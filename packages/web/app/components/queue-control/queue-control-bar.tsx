@@ -571,6 +571,79 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     void setPreference('tickBarExpanded', expanded);
   }, []);
 
+  // One-time play view drawer peek — briefly slides the drawer up to show
+  // users there's a full view behind the queue bar.
+  const playViewPaperRef = useRef<HTMLDivElement | null>(null);
+  const playViewHintPlayedRef = useRef(false);
+  const handlePlayViewPaperRef = useCallback((el: HTMLDivElement | null) => {
+    playViewPaperRef.current = el;
+  }, []);
+
+  useEffect(() => {
+    if (!currentClimb || activeDrawer !== 'none' || tickBarActive || playViewHintPlayedRef.current) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const animations: Animation[] = [];
+
+    const peekOnce = (el: HTMLElement): Promise<void> => {
+      const slideUp = el.animate(
+        [{ transform: 'translateY(100%)' }, { transform: 'translateY(calc(100% - 120px))' }],
+        { duration: 400, easing: 'ease-out', fill: 'forwards' },
+      );
+      animations.push(slideUp);
+
+      return slideUp.finished.then(() => {
+        if (cancelled) return;
+        return new Promise<void>((r) => { timer = setTimeout(r, 800); });
+      }).then(() => {
+        if (cancelled) return;
+        const slideDown = el.animate(
+          [{ transform: 'translateY(calc(100% - 120px))' }, { transform: 'translateY(100%)' }],
+          { duration: 300, easing: 'ease-out', fill: 'forwards' },
+        );
+        animations.push(slideDown);
+        return slideDown.finished as Promise<unknown> as Promise<void>;
+      });
+    };
+
+    getPreference<boolean>('swipeHint:playViewSeen').then((seen) => {
+      if (cancelled || seen) return;
+      if (!window.matchMedia('(pointer: coarse)').matches) return;
+
+      timer = setTimeout(async () => {
+        if (cancelled) return;
+        const el = playViewPaperRef.current;
+        if (!el) return;
+
+        playViewHintPlayedRef.current = true;
+
+        // The drawer is off-screen with visibility: hidden — temporarily show it
+        const origVisibility = el.style.visibility;
+        el.style.visibility = 'visible';
+
+        try {
+          await peekOnce(el);
+          if (cancelled) return;
+          await new Promise<void>((r) => { timer = setTimeout(r, 300); });
+          if (cancelled) return;
+          await peekOnce(el);
+          if (cancelled) return;
+          el.style.visibility = origVisibility;
+          setPreference('swipeHint:playViewSeen', true);
+        } catch {
+          el.style.visibility = origVisibility;
+        }
+      }, 2000);
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      for (const a of animations) a.cancel();
+    };
+  }, [currentClimb, activeDrawer, tickBarActive]);
+
   // Close expanded participants when tick mode opens
   useEffect(() => {
     if (tickBarActive) setParticipantsExpanded(false);
@@ -1341,6 +1414,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         setActiveDrawer={setActiveDrawer}
         boardDetails={boardDetails}
         angle={angle}
+        onPaperRef={handlePlayViewPaperRef}
       />
 
       <StartSeshDrawer open={startSeshOpen} onClose={() => setStartSeshOpen(false)} />

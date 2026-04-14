@@ -26,6 +26,7 @@ export type UserPreferenceKeyMap = {
   'swipeHint:climbListSeen': boolean;
   'swipeHint:queueBarSeen': boolean;
   'swipeHint:logbookSeen': boolean;
+  'swipeHint:playViewSeen': boolean;
   tickBarExpanded: boolean;
   'shakeToReport:dismissed': boolean;
   esp32Connections: Esp32Connection[];

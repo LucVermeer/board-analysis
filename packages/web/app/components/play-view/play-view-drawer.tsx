@@ -419,9 +419,17 @@ type PlayViewDrawerProps = {
   setActiveDrawer: (drawer: ActiveDrawer) => void;
   boardDetails: BoardDetails;
   angle: Angle;
+  /** Callback to expose the MUI Paper element for external animation (e.g., peek hint). */
+  onPaperRef?: (el: HTMLDivElement | null) => void;
 };
 
-const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({ activeDrawer, setActiveDrawer, boardDetails, angle }) => {
+const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
+  activeDrawer,
+  setActiveDrawer,
+  boardDetails,
+  angle,
+  onPaperRef,
+}) => {
   const { t } = useTranslation('session');
   const isOpen = activeDrawer === 'play';
   const [isActionsOpen, setIsActionsOpen] = useState(false);
@@ -445,6 +453,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({ activeDrawer, setActive
   }, [isBoardZoomed, isOpen]);
 
   const playPaperRef = useRef<HTMLDivElement>(null);
+  const combinedPaperRef = useCallback((el: HTMLDivElement | null) => {
+    (playPaperRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    onPaperRef?.(el);
+  }, [onPaperRef]);
 
   // Custom swipe-to-close for nested disablePortal drawers (actions + playlist)
   const handleCloseActions = useCallback(() => setIsActionsOpen(false), []);
@@ -888,7 +900,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({ activeDrawer, setActive
       onClose={handleClose}
       onTransitionEnd={handleTransitionEnd}
       keepMounted
-      paperRef={playPaperRef}
+      paperRef={combinedPaperRef}
       swipeEnabled={!isActionsOpen && !isQueueOpen && !isPlaylistSelectorOpen}
       showDragHandle
       styles={{
