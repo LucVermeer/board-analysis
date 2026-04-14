@@ -9,6 +9,7 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
 import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import drawerCss from '../swipeable-drawer/swipeable-drawer.module.css';
 import { useDrawerDragResize } from '@/app/hooks/use-drawer-drag-resize';
@@ -122,6 +123,23 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
         const slug = segments[1];
         match = boards.find((b) => b.slug === slug);
       }
+    }
+
+    // Strategy 4: Match by generic board route path (e.g. /kilter/homewall/10x12-full-ride/...)
+    if (!match && pathname && isBoardRoutePath(pathname) && !pathname.startsWith('/b/')) {
+      const currentBasePath = getBaseBoardPath(pathname);
+      match = boards.find((b) => {
+        if (!b.layoutName || !b.sizeName || !b.setNames) return false;
+        const boardUrl = constructClimbListWithSlugs(
+          b.boardType,
+          b.layoutName,
+          b.sizeName,
+          b.sizeDescription ?? undefined,
+          b.setNames,
+          0,
+        );
+        return getBaseBoardPath(boardUrl) === currentBasePath;
+      });
     }
 
     hasAutoSelectedRef.current = true;
@@ -285,55 +303,58 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
 
   const hasSelection = selectedBoard || selectedCustomConfig;
 
+  const showCollapsed = !!hasSelection && !boardSelectorExpanded;
+
   const boardSelector = (
     <Box>
-      {hasSelection && !boardSelectorExpanded ? (
-        <Box>
-          <Typography sx={{ fontSize: 16, fontWeight: 600, color: 'var(--neutral-900)', mb: 1.5 }}>
-            {t('creation.boardsNearYou')}
-          </Typography>
-          <Box
-            data-testid="selected-board-card"
-            sx={{ position: 'relative', width: 'fit-content' }}
+      <Typography sx={{ fontSize: 16, fontWeight: 600, color: 'var(--neutral-900)', mb: 1.5 }}>
+        {t('creation.boardsNearYou')}
+      </Typography>
+      <Collapse in={showCollapsed} unmountOnExit>
+        <Box
+          data-testid="selected-board-card"
+          sx={{ position: 'relative', width: 'fit-content', mb: 1 }}
+          onClick={() => setBoardSelectorExpanded(true)}
+        >
+          <BoardScrollCard
+            userBoard={selectedBoard ?? undefined}
+            storedConfig={selectedCustomConfig ?? undefined}
+            boardConfigs={boardConfigs}
+            selected
+            size="collapsed"
             onClick={() => setBoardSelectorExpanded(true)}
+          />
+          {/* Grey overlay + edit icon */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              aspectRatio: 1,
+              borderRadius: '6px',
+              bgcolor: 'rgba(0, 0, 0, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              pointerEvents: 'none',
+            }}
           >
-            <BoardScrollCard
-              userBoard={selectedBoard ?? undefined}
-              storedConfig={selectedCustomConfig ?? undefined}
-              boardConfigs={boardConfigs}
-              selected
-              onClick={() => setBoardSelectorExpanded(true)}
-            />
-            {/* Grey overlay + edit icon */}
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                aspectRatio: 1,
-                borderRadius: '8px',
-                bgcolor: 'rgba(0, 0, 0, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                pointerEvents: 'none',
-              }}
-            >
-              <EditOutlined sx={{ color: '#fff', fontSize: 28 }} />
-            </Box>
+            <EditOutlined sx={{ color: '#fff', fontSize: 20 }} />
           </Box>
         </Box>
-      ) : (
+      </Collapse>
+      <Collapse in={!showCollapsed} unmountOnExit>
         <BoardDiscoveryScroll
           onBoardClick={handleDiscoveryBoardClick}
           onConfigClick={handleConfigClick}
           onCustomClick={() => setShowBoardDrawer(true)}
           selectedBoardUuid={selectedBoard?.uuid}
           myBoards={boards}
+          hideTitle
         />
-      )}
+      </Collapse>
       {boardsError && (
         <Typography variant="body2" color="error" sx={{ mt: 0.5 }}>
           {boardsError}
