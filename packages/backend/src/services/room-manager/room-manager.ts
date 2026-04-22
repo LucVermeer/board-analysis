@@ -348,11 +348,26 @@ class RoomManager {
     return this.writeScheduler.flushPendingWrites(this.sessionGraceTimers);
   }
 
-  /**
-   * Get all active session IDs (for TTL refresh).
-   */
-  getAllActiveSessions(): string[] {
-    return Array.from(this.sessions.keys());
+  async refreshActiveSessionTTLs(): Promise<void> {
+    const store = this.redisStore;
+    if (!store) return;
+
+    const activeSessions = Array.from(this.sessions.keys());
+    if (activeSessions.length === 0) return;
+
+    console.info(`[RoomManager] Refreshing TTL for ${activeSessions.length} active sessions`);
+
+    const batchSize = 50;
+    for (let i = 0; i < activeSessions.length; i += batchSize) {
+      const batch = activeSessions.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map((sessionId) =>
+          store.refreshTTL(sessionId).catch((err) =>
+            console.error(`[RoomManager] TTL refresh failed for ${sessionId}:`, err),
+          ),
+        ),
+      );
+    }
   }
 }
 
