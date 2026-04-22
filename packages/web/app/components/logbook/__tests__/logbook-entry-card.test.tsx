@@ -79,7 +79,7 @@ const baseEntry = {
 
 describe('LogbookEntryCard', () => {
   it('renders entry fields without a user header when user is absent', () => {
-    render(<LogbookEntryCard entry={baseEntry} currentClimbAngle={40} showMirrorTag={false} />);
+    render(<LogbookEntryCard entry={baseEntry} showMirrorTag={false} />);
 
     expect(screen.getByText('Attempts: 3')).toBeTruthy();
     expect(screen.getByText('Nice moves')).toBeTruthy();
@@ -92,7 +92,6 @@ describe('LogbookEntryCard', () => {
     render(
       <LogbookEntryCard
         entry={baseEntry}
-        currentClimbAngle={40}
         showMirrorTag={false}
         user={{ userId: 'user-42', displayName: 'Alex', avatarUrl: 'https://example.test/a.png' }}
       />,
@@ -110,7 +109,6 @@ describe('LogbookEntryCard', () => {
     render(
       <LogbookEntryCard
         entry={baseEntry}
-        currentClimbAngle={40}
         showMirrorTag={false}
         user={{ userId: 'user-42', displayName: null, avatarUrl: null }}
       />,
@@ -119,25 +117,29 @@ describe('LogbookEntryCard', () => {
     expect(screen.getByText('Climber')).toBeTruthy();
   });
 
-  it('hides the angle chip and status icon when the entry angle matches the current climb angle', () => {
-    render(<LogbookEntryCard entry={baseEntry} currentClimbAngle={40} showMirrorTag={false} />);
-    expect(screen.queryByTestId('ascent-status-icon')).toBeNull();
-  });
-
-  it('shows the angle chip and status icon when entry angle differs from the current climb angle', () => {
-    render(<LogbookEntryCard entry={{ ...baseEntry, angle: 50 }} currentClimbAngle={40} showMirrorTag={false} />);
+  it('always shows the angle chip and status icon', () => {
+    render(<LogbookEntryCard entry={baseEntry} showMirrorTag={false} />);
     const icon = screen.getByTestId('ascent-status-icon');
     expect(icon.getAttribute('data-status')).toBe('send');
-    expect(screen.getByText('50')).toBeTruthy();
+    expect(screen.getByText('40°')).toBeTruthy();
+  });
+
+  it('renders the entry angle even when it differs from typical board angles', () => {
+    render(<LogbookEntryCard entry={{ ...baseEntry, angle: 50 }} showMirrorTag={false} />);
+    const icon = screen.getByTestId('ascent-status-icon');
+    expect(icon.getAttribute('data-status')).toBe('send');
+    expect(screen.getByText('50°')).toBeTruthy();
   });
 
   it('shows the Mirrored chip only when showMirrorTag is true and the entry is mirrored', () => {
     const { rerender } = render(
-      <LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} currentClimbAngle={40} showMirrorTag={false} />,
+      <LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} showMirrorTag={false} />,
     );
     expect(screen.queryByText('Mirrored')).toBeNull();
 
-    rerender(<LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} currentClimbAngle={40} showMirrorTag />);
+    rerender(
+      <LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} showMirrorTag={true} />,
+    );
     expect(screen.getByText('Mirrored')).toBeTruthy();
   });
 
@@ -145,7 +147,6 @@ describe('LogbookEntryCard', () => {
     render(
       <LogbookEntryCard
         entry={{ ...baseEntry, status: 'attempt', quality: null }}
-        currentClimbAngle={40}
         showMirrorTag={false}
       />,
     );
@@ -161,7 +162,6 @@ describe('LogbookEntryCard', () => {
           quality: null,
           angle: 50,
         }}
-        currentClimbAngle={40}
         showMirrorTag={false}
       />,
     );
@@ -171,7 +171,7 @@ describe('LogbookEntryCard', () => {
   });
 
   it('does not render the social footer when tickUuid is absent', () => {
-    render(<LogbookEntryCard entry={baseEntry} currentClimbAngle={40} showMirrorTag={false} />);
+    render(<LogbookEntryCard entry={baseEntry} showMirrorTag={false} />);
     expect(screen.queryByTestId('vote-button')).toBeNull();
     expect(screen.queryByTestId('feed-comment-button')).toBeNull();
   });
@@ -186,7 +186,6 @@ describe('LogbookEntryCard', () => {
           downvotes: 1,
           commentCount: 3,
         }}
-        currentClimbAngle={40}
         showMirrorTag={false}
       />,
     );

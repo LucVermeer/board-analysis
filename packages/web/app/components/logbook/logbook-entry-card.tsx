@@ -51,14 +51,12 @@ export type LogbookEntryCardData = {
 
 export type LogbookEntryCardProps = {
   entry: LogbookEntryCardData;
-  currentClimbAngle: number;
   showMirrorTag: boolean;
   user?: LogbookEntryUser;
 };
 
 export const LogbookEntryCard: React.FC<LogbookEntryCardProps> = ({
   entry,
-  currentClimbAngle,
   showMirrorTag,
   user,
 }) => {
@@ -70,7 +68,6 @@ export const LogbookEntryCard: React.FC<LogbookEntryCardProps> = ({
     tries: entry.attemptCount,
   });
   const hasSuccess = ascentStatus !== 'attempt';
-  const showAngleAndStatus = entry.angle !== currentClimbAngle;
 
   return (
     <Card sx={{ width: '100%' }}>
@@ -99,12 +96,8 @@ export const LogbookEntryCard: React.FC<LogbookEntryCardProps> = ({
             <Typography variant="body2" component="span" fontWeight={600}>
               {formatTickAbsoluteTime(entry.climbedAt, 'MMM D, YYYY h:mm A')}
             </Typography>
-            {showAngleAndStatus && (
-              <>
-                <Chip label={entry.angle} size="small" color="primary" />
-                <AscentStatusIcon status={ascentStatus} variant="icon" />
-              </>
-            )}
+            <Chip label={`${entry.angle}°`} size="small" color="primary" />
+            <AscentStatusIcon status={ascentStatus} variant="icon" />
             {showMirrorTag && entry.isMirror && (
               <Chip label={t('logbook.entry.mirroredTag')} size="small" color="secondary" />
             )}
