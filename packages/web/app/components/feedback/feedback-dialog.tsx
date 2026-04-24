@@ -56,7 +56,7 @@ const FeedbackDialogBody: React.FC<Omit<FeedbackDialogProps, 'open'>> = ({
   secondaryAction,
 }) => {
   const { t } = useTranslation('settings');
-  const { mutate } = useSubmitAppFeedback();
+  const { mutateAsync } = useSubmitAppFeedback();
   const { showMessage } = useSnackbar();
   const isBug = mode === 'bug';
   const resolvedTitle = title ?? (isBug ? t('feedbackDialog.titleBug') : t('feedbackDialog.titleRating'));
@@ -78,24 +78,31 @@ const FeedbackDialogBody: React.FC<Omit<FeedbackDialogProps, 'open'>> = ({
       void setFeedbackStatus('submitted');
     }
 
-    mutate(
-      {
-        rating: isBug ? null : values.rating,
-        comment: values.comment,
-        source,
-      },
-      {
-        onSuccess: () => {
-          showMessage(isBug ? t('feedbackDialog.successBug') : t('feedbackDialog.successRating'), 'success');
-          // Fire chained follow-ups (e.g. "also leave a store review?") only
-          // on successful submission. Otherwise we'd be prompting the user to
-          // publicly review the app right after telling them their feedback
-          // didn't save.
-          onSubmitted?.(values);
-        },
-        onError: () => showMessage(t('feedbackDialog.errorRating'), 'warning'),
-      },
-    );
+    // Use mutateAsync + a promise chain, not mutate() with per-call callbacks.
+    // onClose() below unmounts this body synchronously, which tears down
+    // React Query's MutationObserver and cancels any per-call callbacks
+    // (onSuccess / onError). The underlying mutation promise survives the
+    // teardown — TanStack Query does not cancel mutations when an observer
+    // is removed — so a raw .then/.catch chain still runs the post-submit
+    // hooks. Without this, the chained StoreReviewPromptDialog after a
+    // rating submission never opened and the "Thanks — logged" snackbar
+    // silently never fired.
+    mutateAsync({
+      rating: isBug ? null : values.rating,
+      comment: values.comment,
+      source,
+    })
+      .then(() => {
+        showMessage(isBug ? t('feedbackDialog.successBug') : t('feedbackDialog.successRating'), 'success');
+        // Chained follow-ups (e.g. "also leave a store review?") only on
+        // successful submission — otherwise we'd be prompting the user to
+        // publicly review the app right after telling them their feedback
+        // didn't save.
+        onSubmitted?.(values);
+      })
+      .catch(() => {
+        showMessage(t('feedbackDialog.errorRating'), 'warning');
+      });
     onClose();
   };
 
