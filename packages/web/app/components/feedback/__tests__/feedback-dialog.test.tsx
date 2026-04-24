@@ -17,6 +17,9 @@ vi.mock('react-i18next', () => ({
 // The dialog pulls in a React Query hook, a snackbar provider, and an
 // IndexedDB-backed db module. Stub them out so these tests focus on the
 // onSubmitted chaining contract and don't depend on a full app shell.
+// vi.mock calls are auto-hoisted by the Vitest plugin, so declaring them
+// below the imports keeps oxlint happy ("imports first") without changing
+// runtime behaviour.
 vi.mock('@/app/hooks/use-submit-app-feedback', () => ({
   useSubmitAppFeedback: vi.fn(),
 }));
