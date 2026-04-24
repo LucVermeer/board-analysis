@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { FeedbackDialog } from '../feedback-dialog';
 import { useSubmitAppFeedback } from '@/app/hooks/use-submit-app-feedback';
@@ -46,17 +46,6 @@ function setupMutate(behavior: 'success' | 'error' | 'noop') {
   return mutateAsync;
 }
 
-// After firing the mutation we need to flush the microtask queue so the
-// `.then` / `.catch` chain runs before assertions. Two resolves covers the
-// one await inside the handler plus any trailing microtasks scheduled by
-// React Query.
-async function flushSubmission() {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-}
-
 describe('FeedbackDialog — onSubmitted chaining', () => {
   beforeEach(() => {
     mockedUseSubmitAppFeedback.mockReset();
@@ -71,8 +60,7 @@ describe('FeedbackDialog — onSubmitted chaining', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
     });
-    await flushSubmission();
-    expect(onSubmitted).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(1));
     expect(onSubmitted).toHaveBeenCalledWith({ rating: 5, comment: null });
   });
 
@@ -84,8 +72,7 @@ describe('FeedbackDialog — onSubmitted chaining', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
     });
-    await flushSubmission();
-    expect(onClose).toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it('marks the auto-banner status as "submitted" when the user rates via the drawer', async () => {
@@ -95,20 +82,24 @@ describe('FeedbackDialog — onSubmitted chaining', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
     });
-    await flushSubmission();
-    expect(mockedSetFeedbackStatus).toHaveBeenCalledWith('submitted');
+    await waitFor(() => expect(mockedSetFeedbackStatus).toHaveBeenCalledWith('submitted'));
   });
 
   it("does NOT mark the auto-banner status on a bug submission — bugs aren't a rating", async () => {
-    setupMutate('success');
-    render(<FeedbackDialog open onClose={vi.fn()} source="drawer-bug" mode="bug" onSubmitted={vi.fn()} />);
+    const mutateAsync = setupMutate('success');
+    const onSubmitted = vi.fn();
+    render(<FeedbackDialog open onClose={vi.fn()} source="drawer-bug" mode="bug" onSubmitted={onSubmitted} />);
     fireEvent.change(screen.getByPlaceholderText(/what were you doing/i), {
       target: { value: 'crashed when submitting' },
     });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /send bug report/i }));
     });
-    await flushSubmission();
+    // Wait for the mutation to resolve — onSubmitted firing is our signal that
+    // the whole submit pipeline ran. If setFeedbackStatus were going to fire,
+    // it would have fired synchronously in the handler before that point.
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
     expect(mockedSetFeedbackStatus).not.toHaveBeenCalled();
   });
 
@@ -119,16 +110,17 @@ describe('FeedbackDialog — onSubmitted chaining', () => {
   });
 
   it('does NOT fire onSubmitted when the mutation errors', async () => {
-    setupMutate('error');
+    const mutateAsync = setupMutate('error');
     const onSubmitted = vi.fn();
     render(<FeedbackDialog open onClose={vi.fn()} source="drawer-feedback" onSubmitted={onSubmitted} />);
     pickStars(5);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
     });
-    await flushSubmission();
-    // The user sees the "Couldn't send" snackbar — asking them to publicly
-    // review the app on top of that failure would be user-hostile.
+    // Wait for the mutation to have been attempted; the rejected promise's
+    // .catch fires in the same microtask cycle, so after this point
+    // onSubmitted would have already fired if it were going to.
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(onSubmitted).not.toHaveBeenCalled();
   });
 
@@ -166,7 +158,7 @@ describe('FeedbackDialog — onSubmitted chaining', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /send bug report/i }));
     });
-    await flushSubmission();
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
     expect(mutateAsync).toHaveBeenCalledTimes(1);
     expect(onSubmitted).toHaveBeenCalledWith({ rating: null, comment: 'crashed when submitting' });
   });

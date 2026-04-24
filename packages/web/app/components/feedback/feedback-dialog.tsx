@@ -78,15 +78,7 @@ const FeedbackDialogBody: React.FC<Omit<FeedbackDialogProps, 'open'>> = ({
       void setFeedbackStatus('submitted');
     }
 
-    // Use mutateAsync + a promise chain, not mutate() with per-call callbacks.
-    // onClose() below unmounts this body synchronously, which tears down
-    // React Query's MutationObserver and cancels any per-call callbacks
-    // (onSuccess / onError). The underlying mutation promise survives the
-    // teardown — TanStack Query does not cancel mutations when an observer
-    // is removed — so a raw .then/.catch chain still runs the post-submit
-    // hooks. Without this, the chained StoreReviewPromptDialog after a
-    // rating submission never opened and the "Thanks — logged" snackbar
-    // silently never fired.
+    // mutateAsync outlives the observer; per-call options on mutate() die with the component on onClose().
     mutateAsync({
       rating: isBug ? null : values.rating,
       comment: values.comment,
@@ -94,10 +86,7 @@ const FeedbackDialogBody: React.FC<Omit<FeedbackDialogProps, 'open'>> = ({
     })
       .then(() => {
         showMessage(isBug ? t('feedbackDialog.successBug') : t('feedbackDialog.successRating'), 'success');
-        // Chained follow-ups (e.g. "also leave a store review?") only on
-        // successful submission — otherwise we'd be prompting the user to
-        // publicly review the app right after telling them their feedback
-        // didn't save.
+        // Chain only on success — don't push a failed submission toward a public app store review.
         onSubmitted?.(values);
       })
       .catch(() => {

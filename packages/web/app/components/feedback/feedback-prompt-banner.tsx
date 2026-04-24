@@ -32,14 +32,7 @@ const FeedbackPromptBannerBody: React.FC<BannerBodyProps> = ({ onDismiss, onSubm
     if (values.rating >= 3 && isNativeApp()) {
       void requestInAppReview();
     }
-    // mutateAsync + promise chain, not mutate() with per-call callbacks.
-    // onSubmitted() above flips the banner closed, which combined with
-    // Fade's unmountOnExit tears this body down. React Query's
-    // MutationObserver goes with it and cancels any per-call
-    // onSuccess / onError options — so the "Thanks — logged" and
-    // "Couldn't send" snackbars silently never fired. The raw promise
-    // outlives the component; showMessage targets the provider above and
-    // is safe to call post-unmount.
+    // mutateAsync outlives the observer; per-call options on mutate() die when Fade unmounts this body.
     mutateAsync({
       rating: values.rating,
       comment: values.comment,
