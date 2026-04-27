@@ -248,4 +248,72 @@ describe('fetchInstagramMeta', () => {
     expect(recovered.status).toBe('ok');
     expect(fetchMock).toHaveBeenCalledTimes(11);
   });
+
+  it('treats an oversized embed body as a transient error', async () => {
+    // Feed a 2 MB stream past the 1 MB cap. Without the cap, a hostile
+    // endpoint over a fast pipe could exhaust process memory inside the 4s
+    // wall-clock budget. With the cap, the reader cancels and we surface
+    // transient_error.
+    const chunk = new Uint8Array(64 * 1024).fill(0x61); // 64 KB of 'a'
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 32; i++) controller.enqueue(chunk); // 2 MB total
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: stream,
+      text: () => Promise.resolve(''),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchInstagramMeta(SAMPLE_URL);
+    expect(result).toEqual({ status: 'transient_error' });
+  });
+
+  it('drops a username that does not match Instagram username rules', async () => {
+    // Username field is captured from the embed HTML and persisted to
+    // boardBetaLinks.foreign_username. An anomalous response that returns a
+    // 35-character "username" or one with a leading dot shouldn't poison the
+    // column — fall back to null instead.
+    const malformed = `
+      <html><body>
+        <img class="EmbeddedMediaImage"
+             alt="Instagram post shared by &#064;${'a'.repeat(35)}"
+             src="https://scontent.cdninstagram.com/photo.jpg" />
+      </body></html>
+    `;
+    mockFetchOnce(malformed);
+    const result = await fetchInstagramMeta(SAMPLE_URL);
+    expect(result).toEqual({
+      status: 'ok',
+      thumbnail: 'https://scontent.cdninstagram.com/photo.jpg',
+      username: null,
+    });
+  });
+
+  it('accepts a 30-character username and a single-character username', async () => {
+    const longBoundary = 'a'.repeat(30);
+    mockFetchOnce(htmlWithImage({ username: longBoundary }));
+    const longResult = await fetchInstagramMeta(SAMPLE_URL);
+    expect(longResult).toMatchObject({ status: 'ok', username: longBoundary });
+
+    clearInstagramMetaCache();
+    mockFetchOnce(htmlWithImage({ username: 'x' }));
+    const shortResult = await fetchInstagramMeta('https://www.instagram.com/p/SHORT_/');
+    expect(shortResult).toMatchObject({ status: 'ok', username: 'x' });
+  });
+
+  it('drops usernames with leading or trailing dots', async () => {
+    mockFetchOnce(htmlWithImage({ username: '.foo' }));
+    const leadingDot = await fetchInstagramMeta(SAMPLE_URL);
+    expect(leadingDot).toMatchObject({ status: 'ok', username: null });
+
+    clearInstagramMetaCache();
+    mockFetchOnce(htmlWithImage({ username: 'foo.' }));
+    const trailingDot = await fetchInstagramMeta('https://www.instagram.com/p/TRAILDOT/');
+    expect(trailingDot).toMatchObject({ status: 'ok', username: null });
+  });
 });

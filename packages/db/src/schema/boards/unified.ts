@@ -429,9 +429,15 @@ export const boardBetaLinks = pgTable(
     thumbnail: text(),
     isListed: boolean('is_listed'),
     createdAt: text('created_at'),
+    // Platform-stable identifier extracted from `link` at write time.
+    // Currently only populated for Instagram URLs (the post/reel shortcode);
+    // null for TikTok and other platforms. Used as the indexed key for the
+    // cross-climb dedup check so we don't have to LIKE-scan every row.
+    shortcode: text('shortcode'),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.boardType, table.climbUuid, table.link] }),
+    shortcodeIdx: index('board_beta_links_shortcode_idx').on(table.boardType, table.shortcode),
     // Note: No FK to board_climbs - beta links may arrive before their corresponding climbs during sync
   }),
 );

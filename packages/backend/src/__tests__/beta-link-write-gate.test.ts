@@ -68,28 +68,30 @@ describe('validateAndEnrichBetaLinkInsert (gate)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('skips Instagram validation for TikTok URLs', async () => {
+  it('returns insert plan with null enrichment for TikTok URLs without hitting fetch or DB', async () => {
     const result = await validateAndEnrichBetaLinkInsert(
       fakeCtx,
       'kilter',
       '00000000-0000-0000-0000-000000000000',
       'https://www.tiktok.com/@user/video/12345',
+      { onSameClimbDup: 'throw' },
     );
 
-    expect(result).toEqual({ thumbnail: null, foreignUsername: null });
+    expect(result).toEqual({ action: 'insert', thumbnail: null, foreignUsername: null });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mockDbSelect).not.toHaveBeenCalled();
   });
 
-  it('skips Instagram validation for short-form TikTok URLs', async () => {
+  it('returns insert plan for short-form TikTok URLs', async () => {
     const result = await validateAndEnrichBetaLinkInsert(
       fakeCtx,
       'tension',
       '00000000-0000-0000-0000-000000000000',
       'https://vm.tiktok.com/abc123',
+      { onSameClimbDup: 'skip' },
     );
 
-    expect(result).toEqual({ thumbnail: null, foreignUsername: null });
+    expect(result).toEqual({ action: 'insert', thumbnail: null, foreignUsername: null });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mockDbSelect).not.toHaveBeenCalled();
   });
@@ -100,6 +102,7 @@ describe('validateAndEnrichBetaLinkInsert (gate)', () => {
       'kilter',
       '00000000-0000-0000-0000-000000000000',
       'https://www.tiktok.com/@user/video/12345',
+      { onSameClimbDup: 'throw' },
     );
     expect(mockApplyRateLimit).not.toHaveBeenCalled();
   });
@@ -138,5 +141,82 @@ describe('escapeLikePattern', () => {
   it('passes plain alphanumerics through unchanged', () => {
     expect(escapeLikePattern('ABC123xyz')).toBe('ABC123xyz');
     expect(escapeLikePattern('DLM2nf9S1h6')).toBe('DLM2nf9S1h6');
+  });
+});
+
+// findInstagramShortcodeConflict drives the dedup decisions for both call
+// sites. We test it by short-circuiting the drizzle chain mock so we can feed
+// the rows we want directly.
+describe('findInstagramShortcodeConflict', () => {
+  const stubDbReturning = (rows: Array<{ climbName: string | null; climbUuid: string }>) => {
+    // Drizzle's chained query builder is heavily typed; for unit tests we
+    // only need the runtime shape. Cast through unknown to bypass the
+    // void-returning signature `mockDbSelect` got from its initial setup.
+    mockDbSelect.mockImplementation((() => ({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => Promise.resolve(rows),
+        }),
+      }),
+    })) as unknown as () => never);
+  };
+
+  beforeEach(() => {
+    mockDbSelect.mockReset();
+  });
+
+  it('returns same-climb when the existing row is on the same climb', async () => {
+    const { findInstagramShortcodeConflict } = await import('../graphql/resolvers/ticks/mutations');
+    stubDbReturning([{ climbName: 'Cut to the Chase', climbUuid: 'climb-1' }]);
+    const result = await findInstagramShortcodeConflict(
+      'kilter',
+      'climb-1',
+      'https://www.instagram.com/reel/ABC123xyz/',
+    );
+    expect(result).toEqual({ kind: 'same-climb' });
+  });
+
+  it('returns cross-climb with the other climb name when the row is on a different climb', async () => {
+    const { findInstagramShortcodeConflict } = await import('../graphql/resolvers/ticks/mutations');
+    stubDbReturning([{ climbName: 'The Project', climbUuid: 'climb-other' }]);
+    const result = await findInstagramShortcodeConflict(
+      'kilter',
+      'climb-1',
+      'https://www.instagram.com/reel/ABC123xyz/',
+    );
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'The Project' });
+  });
+
+  it('falls back to "another climb" if the conflicting row has a null climb name', async () => {
+    const { findInstagramShortcodeConflict } = await import('../graphql/resolvers/ticks/mutations');
+    stubDbReturning([{ climbName: null, climbUuid: 'climb-other' }]);
+    const result = await findInstagramShortcodeConflict(
+      'kilter',
+      'climb-1',
+      'https://www.instagram.com/reel/ABC123xyz/',
+    );
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'another climb' });
+  });
+
+  it('returns none when no rows match', async () => {
+    const { findInstagramShortcodeConflict } = await import('../graphql/resolvers/ticks/mutations');
+    stubDbReturning([]);
+    const result = await findInstagramShortcodeConflict(
+      'kilter',
+      'climb-1',
+      'https://www.instagram.com/reel/ABC123xyz/',
+    );
+    expect(result).toEqual({ kind: 'none' });
+  });
+
+  it('returns none for non-Instagram URLs (no shortcode to look up)', async () => {
+    const { findInstagramShortcodeConflict } = await import('../graphql/resolvers/ticks/mutations');
+    const result = await findInstagramShortcodeConflict(
+      'kilter',
+      'climb-1',
+      'https://www.tiktok.com/@user/video/12345',
+    );
+    expect(result).toEqual({ kind: 'none' });
+    expect(mockDbSelect).not.toHaveBeenCalled();
   });
 });

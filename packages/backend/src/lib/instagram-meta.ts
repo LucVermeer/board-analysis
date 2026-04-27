@@ -7,6 +7,56 @@ const FETCH_TIMEOUT_MS = 4000;
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
+// Cap the HTML body we accept from Instagram. AbortSignal.timeout() bounds
+// wall-clock, but without a byte cap a hostile or compromised endpoint over a
+// fast pipe can exhaust process memory before the timeout fires. IG embed
+// pages are typically a few hundred KB; 1 MB is generous.
+const MAX_HTML_BYTES = 1024 * 1024;
+
+// Instagram usernames are 1–30 chars from [a-z0-9_.] (case-insensitive) with
+// no leading or trailing dot. Apply this to any captured username before
+// returning it so a malformed embed response can't poison
+// boardBetaLinks.foreign_username with garbage.
+const INSTAGRAM_USERNAME_REGEX = /^[a-z0-9_](?:[a-z0-9_.]{0,28}[a-z0-9_])?$/i;
+
+function sanitizeInstagramUsername(candidate: string | null | undefined): string | null {
+  if (!candidate) return null;
+  return INSTAGRAM_USERNAME_REGEX.test(candidate) ? candidate : null;
+}
+
+async function readBodyWithCap(res: Response, maxBytes: number): Promise<string> {
+  if (!res.body) {
+    // Some fetch implementations / tests return a mock without a streamable
+    // body. Fall back to res.text() + post-hoc length check so we still
+    // enforce the cap, just at the cost of buffering up to maxBytes first.
+    const text = await res.text();
+    if (text.length > maxBytes) {
+      throw new Error('html body exceeded cap');
+    }
+    return text;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let total = 0;
+  let html = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > maxBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // best-effort
+      }
+      throw new Error('html body exceeded cap');
+    }
+    html += decoder.decode(value, { stream: true });
+  }
+  html += decoder.decode();
+  return html;
+}
+
 export const INSTAGRAM_META_TTL_MS = 10 * 60 * 1000;
 // Cache transient errors briefly so a rate-limit / login-wall response from
 // Instagram doesn't make us refetch on every read of every beta link. Short
@@ -97,7 +147,7 @@ async function fetchInstagramMetaUncached(url: string): Promise<InstagramMetaRes
       cache: 'no-store',
     });
     if (!res.ok) return { status: 'transient_error' };
-    html = await res.text();
+    html = await readBodyWithCap(res, MAX_HTML_BYTES);
   } catch {
     return { status: 'transient_error' };
   }
@@ -148,11 +198,15 @@ async function fetchInstagramMetaUncached(url: string): Promise<InstagramMetaRes
     return { status: 'gone' };
   }
 
-  const username =
+  const rawUsername =
     usernameFromAlt ??
     html.match(/"owner"\s*:\s*\{[^}]*"username"\s*:\s*"([^"]+)"/)?.[1] ??
     html.match(/<input[^>]*class=["']EmbedInput["'][^>]*value=["']@?([\w._]+)["']/i)?.[1] ??
     null;
+  // Validate against Instagram's username rules before persisting — an
+  // anomalous embed response (length, leading/trailing dot, unexpected chars)
+  // shouldn't end up in boardBetaLinks.foreign_username.
+  const username = sanitizeInstagramUsername(rawUsername);
 
   return { status: 'ok', thumbnail, username };
 }
