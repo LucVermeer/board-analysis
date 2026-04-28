@@ -68,6 +68,18 @@ export function isPrivateIp(addr: string): boolean {
 //
 // Both layers must pass. The DNS check uses dns.lookup (Node's libuv-backed
 // resolver) so /etc/hosts is honored — important in dev / CI.
+//
+// Known limitation (TOCTOU): the DNS resolution here and the subsequent
+// `fetch(url)` call in cacheRemoteThumbnail are separate steps. A DNS
+// rebinding attacker who controls an authoritative server with a very
+// short TTL could in principle return a public IP for our lookup and a
+// private IP for fetch's own resolution. Mitigating this fully requires
+// resolving the IP here and then making fetch connect to that exact IP
+// (with the original Host header), which Node's fetch doesn't expose
+// cleanly. Combined with the host allowlist (only fbcdn.net /
+// cdninstagram.com / tiktokcdn.com — domains controlled by Meta /
+// ByteDance, not attackers) the residual risk is low; we accept it as
+// a known trade-off rather than reach for a custom socket dialer.
 export async function assertAllowedImageHost(rawUrl: string, kind: ImageHostKind): Promise<void> {
   let parsed: URL;
   try {

@@ -128,7 +128,14 @@ export type BetaLinkInsertPlan =
   // as a silent skip (the user logged a climb; the video URL is incidental
   // and the existing row covers it). attachBetaLink should pass
   // `onSameClimbDup: 'throw'` and never observe this case.
-  | { action: 'skip-existing' };
+  | { action: 'skip-existing' }
+  // The caller never had a URL to attach (e.g. saveTick on `attempt` status,
+  // or saveTick without `videoUrl`). Distinct from `skip-existing` so the
+  // call site can differentiate "we deliberately skipped a dup" from "there
+  // was nothing to do" — and so a future refactor that drops the
+  // attachedVideoUrl guard doesn't silently start dropping legitimate
+  // inserts.
+  | { action: 'no-url' };
 
 export type ValidateAndEnrichOptions = {
   // Decides whether a same-climb shortcode duplicate is fatal (attachBetaLink)
@@ -295,7 +302,7 @@ export const tickMutations = {
             onSameClimbDup: 'skip',
           },
         )
-      : { action: 'skip-existing' };
+      : { action: 'no-url' };
 
     // Insert into database
     const [tick] = await db.transaction(async (tx) => {
