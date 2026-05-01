@@ -3,7 +3,13 @@ import { type RequestDocument, type Variables, GraphQLClient } from 'graphql-req
 import { getGraphQLHttpUrl } from './client';
 import type { GroupedNotificationConnection, UserBoard } from '@boardsesh/shared-schema';
 import type { GetMyBoardsQueryResponse } from '@/app/lib/graphql/operations/boards';
-import type { Playlist, GetAllUserPlaylistsQueryResponse } from '@/app/lib/graphql/operations/playlists';
+import type {
+  Playlist,
+  GetAllUserPlaylistsQueryResponse,
+  GetPlaylistQueryResponse,
+  GetPlaylistClimbsQueryResponse,
+  GetPlaylistClimbsInput,
+} from '@/app/lib/graphql/operations/playlists';
 
 /**
  * Execute a GraphQL query with an auth token (non-cached, per-user data).
@@ -88,4 +94,43 @@ export async function serverGroupedNotifications(
   const data = await executeAuthenticatedGraphQL<Response>(GET_GROUPED_NOTIFICATIONS, { limit, offset }, authToken);
 
   return data.groupedNotifications;
+}
+
+/**
+ * Server-side fetch of a single playlist.
+ */
+export async function serverPlaylist(authToken: string | undefined, playlistId: string): Promise<Playlist | null> {
+  const { GET_PLAYLIST } = await import('@/app/lib/graphql/operations/playlists');
+
+  try {
+    const response = await executeAuthenticatedGraphQL<GetPlaylistQueryResponse>(
+      GET_PLAYLIST,
+      { playlistId },
+      authToken,
+    );
+    return response.playlist;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Server-side fetch of the first page of playlist climbs.
+ */
+export async function serverPlaylistClimbs(
+  authToken: string | undefined,
+  input: GetPlaylistClimbsInput,
+): Promise<GetPlaylistClimbsQueryResponse['playlistClimbs'] | null> {
+  const { GET_PLAYLIST_CLIMBS } = await import('@/app/lib/graphql/operations/playlists');
+
+  try {
+    const response = await executeAuthenticatedGraphQL<GetPlaylistClimbsQueryResponse>(
+      GET_PLAYLIST_CLIMBS,
+      { input },
+      authToken,
+    );
+    return response.playlistClimbs;
+  } catch {
+    return null;
+  }
 }

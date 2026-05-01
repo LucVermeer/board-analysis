@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { getServerAuthToken } from '@/app/lib/auth/server-auth';
-import { serverMyBoards } from '@/app/lib/graphql/server-cached-client';
+import { serverMyBoards, serverPlaylist, serverPlaylistClimbs } from '@/app/lib/graphql/server-cached-client';
 import { generatePlaylistMetadata } from '@/app/lib/seo/playlist-metadata';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import I18nProvider from '@/app/components/providers/i18n-provider';
@@ -18,12 +18,27 @@ export default async function PlaylistDetailPage({ params }: { params: Promise<{
 
   const authToken = await getServerAuthToken();
   const locale = await getLocale();
-  const initialMyBoards = authToken ? await serverMyBoards(authToken) : null;
+  const [initialMyBoards, initialPlaylist] = await Promise.all([
+    authToken ? serverMyBoards(authToken) : null,
+    serverPlaylist(authToken, playlist_uuid),
+  ]);
+
+  const initialClimbs = initialPlaylist
+    ? await serverPlaylistClimbs(authToken, { playlistId: playlist_uuid, page: 0, pageSize: 20 })
+    : null;
 
   return (
-    <I18nProvider locale={locale} namespaces={['common', 'climbs', 'session', 'boards', 'profile', 'feed', 'playlists']}>
+    <I18nProvider
+      locale={locale}
+      namespaces={['common', 'climbs', 'session', 'boards', 'profile', 'feed', 'playlists']}
+    >
       <div className={styles.pageContainer}>
-        <PlaylistDetailContent playlistUuid={playlist_uuid} initialMyBoards={initialMyBoards} />
+        <PlaylistDetailContent
+          playlistUuid={playlist_uuid}
+          initialMyBoards={initialMyBoards}
+          initialPlaylist={initialPlaylist}
+          initialClimbs={initialClimbs}
+        />
       </div>
     </I18nProvider>
   );

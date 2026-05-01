@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import { resolveBoardBySlug } from '@/app/lib/board-slug-utils';
 import { constructBoardSlugPlaylistsUrl } from '@/app/lib/url-utils';
 import { getServerAuthToken } from '@/app/lib/auth/server-auth';
-import { serverMyBoards } from '@/app/lib/graphql/server-cached-client';
+import { serverMyBoards, serverPlaylist, serverPlaylistClimbs } from '@/app/lib/graphql/server-cached-client';
 import { generatePlaylistMetadata } from '@/app/lib/seo/playlist-metadata';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import I18nProvider from '@/app/components/providers/i18n-provider';
@@ -33,7 +33,20 @@ export default async function BoardSlugPlaylistDetailPage(props: PlaylistDetailP
 
   const authToken = await getServerAuthToken();
   const locale = await getLocale();
-  const initialMyBoards = authToken ? await serverMyBoards(authToken) : null;
+  const [initialMyBoards, initialPlaylist] = await Promise.all([
+    authToken ? serverMyBoards(authToken) : null,
+    serverPlaylist(authToken, params.playlist_uuid),
+  ]);
+
+  const initialClimbs = initialPlaylist
+    ? await serverPlaylistClimbs(authToken, {
+        playlistId: params.playlist_uuid,
+        boardName: board.boardType,
+        layoutId: board.layoutId,
+        page: 0,
+        pageSize: 20,
+      })
+    : null;
 
   const lcpPreloadUrl = getPlaylistLcpPreloadUrl({
     boardType: board.boardType,
@@ -51,6 +64,8 @@ export default async function BoardSlugPlaylistDetailPage(props: PlaylistDetailP
           playlistsBasePath={playlistsBasePath}
           boardSlug={params.board_slug}
           initialMyBoards={initialMyBoards}
+          initialPlaylist={initialPlaylist}
+          initialClimbs={initialClimbs}
         />
       </div>
     </I18nProvider>
