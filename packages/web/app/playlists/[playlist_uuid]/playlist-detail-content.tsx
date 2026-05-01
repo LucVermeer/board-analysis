@@ -49,6 +49,7 @@ import {
   type UnpinPlaylistMutationVariables,
   type GetPlaylistClimbsQueryVariables,
   type GetPlaylistClimbsInput,
+  type PlaylistClimbsResult,
 } from '@/app/lib/graphql/operations/playlists';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { shareWithFallback } from '@/app/lib/share-utils';
@@ -97,6 +98,10 @@ type PlaylistDetailContentProps = {
   boardConfig?: BoardConfig;
   /** SSR-fetched user boards for instant board filter selection (avoids flash). */
   initialMyBoards?: UserBoard[] | null;
+  /** SSR-fetched playlist to avoid first-load spinner. */
+  initialPlaylist?: Playlist | null;
+  /** SSR-fetched first page of climbs to avoid first-load spinner. */
+  initialClimbs?: PlaylistClimbsResult | null;
 };
 
 export default function PlaylistDetailContent({
@@ -105,12 +110,14 @@ export default function PlaylistDetailContent({
   boardSlug,
   boardConfig,
   initialMyBoards,
+  initialPlaylist,
+  initialClimbs,
 }: PlaylistDetailContentProps) {
   const router = useLocaleRouter();
   const { showMessage } = useSnackbar();
   const { t } = useTranslation('playlists');
-  const [playlist, setPlaylist] = useState<Playlist | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [playlist, setPlaylist] = useState<Playlist | null>(initialPlaylist ?? null);
+  const [loading, setLoading] = useState(!initialPlaylist);
   const [error, setError] = useState<string | null>(null);
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -150,7 +157,7 @@ export default function PlaylistDetailContent({
     if (tokenLoading) return;
 
     try {
-      setLoading(true);
+      if (!playlist) setLoading(true);
       setError(null);
 
       const response = await executeGraphQL<GetPlaylistQueryResponse, GetPlaylistQueryVariables>(
@@ -171,7 +178,7 @@ export default function PlaylistDetailContent({
     } finally {
       setLoading(false);
     }
-  }, [playlistUuid, token, tokenLoading]);
+  }, [playlistUuid, token, tokenLoading, playlist]);
 
   useEffect(() => {
     void fetchPlaylist();
@@ -243,6 +250,12 @@ export default function PlaylistDetailContent({
       return allPages.length;
     },
     staleTime: 5 * 60 * 1000,
+    initialData: initialClimbs
+      ? {
+          pages: [initialClimbs],
+          pageParams: [0],
+        }
+      : undefined,
   });
 
   const allClimbs: Climb[] = useMemo(
