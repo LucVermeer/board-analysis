@@ -96,6 +96,7 @@ export type SessionLifecycleState = {
   sessionSummary: SessionSummary | null;
   sessionSummaryBoardType: string | null;
   sessionSummaryHealthKitWorkoutId: string | null;
+  sessionSummaryAutoFinished: boolean;
 };
 
 export type SessionLifecycleActions = {
@@ -108,6 +109,7 @@ export type SessionLifecycleActions = {
     sessionName?: string,
   ) => void;
   endSessionWithSummary: () => void;
+  setAutoFinishedSummary: (summary: SessionSummary, boardType: string | null) => void;
   dismissSessionSummary: () => void;
   setSession: Dispatch<SetStateAction<Session | null>>;
 };
@@ -146,6 +148,7 @@ export function useSessionLifecycle({
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [sessionSummaryBoardType, setSessionSummaryBoardType] = useState<string | null>(null);
   const [sessionSummaryHealthKitWorkoutId, setSessionSummaryHealthKitWorkoutId] = useState<string | null>(null);
+  const [sessionSummaryAutoFinished, setSessionSummaryAutoFinished] = useState(false);
 
   // Pending initial queue for new sessions
   const [pendingInitialQueue, setPendingInitialQueue] = useState<PendingInitialQueue | null>(null);
@@ -214,6 +217,14 @@ export function useSessionLifecycle({
     setSessionSummary(null);
     setSessionSummaryBoardType(null);
     setSessionSummaryHealthKitWorkoutId(null);
+    setSessionSummaryAutoFinished(false);
+  }, []);
+
+  const setAutoFinishedSummary = useCallback((summary: SessionSummary, boardType: string | null) => {
+    setSessionSummary(summary);
+    setSessionSummaryBoardType(boardType);
+    setSessionSummaryHealthKitWorkoutId(null);
+    setSessionSummaryAutoFinished(true);
   }, []);
 
   const endSessionWithSummary = useCallback(() => {
@@ -232,6 +243,7 @@ export function useSessionLifecycle({
             setSessionSummary(response.endSession);
             setSessionSummaryBoardType(boardType);
             setSessionSummaryHealthKitWorkoutId(null);
+            setSessionSummaryAutoFinished(false);
           }
         })
         .catch((err) => {
@@ -629,10 +641,12 @@ export function useSessionLifecycle({
     sessionSummary,
     sessionSummaryBoardType,
     sessionSummaryHealthKitWorkoutId,
+    sessionSummaryAutoFinished,
     activateSession,
     deactivateSession,
     setInitialQueueForSession,
     endSessionWithSummary,
+    setAutoFinishedSummary,
     dismissSessionSummary,
     setSession,
   };

@@ -1,7 +1,7 @@
 import { db } from '../../db/client';
 import { sessions, type Session } from '../../db/schema';
 import { userBoards } from '@boardsesh/db/schema/app';
-import { eq, and, gt, gte, lte, ne, isNull } from 'drizzle-orm';
+import { eq, and, gt, gte, lt, lte, ne, isNull } from 'drizzle-orm';
 import type { RedisSessionStore } from '../redis-session-store';
 import type { DistributedStateManager } from '../distributed-state';
 import type { WriteScheduler } from './write-scheduler';
@@ -225,4 +225,30 @@ export async function endSession(
   sessionsMap.delete(sessionId);
 
   console.info(`[RoomManager] Session ${sessionId} explicitly ended`);
+}
+
+/**
+ * Mark sessions as ended when they have been inactive for longer than `thresholdMs`.
+ * Permanent sessions are exempt. Skips Redis / WriteScheduler cleanup because these
+ * sessions have no live clients (otherwise lastActivity would have been refreshed).
+ * Returns the number of sessions ended.
+ */
+export async function endStaleInactiveSessions(thresholdMs: number): Promise<number> {
+  const cutoff = new Date(Date.now() - thresholdMs);
+  const now = new Date();
+  const result = await db
+    .update(sessions)
+    .set({ status: 'ended', endedAt: now })
+    .where(
+      and(
+        eq(sessions.status, 'active'),
+        eq(sessions.isPermanent, false),
+        lt(sessions.lastActivity, cutoff),
+      ),
+    )
+    .returning({ id: sessions.id });
+  if (result.length > 0) {
+    console.info(`[RoomManager] Auto-ended ${result.length} inactive session(s)`);
+  }
+  return result.length;
 }

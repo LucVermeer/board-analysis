@@ -21,6 +21,30 @@ vi.mock('../../graphql-queue/graphql-client', () => ({
   subscribe: vi.fn(() => vi.fn()),
 }));
 
+// Mock the HTTP GraphQL client used by the auto-finished pre-flight check on
+// session restore. Returning null mirrors a session with no ticks, which the
+// pre-flight treats as "silently clear" — but the tests using this mock pre-
+// populate IndexedDB themselves, so we make the request return a fresh-active
+// shape (endedAt=null) to keep the existing restore path intact.
+vi.mock('@/app/lib/graphql/client', () => ({
+  createGraphQLHttpClient: vi.fn(() => ({
+    request: vi.fn().mockResolvedValue({
+      sessionSummary: {
+        sessionId: 'mocked',
+        endedAt: null,
+        startedAt: null,
+        durationMinutes: 0,
+        totalSends: 0,
+        totalAttempts: 0,
+        gradeDistribution: [],
+        hardestClimb: null,
+        participants: [],
+        goal: null,
+      },
+    }),
+  })),
+}));
+
 // Mock auth token hook
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: () => ({ token: 'test-token', isLoading: false }),

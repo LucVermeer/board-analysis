@@ -16,6 +16,8 @@ type SessionSummaryDialogProps = {
   summary: SessionSummary | null;
   boardType?: string;
   existingWorkoutId?: string | null;
+  /** When true, the session was auto-finished after inactivity. Hides HealthKit save and changes the title. */
+  autoFinished?: boolean;
   onDismiss: () => void;
 };
 
@@ -23,6 +25,7 @@ export default function SessionSummaryDialog({
   summary,
   boardType = '',
   existingWorkoutId,
+  autoFinished = false,
   onDismiss,
 }: SessionSummaryDialogProps) {
   const { t } = useTranslation('session');
@@ -30,14 +33,17 @@ export default function SessionSummaryDialog({
   const { enabled: autoSyncEnabled, loaded: autoSyncLoaded } = useHealthKitAutoSync();
   const autoSyncedFor = useRef<string | null>(null);
 
-  // Auto-sync on first dialog open for a given session.
+  // Auto-sync on first dialog open for a given session. Skipped when the
+  // session was auto-finished — the user didn't intend to end it here, so we
+  // shouldn't write anything to HealthKit on their behalf.
   useEffect(() => {
+    if (autoFinished) return;
     if (!summary || !available || !autoSyncLoaded) return;
     if (!autoSyncEnabled) return;
     if (autoSyncedFor.current === summary.sessionId) return;
     autoSyncedFor.current = summary.sessionId;
     void save();
-  }, [summary, available, autoSyncEnabled, autoSyncLoaded, save]);
+  }, [summary, available, autoSyncEnabled, autoSyncLoaded, save, autoFinished]);
 
   let buttonLabel = t('summary.saveToAppleHealth');
   if (state === 'saving') {
@@ -48,12 +54,14 @@ export default function SessionSummaryDialog({
     buttonLabel = t('summary.saveToAppleHealthRetry');
   }
 
+  const dialogTitle = autoFinished ? t('summary.autoFinishedDialogTitle') : t('summary.dialogTitle');
+
   return (
     <Dialog open={summary !== null} onClose={onDismiss} maxWidth="sm" fullWidth>
-      <DialogTitle>{t('summary.dialogTitle')}</DialogTitle>
+      <DialogTitle>{dialogTitle}</DialogTitle>
       <DialogContent>{summary && <SessionSummaryView summary={summary} />}</DialogContent>
       <DialogActions>
-        {available && (
+        {available && !autoFinished && (
           <Button
             onClick={() => void save()}
             variant="outlined"

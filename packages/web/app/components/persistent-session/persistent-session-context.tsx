@@ -128,6 +128,8 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     setActiveSession: (val) => {
       if (val) lifecycle.activateSession(val);
     },
+    onSessionAutoFinished: lifecycle.setAutoFinishedSummary,
+    wsAuthTokenRef,
   });
 
   // 4. Queue mutations: GraphQL mutation wrappers
@@ -165,6 +167,7 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       triggerResync: subscriptions.triggerResync,
       endSessionWithSummary: lifecycle.endSessionWithSummary,
       dismissSessionSummary: lifecycle.dismissSessionSummary,
+      setAutoFinishedSummary: lifecycle.setAutoFinishedSummary,
     }),
     [
       lifecycle.activateSession,
@@ -172,6 +175,7 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       lifecycle.setInitialQueueForSession,
       lifecycle.endSessionWithSummary,
       lifecycle.dismissSessionSummary,
+      lifecycle.setAutoFinishedSummary,
       mutations.addQueueItem,
       mutations.removeQueueItem,
       mutations.setCurrentClimb,
@@ -209,6 +213,7 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       sessionSummary: lifecycle.sessionSummary,
       sessionSummaryBoardType: lifecycle.sessionSummaryBoardType ?? null,
       sessionSummaryHealthKitWorkoutId: lifecycle.sessionSummaryHealthKitWorkoutId ?? null,
+      sessionSummaryAutoFinished: lifecycle.sessionSummaryAutoFinished,
     }),
     [
       lifecycle.activeSession,
@@ -219,6 +224,7 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       lifecycle.sessionSummary,
       lifecycle.sessionSummaryBoardType,
       lifecycle.sessionSummaryHealthKitWorkoutId,
+      lifecycle.sessionSummaryAutoFinished,
       eventProcessor.currentClimbQueueItem,
       eventProcessor.queue,
       queueStorage.localQueue,
