@@ -239,13 +239,7 @@ export async function endStaleInactiveSessions(thresholdMs: number): Promise<num
   const result = await db
     .update(sessions)
     .set({ status: 'ended', endedAt: now })
-    .where(
-      and(
-        eq(sessions.status, 'active'),
-        eq(sessions.isPermanent, false),
-        lt(sessions.lastActivity, cutoff),
-      ),
-    )
+    .where(and(eq(sessions.status, 'active'), eq(sessions.isPermanent, false), lt(sessions.lastActivity, cutoff)))
     .returning({ id: sessions.id });
   if (result.length > 0) {
     console.info(`[RoomManager] Auto-ended ${result.length} inactive session(s)`);

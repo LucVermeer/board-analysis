@@ -4,10 +4,7 @@ import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/
 import type { BoardDetails } from '@/app/lib/types';
 import { getPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import {
-  GET_SESSION_SUMMARY,
-  type GetSessionSummaryResponse,
-} from '@/app/lib/graphql/operations/sessions';
+import { GET_SESSION_SUMMARY, type GetSessionSummaryResponse } from '@/app/lib/graphql/operations/sessions';
 import { type ActiveSessionInfo, ACTIVE_SESSION_KEY, DEBUG } from '../types';
 
 type UseQueueStorageArgs = {
