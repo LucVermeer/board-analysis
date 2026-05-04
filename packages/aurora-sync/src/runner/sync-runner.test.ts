@@ -7,6 +7,8 @@ type SyncRunnerPrivates = {
   updateCredentialStatus: (userId: string, boardType: string, status: string, error?: string | null) => Promise<void>;
   syncSingleCredential: (cred: ReturnType<typeof createCredential>) => Promise<void>;
   maybeRunSharedSync: (boardType: AuroraBoardName, token: string, userId: string) => Promise<void>;
+  getActiveCredentials: () => Promise<Array<ReturnType<typeof createCredential>>>;
+  getNextCredentialToSync: () => Promise<ReturnType<typeof createCredential> | null>;
 };
 
 const { mockDecrypt, mockEncrypt, mockSignIn, mockSyncSharedData } = vi.hoisted(() => ({
@@ -95,7 +97,11 @@ describe('SyncRunner login failure handling', () => {
   });
 });
 
-function createCredential() {
+function createCredential(overrides: Partial<ReturnType<typeof baseCredential>> = {}) {
+  return { ...baseCredential(), ...overrides };
+}
+
+function baseCredential() {
   return {
     userId: 'user-123',
     boardType: 'decoy',
@@ -183,5 +189,73 @@ describe('SyncRunner shared-sync per-board throttle', () => {
     await runnerPrivates.maybeRunSharedSync('decoy', 'tok', 'u2');
 
     expect(mockSyncSharedData).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SyncRunner per-user fault isolation', () => {
+  it('continues syncing remaining users when one user throws a SQL error', async () => {
+    vi.useFakeTimers();
+    try {
+      const runner = new SyncRunner();
+      const runnerPrivates = runner as unknown as SyncRunnerPrivates;
+
+      const credA = createCredential({ userId: 'user-A' });
+      const credB = createCredential({ userId: 'user-B' });
+      const credC = createCredential({ userId: 'user-C' });
+
+      vi.spyOn(runnerPrivates, 'getActiveCredentials').mockResolvedValue([credA, credB, credC]);
+
+      const dbError = new Error(
+        'Database error [code=23503 constraint=board_walls_layout_fk table=board_walls]: detail=Key not present',
+      );
+      const syncSingle = vi.spyOn(runnerPrivates, 'syncSingleCredential').mockImplementation(async (cred) => {
+        if (cred.userId === 'user-B') throw dbError;
+      });
+
+      const syncPromise = runner.syncAllUsers();
+      // syncAllUsers sleeps 10s after each successful credential — fast-forward through them
+      await vi.runAllTimersAsync();
+      const summary = await syncPromise;
+
+      expect(syncSingle).toHaveBeenCalledTimes(3);
+      expect(summary.total).toBe(3);
+      expect(summary.successful).toBe(2);
+      expect(summary.failed).toBe(1);
+      expect(summary.errors).toEqual([
+        {
+          userId: 'user-B',
+          boardType: 'decoy',
+          error: dbError.message,
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('syncNextUser does not throw on a SQL error and reports it in the summary', async () => {
+    const runner = new SyncRunner();
+    const runnerPrivates = runner as unknown as SyncRunnerPrivates;
+
+    const cred = createCredential({ userId: 'user-X' });
+    vi.spyOn(runnerPrivates, 'getNextCredentialToSync').mockResolvedValue(cred);
+
+    const dbError = new Error('Database error [code=23503 constraint=board_walls_user_fk table=board_walls]');
+    vi.spyOn(runnerPrivates, 'syncSingleCredential').mockRejectedValue(dbError);
+
+    const summary = await runner.syncNextUser();
+
+    expect(summary).toEqual({
+      total: 1,
+      successful: 0,
+      failed: 1,
+      errors: [
+        {
+          userId: 'user-X',
+          boardType: 'decoy',
+          error: dbError.message,
+        },
+      ],
+    });
   });
 });

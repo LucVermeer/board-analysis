@@ -7,6 +7,7 @@ import { UNIFIED_TABLES } from '../db/table-select';
 import { boardseshTicks, playlists, playlistClimbs, playlistOwnership } from '@boardsesh/db/schema/app';
 import { randomUUID } from 'crypto';
 import { convertQuality } from '@boardsesh/shared-schema';
+import { formatDbError } from './db-error';
 
 const BATCH_SIZE = 100;
 
@@ -552,18 +553,9 @@ export async function syncUserData(
           }
         });
       } catch (error) {
-        let errorMessage: string;
-        if (error instanceof Error) {
-          if (error.message.includes('violates foreign key constraint')) {
-            errorMessage = `FK constraint violation: ${error.message.split('violates foreign key constraint')[1]?.split('"')[1] || 'unknown'}`;
-          } else {
-            errorMessage = error.message.slice(0, 2000);
-          }
-        } else {
-          errorMessage = String(error).slice(0, 2000);
-        }
-        log(`Database error: ${errorMessage}`);
-        throw new Error(`Database error: ${errorMessage}`);
+        const formatted = formatDbError(error);
+        log(formatted);
+        throw new Error(formatted);
       }
 
       isComplete = syncResults._complete !== false;
@@ -581,8 +573,8 @@ export async function syncUserData(
 
     return totalResults;
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-    log(`Error syncing user data: ${errorMsg}`);
-    throw error instanceof Error ? error : new Error(`Sync error: ${errorMsg}`);
+    const formatted = formatDbError(error);
+    log(`Error syncing user data: ${formatted}`);
+    throw error instanceof Error ? error : new Error(formatted);
   }
 }
