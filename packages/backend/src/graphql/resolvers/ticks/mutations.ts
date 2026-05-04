@@ -39,6 +39,21 @@ export function videoUrlForTickStatus(status: TickStatus, videoUrl: string | nul
   }
 }
 
+// Hold-set IDs are stored and transported as a comma-separated string but the
+// order isn't part of the identity — `15,20` and `20,15` describe the same
+// configuration. Normalize before comparing so a client serializing in a
+// different order doesn't trip the boardUuid consistency check.
+export function normalizeSetIds(setIds: string): string {
+  return setIds
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map(Number)
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b)
+    .join(',');
+}
+
 export type ShortcodeConflict = { kind: 'none' } | { kind: 'same-climb' } | { kind: 'cross-climb'; climbName: string };
 
 // Looks up whether the same Instagram shortcode is already attached to any
@@ -307,6 +322,10 @@ export const tickMutations = {
           id: dbSchema.userBoards.id,
           ownerId: dbSchema.userBoards.ownerId,
           isPublic: dbSchema.userBoards.isPublic,
+          boardType: dbSchema.userBoards.boardType,
+          layoutId: dbSchema.userBoards.layoutId,
+          sizeId: dbSchema.userBoards.sizeId,
+          setIds: dbSchema.userBoards.setIds,
         })
         .from(dbSchema.userBoards)
         .where(and(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid), isNull(dbSchema.userBoards.deletedAt)))
@@ -321,6 +340,34 @@ export const tickMutations = {
       // boards are both fine.
       if (!board.isPublic && board.ownerId !== userId) {
         throw new GraphQLError('Cannot tick on a private board', { extensions: { code: 'FORBIDDEN' } });
+      }
+
+      // Make sure the board the client is pointing at actually matches the
+      // tick payload. Without this, a client could attach a Kilter tick to
+      // any public Tension board (or any other config) and skew that board's
+      // ascent/climber stats — those aggregations key purely on `board_id`.
+      if (board.boardType !== validatedInput.boardType) {
+        throw new GraphQLError("Board type doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (validatedInput.layoutId !== undefined && Number(board.layoutId) !== validatedInput.layoutId) {
+        throw new GraphQLError("Board layout doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (validatedInput.sizeId !== undefined && Number(board.sizeId) !== validatedInput.sizeId) {
+        throw new GraphQLError("Board size doesn't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+      if (
+        validatedInput.setIds !== undefined &&
+        normalizeSetIds(board.setIds) !== normalizeSetIds(validatedInput.setIds)
+      ) {
+        throw new GraphQLError("Board hold sets don't match tick payload", {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
       }
 
       boardId = board.id;
