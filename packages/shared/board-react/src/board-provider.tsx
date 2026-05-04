@@ -21,6 +21,13 @@ export type BoardContextType = {
    * yet" — mutations throw rather than send an empty boardType.
    */
   boardName: BoardName | null;
+  /**
+   * UUID of the active board entity when the user is on a named-board route
+   * (`/b/<slug>/...`). Null on the legacy config route, which doesn't
+   * reference a specific board entity, and on platforms that resolve the
+   * board by config alone.
+   */
+  boardUuid: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -41,7 +48,21 @@ export type BoardContextType = {
 
 const BoardContext = createContext<BoardContextType | undefined>(undefined);
 
-export function BoardProvider({ boardName, children }: { boardName: BoardName | null; children: ReactNode }) {
+export function BoardProvider({
+  boardName,
+  boardUuid,
+  children,
+}: {
+  boardName: BoardName | null;
+  /**
+   * Active board entity UUID. Set by named-board routes (`/b/<slug>/...`) so
+   * ticks attach to that exact board even when the climber doesn't own it
+   * (e.g. a seeded gym board). Omit on the legacy config route, which doesn't
+   * reference a specific board entity.
+   */
+  boardUuid?: string;
+  children: ReactNode;
+}) {
   const { isAuthenticated, isAuthLoading, resolveActiveSessionId } = useBoardAdapter();
   const [isInitialized, setIsInitialized] = useState(false);
   const [climbUuids, setClimbUuids] = useState<string[]>([]);
@@ -96,12 +117,20 @@ export function BoardProvider({ boardName, children }: { boardName: BoardName | 
     updateClimbMutateRef.current = updateClimbMutation.mutateAsync;
   });
 
+  // Mirror the active board uuid into a ref so the stable empty-dep saveTick
+  // callback always injects the latest value without taking boardUuid as a dep.
+  const boardUuidRef = useRef(boardUuid);
+  useEffect(() => {
+    boardUuidRef.current = boardUuid;
+  });
+
   const saveTick = useCallback(
     async (options: SaveTickOptions): Promise<void> => {
       const resolvedSessionId = options.sessionId ?? resolveActiveSessionId() ?? undefined;
       await saveTickMutateRef.current({
         ...options,
         sessionId: resolvedSessionId,
+        boardUuid: options.boardUuid ?? boardUuidRef.current,
       });
     },
     [resolveActiveSessionId],
@@ -118,6 +147,7 @@ export function BoardProvider({ boardName, children }: { boardName: BoardName | 
   const value = useMemo<BoardContextType>(
     () => ({
       boardName,
+      boardUuid: boardUuid ?? null,
       isAuthenticated,
       isLoading: isAuthLoading,
       error: null,
@@ -131,6 +161,7 @@ export function BoardProvider({ boardName, children }: { boardName: BoardName | 
     }),
     [
       boardName,
+      boardUuid,
       isAuthenticated,
       isAuthLoading,
       isInitialized,

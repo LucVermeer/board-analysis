@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, isNull } from 'drizzle-orm';
 import { GraphQLError } from 'graphql';
 import type { ConnectionContext, TickStatus } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
@@ -294,9 +294,37 @@ export const tickMutations = {
     const now = new Date().toISOString();
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
 
-    // Resolve board ID from board config if provided
+    // Resolve board ID. Prefer the explicit boardUuid coming from a named-board
+    // route (`/b/<slug>/...`) so ticks attach to that exact board entity even
+    // when the climber doesn't own it (e.g. a seeded gym board owned by the
+    // system user). Fall back to the user-owned config lookup for the legacy
+    // `/[board_name]/[layout_id]/...` route, which doesn't reference a
+    // specific board entity.
     let boardId: number | null = null;
-    if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
+    if (validatedInput.boardUuid) {
+      const [board] = await db
+        .select({
+          id: dbSchema.userBoards.id,
+          ownerId: dbSchema.userBoards.ownerId,
+          isPublic: dbSchema.userBoards.isPublic,
+        })
+        .from(dbSchema.userBoards)
+        .where(and(eq(dbSchema.userBoards.uuid, validatedInput.boardUuid), isNull(dbSchema.userBoards.deletedAt)))
+        .limit(1);
+
+      if (!board) {
+        throw new GraphQLError('Board not found', { extensions: { code: 'BAD_USER_INPUT' } });
+      }
+
+      // Don't let a client write ticks against someone else's private board.
+      // Public boards (including seeded gym boards) and the climber's own
+      // boards are both fine.
+      if (!board.isPublic && board.ownerId !== userId) {
+        throw new GraphQLError('Cannot tick on a private board', { extensions: { code: 'FORBIDDEN' } });
+      }
+
+      boardId = board.id;
+    } else if (validatedInput.layoutId && validatedInput.sizeId && validatedInput.setIds) {
       boardId = await resolveBoardFromPath(
         userId,
         validatedInput.boardType,

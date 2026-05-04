@@ -109,6 +109,8 @@ export const ticksTypeDefs = /* GraphQL */ `
     sizeId: Int
     "Set IDs for board resolution"
     setIds: String
+    "Specific board entity this tick is on. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board)."
+    boardUuid: String
     "Optional Instagram post or reel URL to attach as beta for the climb"
     videoUrl: String
   }

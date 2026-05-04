@@ -3950,6 +3950,8 @@ export type SaveTickInput = {
   attemptCount: Scalars['Int']['input'];
   /** Board type */
   boardType: Scalars['String']['input'];
+  /** Specific board entity this tick is on. When provided, takes precedence over (layoutId, sizeId, setIds) resolution and lets ticks attach to a board the climber doesn't own (e.g. a seeded gym board). */
+  boardUuid?: InputMaybe<Scalars['String']['input']>;
   /** Climb UUID */
   climbUuid: Scalars['String']['input'];
   /** When the climb was attempted (ISO 8601) */

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BETA_VIDEO_URL_REGEX, BETA_VIDEO_URL_VALIDATION_MESSAGE } from '@boardsesh/shared-schema';
-import { ExternalUUIDSchema, BoardNameSchema } from './primitives';
+import { ExternalUUIDSchema, BoardNameSchema, UUIDSchema } from './primitives';
 
 /**
  * Tick status validation schema
@@ -29,6 +29,7 @@ export const SaveTickInputSchema = z
     layoutId: z.number().int().positive().optional(),
     sizeId: z.number().int().positive().optional(),
     setIds: z.string().min(1).optional(),
+    boardUuid: UUIDSchema.optional(),
     videoUrl: z.string().max(500).regex(BETA_VIDEO_URL_REGEX, BETA_VIDEO_URL_VALIDATION_MESSAGE).optional().nullable(),
   })
   .refine(
