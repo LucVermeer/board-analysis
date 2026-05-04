@@ -32,7 +32,7 @@ import {
 } from './session-discovery';
 
 const INACTIVITY_THRESHOLD_MS = 60 * 60 * 1000;
-const INACTIVITY_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const INACTIVITY_SWEEP_INTERVAL_MS = 60 * 1000;
 
 class RoomManager {
   private clients = new Map<string, ConnectedClient>();
