@@ -24,6 +24,7 @@ export default function DrawerClimbHeader({ climb, boardDetails }: DrawerClimbHe
         gradePosition="right"
         titleFontSize={themeTokens.typography.fontSize.xl}
         showSetterInfo
+        isActive
       />
     </div>
   );

@@ -625,7 +625,7 @@ const ClimbListItem: React.FC<ClimbListItemProps> = React.memo(
 
             {/* Center: Name, stars, setter, colorized grade */}
             <div style={centerStyle}>
-              <ClimbTitle climb={climb} {...resolvedTitleProps} />
+              <ClimbTitle climb={climb} {...resolvedTitleProps} isActive={selected} />
               {centerBottomSlot}
             </div>
 
