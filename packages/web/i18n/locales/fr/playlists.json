@@ -93,8 +93,6 @@
       "notFoundDescription": "Cette playlist a été supprimée ou vous n'avez pas accès.",
       "loadTitle": "Impossible de charger la playlist",
       "loadDescription": "Erreur lors du chargement de cette playlist. Réessayez.",
-      "loadFailed": "Impossible de charger la playlist",
-      "notFound": "Playlist introuvable",
       "tryAgain": "Réessayer"
     }
   },
@@ -180,12 +178,6 @@
       "unfamiliar": "Jamais essayés",
       "attempted": "Déjà essayés",
       "any": "Tous"
-    },
-    "effortLevels": {
-      "moderate": "Modéré",
-      "challenging": "Exigeant",
-      "veryDifficult": "Très difficile",
-      "maxEffort": "Effort max"
     },
     "workoutTypes": {
       "volume": {

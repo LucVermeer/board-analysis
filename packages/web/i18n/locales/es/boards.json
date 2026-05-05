@@ -146,14 +146,6 @@
       "hardest": "Más difícil"
     }
   },
-  "boardHeatmap": {
-    "loading": "Cargando mapa de calor...",
-    "legend": {
-      "low": "Bajo ({{value}})",
-      "mid": "Medio ({{value}})",
-      "high": "Alto ({{value}})"
-    }
-  },
   "boardConfigSelects": {
     "board": "Tabla de escalada",
     "layout": "Disposición",

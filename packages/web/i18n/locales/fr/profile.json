@@ -1,7 +1,6 @@
 {
   "metadata": {
     "profile": {
-      "title": "{{name}}",
       "description": "Profil de grimpe de {{name}} sur Boardsesh",
       "fallbackTitle": "Profil",
       "fallbackDescription": "Profil de grimpe et stats",

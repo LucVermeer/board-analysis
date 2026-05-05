@@ -311,8 +311,7 @@
   "onboarding": {
     "skipTour": "Passer la visite",
     "finish": "Terminer",
-    "next": "Suivant",
-    "stepProgress": "{{current}} sur {{total}}"
+    "next": "Suivant"
   },
   "devUrlDialog": {
     "title": "URL de dev",

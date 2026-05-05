@@ -16,14 +16,8 @@
     "signInPrompt": "Connectez-vous pour suivre les grimpeurs de votre crew."
   },
   "ascentsFeed": {
-    "attempts": "{{count}} essais",
-    "deleteAscent": {
-      "title": "Supprimer l'ascension",
-      "description": "Sûr ? C'est définitif."
-    },
     "mirrored": "Miroir",
     "benchmark": "Référence",
-    "setBy": "Ouvert par {{name}}",
     "empty": "Aucune ascension pour le moment"
   },
   "betaVideos": {

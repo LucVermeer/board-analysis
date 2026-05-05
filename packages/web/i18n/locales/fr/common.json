@@ -1,12 +1,6 @@
 {
   "languageSwitcher": {
-    "ariaLabel": "Langue",
     "ariaLabelWithCurrent": "Langue : {{language}}"
-  },
-  "languages": {
-    "en-US": "English",
-    "es": "Español",
-    "fr": "Français"
   },
   "lightControl": {
     "title": "Lumières",
@@ -32,9 +26,7 @@
   "actions": {
     "yes": "Oui",
     "no": "Non",
-    "ok": "OK",
     "cancel": "Annuler",
-    "save": "Enregistrer",
     "delete": "Supprimer",
     "edit": "Modifier",
     "close": "Fermer",
@@ -42,19 +34,12 @@
     "next": "Suivant",
     "done": "Terminé",
     "retry": "Réessayer",
-    "loadMore": "Charger plus",
     "loading": "Chargement...",
-    "share": "Partager",
-    "copy": "Copier",
-    "submit": "Envoyer",
-    "clear": "Effacer",
-    "remove": "Retirer"
+    "clear": "Effacer"
   },
   "ariaLabels": {
     "close": "Fermer",
     "back": "Retour",
-    "menu": "Menu",
-    "search": "Rechercher",
     "clearSearch": "Effacer la recherche",
     "openFilters": "Ouvrir les filtres",
     "openQueue": "Ouvrir la file d'attente",

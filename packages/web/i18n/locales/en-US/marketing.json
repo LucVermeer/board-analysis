@@ -2,8 +2,7 @@
   "metadata": {
     "home": {
       "title": "Boardsesh - Train smarter on your climbing board",
-      "description": "Track your sends across Kilter, Tension, and MoonBoard. One app for your boards.",
-      "ogDescription": "Works with Kilter, Tension, and MoonBoard. Track sessions, control LEDs, climb together."
+      "description": "Track your sends across Kilter, Tension, and MoonBoard. One app for your boards."
     },
     "about": {
       "title": "About",
@@ -189,11 +188,21 @@
       "subtitle": "Learn about Boardsesh features and get the most out of your climbing sessions"
     },
     "sections": {
-      "visualization": { "label": "Visualization & Analysis" },
-      "collaboration": { "label": "Session & Collaboration" },
-      "training": { "label": "Training & Workouts" },
-      "search": { "label": "Search & Discovery" },
-      "connectivity": { "label": "Sync & Connectivity" }
+      "visualization": {
+        "label": "Visualization & Analysis"
+      },
+      "collaboration": {
+        "label": "Session & Collaboration"
+      },
+      "training": {
+        "label": "Training & Workouts"
+      },
+      "search": {
+        "label": "Search & Discovery"
+      },
+      "connectivity": {
+        "label": "Sync & Connectivity"
+      }
     },
     "heatmap": {
       "q": "How do I use the heatmap feature?",

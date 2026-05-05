@@ -93,8 +93,6 @@
       "notFoundDescription": "This playlist may have been deleted or you may not have permission to view it.",
       "loadTitle": "Unable to Load Playlist",
       "loadDescription": "There was an error loading this playlist. Please try again.",
-      "loadFailed": "Failed to load playlist",
-      "notFound": "Playlist not found",
       "tryAgain": "Try Again"
     }
   },
@@ -180,12 +178,6 @@
       "unfamiliar": "Unfamiliar",
       "attempted": "Attempted",
       "any": "Any"
-    },
-    "effortLevels": {
-      "moderate": "Moderate",
-      "challenging": "Challenging",
-      "veryDifficult": "Very Difficult",
-      "maxEffort": "Max Effort"
     },
     "workoutTypes": {
       "volume": {

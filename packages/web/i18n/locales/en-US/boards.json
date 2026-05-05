@@ -146,14 +146,6 @@
       "hardest": "Hardest"
     }
   },
-  "boardHeatmap": {
-    "loading": "Loading heatmap...",
-    "legend": {
-      "low": "Low ({{value}})",
-      "mid": "Mid ({{value}})",
-      "high": "High ({{value}})"
-    }
-  },
   "boardConfigSelects": {
     "board": "Board",
     "layout": "Layout",

@@ -1,10 +1,7 @@
 {
   "metadata": {
     "detail": {
-      "title": "Session de grimpe",
-      "description": "Session de grimpe sur Boardsesh",
-      "notFoundTitle": "Session introuvable",
-      "notFoundDescription": "Cette session n'existe pas ou est terminée."
+      "notFoundTitle": "Session introuvable"
     },
     "join": {
       "title": "Rejoindre la session",
@@ -22,20 +19,11 @@
     }
   },
   "detail": {
-    "title": "Session",
     "subtitleSends_one": "{{count}} enchaînement",
     "subtitleSends_other": "{{count}} enchaînements",
     "participantsClimbing": "{{names}} grimpent sur Boardsesh",
     "sessionNameOnBoardsesh": "{{name}} sur Boardsesh",
-    "host": "Hôte : {{name}}",
-    "participants": "Participants",
-    "climbs": "Blocs",
     "climbsCount": "Blocs ({{count}})",
-    "duration": "Durée",
-    "startedAt": "Démarrée {{time}}",
-    "empty": "Aucun enchaînement pour l'instant",
-    "endSession": "Terminer la session",
-    "leaveSession": "Quitter la session",
     "share": "Partager la session",
     "shareTitle": "Session de grimpe",
     "shareText": "Regarde cette session de grimpe sur Boardsesh",
@@ -47,7 +35,6 @@
     "delete": "Supprimer",
     "climberFallback": "Grimpeur",
     "unknownClimb": "Bloc inconnu",
-    "anonymous": "Anonyme",
     "attemptOnNth": "au {{ordinal}} essai",
     "totalAttempts": "{{count}} au total",
     "attemptCount_one": "{{count}} essai",
@@ -56,7 +43,6 @@
     "ordinalSecond": "{{n}}e",
     "ordinalThird": "{{n}}e",
     "ordinalDefault": "{{n}}e",
-    "joiningSession": "On te connecte…",
     "sessionNotesPlaceholder": "Notes ou objectif de session…",
     "noClimbsYet": "Aucun bloc pour l'instant",
     "logSomeClimbs": "Enregistre quelques blocs pour voir la répartition par cotation",
@@ -85,8 +71,7 @@
     "hardestLabel": "Plus dur : {{grade}}",
     "notFound": {
       "title": "Session introuvable",
-      "subtitle": "Cette session est introuvable. Elle a peut-être été supprimée.",
-      "back": "Retour à Boardsesh"
+      "subtitle": "Cette session est introuvable. Elle a peut-être été supprimée."
     },
     "userSearch": {
       "title": "Ajouter un grimpeur",
@@ -95,42 +80,13 @@
     }
   },
   "join": {
-    "title": "Rejoindre la session",
-    "subtitle": "Au mur",
-    "description": "On t'invite à grimper.",
-    "joinButton": "Rejoindre la session",
-    "joining": "On te connecte…",
-    "leaderName": "Session de {{name}}",
-    "scanQr": "Ou scanne un QR code de l'hôte",
-    "enterId": "Ou colle un identifiant de session",
-    "errors": {
-      "notFound": "Session introuvable",
-      "ended": "Cette session est terminée",
-      "joinFailed": "Impossible de rejoindre la session"
-    }
+    "joining": "On te connecte…"
   },
   "settings": {
-    "drawerTitle": "Paramètres de la session",
     "fallbackTitle": "Session",
-    "partyMode": {
-      "label": "Mode Party",
-      "subtitle": "Partage ta file avec la crew"
-    },
-    "name": "Nom de la session",
-    "namePlaceholder": "Sesh du vendredi soir",
-    "color": "Couleur de la session",
-    "leader": "Leader de la session",
-    "leaveSession": "Quitter la session",
-    "endSession": "Terminer la session",
     "stopSession": "Arrêter la session",
     "dismiss": "Fermer",
     "loadFailed": "Impossible de charger tous les détails. Les stats en direct reprendront dès que possible.",
-    "endSessionConfirm": {
-      "title": "Terminer cette session ?",
-      "description": "Ta crew sera déconnectée.",
-      "confirm": "Terminer",
-      "cancel": "Annuler"
-    },
     "share": {
       "shareTitle": "Rejoins ma session de grimpe",
       "shareText": "Viens grimper avec moi sur Boardsesh",
@@ -146,11 +102,7 @@
     }
   },
   "creation": {
-    "title": "Lancer une session",
-    "subtitle": "Grimpez ensemble en temps réel",
     "drawerTitle": "Lancer la session",
-    "create": "Lancer la session",
-    "creating": "Lancement…",
     "submitDefault": "Sesh",
     "dialogTitle": "Créer une session",
     "dialogSubmit": "Créer la session",
@@ -178,19 +130,14 @@
     }
   },
   "summary": {
-    "title": "Résumé de la session",
     "dialogTitle": "Résumé de la session",
-    "totalClimbs": "Total des blocs",
     "sends": "Enchaînements",
     "attempts": "Essais",
     "duration": "Durée",
     "hardestSend": "Enchaînement le plus dur :",
-    "shareSummary": "Partager le résumé",
     "goal": "Objectif :",
     "gradeDistribution": "Répartition des cotations",
     "participants": "Participants",
-    "anonymous": "Anonyme",
-    "participantStats": "{{sends}} enchaînements / {{attempts}} essais",
     "done": "Terminé",
     "saveToAppleHealth": "Enregistrer dans Apple Santé",
     "savingToAppleHealth": "Enregistrement dans Apple Santé…",
@@ -213,7 +160,6 @@
     "cancelReconnect": "Annuler",
     "tickError": "Impossible d'enregistrer ton tick. Réessaie.",
     "tickCommentPlaceholder": "Commentaire…",
-    "tickCommentAria": "Commentaire du tick",
     "tickAttemptLabel": "essai",
     "reconnect": {
       "connectionError": "Erreur de connexion. Nouvelle tentative…",
@@ -221,9 +167,7 @@
     },
     "tickBar": {
       "collapse": "Réduire",
-      "expand": "Développer",
-      "collapseAria": "Réduire la barre de tick",
-      "expandAria": "Développer la barre de tick"
+      "expand": "Développer"
     },
     "ariaLabels": {
       "leaveSession": "Quitter la session",
@@ -271,7 +215,6 @@
     },
     "tickBar": {
       "commentPlaceholder": "Commentaire…",
-      "commentAria": "Commentaire du tick",
       "closeAria": "Fermer la barre de tick",
       "collapseAria": "Réduire la barre de tick",
       "expandAria": "Développer la barre de tick",

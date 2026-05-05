@@ -2,8 +2,7 @@
   "metadata": {
     "home": {
       "title": "Boardsesh - Entraînez-vous mieux sur votre board d'escalade",
-      "description": "Notez vos enchaînements sur Kilter, Tension et MoonBoard. Une seule app pour vos boards.",
-      "ogDescription": "Compatible avec Kilter, Tension et MoonBoard. Suivez vos sessions, pilotez les LEDs, grimpez ensemble."
+      "description": "Notez vos enchaînements sur Kilter, Tension et MoonBoard. Une seule app pour vos boards."
     },
     "about": {
       "title": "À propos",
@@ -189,11 +188,21 @@
       "subtitle": "Découvrez les fonctionnalités de Boardsesh et tirez le meilleur de vos sessions"
     },
     "sections": {
-      "visualization": { "label": "Visualisation et analyse" },
-      "collaboration": { "label": "Sessions et collaboration" },
-      "training": { "label": "Entraînement et workouts" },
-      "search": { "label": "Recherche et découverte" },
-      "connectivity": { "label": "Sync et connectivité" }
+      "visualization": {
+        "label": "Visualisation et analyse"
+      },
+      "collaboration": {
+        "label": "Sessions et collaboration"
+      },
+      "training": {
+        "label": "Entraînement et workouts"
+      },
+      "search": {
+        "label": "Recherche et découverte"
+      },
+      "connectivity": {
+        "label": "Sync et connectivité"
+      }
     },
     "heatmap": {
       "q": "Comment utiliser la heatmap ?",

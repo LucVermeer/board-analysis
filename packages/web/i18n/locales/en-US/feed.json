@@ -16,14 +16,8 @@
     "signInPrompt": "Sign in to see a personalized feed from climbers you follow."
   },
   "ascentsFeed": {
-    "attempts": "{{count}} attempts",
-    "deleteAscent": {
-      "title": "Delete ascent",
-      "description": "Are you sure? This cannot be undone."
-    },
     "mirrored": "Mirrored",
     "benchmark": "Benchmark",
-    "setBy": "Set by {{name}}",
     "empty": "No ascents logged yet"
   },
   "betaVideos": {
