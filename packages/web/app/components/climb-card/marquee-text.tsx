@@ -13,7 +13,6 @@ type MarqueeTextProps = {
 const PIXELS_PER_SECOND = 30;
 const MIN_DURATION_S = 8;
 const MAX_DURATION_S = 24;
-const TRAILING_BUFFER_PX = 8;
 
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -50,7 +49,7 @@ const MarqueeText: React.FC<MarqueeTextProps> = ({ active, className, children }
 
   const innerStyle = isScrolling
     ? ({
-        ['--marquee-distance' as string]: `${overflowPx + TRAILING_BUFFER_PX}px`,
+        ['--marquee-distance' as string]: `${overflowPx}px`,
         ['--marquee-duration' as string]: `${durationS}s`,
       } as React.CSSProperties)
     : undefined;
