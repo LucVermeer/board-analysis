@@ -294,8 +294,8 @@ type FileAnalysis = {
   keepHints: Set<string>;
 };
 
-function analyzeFile(filePath: string): FileAnalysis {
-  const source = readFileSync(filePath, 'utf8');
+function analyzeFile(filePath: string, sourceOverride?: string): FileAnalysis {
+  const source = sourceOverride ?? readFileSync(filePath, 'utf8');
   const sourceFile = ts.createSourceFile(
     filePath,
     source,
@@ -366,7 +366,10 @@ function analyzeFile(filePath: string): FileAnalysis {
       const firstSegment = pattern.segments[0];
       if (typeof firstSegment === 'string') {
         const remainder = firstSegment.slice(colonIndex + 1);
-        const remainderSegments = remainder.split('.').map<GlobSegment>((seg) => seg);
+        // `ns:${expr}.suffix` leaves an empty remainder — drop the empty
+        // first segment instead of pushing `["", wildcard, "suffix"]`, which
+        // would never match any catalog key.
+        const remainderSegments: GlobSegment[] = remainder === '' ? [] : remainder.split('.');
         pattern = { segments: [...remainderSegments, ...pattern.segments.slice(1)] };
       }
       targetNamespaces = [ns];
