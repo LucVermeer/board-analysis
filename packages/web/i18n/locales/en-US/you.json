@@ -16,7 +16,8 @@
   "tabs": {
     "progress": "Progress",
     "sessions": "Sessions",
-    "logbook": "Logbook"
+    "logbook": "Logbook",
+    "feed": "Feed"
   },
   "progress": {
     "title": "Progress"

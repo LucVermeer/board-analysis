@@ -540,7 +540,7 @@ export default function HomePageContent({ boardConfigs, initialPopularConfigs }:
             <Typography variant="body2" sx={{ color: 'var(--neutral-400)', mb: 1 }}>
               {t('home.feed.callout')}
             </Typography>
-            <Button variant="text" size="small" onClick={() => router.push('/feed')} sx={{ textTransform: 'none' }}>
+            <Button variant="text" size="small" onClick={() => router.push('/you/feed')} sx={{ textTransform: 'none' }}>
               {t('home.feed.cta')}
             </Button>
           </Box>

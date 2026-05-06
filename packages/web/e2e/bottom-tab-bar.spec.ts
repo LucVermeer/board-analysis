@@ -274,10 +274,11 @@ test.describe('Bottom Tab Bar - Queue Integration', () => {
     await expect(page).toHaveURL(/\/playlists/, { timeout: 15000 });
     await verifyBarsShowClimb();
 
-    // Navigate to Feed (Notifications tab was removed from the bottom bar;
-    // use Feed as a second public route to verify persistence).
-    await tabClickWithFallback('Feed', false, /\/feed/, '/feed');
-    await expect(page).toHaveURL(/\/feed/, { timeout: 15000 });
+    // Navigate back to Home as a second hop before returning to Climb.
+    // (The Feed tab was folded into /you/feed and removed from the bottom bar;
+    // /you requires auth so we use Home instead to verify multi-hop persistence.)
+    await tabClickWithFallback('Home', false, '/', '/');
+    await expect(page).toHaveURL('/', { timeout: 15000 });
     await verifyBarsShowClimb();
 
     // Navigate back to Climb. Fallback URL is the original board this test

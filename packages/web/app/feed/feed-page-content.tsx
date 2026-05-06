@@ -26,6 +26,7 @@ type FeedPageContentProps = {
   initialFeedResult?: SessionFeedResult | null;
   isAuthenticatedSSR?: boolean;
   initialMyBoards?: UserBoard[] | null;
+  basePath?: string;
 };
 
 export default function FeedPageContent({
@@ -34,6 +35,7 @@ export default function FeedPageContent({
   initialFeedResult,
   isAuthenticatedSSR,
   initialMyBoards,
+  basePath = '/feed',
 }: FeedPageContentProps) {
   const { t } = useTranslation('feed');
   const { status } = useSession();
@@ -70,9 +72,9 @@ export default function FeedPageContent({
         params.delete(key);
       }
       const qs = params.toString();
-      router.push(qs ? `/feed?${qs}` : '/feed', { scroll: false });
+      router.push(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
     },
-    [router, searchParams],
+    [router, searchParams, basePath],
   );
 
   const handleTabChange = (_: React.SyntheticEvent, value: FeedTab) => {

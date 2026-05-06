@@ -363,15 +363,18 @@ describe('BottomTabBar You tab', () => {
     expect(youTab.classList.contains('Mui-selected')).toBe(false);
   });
 
-  it('Feed tab is selected when on /feed path', () => {
-    mockPathname = '/feed';
+  it('Feed tab is no longer rendered (folded into the You sub-tabs)', () => {
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const feedTab = screen.getByRole('button', { name: 'Feed' });
-    expect(feedTab.classList.contains('Mui-selected')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Feed' })).toBeNull();
+  });
+
+  it('You tab is selected when on /you/feed path (Feed lives under You)', () => {
+    mockPathname = '/you/feed';
+    render(<BottomTabBar boardConfigs={boardConfigs} />);
 
     const youTab = screen.getByRole('button', { name: 'You' });
-    expect(youTab.classList.contains('Mui-selected')).toBe(false);
+    expect(youTab.classList.contains('Mui-selected')).toBe(true);
   });
 
   it('Home tab is selected when on / path', () => {
@@ -418,12 +421,12 @@ describe('BottomTabBar locale-aware pathname matching', () => {
     mockLanguage = 'es';
   });
 
-  it('Feed tab is selected when on /es/feed', () => {
-    mockPathname = '/es/feed';
+  it('You tab is selected when on /es/you/feed (locale-prefixed feed)', () => {
+    mockPathname = '/es/you/feed';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const feedTab = screen.getByRole('button', { name: 'Feed' });
-    expect(feedTab.classList.contains('Mui-selected')).toBe(true);
+    const youTab = screen.getByRole('button', { name: 'You' });
+    expect(youTab.classList.contains('Mui-selected')).toBe(true);
   });
 
   it('You tab is selected when on /es/you', () => {
