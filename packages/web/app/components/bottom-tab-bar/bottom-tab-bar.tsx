@@ -58,11 +58,13 @@ const getActiveTab = (pathname: string): Tab => {
 
 // Scroll-direction hook. Returns true while the user is scrolling *down* past
 // COLLAPSE_THRESHOLD; flips back to false on any upward scroll or when they're
-// near the top of the page (< NEAR_TOP_PX). Movement under MIN_DELTA is ignored
-// to keep the pill stable on tiny scroll jitter (iOS rubber-banding, etc.).
+// near the top of the page (< NEAR_TOP_PX). Movement under the threshold is
+// ignored to keep the pill stable on tiny scroll jitter (iOS rubber-banding,
+// etc.). Returns a setter so the component can also expand the pill manually
+// — first tap on a collapsed pill should expand instead of navigating.
 const COLLAPSE_THRESHOLD = 8;
 const NEAR_TOP_PX = 24;
-function useScrollCollapsed(): boolean {
+function useScrollCollapsed(): [boolean, (value: boolean) => void] {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -90,7 +92,7 @@ function useScrollCollapsed(): boolean {
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);
-  return collapsed;
+  return [collapsed, setCollapsed];
 }
 
 const listUrlToCreateUrl = (url: string): string => {
@@ -112,7 +114,7 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
   const { t } = useTranslation('playlists');
   const { mode } = useColorMode();
   const isDark = mode === 'dark';
-  const collapsed = useScrollCollapsed();
+  const [collapsed, setCollapsed] = useScrollCollapsed();
   const { openAuthModal } = useAuthModal();
 
   // Publish the collapsed state as a `data-` attribute on <html> so other
@@ -322,6 +324,15 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
   };
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: Tab) => {
+    // First tap on a collapsed pill expands it instead of navigating.
+    // The user can't reliably hit a 14px icon in a 28px-tall chrome, so the
+    // tap is treated as "bring the chrome back" — they can then aim properly
+    // and tap again to navigate. Mirrors how Safari's collapsed URL bar
+    // expands on first tap before it accepts a target.
+    if (collapsed) {
+      setCollapsed(false);
+      return;
+    }
     switch (newValue) {
       case 'home':
         handleHomeTab();
