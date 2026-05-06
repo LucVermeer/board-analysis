@@ -518,14 +518,17 @@
 
 /* Wraps the entire MuiCard so the bar can collapse to 0 height (minimised
    state) and re-expand smoothly. Same CSS grid 0fr↔1fr pattern used by
-   the tick row and session header wrapper above. */
+   the tick row and session header wrapper above. Opacity and grid-row
+   share the same 220ms duration so the bar doesn't go invisible while
+   still occupying ~20% of its height (which used to read as a layout jump
+   at the 180/220ms split). */
 .cardWrapper {
   display: grid;
   grid-template-rows: 1fr;
   opacity: 1;
   transition:
     grid-template-rows 220ms ease-out,
-    opacity 180ms ease-out;
+    opacity 220ms ease-out;
 }
 
 .cardWrapperHidden {
@@ -553,4 +556,35 @@
 .thumbnailEnter {
   animation: thumbnailFadeIn 120ms ease-out;
   will-change: transform, opacity;
+}
+
+/* Honour the OS-level reduced-motion preference. Translation/scale
+   animations collapse to opacity-only; the grid-rows collapse stays (it's
+   a layout change, not a transform — and snapping it to instant would be
+   more jarring than the smooth height transition for vestibular users). */
+@media (prefers-reduced-motion: reduce) {
+  .sessionHeaderWrapper,
+  .participantBar,
+  .tickRow {
+    transition: opacity 180ms ease-out;
+  }
+
+  .cardWrapper {
+    transition: opacity 180ms ease-out;
+  }
+
+  .thumbnailEnter {
+    animation: none;
+  }
+
+  @keyframes thumbnailFadeIn {
+    from {
+      opacity: 0;
+      transform: none;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }

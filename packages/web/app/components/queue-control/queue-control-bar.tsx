@@ -81,7 +81,7 @@ export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
 type LayoutState = 'minimised' | 'expanded' | 'peeking';
 type OpenReason = 'userOpen' | 'tickOpen' | 'queueOpen' | 'playOpen' | 'scrollOpen' | 'default';
 
-const PEEK_DURATION_MS = 1800;
+const PEEK_DURATION_MS = 3000;
 
 // Re-export the window event so existing imports from this file keep working.
 // The actual definition lives in ./play-drawer-event to keep the import graph
@@ -156,11 +156,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // doesn't trigger a peek (the bar mounts with a current climb already set).
   const initialUuidRef = useRef<string | null | undefined>(undefined);
 
-  // Reset activeDrawer + layout state on navigation
+  // Reset activeDrawer + layout state on navigation. Also re-arm the peek
+  // gate so the next climb-uuid change is treated as a *first observation*
+  // on the new route — without this, navigating to a climb that differs
+  // from the one we were viewing fires a peek that announces the climb
+  // we just navigated to (a duplicate cue, since the user just clicked).
   useEffect(() => {
     setActiveDrawer('none');
     setLayoutState(isClimbListPage ? 'expanded' : 'minimised');
     setOpenReason('default');
+    initialUuidRef.current = undefined;
     if (peekTimerRef.current) {
       clearTimeout(peekTimerRef.current);
       peekTimerRef.current = null;
@@ -194,10 +199,18 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   }, []);
 
   // While any drawer is open, the bar must stay expanded — drawers can't
-  // render meaningfully over a FAB.
+  // render meaningfully over a FAB. Cancel any in-flight peek timer too,
+  // otherwise it would fire setLayoutState('minimised') under the open
+  // drawer (and immediately get force-expanded again on the next render).
   useEffect(() => {
-    if (activeDrawer !== 'none' && layoutState !== 'expanded') {
-      setLayoutState('expanded');
+    if (activeDrawer !== 'none') {
+      if (peekTimerRef.current) {
+        clearTimeout(peekTimerRef.current);
+        peekTimerRef.current = null;
+      }
+      if (layoutState !== 'expanded') {
+        setLayoutState('expanded');
+      }
     }
   }, [activeDrawer, layoutState]);
 
@@ -1498,7 +1511,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         currentClimb={currentClimb}
         boardDetails={boardDetails}
         pathname={pathname}
-        queueSize={queue.length}
         onExpandFromGrade={handleFabExpand}
         onOpenPlayView={handleFabPlayOpen}
         onExpandFromTick={handleFabTickExpand}

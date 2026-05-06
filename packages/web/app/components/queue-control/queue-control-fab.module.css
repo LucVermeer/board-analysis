@@ -1,12 +1,26 @@
 /* FAB cluster: thumbnail FAB on left, tick FAB on right.
    Anchored above the bottom tab bar via the published --bottom-bar-height
-   variable so the FAB sits clear of the BottomNavigation and tracks the
-   queue bar's collapsed/expanded height automatically. */
+   variable, which the bottom-bar wrapper updates continuously as it
+   collapses/expands. The cluster's `bottom` therefore tracks the bar's
+   real-time height — no separate `transition: bottom` needed, otherwise
+   the eased `bottom` would desync from the wrapper's actual motion and
+   the FABs would appear to drift independently of the bar.
+
+   The cluster is purely a fade in/out: the bar visibly slides away above
+   it to reveal the FABs already in place. The 80ms delay on the entrance
+   keeps it from crossfading with the bar's exit. */
 .fabRoot {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--bottom-bar-height, 80px) + 8px);
+  /* Hardcoded against the BottomTabBar's content height (~64px: 56px default
+     BottomNavigation content + 8px sx padding-top) plus the OS safe-area
+     inset plus an 8px gap. Tried measuring the wrapper / the tab bar via
+     getBoundingClientRect + ResizeObserver, but on Android the URL-bar
+     movement and the queue-control-bar grid-row collapse compound into
+     visible jitter — a fixed reference is the only way to keep the FAB
+     perfectly stationary while the bar slides away. */
+  bottom: calc(59px + env(safe-area-inset-bottom, 0px) + 8px);
   z-index: 8;
   padding: 0 12px;
   display: flex;
@@ -15,15 +29,17 @@
   gap: 12px;
   pointer-events: none;
   opacity: 0;
-  transform: translateY(8px);
-  transition:
-    opacity 200ms ease-out,
-    transform 220ms ease-out;
+  transition: opacity 220ms ease-out 80ms;
 }
 
 .fabRootVisible {
   opacity: 1;
-  transform: translateY(0);
+}
+
+/* On the way out, drop the entrance delay so the cluster fades immediately
+   and the bar takes its place underneath. */
+.fabRoot:not(.fabRootVisible) {
+  transition: opacity 180ms ease-in;
 }
 
 .thumbnailFab,
@@ -80,26 +96,42 @@
   width: 100%;
 }
 
+/* Grade FAB stays mounted while the grade format resolves so the cluster
+   width doesn't shift on cold load. Hidden via opacity + pointer-events
+   until ready, then revealed in sync with the cluster fade-in. */
+.gradeFab {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+}
+
+.gradeFab.gradeFabReady {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* Peek snackbar: pill-shaped overlay above the smaller FABs that surfaces
-   the current climb's title + byline when the climb changes. The grade-tint
-   background ties it to the climb FAB visually. Sibling of fabRoot in the
-   portal (not nested inside) so Safari's flex + absolute-position quirks
-   can't hide it. Anchored to the bottom-bar height + small-FAB height so
-   it sits just above the right cluster. */
+   the current climb's title + byline when the climb changes. Sibling of
+   fabRoot in the portal (not nested inside) so Safari's flex +
+   absolute-position quirks can't hide it. Anchored to the bottom-bar
+   height + small-FAB height so it sits just above the right cluster.
+
+   Per UX review: the snackbar is opaque (no backdrop blur) so it reads as
+   a tooltip *for* the FAB rather than a fifth glass surface in the same
+   region. */
 .peekSnackbar {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--bottom-bar-height, 80px) + 8px + 46px + 12px);
+  /* Same fixed anchor as the FAB cluster (above the small-FAB row + gap). */
+  bottom: calc(59px + env(safe-area-inset-bottom, 0px) + 8px + 46px + 12px);
   max-width: calc(100vw - 32px);
   z-index: 8;
   border-radius: 9999px;
   pointer-events: none;
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(20px) saturate(200%);
-  -webkit-backdrop-filter: blur(20px) saturate(200%);
+    0 8px 24px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   /* `forwards` keeps the centering translate after the animation finishes. */
   animation: peekSnackbarIn 220ms ease-out forwards;
   display: inline-flex;
@@ -109,6 +141,14 @@
   font-size: 14px;
   line-height: 1.25;
   text-align: center;
+  transition: bottom 220ms ease-out;
+}
+
+/* Exit phase: paired ease-in animation (incoming items decelerate, outgoing
+   items accelerate). The element stays mounted for the full 200ms exit
+   before unmounting in JS so the user sees a fade rather than a snap. */
+.peekSnackbarExiting {
+  animation: peekSnackbarOut 180ms ease-in forwards;
 }
 
 .peekName {
@@ -136,5 +176,59 @@
   to {
     opacity: 1;
     transform: translate(-50%, 0);
+  }
+}
+
+@keyframes peekSnackbarOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+/* Honour the OS-level reduced-motion preference. Translation/scale
+   animations become opacity-only; durations stay (the cue is the fade,
+   not the motion) but the transform component is removed so users with
+   vestibular sensitivity don't get screen movement. */
+@media (prefers-reduced-motion: reduce) {
+  .fabRoot,
+  .fabRoot:not(.fabRootVisible) {
+    transition: opacity 180ms ease-out;
+  }
+
+  .peekSnackbar {
+    animation: peekSnackbarFadeIn 180ms ease-out forwards;
+    transform: translateX(-50%);
+    transition: none;
+  }
+
+  .peekSnackbarExiting {
+    animation: peekSnackbarFadeOut 160ms ease-in forwards;
+  }
+
+  @keyframes peekSnackbarFadeIn {
+    from {
+      opacity: 0;
+      transform: translateX(-50%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%);
+    }
+  }
+
+  @keyframes peekSnackbarFadeOut {
+    from {
+      opacity: 1;
+      transform: translateX(-50%);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(-50%);
+    }
   }
 }

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import Fab from '@mui/material/Fab';
-import Badge from '@mui/material/Badge';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
 import type { BoardDetails, Climb } from '@/app/lib/types';
@@ -23,8 +23,6 @@ type QueueControlFabProps = {
   currentClimb: Climb | null;
   boardDetails: BoardDetails;
   pathname: string;
-  /** Number of items in the queue, shown as a badge on the queue FAB. */
-  queueSize: number;
   /** Tap on the grade FAB — expand the queue control bar. */
   onExpandFromGrade: () => void;
   /** Tap on the climb thumbnail FAB — open the play view drawer. */
@@ -34,31 +32,57 @@ type QueueControlFabProps = {
   onExpandFromQueue: () => void;
 };
 
+// Constants hoisted out so they don't allocate on every render.
+const SMALL_FAB_SIZE = 46;
+const SNACKBAR_EXIT_MS = 200;
+const liquidGlass = {
+  backdropFilter: 'blur(20px) saturate(200%)',
+  WebkitBackdropFilter: 'blur(20px) saturate(200%)',
+  border: '1px solid rgba(255, 255, 255, 0.28)',
+  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.32)',
+} as const;
 const QueueControlFab: React.FC<QueueControlFabProps> = ({
   mode,
   currentClimb,
   boardDetails,
   pathname,
-  queueSize,
   onExpandFromGrade,
   onOpenPlayView,
   onExpandFromTick,
   onExpandFromQueue,
 }) => {
+  const { t } = useTranslation('session');
   const { formatGrade, getGradeColor, loaded: gradeLoaded } = useGradeFormat();
   const isDark = useIsDarkMode();
-  const { isConnected: isBluetoothConnected, connect } = useBluetoothContext();
+  const { isConnected: isBluetoothConnected, isBluetoothSupported, connect } = useBluetoothContext();
 
   const handleConnectBluetooth = useCallback(() => {
     void connect();
   }, [connect]);
 
-  if (typeof document === 'undefined') return null;
-  if (!currentClimb) return null;
-
   const isPeeking = mode === 'peeking';
   const isVisible = mode !== 'hidden';
-  const sourceGrade = currentClimb.difficulty;
+
+  // Snackbar visibility tracks isPeeking but lingers SNACKBAR_EXIT_MS so the
+  // exit keyframe finishes before the element unmounts.
+  const [snackbarMounted, setSnackbarMounted] = useState(isPeeking);
+  const [snackbarExiting, setSnackbarExiting] = useState(false);
+  useEffect(() => {
+    if (isPeeking) {
+      setSnackbarMounted(true);
+      setSnackbarExiting(false);
+      return;
+    }
+    if (!snackbarMounted) return;
+    setSnackbarExiting(true);
+    const id = setTimeout(() => {
+      setSnackbarMounted(false);
+      setSnackbarExiting(false);
+    }, SNACKBAR_EXIT_MS);
+    return () => clearTimeout(id);
+  }, [isPeeking, snackbarMounted]);
+
+  const sourceGrade = currentClimb?.difficulty;
   const formattedGrade = gradeLoaded ? formatGrade(sourceGrade) : null;
   const gradeColor = formattedGrade ? getGradeColor(sourceGrade, isDark) : undefined;
   // Use the 'session' variant for a more saturated, opaque background than
@@ -66,76 +90,88 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
   // page rather than fade into it.
   const gradeTintColor = getGradeTintColor(sourceGrade, 'session', isDark);
   const fabBackground = gradeTintColor ?? 'var(--semantic-surface)';
-  const showBluetoothFab = !isBluetoothConnected;
+  const showBluetoothFab = isBluetoothSupported && !isBluetoothConnected;
 
-  // Liquid glass shared styling: very-light translucent backdrop with strong
-  // blur + saturation, subtle inner highlight border, soft drop shadow.
-  // The non-climb FABs share this base so the cluster reads as a glass pane;
-  // the climb FAB gets a colorized tint on top of the same blur.
   const glassBg = isDark ? 'rgba(28, 28, 30, 0.42)' : 'rgba(255, 255, 255, 0.42)';
   const glassBgHover = isDark ? 'rgba(28, 28, 30, 0.62)' : 'rgba(255, 255, 255, 0.62)';
-  const liquidGlass = {
-    backdropFilter: 'blur(20px) saturate(200%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(200%)',
-    border: '1px solid rgba(255, 255, 255, 0.28)',
-    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.32)',
-  } as const;
 
-  // FABs share the same translucent backdrop and only differ by their icon
-  // tint, so the cluster reads as a unified glass pane. Sized at 46×46 —
-  // a touch larger than MUI's `small` default so the icon has room without
-  // dominating next to the 84px climb FAB.
-  const SMALL_FAB_SIZE = 46;
-  const glassFab = (iconColor: string) =>
-    ({
+  // Memoised so MUI's sx shallow-compare doesn't re-style every render.
+  const tickFabSx = useMemo(
+    () => ({
       ...liquidGlass,
       width: SMALL_FAB_SIZE,
       height: SMALL_FAB_SIZE,
       minHeight: SMALL_FAB_SIZE,
       backgroundColor: glassBg,
-      color: iconColor,
+      color: themeTokens.colors.success,
       '&:hover': { backgroundColor: glassBgHover },
-    }) as const;
+    }),
+    [glassBg, glassBgHover],
+  );
 
-  // Thumbnail FAB is a fixed 84px pill — climb info no longer lives inside
-  // the FAB during peek; instead a separate snackbar fades in above the
-  // smaller FABs to surface the climb name + byline.
-  const thumbnailFabSx = {
-    ...liquidGlass,
-    width: 84,
-    minWidth: 84,
-    height: 84,
-    minHeight: 84,
-    borderRadius: '42px',
-    padding: 0,
-    overflow: 'hidden',
-    backgroundColor: fabBackground,
-    color: 'text.primary',
-    transition: 'background-color 220ms ease-out',
-    '&:hover': { backgroundColor: fabBackground },
-  };
+  const bluetoothFabSx = useMemo(
+    () => ({
+      ...liquidGlass,
+      width: SMALL_FAB_SIZE,
+      height: SMALL_FAB_SIZE,
+      minHeight: SMALL_FAB_SIZE,
+      backgroundColor: glassBg,
+      color: themeTokens.colors.warning,
+      '&:hover': { backgroundColor: glassBgHover },
+    }),
+    [glassBg, glassBgHover],
+  );
 
-  // Non-climb FABs: shared translucent glass background, icon-only color
-  // signal (no full-width tint). The climb FAB keeps the colorized tint
-  // because the climb image lives inside it and needs the colour cue.
-  const tickFabSx = glassFab(themeTokens.colors.success);
-  const bluetoothFabSx = glassFab(themeTokens.colors.warning);
-  const queueFabSx = glassFab(isDark ? '#fff' : themeTokens.neutral[800]);
-  const gradeFabSx = {
-    ...glassFab(gradeColor ?? (isDark ? '#fff' : themeTokens.neutral[800])),
-    fontWeight: themeTokens.typography.fontWeight.bold,
-    fontSize: themeTokens.typography.fontSize.xs,
-    textTransform: 'none',
-    alignSelf: 'flex-end',
-  } as const;
+  const queueFabSx = useMemo(
+    () => ({
+      ...liquidGlass,
+      width: SMALL_FAB_SIZE,
+      height: SMALL_FAB_SIZE,
+      minHeight: SMALL_FAB_SIZE,
+      backgroundColor: glassBg,
+      color: isDark ? '#fff' : themeTokens.neutral[800],
+      '&:hover': { backgroundColor: glassBgHover },
+    }),
+    [glassBg, glassBgHover, isDark],
+  );
 
-  const queueBadgeSx = {
-    '& .MuiBadge-badge': {
-      ...themeTokens.badge.small,
-      backgroundColor: themeTokens.colors.primary,
-      color: 'common.white',
-    },
-  } as const;
+  const gradeFabSx = useMemo(
+    () => ({
+      ...liquidGlass,
+      width: SMALL_FAB_SIZE,
+      height: SMALL_FAB_SIZE,
+      minHeight: SMALL_FAB_SIZE,
+      backgroundColor: glassBg,
+      color: gradeColor ?? (isDark ? '#fff' : themeTokens.neutral[800]),
+      fontWeight: themeTokens.typography.fontWeight.bold,
+      fontSize: themeTokens.typography.fontSize.xs,
+      textTransform: 'none' as const,
+      alignSelf: 'flex-end' as const,
+      '&:hover': { backgroundColor: glassBgHover },
+    }),
+    [glassBg, glassBgHover, gradeColor, isDark],
+  );
+
+  const thumbnailFabSx = useMemo(
+    () => ({
+      ...liquidGlass,
+      width: 84,
+      minWidth: 84,
+      height: 84,
+      minHeight: 84,
+      borderRadius: '42px',
+      padding: 0,
+      overflow: 'hidden',
+      backgroundColor: fabBackground,
+      color: 'text.primary',
+      transition: 'background-color 220ms ease-out',
+      '&:hover': { backgroundColor: fabBackground },
+    }),
+    [fabBackground],
+  );
+
+  if (typeof document === 'undefined') return null;
+  if (!currentClimb) return null;
 
   return createPortal(
     <>
@@ -146,7 +182,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       >
         <div className={styles.leftCluster}>
           <Fab
-            aria-label="Open climb details"
+            aria-label={t('queueBar.ariaLabels.openClimbDetails')}
             onClick={onOpenPlayView}
             className={styles.thumbnailFab}
             sx={thumbnailFabSx}
@@ -161,21 +197,23 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
               />
             </span>
           </Fab>
-          {formattedGrade && (
-            <Fab
-              aria-label="Expand queue control"
-              onClick={onExpandFromGrade}
-              className={styles.gradeFab}
-              sx={gradeFabSx}
-            >
-              {formattedGrade}
-            </Fab>
-          )}
+          {/* Grade FAB is always mounted so its slot is reserved on cold load
+              when `formattedGrade` is still resolving — opacity gates the
+              visual reveal so we don't shift the cluster width. */}
+          <Fab
+            aria-label={t('queueBar.ariaLabels.expandQueueControl')}
+            onClick={onExpandFromGrade}
+            className={`${styles.gradeFab} ${formattedGrade ? styles.gradeFabReady : ''}`}
+            sx={gradeFabSx}
+            disabled={!formattedGrade}
+          >
+            {formattedGrade ?? ' '}
+          </Fab>
         </div>
         <div className={styles.rightCluster}>
           {showBluetoothFab && (
             <Fab
-              aria-label="Connect to board"
+              aria-label={t('queueBar.ariaLabels.connectToBoard')}
               onClick={handleConnectBluetooth}
               className={styles.bluetoothFab}
               sx={bluetoothFabSx}
@@ -183,12 +221,20 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
               <LightbulbOutlined fontSize="small" />
             </Fab>
           )}
-          <Badge badgeContent={queueSize} sx={queueBadgeSx} max={99} overlap="circular">
-            <Fab aria-label="Open queue" onClick={onExpandFromQueue} className={styles.queueFab} sx={queueFabSx}>
-              <FormatListBulletedOutlined fontSize="small" />
-            </Fab>
-          </Badge>
-          <Fab aria-label="Save tick" onClick={onExpandFromTick} className={styles.tickFab} sx={tickFabSx}>
+          <Fab
+            aria-label={t('queueBar.ariaLabels.openQueue')}
+            onClick={onExpandFromQueue}
+            className={styles.queueFab}
+            sx={queueFabSx}
+          >
+            <FormatListBulletedOutlined fontSize="small" />
+          </Fab>
+          <Fab
+            aria-label={t('queueBar.ariaLabels.saveTick')}
+            onClick={onExpandFromTick}
+            className={styles.tickFab}
+            sx={tickFabSx}
+          >
             <TickIcon isFlash={false} />
           </Fab>
         </div>
@@ -196,12 +242,17 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       {/* Peek snackbar: pill shaped, colorized grade tint, surfaces the
           current climb's name + setter when it changes. Sibling of fabRoot
           (not inside it) because Safari has rendering bugs with position:
-          absolute children of display: flex containers. The grade is
-          already shown on the grade FAB so we omit it here. */}
-      {isPeeking && (
-        <div className={styles.peekSnackbar} style={{ backgroundColor: fabBackground }}>
+          absolute children of display: flex containers. Mounted via
+          snackbarMounted so the exit animation can run before unmount. */}
+      {snackbarMounted && (
+        <div
+          className={`${styles.peekSnackbar} ${snackbarExiting ? styles.peekSnackbarExiting : ''}`}
+          style={{ backgroundColor: fabBackground }}
+        >
           <span className={styles.peekName}>{currentClimb.name}</span>
-          {currentClimb.setter_username && <span className={styles.peekByline}>By {currentClimb.setter_username}</span>}
+          {currentClimb.setter_username && (
+            <span className={styles.peekByline}>{t('queueBar.byline', { setter: currentClimb.setter_username })}</span>
+          )}
         </div>
       )}
     </>,

@@ -20,6 +20,10 @@ type UseScrollDirectionOptions = {
  * threshold. RAF-coalesced; passive listener. Each accumulator resets after
  * its callback fires, so a single deliberate scroll fires once — there's no
  * sticky direction state that can re-fire on unrelated re-renders.
+ *
+ * Thresholds and callbacks are stored in refs so callers can pass changing
+ * values without churning the listener — the effect only resubscribes when
+ * `enabled` flips.
  */
 export function useScrollDirection({
   upThresholdPx = 24,
@@ -28,24 +32,31 @@ export function useScrollDirection({
   onUp,
   onDown,
 }: UseScrollDirectionOptions = {}): void {
-  // Latest callbacks captured in refs so the listener always invokes the
-  // current closure without resubscribing on every render.
   const onUpRef = useRef(onUp);
   const onDownRef = useRef(onDown);
+  const upThresholdRef = useRef(upThresholdPx);
+  const downThresholdRef = useRef(downThresholdPx);
   onUpRef.current = onUp;
   onDownRef.current = onDown;
+  upThresholdRef.current = upThresholdPx;
+  downThresholdRef.current = downThresholdPx;
 
   useEffect(() => {
     if (!enabled || typeof window === 'undefined') return;
 
-    let lastY = window.scrollY;
+    // Clamp negative scrollY so iOS Safari rubber-band overscroll at the top
+    // of the page (which makes scrollY go negative on pull) doesn't get
+    // counted as upward scroll and fire spurious onUp callbacks.
+    const readScrollY = () => Math.max(0, window.scrollY);
+
+    let lastY = readScrollY();
     let upAccum = 0;
     let downAccum = 0;
     let raf: number | null = null;
 
     const evaluate = () => {
       raf = null;
-      const currentY = window.scrollY;
+      const currentY = readScrollY();
       const delta = currentY - lastY;
       lastY = currentY;
       if (delta === 0) return;
@@ -53,14 +64,14 @@ export function useScrollDirection({
       if (delta > 0) {
         upAccum = 0;
         downAccum += delta;
-        if (downAccum >= downThresholdPx) {
+        if (downAccum >= downThresholdRef.current) {
           downAccum = 0;
           onDownRef.current?.();
         }
       } else {
         downAccum = 0;
         upAccum += -delta;
-        if (upAccum >= upThresholdPx) {
+        if (upAccum >= upThresholdRef.current) {
           upAccum = 0;
           onUpRef.current?.();
         }
@@ -80,5 +91,5 @@ export function useScrollDirection({
         raf = null;
       }
     };
-  }, [enabled, upThresholdPx, downThresholdPx]);
+  }, [enabled]);
 }

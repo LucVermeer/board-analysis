@@ -110,6 +110,29 @@ describe('useScrollDirection', () => {
     expect(onDown).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores negative scrollY (iOS Safari rubber-band overscroll)', () => {
+    const onUp = vi.fn();
+    const onDown = vi.fn();
+    renderHook(() => useScrollDirection({ onUp, onDown, upThresholdPx: 10, downThresholdPx: 4 }));
+
+    // Simulate iOS pull-down at top of page: scrollY goes negative then back to 0.
+    act(() => {
+      fireScroll(-40);
+      flushRaf();
+    });
+    act(() => {
+      fireScroll(-20);
+      flushRaf();
+    });
+    act(() => {
+      fireScroll(0);
+      flushRaf();
+    });
+
+    expect(onUp).not.toHaveBeenCalled();
+    expect(onDown).not.toHaveBeenCalled();
+  });
+
   it('does not subscribe when disabled', () => {
     const onDown = vi.fn();
     const addSpy = vi.spyOn(window, 'addEventListener');
