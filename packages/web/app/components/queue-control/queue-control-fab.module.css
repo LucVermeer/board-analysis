@@ -28,19 +28,37 @@
 
 .thumbnailFab,
 .tickFab,
-.bluetoothFab {
+.bluetoothFab,
+.queueFab,
+.gradeFab {
   flex-shrink: 0;
 }
 
 .fabRootVisible .thumbnailFab,
 .fabRootVisible .tickFab,
-.fabRootVisible .bluetoothFab {
+.fabRootVisible .bluetoothFab,
+.fabRootVisible .queueFab,
+.fabRootVisible .gradeFab {
   pointer-events: auto;
 }
 
-/* Right-side cluster: optional bluetooth FAB + tick FAB grouped together so
-   they sit as a pair to the right of the thumbnail FAB. flex-shrink: 0 so
-   the thumbnail FAB never pushes the tick button off screen during peek. */
+/* Left-side cluster: thumbnail FAB + grade FAB. The thumbnail can flex-grow
+   during peek while the grade stays a fixed 46px to its right.
+   Explicit height matches the climb FAB so flex-end alignment is always
+   resolved against a known cross-axis size. */
+.leftCluster {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-width: 0;
+  height: 84px;
+}
+
+/* Right-side cluster: optional lightbulb + queue (with badge) + tick, all
+   inline. flex-shrink: 0 so the thumbnail can't push it off screen during
+   peek. */
 .rightCluster {
   display: flex;
   align-items: flex-end;
@@ -48,20 +66,10 @@
   flex-shrink: 0;
 }
 
-.thumbnailContent {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-}
-
 .thumbnailWrapper {
-  position: relative;
   width: 56px;
   height: 72px;
   flex-shrink: 0;
-  margin-left: 12px;
-  margin-right: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -72,42 +80,61 @@
   width: 100%;
 }
 
-.gradeChip {
-  position: absolute;
-  bottom: -2px;
-  right: -10px;
-  background-color: var(--semantic-surface, #ffffff);
-  border-radius: 7px;
-  padding: 3px 6px;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.2px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+/* Peek snackbar: pill-shaped overlay above the smaller FABs that surfaces
+   the current climb's title + byline when the climb changes. The grade-tint
+   background ties it to the climb FAB visually. Sibling of fabRoot in the
+   portal (not nested inside) so Safari's flex + absolute-position quirks
+   can't hide it. Anchored to the bottom-bar height + small-FAB height so
+   it sits just above the right cluster. */
+.peekSnackbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-bar-height, 80px) + 8px + 46px + 12px);
+  max-width: calc(100vw - 32px);
+  z-index: 8;
+  border-radius: 9999px;
   pointer-events: none;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(20px) saturate(200%);
+  -webkit-backdrop-filter: blur(20px) saturate(200%);
+  /* `forwards` keeps the centering translate after the animation finishes. */
+  animation: peekSnackbarIn 220ms ease-out forwards;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 18px;
+  font-size: 14px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.peekName {
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:global(html[data-theme='dark']) .gradeChip {
-  background-color: rgba(255, 255, 255, 0.95);
-  color: var(--neutral-50, #111);
+.peekByline {
+  font-size: 12px;
+  opacity: 0.75;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Peek text: hidden in minimised, fades + slides in when peeking. */
-.peekText {
-  flex: 1;
-  min-width: 0;
-  padding: 0 16px 0 6px;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition:
-    opacity 180ms ease-out,
-    transform 200ms ease-out;
-  pointer-events: none;
-  text-align: left;
-}
-
-.thumbnailFabPeeking .peekText {
-  opacity: 1;
-  transform: translateX(0);
+@keyframes peekSnackbarIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }

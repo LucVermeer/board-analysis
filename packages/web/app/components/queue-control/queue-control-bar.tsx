@@ -79,7 +79,7 @@ import { PLAY_DRAWER_EVENT as PLAY_DRAWER_EVENT_INTERNAL, dispatchOpenPlayDrawer
 export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
 
 type LayoutState = 'minimised' | 'expanded' | 'peeking';
-type OpenReason = 'userOpen' | 'tickOpen' | 'scrollOpen' | 'default';
+type OpenReason = 'userOpen' | 'tickOpen' | 'queueOpen' | 'playOpen' | 'scrollOpen' | 'default';
 
 const PEEK_DURATION_MS = 1800;
 
@@ -202,18 +202,23 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   }, [activeDrawer, layoutState]);
 
   // Peek-on-climb-change: when the current climb uuid changes (locally or
-  // from a party-mode WebSocket event), briefly widen the FAB to surface
-  // the new climb's name. No-op while expanded — the bar already shows it.
+  // from a party-mode WebSocket event), briefly surface the new climb's name
+  // in a snackbar above the FAB cluster. The ref tracks the last uuid we
+  // *actually peeked for* — not just the latest seen — so a climb change
+  // that happens while the bar is expanded (e.g. the queue drawer is open)
+  // still triggers a peek the moment the bar returns to minimised.
   const currentClimbUuid = useCurrentClimbUuid();
   useEffect(() => {
     if (initialUuidRef.current === undefined) {
+      // First mount: record the current climb so the initial value doesn't
+      // immediately trigger a peek.
       initialUuidRef.current = currentClimbUuid;
       return;
     }
-    if (currentClimbUuid === initialUuidRef.current) return;
-    initialUuidRef.current = currentClimbUuid;
     if (!currentClimbUuid) return;
+    if (currentClimbUuid === initialUuidRef.current) return;
     if (layoutState !== 'minimised') return;
+    initialUuidRef.current = currentClimbUuid;
     if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
     setLayoutState('peeking');
     peekTimerRef.current = setTimeout(() => {
@@ -274,6 +279,41 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     setOpenReason('tickOpen');
     setActiveDrawer('tick');
   }, []);
+
+  const handleFabQueueExpand = useCallback(() => {
+    if (peekTimerRef.current) {
+      clearTimeout(peekTimerRef.current);
+      peekTimerRef.current = null;
+    }
+    setLayoutState('expanded');
+    setOpenReason('queueOpen');
+    setActiveDrawer('queue');
+  }, []);
+
+  const handleFabPlayOpen = useCallback(() => {
+    if (peekTimerRef.current) {
+      clearTimeout(peekTimerRef.current);
+      peekTimerRef.current = null;
+    }
+    setLayoutState('expanded');
+    setOpenReason('playOpen');
+    setActiveDrawer('play');
+  }, []);
+
+  // When the user closes a drawer they opened from a FAB, fall back to
+  // minimised so the FAB cluster comes back without an extra tap. Other
+  // open reasons (scrollOpen, userOpen) leave the bar expanded.
+  const prevDrawerRef = useRef<ActiveDrawer>('none');
+  useEffect(() => {
+    const prev = prevDrawerRef.current;
+    prevDrawerRef.current = activeDrawer;
+    if (prev !== 'none' && activeDrawer === 'none') {
+      if (openReason === 'queueOpen' || openReason === 'tickOpen' || openReason === 'playOpen') {
+        setLayoutState('minimised');
+        setOpenReason('default');
+      }
+    }
+  }, [activeDrawer, openReason]);
 
   const handleCloseDrawer = useCallback(() => setActiveDrawer('none'), []);
 
@@ -1458,8 +1498,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         currentClimb={currentClimb}
         boardDetails={boardDetails}
         pathname={pathname}
-        onExpandFromThumbnail={handleFabExpand}
+        queueSize={queue.length}
+        onExpandFromGrade={handleFabExpand}
+        onOpenPlayView={handleFabPlayOpen}
         onExpandFromTick={handleFabTickExpand}
+        onExpandFromQueue={handleFabQueueExpand}
       />
 
       <QueueDrawer open={activeDrawer === 'queue'} onClose={handleCloseDrawer} boardDetails={boardDetails} />
