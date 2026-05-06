@@ -127,6 +127,10 @@
      (measurement jitters during URL-bar moves on Android). Update here if
      the tab bar's content height changes. */
   --bottom-tab-bar-height: 59px;
+  /* Collapsed pill height — used while scrolling down (Safari-chrome shrink).
+     The tab bar publishes `data-tab-bar-collapsed` on <html>; consumers (FAB
+     cluster, peek snackbar) override their `bottom` against this value. */
+  --bottom-tab-bar-height-collapsed: 28px;
 
   /* Tap highlight (Android/mobile browsers) */
   --tap-highlight: transparent;

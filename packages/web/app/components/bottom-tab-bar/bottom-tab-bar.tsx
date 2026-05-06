@@ -114,6 +114,19 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
   const isDark = mode === 'dark';
   const collapsed = useScrollCollapsed();
   const { openAuthModal } = useAuthModal();
+
+  // Publish the collapsed state as a `data-` attribute on <html> so other
+  // floating UI (specifically the queue-control FAB cluster, portal-rendered
+  // outside this component's tree) can subscribe via plain CSS — no shared
+  // state, no measurement-based jitter. Binary toggle = single 200ms
+  // transition on the consumer side that matches the bar's own animation.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.tabBarCollapsed = collapsed ? 'true' : 'false';
+    return () => {
+      delete document.documentElement.dataset.tabBarCollapsed;
+    };
+  }, [collapsed]);
   const [isBoardSelectorOpen, setIsBoardSelectorOpen] = useState(false);
   const [isBoardSelectorRendered, setIsBoardSelectorRendered] = useState(false);
   const [isCustomBoardOpen, setIsCustomBoardOpen] = useState(false);

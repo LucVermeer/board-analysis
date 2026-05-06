@@ -6,7 +6,7 @@
   --tab-bar-safe-area-padding: 0px;
   --tab-bar-bottom-extension: 0px;
   position: fixed;
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: max(4px, env(safe-area-inset-bottom));
   left: 0;
   right: 0;
   padding-inline: 12px;
@@ -26,14 +26,14 @@
    on Android via passed insets (Chromium 140+) or decorView padding (older);
    on iOS WKWebView env() reports the home-indicator inset natively. */
 .nativeApp {
-  bottom: max(16px, env(safe-area-inset-bottom));
+  bottom: max(8px, env(safe-area-inset-bottom));
 }
 
 /* On desktop the pill stays centered and capped; the wrapper itself spans full
    width but the BottomNavigation child sets max-width: min(560px, 100%). */
 @media (min-width: 768px) {
   .bottomBarWrapper {
-    bottom: 16px;
+    bottom: 8px;
     padding-inline: 24px;
   }
 }
