@@ -516,6 +516,29 @@
   pointer-events: auto;
 }
 
+/* Wraps the entire MuiCard so the bar can collapse to 0 height (minimised
+   state) and re-expand smoothly. Same CSS grid 0fr↔1fr pattern used by
+   the tick row and session header wrapper above. */
+.cardWrapper {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 220ms ease-out,
+    opacity 180ms ease-out;
+}
+
+.cardWrapperHidden {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cardWrapperInner {
+  overflow: hidden;
+  min-height: 0;
+}
+
 @keyframes thumbnailFadeIn {
   from {
     opacity: 0;

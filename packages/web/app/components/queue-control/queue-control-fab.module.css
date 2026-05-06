@@ -1,0 +1,113 @@
+/* FAB cluster: thumbnail FAB on left, tick FAB on right.
+   Anchored above the bottom tab bar via the published --bottom-bar-height
+   variable so the FAB sits clear of the BottomNavigation and tracks the
+   queue bar's collapsed/expanded height automatically. */
+.fabRoot {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--bottom-bar-height, 80px) + 8px);
+  z-index: 8;
+  padding: 0 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 200ms ease-out,
+    transform 220ms ease-out;
+}
+
+.fabRootVisible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.thumbnailFab,
+.tickFab,
+.bluetoothFab {
+  flex-shrink: 0;
+}
+
+.fabRootVisible .thumbnailFab,
+.fabRootVisible .tickFab,
+.fabRootVisible .bluetoothFab {
+  pointer-events: auto;
+}
+
+/* Right-side cluster: optional bluetooth FAB + tick FAB grouped together so
+   they sit as a pair to the right of the thumbnail FAB. flex-shrink: 0 so
+   the thumbnail FAB never pushes the tick button off screen during peek. */
+.rightCluster {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.thumbnailContent {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.thumbnailWrapper {
+  position: relative;
+  width: 56px;
+  height: 72px;
+  flex-shrink: 0;
+  margin-left: 12px;
+  margin-right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.thumbnailWrapper > * {
+  width: 100%;
+}
+
+.gradeChip {
+  position: absolute;
+  bottom: -2px;
+  right: -10px;
+  background-color: var(--semantic-surface, #ffffff);
+  border-radius: 7px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+:global(html[data-theme='dark']) .gradeChip {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: var(--neutral-50, #111);
+}
+
+/* Peek text: hidden in minimised, fades + slides in when peeking. */
+.peekText {
+  flex: 1;
+  min-width: 0;
+  padding: 0 16px 0 6px;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition:
+    opacity 180ms ease-out,
+    transform 200ms ease-out;
+  pointer-events: none;
+  text-align: left;
+}
+
+.thumbnailFabPeeking .peekText {
+  opacity: 1;
+  transform: translateX(0);
+}
