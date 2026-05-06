@@ -9,6 +9,10 @@ buzzwords, and explicitly non-affiliated with Aurora / Moon / Tension.
 
 ---
 
+## English version
+
+---
+
 **Subject:** Boardsesh — a free tool for your Kilter / Tension members
 
 Hi [Manager's name],
@@ -54,6 +58,56 @@ I'll turn it around within a couple of days. And if any of your setters or coach
 Thanks again — stoked to have Sharma involved.
 
 Cheers,
+Alex
+Boardsesh
+https://www.boardsesh.com
+
+--- 
+
+## Spanish version
+
+---
+Hola,
+
+Como comenté el otro dia con [persona de contacto], estoy colaborando en una aplicación para Kilter y me gustaría poder un QR o un banner junto a la kilter.
+
+**Qué es Boardsesh?**
+
+Boardsesh es una aplicación gratuita y de código abierto para escaladores que entrenan en paneles LED. Funciona con Kilter, Tension y MoonBoard con un único inicio de sesión, por lo que los miembros no tienen que lidiar con tres aplicaciones distintas. 
+
+No estamos afiliados a Aurora, Tension, Moon, ni ninguna marca comercial solo somos un proyecto de código abierto creado por y para escaladores.
+
+Puedes ver la aplicación y probarla en boardsesh.com
+
+**Por qué puede gustarles a los socios de Sharma?**
+
+- La única app con traducción al español
+- Turnos sin preguntas del tipo «¿quién es el siguiente?»: una cola compartida en los teléfonos de todos, para que la rotación se gestione sola.
+- Escalad juntos en tiempo real: el «Modo Grupo» comparte una sesión entre los teléfonos; la siguiente vía se ilumina para quien esté en el rocódromo.
+- Traslada tu Logbook de escalada desde Kilter: migración en un solo paso, sin perder el historial.
+- Crea una lista de proyectos antes de llegar: organiza tus proyectos en casa y envíalos al gimnasio.
+- Un solo inicio de sesión para todas: Kilter, Tension, MoonBoard y más en camino.
+- Es gratis, sin anuncios, y sin pagos. Además, puede ser selfhosted si alguien quiere gestionar su propia instancia.
+
+**Mi sugerencia para el banner / QR**
+
+Estaré encantado de crear el material gráfico listo para imprimir en el tamaño que queráis. La versión más sencilla:
+
+- Código QR que redirija a https://www.boardsesh.com
+- Un eslogan breve. Algunas opciones que han funcionado bien:
+  - _«Una sola app para Kilter, Tension y MoonBoard»._
+  - _«Ponte en la cola. Escalad juntos. Gratis.»_
+
+**Que teneis que hacer vosotros?**
+
+- Decidid donde se va a colocar
+- El tamaño o formato que prefieras (cartel, pegatina, cartelito de mesa)
+
+Os lo tendré listo en un par de días. Y si alguno de vuestros setters o entrenadores quiere que le explique cómo funciona la app, puedo acercarme en cualquier horario
+
+Gracias de nuevo — estoy encantado de que Sharma se sume al proyecto.
+
+Saludos,
 Alex
 Boardsesh
 https://www.boardsesh.com
