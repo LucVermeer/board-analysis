@@ -13,14 +13,15 @@
   position: fixed;
   left: 0;
   right: 0;
-  /* Hardcoded against the BottomTabBar's content height (~64px: 56px default
-     BottomNavigation content + 8px sx padding-top) plus the OS safe-area
-     inset plus an 8px gap. Tried measuring the wrapper / the tab bar via
-     getBoundingClientRect + ResizeObserver, but on Android the URL-bar
-     movement and the queue-control-bar grid-row collapse compound into
-     visible jitter — a fixed reference is the only way to keep the FAB
-     perfectly stationary while the bar slides away. */
-  bottom: calc(59px + env(safe-area-inset-bottom, 0px) + 8px);
+  /* Anchored against --bottom-tab-bar-height (declared in components/index.css)
+     plus the OS safe-area inset plus an 8px gap. Tried measuring the wrapper
+     / the tab bar via getBoundingClientRect + ResizeObserver, but on Android
+     the URL-bar movement and the queue-control-bar grid-row collapse compound
+     into visible jitter — a fixed reference is the only way to keep the FAB
+     perfectly stationary while the bar slides away. The custom property is
+     the single source of truth so a tab-bar height change here propagates
+     without grepping for magic numbers. */
+  bottom: calc(var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + 8px);
   z-index: 8;
   padding: 0 12px;
   display: flex;
@@ -123,7 +124,7 @@
   position: fixed;
   left: 50%;
   /* Same fixed anchor as the FAB cluster (above the small-FAB row + gap). */
-  bottom: calc(59px + env(safe-area-inset-bottom, 0px) + 8px + 46px + 12px);
+  bottom: calc(var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + 8px + 46px + 12px);
   max-width: calc(100vw - 32px);
   z-index: 8;
   border-radius: 9999px;

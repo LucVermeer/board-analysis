@@ -13,7 +13,7 @@ import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-contex
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
 import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
-import { themeTokens } from '@/app/theme/theme-config';
+import { themeTokens, darkTokens } from '@/app/theme/theme-config';
 import styles from './queue-control-fab.module.css';
 
 export type QueueControlFabMode = 'minimised' | 'peeking' | 'hidden';
@@ -36,10 +36,10 @@ type QueueControlFabProps = {
 const SMALL_FAB_SIZE = 46;
 const SNACKBAR_EXIT_MS = 200;
 const liquidGlass = {
-  backdropFilter: 'blur(20px) saturate(200%)',
-  WebkitBackdropFilter: 'blur(20px) saturate(200%)',
-  border: '1px solid rgba(255, 255, 255, 0.28)',
-  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.32)',
+  backdropFilter: themeTokens.glass.filter,
+  WebkitBackdropFilter: themeTokens.glass.filter,
+  border: `1px solid ${themeTokens.glass.border}`,
+  boxShadow: `0 8px 24px ${themeTokens.glass.shadow}, inset 0 1px 0 ${themeTokens.glass.innerHighlight}`,
 } as const;
 const QueueControlFab: React.FC<QueueControlFabProps> = ({
   mode,
@@ -92,8 +92,8 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
   const fabBackground = gradeTintColor ?? 'var(--semantic-surface)';
   const showBluetoothFab = isBluetoothSupported && !isBluetoothConnected;
 
-  const glassBg = isDark ? 'rgba(28, 28, 30, 0.42)' : 'rgba(255, 255, 255, 0.42)';
-  const glassBgHover = isDark ? 'rgba(28, 28, 30, 0.62)' : 'rgba(255, 255, 255, 0.62)';
+  const glassBg = isDark ? darkTokens.glass.background : themeTokens.glass.background;
+  const glassBgHover = isDark ? darkTokens.glass.backgroundHover : themeTokens.glass.backgroundHover;
 
   // Memoised so MUI's sx shallow-compare doesn't re-style every render.
   const tickFabSx = useMemo(
@@ -129,7 +129,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       height: SMALL_FAB_SIZE,
       minHeight: SMALL_FAB_SIZE,
       backgroundColor: glassBg,
-      color: isDark ? '#fff' : themeTokens.neutral[800],
+      color: isDark ? themeTokens.common.white : themeTokens.neutral[800],
       '&:hover': { backgroundColor: glassBgHover },
     }),
     [glassBg, glassBgHover, isDark],
@@ -142,7 +142,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       height: SMALL_FAB_SIZE,
       minHeight: SMALL_FAB_SIZE,
       backgroundColor: glassBg,
-      color: gradeColor ?? (isDark ? '#fff' : themeTokens.neutral[800]),
+      color: gradeColor ?? (isDark ? themeTokens.common.white : themeTokens.neutral[800]),
       fontWeight: themeTokens.typography.fontWeight.bold,
       fontSize: themeTokens.typography.fontSize.xs,
       textTransform: 'none' as const,

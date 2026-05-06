@@ -1231,14 +1231,18 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') handleTickBarExpandedChange(!tickBarExpanded);
                         }}
-                        aria-label={tickBarExpanded ? 'Collapse tick bar' : 'Expand tick bar'}
+                        aria-label={
+                          tickBarExpanded ? t('queueBar.tickBar.collapseAria') : t('queueBar.tickBar.expandAria')
+                        }
                       >
                         {tickBarExpanded ? (
                           <KeyboardArrowDownOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
                         ) : (
                           <KeyboardArrowUpOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
                         )}
-                        <span className={styles.tickExpandLabel}>{tickBarExpanded ? 'Collapse' : 'Expand'}</span>
+                        <span className={styles.tickExpandLabel}>
+                          {tickBarExpanded ? t('queueBar.tickBar.collapse') : t('queueBar.tickBar.expand')}
+                        </span>
                       </div>
                       <div className={styles.tickCloseButton}>
                         <IconButton

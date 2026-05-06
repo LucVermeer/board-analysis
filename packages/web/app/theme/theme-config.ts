@@ -184,6 +184,30 @@ export const themeTokens = {
     /** Safe-area top inset. Resolves through --safe-area-inset-top defined on :root in index.css. */
     safeAreaTop: 'var(--safe-area-inset-top)',
   },
+
+  // Liquid-glass surface — translucent FAB / pill backdrops with backdrop-filter.
+  // Light-mode values; dark-mode overrides live in darkTokens.glass below.
+  glass: {
+    /** Resting backdrop for glass FABs (light mode). */
+    background: 'rgba(255, 255, 255, 0.42)',
+    /** Hover/press backdrop for glass FABs (light mode). */
+    backgroundHover: 'rgba(255, 255, 255, 0.62)',
+    /** 1px outer border that gives the surface its frosted edge. */
+    border: 'rgba(255, 255, 255, 0.28)',
+    /** Inset top highlight that suggests refractive depth. */
+    innerHighlight: 'rgba(255, 255, 255, 0.32)',
+    /** Soft drop shadow under the floating cluster. */
+    shadow: 'rgba(0, 0, 0, 0.18)',
+    /** backdrop-filter / -webkit-backdrop-filter value. */
+    filter: 'blur(20px) saturate(200%)',
+  },
+
+  // Common pure-color tokens used as foreground colour against tinted surfaces
+  // (e.g. white icon on a colorized grade-tint FAB regardless of theme).
+  common: {
+    white: '#FFFFFF',
+    black: '#000000',
+  },
 } as const;
 
 // Dark mode overrides — only backgrounds, surfaces, text, neutrals, and status tints change.
@@ -229,6 +253,11 @@ export const darkTokens = {
     lg: '0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3)',
     xl: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
     inner: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.15)',
+  },
+
+  glass: {
+    background: 'rgba(28, 28, 30, 0.42)',
+    backgroundHover: 'rgba(28, 28, 30, 0.62)',
   },
 } as const;
 
