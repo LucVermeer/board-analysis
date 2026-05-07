@@ -29,6 +29,11 @@ export type UserPreferenceKeyMap = {
   tickBarExpanded: boolean;
   'shakeToReport:dismissed': boolean;
   esp32Connections: Esp32Connection[];
+  // Experiment opt-ins exposed through the avatar → Experiments drawer.
+  // Keep the `experiment:` prefix so the IndexedDB store and any future
+  // bulk-clear path (e.g. a "reset all experiments" action) can match by
+  // prefix without enumerating every flag.
+  'experiment:queueBarFab': boolean;
 };
 
 // Map of IDB preference keys to their legacy localStorage keys for one-time migration

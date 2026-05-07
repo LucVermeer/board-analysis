@@ -100,7 +100,16 @@
     "about": "À propos",
     "rateBoardsesh": "Noter Boardsesh",
     "reportBug": "Signaler un bug",
-    "logout": "Se déconnecter"
+    "logout": "Se déconnecter",
+    "experiments": "Expériences"
+  },
+  "experiments": {
+    "title": "Expériences",
+    "subtitle": "Essayez des fonctionnalités encore en cours de finition. Activables et désactivables à la volée — aucun redémarrage requis.",
+    "queueBarFab": {
+      "label": "Barre de file compacte",
+      "description": "Réduit la barre de file en un groupe de boutons flottants sur la plupart des pages, avec un aperçu bref lors du changement de voie."
+    }
   },
   "loading": {
     "messages": [

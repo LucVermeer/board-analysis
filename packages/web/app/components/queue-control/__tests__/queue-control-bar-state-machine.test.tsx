@@ -27,6 +27,17 @@ vi.mock('@/app/lib/user-preferences-db', () => ({
   setGradeDisplayFormat: async () => {},
 }));
 
+// The minimised FAB experience is opt-in via the experiments drawer. The
+// existing state-machine tests below exercise the experiment-on path; the
+// dedicated "with the FAB experiment off" block at the bottom flips this
+// to false.
+let mockFabMinimisedEnabled = true;
+vi.mock('@/app/lib/experiments', () => ({
+  useExperiment: () => mockFabMinimisedEnabled,
+  setExperiment: vi.fn().mockResolvedValue(undefined),
+  EXPERIMENTS: [],
+}));
+
 let mockQueueContext: Record<string, unknown> = {};
 vi.mock('@/app/components/graphql-queue', () => ({
   useQueueContext: () => mockQueueContext,
@@ -100,11 +111,12 @@ vi.mock('@/app/hooks/use-color-mode', () => ({
 
 // useScrollDirection: pretend nothing scrolls. Tests that need a scroll
 // event override this via vi.mock factory call captures.
-const scrollHandlers: { onUp?: () => void; onDown?: () => void } = {};
+const scrollHandlers: { onUp?: () => void; onDown?: () => void; enabled?: boolean } = {};
 vi.mock('@/app/hooks/use-scroll-direction', () => ({
-  useScrollDirection: (opts: { onUp?: () => void; onDown?: () => void }) => {
+  useScrollDirection: (opts: { onUp?: () => void; onDown?: () => void; enabled?: boolean }) => {
     scrollHandlers.onUp = opts.onUp;
     scrollHandlers.onDown = opts.onDown;
+    scrollHandlers.enabled = opts.enabled;
   },
 }));
 
@@ -368,6 +380,8 @@ describe('QueueControlBar layout state machine', () => {
     queueDrawerOpenStates.length = 0;
     scrollHandlers.onUp = undefined;
     scrollHandlers.onDown = undefined;
+    scrollHandlers.enabled = undefined;
+    mockFabMinimisedEnabled = true;
   });
 
   it('starts minimised on a non-list page (FAB visible)', async () => {
@@ -585,5 +599,83 @@ describe('QueueControlBar layout state machine', () => {
 
     // Scroll down → minimised → FAB visible.
     expect(getFabCluster()?.getAttribute('aria-hidden')).toBe('false');
+  });
+});
+
+describe('QueueControlBar with the FAB experiment off', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockQueueContext = { ...baseQueueContext };
+    mockGetPreference.mockResolvedValue(null);
+    mockSetPreference.mockResolvedValue(undefined);
+    mockPathname = '/kilter/1/1/1/40/view/abc';
+    playDrawerOpenStates.length = 0;
+    queueDrawerOpenStates.length = 0;
+    scrollHandlers.onUp = undefined;
+    scrollHandlers.onDown = undefined;
+    scrollHandlers.enabled = undefined;
+    mockFabMinimisedEnabled = false;
+  });
+
+  it('does not render the FAB cluster on a non-list page', async () => {
+    await act(async () => {
+      render(<QueueControlBar {...defaultProps} />);
+    });
+
+    expect(getFabCluster()).toBeNull();
+  });
+
+  it('does not render the FAB cluster on the climb list page', async () => {
+    mockPathname = '/kilter/1/1/1/40/list';
+    await act(async () => {
+      render(<QueueControlBar {...defaultProps} />);
+    });
+
+    expect(getFabCluster()).toBeNull();
+  });
+
+  it('passes enabled=false to the scroll-direction hook so it never collapses the bar', async () => {
+    await act(async () => {
+      render(<QueueControlBar {...defaultProps} />);
+    });
+
+    expect(scrollHandlers.enabled).toBe(false);
+  });
+
+  it('does not peek when the current climb uuid changes (FAB DOM is gone)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<QueueControlBar {...defaultProps} />);
+      await act(async () => {});
+
+      const nextClimb = { ...mockClimb, uuid: 'climb-2', name: 'Different Climb' };
+      mockQueueContext = {
+        ...baseQueueContext,
+        queue: [{ uuid: 'item-2', climb: nextClimb, addedBy: 'user-1', suggested: false }],
+        currentClimbQueueItem: { uuid: 'item-2', climb: nextClimb, addedBy: 'user-1', suggested: false },
+        currentClimb: nextClimb,
+      };
+      await act(async () => {
+        rerender(<QueueControlBar {...propsWithFreshRef(defaultProps)} />);
+      });
+
+      expect(document.querySelector('[class*="peekSnackbar"]')).toBeNull();
+      expect(getFabCluster()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the queue drawer flow working without the FAB cluster', async () => {
+    // The in-bar queue icon (not the FAB) is still wired up — sanity-check
+    // that closing the drawer leaves the bar in its always-expanded state.
+    await act(async () => {
+      render(<QueueControlBar {...defaultProps} />);
+    });
+
+    expect(getFabCluster()).toBeNull();
+    // Queue drawer starts closed and stays so until user-driven flows open it
+    // — the FAB-driven open paths are gone, but the bar itself is rendered.
+    expect(queueDrawerOpenStates.at(-1)).toBe(false);
   });
 });
