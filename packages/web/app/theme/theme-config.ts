@@ -187,6 +187,8 @@ export const themeTokens = {
 
   // Liquid-glass surface — translucent FAB / pill backdrops with backdrop-filter.
   // Light-mode values; dark-mode overrides live in darkTokens.glass below.
+  // Shared by the queue-control FAB cluster and the bottom-tab pill so glass
+  // surfaces read as one design language across the bottom region.
   glass: {
     /** Resting backdrop for glass FABs (light mode). */
     background: 'rgba(255, 255, 255, 0.42)',
@@ -200,6 +202,17 @@ export const themeTokens = {
     shadow: 'rgba(0, 0, 0, 0.18)',
     /** backdrop-filter / -webkit-backdrop-filter value. */
     filter: 'blur(20px) saturate(200%)',
+    /** Bottom-tab pill: backdrop-filter blur strengths. soft for light mode,
+     *  strong for dark (which needs more blur to keep contrast against busy
+     *  page content underneath). */
+    blur: { soft: '12px', strong: '24px' },
+    /** Bottom-tab pill: resting backdrop. Slightly more opaque than
+     *  `background` because the pill spans wider and reads better with
+     *  more body. */
+    surface: 'rgba(255, 255, 255, 0.55)',
+    /** Bottom-tab pill: top-edge highlight overlay (the 'lit edge' that
+     *  makes the surface read as glass and not just a frosted panel). */
+    highlight: 'linear-gradient(to bottom, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 35%)',
   },
 
   // Common pure-color tokens used as foreground colour against tinted surfaces
@@ -256,6 +269,7 @@ export const darkTokens = {
   },
 
   glass: {
+    // FAB tokens (PR 2010) — queue-control floating cluster.
     background: 'rgba(28, 28, 30, 0.42)',
     backgroundHover: 'rgba(28, 28, 30, 0.62)',
     /** Edge highlight is dimmer in dark mode — a 28% white border on a
@@ -272,6 +286,12 @@ export const darkTokens = {
      *  symmetric and consumers can read `glassTokens.filter`
      *  unconditionally. */
     filter: 'blur(20px) saturate(200%)',
+    // Bottom-tab pill tokens — `surface` and `highlight` are dark-mode
+    // overrides for the floating tab bar pill. Co-located with the FAB
+    // tokens so any glass surface that needs them in dark mode reads from
+    // one place. (`border` is shared with the FAB cluster above.)
+    surface: 'rgba(26, 26, 26, 0.55)',
+    highlight: 'linear-gradient(to bottom, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 35%)',
   },
 } as const;
 

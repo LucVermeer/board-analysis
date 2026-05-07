@@ -548,12 +548,12 @@ describe('GlobalHeader', () => {
     });
   });
 
-  describe('on /feed page', () => {
-    it('renders search bar (default header)', () => {
-      mockPathname = '/feed';
+  describe('on /you/feed page', () => {
+    it('uses the /you child header (no search bar)', () => {
+      mockPathname = '/you/feed';
       render(<GlobalHeader boardConfigs={mockBoardConfigs} />);
 
-      expect(screen.getByPlaceholderText('What do you want to climb?')).toBeTruthy();
+      expect(screen.queryByPlaceholderText('What do you want to climb?')).toBeNull();
     });
   });
 });

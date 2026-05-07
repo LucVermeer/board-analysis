@@ -1,14 +1,17 @@
 /* FAB cluster: thumbnail FAB on left, tick FAB on right.
-   Anchored above the bottom tab bar via the published --bottom-bar-height
-   variable, which the bottom-bar wrapper updates continuously as it
-   collapses/expands. The cluster's `bottom` therefore tracks the bar's
-   real-time height — no separate `transition: bottom` needed, otherwise
-   the eased `bottom` would desync from the wrapper's actual motion and
-   the FABs would appear to drift independently of the bar.
 
-   The cluster is purely a fade in/out: the bar visibly slides away above
-   it to reveal the FABs already in place. The 80ms delay on the entrance
-   keeps it from crossfading with the bar's exit. */
+   Anchored at a fixed offset above the bottom tab bar's expanded content
+   height. We can't measure the wrapper live (continuous height tracking
+   compounds with Android URL-bar movement and the queue-control-bar's
+   grid-row collapse into visible jitter — abandoned that approach
+   intentionally). Instead, we react to a binary signal: the bottom tab
+   bar publishes its collapsed state as `data-tab-bar-collapsed` on
+   <html>, and we override `bottom` via a single CSS rule below. One
+   200ms transition matches the tab-bar pill's own animation.
+
+   The cluster's opacity is also a fade in/out: the bar visibly slides
+   away above it to reveal the FABs already in place. The 80ms delay on
+   the entrance keeps it from crossfading with the bar's exit. */
 .fabRoot {
   position: fixed;
   left: 0;
@@ -31,7 +34,17 @@
   gap: 12px;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 220ms ease-out 80ms;
+  transition:
+    opacity 220ms ease-out 80ms,
+    bottom 200ms ease;
+}
+
+/* Tab bar collapsed: pill shrinks to --bottom-tab-bar-height-collapsed, so the
+   FAB cluster drops with it and reclaims the space the labels used to occupy.
+   Single transition on `bottom` (declared above) matches the bar's own
+   collapse timing. */
+:root[data-tab-bar-collapsed='true'] .fabRoot {
+  bottom: calc(var(--bottom-tab-bar-height-collapsed) + env(safe-area-inset-bottom, 0px) + var(--spacing-2));
 }
 
 .fabRootVisible {
@@ -127,7 +140,9 @@
   /* Same fixed anchor as the FAB cluster (above the small-FAB row + gap).
      46px = small FAB diameter (mirrored from SMALL_FAB_SIZE in
      queue-control-fab.tsx); --spacing-3 is the visual gap between the
-     small-FAB row and the snackbar pill above it. */
+     small-FAB row and the snackbar pill above it. A
+     `:root[data-tab-bar-collapsed='true']` rule below tracks the bar
+     when it collapses, animated by the existing `transition: bottom`. */
   bottom: calc(
     var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--spacing-2) + 46px +
       var(--spacing-3)
@@ -149,6 +164,13 @@
   font-size: 14px;
   line-height: 1.25;
   text-align: center;
+}
+
+:root[data-tab-bar-collapsed='true'] .peekSnackbar {
+  bottom: calc(
+    var(--bottom-tab-bar-height-collapsed) + env(safe-area-inset-bottom, 0px) + var(--spacing-2) + 46px +
+      var(--spacing-3)
+  );
 }
 
 /* Exit phase: paired ease-in animation (incoming items decelerate, outgoing
