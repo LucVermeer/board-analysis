@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import React from 'react';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import { dispatchOpenSeshSettingsDrawer } from '@/app/components/sesh-settings/sesh-settings-drawer-event';
 import QueueControlBar from '../queue-control-bar';
+
+// Both the in-bar queue icon and the minimised-state FAB cluster carry
+// aria-label="Open queue". These tests target the in-bar control, so
+// scope queries to the bar root to disambiguate from the FAB sibling
+// that lives in a body-level portal.
+const queryInBar = () => within(screen.getByTestId('queue-control-bar'));
 
 // -- All mocks before imports --
 
@@ -24,6 +30,8 @@ const mockSetPreference = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/app/lib/user-preferences-db', () => ({
   getPreference: (...args: unknown[]) => mockGetPreference(...args),
   setPreference: (...args: unknown[]) => mockSetPreference(...args),
+  getGradeDisplayFormat: async () => 'v',
+  setGradeDisplayFormat: async () => {},
 }));
 
 let mockQueueContext: Record<string, unknown> = {};
@@ -34,6 +42,7 @@ vi.mock('@/app/components/graphql-queue', () => ({
   useCurrentClimb: () => ({
     currentClimb: mockQueueContext.currentClimb,
   }),
+  useCurrentClimbUuid: () => (mockQueueContext.currentClimb as { uuid?: string } | undefined)?.uuid ?? null,
   useQueueList: () => ({
     queue: mockQueueContext.queue,
     suggestedClimbs: [],
@@ -342,7 +351,7 @@ describe('QueueControlBar queue button', () => {
     expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('false');
 
     await act(async () => {
-      fireEvent.click(screen.getByLabelText('Open queue'));
+      fireEvent.click(queryInBar().getByLabelText('Open queue'));
     });
 
     expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('true');
@@ -356,7 +365,7 @@ describe('QueueControlBar queue button', () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByLabelText('Open queue'));
+      fireEvent.click(queryInBar().getByLabelText('Open queue'));
     });
 
     expect(dispatchOpenSeshSettingsDrawer).not.toHaveBeenCalled();
@@ -374,7 +383,7 @@ describe('QueueControlBar queue button', () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
-    const badge = screen.getByLabelText('Open queue').querySelector('.MuiBadge-badge');
+    const badge = queryInBar().getByLabelText('Open queue').querySelector('.MuiBadge-badge');
     expect(badge).toBeTruthy();
     expect(badge!.textContent).toBe('3');
   });
@@ -386,7 +395,7 @@ describe('QueueControlBar queue button', () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
-    const badge = screen.getByLabelText('Open queue').querySelector('.MuiBadge-badge');
+    const badge = queryInBar().getByLabelText('Open queue').querySelector('.MuiBadge-badge');
     expect(badge).toBeTruthy();
     // MUI renders `badgeContent={0}` literally; `invisible={true}` hides it via CSS
     // (no public class name in v6+), so we assert on the bound count, not visibility.

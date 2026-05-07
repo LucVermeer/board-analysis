@@ -232,8 +232,14 @@
       "shareSessionLink": "Compartir enlace de sesión",
       "closeTickBar": "Cerrar barra de marca",
       "enterPlayMode": "Entrar en modo juego",
-      "logAttempt": "Registrar intento"
-    }
+      "logAttempt": "Registrar intento",
+      "openClimbDetails": "Abrir detalles del bloque",
+      "expandQueueControl": "Expandir control de cola",
+      "connectToBoard": "Conectar al panel",
+      "openQueue": "Abrir cola",
+      "saveTick": "Guardar marca"
+    },
+    "byline": "Por {{setter}}"
   },
   "queueDrawer": {
     "title": "Cola",

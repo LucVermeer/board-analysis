@@ -232,8 +232,14 @@
       "shareSessionLink": "Partager le lien de la session",
       "closeTickBar": "Fermer la barre de tick",
       "enterPlayMode": "Passer en mode jeu",
-      "logAttempt": "Enregistrer un essai"
-    }
+      "logAttempt": "Enregistrer un essai",
+      "openClimbDetails": "Ouvrir les détails du bloc",
+      "expandQueueControl": "Déployer la file d'attente",
+      "connectToBoard": "Se connecter au panneau",
+      "openQueue": "Ouvrir la file d'attente",
+      "saveTick": "Enregistrer le tick"
+    },
+    "byline": "Par {{setter}}"
   },
   "queueDrawer": {
     "title": "File d'attente",
