@@ -451,8 +451,15 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
           border: `1px solid ${glassBorder}`,
           boxShadow: glassShadow,
           borderRadius: `${themeTokens.borderRadius.full}px`,
-          // Smoothly animate every collapse property at once.
-          transition: `min-height ${themeTokens.transitions.normal}, padding ${themeTokens.transitions.normal}, max-width ${themeTokens.transitions.normal}, opacity ${themeTokens.transitions.normal}, transform ${themeTokens.transitions.normal}`,
+          // Layer-promote: keep backdrop-filter rasterization on its own GPU
+          // layer so the blur cost doesn't bleed into sibling paint, and clip
+          // repaints to the pill's own bounding box.
+          willChange: 'transform, opacity',
+          contain: 'paint',
+          // Single shared iOS-decel curve for everything the pill animates.
+          // 220ms reads as deliberate without lagging — the curve does most
+          // of the perceptual work.
+          transition: `min-height 220ms ${themeTokens.transitions.snappy}, padding 220ms ${themeTokens.transitions.snappy}, max-width 220ms ${themeTokens.transitions.snappy}, opacity 220ms ${themeTokens.transitions.snappy}, transform 220ms ${themeTokens.transitions.snappy}`,
           pt: `${collapsed ? 0 : themeTokens.spacing[2]}px`,
           pb: `calc(${collapsed ? 0 : themeTokens.spacing[2]}px + var(--tab-bar-safe-area-padding, 0px))`,
           px: `${collapsed ? themeTokens.spacing[1] : themeTokens.spacing[2]}px`,
@@ -465,20 +472,31 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
           // mirrors the Safari chrome shrink so the user knows it's still
           // there but is out of the way.
           opacity: collapsed ? themeTokens.opacity.subtle : 1,
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: `opacity 180ms ease-out`,
+            '& .MuiBottomNavigationAction-root, & .MuiBottomNavigationAction-label, & .MuiSvgIcon-root': {
+              transition: 'none',
+            },
+          },
           '& .MuiBottomNavigationAction-root': {
             minWidth: collapsed ? 32 : 'auto',
             maxWidth: collapsed ? 32 : undefined,
             padding: collapsed ? '0 2px' : undefined,
             minHeight: collapsed ? 24 : undefined,
-            transition: `min-width ${themeTokens.transitions.normal}, padding ${themeTokens.transitions.normal}`,
+            transition: `min-width 220ms ${themeTokens.transitions.snappy}, padding 220ms ${themeTokens.transitions.snappy}`,
           },
+          // Labels fade via opacity (was display:none, which can't animate —
+          // hard-cut at frame 0). pointer-events:none keeps the invisible
+          // label area from intercepting taps. MUI's showLabels={!collapsed}
+          // already collapses the label's vertical space via translateY, so
+          // we don't need display:none to claim the space back.
           '& .MuiBottomNavigationAction-label': {
-            transition: `opacity ${themeTokens.transitions.normal}`,
+            transition: `opacity 220ms ${themeTokens.transitions.snappy}, transform 220ms ${themeTokens.transitions.snappy}`,
             opacity: collapsed ? 0 : 1,
-            display: collapsed ? 'none' : undefined,
+            pointerEvents: collapsed ? 'none' : 'auto',
           },
           '& .MuiSvgIcon-root': {
-            transition: `font-size ${themeTokens.transitions.normal}`,
+            transition: `font-size 220ms ${themeTokens.transitions.snappy}`,
             fontSize: collapsed ? 14 : 20,
           },
         }}
