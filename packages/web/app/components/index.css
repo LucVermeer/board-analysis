@@ -131,6 +131,18 @@
      The tab bar publishes `data-tab-bar-collapsed` on <html>; consumers (FAB
      cluster, peek snackbar) override their `bottom` against this value. */
   --bottom-tab-bar-height-collapsed: 28px;
+  /* Distance from the screen bottom to the tab-bar wrapper's bottom edge.
+     Single source of truth so the wrapper, the FAB cluster, and the peek
+     snackbar all stay anchored to the same line without re-deriving the
+     value. Default is `max(12px, env(safe-area-inset-bottom))`, which
+     covers Android Capacitor (gesture-nav inset 24–48px) and Android
+     Chromium web (inset 0, 12px floor). The iOS override below pins it
+     to a flat 12px so the pill's rounded bottom corners align
+     concentrically with the iPhone screen-corner radius — accepting that
+     interactive content sits inside the home-indicator zone, since the
+     pill's intrinsic 64px height keeps tap targets clear of the
+     indicator gesture region in practice. */
+  --bottom-tab-bar-bottom-offset: max(12px, env(safe-area-inset-bottom));
 
   /* Tap highlight (Android/mobile browsers) */
   --tap-highlight: transparent;
@@ -144,6 +156,25 @@
      `text.brandPrimaryLight` / `text.brandMutedLight` — keep in sync. */
   --bs-text-brand-primary: #2a1f1f;
   --bs-text-brand-muted: #6b5b54;
+}
+
+/* iOS Safari + WKWebView (Capacitor) override: pin the tab-bar offset to a
+   flat 12px so the pill's rounded bottom corners align concentrically with
+   the iPhone screen-corner radius. `-webkit-touch-callout: none` is
+   supported by every WebKit-based engine and absent from Chromium, so this
+   selector reliably picks iOS without needing a JS-set class on <html>. */
+@supports (-webkit-touch-callout: none) {
+  :root {
+    --bottom-tab-bar-bottom-offset: 12px;
+  }
+}
+
+/* Desktop: tighter 8px lift since there's no home-indicator or gesture-nav
+   to clear and the pill is centred and width-capped at min(560px, 100%). */
+@media (min-width: 768px) {
+  :root {
+    --bottom-tab-bar-bottom-offset: 8px;
+  }
 }
 
 /* Dark mode overrides */
