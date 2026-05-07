@@ -24,7 +24,14 @@ export default defineConfig({
     ],
   },
   staged: {
-    '*.{ts,tsx,js,mjs,cjs}': 'vp check --fix',
+    // Generated GraphQL artefacts are committed verbatim from the codegen
+    // output (see codegen-drift CI). Filtering them out here keeps the
+    // staged formatter from rewriting them into oxfmt's single-quote /
+    // trailing-newline style and silently re-introducing CI drift.
+    '*.{ts,tsx,js,mjs,cjs}': (files: readonly string[]) => {
+      const formattable = files.filter((file) => !file.includes('/generated/'));
+      return formattable.length > 0 ? `vp check --fix ${formattable.join(' ')}` : [];
+    },
   },
   run: {
     tasks: {
