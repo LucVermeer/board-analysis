@@ -258,6 +258,14 @@ export const darkTokens = {
   glass: {
     background: 'rgba(28, 28, 30, 0.42)',
     backgroundHover: 'rgba(28, 28, 30, 0.62)',
+    /** Edge highlight is dimmer in dark mode — a 28% white border on a
+     *  dark surface reads as a bright halo. */
+    border: 'rgba(255, 255, 255, 0.12)',
+    /** Inset top highlight stays subtle so it suggests refraction rather
+     *  than a glow. */
+    innerHighlight: 'rgba(255, 255, 255, 0.08)',
+    /** Drop shadow goes deeper to read against dark surfaces. */
+    shadow: 'rgba(0, 0, 0, 0.5)',
   },
 } as const;
 

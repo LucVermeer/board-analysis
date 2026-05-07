@@ -35,12 +35,6 @@ type QueueControlFabProps = {
 // Constants hoisted out so they don't allocate on every render.
 const SMALL_FAB_SIZE = 46;
 const SNACKBAR_EXIT_MS = 200;
-const liquidGlass = {
-  backdropFilter: themeTokens.glass.filter,
-  WebkitBackdropFilter: themeTokens.glass.filter,
-  border: `1px solid ${themeTokens.glass.border}`,
-  boxShadow: `0 8px 24px ${themeTokens.glass.shadow}, inset 0 1px 0 ${themeTokens.glass.innerHighlight}`,
-} as const;
 const QueueControlFab: React.FC<QueueControlFabProps> = ({
   mode,
   currentClimb,
@@ -92,8 +86,23 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
   const fabBackground = gradeTintColor ?? 'var(--semantic-surface)';
   const showBluetoothFab = isBluetoothSupported && !isBluetoothConnected;
 
-  const glassBg = isDark ? darkTokens.glass.background : themeTokens.glass.background;
-  const glassBgHover = isDark ? darkTokens.glass.backgroundHover : themeTokens.glass.backgroundHover;
+  // Resolve glass tokens per theme. In dark mode the border / inset
+  // highlight / shadow values all need to swing — the light-mode 28%
+  // white border reads as a bright halo on a dark surface, and the
+  // light shadow disappears against dark backgrounds. liquidGlass is
+  // therefore derived per render rather than hoisted.
+  const glassTokens = isDark ? darkTokens.glass : themeTokens.glass;
+  const glassBg = glassTokens.background;
+  const glassBgHover = glassTokens.backgroundHover;
+  const liquidGlass = useMemo(
+    () => ({
+      backdropFilter: themeTokens.glass.filter,
+      WebkitBackdropFilter: themeTokens.glass.filter,
+      border: `1px solid ${glassTokens.border}`,
+      boxShadow: `0 8px 24px ${glassTokens.shadow}, inset 0 1px 0 ${glassTokens.innerHighlight}`,
+    }),
+    [glassTokens.border, glassTokens.shadow, glassTokens.innerHighlight],
+  );
 
   // Memoised so MUI's sx shallow-compare doesn't re-style every render.
   const tickFabSx = useMemo(
@@ -106,7 +115,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       color: themeTokens.colors.success,
       '&:hover': { backgroundColor: glassBgHover },
     }),
-    [glassBg, glassBgHover],
+    [liquidGlass, glassBg, glassBgHover],
   );
 
   const bluetoothFabSx = useMemo(
@@ -119,7 +128,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       color: themeTokens.colors.warning,
       '&:hover': { backgroundColor: glassBgHover },
     }),
-    [glassBg, glassBgHover],
+    [liquidGlass, glassBg, glassBgHover],
   );
 
   const queueFabSx = useMemo(
@@ -132,7 +141,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       color: isDark ? themeTokens.common.white : themeTokens.neutral[800],
       '&:hover': { backgroundColor: glassBgHover },
     }),
-    [glassBg, glassBgHover, isDark],
+    [liquidGlass, glassBg, glassBgHover, isDark],
   );
 
   const gradeFabSx = useMemo(
@@ -149,7 +158,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       alignSelf: 'flex-end' as const,
       '&:hover': { backgroundColor: glassBgHover },
     }),
-    [glassBg, glassBgHover, gradeColor, isDark],
+    [liquidGlass, glassBg, glassBgHover, gradeColor, isDark],
   );
 
   const thumbnailFabSx = useMemo(
@@ -167,7 +176,7 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
       transition: 'background-color 220ms ease-out',
       '&:hover': { backgroundColor: fabBackground },
     }),
-    [fabBackground],
+    [liquidGlass, fabBackground],
   );
 
   if (typeof document === 'undefined') return null;
@@ -243,9 +252,14 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
           current climb's name + setter when it changes. Sibling of fabRoot
           (not inside it) because Safari has rendering bugs with position:
           absolute children of display: flex containers. Mounted via
-          snackbarMounted so the exit animation can run before unmount. */}
+          snackbarMounted so the exit animation can run before unmount.
+          role="status" + aria-live="polite" so screen readers announce
+          the climb change in party mode without preempting other speech. */}
       {snackbarMounted && (
         <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
           className={`${styles.peekSnackbar} ${snackbarExiting ? styles.peekSnackbarExiting : ''}`}
           style={{ backgroundColor: fabBackground }}
         >

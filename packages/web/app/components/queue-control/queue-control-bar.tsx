@@ -161,6 +161,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // on the new route — without this, navigating to a climb that differs
   // from the one we were viewing fires a peek that announces the climb
   // we just navigated to (a duplicate cue, since the user just clicked).
+  // isClimbListPage is omitted from deps because it's derived synchronously
+  // from pathname — listing both is harmless but adds noise.
   useEffect(() => {
     setActiveDrawer('none');
     setLayoutState(isClimbListPage ? 'expanded' : 'minimised');
@@ -170,7 +172,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       clearTimeout(peekTimerRef.current);
       peekTimerRef.current = null;
     }
-  }, [pathname, isClimbListPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname
+  }, [pathname]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -215,11 +218,19 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   }, [activeDrawer, layoutState]);
 
   // Peek-on-climb-change: when the current climb uuid changes (locally or
-  // from a party-mode WebSocket event), briefly surface the new climb's name
-  // in a snackbar above the FAB cluster. The ref tracks the last uuid we
-  // *actually peeked for* — not just the latest seen — so a climb change
-  // that happens while the bar is expanded (e.g. the queue drawer is open)
-  // still triggers a peek the moment the bar returns to minimised.
+  // from a party-mode WebSocket event), briefly surface the new climb's
+  // name in a snackbar above the FAB cluster.
+  //
+  // The ref tracks the last uuid we *actually peeked for* — not the
+  // latest seen — and we only peek while layoutState === 'minimised'.
+  // The effect is keyed on both currentClimbUuid AND layoutState, so a
+  // climb change that happens while the bar is expanded is queued: the
+  // ref stays put, and when the bar later returns to minimised the
+  // effect re-fires (layoutState dep changed) and peeks for the latest
+  // uuid. If multiple climb changes happen while expanded, only the
+  // most recent one is announced on collapse — by design, so a long
+  // queue session doesn't bombard the user with stale peeks when they
+  // close a drawer.
   const currentClimbUuid = useCurrentClimbUuid();
   useEffect(() => {
     if (initialUuidRef.current === undefined) {
@@ -230,6 +241,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     }
     if (!currentClimbUuid) return;
     if (currentClimbUuid === initialUuidRef.current) return;
+    // Bar isn't free to peek right now — leave the ref untouched so the
+    // next layoutState change re-evaluates against the latest uuid.
     if (layoutState !== 'minimised') return;
     initialUuidRef.current = currentClimbUuid;
     if (peekTimerRef.current) clearTimeout(peekTimerRef.current);

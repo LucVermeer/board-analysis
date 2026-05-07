@@ -521,6 +521,55 @@ describe('QueueControlBar layout state machine', () => {
     }
   });
 
+  it('queues a peek when the climb changes while expanded and fires it on collapse', async () => {
+    // Party-mode scenario: user has the tick drawer open (bar expanded)
+    // when another participant advances the queue. The peek must be
+    // deferred until the drawer closes — otherwise the climb-change
+    // cue is lost behind the drawer chrome.
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<QueueControlBar {...defaultProps} />);
+      await act(async () => {});
+
+      // Open tick drawer → bar forces expanded, openReason='tickOpen'.
+      await act(async () => {
+        fireEvent.click(getFabButton('Save tick'));
+      });
+      expect(screen.getByTestId('quick-tick-bar')).toBeTruthy();
+      expect(getFabCluster()?.getAttribute('aria-hidden')).toBe('true');
+
+      // Climb changes while drawer is open. Snackbar must NOT appear
+      // yet — the peek effect early-returns because layoutState is
+      // 'expanded'.
+      const nextClimb = { ...mockClimb, uuid: 'climb-99', name: 'Party Climb' };
+      mockQueueContext = {
+        ...baseQueueContext,
+        queue: [{ uuid: 'item-99', climb: nextClimb, addedBy: 'user-1', suggested: false }],
+        currentClimbQueueItem: { uuid: 'item-99', climb: nextClimb, addedBy: 'user-1', suggested: false },
+        currentClimb: nextClimb,
+      };
+      await act(async () => {
+        rerender(<QueueControlBar {...propsWithFreshRef(defaultProps)} />);
+      });
+      expect(document.querySelector('[class*="peekSnackbar"]')).toBeNull();
+
+      // Close the drawer via the tick overlay (production close path).
+      // Bar collapses to minimised → peek effect re-runs because
+      // layoutState changed → fires the queued peek for the latest uuid.
+      const overlay = document.querySelector('[data-testid="tick-backdrop-overlay"]') as HTMLElement | null;
+      expect(overlay).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(overlay!);
+      });
+
+      const snackbar = document.querySelector('[class*="peekSnackbar"]');
+      expect(snackbar).toBeTruthy();
+      expect(snackbar?.textContent).toMatch(/Party Climb/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('collapses to minimised on scroll-down on the climb list page', async () => {
     mockPathname = '/kilter/1/1/1/40/list';
     await act(async () => {
