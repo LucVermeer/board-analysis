@@ -485,14 +485,20 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
             minHeight: collapsed ? 24 : undefined,
             transition: `min-width 220ms ${themeTokens.transitions.snappy}, padding 220ms ${themeTokens.transitions.snappy}`,
           },
-          // Labels fade via opacity (was display:none, which can't animate —
-          // hard-cut at frame 0). pointer-events:none keeps the invisible
-          // label area from intercepting taps. MUI's showLabels={!collapsed}
-          // already collapses the label's vertical space via translateY, so
-          // we don't need display:none to claim the space back.
+          // Labels fade via opacity + collapse to 0 font-size so the icon
+          // sits in the vertical centre of the collapsed pill. Without the
+          // font-size shrink, the label's line-height keeps reserving
+          // vertical space inside MuiBottomNavigationAction's flex column
+          // (`flex-direction: column; justify-content: center`), so the
+          // icon ends up at the *top* of an icon-plus-empty-label group
+          // instead of centred. Animating font-size 12→0 in lockstep with
+          // the opacity fade collapses the label box smoothly and re-
+          // centres the icon as the pill shrinks. Not display:none —
+          // that can't animate and would hard-cut the fade at frame 0.
           '& .MuiBottomNavigationAction-label': {
-            transition: `opacity 220ms ${themeTokens.transitions.snappy}, transform 220ms ${themeTokens.transitions.snappy}`,
+            transition: `opacity 220ms ${themeTokens.transitions.snappy}, font-size 220ms ${themeTokens.transitions.snappy}, transform 220ms ${themeTokens.transitions.snappy}`,
             opacity: collapsed ? 0 : 1,
+            fontSize: collapsed ? 0 : undefined,
             pointerEvents: collapsed ? 'none' : 'auto',
           },
           '& .MuiSvgIcon-root': {
