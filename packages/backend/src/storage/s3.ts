@@ -1,4 +1,12 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  type ObjectCannedACL,
+  type PutObjectCommandInput,
+} from '@aws-sdk/client-s3';
 import type { Readable } from 'stream';
 
 let s3Client: S3Client | null = null;
@@ -80,20 +88,27 @@ export async function uploadToS3(
   buffer: Buffer,
   key: string,
   contentType: string,
+  options: {
+    cacheControl?: string;
+    acl?: ObjectCannedACL | null;
+  } = {},
 ): Promise<{ url: string; key: string }> {
   const client = getS3Client();
   const bucket = getBucketName();
 
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-      CacheControl: 'public, max-age=31536000, immutable',
-      ACL: 'public-read',
-    }),
-  );
+  const input: PutObjectCommandInput = {
+    Bucket: bucket,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+    CacheControl: options.cacheControl ?? 'public, max-age=31536000, immutable',
+  };
+
+  if (options.acl !== null) {
+    input.ACL = options.acl ?? 'public-read';
+  }
+
+  await client.send(new PutObjectCommand(input));
 
   const url = getPublicUrl(key);
   return { url, key };
@@ -144,6 +159,35 @@ export async function getFromS3(key: string): Promise<{
     };
   } catch {
     // Return null for not found or other errors
+    return null;
+  }
+}
+
+/**
+ * Get S3 object metadata without downloading the object body.
+ */
+export async function getS3ObjectMetadata(key: string): Promise<{
+  contentType: string | undefined;
+  contentLength: number | undefined;
+  lastModified: Date | undefined;
+} | null> {
+  const client = getS3Client();
+  const bucket = getBucketName();
+
+  try {
+    const response = await client.send(
+      new HeadObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+    );
+
+    return {
+      contentType: response.ContentType,
+      contentLength: response.ContentLength,
+      lastModified: response.LastModified,
+    };
+  } catch {
     return null;
   }
 }
