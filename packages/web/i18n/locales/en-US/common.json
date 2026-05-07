@@ -100,7 +100,16 @@
     "about": "About",
     "rateBoardsesh": "Rate Boardsesh",
     "reportBug": "Report a bug",
-    "logout": "Log out"
+    "logout": "Log out",
+    "experiments": "Experiments"
+  },
+  "experiments": {
+    "title": "Experiments",
+    "subtitle": "Try out features that aren't ready for everyone yet. Toggle anytime — no restart needed.",
+    "queueBarFab": {
+      "label": "Compact queue bar",
+      "description": "Collapses the queue bar to a floating button cluster on most pages, with a brief peek when the climb changes."
+    }
   },
   "loading": {
     "messages": [

@@ -29,6 +29,8 @@ export type UserPreferenceKeyMap = {
   tickBarExpanded: boolean;
   'shakeToReport:dismissed': boolean;
   esp32Connections: Esp32Connection[];
+  // Experiment opt-ins exposed through the avatar → Experiments drawer.
+  'experiment:queueBarFab': boolean;
 };
 
 // Map of IDB preference keys to their legacy localStorage keys for one-time migration

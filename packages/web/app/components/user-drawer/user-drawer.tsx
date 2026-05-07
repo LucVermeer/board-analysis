@@ -22,6 +22,7 @@ import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutl
 import GroupOutlined from '@mui/icons-material/GroupOutlined';
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
+import ScienceOutlined from '@mui/icons-material/ScienceOutlined';
 
 import { useSession, signOut } from 'next-auth/react';
 import { useColorMode } from '@/app/hooks/use-color-mode';
@@ -50,6 +51,7 @@ import { StoreReviewPromptDialog } from '../feedback/store-review-prompt-dialog'
 import BoardDiscoveryScroll from '../board-scroll/board-discovery-scroll';
 import BoardSelectorDrawer from '../board-selector-drawer/board-selector-drawer';
 import MyBoardsDrawer from '../my-boards-drawer/my-boards-drawer';
+import ExperimentsDrawer from '../experiments/experiments-drawer';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
 import type { BoardDetails, BoardName, BoardRouteIdentity } from '@/app/lib/types';
 import { SUPPORTED_BOARDS } from '@/app/lib/board-data';
@@ -94,6 +96,8 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
   const [showRating, setShowRating] = useState(false);
   const [showBugReport, setShowBugReport] = useState(false);
   const [showStoreReviewPrompt, setShowStoreReviewPrompt] = useState(false);
+  const [showExperiments, setShowExperiments] = useState(false);
+  const [experimentsRendered, setExperimentsRendered] = useState(false);
 
   const { mode, toggleMode } = useColorMode();
   const isMoonboard = boardDetails?.board_name === 'moonboard';
@@ -124,6 +128,9 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
   }, []);
   const handleMyBoardsTransitionEnd = useCallback((open: boolean) => {
     if (!open) setMyBoardsRendered(false);
+  }, []);
+  const handleExperimentsTransitionEnd = useCallback((open: boolean) => {
+    if (!open) setExperimentsRendered(false);
   }, []);
 
   const handleChangeBoardClick = useCallback(
@@ -321,6 +328,21 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
                 </span>
                 <span className={styles.menuItemLabel}>{t('ariaLabels.settings')}</span>
               </LocaleLink>
+
+              <button
+                type="button"
+                className={styles.menuItem}
+                onClick={() => {
+                  handleClose();
+                  setExperimentsRendered(true);
+                  setShowExperiments(true);
+                }}
+              >
+                <span className={styles.menuItemIcon}>
+                  <ScienceOutlined />
+                </span>
+                <span className={styles.menuItemLabel}>{t('userDrawer.experiments')}</span>
+              </button>
 
               {devUrlAvailable && (
                 <button
@@ -549,6 +571,14 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
       )}
 
       {devUrlAvailable && <DevUrlDialog open={showDevUrl} onClose={() => setShowDevUrl(false)} />}
+
+      {experimentsRendered && (
+        <ExperimentsDrawer
+          open={showExperiments}
+          onClose={() => setShowExperiments(false)}
+          onTransitionEnd={handleExperimentsTransitionEnd}
+        />
+      )}
 
       <FeedbackDialog
         open={showRating}
