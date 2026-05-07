@@ -1,12 +1,16 @@
-/* Floating liquid-glass pill. Centered, lifted off the bottom, with safe-area
-   clearance so it doesn't collide with the iOS home indicator or Android
-   gesture-nav area. Native (Capacitor) and web both render the pill — no
-   edge-to-edge fallback. */
+/* Floating liquid-glass pill. The wrapper sits at a flat 12px above the
+   screen bottom — that's the geometric gap (screen_radius − pill_radius)
+   that makes the pill's rounded corners concentric with the iPhone's
+   curved screen corners. The 12px lift plus the pill's intrinsic height
+   keeps interactive content well above the iOS home-indicator gesture
+   zone (~34px on modern iPhones), so we don't need to pile additional
+   safe-area padding inside the pill — that path made the pill look
+   bottom-heavy. */
 .bottomBarWrapper {
   --tab-bar-safe-area-padding: 0px;
   --tab-bar-bottom-extension: 0px;
   position: fixed;
-  bottom: max(4px, env(safe-area-inset-bottom));
+  bottom: 12px;
   left: 0;
   right: 0;
   padding-inline: 12px;
@@ -18,26 +22,6 @@
 /* Children (BottomNavigation, QueueControlBar, banners) handle their own taps. */
 .bottomBarWrapper > * {
   pointer-events: auto;
-}
-
-/* Native shells get the same pill but a slightly larger lift on Android, where
-   the gesture-nav area can be 24-48px above the WebView bottom. The
-   @capacitor-community/safe-area plugin populates env(safe-area-inset-bottom)
-   on Android via passed insets (Chromium 140+) or decorView padding (older);
-   on iOS WKWebView env() reports the home-indicator inset natively. */
-.nativeApp {
-  bottom: max(8px, env(safe-area-inset-bottom));
-}
-
-/* iOS WKWebView: drop the pill flush with the bottom of the screen so its
-   rounded bottom edges nest into the iPhone's curved screen corners. The
-   home-indicator clearance moves *inside* the pill via
-   --tab-bar-safe-area-padding instead of lifting the whole element off
-   the bottom. Android stays on .nativeApp because gesture-nav clearance
-   varies more and a flush placement risks gesture conflicts there. */
-.iosNativeApp {
-  --tab-bar-safe-area-padding: env(safe-area-inset-bottom);
-  bottom: 0;
 }
 
 /* On desktop the pill stays centered and capped; the wrapper itself spans full
