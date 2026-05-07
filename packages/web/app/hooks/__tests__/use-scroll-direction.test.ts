@@ -133,17 +133,53 @@ describe('useScrollDirection', () => {
     expect(onDown).not.toHaveBeenCalled();
   });
 
-  it('does not subscribe when disabled', () => {
+  it('suppresses callbacks while disabled', () => {
     const onDown = vi.fn();
-    const addSpy = vi.spyOn(window, 'addEventListener');
     renderHook(() => useScrollDirection({ enabled: false, onDown }));
 
-    expect(addSpy.mock.calls.find(([event]) => event === 'scroll')).toBeUndefined();
     act(() => {
       fireScroll(100);
       flushRaf();
     });
     expect(onDown).not.toHaveBeenCalled();
+  });
+
+  it('preserves the accumulator across enable toggles so paused scrolls resume', () => {
+    // Repro for the bug reported in PR review: a parent state flip that
+    // drives `enabled` shouldn't wipe a scroll the user is mid-way
+    // through. The old implementation reattached the listener on every
+    // toggle, which reset the accumulator and forced the user to
+    // re-scroll the full threshold distance.
+    const onDown = vi.fn();
+    const { rerender } = renderHook(({ enabled }) => useScrollDirection({ enabled, onDown, downThresholdPx: 10 }), {
+      initialProps: { enabled: true },
+    });
+
+    act(() => {
+      fireScroll(8);
+      flushRaf();
+    });
+    expect(onDown).not.toHaveBeenCalled();
+
+    // Disable mid-scroll — accumulator should freeze, not reset.
+    rerender({ enabled: false });
+
+    // Motion during the disabled window must not be credited.
+    act(() => {
+      fireScroll(50);
+      flushRaf();
+    });
+    expect(onDown).not.toHaveBeenCalled();
+
+    // Re-enable. lastY is now 50 and accum is still 8. A 3px nudge
+    // beyond would be 11px total of "credited" motion (the 8 from
+    // before disable plus 3 now), enough to cross the 10px threshold.
+    rerender({ enabled: true });
+    act(() => {
+      fireScroll(53);
+      flushRaf();
+    });
+    expect(onDown).toHaveBeenCalledTimes(1);
   });
 
   it('uses the latest callback closure without resubscribing', () => {

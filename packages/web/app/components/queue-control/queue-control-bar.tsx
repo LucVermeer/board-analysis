@@ -1037,10 +1037,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   return (
     <div id="onboarding-queue-bar" className={`queue-bar-shadow ${styles.queueBar}`} data-testid="queue-control-bar">
-      {/* Main Control Bar — wrapper collapses to 0 height when minimised */}
+      {/* Main Control Bar — wrapper collapses to 0 height when minimised.
+          inert blocks focus + pointer events on the whole subtree so
+          keyboard users can't tab into hidden in-bar buttons (queue
+          icon, mirror, share, tick, etc.) while the bar is collapsed.
+          aria-hidden alone removes the cluster from the a11y tree but
+          doesn't remove it from the focus order. */}
       <div
         className={`${styles.cardWrapper} ${layoutState !== 'expanded' ? styles.cardWrapperHidden : ''}`}
         aria-hidden={layoutState !== 'expanded'}
+        inert={layoutState !== 'expanded'}
       >
         <div className={styles.cardWrapperInner}>
           <MuiCard variant="outlined" className={styles.card} sx={{ border: 'none' }}>

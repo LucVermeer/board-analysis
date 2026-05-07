@@ -14,14 +14,15 @@
   left: 0;
   right: 0;
   /* Anchored against --bottom-tab-bar-height (declared in components/index.css)
-     plus the OS safe-area inset plus an 8px gap. Tried measuring the wrapper
-     / the tab bar via getBoundingClientRect + ResizeObserver, but on Android
-     the URL-bar movement and the queue-control-bar grid-row collapse compound
-     into visible jitter — a fixed reference is the only way to keep the FAB
-     perfectly stationary while the bar slides away. The custom property is
-     the single source of truth so a tab-bar height change here propagates
-     without grepping for magic numbers. */
-  bottom: calc(var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + 8px);
+     plus the OS safe-area inset plus the standard --spacing-2 gap. Tried
+     measuring the wrapper / the tab bar via getBoundingClientRect +
+     ResizeObserver, but on Android the URL-bar movement and the
+     queue-control-bar grid-row collapse compound into visible jitter — a
+     fixed reference is the only way to keep the FAB perfectly stationary
+     while the bar slides away. The custom property is the single source of
+     truth so a tab-bar height change here propagates without grepping for
+     magic numbers. */
+  bottom: calc(var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--spacing-2));
   z-index: 8;
   padding: 0 12px;
   display: flex;
@@ -123,8 +124,14 @@
 .peekSnackbar {
   position: fixed;
   left: 50%;
-  /* Same fixed anchor as the FAB cluster (above the small-FAB row + gap). */
-  bottom: calc(var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + 8px + 46px + 12px);
+  /* Same fixed anchor as the FAB cluster (above the small-FAB row + gap).
+     46px = small FAB diameter (mirrored from SMALL_FAB_SIZE in
+     queue-control-fab.tsx); --spacing-3 is the visual gap between the
+     small-FAB row and the snackbar pill above it. */
+  bottom: calc(
+    var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--spacing-2) + 46px +
+      var(--spacing-3)
+  );
   max-width: calc(100vw - 32px);
   z-index: 8;
   border-radius: 9999px;
@@ -142,7 +149,6 @@
   font-size: 14px;
   line-height: 1.25;
   text-align: center;
-  transition: bottom 220ms ease-out;
 }
 
 /* Exit phase: paired ease-in animation (incoming items decelerate, outgoing

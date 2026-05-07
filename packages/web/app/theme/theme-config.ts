@@ -266,6 +266,12 @@ export const darkTokens = {
     innerHighlight: 'rgba(255, 255, 255, 0.08)',
     /** Drop shadow goes deeper to read against dark surfaces. */
     shadow: 'rgba(0, 0, 0, 0.5)',
+    /** backdrop-filter is the same recipe in both modes — a denser blur
+     *  here would chew battery on mobile without a real visual gain.
+     *  Mirrored from themeTokens.glass.filter so the dark token shape is
+     *  symmetric and consumers can read `glassTokens.filter`
+     *  unconditionally. */
+    filter: 'blur(20px) saturate(200%)',
   },
 } as const;
 

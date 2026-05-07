@@ -21,9 +21,15 @@ type UseScrollDirectionOptions = {
  * its callback fires, so a single deliberate scroll fires once — there's no
  * sticky direction state that can re-fire on unrelated re-renders.
  *
- * Thresholds and callbacks are stored in refs so callers can pass changing
- * values without churning the listener — the effect only resubscribes when
- * `enabled` flips.
+ * Thresholds, callbacks, and `enabled` are all stored in refs so the listener
+ * attaches once on mount and never re-attaches. That matters because the
+ * parent's `enabled` is typically derived from layout state — flipping it
+ * mid-scroll (e.g. a drawer opening while the user is two thirds of the
+ * way to the threshold) used to wipe the accumulator and force them to
+ * re-scroll the full distance. Now the gate is checked inside the scroll
+ * handler: when disabled we still track lastY so motion that happens while
+ * disabled isn't credited, but the accumulator is preserved across enable
+ * toggles so a paused scroll can resume from where it left off.
  */
 export function useScrollDirection({
   upThresholdPx = 24,
@@ -36,13 +42,15 @@ export function useScrollDirection({
   const onDownRef = useRef(onDown);
   const upThresholdRef = useRef(upThresholdPx);
   const downThresholdRef = useRef(downThresholdPx);
+  const enabledRef = useRef(enabled);
   onUpRef.current = onUp;
   onDownRef.current = onDown;
   upThresholdRef.current = upThresholdPx;
   downThresholdRef.current = downThresholdPx;
+  enabledRef.current = enabled;
 
   useEffect(() => {
-    if (!enabled || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
 
     // Clamp negative scrollY so iOS Safari rubber-band overscroll at the top
     // of the page (which makes scrollY go negative on pull) doesn't get
@@ -59,6 +67,10 @@ export function useScrollDirection({
       const currentY = readScrollY();
       const delta = currentY - lastY;
       lastY = currentY;
+      // While disabled, keep lastY in sync (so motion during the disabled
+      // window isn't credited on re-enable) but leave the accumulators
+      // alone — paused scrolls resume from where they left off.
+      if (!enabledRef.current) return;
       if (delta === 0) return;
 
       if (delta > 0) {
@@ -91,5 +103,5 @@ export function useScrollDirection({
         raf = null;
       }
     };
-  }, [enabled]);
+  }, []);
 }

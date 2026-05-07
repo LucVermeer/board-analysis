@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
@@ -96,12 +97,12 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
   const glassBgHover = glassTokens.backgroundHover;
   const liquidGlass = useMemo(
     () => ({
-      backdropFilter: themeTokens.glass.filter,
-      WebkitBackdropFilter: themeTokens.glass.filter,
+      backdropFilter: glassTokens.filter,
+      WebkitBackdropFilter: glassTokens.filter,
       border: `1px solid ${glassTokens.border}`,
       boxShadow: `0 8px 24px ${glassTokens.shadow}, inset 0 1px 0 ${glassTokens.innerHighlight}`,
     }),
-    [glassTokens.border, glassTokens.shadow, glassTokens.innerHighlight],
+    [glassTokens.filter, glassTokens.border, glassTokens.shadow, glassTokens.innerHighlight],
   );
 
   // Memoised so MUI's sx shallow-compare doesn't re-style every render.
@@ -184,10 +185,15 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
 
   return createPortal(
     <>
+      {/* `inert` complements aria-hidden: aria-hidden removes the cluster
+          from the a11y tree, but the FABs remain keyboard-tabbable
+          underneath the expanded bar without it. inert blocks focus +
+          pointer events on the whole subtree so Tab skips past them. */}
       <div
         className={`${styles.fabRoot} ${isVisible ? styles.fabRootVisible : ''}`}
         data-testid="queue-control-fab"
         aria-hidden={!isVisible}
+        inert={!isVisible}
       >
         <div className={styles.leftCluster}>
           <Fab
@@ -254,20 +260,22 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
           absolute children of display: flex containers. Mounted via
           snackbarMounted so the exit animation can run before unmount.
           role="status" + aria-live="polite" so screen readers announce
-          the climb change in party mode without preempting other speech. */}
+          the climb change in party mode without preempting other speech.
+          Rendered as MUI Box so we can pass the dynamic grade tint via
+          sx (project convention prefers sx over the style prop). */}
       {snackbarMounted && (
-        <div
+        <Box
           role="status"
           aria-live="polite"
           aria-atomic="true"
           className={`${styles.peekSnackbar} ${snackbarExiting ? styles.peekSnackbarExiting : ''}`}
-          style={{ backgroundColor: fabBackground }}
+          sx={{ backgroundColor: fabBackground }}
         >
           <span className={styles.peekName}>{currentClimb.name}</span>
           {currentClimb.setter_username && (
             <span className={styles.peekByline}>{t('queueBar.byline', { setter: currentClimb.setter_username })}</span>
           )}
-        </div>
+        </Box>
       )}
     </>,
     document.body,

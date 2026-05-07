@@ -146,7 +146,7 @@ describe('QueueControlFab', () => {
     expect(cluster.getAttribute('aria-hidden')).toBe('false');
   });
 
-  it('marks the cluster aria-hidden when mode is hidden', () => {
+  it('marks the cluster aria-hidden + inert when mode is hidden', () => {
     const handlers = makeHandlers();
     render(
       <QueueControlFab
@@ -160,6 +160,25 @@ describe('QueueControlFab', () => {
 
     const cluster = screen.getByTestId('queue-control-fab');
     expect(cluster.getAttribute('aria-hidden')).toBe('true');
+    // inert removes the FABs from focus order so keyboard users can't
+    // Tab into invisible buttons while the bar is expanded.
+    expect(cluster.hasAttribute('inert')).toBe(true);
+  });
+
+  it('does not mark the cluster inert when visible', () => {
+    const handlers = makeHandlers();
+    render(
+      <QueueControlFab
+        mode="minimised"
+        currentClimb={mockClimb}
+        boardDetails={baseBoardDetails}
+        pathname="/kilter/1/1/1/40/view/abc"
+        {...handlers}
+      />,
+    );
+
+    const cluster = screen.getByTestId('queue-control-fab');
+    expect(cluster.hasAttribute('inert')).toBe(false);
   });
 
   it('fires handlers when each FAB is tapped', () => {
