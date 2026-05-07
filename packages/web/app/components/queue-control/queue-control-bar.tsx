@@ -147,14 +147,19 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const enterFallbackRef = useRef<NodeJS.Timeout | null>(null);
 
   // The minimised/FAB experience is opt-in via the experiments drawer.
-  // While disabled the bar always renders expanded — no FAB cluster, no
-  // scroll-driven collapse, no peek snackbar. The hook returns the
-  // experiment default (false) on first render and lands the persisted
-  // value on the next tick, so users who haven't opted in pay nothing.
+  // `useExperiment` returns the registered default (false) on the first
+  // render and only lands the persisted IndexedDB value on the next tick —
+  // so users who opted in see a brief "expanded → minimised" snap on every
+  // page load. That's acceptable for an opt-in (the expanded bar is the
+  // documented default state) but it does mean the useState initialiser
+  // below cannot be the canonical source of truth: the runtime-flip effect
+  // further down reconciles `layoutState` whenever the flag value changes.
   const fabMinimisedEnabled = useExperiment('queueBarFab');
 
-  // Layout state: minimised by default, expanded on the climb list page.
-  // Computed synchronously in useState so /list doesn't flash from minimised → expanded.
+  // Layout state. The initialiser uses the synchronously-known flag value
+  // so the climb list and flag-off paths render in the right state on the
+  // first paint without an effect tick. The flag-change effect below takes
+  // over once IndexedDB hydrates or the user toggles the experiment live.
   const [layoutState, setLayoutState] = useState<LayoutState>(() => {
     if (!fabMinimisedEnabled) return 'expanded';
     return isClimbListPage ? 'expanded' : 'minimised';
@@ -181,8 +186,27 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       clearTimeout(peekTimerRef.current);
       peekTimerRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname; fabMinimisedEnabled is stable per render
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname; the flag-change effect below handles fabMinimisedEnabled
   }, [pathname]);
+
+  // Runtime flag flip: react when `fabMinimisedEnabled` changes (IndexedDB
+  // hydration on mount, or a live toggle from the experiments drawer in
+  // this or another tab). The useState initialiser only runs once, so
+  // without this effect a flip never takes hold until the next route
+  // change — turning the experiment on would not visibly collapse the bar
+  // and turning it off would not bring it back. Drawer state is left
+  // alone here; the drawer-open effect already forces `expanded` while a
+  // drawer is mounted, so the only racing case (toggle while a drawer is
+  // open) self-corrects on the next render.
+  useEffect(() => {
+    setLayoutState(!fabMinimisedEnabled || isClimbListPage ? 'expanded' : 'minimised');
+    setOpenReason('default');
+    if (peekTimerRef.current) {
+      clearTimeout(peekTimerRef.current);
+      peekTimerRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname; pathname changes are handled by the route-reset effect above
+  }, [fabMinimisedEnabled]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {

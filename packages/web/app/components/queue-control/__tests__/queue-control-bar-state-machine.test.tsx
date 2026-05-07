@@ -350,6 +350,15 @@ const isFabVisible = () => {
   return !!cluster && cluster.getAttribute('aria-hidden') === 'false';
 };
 
+// The bar's collapsible wrapper (queue-control-bar.tsx line 1047) is the
+// direct child of the testid root that carries `aria-hidden`. Its value
+// is `false` only when `layoutState === 'expanded'`, so it's a faithful
+// signal for "the bar is showing its full content" — independent of
+// whether the FAB cluster happens to be rendered.
+const getBarWrapper = () =>
+  document.querySelector('[data-testid="queue-control-bar"] > [aria-hidden]') as HTMLElement | null;
+const isBarExpanded = () => getBarWrapper()?.getAttribute('aria-hidden') === 'false';
+
 // Queries restricted to the FAB cluster so we don't collide with the
 // in-bar queue icon (which also uses aria-label="Open queue") that
 // stays mounted in the DOM under the collapsed wrapper.
@@ -617,21 +626,23 @@ describe('QueueControlBar with the FAB experiment off', () => {
     mockFabMinimisedEnabled = false;
   });
 
-  it('does not render the FAB cluster on a non-list page', async () => {
+  it('renders the bar expanded with no FAB cluster on a non-list page', async () => {
     await act(async () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
     expect(getFabCluster()).toBeNull();
+    expect(isBarExpanded()).toBe(true);
   });
 
-  it('does not render the FAB cluster on the climb list page', async () => {
+  it('renders the bar expanded with no FAB cluster on the climb list page', async () => {
     mockPathname = '/kilter/1/1/1/40/list';
     await act(async () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
     expect(getFabCluster()).toBeNull();
+    expect(isBarExpanded()).toBe(true);
   });
 
   it('passes enabled=false to the scroll-direction hook so it never collapses the bar', async () => {
@@ -640,9 +651,10 @@ describe('QueueControlBar with the FAB experiment off', () => {
     });
 
     expect(scrollHandlers.enabled).toBe(false);
+    expect(isBarExpanded()).toBe(true);
   });
 
-  it('does not peek when the current climb uuid changes (FAB DOM is gone)', async () => {
+  it('does not peek when the current climb uuid changes (bar stays expanded, FAB DOM is gone)', async () => {
     vi.useFakeTimers();
     try {
       const { rerender } = render(<QueueControlBar {...defaultProps} />);
@@ -661,21 +673,22 @@ describe('QueueControlBar with the FAB experiment off', () => {
 
       expect(document.querySelector('[class*="peekSnackbar"]')).toBeNull();
       expect(getFabCluster()).toBeNull();
+      expect(isBarExpanded()).toBe(true);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('keeps the queue drawer flow working without the FAB cluster', async () => {
+  it('keeps the bar fully expanded with the queue drawer closed', async () => {
     // The in-bar queue icon (not the FAB) is still wired up — sanity-check
-    // that closing the drawer leaves the bar in its always-expanded state.
+    // that the bar shows its full content and the queue drawer is closed
+    // until something user-driven opens it.
     await act(async () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
     expect(getFabCluster()).toBeNull();
-    // Queue drawer starts closed and stays so until user-driven flows open it
-    // — the FAB-driven open paths are gone, but the bar itself is rendered.
+    expect(isBarExpanded()).toBe(true);
     expect(queueDrawerOpenStates.at(-1)).toBe(false);
   });
 });

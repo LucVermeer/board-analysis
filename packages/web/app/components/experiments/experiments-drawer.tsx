@@ -28,7 +28,7 @@ const ExperimentRow: React.FC<ExperimentRowProps> = ({ experimentKey, labelKey, 
   const enabled = useExperiment(experimentKey);
 
   const handleToggle = useCallback(
-    (_event: React.SyntheticEvent, checked: boolean) => {
+    (_event: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
       void setExperiment(experimentKey, checked);
     },
     [experimentKey],

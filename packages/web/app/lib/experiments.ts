@@ -38,6 +38,7 @@ export const EXPERIMENTS: readonly ExperimentDefinition[] = [
 ] as const;
 
 const EXPERIMENT_CHANGE_EVENT = 'boardsesh:experiment-changed';
+const EXPERIMENT_CHANNEL_NAME = 'boardsesh:experiments';
 
 type ExperimentPreferenceKey = `experiment:${ExperimentKey}`;
 
@@ -48,9 +49,22 @@ const getDefault = (key: ExperimentKey): boolean =>
 
 type ExperimentChangeDetail = { key: ExperimentKey; value: boolean };
 
+// Lazy singleton: BroadcastChannel is only available in the browser and is
+// undefined in jsdom test environments, so guard both. Same-tab consumers
+// also need to hear about a flip — BroadcastChannel deliberately does NOT
+// deliver to the tab that posted, so we keep a window CustomEvent for the
+// in-tab path and the channel for cross-tab sync.
+let channelInstance: BroadcastChannel | null = null;
+const getChannel = (): BroadcastChannel | null => {
+  if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return null;
+  if (!channelInstance) channelInstance = new BroadcastChannel(EXPERIMENT_CHANNEL_NAME);
+  return channelInstance;
+};
+
 const dispatchChange = (detail: ExperimentChangeDetail) => {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent<ExperimentChangeDetail>(EXPERIMENT_CHANGE_EVENT, { detail }));
+  getChannel()?.postMessage(detail);
 };
 
 /**
@@ -71,14 +85,19 @@ export function useExperiment(key: ExperimentKey): boolean {
       if (typeof stored === 'boolean') setValue(stored);
     });
 
-    const onChange = (event: Event) => {
-      const detail = (event as CustomEvent<ExperimentChangeDetail>).detail;
+    const applyChange = (detail: ExperimentChangeDetail | undefined) => {
       if (detail?.key === key) setValue(detail.value);
     };
-    window.addEventListener(EXPERIMENT_CHANGE_EVENT, onChange);
+    const onWindowEvent = (event: Event) => applyChange((event as CustomEvent<ExperimentChangeDetail>).detail);
+    const onChannelMessage = (event: MessageEvent<ExperimentChangeDetail>) => applyChange(event.data);
+
+    window.addEventListener(EXPERIMENT_CHANGE_EVENT, onWindowEvent);
+    const channel = getChannel();
+    channel?.addEventListener('message', onChannelMessage);
     return () => {
       cancelled = true;
-      window.removeEventListener(EXPERIMENT_CHANGE_EVENT, onChange);
+      window.removeEventListener(EXPERIMENT_CHANGE_EVENT, onWindowEvent);
+      channel?.removeEventListener('message', onChannelMessage);
     };
   }, [key]);
 
