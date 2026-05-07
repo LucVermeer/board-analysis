@@ -373,7 +373,7 @@ describe('QueueControlBar queue button', () => {
     expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('true');
   });
 
-  it('badge shows the queue count when items are queued', async () => {
+  it('does not render a queue-count badge on the open-queue button', async () => {
     mockQueueContext = {
       ...baseQueueContext,
       queue: [makeQueueItem('item-1'), makeQueueItem('item-2'), makeQueueItem('item-3')],
@@ -383,23 +383,9 @@ describe('QueueControlBar queue button', () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
+    // The count is visible inside the drawer; the button itself stays uncluttered.
     const badge = queryInBar().getByLabelText('Open queue').querySelector('.MuiBadge-badge');
-    expect(badge).toBeTruthy();
-    expect(badge!.textContent).toBe('3');
-  });
-
-  it('badge content is 0 (and rendered invisible) when queue is empty', async () => {
-    mockQueueContext = { ...baseQueueContext, queue: [] };
-
-    await act(async () => {
-      render(<QueueControlBar {...defaultProps} />);
-    });
-
-    const badge = queryInBar().getByLabelText('Open queue').querySelector('.MuiBadge-badge');
-    expect(badge).toBeTruthy();
-    // MUI renders `badgeContent={0}` literally; `invisible={true}` hides it via CSS
-    // (no public class name in v6+), so we assert on the bound count, not visibility.
-    expect(badge!.textContent).toBe('0');
+    expect(badge).toBeNull();
   });
 
   it('mini bar collapses (loses sessionHeaderExpanded) when tick mode activates', async () => {

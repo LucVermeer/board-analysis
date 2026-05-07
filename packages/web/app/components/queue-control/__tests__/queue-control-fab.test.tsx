@@ -280,7 +280,8 @@ describe('QueueControlFab', () => {
       // Minimised → no snackbar.
       expect(screen.queryByText('Test Climb')).toBeNull();
 
-      // Switch to peeking → snackbar mounts with name + setter byline.
+      // Switch to peeking → snackbar mounts with the climb name only
+      // (no setter byline — the peek stays uncluttered).
       rerender(
         <QueueControlFab
           mode="peeking"
@@ -291,7 +292,7 @@ describe('QueueControlFab', () => {
         />,
       );
       expect(screen.getByText('Test Climb')).toBeTruthy();
-      expect(screen.getByText(/setter1/)).toBeTruthy();
+      expect(screen.queryByText(/setter1/)).toBeNull();
 
       // Returning to minimised: the snackbar stays mounted (exit animation),
       // then unmounts after the SNACKBAR_EXIT_MS (200ms) timeout.
@@ -315,22 +316,5 @@ describe('QueueControlFab', () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it('omits the byline when the climb has no setter username', () => {
-    const handlers = makeHandlers();
-    const climbWithoutSetter = { ...mockClimb, setter_username: '' };
-    render(
-      <QueueControlFab
-        mode="peeking"
-        currentClimb={climbWithoutSetter}
-        boardDetails={baseBoardDetails}
-        pathname="/kilter/1/1/1/40/view/abc"
-        {...handlers}
-      />,
-    );
-
-    expect(screen.getByText('Test Climb')).toBeTruthy();
-    expect(screen.queryByText(/By /)).toBeNull();
   });
 });

@@ -212,15 +212,6 @@
   white-space: nowrap;
 }
 
-.peekByline {
-  font-size: 12px;
-  opacity: 0.75;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 @keyframes peekSnackbarIn {
   from {
     opacity: 0;

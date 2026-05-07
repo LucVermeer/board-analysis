@@ -280,11 +280,6 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
             sx={{ backgroundColor: fabBackground }}
           >
             <span className={styles.peekName}>{currentClimb.name}</span>
-            {currentClimb.setter_username && (
-              <span className={styles.peekByline}>
-                {t('queueBar.byline', { setter: currentClimb.setter_username })}
-              </span>
-            )}
           </Box>
         </div>
       )}

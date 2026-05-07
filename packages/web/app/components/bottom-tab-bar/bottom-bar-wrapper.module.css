@@ -29,6 +29,17 @@
   bottom: max(8px, env(safe-area-inset-bottom));
 }
 
+/* iOS WKWebView: drop the pill flush with the bottom of the screen so its
+   rounded bottom edges nest into the iPhone's curved screen corners. The
+   home-indicator clearance moves *inside* the pill via
+   --tab-bar-safe-area-padding instead of lifting the whole element off
+   the bottom. Android stays on .nativeApp because gesture-nav clearance
+   varies more and a flush placement risks gesture conflicts there. */
+.iosNativeApp {
+  --tab-bar-safe-area-padding: env(safe-area-inset-bottom);
+  bottom: 0;
+}
+
 /* On desktop the pill stays centered and capped; the wrapper itself spans full
    width but the BottomNavigation child sets max-width: min(560px, 100%). */
 @media (min-width: 768px) {

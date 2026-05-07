@@ -148,8 +148,8 @@ export const themeTokens = {
     fast: '150ms ease',
     normal: '200ms ease',
     slow: '300ms ease',
-    /** iOS-style decelerate curve. Curve only — pair with a duration. */
-    snappy: 'cubic-bezier(0.32, 0.72, 0, 1)',
+    /** iOS-style decelerate — 220ms reads as deliberate without lagging. */
+    snappy: '220ms cubic-bezier(0.32, 0.72, 0, 1)',
   },
 
   // Z-index scale

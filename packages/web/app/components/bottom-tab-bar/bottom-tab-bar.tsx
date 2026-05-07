@@ -452,14 +452,16 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
           boxShadow: glassShadow,
           borderRadius: `${themeTokens.borderRadius.full}px`,
           // Layer-promote: keep backdrop-filter rasterization on its own GPU
-          // layer so the blur cost doesn't bleed into sibling paint, and clip
-          // repaints to the pill's own bounding box.
+          // layer so the blur cost doesn't bleed into sibling paint. (No
+          // `contain: paint` — it clips MUI touch ripples at the pill edge.)
+          // Deliberately permanent: scroll constantly drives the
+          // collapse/expand transition, so the cost of toggling
+          // `will-change` per-transition would cause more layer-creation
+          // jank than the small fixed compositor-memory footprint we pay
+          // by leaving it on for a single ~560×64px element.
           willChange: 'transform, opacity',
-          contain: 'paint',
           // Single shared iOS-decel curve for everything the pill animates.
-          // 220ms reads as deliberate without lagging — the curve does most
-          // of the perceptual work.
-          transition: `min-height 220ms ${themeTokens.transitions.snappy}, padding 220ms ${themeTokens.transitions.snappy}, max-width 220ms ${themeTokens.transitions.snappy}, opacity 220ms ${themeTokens.transitions.snappy}, transform 220ms ${themeTokens.transitions.snappy}`,
+          transition: `min-height ${themeTokens.transitions.snappy}, padding ${themeTokens.transitions.snappy}, max-width ${themeTokens.transitions.snappy}, opacity ${themeTokens.transitions.snappy}, transform ${themeTokens.transitions.snappy}`,
           pt: `${collapsed ? 0 : themeTokens.spacing[2]}px`,
           pb: `calc(${collapsed ? 0 : themeTokens.spacing[2]}px + var(--tab-bar-safe-area-padding, 0px))`,
           px: `${collapsed ? themeTokens.spacing[1] : themeTokens.spacing[2]}px`,
@@ -483,7 +485,7 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
             maxWidth: collapsed ? 32 : undefined,
             padding: collapsed ? '0 2px' : undefined,
             minHeight: collapsed ? 24 : undefined,
-            transition: `min-width 220ms ${themeTokens.transitions.snappy}, padding 220ms ${themeTokens.transitions.snappy}`,
+            transition: `min-width ${themeTokens.transitions.snappy}, padding ${themeTokens.transitions.snappy}`,
           },
           // Labels fade via opacity + collapse to 0 font-size so the icon
           // sits in the vertical centre of the collapsed pill. Without the
@@ -496,32 +498,50 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
           // centres the icon as the pill shrinks. Not display:none —
           // that can't animate and would hard-cut the fade at frame 0.
           '& .MuiBottomNavigationAction-label': {
-            transition: `opacity 220ms ${themeTokens.transitions.snappy}, font-size 220ms ${themeTokens.transitions.snappy}, transform 220ms ${themeTokens.transitions.snappy}`,
+            transition: `opacity ${themeTokens.transitions.snappy}, font-size ${themeTokens.transitions.snappy}, transform ${themeTokens.transitions.snappy}`,
             opacity: collapsed ? 0 : 1,
             fontSize: collapsed ? 0 : undefined,
             pointerEvents: collapsed ? 'none' : 'auto',
           },
           '& .MuiSvgIcon-root': {
-            transition: `font-size 220ms ${themeTokens.transitions.snappy}`,
+            transition: `font-size ${themeTokens.transitions.snappy}`,
             fontSize: collapsed ? 14 : 20,
           },
         }}
       >
-        <BottomNavigationAction label={t('bottomTabBar.home')} icon={<HomeOutlined />} value="home" sx={actionSx} />
+        {/* Wrapping labels in an aria-hidden span when collapsed keeps the
+            zero-font-size text out of the screen-reader tree (the icons are
+            still announced via the action's aria-label / route semantics). */}
         <BottomNavigationAction
-          label={t('bottomTabBar.climb')}
+          label={<span aria-hidden={collapsed || undefined}>{t('bottomTabBar.home')}</span>}
+          icon={<HomeOutlined />}
+          value="home"
+          sx={actionSx}
+        />
+        <BottomNavigationAction
+          label={<span aria-hidden={collapsed || undefined}>{t('bottomTabBar.climb')}</span>}
           icon={<FormatListBulletedOutlined />}
           value="climbs"
           sx={actionSx}
         />
         <BottomNavigationAction
-          label={t('bottomTabBar.discover')}
+          label={<span aria-hidden={collapsed || undefined}>{t('bottomTabBar.discover')}</span>}
           icon={<LocalOfferOutlined />}
           value="library"
           sx={actionSx}
         />
-        <BottomNavigationAction label={t('bottomTabBar.create')} icon={<AddOutlined />} value="create" sx={actionSx} />
-        <BottomNavigationAction label={t('bottomTabBar.you')} icon={<PersonOutlined />} value="you" sx={actionSx} />
+        <BottomNavigationAction
+          label={<span aria-hidden={collapsed || undefined}>{t('bottomTabBar.create')}</span>}
+          icon={<AddOutlined />}
+          value="create"
+          sx={actionSx}
+        />
+        <BottomNavigationAction
+          label={<span aria-hidden={collapsed || undefined}>{t('bottomTabBar.you')}</span>}
+          icon={<PersonOutlined />}
+          value="you"
+          sx={actionSx}
+        />
       </BottomNavigation>
 
       {/* Board Selector Drawer */}
