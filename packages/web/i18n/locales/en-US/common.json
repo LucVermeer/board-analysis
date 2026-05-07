@@ -17,7 +17,17 @@
     "discoMode": "Disco the climb",
     "stopDisco": "Stop disco",
     "discoNeedsClimb": "Load a climb to start the disco",
-    "clearFailed": "Couldn't clear the board"
+    "clearFailed": "Couldn't clear the board",
+    "customizeColors": "Customize LED colors",
+    "customizeColorsUnsupported": "Custom colors aren't available on this board",
+    "customizeColorsTitle": "LED colors",
+    "customizeColorsHelp": "Pick the colors your board lights up for hands, feet, and the finish hold. Start holds keep their default green.",
+    "resetColors": "Reset",
+    "role": {
+      "HAND": "Hands",
+      "FOOT": "Feet",
+      "FINISH": "Finish"
+    }
   },
   "actions": {
     "yes": "Yes",

@@ -17,7 +17,17 @@
     "discoMode": "Disco sur le bloc",
     "stopDisco": "Arrêter le disco",
     "discoNeedsClimb": "Chargez un bloc pour lancer le disco",
-    "clearFailed": "Impossible d'éteindre le board"
+    "clearFailed": "Impossible d'éteindre le board",
+    "customizeColors": "Personnaliser les couleurs LED",
+    "customizeColorsUnsupported": "Couleurs personnalisées indisponibles sur ce board",
+    "customizeColorsTitle": "Couleurs des LED",
+    "customizeColorsHelp": "Choisissez les couleurs des prises pour les mains, les pieds et l'arrivée. Les prises de départ gardent leur vert par défaut.",
+    "resetColors": "Réinitialiser",
+    "role": {
+      "HAND": "Mains",
+      "FOOT": "Pieds",
+      "FINISH": "Arrivée"
+    }
   },
   "actions": {
     "yes": "Oui",
