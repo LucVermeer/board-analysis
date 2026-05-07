@@ -88,8 +88,6 @@ const PEEK_DURATION_MS = 3000;
 // light for callsites that only need the dispatch helper.
 export { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 
-const QUEUE_BADGE_SX = { '& .MuiBadge-badge': themeTokens.badge.small } as const;
-
 const TICK_BADGE_SX = {
   '& .MuiBadge-badge': {
     backgroundColor: themeTokens.colors.success,
@@ -459,19 +457,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         aria-label={t('common:ariaLabels.openQueue')}
       >
         <IconButton size="small" component="span" tabIndex={-1} sx={{ p: 0.25 }}>
-          <Badge
-            badgeContent={queue.length}
-            max={99}
-            color="primary"
-            invisible={queue.length === 0}
-            sx={QUEUE_BADGE_SX}
-          >
-            <FormatListBulletedOutlined sx={{ fontSize: 18 }} />
-          </Badge>
+          <FormatListBulletedOutlined sx={{ fontSize: 18 }} />
         </IconButton>
       </div>
     ),
-    [openQueueDrawer, queue.length, t],
+    [openQueueDrawer, t],
   );
   const shouldNavigate = isViewPage || isPlayPage;
 

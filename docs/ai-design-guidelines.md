@@ -589,33 +589,36 @@ The queue drawer dynamically expands from partial to full height based on scroll
 
 ### 7. Bottom Tab Bar
 
-Mobile-only navigation bar with glassmorphism effect.
+Mobile primary navigation. A floating **liquid-glass pill** (not an edge-to-edge bar) anchored above the safe area, with five tabs: Home, Climbs, Discover, Create, You. (Feed is folded under `/you/feed` — there's no top-level Feed tab anymore.) The pill scroll-collapses into a small Safari-style chrome on downward scroll and re-expands on upward scroll or near-top.
 
-**Styling:**
+**Pill chrome:**
 
-```css
-background: rgba(255, 255, 255, 0.5);
--webkit-backdrop-filter: blur(10px);
-backdrop-filter: blur(10px);
-padding-top: 4px;
-padding-bottom: env(safe-area-inset-bottom, 0px);
-```
+- Shape: rounded pill (`border-radius: 9999px`), `max-width: min(560px, 100%)`, centered horizontally with a `var(--spacing-2)` bottom gap above the safe area.
+- Liquid glass: layered translucent surface + top-edge highlight gradient + 1px hairline border. Backdrop-filter strength differs per theme — light mode uses `blur(12px) saturate(180%)`, dark mode uses `blur(24px) saturate(180%)` to keep contrast over busy content. Tokens live under `themeTokens.glass.*` / `darkTokens.glass.*`.
+- The pill sits in a `position: fixed` wrapper at `z-index: 10`. The wrapper's `pointer-events: none` lets taps pass through gaps; the pill itself accepts events.
 
-**Tab items:**
+**Tab items (expanded):**
 
-- Layout: Flex column, centered
-- Padding: `6px 0 4px`
-- Icon size: `20px`
-- Label: `10px`, `margin-top: 2px`, `line-height: 1`
-- Active color: `var(--color-primary)` (`#8C4A52`)
-- Inactive color: `var(--neutral-400)` (`#9CA3AF`)
-- Transition: `color 150ms ease`
-- Touch handling: `-webkit-tap-highlight-color: transparent`, `touch-action: manipulation`
+- Layout: Flex row inside the pill (MUI `BottomNavigation` + `BottomNavigationAction`).
+- Icon size: `20px`. Label: shown via `showLabels`. Active color: `var(--color-primary)`. Inactive: `var(--neutral-400)`.
+- Touch handling: `-webkit-tap-highlight-color: transparent`, `touch-action: manipulation`.
+
+**Collapsed state (scroll-down or Safari-chrome shrink):**
+
+- Triggered by an RAF-coalesced scroll listener with asymmetric thresholds (8px down to collapse, top-of-page or 8px+ up to expand). State is published to `<html data-tab-bar-collapsed>` so the queue-control FAB cluster can subscribe via plain CSS — no shared React state, no measurement-based jitter.
+- Pill shrinks to ~`220px × 28px` at `opacity: 0.7`. Icons drop to `14px` and labels fade out (via `opacity` + `pointer-events: none` — never `display: none`, which kills the transition).
+- **First-tap-to-expand:** when collapsed, a tap on any tab expands the pill instead of navigating; the user can then aim properly and tap again to navigate. Mirrors how Safari's collapsed URL bar behaves — at 14px / 28px chrome, all icons are equally hard to hit, so the safety net applies uniformly.
+
+**Motion:**
+
+- Single shared transition family with the iOS decelerate curve: `transition: <props> 220ms cubic-bezier(0.32, 0.72, 0, 1)` (the `themeTokens.transitions.snappy` curve). The same curve is used by the queue-control FAB cluster's collapse-tracking and the queue-control bar's `cardWrapper` minimisation, so the bottom region reads as one motion family.
+- Layer-promote with `will-change: transform, opacity` and `contain: paint` so the backdrop-filter rasterization stays GPU-composited and doesn't bleed into sibling paint cost.
+- `prefers-reduced-motion: reduce` falls back to opacity-only fade — vertical motion is suppressed, dimensional changes snap.
 
 **Responsive:**
 
-- Hidden at `min-width: 768px` (desktop uses sidebar/header navigation)
-- Safe area insets for notched devices
+- Pill stays mobile-first; on `min-width: 768px` the wrapper still renders but desktop chrome (sidebar/header) handles primary navigation.
+- Safe-area insets honoured via `env(safe-area-inset-bottom, 0px)` and `var(--tab-bar-safe-area-padding)`.
 
 ---
 
