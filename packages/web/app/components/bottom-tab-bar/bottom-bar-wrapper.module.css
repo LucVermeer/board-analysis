@@ -1,16 +1,20 @@
-/* Floating liquid-glass pill. The wrapper sits at a flat 12px above the
-   screen bottom — that's the geometric gap (screen_radius − pill_radius)
-   that makes the pill's rounded corners concentric with the iPhone's
-   curved screen corners. The 12px lift plus the pill's intrinsic height
-   keeps interactive content well above the iOS home-indicator gesture
-   zone (~34px on modern iPhones), so we don't need to pile additional
-   safe-area padding inside the pill — that path made the pill look
-   bottom-heavy. */
+/* Floating liquid-glass pill. The wrapper anchors against
+   --bottom-tab-bar-bottom-offset (defined in components/index.css) so the
+   wrapper, the FAB cluster, and the peek snackbar all track the same per-
+   platform line without re-deriving it. The variable resolves to:
+
+   - iOS Safari + Capacitor → flat 12px (concentric with the iPhone screen-
+     corner radius on iPhone 17 Pro; older iPhones get a tasteful floating-
+     pill gap with no gesture conflict).
+   - Android Capacitor → max(12px, env(safe-area-inset-bottom)) so the
+     gesture-nav inset (24–48px on modern Android) is respected.
+   - Android Chromium web → 12px floor (env reports 0).
+   - Desktop ≥768px → 8px (no inset, narrow centred pill). */
 .bottomBarWrapper {
   --tab-bar-safe-area-padding: 0px;
   --tab-bar-bottom-extension: 0px;
   position: fixed;
-  bottom: 12px;
+  bottom: var(--bottom-tab-bar-bottom-offset);
   left: 0;
   right: 0;
   padding-inline: 12px;
@@ -24,11 +28,10 @@
   pointer-events: auto;
 }
 
-/* On desktop the pill stays centered and capped; the wrapper itself spans full
-   width but the BottomNavigation child sets max-width: min(560px, 100%). */
+/* Desktop padding-inline tightens the gutter; the bottom offset is handled
+   by the :root override in components/index.css. */
 @media (min-width: 768px) {
   .bottomBarWrapper {
-    bottom: 8px;
     padding-inline: 24px;
   }
 }
