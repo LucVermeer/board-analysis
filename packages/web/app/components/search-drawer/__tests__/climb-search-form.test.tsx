@@ -323,6 +323,49 @@ describe('ClimbSearchForm — drag handles', () => {
     expect(back.y).toBeCloseTo(31);
   });
 
+  it('marks zone handles as swipe-blocked so drawer gestures ignore zone drags', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: startZone,
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    const seHandle = screen.getByTestId('zone-handle-se');
+    const moveHandle = screen.getByTestId('zone-handle-move');
+
+    expect(screen.getByTestId('zone-board-container').closest('[data-swipe-blocked]')).toBe(
+      screen.getByTestId('zone-board-container'),
+    );
+    expect(seHandle.closest('[data-swipe-blocked]')).toBe(seHandle);
+    expect(moveHandle.closest('[data-swipe-blocked]')).toBe(moveHandle);
+  });
+
+  it('renders larger invisible hit targets around zone handles', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: startZone,
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    const seHandleRadius = Number(screen.getByTestId('zone-handle-se').getAttribute('r'));
+    const seHitRadius = Number(screen.getByTestId('zone-hit-se').getAttribute('r'));
+    const moveHandleRadius = Number(screen.getByTestId('zone-handle-move').getAttribute('r'));
+    const moveHitRadius = Number(screen.getByTestId('zone-hit-move').getAttribute('r'));
+    const moveBorderHitTarget = screen.getByTestId('zone-hit-move-border');
+
+    expect(seHitRadius).toBeGreaterThan(seHandleRadius * 2);
+    expect(moveHitRadius).toBeGreaterThan(moveHandleRadius * 2);
+    expect(Number(moveBorderHitTarget.getAttribute('stroke-width'))).toBe(seHitRadius);
+    expect(moveBorderHitTarget.getAttribute('pointer-events')).toBe('stroke');
+    expect(screen.getByTestId('zone-hit-se').closest('[data-swipe-blocked]')).toBe(screen.getByTestId('zone-hit-se'));
+    expect(screen.getByTestId('zone-hit-move').closest('[data-swipe-blocked]')).toBe(
+      screen.getByTestId('zone-hit-move'),
+    );
+    expect(moveBorderHitTarget.closest('[data-swipe-blocked]')).toBe(moveBorderHitTarget);
+  });
+
   it('dragging the SE corner shrinks the zone and prunes holds outside the new box', () => {
     const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
     mockUISearchParams = {
@@ -350,6 +393,29 @@ describe('ClimbSearchForm — drag handles', () => {
     // Hold 101 at grid (60, 80) is inside the new box; the other two are
     // dropped. Critical check: a regression that removed pruneHoldsToZone
     // from endDrag (while keeping it in handleEnable) would fail here.
+    expect(dragCall?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
+  });
+
+  it('persists the latest valid drag box when iOS cancels with bogus coordinates', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      holdsFilter: filterAllThreeHolds,
+      zoneBox: startZone,
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    const seHandle = screen.getByTestId('zone-handle-se');
+
+    fireEvent.pointerDown(seHandle, { clientX: 862.5, clientY: 937.5, pointerId: 1 });
+    fireEvent.pointerMove(seHandle, { clientX: 525, clientY: 600, pointerId: 1 });
+    fireEvent.pointerCancel(seHandle, { clientX: 0, clientY: 1170, pointerId: 1 });
+
+    const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
+      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
+      | undefined;
+    expect(dragCall).toBeDefined();
+    expect(dragCall?.zoneBox).toEqual({ edgeLeft: 29, edgeRight: 70, edgeBottom: 76, edgeTop: 125 });
     expect(dragCall?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
   });
 
