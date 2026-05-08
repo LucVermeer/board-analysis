@@ -73,7 +73,6 @@ import IosShare from '@mui/icons-material/IosShare';
 import { QRCodeSVG } from 'qrcode.react';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
-import { useExperiment } from '@/app/lib/experiments';
 import styles from './queue-control-bar.module.css';
 import { PLAY_DRAWER_EVENT as PLAY_DRAWER_EVENT_INTERNAL, dispatchOpenPlayDrawer } from './play-drawer-event';
 
@@ -146,24 +145,9 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const router = useLocaleRouter();
   const enterFallbackRef = useRef<NodeJS.Timeout | null>(null);
 
-  // The minimised/FAB experience is opt-in via the experiments drawer.
-  // `useExperiment` returns the registered default (false) on the first
-  // render and only lands the persisted IndexedDB value on the next tick —
-  // so users who opted in see a brief "expanded → minimised" snap on every
-  // page load. That's acceptable for an opt-in (the expanded bar is the
-  // documented default state) but it does mean the useState initialiser
-  // below cannot be the canonical source of truth: the runtime-flip effect
-  // further down reconciles `layoutState` whenever the flag value changes.
-  const fabMinimisedEnabled = useExperiment('queueBarFab');
-
-  // Layout state. The initialiser uses the synchronously-known flag value
-  // so the climb list and flag-off paths render in the right state on the
-  // first paint without an effect tick. The flag-change effect below takes
-  // over once IndexedDB hydrates or the user toggles the experiment live.
-  const [layoutState, setLayoutState] = useState<LayoutState>(() => {
-    if (!fabMinimisedEnabled) return 'expanded';
-    return isClimbListPage ? 'expanded' : 'minimised';
-  });
+  // Layout state: minimised by default, expanded on the climb list page.
+  // Computed synchronously in useState so /list doesn't flash from minimised → expanded.
+  const [layoutState, setLayoutState] = useState<LayoutState>(() => (isClimbListPage ? 'expanded' : 'minimised'));
   const [openReason, setOpenReason] = useState<OpenReason>('default');
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track the climb uuid we observed on first mount so the initial value
@@ -179,34 +163,15 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // from pathname — listing both is harmless but adds noise.
   useEffect(() => {
     setActiveDrawer('none');
-    setLayoutState(!fabMinimisedEnabled || isClimbListPage ? 'expanded' : 'minimised');
+    setLayoutState(isClimbListPage ? 'expanded' : 'minimised');
     setOpenReason('default');
     initialUuidRef.current = undefined;
     if (peekTimerRef.current) {
       clearTimeout(peekTimerRef.current);
       peekTimerRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname; the flag-change effect below handles fabMinimisedEnabled
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname
   }, [pathname]);
-
-  // Runtime flag flip: react when `fabMinimisedEnabled` changes (IndexedDB
-  // hydration on mount, or a live toggle from the experiments drawer in
-  // this or another tab). The useState initialiser only runs once, so
-  // without this effect a flip never takes hold until the next route
-  // change — turning the experiment on would not visibly collapse the bar
-  // and turning it off would not bring it back. Drawer state is left
-  // alone here; the drawer-open effect already forces `expanded` while a
-  // drawer is mounted, so the only racing case (toggle while a drawer is
-  // open) self-corrects on the next render.
-  useEffect(() => {
-    setLayoutState(!fabMinimisedEnabled || isClimbListPage ? 'expanded' : 'minimised');
-    setOpenReason('default');
-    if (peekTimerRef.current) {
-      clearTimeout(peekTimerRef.current);
-      peekTimerRef.current = null;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname; pathname changes are handled by the route-reset effect above
-  }, [fabMinimisedEnabled]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -304,7 +269,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // Use event callbacks (not sticky state) so a stale direction can't
   // re-fire when unrelated state — e.g. a manual FAB tap — re-renders.
   useScrollDirection({
-    enabled: fabMinimisedEnabled && (isClimbListPage || (layoutState === 'expanded' && openReason === 'userOpen')),
+    enabled: isClimbListPage || (layoutState === 'expanded' && openReason === 'userOpen'),
     onDown: () => {
       if (layoutState !== 'expanded') return;
       if (isClimbListPage || openReason === 'userOpen') {
@@ -1553,21 +1518,17 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         </div>
       </div>
 
-      {/* FAB cluster — shown in minimised/peeking state. Gated behind a
-          feature flag so we can flip back to the always-expanded bar without
-          paying for the FAB DOM, snackbar peek, or backdrop-filter when off. */}
-      {fabMinimisedEnabled && (
-        <QueueControlFab
-          mode={layoutState === 'expanded' ? 'hidden' : layoutState}
-          currentClimb={currentClimb}
-          boardDetails={boardDetails}
-          pathname={pathname}
-          onExpandFromGrade={handleFabExpand}
-          onOpenPlayView={handleFabPlayOpen}
-          onExpandFromTick={handleFabTickExpand}
-          onExpandFromQueue={handleFabQueueExpand}
-        />
-      )}
+      {/* FAB cluster — shown in minimised/peeking state */}
+      <QueueControlFab
+        mode={layoutState === 'expanded' ? 'hidden' : layoutState}
+        currentClimb={currentClimb}
+        boardDetails={boardDetails}
+        pathname={pathname}
+        onExpandFromGrade={handleFabExpand}
+        onOpenPlayView={handleFabPlayOpen}
+        onExpandFromTick={handleFabTickExpand}
+        onExpandFromQueue={handleFabQueueExpand}
+      />
 
       <QueueDrawer open={activeDrawer === 'queue'} onClose={handleCloseDrawer} boardDetails={boardDetails} />
 
