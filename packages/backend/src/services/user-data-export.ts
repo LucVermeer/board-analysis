@@ -1,0 +1,315 @@
+import { and, asc, eq } from 'drizzle-orm';
+import {
+  boardClimbs,
+  boardDifficultyGrades,
+  boardseshTicks,
+  playlistClimbs,
+  playlistOwnership,
+  playlists,
+  userFavorites,
+  users,
+} from '@boardsesh/db/schema';
+import type { AuroraBoardName } from '@boardsesh/shared-schema';
+import { dbRead } from '../db/client';
+import { getFromS3, getS3ObjectMetadata, isS3Configured, uploadToS3 } from '../storage/s3';
+import {
+  buildAuroraJsonExport,
+  getIsoWeekPeriod,
+  getUserDataExportFilename,
+  getUserDataExportS3Key,
+  type AuroraJsonExport,
+} from './user-data-export-format';
+
+export type UserDataExportStatus = {
+  boardType: AuroraBoardName;
+  period: string;
+  status: 'not_requested' | 'generating' | 'ready' | 'failed' | 'unavailable';
+  requestedAt?: string;
+  completedAt?: string;
+  downloadUrl?: string;
+  fileSize?: number;
+  error?: string;
+};
+
+type ExportJob = UserDataExportStatus & {
+  userId: string;
+  key: string;
+  jobId: string;
+};
+
+export type DownloadableUserDataExport = {
+  key: string;
+  filename: string;
+  stream: NonNullable<Awaited<ReturnType<typeof getFromS3>>>['stream'];
+  contentType: string | undefined;
+  contentLength: number | undefined;
+};
+
+const exportJobs = new Map<string, ExportJob>();
+
+export async function getUserDataExportStatus(
+  userId: string,
+  boardType: AuroraBoardName,
+): Promise<UserDataExportStatus> {
+  const descriptor = getCurrentExportDescriptor(userId, boardType);
+  const existing = exportJobs.get(descriptor.jobId);
+  if (existing) return toPublicStatus(existing);
+
+  if (!isS3Configured()) {
+    return {
+      boardType,
+      period: descriptor.period,
+      status: 'unavailable',
+      error: 'S3 storage is not configured',
+    };
+  }
+
+  const metadata = await getS3ObjectMetadata(descriptor.key);
+  if (!metadata) {
+    return {
+      boardType,
+      period: descriptor.period,
+      status: 'not_requested',
+    };
+  }
+
+  const readyJob: ExportJob = {
+    userId,
+    key: descriptor.key,
+    jobId: descriptor.jobId,
+    boardType,
+    period: descriptor.period,
+    status: 'ready',
+    completedAt: metadata.lastModified?.toISOString(),
+    downloadUrl: descriptor.downloadUrl,
+    fileSize: metadata.contentLength,
+  };
+  exportJobs.set(descriptor.jobId, readyJob);
+  return toPublicStatus(readyJob);
+}
+
+export async function requestUserDataExport(userId: string, boardType: AuroraBoardName): Promise<UserDataExportStatus> {
+  const descriptor = getCurrentExportDescriptor(userId, boardType);
+  const existing = exportJobs.get(descriptor.jobId);
+
+  if (existing?.status === 'generating' || existing?.status === 'ready') {
+    return toPublicStatus(existing);
+  }
+
+  if (!isS3Configured()) {
+    return {
+      boardType,
+      period: descriptor.period,
+      status: 'unavailable',
+      error: 'S3 storage is not configured',
+    };
+  }
+
+  const metadata = await getS3ObjectMetadata(descriptor.key);
+  if (metadata) {
+    const readyJob: ExportJob = {
+      userId,
+      key: descriptor.key,
+      jobId: descriptor.jobId,
+      boardType,
+      period: descriptor.period,
+      status: 'ready',
+      completedAt: metadata.lastModified?.toISOString(),
+      downloadUrl: descriptor.downloadUrl,
+      fileSize: metadata.contentLength,
+    };
+    exportJobs.set(descriptor.jobId, readyJob);
+    return toPublicStatus(readyJob);
+  }
+
+  const generatingJob: ExportJob = {
+    userId,
+    key: descriptor.key,
+    jobId: descriptor.jobId,
+    boardType,
+    period: descriptor.period,
+    status: 'generating',
+    requestedAt: new Date().toISOString(),
+  };
+  exportJobs.set(descriptor.jobId, generatingJob);
+
+  void generateAndStoreUserDataExport(generatingJob, descriptor.downloadUrl);
+
+  return toPublicStatus(generatingJob);
+}
+
+export async function getDownloadableUserDataExport(
+  userId: string,
+  boardType: AuroraBoardName,
+): Promise<DownloadableUserDataExport | null> {
+  if (!isS3Configured()) return null;
+
+  const descriptor = getCurrentExportDescriptor(userId, boardType);
+  const file = await getFromS3(descriptor.key);
+  if (!file) return null;
+
+  return {
+    key: descriptor.key,
+    filename: getUserDataExportFilename(boardType),
+    stream: file.stream,
+    contentType: file.contentType,
+    contentLength: file.contentLength,
+  };
+}
+
+export async function buildUserAuroraJsonExport(userId: string, boardType: AuroraBoardName): Promise<AuroraJsonExport> {
+  const [userRows, tickRows, favoriteRows, circuitRows, climbRows] = await Promise.all([
+    dbRead
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+    dbRead
+      .select({
+        climbName: boardClimbs.name,
+        status: boardseshTicks.status,
+        angle: boardseshTicks.angle,
+        attemptCount: boardseshTicks.attemptCount,
+        quality: boardseshTicks.quality,
+        difficulty: boardseshTicks.difficulty,
+        difficultyName: boardDifficultyGrades.boulderName,
+        climbedAt: boardseshTicks.climbedAt,
+        createdAt: boardseshTicks.createdAt,
+      })
+      .from(boardseshTicks)
+      .innerJoin(
+        boardClimbs,
+        and(eq(boardseshTicks.boardType, boardClimbs.boardType), eq(boardseshTicks.climbUuid, boardClimbs.uuid)),
+      )
+      .leftJoin(
+        boardDifficultyGrades,
+        and(
+          eq(boardseshTicks.boardType, boardDifficultyGrades.boardType),
+          eq(boardseshTicks.difficulty, boardDifficultyGrades.difficulty),
+        ),
+      )
+      .where(and(eq(boardseshTicks.userId, userId), eq(boardseshTicks.boardType, boardType)))
+      .orderBy(asc(boardseshTicks.climbedAt), asc(boardseshTicks.createdAt), asc(boardseshTicks.uuid)),
+    dbRead
+      .select({
+        climbName: boardClimbs.name,
+        createdAt: userFavorites.createdAt,
+      })
+      .from(userFavorites)
+      .innerJoin(
+        boardClimbs,
+        and(eq(userFavorites.boardName, boardClimbs.boardType), eq(userFavorites.climbUuid, boardClimbs.uuid)),
+      )
+      .where(and(eq(userFavorites.userId, userId), eq(userFavorites.boardName, boardType)))
+      .orderBy(asc(userFavorites.createdAt)),
+    dbRead
+      .select({
+        playlistId: playlists.id,
+        name: playlists.name,
+        color: playlists.color,
+        createdAt: playlists.createdAt,
+        description: playlists.description,
+        isPublic: playlists.isPublic,
+        climbName: boardClimbs.name,
+        position: playlistClimbs.position,
+      })
+      .from(playlists)
+      .innerJoin(
+        playlistOwnership,
+        and(eq(playlistOwnership.playlistId, playlists.id), eq(playlistOwnership.userId, userId)),
+      )
+      .leftJoin(playlistClimbs, eq(playlistClimbs.playlistId, playlists.id))
+      .leftJoin(
+        boardClimbs,
+        and(eq(playlists.boardType, boardClimbs.boardType), eq(playlistClimbs.climbUuid, boardClimbs.uuid)),
+      )
+      .where(and(eq(playlists.boardType, boardType), eq(playlistOwnership.role, 'owner')))
+      .orderBy(asc(playlists.createdAt), asc(playlistClimbs.position)),
+    dbRead
+      .select({
+        uuid: boardClimbs.uuid,
+        name: boardClimbs.name,
+        layoutId: boardClimbs.layoutId,
+        frames: boardClimbs.frames,
+        createdAt: boardClimbs.createdAt,
+        isDraft: boardClimbs.isDraft,
+        description: boardClimbs.description,
+      })
+      .from(boardClimbs)
+      .where(and(eq(boardClimbs.userId, userId), eq(boardClimbs.boardType, boardType)))
+      .orderBy(asc(boardClimbs.createdAt), asc(boardClimbs.uuid)),
+  ]);
+
+  return buildAuroraJsonExport({
+    boardType,
+    user: userRows[0] ?? null,
+    ticks: tickRows,
+    favorites: favoriteRows,
+    circuitRows,
+    climbs: climbRows,
+  });
+}
+
+async function generateAndStoreUserDataExport(job: ExportJob, downloadUrl: string): Promise<void> {
+  try {
+    const payload = await buildUserAuroraJsonExport(job.userId, job.boardType);
+    const buffer = Buffer.from(JSON.stringify(payload, null, 2));
+
+    await uploadToS3(buffer, job.key, 'application/json', {
+      cacheControl: 'private, no-store',
+      acl: null,
+    });
+
+    exportJobs.set(job.jobId, {
+      ...job,
+      status: 'ready',
+      completedAt: new Date().toISOString(),
+      downloadUrl,
+      fileSize: buffer.length,
+      error: undefined,
+    });
+  } catch (error) {
+    console.error('[User Data Export] Export generation failed:', error);
+    exportJobs.set(job.jobId, {
+      ...job,
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Export generation failed',
+    });
+  }
+}
+
+function getCurrentExportDescriptor(userId: string, boardType: AuroraBoardName) {
+  const period = getIsoWeekPeriod().label;
+  const key = getUserDataExportS3Key(userId, boardType);
+  const downloadUrl = `/api/user-data-export/download?boardType=${encodeURIComponent(boardType)}`;
+
+  return {
+    period,
+    key,
+    jobId: getJobId(userId, boardType),
+    downloadUrl,
+  };
+}
+
+function getJobId(userId: string, boardType: AuroraBoardName): string {
+  const period = getIsoWeekPeriod().label;
+  return `${userId}:${boardType}:${period}`;
+}
+
+function toPublicStatus(job: ExportJob): UserDataExportStatus {
+  return {
+    boardType: job.boardType,
+    period: job.period,
+    status: job.status,
+    requestedAt: job.requestedAt,
+    completedAt: job.completedAt,
+    downloadUrl: job.downloadUrl,
+    fileSize: job.fileSize,
+    error: job.error,
+  };
+}

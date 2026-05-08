@@ -13,6 +13,7 @@ import { handleAvatarUpload } from './handlers/avatars';
 import { handleStaticAvatar, handleStaticBetaThumbnail } from './handlers/static';
 import { handleSyncCron } from './handlers/sync';
 import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
+import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
 import { warmPopularConfigsCache } from './graphql/resolvers/social/boards';
@@ -94,6 +95,20 @@ export async function startServer(): Promise<ServerResources> {
       // OCR test data upload endpoint (handle OPTIONS for CORS preflight)
       if (pathname === '/api/ocr-test-data' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleOcrTestDataUpload(req, res);
+        return;
+      }
+
+      // User data export endpoints (request/status + authenticated download)
+      if (
+        pathname === '/api/user-data-export' &&
+        (req.method === 'GET' || req.method === 'POST' || req.method === 'OPTIONS')
+      ) {
+        await handleUserDataExport(req, res, url);
+        return;
+      }
+
+      if (pathname === '/api/user-data-export/download' && (req.method === 'GET' || req.method === 'OPTIONS')) {
+        await handleUserDataExportDownload(req, res, url);
         return;
       }
 
@@ -184,6 +199,7 @@ export async function startServer(): Promise<ServerResources> {
     console.info(`  Avatar upload: ${httpScheme}://0.0.0.0:${PORT}/api/avatars`);
     console.info(`  Avatar files: ${httpScheme}://0.0.0.0:${PORT}/static/avatars/`);
     console.info(`  OCR test data: ${httpScheme}://0.0.0.0:${PORT}/api/ocr-test-data`);
+    console.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
     console.info(`  Sync cron: ${httpScheme}://0.0.0.0:${PORT}/sync-cron`);
 
     // Warm up popular board configs cache in the background.
