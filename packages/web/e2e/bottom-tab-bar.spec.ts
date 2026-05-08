@@ -243,12 +243,7 @@ test.describe('Bottom Tab Bar - Queue Integration', () => {
     // persistence across tab navigations; the navigation method is incidental.
     // Click first, then fall back to a direct page.goto if the URL doesn't
     // change within 5 s, so the persistence assertion still runs.
-    const tabClickWithFallback = async (
-      label: string,
-      exact: boolean,
-      urlPattern: RegExp | string,
-      fallbackUrl: string,
-    ) => {
+    const tabClickWithFallback = async (label: string, exact: boolean, urlPattern: RegExp | string, fallbackUrl: string) => {
       await bottomTabButton(page, label, exact).click();
       try {
         await page.waitForURL(urlPattern, { timeout: 5_000 });

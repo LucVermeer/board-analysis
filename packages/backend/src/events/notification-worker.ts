@@ -328,9 +328,7 @@ export class NotificationWorker {
     entityId: string,
     intervalMinutes: number,
   ): Promise<boolean> {
-    const rows = await executeRows<unknown>(
-      db,
-      sql`
+    const rows = await executeRows<unknown>(db, sql`
       SELECT 1 FROM notifications
       WHERE actor_id = ${actorId}
         AND recipient_id = ${recipientId}
@@ -338,8 +336,7 @@ export class NotificationWorker {
         AND entity_id = ${entityId}
         AND created_at > NOW() - make_interval(mins => ${intervalMinutes})
       LIMIT 1
-    `,
-    );
+    `);
     return rows.length > 0;
   }
 

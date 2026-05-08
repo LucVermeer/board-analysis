@@ -121,12 +121,6 @@
      queue-control shell (~85px: session header strip + main row) + tab bar (~60px).
      JS in persistent-session-wrapper measures the actual height post-hydration. */
   --bottom-bar-height: calc(145px + var(--safe-area-inset-bottom));
-  /* Fixed visible height of the BottomTabBar content area, excluding the
-     OS safe-area inset. Single source of truth so FAB clusters / overlays
-     can anchor against the tab bar without measuring the DOM at runtime
-     (measurement jitters during URL-bar moves on Android). Update here if
-     the tab bar's content height changes. */
-  --bottom-tab-bar-height: 59px;
 
   /* Tap highlight (Android/mobile browsers) */
   --tap-highlight: transparent;

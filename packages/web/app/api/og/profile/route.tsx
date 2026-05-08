@@ -35,8 +35,7 @@ export async function GET(request: NextRequest) {
     const sql = getReadPool();
     const [summary, gradeRows] = await Promise.all([
       getProfileOgSummary(userId),
-      rowsFromResult<{ difficulty: number; cnt: number }>(
-        await sql`
+      rowsFromResult<{ difficulty: number; cnt: number }>(await sql`
         SELECT difficulty, COUNT(DISTINCT climb_uuid) as cnt
         FROM boardsesh_ticks
         WHERE user_id = ${userId}
@@ -44,8 +43,7 @@ export async function GET(request: NextRequest) {
           AND difficulty IS NOT NULL
         GROUP BY difficulty
         ORDER BY difficulty
-      `,
-      ),
+      `),
     ]);
     const dbMs = performance.now() - dbT0;
 

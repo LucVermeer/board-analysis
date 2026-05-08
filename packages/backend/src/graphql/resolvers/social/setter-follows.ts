@@ -495,9 +495,7 @@ export const setterFollowQueries = {
       benchmark_difficulty: number | null;
     };
 
-    const rawRows = await executeRows<RawRow>(
-      db,
-      sql`
+    const rawRows = await executeRows<RawRow>(db, sql`
       WITH owned_climbs AS (
         SELECT
           c.uuid,
@@ -548,8 +546,7 @@ export const setterFollowQueries = {
       ORDER BY ${orderSql}, owned_climbs.uuid DESC
       LIMIT ${limit + 1}
       OFFSET ${offset}
-    `,
-    );
+    `);
 
     const hasMore = rawRows.length > limit;
     const trimmedResults = hasMore ? rawRows.slice(0, limit) : rawRows;

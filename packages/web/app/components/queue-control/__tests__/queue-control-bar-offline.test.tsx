@@ -26,7 +26,6 @@ vi.mock('@/app/components/graphql-queue', () => ({
   useCurrentClimb: () => ({
     currentClimb: mockQueueContext.currentClimb,
   }),
-  useCurrentClimbUuid: () => (mockQueueContext.currentClimb as { uuid?: string } | undefined)?.uuid ?? null,
   useQueueList: () => ({
     queue: mockQueueContext.queue,
     suggestedClimbs: [],

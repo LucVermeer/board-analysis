@@ -15,9 +15,7 @@ import CloudOffOutlined from '@mui/icons-material/CloudOffOutlined';
 import OpenInFullOutlined from '@mui/icons-material/OpenInFullOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
 import { track } from '@vercel/analytics';
-import { useQueueActions, useCurrentClimb, useCurrentClimbUuid, useQueueList, useSessionData } from '../graphql-queue';
-import { useScrollDirection } from '@/app/hooks/use-scroll-direction';
-import QueueControlFab from './queue-control-fab';
+import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
 import NextClimbButton from './next-climb-button';
 import { usePathname, useParams, useSearchParams } from 'next/navigation';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
@@ -78,11 +76,6 @@ import { PLAY_DRAWER_EVENT as PLAY_DRAWER_EVENT_INTERNAL, dispatchOpenPlayDrawer
 
 export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
 
-type LayoutState = 'minimised' | 'expanded' | 'peeking';
-type OpenReason = 'userOpen' | 'tickOpen' | 'queueOpen' | 'playOpen' | 'scrollOpen' | 'default';
-
-const PEEK_DURATION_MS = 3000;
-
 // Re-export the window event so existing imports from this file keep working.
 // The actual definition lives in ./play-drawer-event to keep the import graph
 // light for callsites that only need the dispatch helper.
@@ -141,38 +134,14 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>('none');
   const [startSeshOpen, setStartSeshOpen] = useState(false);
   const pathname = usePathname();
-  const isClimbListPage = /\/list(?:\/|$)/.test(pathname);
   const params = useParams<BoardRouteParameters>();
   const searchParams = useSearchParams();
   const router = useLocaleRouter();
   const enterFallbackRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Layout state: minimised by default, expanded on the climb list page.
-  // Computed synchronously in useState so /list doesn't flash from minimised → expanded.
-  const [layoutState, setLayoutState] = useState<LayoutState>(() => (isClimbListPage ? 'expanded' : 'minimised'));
-  const [openReason, setOpenReason] = useState<OpenReason>('default');
-  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track the climb uuid we observed on first mount so the initial value
-  // doesn't trigger a peek (the bar mounts with a current climb already set).
-  const initialUuidRef = useRef<string | null | undefined>(undefined);
-
-  // Reset activeDrawer + layout state on navigation. Also re-arm the peek
-  // gate so the next climb-uuid change is treated as a *first observation*
-  // on the new route — without this, navigating to a climb that differs
-  // from the one we were viewing fires a peek that announces the climb
-  // we just navigated to (a duplicate cue, since the user just clicked).
-  // isClimbListPage is omitted from deps because it's derived synchronously
-  // from pathname — listing both is harmless but adds noise.
+  // Reset activeDrawer on navigation
   useEffect(() => {
     setActiveDrawer('none');
-    setLayoutState(isClimbListPage ? 'expanded' : 'minimised');
-    setOpenReason('default');
-    initialUuidRef.current = undefined;
-    if (peekTimerRef.current) {
-      clearTimeout(peekTimerRef.current);
-      peekTimerRef.current = null;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isClimbListPage derives from pathname
   }, [pathname]);
 
   // Cleanup timeouts on unmount
@@ -200,146 +169,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     window.addEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
     return () => window.removeEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
   }, []);
-
-  // While any drawer is open, the bar must stay expanded — drawers can't
-  // render meaningfully over a FAB. Cancel any in-flight peek timer too,
-  // otherwise it would fire setLayoutState('minimised') under the open
-  // drawer (and immediately get force-expanded again on the next render).
-  useEffect(() => {
-    if (activeDrawer !== 'none') {
-      if (peekTimerRef.current) {
-        clearTimeout(peekTimerRef.current);
-        peekTimerRef.current = null;
-      }
-      if (layoutState !== 'expanded') {
-        setLayoutState('expanded');
-      }
-    }
-  }, [activeDrawer, layoutState]);
-
-  // Peek-on-climb-change: when the current climb uuid changes (locally or
-  // from a party-mode WebSocket event), briefly surface the new climb's
-  // name in a snackbar above the FAB cluster.
-  //
-  // The ref tracks the last uuid we *actually peeked for* — not the
-  // latest seen — and we only peek while layoutState === 'minimised'.
-  // The effect is keyed on both currentClimbUuid AND layoutState, so a
-  // climb change that happens while the bar is expanded is queued: the
-  // ref stays put, and when the bar later returns to minimised the
-  // effect re-fires (layoutState dep changed) and peeks for the latest
-  // uuid. If multiple climb changes happen while expanded, only the
-  // most recent one is announced on collapse — by design, so a long
-  // queue session doesn't bombard the user with stale peeks when they
-  // close a drawer.
-  const currentClimbUuid = useCurrentClimbUuid();
-  useEffect(() => {
-    if (initialUuidRef.current === undefined) {
-      // First mount: record the current climb so the initial value doesn't
-      // immediately trigger a peek.
-      initialUuidRef.current = currentClimbUuid;
-      return;
-    }
-    if (!currentClimbUuid) return;
-    if (currentClimbUuid === initialUuidRef.current) return;
-    // Bar isn't free to peek right now — leave the ref untouched so the
-    // next layoutState change re-evaluates against the latest uuid.
-    if (layoutState !== 'minimised') return;
-    initialUuidRef.current = currentClimbUuid;
-    if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
-    setLayoutState('peeking');
-    peekTimerRef.current = setTimeout(() => {
-      setLayoutState('minimised');
-      peekTimerRef.current = null;
-    }, PEEK_DURATION_MS);
-  }, [currentClimbUuid, layoutState]);
-
-  // Cleanup peek timer on unmount
-  useEffect(
-    () => () => {
-      if (peekTimerRef.current) {
-        clearTimeout(peekTimerRef.current);
-        peekTimerRef.current = null;
-      }
-    },
-    [],
-  );
-
-  // Window scroll drives auto-collapse/expand:
-  //  - climb list page: scroll down → collapse, scroll up → expand
-  //  - other pages: only collapse on scroll down if the user manually
-  //    expanded via the thumbnail FAB (openReason === 'userOpen').
-  // Use event callbacks (not sticky state) so a stale direction can't
-  // re-fire when unrelated state — e.g. a manual FAB tap — re-renders.
-  useScrollDirection({
-    enabled: isClimbListPage || (layoutState === 'expanded' && openReason === 'userOpen'),
-    onDown: () => {
-      if (layoutState !== 'expanded') return;
-      if (isClimbListPage || openReason === 'userOpen') {
-        setLayoutState('minimised');
-        setOpenReason('default');
-      }
-    },
-    onUp: () => {
-      if (isClimbListPage && layoutState === 'minimised') {
-        setLayoutState('expanded');
-        setOpenReason('scrollOpen');
-      }
-    },
-  });
-
-  const handleFabExpand = useCallback(() => {
-    if (peekTimerRef.current) {
-      clearTimeout(peekTimerRef.current);
-      peekTimerRef.current = null;
-    }
-    setLayoutState('expanded');
-    setOpenReason('userOpen');
-  }, []);
-
-  const handleFabTickExpand = useCallback(() => {
-    if (peekTimerRef.current) {
-      clearTimeout(peekTimerRef.current);
-      peekTimerRef.current = null;
-    }
-    setLayoutState('expanded');
-    setOpenReason('tickOpen');
-    setActiveDrawer('tick');
-  }, []);
-
-  const handleFabQueueExpand = useCallback(() => {
-    if (peekTimerRef.current) {
-      clearTimeout(peekTimerRef.current);
-      peekTimerRef.current = null;
-    }
-    setLayoutState('expanded');
-    setOpenReason('queueOpen');
-    setActiveDrawer('queue');
-  }, []);
-
-  const handleFabPlayOpen = useCallback(() => {
-    if (peekTimerRef.current) {
-      clearTimeout(peekTimerRef.current);
-      peekTimerRef.current = null;
-    }
-    setLayoutState('expanded');
-    setOpenReason('playOpen');
-    setActiveDrawer('play');
-  }, []);
-
-  // When the user closes a drawer they opened from a FAB, fall back to
-  // minimised so the FAB cluster comes back without an extra tap. Other
-  // open reasons (scrollOpen, userOpen) leave the bar expanded.
-  const prevDrawerRef = useRef<ActiveDrawer>('none');
-  useEffect(() => {
-    const prev = prevDrawerRef.current;
-    prevDrawerRef.current = activeDrawer;
-    if (prev !== 'none' && activeDrawer === 'none') {
-      if (openReason === 'queueOpen' || openReason === 'tickOpen' || openReason === 'playOpen') {
-        setLayoutState('minimised');
-        setOpenReason('default');
-      }
-    }
-  }, [activeDrawer, openReason]);
 
   const handleCloseDrawer = useCallback(() => setActiveDrawer('none'), []);
 
@@ -1037,508 +866,473 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   return (
     <div id="onboarding-queue-bar" className={`queue-bar-shadow ${styles.queueBar}`} data-testid="queue-control-bar">
-      {/* Main Control Bar — wrapper collapses to 0 height when minimised.
-          inert blocks focus + pointer events on the whole subtree so
-          keyboard users can't tab into hidden in-bar buttons (queue
-          icon, mirror, share, tick, etc.) while the bar is collapsed.
-          aria-hidden alone removes the cluster from the a11y tree but
-          doesn't remove it from the focus order. */}
-      <div
-        className={`${styles.cardWrapper} ${layoutState !== 'expanded' ? styles.cardWrapperHidden : ''}`}
-        aria-hidden={layoutState !== 'expanded'}
-        inert={layoutState !== 'expanded'}
-      >
-        <div className={styles.cardWrapperInner}>
-          <MuiCard variant="outlined" className={styles.card} sx={{ border: 'none' }}>
-            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-              {/* Session header — name + avatars, or start sesh prompt.
+      {/* Main Control Bar */}
+      <MuiCard variant="outlined" className={styles.card} sx={{ border: 'none' }}>
+        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+          {/* Session header — name + avatars, or start sesh prompt.
             Uses CSS grid collapse instead of unmounting so the transition
             between session header and tick row is smooth. */}
-              <div
-                className={`${styles.sessionHeaderWrapper} ${!tickBarActive && !tickRowVisible ? styles.sessionHeaderExpanded : ''}`}
-              >
-                <div className={styles.sessionHeaderInner} data-tour-anchor="session-mini-bar">
-                  {/* Offline overlay on session header */}
-                  {isDisconnected && !dismissedDisconnect && (
-                    <div
-                      className={styles.offlineBanner}
-                      onClick={() => setDismissedDisconnect(true)}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={t('queueBar.ariaLabels.dismissOfflineNotice')}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setDismissedDisconnect(true);
-                        }
-                      }}
-                    >
-                      <CloudOffOutlined sx={{ fontSize: 14, flexShrink: 0 }} />
-                      <span className={styles.offlineBannerText}>{offlineBannerText}</span>
-                      <CloseOutlined sx={{ fontSize: 14, flexShrink: 0, opacity: 0.6 }} />
-                    </div>
-                  )}
-                  {activeSession ? (
-                    <div
-                      className={styles.sessionHeader}
-                      onClick={dispatchOpenSeshSettingsDrawer}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') dispatchOpenSeshSettingsDrawer();
-                      }}
-                      style={{
-                        backgroundColor: sessionTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
-                      }}
-                    >
-                      <span className={styles.sessionName}>
-                        {persistentSession?.name ||
-                          activeSession.sessionName ||
-                          generateSessionName(persistentSession?.startedAt ?? new Date().toISOString(), [
-                            boardDetails.board_name,
-                          ])}
-                      </span>
-                      {uniqueSessionUsers.length > 0 && (
-                        <div
-                          className={styles.avatarToggle}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setParticipantsExpanded((prev) => !prev);
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={participantsExpanded ? 'Hide participants' : 'Show participants'}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.stopPropagation();
-                              setParticipantsExpanded((prev) => !prev);
-                            }
-                          }}
-                        >
-                          {participantsExpanded ? (
-                            <IconButton size="small" component="span" tabIndex={-1} sx={{ p: 0.25 }}>
-                              <CloseOutlined sx={{ fontSize: 18 }} />
-                            </IconButton>
-                          ) : (
-                            <AvatarGroup
-                              max={3}
-                              sx={{
-                                '& .MuiAvatar-root': {
-                                  width: 28,
-                                  height: 28,
-                                  fontSize: 11,
-                                  border: '2px solid transparent',
-                                },
-                              }}
-                            >
-                              {uniqueSessionUsers.map((user) => (
-                                <TickBadgeAvatar
-                                  key={user.id}
-                                  user={user}
-                                  hasTicked={
-                                    tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
-                                  }
-                                />
-                              ))}
-                            </AvatarGroup>
-                          )}
-                        </div>
-                      )}
-                      {queueIconButton}
-                    </div>
-                  ) : (
-                    <div
-                      className={styles.sessionHeader}
-                      onClick={() => setStartSeshOpen(true)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') setStartSeshOpen(true);
-                      }}
-                      style={{
-                        backgroundColor: gradeTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
-                        justifyContent: 'flex-end',
-                      }}
-                    >
-                      <PlayCircleOutlineOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
-                      <span className={styles.sessionName}>{t('queueBar.startSesh')}</span>
-                      {queueIconButton}
-                    </div>
-                  )}
-                  {/* Expandable participant bar — only for active sessions with participants */}
-                  {activeSession && uniqueSessionUsers.length > 0 && (
-                    <div
-                      className={`${styles.participantBar} ${participantsExpanded ? styles.participantBarExpanded : ''}`}
-                      style={{
-                        backgroundColor: sessionTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
-                      }}
-                    >
-                      <div className={styles.participantBarInner}>
-                        {uniqueSessionUsers.length === 1 ? (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 1,
-                              width: '100%',
-                              px: 1,
-                              py: 0.5,
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                                {t('settings.share.inviteCopy')}
-                              </Typography>
-                              <IconButton
-                                size="small"
-                                onClick={handleInviteShare}
-                                aria-label={t('queueBar.ariaLabels.shareSessionLink')}
-                              >
-                                <IosShare sx={{ fontSize: 18 }} />
-                              </IconButton>
-                            </Box>
-                            {sessionShareUrl && (
-                              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-                                <QRCodeSVG value={sessionShareUrl} size={140} level="M" marginSize={4} />
-                              </Box>
-                            )}
-                          </Box>
-                        ) : (
-                          <div className={styles.participantScroll}>
-                            {uniqueSessionUsers.map((user) => (
-                              <div key={user.id} className={styles.participantItem}>
-                                <TickBadgeAvatar
-                                  user={user}
-                                  hasTicked={
-                                    tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
-                                  }
-                                  size={32}
-                                />
-                                <Typography variant="caption" className={styles.participantName} noWrap>
-                                  {user.username}
-                                </Typography>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {/* Tick-mode controls — expands/collapses via CSS grid transition.
-            Swipe-to-dismiss handlers are on the tick row only, not the whole card. */}
-              {(tickBarActive || tickRowVisible) && (
+          <div
+            className={`${styles.sessionHeaderWrapper} ${!tickBarActive && !tickRowVisible ? styles.sessionHeaderExpanded : ''}`}
+          >
+            <div className={styles.sessionHeaderInner} data-tour-anchor="session-mini-bar">
+              {/* Offline overlay on session header */}
+              {isDisconnected && !dismissedDisconnect && (
                 <div
-                  {...(tickBarActive ? tickDismissHandlers : {})}
-                  className={`${styles.tickRow} ${tickBarActive ? styles.tickRowExpanded : ''} ${tickSwipeOffset > 0 ? styles.tickRowSwiping : ''}`}
-                  style={{
-                    backgroundColor: gradeTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
-                    ...tickDismissStyle,
+                  className={styles.offlineBanner}
+                  onClick={() => setDismissedDisconnect(true)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t('queueBar.ariaLabels.dismissOfflineNotice')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setDismissedDisconnect(true);
+                    }
                   }}
                 >
-                  {/* Drag handle — centered across full tick bar width */}
-                  <div className={styles.tickDragHandleBar} />
-                  <div className={styles.tickRowInner}>
-                    {/* Toolbar: expand left, close right */}
-                    <div className={styles.tickDragHandleRow}>
-                      <div
-                        className={styles.tickExpandButton}
-                        onClick={() => handleTickBarExpandedChange(!tickBarExpanded)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') handleTickBarExpandedChange(!tickBarExpanded);
-                        }}
-                        aria-label={
-                          tickBarExpanded ? t('queueBar.tickBar.collapseAria') : t('queueBar.tickBar.expandAria')
+                  <CloudOffOutlined sx={{ fontSize: 14, flexShrink: 0 }} />
+                  <span className={styles.offlineBannerText}>{offlineBannerText}</span>
+                  <CloseOutlined sx={{ fontSize: 14, flexShrink: 0, opacity: 0.6 }} />
+                </div>
+              )}
+              {activeSession ? (
+                <div
+                  className={styles.sessionHeader}
+                  onClick={dispatchOpenSeshSettingsDrawer}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') dispatchOpenSeshSettingsDrawer();
+                  }}
+                  style={{
+                    backgroundColor: sessionTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
+                  }}
+                >
+                  <span className={styles.sessionName}>
+                    {persistentSession?.name ||
+                      activeSession.sessionName ||
+                      generateSessionName(persistentSession?.startedAt ?? new Date().toISOString(), [
+                        boardDetails.board_name,
+                      ])}
+                  </span>
+                  {uniqueSessionUsers.length > 0 && (
+                    <div
+                      className={styles.avatarToggle}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setParticipantsExpanded((prev) => !prev);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={participantsExpanded ? 'Hide participants' : 'Show participants'}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.stopPropagation();
+                          setParticipantsExpanded((prev) => !prev);
                         }
-                      >
-                        {tickBarExpanded ? (
-                          <KeyboardArrowDownOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
-                        ) : (
-                          <KeyboardArrowUpOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
-                        )}
-                        <span className={styles.tickExpandLabel}>
-                          {tickBarExpanded ? t('queueBar.tickBar.collapse') : t('queueBar.tickBar.expand')}
-                        </span>
-                      </div>
-                      <div className={styles.tickCloseButton}>
-                        <IconButton
-                          onClick={() => setActiveDrawer('none')}
-                          size="small"
-                          aria-label={t('queueBar.ariaLabels.closeTickBar')}
+                      }}
+                    >
+                      {participantsExpanded ? (
+                        <IconButton size="small" component="span" tabIndex={-1} sx={{ p: 0.25 }}>
+                          <CloseOutlined sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      ) : (
+                        <AvatarGroup
+                          max={3}
                           sx={{
-                            color: 'text.primary',
-                            backgroundColor: 'action.selected',
-                            '&:hover': { backgroundColor: 'action.focus' },
-                            padding: '2px',
+                            '& .MuiAvatar-root': {
+                              width: 28,
+                              height: 28,
+                              fontSize: 11,
+                              border: '2px solid transparent',
+                            },
                           }}
                         >
-                          <CloseOutlined sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      </div>
-                    </div>
-                    {tickBarActive && (
-                      <QuickTickBar
-                        ref={quickTickBarRef}
-                        currentClimb={currentClimb}
-                        angle={angle}
-                        boardDetails={boardDetails}
-                        expanded={tickBarExpanded}
-                        onSave={() => {
-                          if (currentClimb) {
-                            setLocalTickedClimbs((prev) => new Set(prev).add(currentClimb.uuid));
-                          }
-                          setActiveDrawer('none');
-                          setLayoutState('minimised');
-                          setOpenReason('default');
-                        }}
-                        onError={() => showMessage(t('queueBar.tickError'), 'error')}
-                        onDraftRestored={(draftComment) => setTickComment(draftComment)}
-                        onIsFlashChange={setIsFlash}
-                        onAscentTypeChange={setAscentType}
-                        comment={tickComment}
-                        commentSlot={
-                          <div
-                            className={`${styles.tickComment} ${tickCommentFocused ? styles.tickCommentExpanded : ''}`}
-                          >
-                            <TextField
-                              fullWidth
-                              size="small"
-                              variant="outlined"
-                              placeholder={t('queueBar.tickCommentPlaceholder')}
-                              multiline
-                              minRows={1}
-                              maxRows={tickCommentFocused ? 4 : 1}
-                              value={tickComment}
-                              onChange={(e) => setTickComment(e.target.value)}
-                              onFocus={handleTickCommentFocus}
-                              onBlur={handleTickCommentBlur}
-                              slotProps={{
-                                htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
-                                input: {
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <ChatBubbleOutlineOutlined sx={{ fontSize: 16, opacity: 0.5 }} />
-                                    </InputAdornment>
-                                  ),
-                                },
-                              }}
-                              sx={{
-                                '& .MuiOutlinedInput-root': {
-                                  borderRadius: '8px',
-                                  backgroundColor: 'var(--input-bg)',
-                                  '& .MuiOutlinedInput-notchedOutline': {
-                                    borderColor: 'var(--neutral-200)',
-                                  },
-                                },
-                              }}
+                          {uniqueSessionUsers.map((user) => (
+                            <TickBadgeAvatar
+                              key={user.id}
+                              user={user}
+                              hasTicked={
+                                tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
+                              }
                             />
-                          </div>
-                        }
-                        expandedCommentSlot={
-                          <TextField
-                            fullWidth
+                          ))}
+                        </AvatarGroup>
+                      )}
+                    </div>
+                  )}
+                  {queueIconButton}
+                </div>
+              ) : (
+                <div
+                  className={styles.sessionHeader}
+                  onClick={() => setStartSeshOpen(true)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') setStartSeshOpen(true);
+                  }}
+                  style={{
+                    backgroundColor: gradeTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
+                    justifyContent: 'flex-end',
+                  }}
+                >
+                  <PlayCircleOutlineOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
+                  <span className={styles.sessionName}>{t('queueBar.startSesh')}</span>
+                  {queueIconButton}
+                </div>
+              )}
+              {/* Expandable participant bar — only for active sessions with participants */}
+              {activeSession && uniqueSessionUsers.length > 0 && (
+                <div
+                  className={`${styles.participantBar} ${participantsExpanded ? styles.participantBarExpanded : ''}`}
+                  style={{
+                    backgroundColor: sessionTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
+                  }}
+                >
+                  <div className={styles.participantBarInner}>
+                    {uniqueSessionUsers.length === 1 ? (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 1,
+                          width: '100%',
+                          px: 1,
+                          py: 0.5,
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                            {t('settings.share.inviteCopy')}
+                          </Typography>
+                          <IconButton
                             size="small"
-                            variant="outlined"
-                            placeholder={t('queueBar.tickCommentPlaceholder')}
-                            multiline
-                            minRows={2}
-                            maxRows={4}
-                            value={tickComment}
-                            onChange={(e) => setTickComment(e.target.value)}
-                            onFocus={handleTickCommentFocus}
-                            onBlur={handleTickCommentBlur}
-                            slotProps={{
-                              htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
-                            }}
-                            sx={{
-                              '& .MuiOutlinedInput-root': {
-                                borderRadius: '8px',
-                                backgroundColor: 'var(--input-bg)',
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: 'var(--neutral-200)',
-                                },
-                              },
-                            }}
-                          />
-                        }
-                      />
+                            onClick={handleInviteShare}
+                            aria-label={t('queueBar.ariaLabels.shareSessionLink')}
+                          >
+                            <IosShare sx={{ fontSize: 18 }} />
+                          </IconButton>
+                        </Box>
+                        {sessionShareUrl && (
+                          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                            <QRCodeSVG value={sessionShareUrl} size={140} level="M" marginSize={4} />
+                          </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <div className={styles.participantScroll}>
+                        {uniqueSessionUsers.map((user) => (
+                          <div key={user.id} className={styles.participantItem}>
+                            <TickBadgeAvatar
+                              user={user}
+                              hasTicked={
+                                tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
+                              }
+                              size={32}
+                            />
+                            <Typography variant="caption" className={styles.participantName} noWrap>
+                              {user.username}
+                            </Typography>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
               )}
-              {/* Swipe container - captures swipe gestures, does NOT translate */}
-              <div className={styles.swipeWrapper}>
-                <div
-                  {...swipeHandlers}
-                  className={styles.swipeContainer}
-                  style={{
-                    padding: `${themeTokens.spacing[2]}px ${themeTokens.spacing[3]}px`,
-                    backgroundColor: gradeTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
-                  }}
-                >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexWrap: 'nowrap',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
+            </div>
+          </div>
+          {/* Tick-mode controls — expands/collapses via CSS grid transition.
+            Swipe-to-dismiss handlers are on the tick row only, not the whole card. */}
+          {(tickBarActive || tickRowVisible) && (
+            <div
+              {...(tickBarActive ? tickDismissHandlers : {})}
+              className={`${styles.tickRow} ${tickBarActive ? styles.tickRowExpanded : ''} ${tickSwipeOffset > 0 ? styles.tickRowSwiping : ''}`}
+              style={{
+                backgroundColor: gradeTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
+                ...tickDismissStyle,
+              }}
+            >
+              {/* Drag handle — centered across full tick bar width */}
+              <div className={styles.tickDragHandleBar} />
+              <div className={styles.tickRowInner}>
+                {/* Toolbar: expand left, close right */}
+                <div className={styles.tickDragHandleRow}>
+                  <div
+                    className={styles.tickExpandButton}
+                    onClick={() => handleTickBarExpandedChange(!tickBarExpanded)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') handleTickBarExpandedChange(!tickBarExpanded);
                     }}
-                    className={styles.row}
+                    aria-label={tickBarExpanded ? 'Collapse tick bar' : 'Expand tick bar'}
                   >
-                    {/* Left section: Thumbnail and climb info */}
-                    <Box sx={{ flex: 1 }} className={styles.climbInfoCol}>
-                      <div className={styles.climbInfoInner} style={{ gap: themeTokens.spacing[2] }}>
-                        {/* Board preview — STATIC, with crossfade on enter */}
-                        <div
-                          className={`${styles.boardPreviewContainer} ${enterDirection ? styles.thumbnailEnter : ''}`}
-                        >
-                          <ClimbThumbnail
-                            boardDetails={boardDetails}
-                            currentClimb={displayedClimb}
-                            pathname={pathname}
-                            onClick={handleThumbnailClick}
-                          />
-                        </div>
-
-                        {/* Text swipe clip — overflow hidden to contain sliding text */}
-                        <div className={styles.textSwipeClip}>
-                          {/* Current climb text — slides with finger */}
-                          <div
-                            id="onboarding-queue-toggle"
-                            onClick={tickBarActive ? undefined : handleClimbInfoClick}
-                            className={styles.queueToggle}
-                            style={{
-                              transform: tickBarActive ? undefined : `translateX(${swipeOffset}px)`,
-                              transition: tickBarActive ? undefined : getTextTransitionStyle(),
-                              cursor: tickBarActive ? 'default' : undefined,
-                            }}
-                          >
-                            <ClimbTitle climb={displayedClimb} gradePosition="right" showSetterInfo />
-                          </div>
-
-                          {/* Peek text — shows next/previous climb sliding in from the edge */}
-                          {!tickBarActive && showPeek && peekClimbData && (
-                            <div
-                              className={`${styles.queueToggle} ${styles.peekText}`}
-                              style={{
-                                transform: getPeekTransform(),
-                                transition: getTextTransitionStyle(),
-                              }}
-                            >
-                              <ClimbTitle climb={peekClimbData} gradePosition="right" showSetterInfo />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </Box>
-
-                    {/* Button cluster — always visible, lightbulb swaps to X in tick mode */}
-                    <Box sx={{ flex: 'none', marginLeft: `${themeTokens.spacing[1]}px` }}>
-                      <Stack direction="row" spacing={0.5}>
-                        {/* Mirror button - desktop only */}
-                        {boardDetails.supportsMirroring ? (
-                          <span className={styles.desktopOnly}>
-                            <IconButton
-                              id="button-mirror"
-                              onClick={() => {
-                                mirrorClimb();
-                                track('Mirror Climb Toggled', {
-                                  boardLayout: boardDetails.layout_name || '',
-                                  mirrored: !displayedClimb?.mirrored,
-                                });
-                              }}
-                              color={displayedClimb?.mirrored ? 'primary' : 'default'}
-                              sx={
-                                displayedClimb?.mirrored
-                                  ? {
-                                      backgroundColor: themeTokens.colors.purple,
-                                      borderColor: themeTokens.colors.purple,
-                                      color: 'common.white',
-                                      '&:hover': { backgroundColor: themeTokens.colors.purple },
-                                    }
-                                  : undefined
-                              }
-                            >
-                              <SyncOutlined />
-                            </IconButton>
-                          </span>
-                        ) : null}
-                        {/* Play link - desktop only */}
-                        {!isPlayPage && playUrl && (
-                          <span className={styles.desktopOnly}>
-                            <LocaleLink
-                              href={playUrl}
-                              onClick={() => {
-                                track('Play Mode Entered', {
-                                  boardLayout: boardDetails.layout_name || '',
-                                });
-                              }}
-                            >
-                              <IconButton aria-label={t('queueBar.ariaLabels.enterPlayMode')}>
-                                <OpenInFullOutlined />
-                              </IconButton>
-                            </LocaleLink>
-                          </span>
-                        )}
-                        {/* Navigation buttons - desktop only */}
-                        <span className={styles.navButtons}>
-                          <Stack direction="row" spacing={0.5}>
-                            <PreviousClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
-                            <NextClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
-                          </Stack>
-                        </span>
-                        {/* Attempt button — visible whenever tick mode is active */}
-                        {tickBarActive && (
-                          <TickButtonWithLabel label={t('queueBar.tickAttemptLabel')}>
-                            <IconButton
-                              onClick={(e) => quickTickBarRef.current?.saveAttempt(e.currentTarget)}
-                              sx={{
-                                backgroundColor: themeTokens.colors.errorMuted,
-                                color: themeTokens.colors.error,
-                                '&:hover': { backgroundColor: themeTokens.colors.errorMutedHover },
-                              }}
-                              aria-label={t('queueBar.ariaLabels.logAttempt')}
-                            >
-                              <PersonFallingIcon />
-                            </IconButton>
-                          </TickButtonWithLabel>
-                        )}
-                        {!tickBarActive && <ShareBoardButton />}
-                        {/* Tick button — activates tick mode, or saves when already active */}
-                        <TickButton
-                          currentClimb={displayedClimb}
-                          angle={angle}
-                          boardDetails={boardDetails}
-                          onActivateTickBar={() => setActiveDrawer('tick')}
-                          onTickSave={(el) => quickTickBarRef.current?.save(el)}
-                          tickBarActive={tickBarActive}
-                          isFlash={isFlash}
-                          ascentType={tickBarExpanded ? ascentType : undefined}
-                        />
-                      </Stack>
-                    </Box>
-                  </Box>
+                    {tickBarExpanded ? (
+                      <KeyboardArrowDownOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
+                    ) : (
+                      <KeyboardArrowUpOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
+                    )}
+                    <span className={styles.tickExpandLabel}>{tickBarExpanded ? 'Collapse' : 'Expand'}</span>
+                  </div>
+                  <div className={styles.tickCloseButton}>
+                    <IconButton
+                      onClick={() => setActiveDrawer('none')}
+                      size="small"
+                      aria-label={t('queueBar.ariaLabels.closeTickBar')}
+                      sx={{
+                        color: 'text.primary',
+                        backgroundColor: 'action.selected',
+                        '&:hover': { backgroundColor: 'action.focus' },
+                        padding: '2px',
+                      }}
+                    >
+                      <CloseOutlined sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </div>
                 </div>
+                {tickBarActive && (
+                  <QuickTickBar
+                    ref={quickTickBarRef}
+                    currentClimb={currentClimb}
+                    angle={angle}
+                    boardDetails={boardDetails}
+                    expanded={tickBarExpanded}
+                    onSave={() => {
+                      if (currentClimb) {
+                        setLocalTickedClimbs((prev) => new Set(prev).add(currentClimb.uuid));
+                      }
+                      setActiveDrawer('none');
+                    }}
+                    onError={() => showMessage(t('queueBar.tickError'), 'error')}
+                    onDraftRestored={(draftComment) => setTickComment(draftComment)}
+                    onIsFlashChange={setIsFlash}
+                    onAscentTypeChange={setAscentType}
+                    comment={tickComment}
+                    commentSlot={
+                      <div className={`${styles.tickComment} ${tickCommentFocused ? styles.tickCommentExpanded : ''}`}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          variant="outlined"
+                          placeholder={t('queueBar.tickCommentPlaceholder')}
+                          multiline
+                          minRows={1}
+                          maxRows={tickCommentFocused ? 4 : 1}
+                          value={tickComment}
+                          onChange={(e) => setTickComment(e.target.value)}
+                          onFocus={handleTickCommentFocus}
+                          onBlur={handleTickCommentBlur}
+                          slotProps={{
+                            htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                            input: {
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <ChatBubbleOutlineOutlined sx={{ fontSize: 16, opacity: 0.5 }} />
+                                </InputAdornment>
+                              ),
+                            },
+                          }}
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              borderRadius: '8px',
+                              backgroundColor: 'var(--input-bg)',
+                              '& .MuiOutlinedInput-notchedOutline': {
+                                borderColor: 'var(--neutral-200)',
+                              },
+                            },
+                          }}
+                        />
+                      </div>
+                    }
+                    expandedCommentSlot={
+                      <TextField
+                        fullWidth
+                        size="small"
+                        variant="outlined"
+                        placeholder={t('queueBar.tickCommentPlaceholder')}
+                        multiline
+                        minRows={2}
+                        maxRows={4}
+                        value={tickComment}
+                        onChange={(e) => setTickComment(e.target.value)}
+                        onFocus={handleTickCommentFocus}
+                        onBlur={handleTickCommentBlur}
+                        slotProps={{
+                          htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                        }}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: '8px',
+                            backgroundColor: 'var(--input-bg)',
+                            '& .MuiOutlinedInput-notchedOutline': {
+                              borderColor: 'var(--neutral-200)',
+                            },
+                          },
+                        }}
+                      />
+                    }
+                  />
+                )}
               </div>
-            </CardContent>
-          </MuiCard>
-        </div>
-      </div>
+            </div>
+          )}
+          {/* Swipe container - captures swipe gestures, does NOT translate */}
+          <div className={styles.swipeWrapper}>
+            <div
+              {...swipeHandlers}
+              className={styles.swipeContainer}
+              style={{
+                padding: `${themeTokens.spacing[2]}px ${themeTokens.spacing[3]}px`,
+                backgroundColor: gradeTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'nowrap',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+                className={styles.row}
+              >
+                {/* Left section: Thumbnail and climb info */}
+                <Box sx={{ flex: 1 }} className={styles.climbInfoCol}>
+                  <div className={styles.climbInfoInner} style={{ gap: themeTokens.spacing[2] }}>
+                    {/* Board preview — STATIC, with crossfade on enter */}
+                    <div className={`${styles.boardPreviewContainer} ${enterDirection ? styles.thumbnailEnter : ''}`}>
+                      <ClimbThumbnail
+                        boardDetails={boardDetails}
+                        currentClimb={displayedClimb}
+                        pathname={pathname}
+                        onClick={handleThumbnailClick}
+                      />
+                    </div>
 
-      {/* FAB cluster — shown in minimised/peeking state */}
-      <QueueControlFab
-        mode={layoutState === 'expanded' ? 'hidden' : layoutState}
-        currentClimb={currentClimb}
-        boardDetails={boardDetails}
-        pathname={pathname}
-        onExpandFromGrade={handleFabExpand}
-        onOpenPlayView={handleFabPlayOpen}
-        onExpandFromTick={handleFabTickExpand}
-        onExpandFromQueue={handleFabQueueExpand}
-      />
+                    {/* Text swipe clip — overflow hidden to contain sliding text */}
+                    <div className={styles.textSwipeClip}>
+                      {/* Current climb text — slides with finger */}
+                      <div
+                        id="onboarding-queue-toggle"
+                        onClick={tickBarActive ? undefined : handleClimbInfoClick}
+                        className={styles.queueToggle}
+                        style={{
+                          transform: tickBarActive ? undefined : `translateX(${swipeOffset}px)`,
+                          transition: tickBarActive ? undefined : getTextTransitionStyle(),
+                          cursor: tickBarActive ? 'default' : undefined,
+                        }}
+                      >
+                        <ClimbTitle climb={displayedClimb} gradePosition="right" showSetterInfo />
+                      </div>
+
+                      {/* Peek text — shows next/previous climb sliding in from the edge */}
+                      {!tickBarActive && showPeek && peekClimbData && (
+                        <div
+                          className={`${styles.queueToggle} ${styles.peekText}`}
+                          style={{
+                            transform: getPeekTransform(),
+                            transition: getTextTransitionStyle(),
+                          }}
+                        >
+                          <ClimbTitle climb={peekClimbData} gradePosition="right" showSetterInfo />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Box>
+
+                {/* Button cluster — always visible, lightbulb swaps to X in tick mode */}
+                <Box sx={{ flex: 'none', marginLeft: `${themeTokens.spacing[1]}px` }}>
+                  <Stack direction="row" spacing={0.5}>
+                    {/* Mirror button - desktop only */}
+                    {boardDetails.supportsMirroring ? (
+                      <span className={styles.desktopOnly}>
+                        <IconButton
+                          id="button-mirror"
+                          onClick={() => {
+                            mirrorClimb();
+                            track('Mirror Climb Toggled', {
+                              boardLayout: boardDetails.layout_name || '',
+                              mirrored: !displayedClimb?.mirrored,
+                            });
+                          }}
+                          color={displayedClimb?.mirrored ? 'primary' : 'default'}
+                          sx={
+                            displayedClimb?.mirrored
+                              ? {
+                                  backgroundColor: themeTokens.colors.purple,
+                                  borderColor: themeTokens.colors.purple,
+                                  color: 'common.white',
+                                  '&:hover': { backgroundColor: themeTokens.colors.purple },
+                                }
+                              : undefined
+                          }
+                        >
+                          <SyncOutlined />
+                        </IconButton>
+                      </span>
+                    ) : null}
+                    {/* Play link - desktop only */}
+                    {!isPlayPage && playUrl && (
+                      <span className={styles.desktopOnly}>
+                        <LocaleLink
+                          href={playUrl}
+                          onClick={() => {
+                            track('Play Mode Entered', {
+                              boardLayout: boardDetails.layout_name || '',
+                            });
+                          }}
+                        >
+                          <IconButton aria-label={t('queueBar.ariaLabels.enterPlayMode')}>
+                            <OpenInFullOutlined />
+                          </IconButton>
+                        </LocaleLink>
+                      </span>
+                    )}
+                    {/* Navigation buttons - desktop only */}
+                    <span className={styles.navButtons}>
+                      <Stack direction="row" spacing={0.5}>
+                        <PreviousClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
+                        <NextClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
+                      </Stack>
+                    </span>
+                    {/* Attempt button — visible whenever tick mode is active */}
+                    {tickBarActive && (
+                      <TickButtonWithLabel label={t('queueBar.tickAttemptLabel')}>
+                        <IconButton
+                          onClick={(e) => quickTickBarRef.current?.saveAttempt(e.currentTarget)}
+                          sx={{
+                            backgroundColor: themeTokens.colors.errorMuted,
+                            color: themeTokens.colors.error,
+                            '&:hover': { backgroundColor: themeTokens.colors.errorMutedHover },
+                          }}
+                          aria-label={t('queueBar.ariaLabels.logAttempt')}
+                        >
+                          <PersonFallingIcon />
+                        </IconButton>
+                      </TickButtonWithLabel>
+                    )}
+                    {!tickBarActive && <ShareBoardButton />}
+                    {/* Tick button — activates tick mode, or saves when already active */}
+                    <TickButton
+                      currentClimb={displayedClimb}
+                      angle={angle}
+                      boardDetails={boardDetails}
+                      onActivateTickBar={() => setActiveDrawer('tick')}
+                      onTickSave={(el) => quickTickBarRef.current?.save(el)}
+                      tickBarActive={tickBarActive}
+                      isFlash={isFlash}
+                      ascentType={tickBarExpanded ? ascentType : undefined}
+                    />
+                  </Stack>
+                </Box>
+              </Box>
+            </div>
+          </div>
+        </CardContent>
+      </MuiCard>
 
       <QueueDrawer open={activeDrawer === 'queue'} onClose={handleCloseDrawer} boardDetails={boardDetails} />
 

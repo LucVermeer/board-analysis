@@ -232,14 +232,8 @@
       "shareSessionLink": "Share session link",
       "closeTickBar": "Close tick bar",
       "enterPlayMode": "Enter play mode",
-      "logAttempt": "Log attempt",
-      "openClimbDetails": "Open climb details",
-      "expandQueueControl": "Expand queue control",
-      "connectToBoard": "Connect to board",
-      "openQueue": "Open queue",
-      "saveTick": "Save tick"
-    },
-    "byline": "By {{setter}}"
+      "logAttempt": "Log attempt"
+    }
   },
   "queueDrawer": {
     "title": "Queue",

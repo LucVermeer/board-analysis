@@ -64,17 +64,14 @@ export const socialProposalMutations = {
       } else {
         try {
           // Look up display_difficulty from stats, then resolve grade name in-memory
-          const rows = await executeRows<{ difficulty_id: number | null }>(
-            db,
-            sql`
+          const rows = await executeRows<{ difficulty_id: number | null }>(db, sql`
             SELECT ROUND(cs.display_difficulty::numeric, 0) as difficulty_id
             FROM board_climb_stats cs
             WHERE cs.climb_uuid = ${climbUuid}
               AND cs.angle = ${angle}
               AND cs.board_type = ${boardType}
             LIMIT 1
-          `,
-          );
+          `);
           currentValue = getGradeLabel(rows[0]?.difficulty_id ?? null) || 'Unknown';
         } catch {
           currentValue = 'Unknown';

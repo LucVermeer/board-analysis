@@ -23,8 +23,6 @@ const mockSetPreference = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/app/lib/user-preferences-db', () => ({
   getPreference: (...args: unknown[]) => mockGetPreference(...args),
   setPreference: (...args: unknown[]) => mockSetPreference(...args),
-  getGradeDisplayFormat: async () => 'v',
-  setGradeDisplayFormat: async () => {},
 }));
 
 let mockQueueContext: Record<string, unknown> = {};
@@ -35,7 +33,6 @@ vi.mock('@/app/components/graphql-queue', () => ({
   useCurrentClimb: () => ({
     currentClimb: mockQueueContext.currentClimb,
   }),
-  useCurrentClimbUuid: () => (mockQueueContext.currentClimb as { uuid?: string } | undefined)?.uuid ?? null,
   useQueueList: () => ({
     queue: mockQueueContext.queue,
     suggestedClimbs: [],
