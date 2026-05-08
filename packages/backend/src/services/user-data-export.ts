@@ -37,6 +37,10 @@ type ExportJob = UserDataExportStatus & {
   jobId: string;
 };
 
+type CachedExportJob = ExportJob & {
+  updatedAtMs: number;
+};
+
 export type DownloadableUserDataExport = {
   key: string;
   filename: string;
@@ -45,12 +49,26 @@ export type DownloadableUserDataExport = {
   contentLength: number | undefined;
 };
 
-const exportJobs = new Map<string, ExportJob>();
+const exportJobs = new Map<string, CachedExportJob>();
+const PUBLIC_EXPORT_FAILURE_MESSAGE = 'Export generation failed. Try again later.';
+const PUBLIC_EXPORT_UNAVAILABLE_MESSAGE = 'Export service is temporarily unavailable.';
+const EXPORT_JOB_CACHE_TTL_MS = 8 * 24 * 60 * 60 * 1000;
+const EXPORT_JOB_CACHE_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+const exportJobCleanupInterval = setInterval(() => {
+  evictStaleExportJobs();
+}, EXPORT_JOB_CACHE_SWEEP_INTERVAL_MS);
+
+if (typeof exportJobCleanupInterval.unref === 'function') {
+  exportJobCleanupInterval.unref();
+}
 
 export async function getUserDataExportStatus(
   userId: string,
   boardType: AuroraBoardName,
 ): Promise<UserDataExportStatus> {
+  evictStaleExportJobs();
+
   const descriptor = getCurrentExportDescriptor(userId, boardType);
   const existing = exportJobs.get(descriptor.jobId);
   if (existing) return toPublicStatus(existing);
@@ -60,7 +78,7 @@ export async function getUserDataExportStatus(
       boardType,
       period: descriptor.period,
       status: 'unavailable',
-      error: 'S3 storage is not configured',
+      error: PUBLIC_EXPORT_UNAVAILABLE_MESSAGE,
     };
   }
 
@@ -84,11 +102,13 @@ export async function getUserDataExportStatus(
     downloadUrl: descriptor.downloadUrl,
     fileSize: metadata.contentLength,
   };
-  exportJobs.set(descriptor.jobId, readyJob);
+  storeExportJob(readyJob);
   return toPublicStatus(readyJob);
 }
 
 export async function requestUserDataExport(userId: string, boardType: AuroraBoardName): Promise<UserDataExportStatus> {
+  evictStaleExportJobs();
+
   const descriptor = getCurrentExportDescriptor(userId, boardType);
   const existing = exportJobs.get(descriptor.jobId);
 
@@ -101,7 +121,7 @@ export async function requestUserDataExport(userId: string, boardType: AuroraBoa
       boardType,
       period: descriptor.period,
       status: 'unavailable',
-      error: 'S3 storage is not configured',
+      error: PUBLIC_EXPORT_UNAVAILABLE_MESSAGE,
     };
   }
 
@@ -118,7 +138,7 @@ export async function requestUserDataExport(userId: string, boardType: AuroraBoa
       downloadUrl: descriptor.downloadUrl,
       fileSize: metadata.contentLength,
     };
-    exportJobs.set(descriptor.jobId, readyJob);
+    storeExportJob(readyJob);
     return toPublicStatus(readyJob);
   }
 
@@ -131,7 +151,7 @@ export async function requestUserDataExport(userId: string, boardType: AuroraBoa
     status: 'generating',
     requestedAt: new Date().toISOString(),
   };
-  exportJobs.set(descriptor.jobId, generatingJob);
+  storeExportJob(generatingJob);
 
   void generateAndStoreUserDataExport(generatingJob, descriptor.downloadUrl);
 
@@ -265,7 +285,7 @@ async function generateAndStoreUserDataExport(job: ExportJob, downloadUrl: strin
       acl: null,
     });
 
-    exportJobs.set(job.jobId, {
+    storeExportJob({
       ...job,
       status: 'ready',
       completedAt: new Date().toISOString(),
@@ -275,10 +295,10 @@ async function generateAndStoreUserDataExport(job: ExportJob, downloadUrl: strin
     });
   } catch (error) {
     console.error('[User Data Export] Export generation failed:', error);
-    exportJobs.set(job.jobId, {
+    storeExportJob({
       ...job,
       status: 'failed',
-      error: error instanceof Error ? error.message : 'Export generation failed',
+      error: PUBLIC_EXPORT_FAILURE_MESSAGE,
     });
   }
 }
@@ -299,6 +319,22 @@ function getCurrentExportDescriptor(userId: string, boardType: AuroraBoardName) 
 function getJobId(userId: string, boardType: AuroraBoardName): string {
   const period = getIsoWeekPeriod().label;
   return `${userId}:${boardType}:${period}`;
+}
+
+function storeExportJob(job: ExportJob): CachedExportJob {
+  const exportJob = { ...job, updatedAtMs: Date.now() };
+  exportJobs.set(exportJob.jobId, exportJob);
+  return exportJob;
+}
+
+function evictStaleExportJobs(now = Date.now()): void {
+  const staleBefore = now - EXPORT_JOB_CACHE_TTL_MS;
+
+  for (const [jobId, job] of exportJobs) {
+    if (job.updatedAtMs <= staleBefore) {
+      exportJobs.delete(jobId);
+    }
+  }
 }
 
 function toPublicStatus(job: ExportJob): UserDataExportStatus {

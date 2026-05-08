@@ -158,12 +158,14 @@ export function generateJsonImportAuroraId(
 // Climb draft import helpers
 // ---------------------------------------------------------------------------
 
-/** Map export role names to board-specific hold state codes.
- * Only boards with known codes are listed — absent entries mean climb draft
- * import is not supported for that board (ascents/attempts still import fine). */
+/** Map export role names to board-specific hold state codes. */
 const ROLE_TO_CODE: Partial<Record<AuroraBoardName, Record<string, number>>> = {
   kilter: { start: 42, middle: 43, finish: 44, foot: 45 },
   tension: { start: 1, middle: 2, finish: 3, foot: 4 },
+  decoy: { start: 1, middle: 2, finish: 3, foot: 4 },
+  touchstone: { start: 1, middle: 2, finish: 3, foot: 4 },
+  grasshopper: { start: 1, middle: 2, finish: 3, foot: 4 },
+  soill: { start: 1, middle: 2, finish: 3, foot: 4 },
 };
 
 /** Resolve a layout name (e.g. "Kilter Board Original") to a layout ID. */

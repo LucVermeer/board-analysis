@@ -51,8 +51,19 @@ vi.mock('@/app/lib/board-constants', () => ({
     tension: {
       9: { id: 9, name: 'Original Layout', productId: 4 },
     },
+    decoy: {
+      2: { id: 2, name: 'Decoy Board', productId: 1 },
+    },
+    touchstone: {
+      1: { id: 1, name: 'Touchstone Board', productId: 1 },
+    },
+    grasshopper: {
+      1: { id: 1, name: 'Grasshopper Board', productId: 1 },
+    },
+    soill: {
+      1: { id: 1, name: 'So iLL Board', productId: 1 },
+    },
     moonboard: {},
-    // decoy, touchstone, grasshopper intentionally absent to exercise null-guard
   },
   HOLE_PLACEMENTS: {
     kilter: {
@@ -67,8 +78,31 @@ vi.mock('@/app/lib/board-constants', () => ({
       ],
     },
     tension: {},
+    decoy: {
+      '2-1': [
+        [2001, null, 10, 10],
+        [2002, null, 20, 20],
+      ],
+    },
+    touchstone: {
+      '1-1': [
+        [3001, null, 10, 10],
+        [3002, null, 20, 20],
+      ],
+    },
+    grasshopper: {
+      '1-1': [
+        [4001, null, 10, 10],
+        [4002, null, 20, 20],
+      ],
+    },
+    soill: {
+      '1-1': [
+        [5001, null, 10, 10],
+        [5002, null, 20, 20],
+      ],
+    },
     moonboard: {},
-    // decoy, touchstone, grasshopper intentionally absent to exercise null-guard
   },
 }));
 
@@ -342,6 +376,13 @@ describe('resolveLayoutName', () => {
 
   it('resolves Tension Original Layout to layout ID 9', () => {
     expect(resolveLayoutName('tension', 'Original Layout')).toBe(9);
+  });
+
+  it('resolves Aurora board layouts for imported draft climbs', () => {
+    expect(resolveLayoutName('decoy', 'Decoy Board')).toBe(2);
+    expect(resolveLayoutName('touchstone', 'Touchstone Board')).toBe(1);
+    expect(resolveLayoutName('grasshopper', 'Grasshopper Board')).toBe(1);
+    expect(resolveLayoutName('soill', 'So iLL Board')).toBe(1);
   });
 
   it('returns null for unknown layout name', () => {
@@ -645,40 +686,37 @@ describe('auroraExportSchema - climb validation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// New-board paths: boards without HOLE_PLACEMENTS or ROLE_TO_CODE entries
+// New Aurora board draft-climb import support
 // ---------------------------------------------------------------------------
 
-describe('buildCoordinateMap for unsupported boards', () => {
-  it('returns an empty map for a board with no HOLE_PLACEMENTS entry', () => {
-    const coordMap = buildCoordinateMap('decoy', 2);
-    expect(coordMap.size).toBe(0);
-  });
-
-  it('returns an empty map for touchstone', () => {
-    expect(buildCoordinateMap('touchstone', 1).size).toBe(0);
-  });
-
-  it('returns an empty map for grasshopper', () => {
-    expect(buildCoordinateMap('grasshopper', 1).size).toBe(0);
+describe('buildCoordinateMap for new Aurora boards', () => {
+  it('builds coordinate maps for newly supported Aurora boards', () => {
+    expect(buildCoordinateMap('decoy', 2).get('10,10')).toBe(2001);
+    expect(buildCoordinateMap('touchstone', 1).get('10,10')).toBe(3001);
+    expect(buildCoordinateMap('grasshopper', 1).get('10,10')).toBe(4001);
+    expect(buildCoordinateMap('soill', 1).get('10,10')).toBe(5001);
   });
 });
 
-describe('convertHoldsToFrames for boards without role codes', () => {
-  it('returns null for decoy (no ROLE_TO_CODE entry)', () => {
-    const coordMap = new Map([['10,10', 1]]);
-    const holds = [{ x: 10, y: 10, role: 'start' }];
-    expect(convertHoldsToFrames(holds, coordMap, 'decoy')).toBeNull();
-  });
+describe('convertHoldsToFrames for new Aurora boards', () => {
+  const tensionStyleBoards = ['decoy', 'touchstone', 'grasshopper', 'soill'] as const;
 
-  it('returns null for touchstone (no ROLE_TO_CODE entry)', () => {
-    const coordMap = new Map([['10,10', 1]]);
-    const holds = [{ x: 10, y: 10, role: 'start' }];
-    expect(convertHoldsToFrames(holds, coordMap, 'touchstone')).toBeNull();
-  });
+  for (const boardType of tensionStyleBoards) {
+    it(`uses Tension-style role codes for ${boardType}`, () => {
+      const coordMap = new Map([
+        ['10,10', 1],
+        ['20,20', 2],
+        ['30,30', 3],
+        ['40,40', 4],
+      ]);
+      const holds = [
+        { x: 10, y: 10, role: 'start' },
+        { x: 20, y: 20, role: 'middle' },
+        { x: 30, y: 30, role: 'finish' },
+        { x: 40, y: 40, role: 'foot' },
+      ];
 
-  it('returns null for grasshopper (no ROLE_TO_CODE entry)', () => {
-    const coordMap = new Map([['10,10', 1]]);
-    const holds = [{ x: 10, y: 10, role: 'start' }];
-    expect(convertHoldsToFrames(holds, coordMap, 'grasshopper')).toBeNull();
-  });
+      expect(convertHoldsToFrames(holds, coordMap, boardType)).toBe('p1r1p2r2p3r3p4r4');
+    });
+  }
 });
