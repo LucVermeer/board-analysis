@@ -261,27 +261,21 @@ const QueueControlFab: React.FC<QueueControlFabProps> = ({
           snackbarMounted so the exit animation can run before unmount.
           role="status" + aria-live="polite" so screen readers announce
           the climb change in party mode without preempting other speech.
-          Rendered as MUI Box so we can pass the dynamic grade tint via sx
-          (project convention prefers sx over the style prop).
-
-          Wrapped in `peekSnackbarAnchor` (a plain div) so the outer layer
-          owns the fixed positioning + tab-bar-collapse translateY tracking,
-          while the inner Box owns its entrance/exit keyframes. Two layers,
-          two transforms, no composition headaches. Safe to put a transform
-          on the wrapper because the snackbar is opaque — no backdrop-filter
-          children for the transformed-ancestor containing-block to break. */}
+          Rendered as MUI Box so we can pass the dynamic grade tint via
+          sx (project convention prefers sx over the style prop). */}
       {snackbarMounted && (
-        <div className={styles.peekSnackbarAnchor}>
-          <Box
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            className={`${styles.peekSnackbar} ${snackbarExiting ? styles.peekSnackbarExiting : ''}`}
-            sx={{ backgroundColor: fabBackground }}
-          >
-            <span className={styles.peekName}>{currentClimb.name}</span>
-          </Box>
-        </div>
+        <Box
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className={`${styles.peekSnackbar} ${snackbarExiting ? styles.peekSnackbarExiting : ''}`}
+          sx={{ backgroundColor: fabBackground }}
+        >
+          <span className={styles.peekName}>{currentClimb.name}</span>
+          {currentClimb.setter_username && (
+            <span className={styles.peekByline}>{t('queueBar.byline', { setter: currentClimb.setter_username })}</span>
+          )}
+        </Box>
       )}
     </>,
     document.body,

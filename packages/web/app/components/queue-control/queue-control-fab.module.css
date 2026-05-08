@@ -6,28 +6,12 @@
    grid-row collapse into visible jitter — abandoned that approach
    intentionally). Instead, we react to a binary signal: the bottom tab
    bar publishes its collapsed state as `data-tab-bar-collapsed` on
-   <html>, which sets a `--fab-collapse-offset` custom property on :root.
-   The cluster picks that up via `transform: translateY(...)` —
-   compositor-only, no reflow. One 220ms snappy transition matches the
-   tab-bar pill's animation family.
+   <html>, and we override `bottom` via a single CSS rule below. One
+   200ms transition matches the tab-bar pill's own animation.
 
    The cluster's opacity is also a fade in/out: the bar visibly slides
    away above it to reveal the FABs already in place. The 80ms delay on
    the entrance keeps it from crossfading with the bar's exit. */
-
-/* When the tab bar collapses, drop the peek snackbar DOWN by the height
-   delta (~+31px). The snackbar is opaque (no backdrop-filter children)
-   so its anchor wrapper can use a transform safely.
-
-   The FAB cluster CANNOT use this — its children (5 FABs) all rely on
-   backdrop-filter for the liquid-glass effect, and putting transform on
-   their ancestor creates a containing block that breaks backdrop-filter
-   sampling (the FABs would blur their own empty parent instead of the
-   page behind). So .fabRoot stays on a `bottom` swap below. */
-:root[data-tab-bar-collapsed='true'] {
-  --fab-collapse-offset: calc(var(--bottom-tab-bar-height) - var(--bottom-tab-bar-height-collapsed));
-}
-
 .fabRoot {
   position: fixed;
   left: 0;
@@ -40,15 +24,7 @@
      fixed reference is the only way to keep the FAB perfectly stationary
      while the bar slides away. The custom property is the single source of
      truth so a tab-bar height change here propagates without grepping for
-     magic numbers.
-
-     The collapse animation rides on `bottom` rather than `transform` on
-     purpose: putting `transform` on this element would create a containing
-     block that breaks backdrop-filter sampling on every FAB child (they'd
-     blur the empty parent instead of the page behind). A `bottom` reflow
-     fires only on the binary tab-bar-collapsed toggle, on a single
-     fixed-positioned box with no descendants depending on its layout —
-     cheap, and it keeps the liquid-glass intact. */
+     magic numbers. */
   bottom: calc(var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--spacing-2));
   z-index: 8;
   padding: 0 12px;
@@ -59,10 +35,14 @@
   pointer-events: none;
   opacity: 0;
   transition:
-    opacity 220ms cubic-bezier(0.32, 0.72, 0, 1) 80ms,
-    bottom 220ms cubic-bezier(0.32, 0.72, 0, 1);
+    opacity 220ms ease-out 80ms,
+    bottom 200ms ease;
 }
 
+/* Tab bar collapsed: pill shrinks to --bottom-tab-bar-height-collapsed, so the
+   FAB cluster drops with it and reclaims the space the labels used to occupy.
+   Single transition on `bottom` (declared above) matches the bar's own
+   collapse timing. */
 :root[data-tab-bar-collapsed='true'] .fabRoot {
   bottom: calc(var(--bottom-tab-bar-height-collapsed) + env(safe-area-inset-bottom, 0px) + var(--spacing-2));
 }
@@ -74,9 +54,7 @@
 /* On the way out, drop the entrance delay so the cluster fades immediately
    and the bar takes its place underneath. */
 .fabRoot:not(.fabRootVisible) {
-  transition:
-    opacity 180ms cubic-bezier(0.4, 0, 1, 1),
-    bottom 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  transition: opacity 180ms ease-in;
 }
 
 .thumbnailFab,
@@ -147,47 +125,38 @@
   pointer-events: auto;
 }
 
-/* Peek snackbar wrapper: owns the fixed positioning + tab-bar-collapse
-   tracking (transform: translateY → compositor-only). Sibling of fabRoot
-   in the portal so Safari's flex + absolute-position quirks can't hide
-   it. Two-layer pattern: anchor handles position, inner snackbar handles
-   its own keyframes — no transform composition headaches. */
-.peekSnackbarAnchor {
-  position: fixed;
-  left: 0;
-  right: 0;
-  /* Anchored above the small-FAB row + gap. Same expanded-state bottom as
-     the FAB cluster (--bottom-tab-bar-height + safe-area + --spacing-2),
-     stacked with the small-FAB row (46px = SMALL_FAB_SIZE in
-     queue-control-fab.tsx) and a --spacing-3 visual gap above it.
-     Collapse follows via --fab-collapse-offset (translateY) — compositor-
-     only, and safe here because the snackbar is opaque (no backdrop-filter
-     children to break). */
-  bottom: calc(
-    var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--spacing-2) + 46px + var(--spacing-3)
-  );
-  z-index: 8;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-  transform: translateY(var(--fab-collapse-offset, 0px));
-  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
-  will-change: transform;
-}
+/* Peek snackbar: pill-shaped overlay above the smaller FABs that surfaces
+   the current climb's title + byline when the climb changes. Sibling of
+   fabRoot in the portal (not nested inside) so Safari's flex +
+   absolute-position quirks can't hide it. Anchored to the bottom-bar
+   height + small-FAB height so it sits just above the right cluster.
 
-/* Per UX review: the snackbar is opaque (no backdrop blur) so it reads as
+   Per UX review: the snackbar is opaque (no backdrop blur) so it reads as
    a tooltip *for* the FAB rather than a fifth glass surface in the same
    region. */
 .peekSnackbar {
+  position: fixed;
+  left: 50%;
+  /* Same fixed anchor as the FAB cluster (above the small-FAB row + gap).
+     46px = small FAB diameter (mirrored from SMALL_FAB_SIZE in
+     queue-control-fab.tsx); --spacing-3 is the visual gap between the
+     small-FAB row and the snackbar pill above it. A
+     `:root[data-tab-bar-collapsed='true']` rule below tracks the bar
+     when it collapses, animated by the existing `transition: bottom`. */
+  bottom: calc(
+    var(--bottom-tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--spacing-2) + 46px +
+      var(--spacing-3)
+  );
   max-width: calc(100vw - 32px);
+  z-index: 8;
   border-radius: 9999px;
   pointer-events: none;
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.28);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  /* `forwards` locks the entrance state after the animation finishes. */
-  animation: peekSnackbarIn 220ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  /* `forwards` keeps the centering translate after the animation finishes. */
+  animation: peekSnackbarIn 220ms ease-out forwards;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -197,11 +166,18 @@
   text-align: center;
 }
 
-/* Exit phase: paired ease-in (incoming decelerates, outgoing accelerates).
-   The element stays mounted for the full 200ms exit before unmounting in
-   JS so the user sees a fade rather than a snap. */
+:root[data-tab-bar-collapsed='true'] .peekSnackbar {
+  bottom: calc(
+    var(--bottom-tab-bar-height-collapsed) + env(safe-area-inset-bottom, 0px) + var(--spacing-2) + 46px +
+      var(--spacing-3)
+  );
+}
+
+/* Exit phase: paired ease-in animation (incoming items decelerate, outgoing
+   items accelerate). The element stays mounted for the full 200ms exit
+   before unmounting in JS so the user sees a fade rather than a snap. */
 .peekSnackbarExiting {
-  animation: peekSnackbarOut 180ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation: peekSnackbarOut 180ms ease-in forwards;
 }
 
 .peekName {
@@ -212,25 +188,34 @@
   white-space: nowrap;
 }
 
+.peekByline {
+  font-size: 12px;
+  opacity: 0.75;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes peekSnackbarIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translate(-50%, 6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
   }
 }
 
 @keyframes peekSnackbarOut {
   from {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
   }
   to {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translate(-50%, 6px);
   }
 }
 
@@ -239,26 +224,15 @@
    not the motion) but the transform component is removed so users with
    vestibular sensitivity don't get screen movement. */
 @media (prefers-reduced-motion: reduce) {
-  /* Disable the snackbar's tab-bar-collapse slide — it still appears/
-     disappears via opacity, just without the vertical motion. The FAB
-     cluster's bottom value still swaps when the tab bar collapses, but
-     without a transition it snaps instantly (intended). */
-  :root[data-tab-bar-collapsed='true'] {
-    --fab-collapse-offset: 0px;
-  }
-
   .fabRoot,
   .fabRoot:not(.fabRootVisible) {
     transition: opacity 180ms ease-out;
   }
 
-  .peekSnackbarAnchor {
-    transform: none;
-    transition: none;
-  }
-
   .peekSnackbar {
     animation: peekSnackbarFadeIn 180ms ease-out forwards;
+    transform: translateX(-50%);
+    transition: none;
   }
 
   .peekSnackbarExiting {
@@ -268,18 +242,22 @@
   @keyframes peekSnackbarFadeIn {
     from {
       opacity: 0;
+      transform: translateX(-50%);
     }
     to {
       opacity: 1;
+      transform: translateX(-50%);
     }
   }
 
   @keyframes peekSnackbarFadeOut {
     from {
       opacity: 1;
+      transform: translateX(-50%);
     }
     to {
       opacity: 0;
+      transform: translateX(-50%);
     }
   }
 }

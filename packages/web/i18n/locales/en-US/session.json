@@ -238,7 +238,8 @@
       "connectToBoard": "Connect to board",
       "openQueue": "Open queue",
       "saveTick": "Save tick"
-    }
+    },
+    "byline": "By {{setter}}"
   },
   "queueDrawer": {
     "title": "Queue",

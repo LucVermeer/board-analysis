@@ -238,7 +238,8 @@
       "connectToBoard": "Conectar al panel",
       "openQueue": "Abrir cola",
       "saveTick": "Guardar marca"
-    }
+    },
+    "byline": "Por {{setter}}"
   },
   "queueDrawer": {
     "title": "Cola",

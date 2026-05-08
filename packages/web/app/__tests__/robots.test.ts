@@ -10,10 +10,10 @@ describe('robots', () => {
     });
   });
 
-  it('disallows crawling /api/, /auth/, /settings, and /you', () => {
+  it('disallows crawling /feed, /api/, /auth/, and /settings', () => {
     const result = robots();
     const rules = Array.isArray(result.rules) ? result.rules[0] : result.rules;
-    expect(rules.disallow).toEqual(expect.arrayContaining(['/api/', '/auth/', '/settings', '/you', '/you/*']));
+    expect(rules.disallow).toEqual(expect.arrayContaining(['/feed', '/api/', '/auth/', '/settings']));
   });
 
   it('includes a sitemap URL', () => {

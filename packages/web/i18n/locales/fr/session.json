@@ -238,7 +238,8 @@
       "connectToBoard": "Se connecter au panneau",
       "openQueue": "Ouvrir la file d'attente",
       "saveTick": "Enregistrer le tick"
-    }
+    },
+    "byline": "Par {{setter}}"
   },
   "queueDrawer": {
     "title": "File d'attente",
