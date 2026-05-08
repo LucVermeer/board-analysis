@@ -107,6 +107,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
 
   const defaultZone = useMemo(() => buildDefaultZone(dims), [dims]);
   const handleRadius = useMemo(() => computeHandleRadius(dims), [dims]);
+  const handleHitRadius = handleRadius * 2.25;
 
   // Local zone mirrors the URL param so dragging stays smooth without
   // hammering the search debounce on every pointermove.
@@ -124,6 +125,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
     startGridX: number;
     startGridY: number;
     startBox: ZoneBox;
+    latestBox: ZoneBox;
   } | null>(null);
 
   const svgPointToGrid = useCallback(
@@ -255,6 +257,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
         startGridX: grid.x,
         startGridY: grid.y,
         startBox: localZone,
+        latestBox: localZone,
       };
     },
     [localZone, svgPointToGrid],
@@ -264,17 +267,42 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
     (event: React.PointerEvent<SVGElement>) => {
       const drag = dragStateRef.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
       const grid = svgPointToGrid(event.clientX, event.clientY);
       if (!grid) return;
-      setLocalZone(applyDrag(drag.startBox, drag.mode, grid.x - drag.startGridX, grid.y - drag.startGridY, dims));
+      const nextZone = applyDrag(
+        drag.startBox,
+        drag.mode,
+        grid.x - drag.startGridX,
+        grid.y - drag.startGridY,
+        dims,
+      );
+      drag.latestBox = nextZone;
+      setLocalZone(nextZone);
     },
     [dims, svgPointToGrid],
   );
 
-  const endDrag = useCallback(
+  const persistDraggedZone = useCallback(
+    (finalZone: ZoneBox) => {
+      setLocalZone(finalZone);
+      updateFilters({ zoneBox: finalZone, holdsFilter: pruneHoldsToZone(finalZone) });
+      track('Search Zone Updated', {
+        boardLayout: boardDetails.layout_name || '',
+        width: finalZone.edgeRight - finalZone.edgeLeft,
+        height: finalZone.edgeTop - finalZone.edgeBottom,
+      });
+    },
+    [boardDetails.layout_name, pruneHoldsToZone, updateFilters],
+  );
+
+  const handlePointerUp = useCallback(
     (event: React.PointerEvent<SVGElement>) => {
       const drag = dragStateRef.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
       dragStateRef.current = null;
       (event.target as Element).releasePointerCapture?.(event.pointerId);
       // Compute the final zone directly from the drag start state plus the
@@ -287,16 +315,26 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
       const grid = svgPointToGrid(event.clientX, event.clientY);
       const finalZone = grid
         ? applyDrag(drag.startBox, drag.mode, grid.x - drag.startGridX, grid.y - drag.startGridY, dims)
-        : drag.startBox;
-      setLocalZone(finalZone);
-      updateFilters({ zoneBox: finalZone, holdsFilter: pruneHoldsToZone(finalZone) });
-      track('Search Zone Updated', {
-        boardLayout: boardDetails.layout_name || '',
-        width: finalZone.edgeRight - finalZone.edgeLeft,
-        height: finalZone.edgeTop - finalZone.edgeBottom,
-      });
+        : drag.latestBox;
+      persistDraggedZone(finalZone);
     },
-    [boardDetails.layout_name, dims, pruneHoldsToZone, svgPointToGrid, updateFilters],
+    [dims, persistDraggedZone, svgPointToGrid],
+  );
+
+  const handlePointerCancel = useCallback(
+    (event: React.PointerEvent<SVGElement>) => {
+      const drag = dragStateRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragStateRef.current = null;
+      (event.target as Element).releasePointerCapture?.(event.pointerId);
+      // iOS can cancel pointer streams with coordinates unrelated to the
+      // user's last finger position. Persist the last valid move instead of
+      // recalculating from the cancel event.
+      persistDraggedZone(drag.latestBox);
+    },
+    [persistDraggedZone],
   );
 
   // Drag pointer handlers attach to each interactive handle directly
@@ -308,8 +346,8 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
   // capture self-contained.
   const dragHandlers = {
     onPointerMove: handlePointerMove,
-    onPointerUp: endDrag,
-    onPointerCancel: endDrag,
+    onPointerUp: handlePointerUp,
+    onPointerCancel: handlePointerCancel,
   };
 
   const rectSvg = useMemo(() => {
@@ -387,7 +425,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
         </Stack>
       </div>
 
-      <div className={styles.boardContainer}>
+      <div className={styles.boardContainer} data-testid="zone-board-container" data-swipe-blocked="">
         <BoardRenderer
           boardDetails={tightenedBoardDetails}
           litUpHoldsMap={{}}
@@ -417,6 +455,22 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
             className={styles.zoneOverlaySvg}
           >
             <rect
+              data-testid="zone-hit-move-border"
+              x={rectSvg.x}
+              y={rectSvg.y}
+              width={rectSvg.width}
+              height={rectSvg.height}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={handleHitRadius}
+              onPointerDown={beginDrag('move')}
+              className={styles.zoneDragTarget}
+              data-swipe-blocked=""
+              cursor="move"
+              pointerEvents="stroke"
+              {...dragHandlers}
+            />
+            <rect
               x={rectSvg.x}
               y={rectSvg.y}
               width={rectSvg.width}
@@ -432,6 +486,19 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
                 under the zone fill stay tappable. Sized to match the corner
                 handles so it's a proper touch target on mobile. */}
             <circle
+              data-testid="zone-hit-move"
+              cx={rectSvg.centerX}
+              cy={rectSvg.centerY}
+              r={handleHitRadius}
+              fill="transparent"
+              onPointerDown={beginDrag('move')}
+              className={styles.zoneDragTarget}
+              data-swipe-blocked=""
+              cursor="move"
+              pointerEvents="all"
+              {...dragHandlers}
+            />
+            <circle
               data-testid="zone-handle-move"
               cx={rectSvg.centerX}
               cy={rectSvg.centerY}
@@ -441,6 +508,8 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               stroke={themeTokens.neutral[50]}
               strokeWidth={handleRadius * 0.25}
               onPointerDown={beginDrag('move')}
+              className={styles.zoneDragHandle}
+              data-swipe-blocked=""
               cursor="move"
               pointerEvents="auto"
               {...dragHandlers}
@@ -451,21 +520,37 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               const handlePos = gridToSvg(handleX, handleY, dims);
               const cursor = corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize';
               return (
-                <circle
-                  key={corner}
-                  data-testid={`zone-handle-${corner}`}
-                  cx={handlePos.x}
-                  cy={handlePos.y}
-                  r={handleRadius}
-                  fill={themeTokens.colors.primary}
-                  fillOpacity={HANDLE_OPACITY}
-                  stroke={themeTokens.neutral[50]}
-                  strokeWidth={handleRadius * 0.25}
-                  onPointerDown={beginDrag(corner)}
-                  cursor={cursor}
-                  pointerEvents="auto"
-                  {...dragHandlers}
-                />
+                <React.Fragment key={corner}>
+                  <circle
+                    data-testid={`zone-hit-${corner}`}
+                    cx={handlePos.x}
+                    cy={handlePos.y}
+                    r={handleHitRadius}
+                    fill="transparent"
+                    onPointerDown={beginDrag(corner)}
+                    className={styles.zoneDragTarget}
+                    data-swipe-blocked=""
+                    cursor={cursor}
+                    pointerEvents="all"
+                    {...dragHandlers}
+                  />
+                  <circle
+                    data-testid={`zone-handle-${corner}`}
+                    cx={handlePos.x}
+                    cy={handlePos.y}
+                    r={handleRadius}
+                    fill={themeTokens.colors.primary}
+                    fillOpacity={HANDLE_OPACITY}
+                    stroke={themeTokens.neutral[50]}
+                    strokeWidth={handleRadius * 0.25}
+                    onPointerDown={beginDrag(corner)}
+                    className={styles.zoneDragHandle}
+                    data-swipe-blocked=""
+                    cursor={cursor}
+                    pointerEvents="auto"
+                    {...dragHandlers}
+                  />
+                </React.Fragment>
               );
             })}
           </svg>
