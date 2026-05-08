@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -9,6 +9,7 @@ import HomeOutlined from '@mui/icons-material/HomeOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
 import AddOutlined from '@mui/icons-material/AddOutlined';
 import LocalOfferOutlined from '@mui/icons-material/LocalOfferOutlined';
+import DynamicFeedOutlined from '@mui/icons-material/DynamicFeedOutlined';
 import PersonOutlined from '@mui/icons-material/PersonOutlined';
 import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
 import { track } from '@vercel/analytics';
@@ -23,7 +24,7 @@ import {
   searchParamsToUrlParams,
   getPlaylistsBasePath,
 } from '@/app/lib/url-utils';
-import { themeTokens, darkTokens } from '@/app/theme/theme-config';
+import { themeTokens } from '@/app/theme/theme-config';
 import { useColorMode } from '@/app/hooks/use-color-mode';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { usePersistentSessionState } from '../persistent-session';
@@ -38,7 +39,7 @@ import type { UserBoard, PopularBoardConfig } from '@boardsesh/shared-schema';
 import type { StoredBoardConfig } from '@/app/lib/saved-boards-db';
 import { useBoardSwitchGuard } from '@/app/components/board-lock/use-board-switch-guard';
 
-type Tab = 'home' | 'climbs' | 'library' | 'create' | 'you';
+type Tab = 'home' | 'climbs' | 'library' | 'feed' | 'create' | 'you';
 
 type BottomTabBarProps = {
   boardDetails?: BoardDetails | null;
@@ -49,51 +50,12 @@ type BottomTabBarProps = {
 const getActiveTab = (pathname: string): Tab => {
   if (pathname === '/') return 'home';
   if (pathname.endsWith('/create')) return 'create';
-  // /you/feed (and any other /you/* sub-route) lights up the You tab.
+  if (pathname.startsWith('/feed')) return 'feed';
   if (pathname.startsWith('/you')) return 'you';
   if (pathname.startsWith('/discover/')) return 'library';
   if (pathname.startsWith('/playlists') || pathname.includes('/playlists')) return 'library';
   return 'climbs';
 };
-
-// Scroll-direction hook. Returns true while the user is scrolling *down* past
-// COLLAPSE_THRESHOLD; flips back to false on any upward scroll or when they're
-// near the top of the page (< NEAR_TOP_PX). Movement under the threshold is
-// ignored to keep the pill stable on tiny scroll jitter (iOS rubber-banding,
-// etc.). Returns a setter so the component can also expand the pill manually
-// — first tap on a collapsed pill should expand instead of navigating.
-const COLLAPSE_THRESHOLD = 8;
-const NEAR_TOP_PX = 24;
-function useScrollCollapsed(): [boolean, (value: boolean) => void] {
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    let lastY = window.scrollY;
-    let frame = 0;
-    const handle = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = 0;
-        const y = window.scrollY;
-        const delta = y - lastY;
-        if (y < NEAR_TOP_PX) {
-          setCollapsed(false);
-        } else if (delta > COLLAPSE_THRESHOLD) {
-          setCollapsed(true);
-        } else if (delta < -COLLAPSE_THRESHOLD) {
-          setCollapsed(false);
-        }
-        lastY = y;
-      });
-    };
-    window.addEventListener('scroll', handle, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', handle);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
-  return [collapsed, setCollapsed];
-}
 
 const listUrlToCreateUrl = (url: string): string => {
   const [path, query = ''] = url.split('?');
@@ -114,21 +76,7 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
   const { t } = useTranslation('playlists');
   const { mode } = useColorMode();
   const isDark = mode === 'dark';
-  const [collapsed, setCollapsed] = useScrollCollapsed();
   const { openAuthModal } = useAuthModal();
-
-  // Publish the collapsed state as a `data-` attribute on <html> so other
-  // floating UI (specifically the queue-control FAB cluster, portal-rendered
-  // outside this component's tree) can subscribe via plain CSS — no shared
-  // state, no measurement-based jitter. Binary toggle = single 200ms
-  // transition on the consumer side that matches the bar's own animation.
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.documentElement.dataset.tabBarCollapsed = collapsed ? 'true' : 'false';
-    return () => {
-      delete document.documentElement.dataset.tabBarCollapsed;
-    };
-  }, [collapsed]);
   const [isBoardSelectorOpen, setIsBoardSelectorOpen] = useState(false);
   const [isBoardSelectorRendered, setIsBoardSelectorRendered] = useState(false);
   const [isCustomBoardOpen, setIsCustomBoardOpen] = useState(false);
@@ -294,6 +242,11 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
     track('Bottom Tab Bar', { tab: 'library' });
   };
 
+  const handleFeedTab = () => {
+    router.push('/feed');
+    track('Bottom Tab Bar', { tab: 'feed' });
+  };
+
   const handleYouTab = () => {
     if (!isAuthenticated || !session?.user?.id) {
       openAuthModal({
@@ -324,15 +277,6 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
   };
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: Tab) => {
-    // First tap on a collapsed pill expands it instead of navigating.
-    // The user can't reliably hit a 14px icon in a 28px-tall chrome, so the
-    // tap is treated as "bring the chrome back" — they can then aim properly
-    // and tap again to navigate. Mirrors how Safari's collapsed URL bar
-    // expands on first tap before it accepts a target.
-    if (collapsed) {
-      setCollapsed(false);
-      return;
-    }
     switch (newValue) {
       case 'home':
         handleHomeTab();
@@ -342,6 +286,9 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
         break;
       case 'library':
         handleLibraryTab();
+        break;
+      case 'feed':
+        handleFeedTab();
         break;
       case 'create':
         handleCreateTab();
@@ -429,75 +376,66 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
     [handleBoardSelected],
   );
 
-  const glassSurface = isDark ? darkTokens.glass.surface : themeTokens.glass.surface;
-  const glassBorder = isDark ? darkTokens.glass.border : themeTokens.glass.border;
-  const glassHighlight = isDark ? darkTokens.glass.highlight : themeTokens.glass.highlight;
-  const glassBlur = isDark ? themeTokens.glass.blur.strong : themeTokens.glass.blur.soft;
-  const glassShadow = isDark ? darkTokens.shadows.lg : themeTokens.shadows.lg;
-
   return (
     <>
       <BottomNavigation
         data-testid="bottom-tab-bar"
-        data-collapsed={collapsed ? 'true' : 'false'}
         value={activeTab}
         onChange={handleTabChange}
-        showLabels={!collapsed}
+        showLabels
         sx={{
-          // Liquid-glass pill: layered translucent fill + top-edge highlight + hairline border.
-          background: `${glassHighlight}, ${glassSurface}`,
-          WebkitBackdropFilter: `blur(${glassBlur}) saturate(180%)`,
-          backdropFilter: `blur(${glassBlur}) saturate(180%)`,
-          border: `1px solid ${glassBorder}`,
-          boxShadow: glassShadow,
-          borderRadius: `${themeTokens.borderRadius.full}px`,
-          // Smoothly animate every collapse property at once.
-          transition: `min-height ${themeTokens.transitions.normal}, padding ${themeTokens.transitions.normal}, max-width ${themeTokens.transitions.normal}, opacity ${themeTokens.transitions.normal}, transform ${themeTokens.transitions.normal}`,
-          pt: `${collapsed ? 0 : themeTokens.spacing[2]}px`,
-          pb: `calc(${collapsed ? 0 : themeTokens.spacing[2]}px + var(--tab-bar-safe-area-padding, 0px))`,
-          px: `${collapsed ? themeTokens.spacing[1] : themeTokens.spacing[2]}px`,
+          background: isDark ? 'rgba(26, 26, 26, 0.7)' : 'rgba(255, 255, 255, 0.3)',
+          WebkitBackdropFilter: isDark ? 'blur(20px)' : 'blur(5px)',
+          backdropFilter: isDark ? 'blur(20px)' : 'blur(5px)',
+          borderRadius: `var(--tab-bar-top-radius, ${themeTokens.borderRadius.xl}px) var(--tab-bar-top-radius, ${themeTokens.borderRadius.xl}px) var(--tab-bar-bottom-radius, ${themeTokens.borderRadius.xl}px) var(--tab-bar-bottom-radius, ${themeTokens.borderRadius.xl}px)`,
+          pt: `${themeTokens.spacing[2]}px`,
+          pb: `calc(${themeTokens.spacing[2]}px + var(--tab-bar-safe-area-padding, 0px))`,
           mb: 'var(--tab-bar-bottom-extension, 0px)',
-          minHeight: collapsed ? 28 : 64,
           height: 'auto',
-          mx: 'auto',
-          maxWidth: collapsed ? 220 : 'min(560px, 100%)',
-          // When collapsed, the whole pill recedes — smaller, lower-contrast,
-          // mirrors the Safari chrome shrink so the user knows it's still
-          // there but is out of the way.
-          opacity: collapsed ? themeTokens.opacity.subtle : 1,
-          '& .MuiBottomNavigationAction-root': {
-            minWidth: collapsed ? 32 : 'auto',
-            maxWidth: collapsed ? 32 : undefined,
-            padding: collapsed ? '0 2px' : undefined,
-            minHeight: collapsed ? 24 : undefined,
-            transition: `min-width ${themeTokens.transitions.normal}, padding ${themeTokens.transitions.normal}`,
-          },
-          '& .MuiBottomNavigationAction-label': {
-            transition: `opacity ${themeTokens.transitions.normal}`,
-            opacity: collapsed ? 0 : 1,
-            display: collapsed ? 'none' : undefined,
-          },
-          '& .MuiSvgIcon-root': {
-            transition: `font-size ${themeTokens.transitions.normal}`,
-            fontSize: collapsed ? 14 : 20,
+          '@media (min-width: 768px)': {
+            maxWidth: 480,
+            mx: 'auto',
+            boxShadow: themeTokens.shadows.lg,
+            border: `1px solid var(--neutral-200)`,
           },
         }}
       >
-        <BottomNavigationAction label={t('bottomTabBar.home')} icon={<HomeOutlined />} value="home" sx={actionSx} />
+        <BottomNavigationAction
+          label={t('bottomTabBar.home')}
+          icon={<HomeOutlined sx={{ fontSize: 20 }} />}
+          value="home"
+          sx={actionSx}
+        />
         <BottomNavigationAction
           label={t('bottomTabBar.climb')}
-          icon={<FormatListBulletedOutlined />}
+          icon={<FormatListBulletedOutlined sx={{ fontSize: 20 }} />}
           value="climbs"
           sx={actionSx}
         />
         <BottomNavigationAction
           label={t('bottomTabBar.discover')}
-          icon={<LocalOfferOutlined />}
+          icon={<LocalOfferOutlined sx={{ fontSize: 20 }} />}
           value="library"
           sx={actionSx}
         />
-        <BottomNavigationAction label={t('bottomTabBar.create')} icon={<AddOutlined />} value="create" sx={actionSx} />
-        <BottomNavigationAction label={t('bottomTabBar.you')} icon={<PersonOutlined />} value="you" sx={actionSx} />
+        <BottomNavigationAction
+          label={t('bottomTabBar.feed')}
+          icon={<DynamicFeedOutlined sx={{ fontSize: 20 }} />}
+          value="feed"
+          sx={actionSx}
+        />
+        <BottomNavigationAction
+          label={t('bottomTabBar.create')}
+          icon={<AddOutlined sx={{ fontSize: 20 }} />}
+          value="create"
+          sx={actionSx}
+        />
+        <BottomNavigationAction
+          label={t('bottomTabBar.you')}
+          icon={<PersonOutlined sx={{ fontSize: 20 }} />}
+          value="you"
+          sx={actionSx}
+        />
       </BottomNavigation>
 
       {/* Board Selector Drawer */}

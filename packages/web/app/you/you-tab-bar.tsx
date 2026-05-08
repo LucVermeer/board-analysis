@@ -6,7 +6,7 @@ import Tab from '@mui/material/Tab';
 import { useTranslation } from 'react-i18next';
 import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
 
-type YouTab = 'progress' | 'sessions' | 'logbook' | 'feed';
+type YouTab = 'progress' | 'sessions' | 'logbook';
 
 export default function YouTabBar() {
   const { t } = useTranslation('you');
@@ -14,12 +14,10 @@ export default function YouTabBar() {
   const pathname = usePathnameWithoutLocale();
 
   let activeTab: YouTab;
-  if (pathname.startsWith('/you/sessions')) {
+  if (pathname === '/you/sessions') {
     activeTab = 'sessions';
-  } else if (pathname.startsWith('/you/logbook')) {
+  } else if (pathname === '/you/logbook') {
     activeTab = 'logbook';
-  } else if (pathname.startsWith('/you/feed')) {
-    activeTab = 'feed';
   } else {
     activeTab = 'progress';
   }
@@ -37,7 +35,6 @@ export default function YouTabBar() {
       <Tab label={t('tabs.progress')} value="progress" />
       <Tab label={t('tabs.sessions')} value="sessions" />
       <Tab label={t('tabs.logbook')} value="logbook" />
-      <Tab label={t('tabs.feed')} value="feed" />
     </Tabs>
   );
 }

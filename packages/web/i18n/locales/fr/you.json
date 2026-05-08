@@ -16,8 +16,7 @@
   "tabs": {
     "progress": "Progression",
     "sessions": "Sessions",
-    "logbook": "Carnet",
-    "feed": "Activité"
+    "logbook": "Carnet"
   },
   "progress": {
     "title": "Progression"

@@ -6,13 +6,13 @@ vi.mock('next/headers', () => ({
 }));
 
 const aboutPage = await import('../about/page');
-const youFeedPage = await import('../you/feed/page');
+const feedPage = await import('../feed/page');
 const loginPage = await import('../auth/login/page');
 const playlistsPage = await import('../playlists/page');
 const settingsPage = await import('../settings/page');
 
 const aboutMetadata = await aboutPage.generateMetadata();
-const youFeedMetadata = await youFeedPage.generateMetadata();
+const feedMetadata = await feedPage.generateMetadata();
 const playlistsMetadata = await playlistsPage.generateMetadata();
 const settingsMetadata = await settingsPage.generateMetadata();
 
@@ -65,9 +65,9 @@ describe('page metadata exports', () => {
     expect(loginPage.metadata.robots).toEqual({ index: false, follow: true });
   });
 
-  it('keeps the activity feed (now nested under /you) noindex because it is auth-gated', () => {
-    expect(youFeedMetadata.robots).toEqual({ index: false, follow: true });
-    expect(youFeedMetadata.alternates?.canonical).toBe('/you/feed');
+  it('keeps the activity feed indexable so it surfaces public climbing activity', () => {
+    expect(feedMetadata.robots).toBeUndefined();
+    expect(feedMetadata.alternates?.canonical).toBe('/feed');
   });
 
   it('keeps the public playlists directory indexable because it exposes discoverable content', () => {
