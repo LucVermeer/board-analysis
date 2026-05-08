@@ -67,7 +67,17 @@ describe('user data export formatting', () => {
           position: 1,
         },
       ],
-      climbs: [],
+      climbs: [
+        {
+          uuid: 'climb-1',
+          name: 'My Draft',
+          layoutId: 1,
+          frames: 'p1464r45p1131r42p1233r43p1270r44',
+          createdAt: new Date('2026-05-04T09:30:00Z'),
+          isDraft: true,
+          description: 'Exported from Boardsesh',
+        },
+      ],
     });
 
     expect(exportData.user).toEqual({
@@ -104,6 +114,21 @@ describe('user data export formatting', () => {
         description: 'Limit climbs',
         is_private: true,
         climbs: ['Warm Up', 'Project'],
+      },
+    ]);
+    expect(exportData.climbs).toEqual([
+      {
+        name: 'My Draft',
+        layout: 'Kilter Board Original',
+        created_at: '2026-05-04T09:30:00.000Z',
+        is_draft: true,
+        description: 'Exported from Boardsesh',
+        holds: [
+          { x: 4, y: 4, role: 'foot' },
+          { x: 64, y: 32, role: 'start' },
+          { x: 64, y: 80, role: 'middle' },
+          { x: 88, y: 96, role: 'finish' },
+        ],
       },
     ]);
   });
