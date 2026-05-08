@@ -26,6 +26,7 @@ import { buildSwitchUrl, decidePickerSelection, type ResolvedBoardConfig } from 
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { DiscoveredDevice } from '@/app/lib/ble/types';
 import type { PickerState } from './use-board-bluetooth';
+import { useLedColorOverrides, type LedColorOverrides } from '@/app/lib/led-color-overrides-db';
 
 type BluetoothContextValue = {
   isConnected: boolean;
@@ -49,6 +50,11 @@ type BluetoothContextValue = {
    * current climb's holds through random role colours. */
   partyMode: 'off' | 'glyphs' | 'disco';
   setPartyMode: (mode: 'off' | 'glyphs' | 'disco') => void;
+  /** Per-state hex colour overrides for HAND/FOOT/FINISH LEDs. Persisted in
+   * IndexedDB; consumers update via setLedColorOverrides which re-renders
+   * the auto-sender so the current climb repaints. */
+  ledColorOverrides: LedColorOverrides;
+  setLedColorOverrides: (next: LedColorOverrides) => void;
   isBluetoothSupported: boolean;
   isIOS: boolean;
 };
@@ -136,9 +142,12 @@ export function BluetoothProvider({
   boardUuid?: string;
   children: React.ReactNode;
 }) {
+  const [ledColorOverrides, setLedColorOverrides] = useLedColorOverrides();
+
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({
     boardDetails,
     boardUuid,
+    ledColorOverrides,
   });
   const { token, isAuthenticated } = useWsAuthToken();
   const { showMessage } = useSnackbar();
@@ -351,6 +360,8 @@ export function BluetoothProvider({
       boardDetails,
       partyMode,
       setPartyMode,
+      ledColorOverrides,
+      setLedColorOverrides,
       isBluetoothSupported,
       isIOS,
     }),
@@ -364,6 +375,8 @@ export function BluetoothProvider({
       boardDetails,
       partyMode,
       setPartyMode,
+      ledColorOverrides,
+      setLedColorOverrides,
       isBluetoothSupported,
       isIOS,
     ],

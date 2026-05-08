@@ -2,7 +2,14 @@ import type { LedPlacements } from '@/app/lib/types';
 import { HOLD_STATE_MAP } from '../board-renderer/types';
 import { AURORA_ADVERTISED_SERVICE_UUID, MESSAGE_BODY_MAX_LENGTH, UART_SERVICE_UUID } from './bluetooth-shared';
 import type { AuroraBoardName } from '@/app/lib/api-wrappers/aurora/types';
-import { AURORA_BOARDS } from '@boardsesh/shared-schema';
+import { AURORA_BOARDS, type HoldState } from '@boardsesh/shared-schema';
+
+/**
+ * Optional per-state hex colour overrides (`#rrggbb` or `rrggbb`). When a
+ * frame's role code maps to one of these states, the override replaces the
+ * canonical colour from `HOLD_STATE_MAP` for that LED only.
+ */
+export type LedColorOverrides = Partial<Record<HoldState, string>>;
 
 // --- API v3 command bytes (3 bytes per LED, 16-bit positions) ---
 const V3_PACKET_MIDDLE = 81; // 'Q'
@@ -185,6 +192,7 @@ export const getAuroraBluetoothPacket = (
   placementPositions: LedPlacements,
   boardName: AuroraBoardName,
   apiLevel: number = 3,
+  colorOverrides?: LedColorOverrides,
 ): BluetoothPacketResult => {
   const isV2 = apiLevel < 3;
   const cmds = isV2 ? V2_COMMANDS : V3_COMMANDS;
@@ -225,7 +233,9 @@ export const getAuroraBluetoothPacket = (
       return;
     }
 
-    const color = state.color.replace('#', '');
+    const overrideForState = colorOverrides?.[state.name];
+    const colorSource = overrideForState ?? state.color;
+    const color = colorSource.replace('#', '');
     ledEntries.push({ position: ledPosition, color });
   });
 

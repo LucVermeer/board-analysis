@@ -5,7 +5,7 @@ import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { track } from '@vercel/analytics';
 import * as Sentry from '@sentry/nextjs';
 import type { BoardDetails } from '@/app/lib/types';
-import { getAuroraBluetoothPacket, parseApiLevel, parseSerialNumber } from './bluetooth-aurora';
+import { getAuroraBluetoothPacket, parseApiLevel, parseSerialNumber, type LedColorOverrides } from './bluetooth-aurora';
 import { getMoonboardBluetoothPacket } from './bluetooth-moonboard';
 import type { HoldRenderData } from '../board-renderer/types';
 import { useWakeLock } from './use-wake-lock';
@@ -55,6 +55,10 @@ type UseBoardBluetoothOptions = {
   /** Saved board UUID when on a /b/{slug}/... route — used to link the recorded serial mapping. */
   boardUuid?: string;
   onConnectionChange?: (connected: boolean) => void;
+  /** Per-state hex colour overrides applied at packet build time. Changing
+   * this re-creates `sendFramesToBoard` so the auto-sender repaints the
+   * current climb with the new colours. */
+  ledColorOverrides?: LedColorOverrides;
 };
 
 /**
@@ -85,7 +89,12 @@ function recordBoardSerial(serialNumber: string, boardDetails: BoardDetails, boa
   }).catch(() => {});
 }
 
-export function useBoardBluetooth({ boardDetails, boardUuid, onConnectionChange }: UseBoardBluetoothOptions) {
+export function useBoardBluetooth({
+  boardDetails,
+  boardUuid,
+  onConnectionChange,
+  ledColorOverrides,
+}: UseBoardBluetoothOptions) {
   const { showMessage } = useSnackbar();
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -203,6 +212,7 @@ export function useBoardBluetooth({ boardDetails, boardUuid, onConnectionChange 
           placementPositions,
           boardDetails.board_name,
           apiLevelRef.current,
+          ledColorOverrides,
         );
 
         const skippedCount = result.skippedPositionCount + result.skippedRoleCount;
@@ -260,7 +270,7 @@ export function useBoardBluetooth({ boardDetails, boardUuid, onConnectionChange 
         return false;
       }
     },
-    [boardDetails, showMessage],
+    [boardDetails, showMessage, ledColorOverrides],
   );
 
   // Handle connection initiation

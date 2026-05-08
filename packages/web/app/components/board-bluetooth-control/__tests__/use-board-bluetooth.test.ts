@@ -270,7 +270,7 @@ describe('useBoardBluetooth', () => {
 
     expect(sendResult).toBe(true);
     expect(mockGetLedPlacements).toHaveBeenCalledWith('kilter', 1, 10);
-    expect(mockGetAuroraBluetoothPacket).toHaveBeenCalledWith('p4131r42', { 4131: 39 }, 'kilter', 3);
+    expect(mockGetAuroraBluetoothPacket).toHaveBeenCalledWith('p4131r42', { 4131: 39 }, 'kilter', 3, undefined);
     expect(mockGetMoonboardBluetoothPacket).not.toHaveBeenCalled();
     expect(mockAdapter.write).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), undefined);
   });
