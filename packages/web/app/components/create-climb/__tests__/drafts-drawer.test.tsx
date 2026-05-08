@@ -34,8 +34,12 @@ vi.mock('@/app/lib/graphql/client', () => ({
 }));
 
 vi.mock('../../swipeable-drawer/swipeable-drawer', () => ({
-  default: ({ children, open }: { children: React.ReactNode; open: boolean }) =>
-    open ? <div data-testid="swipeable-drawer">{children}</div> : null,
+  default: ({ children, open, disablePortal }: { children: React.ReactNode; open: boolean; disablePortal?: boolean }) =>
+    open ? (
+      <div data-testid="swipeable-drawer" data-disable-portal={disablePortal ? 'true' : 'false'}>
+        {children}
+      </div>
+    ) : null,
 }));
 
 vi.mock('../../climb-card/climb-list-item', () => ({
@@ -107,6 +111,25 @@ describe('DraftsDrawer', () => {
     await waitFor(() => {
       expect(screen.getByText('No drafts yet')).toBeTruthy();
     });
+  });
+
+  it('uses normal pixel padding for the empty state on narrow mobile drawers', async () => {
+    mockRequest.mockResolvedValue({ searchClimbs: { climbs: [], hasMore: false } });
+    renderDrawer();
+
+    const emptyState = await screen.findByTestId('drafts-empty-state');
+
+    expect(emptyState.style.padding).toBe('32px 24px');
+  });
+
+  it('keeps the draft list scroll gesture from being captured by the drawer', async () => {
+    mockRequest.mockResolvedValue({ searchClimbs: { climbs: [], hasMore: false } });
+    renderDrawer();
+
+    await screen.findByTestId('drafts-empty-state');
+
+    expect(screen.getByTestId('swipeable-drawer').getAttribute('data-disable-portal')).toBe('false');
+    expect(screen.getByTestId('drafts-scroll-container').hasAttribute('data-swipe-blocked')).toBe(true);
   });
 
   it('renders draft climbs when query returns results', async () => {

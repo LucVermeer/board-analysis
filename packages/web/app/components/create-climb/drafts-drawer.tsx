@@ -31,6 +31,23 @@ const DRAFTS_DRAWER_STYLES = {
   body: { padding: 0, overflow: 'hidden' as const, touchAction: 'pan-y' as const },
 } as const;
 
+const DRAFTS_DRAWER_STATE_STYLES = {
+  loading: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: `${themeTokens.spacing[8]}px`,
+  },
+  error: {
+    padding: `${themeTokens.spacing[6]}px`,
+    textAlign: 'center' as const,
+  },
+  empty: {
+    padding: `${themeTokens.spacing[8]}px ${themeTokens.spacing[6]}px`,
+    textAlign: 'center' as const,
+  },
+} as const;
+
 export type DraftsDrawerProps = {
   open: boolean;
   onClose: () => void;
@@ -179,20 +196,13 @@ const DraftsDrawer: React.FC<DraftsDrawerProps> = ({ open, onClose, boardDetails
   let draftsListContent: React.ReactNode;
   if (isLoading) {
     draftsListContent = (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: themeTokens.spacing[8],
-        }}
-      >
+      <Box data-testid="drafts-loading-state" style={DRAFTS_DRAWER_STATE_STYLES.loading}>
         <CircularProgress size={24} />
       </Box>
     );
   } else if (error) {
     draftsListContent = (
-      <Box sx={{ padding: themeTokens.spacing[6], textAlign: 'center' }}>
+      <Box data-testid="drafts-error-state" style={DRAFTS_DRAWER_STATE_STYLES.error}>
         <Typography variant="body2" color="text.secondary">
           {t('draftsDrawer.loadError')}
         </Typography>
@@ -200,7 +210,7 @@ const DraftsDrawer: React.FC<DraftsDrawerProps> = ({ open, onClose, boardDetails
     );
   } else if (drafts.length === 0) {
     draftsListContent = (
-      <Box sx={{ padding: themeTokens.spacing[8], textAlign: 'center' }}>
+      <Box data-testid="drafts-empty-state" style={DRAFTS_DRAWER_STATE_STYLES.empty}>
         <Typography variant="body1" sx={{ fontWeight: themeTokens.typography.fontWeight.semibold }}>
           {t('draftsDrawer.empty.title')}
         </Typography>
@@ -274,7 +284,9 @@ const DraftsDrawer: React.FC<DraftsDrawerProps> = ({ open, onClose, boardDetails
       </div>
 
       <div className={queueStyles.queueBodyLayout}>
-        <div className={queueStyles.queueScrollContainer}>{draftsListContent}</div>
+        <div className={queueStyles.queueScrollContainer} data-testid="drafts-scroll-container" data-swipe-blocked="">
+          {draftsListContent}
+        </div>
       </div>
     </SwipeableDrawer>
   );
