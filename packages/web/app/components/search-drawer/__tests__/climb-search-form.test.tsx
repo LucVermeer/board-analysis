@@ -204,6 +204,39 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
     expect(screen.getByText('1 included')).toBeTruthy();
   });
 
+  it('renders the selected zone as transparent with dimmed excluded regions', () => {
+    const persistedZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: persistedZone,
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    const expectAttrs = (testId: string, attrs: Record<string, string>) => {
+      const node = screen.getByTestId(testId);
+      for (const [name, value] of Object.entries(attrs)) {
+        expect(node.getAttribute(name)).toBe(value);
+      }
+      expect(node.getAttribute('fill')).toBe('#111827');
+      expect(node.getAttribute('fill-opacity')).toBe('0.42');
+      expect(node.getAttribute('pointer-events')).toBe('none');
+    };
+
+    expectAttrs('zone-exclusion-top', { x: '0', y: '0', width: '1080', height: '232.5' });
+    expectAttrs('zone-exclusion-bottom', { x: '0', y: '937.5', width: '1080', height: '232.5' });
+    expectAttrs('zone-exclusion-left', { x: '0', y: '232.5', width: '217.5', height: '705' });
+    expectAttrs('zone-exclusion-right', { x: '862.5', y: '232.5', width: '217.5', height: '705' });
+
+    const outline = screen.getByTestId('zone-selection-outline');
+    expect(outline.getAttribute('x')).toBe('217.5');
+    expect(outline.getAttribute('y')).toBe('232.5');
+    expect(outline.getAttribute('width')).toBe('645');
+    expect(outline.getAttribute('height')).toBe('705');
+    expect(outline.getAttribute('fill')).toBe('none');
+    expect(outline.getAttribute('stroke')).toBe('#8C4A52');
+    expect(outline.getAttribute('pointer-events')).toBe('none');
+  });
+
   it('drawing a zone twice (e.g. user clears and redraws) prunes again from current holdsFilter', () => {
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, holdsFilter: filterAllThreeHolds };
     const { rerender } = render(<ClimbSearchForm boardDetails={boardDetails} />);

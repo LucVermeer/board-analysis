@@ -54,7 +54,7 @@ const getAngleFromPath = (pathname: string): number => {
 };
 
 const HANDLE_OPACITY = 0.95;
-const RECT_FILL_OPACITY = 0.18;
+const ZONE_EXCLUSION_OPACITY = 0.42;
 const RECT_STROKE_OPACITY = 0.9;
 
 // Stable empty fallback so the ref-syncing effect doesn't re-run every
@@ -471,12 +471,52 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               {...dragHandlers}
             />
             <rect
+              data-testid="zone-exclusion-top"
+              x={0}
+              y={0}
+              width={boardWidth}
+              height={rectSvg.y}
+              fill={themeTokens.neutral[900]}
+              fillOpacity={ZONE_EXCLUSION_OPACITY}
+              pointerEvents="none"
+            />
+            <rect
+              data-testid="zone-exclusion-bottom"
+              x={0}
+              y={rectSvg.y + rectSvg.height}
+              width={boardWidth}
+              height={Math.max(0, boardHeight - (rectSvg.y + rectSvg.height))}
+              fill={themeTokens.neutral[900]}
+              fillOpacity={ZONE_EXCLUSION_OPACITY}
+              pointerEvents="none"
+            />
+            <rect
+              data-testid="zone-exclusion-left"
+              x={0}
+              y={rectSvg.y}
+              width={rectSvg.x}
+              height={rectSvg.height}
+              fill={themeTokens.neutral[900]}
+              fillOpacity={ZONE_EXCLUSION_OPACITY}
+              pointerEvents="none"
+            />
+            <rect
+              data-testid="zone-exclusion-right"
+              x={rectSvg.x + rectSvg.width}
+              y={rectSvg.y}
+              width={Math.max(0, boardWidth - (rectSvg.x + rectSvg.width))}
+              height={rectSvg.height}
+              fill={themeTokens.neutral[900]}
+              fillOpacity={ZONE_EXCLUSION_OPACITY}
+              pointerEvents="none"
+            />
+            <rect
+              data-testid="zone-selection-outline"
               x={rectSvg.x}
               y={rectSvg.y}
               width={rectSvg.width}
               height={rectSvg.height}
-              fill={themeTokens.colors.primary}
-              fillOpacity={RECT_FILL_OPACITY}
+              fill="none"
               stroke={themeTokens.colors.primary}
               strokeOpacity={RECT_STROKE_OPACITY}
               strokeWidth={Math.max(boardWidth, boardHeight) * 0.005}
