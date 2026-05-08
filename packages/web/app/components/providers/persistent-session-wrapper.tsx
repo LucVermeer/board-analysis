@@ -26,6 +26,7 @@ import SessionSummaryDialog from '../session-summary/session-summary-dialog';
 import { SearchDrawerBridgeProvider } from '../search-drawer/search-drawer-bridge-context';
 import { StatsFilterBridgeProvider } from '../stats-filter-bridge/stats-filter-bridge-context';
 import { ProfileHeaderShareProvider } from '../profile-header-bridge/profile-header-bridge-context';
+import { getPlatform, isNativeApp } from '@/app/lib/ble/capacitor-utils';
 import dynamic from 'next/dynamic';
 import { SESH_SETTINGS_DRAWER_EVENT } from '../sesh-settings/sesh-settings-drawer-event';
 import { BoardSwitchConfirmProvider } from '../board-lock/board-switch-confirm-provider';
@@ -142,6 +143,8 @@ const HIDE_TAB_BAR_PAGES = ['/aurora-migration'];
 export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData }) {
   const { boardDetails, angle, hasActiveQueue } = useQueueBridgeBoardInfo();
   const pathname = usePathnameWithoutLocale();
+  const isNative = isNativeApp();
+  const isIOSNative = isNative && getPlatform() === 'ios';
 
   const hideTabBar = HIDE_TAB_BAR_PAGES.some((prefix) => pathname.startsWith(prefix)) && !hasActiveQueue;
   const shouldShowQueueShell = isBoardRoutePath(pathname) && !hasActiveQueue && !boardDetails;
@@ -175,7 +178,11 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
   }, []);
 
   return (
-    <div ref={wrapperRef} className={bottomBarStyles.bottomBarWrapper} data-testid="bottom-bar-wrapper">
+    <div
+      ref={wrapperRef}
+      className={`${bottomBarStyles.bottomBarWrapper} ${isNative ? bottomBarStyles.nativeApp : ''} ${isIOSNative ? bottomBarStyles.iosNativeApp : ''}`}
+      data-testid="bottom-bar-wrapper"
+    >
       <FeedbackPromptBanner />
       {hasActiveQueue && boardDetails && (
         <ErrorBoundary>

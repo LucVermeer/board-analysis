@@ -1,20 +1,12 @@
-/* Floating liquid-glass pill. The wrapper anchors against
-   --bottom-tab-bar-bottom-offset (defined in components/index.css) so the
-   wrapper, the FAB cluster, and the peek snackbar all track the same per-
-   platform line without re-deriving it. The variable resolves to:
-
-   - iOS Safari + Capacitor → flat 12px (concentric with the iPhone screen-
-     corner radius on iPhone 17 Pro; older iPhones get a tasteful floating-
-     pill gap with no gesture conflict).
-   - Android Capacitor → max(12px, env(safe-area-inset-bottom)) so the
-     gesture-nav inset (24–48px on modern Android) is respected.
-   - Android Chromium web → 12px floor (env reports 0).
-   - Desktop ≥768px → 8px (no inset, narrow centred pill). */
+/* Floating liquid-glass pill. Centered, lifted off the bottom, with safe-area
+   clearance so it doesn't collide with the iOS home indicator or Android
+   gesture-nav area. Native (Capacitor) and web both render the pill — no
+   edge-to-edge fallback. */
 .bottomBarWrapper {
   --tab-bar-safe-area-padding: 0px;
   --tab-bar-bottom-extension: 0px;
   position: fixed;
-  bottom: var(--bottom-tab-bar-bottom-offset);
+  bottom: max(4px, env(safe-area-inset-bottom));
   left: 0;
   right: 0;
   padding-inline: 12px;
@@ -28,10 +20,31 @@
   pointer-events: auto;
 }
 
-/* Desktop padding-inline tightens the gutter; the bottom offset is handled
-   by the :root override in components/index.css. */
+/* Native shells get the same pill but a slightly larger lift on Android, where
+   the gesture-nav area can be 24-48px above the WebView bottom. The
+   @capacitor-community/safe-area plugin populates env(safe-area-inset-bottom)
+   on Android via passed insets (Chromium 140+) or decorView padding (older);
+   on iOS WKWebView env() reports the home-indicator inset natively. */
+.nativeApp {
+  bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* iOS WKWebView: drop the pill flush with the bottom of the screen so its
+   rounded bottom edges nest into the iPhone's curved screen corners. The
+   home-indicator clearance moves *inside* the pill via
+   --tab-bar-safe-area-padding instead of lifting the whole element off
+   the bottom. Android stays on .nativeApp because gesture-nav clearance
+   varies more and a flush placement risks gesture conflicts there. */
+.iosNativeApp {
+  --tab-bar-safe-area-padding: env(safe-area-inset-bottom);
+  bottom: 0;
+}
+
+/* On desktop the pill stays centered and capped; the wrapper itself spans full
+   width but the BottomNavigation child sets max-width: min(560px, 100%). */
 @media (min-width: 768px) {
   .bottomBarWrapper {
+    bottom: 8px;
     padding-inline: 24px;
   }
 }
