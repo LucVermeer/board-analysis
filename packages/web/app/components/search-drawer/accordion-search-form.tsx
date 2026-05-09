@@ -503,7 +503,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   return (
     <div className={styles.formWrapper}>
       <div className={styles.primaryContent}>{climbContent}</div>
-      <CollapsibleSection sections={sections} defaultActiveKey={defaultActiveKey?.[0]} />
+      <CollapsibleSection sections={sections} defaultActiveKey={defaultActiveKey?.[0]} compactDesktopGrid />
     </div>
   );
 };
