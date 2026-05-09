@@ -165,6 +165,12 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     updateClimb(input: UpdateClimbInput!): UpdateClimbResult!
 
+    """
+    Delete one of the current user's unpublished draft climbs.
+    Published climbs cannot be deleted through this mutation.
+    """
+    deleteDraftClimb(uuid: ID!, boardType: String!): Boolean!
+
     # ============================================
     # Playlist Mutations (require auth)
     # ============================================

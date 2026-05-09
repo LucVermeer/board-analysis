@@ -5,7 +5,10 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
-import { useQuery } from '@tanstack/react-query';
+import IconButton from '@mui/material/IconButton';
+import MuiTooltip from '@mui/material/Tooltip';
+import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import ClimbListItem from '../climb-card/climb-list-item';
@@ -16,9 +19,16 @@ import {
   type ClimbSearchInputVariables,
   type ClimbSearchResponse,
 } from '@/app/lib/graphql/operations/climb-search';
+import {
+  DELETE_DRAFT_CLIMB_MUTATION,
+  type DeleteDraftClimbMutationResponse,
+  type DeleteDraftClimbMutationVariables,
+} from '@/app/lib/graphql/operations/new-climb-feed';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { themeTokens } from '@/app/theme/theme-config';
 import { constructClimbViewUrl } from '@/app/lib/url-utils';
+import { ConfirmPopover } from '@/app/components/ui/confirm-popover';
+import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import queueStyles from '../play-view/play-view-drawer.module.css';
 import drawerStyles from '../swipeable-drawer/swipeable-drawer.module.css';
@@ -60,11 +70,22 @@ export type DraftsDrawerProps = {
    * falls back to navigating to the climb view page.
    */
   onLoadDraft?: (climb: Climb) => void;
+  /** Called after a draft is deleted so the host can detach local saved state. */
+  onDraftDeleted?: (climb: Climb) => void;
 };
 
-const DraftsDrawer: React.FC<DraftsDrawerProps> = ({ open, onClose, boardDetails, angle, onLoadDraft }) => {
+const DraftsDrawer: React.FC<DraftsDrawerProps> = ({
+  open,
+  onClose,
+  boardDetails,
+  angle,
+  onLoadDraft,
+  onDraftDeleted,
+}) => {
   const { t } = useTranslation('climbs');
   const router = useLocaleRouter();
+  const queryClient = useQueryClient();
+  const { showMessage } = useSnackbar();
   const { mode } = useColorMode();
   const isDark = mode === 'dark';
   const { token: wsAuthToken } = useWsAuthToken();
@@ -159,7 +180,41 @@ const DraftsDrawer: React.FC<DraftsDrawerProps> = ({ open, onClose, boardDetails
     refetchOnWindowFocus: false,
   });
 
+  const deleteDraftMutation = useMutation({
+    mutationFn: async (climb: Climb): Promise<boolean> => {
+      if (!wsAuthToken) {
+        throw new Error('Authentication required');
+      }
+
+      const client = createGraphQLHttpClient(wsAuthToken);
+      const variables: DeleteDraftClimbMutationVariables = {
+        uuid: climb.uuid,
+        boardType: boardDetails.board_name,
+      };
+      const result = await client.request<DeleteDraftClimbMutationResponse>(DELETE_DRAFT_CLIMB_MUTATION, variables);
+      return result.deleteDraftClimb;
+    },
+    onSuccess: async (_deleted, climb) => {
+      queryClient.setQueryData<Climb[]>(
+        queryKey,
+        (currentDrafts) => currentDrafts?.filter((draft) => draft.uuid !== climb.uuid) ?? [],
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey }),
+        queryClient.invalidateQueries({
+          queryKey: ['climbDraftsCount', boardDetails.board_name, boardDetails.layout_id],
+        }),
+      ]);
+      showMessage(t('draftsDrawer.delete.success'), 'success');
+      onDraftDeleted?.(climb);
+    },
+    onError: () => {
+      showMessage(t('draftsDrawer.delete.error'), 'error');
+    },
+  });
+
   const drafts = data ?? [];
+  const deletingDraftUuid = deleteDraftMutation.isPending ? deleteDraftMutation.variables?.uuid : null;
 
   const handleSelectDraft = useCallback(
     (climb: Climb) => {
@@ -191,6 +246,41 @@ const DraftsDrawer: React.FC<DraftsDrawerProps> = ({ open, onClose, boardDetails
     () =>
       `/${boardDetails.board_name}/${boardDetails.layout_id}/${boardDetails.size_id}/${boardDetails.set_ids.join(',')}/${angle}/create`,
     [boardDetails, angle],
+  );
+
+  const buildDeleteAction = useCallback(
+    (climb: Climb) => (
+      <Box
+        component="span"
+        data-testid={`draft-delete-action-${climb.uuid}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <ConfirmPopover
+          title={t('draftsDrawer.delete.title')}
+          description={t('draftsDrawer.delete.description')}
+          okText={t('draftsDrawer.delete.confirm')}
+          okButtonProps={{ color: 'error', disabled: deleteDraftMutation.isPending }}
+          onConfirm={() => deleteDraftMutation.mutate(climb)}
+        >
+          <MuiTooltip title={t('draftsDrawer.delete.tooltip')}>
+            <span>
+              <IconButton
+                size="small"
+                disabled={deleteDraftMutation.isPending}
+                aria-label={t('draftsDrawer.delete.tooltip')}
+              >
+                {deletingDraftUuid === climb.uuid ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <DeleteOutlined fontSize="small" />
+                )}
+              </IconButton>
+            </span>
+          </MuiTooltip>
+        </ConfirmPopover>
+      </Box>
+    ),
+    [deleteDraftMutation, deletingDraftUuid, t],
   );
 
   let draftsListContent: React.ReactNode;
@@ -229,6 +319,7 @@ const DraftsDrawer: React.FC<DraftsDrawerProps> = ({ open, onClose, boardDetails
         isDark={isDark}
         disableSwipe
         onSelect={() => handleSelectDraft(climb)}
+        menuSlot={buildDeleteAction(climb)}
       />
     ));
   }

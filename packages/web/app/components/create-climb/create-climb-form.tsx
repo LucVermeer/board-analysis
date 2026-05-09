@@ -1224,6 +1224,18 @@ export default function CreateClimbForm({
     [boardType, boardDetails, loadAuroraHolds, clearJustSaved, queueActions],
   );
 
+  const handleDraftDeleted = useCallback(
+    (climb: Climb) => {
+      void queryClient.invalidateQueries({ queryKey: draftsCountQueryKey });
+
+      if (savedClimb?.uuid === climb.uuid && savedClimb.boardType === boardDetails?.board_name) {
+        setSavedClimb(null);
+        clearJustSaved();
+      }
+    },
+    [boardDetails?.board_name, clearJustSaved, draftsCountQueryKey, queryClient, savedClimb],
+  );
+
   // When the parent passes an editClimb (typically from
   // /b/.../create?editClimbUuid=...), seed the form once it has mounted.
   // Tracked by uuid so we only seed once per distinct target climb — subsequent
@@ -1633,6 +1645,7 @@ export default function CreateClimbForm({
           boardDetails={boardDetails}
           angle={angle}
           onLoadDraft={handleLoadDraft}
+          onDraftDeleted={handleDraftDeleted}
         />
       )}
 

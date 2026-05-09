@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DraftsDrawer from '../drafts-drawer';
-import type { BoardDetails } from '@/app/lib/types';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
 vi.mock('react-i18next', () => ({
@@ -16,6 +16,7 @@ vi.mock('react-i18next', () => ({
 
 const mockPush = vi.fn();
 const mockRequest = vi.fn();
+const mockShowMessage = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -33,6 +34,10 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
+vi.mock('../../providers/snackbar-provider', () => ({
+  useSnackbar: () => ({ showMessage: mockShowMessage }),
+}));
+
 vi.mock('../../swipeable-drawer/swipeable-drawer', () => ({
   default: ({ children, open, disablePortal }: { children: React.ReactNode; open: boolean; disablePortal?: boolean }) =>
     open ? (
@@ -43,9 +48,18 @@ vi.mock('../../swipeable-drawer/swipeable-drawer', () => ({
 }));
 
 vi.mock('../../climb-card/climb-list-item', () => ({
-  default: ({ climb, onSelect }: { climb: { uuid: string; name: string }; onSelect: () => void }) => (
+  default: ({
+    climb,
+    onSelect,
+    menuSlot,
+  }: {
+    climb: { uuid: string; name: string };
+    onSelect: () => void;
+    menuSlot?: React.ReactNode;
+  }) => (
     <div data-testid={`climb-item-${climb.uuid}`} onClick={onSelect}>
       {climb.name}
+      {menuSlot}
     </div>
   ),
 }));
@@ -65,14 +79,29 @@ const boardDetails: BoardDetails = {
   boardWidth: 100,
 };
 
-function renderDrawer(open = true) {
+function renderDrawer({
+  open = true,
+  onLoadDraft,
+  onDraftDeleted,
+}: {
+  open?: boolean;
+  onLoadDraft?: (climb: Climb) => void;
+  onDraftDeleted?: (climb: Climb) => void;
+} = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const onClose = vi.fn();
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <DraftsDrawer open={open} onClose={onClose} boardDetails={boardDetails} angle={40} />
+      <DraftsDrawer
+        open={open}
+        onClose={onClose}
+        boardDetails={boardDetails}
+        angle={40}
+        onLoadDraft={onLoadDraft}
+        onDraftDeleted={onDraftDeleted}
+      />
     </QueryClientProvider>,
   );
   return { ...result, onClose, queryClient };
@@ -84,7 +113,7 @@ describe('DraftsDrawer', () => {
   });
 
   it('renders nothing when closed', () => {
-    renderDrawer(false);
+    renderDrawer({ open: false });
     expect(screen.queryByTestId('swipeable-drawer')).toBeNull();
   });
 
@@ -239,7 +268,53 @@ describe('DraftsDrawer', () => {
 
   it('does not fetch when drawer is closed', () => {
     mockRequest.mockResolvedValue({ searchClimbs: { climbs: [], hasMore: false } });
-    renderDrawer(false);
+    renderDrawer({ open: false });
     expect(mockRequest).not.toHaveBeenCalled();
+  });
+
+  it('deletes a draft from the row action without selecting it', async () => {
+    const onLoadDraft = vi.fn();
+    const onDraftDeleted = vi.fn();
+    mockRequest
+      .mockResolvedValueOnce({
+        searchClimbs: {
+          climbs: [{ uuid: 'draft-1', name: 'My Draft', frames: 'p1r42', angle: 40 }],
+          hasMore: false,
+        },
+      })
+      .mockResolvedValueOnce({ deleteDraftClimb: true })
+      .mockResolvedValueOnce({ searchClimbs: { climbs: [], hasMore: false } });
+
+    const { queryClient } = renderDrawer({ onLoadDraft, onDraftDeleted });
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    await screen.findByTestId('climb-item-draft-1');
+
+    const deleteButton = screen
+      .getAllByLabelText('Delete draft')
+      .find((element): element is HTMLButtonElement => element.tagName === 'BUTTON');
+    expect(deleteButton).toBeTruthy();
+    fireEvent.click(deleteButton!);
+
+    expect(screen.getByText('Delete this draft?')).toBeTruthy();
+    expect(onLoadDraft).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(mockRequest).toHaveBeenCalledTimes(3);
+    });
+
+    const [, deleteVariables] = mockRequest.mock.calls[1] as [unknown, { uuid: string; boardType: string }];
+    expect(deleteVariables).toEqual({ uuid: 'draft-1', boardType: 'kilter' });
+    expect(onDraftDeleted).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'draft-1' }));
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ['climbDraftsCount', 'kilter', 1] }),
+    );
+    expect(mockShowMessage).toHaveBeenCalledWith('Draft deleted.', 'success');
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('climb-item-draft-1')).toBeNull();
+    });
   });
 });
