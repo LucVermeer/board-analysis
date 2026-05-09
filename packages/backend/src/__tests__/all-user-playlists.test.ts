@@ -361,4 +361,31 @@ describe('allUserPlaylists resolver', () => {
     expect(result.totalCount).toBe(30);
     expect(result.hasMore).toBe(true);
   });
+
+  // The climb-action "Add to playlist" picker fetches the user's full library
+  // in one round-trip with pageSize 200. If the schema cap drops below that,
+  // validation throws and the drawer renders an empty list (only newly created
+  // playlists appear via optimistic cache writes). Pin the contract here.
+  it('accepts pageSize 200 (used by the climb-action picker)', async () => {
+    const ctx = makeCtx();
+
+    const { chain: countTotalChain } = createMockChain([{ count: 1 }]);
+    mockDb.select.mockReturnValueOnce(countTotalChain);
+
+    const { chain: mainChain } = createMockChain([makePlaylistRow({ uuid: 'pl-1' })]);
+    mockDb.select.mockReturnValueOnce(mainChain);
+
+    const { chain: countChain } = createMockChain([{ playlistId: BigInt(1), count: 5 }]);
+    mockDb.select.mockReturnValueOnce(countChain);
+
+    const { chain: followerChain } = createMockChain([]);
+    mockDb.select.mockReturnValueOnce(followerChain);
+
+    const { chain: followedChain } = createMockChain([]);
+    mockDb.select.mockReturnValueOnce(followedChain);
+
+    const result = await playlistQueries.allUserPlaylists(null, { input: { pageSize: 200 } }, ctx);
+
+    expect(result.playlists).toHaveLength(1);
+  });
 });

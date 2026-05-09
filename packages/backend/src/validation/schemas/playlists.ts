@@ -50,7 +50,10 @@ export const GetAllUserPlaylistsInputSchema = z.object({
   boardType: BoardNameSchema.optional(),
   layoutId: z.number().int().positive().optional(),
   page: z.number().int().min(0).optional(),
-  pageSize: z.number().int().min(1).max(100).optional(),
+  // Owned-data query, no abuse vector — the climb-action picker fetches the
+  // user's full library in one round-trip with pageSize 200, so the cap needs
+  // to comfortably exceed that.
+  pageSize: z.number().int().min(1).max(500).optional(),
 });
 
 export const PinPlaylistInputSchema = z.object({
