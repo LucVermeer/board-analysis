@@ -26,6 +26,8 @@ type CollapsibleSectionProps = {
   defaultActiveKey?: string;
   /** When provided, forces this section to be active (e.g. for a guided tour). */
   forcedActiveKey?: string | null;
+  /** Use a denser collapsed layout on short desktop viewports. */
+  compactDesktopGrid?: boolean;
 };
 
 const EXPAND_SCROLL_DELAY_MS = 275;
@@ -62,7 +64,12 @@ function scrollSectionIntoView(sectionEl: HTMLElement): void {
   });
 }
 
-const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ sections, defaultActiveKey, forcedActiveKey }) => {
+const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
+  sections,
+  defaultActiveKey,
+  forcedActiveKey,
+  compactDesktopGrid = false,
+}) => {
   const sectionDefaultActive = sections.find((s) => s.defaultActive);
   const initialActiveKey = sectionDefaultActive?.key ?? defaultActiveKey ?? null;
   const [activeKey, setActiveKey] = useState<string | null>(initialActiveKey);
@@ -132,7 +139,9 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ sections, defau
   };
 
   return (
-    <div className={styles.steppedContainer}>
+    <div
+      className={`${styles.steppedContainer} ${compactDesktopGrid ? styles.steppedContainerCompactDesktop : ''}`}
+    >
       {sections.map((section) => {
         const isActive = effectiveActiveKey === section.key;
         const summaryParts = section.getSummary?.() ?? [];
