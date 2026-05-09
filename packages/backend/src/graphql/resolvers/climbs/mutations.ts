@@ -19,12 +19,15 @@ import {
   findMoonBoardDuplicateMatch,
 } from './moonboard-duplicates';
 import {
+  BoardNameSchema,
+  ExternalUUIDSchema,
   SaveClimbInputSchema,
   SaveMoonBoardClimbInputSchema,
   UpdateClimbInputSchema,
 } from '../../../validation/schemas';
 
 type SaveClimbArgs = { input: unknown };
+type DeleteDraftClimbArgs = { uuid: unknown; boardType: unknown };
 
 function generateClimbUuid(): string {
   // Match Aurora-style uppercase UUID without dashes
@@ -383,5 +386,93 @@ export const climbMutations = {
       publishedAt: nextPublishedAt,
       isDraft: nextIsDraft,
     };
+  },
+
+  /**
+   * Delete an unpublished draft climb owned by the current user. This path is
+   * intentionally narrower than account deletion: published climbs are never
+   * removed here, even if the caller owns them.
+   */
+  deleteDraftClimb: async (
+    _: unknown,
+    { uuid, boardType }: DeleteDraftClimbArgs,
+    ctx: ConnectionContext,
+  ): Promise<boolean> => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 20);
+
+    const validatedUuid = validateInput(ExternalUUIDSchema, uuid, 'uuid');
+    const validatedBoardType = validateInput(BoardNameSchema, boardType, 'boardType');
+
+    await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({
+          uuid: dbSchema.boardClimbs.uuid,
+          userId: dbSchema.boardClimbs.userId,
+          isDraft: dbSchema.boardClimbs.isDraft,
+        })
+        .from(dbSchema.boardClimbs)
+        .where(
+          and(eq(dbSchema.boardClimbs.uuid, validatedUuid), eq(dbSchema.boardClimbs.boardType, validatedBoardType)),
+        )
+        .limit(1);
+
+      if (!existing) {
+        throw new Error('Climb not found');
+      }
+
+      if (existing.userId !== ctx.userId!) {
+        throw new Error('You can only delete your own draft climbs');
+      }
+
+      if (existing.isDraft !== true) {
+        throw new Error('Published climbs cannot be deleted here');
+      }
+
+      await tx
+        .delete(dbSchema.boardClimbStats)
+        .where(
+          and(
+            eq(dbSchema.boardClimbStats.boardType, validatedBoardType),
+            eq(dbSchema.boardClimbStats.climbUuid, validatedUuid),
+          ),
+        );
+
+      await tx
+        .delete(dbSchema.boardClimbStatsHistory)
+        .where(
+          and(
+            eq(dbSchema.boardClimbStatsHistory.boardType, validatedBoardType),
+            eq(dbSchema.boardClimbStatsHistory.climbUuid, validatedUuid),
+          ),
+        );
+
+      await tx
+        .delete(dbSchema.boardBetaLinks)
+        .where(
+          and(
+            eq(dbSchema.boardBetaLinks.boardType, validatedBoardType),
+            eq(dbSchema.boardBetaLinks.climbUuid, validatedUuid),
+          ),
+        );
+
+      const deletedRows = await tx
+        .delete(dbSchema.boardClimbs)
+        .where(
+          and(
+            eq(dbSchema.boardClimbs.uuid, validatedUuid),
+            eq(dbSchema.boardClimbs.boardType, validatedBoardType),
+            eq(dbSchema.boardClimbs.userId, ctx.userId!),
+            eq(dbSchema.boardClimbs.isDraft, true),
+          ),
+        )
+        .returning({ uuid: dbSchema.boardClimbs.uuid });
+
+      if (deletedRows.length === 0) {
+        throw new Error('Draft climb could not be deleted');
+      }
+    });
+
+    return true;
   },
 };

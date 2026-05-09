@@ -8,6 +8,8 @@ const { mockDb, mockPublishSocialEvent, insertCalls } = vi.hoisted(() => {
   const mockDb = {
     select: vi.fn(),
     insert: vi.fn(),
+    delete: vi.fn(),
+    transaction: vi.fn(),
     execute: vi.fn(),
   };
 
@@ -47,7 +49,16 @@ function makeCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext 
 
 function createMockChain(resolveValue: unknown = [], onValues?: (values: unknown) => void): Record<string, unknown> {
   const chain: Record<string, unknown> = {};
-  const methods = ['from', 'where', 'leftJoin', 'limit', 'values', 'onConflictDoNothing', 'onConflictDoUpdate'];
+  const methods = [
+    'from',
+    'where',
+    'leftJoin',
+    'limit',
+    'values',
+    'returning',
+    'onConflictDoNothing',
+    'onConflictDoUpdate',
+  ];
 
   chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(resolveValue).then(resolve);
 
@@ -67,6 +78,9 @@ describe('climb mutations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     insertCalls.length = 0;
+    mockDb.transaction.mockImplementation(async (callback: (tx: typeof mockDb) => Promise<unknown>) =>
+      callback(mockDb),
+    );
   });
 
   it('stores non-draft Aurora climbs as listed', async () => {
@@ -201,5 +215,58 @@ describe('climb mutations', () => {
 
     expect(insertCalls).toHaveLength(0);
     expect(mockPublishSocialEvent).not.toHaveBeenCalled();
+  });
+
+  it('deletes an owned draft climb', async () => {
+    mockDb.select.mockReturnValueOnce(createMockChain([{ uuid: 'draft-1', userId: 'user-123', isDraft: true }]));
+    mockDb.delete.mockReturnValue(createMockChain([{ uuid: 'draft-1' }]));
+
+    const result = await climbMutations.deleteDraftClimb(
+      {},
+      {
+        uuid: 'draft-1',
+        boardType: 'kilter',
+      },
+      makeCtx(),
+    );
+
+    expect(result).toBe(true);
+    expect(mockDb.delete).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects non-owned draft deletion', async () => {
+    mockDb.select.mockReturnValueOnce(createMockChain([{ uuid: 'draft-1', userId: 'other-user', isDraft: true }]));
+    mockDb.delete.mockReturnValue(createMockChain([{ uuid: 'draft-1' }]));
+
+    await expect(
+      climbMutations.deleteDraftClimb(
+        {},
+        {
+          uuid: 'draft-1',
+          boardType: 'kilter',
+        },
+        makeCtx(),
+      ),
+    ).rejects.toThrow('You can only delete your own draft climbs');
+
+    expect(mockDb.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects published climb deletion', async () => {
+    mockDb.select.mockReturnValueOnce(createMockChain([{ uuid: 'published-1', userId: 'user-123', isDraft: false }]));
+    mockDb.delete.mockReturnValue(createMockChain([{ uuid: 'published-1' }]));
+
+    await expect(
+      climbMutations.deleteDraftClimb(
+        {},
+        {
+          uuid: 'published-1',
+          boardType: 'kilter',
+        },
+        makeCtx(),
+      ),
+    ).rejects.toThrow('Published climbs cannot be deleted here');
+
+    expect(mockDb.delete).not.toHaveBeenCalled();
   });
 });

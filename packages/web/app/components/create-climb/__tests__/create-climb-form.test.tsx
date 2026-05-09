@@ -1,16 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CreateClimbForm from '../create-climb-form';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 
 const mockShowMessage = vi.fn();
 const mockRequest = vi.fn();
 const mockOpenAuthModal = vi.fn();
 const mockSetCurrentClimb = vi.fn();
 const mockReplaceQueueItem = vi.fn();
+const mockSaveClimb = vi.fn();
+const mockUpdateClimb = vi.fn();
+const mockLoadAuroraHolds = vi.fn();
+const mockGenerateAuroraFramesString = vi.fn(() => 'test-frames');
 let mockQueueActions: Record<string, unknown> | null = null;
 let mockQueueData: Record<string, unknown> | null = null;
+let mockAuroraCreateState = {
+  isValid: false,
+  totalHolds: 0,
+};
+
+type DraftsDrawerTestProps = {
+  open: boolean;
+  onLoadDraft?: (climb: Climb) => void;
+  onDraftDeleted?: (climb: Climb) => void;
+};
+
+let mockDraftsDrawerProps: DraftsDrawerTestProps | null = null;
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -22,7 +39,7 @@ vi.mock('next-auth/react', () => ({
 }));
 
 vi.mock('../../board-provider/board-provider-context', () => ({
-  useBoardProvider: () => ({ isAuthenticated: true, saveClimb: vi.fn() }),
+  useBoardProvider: () => ({ isAuthenticated: true, saveClimb: mockSaveClimb, updateClimb: mockUpdateClimb }),
 }));
 
 vi.mock('../../board-bluetooth-control/use-board-bluetooth', () => ({
@@ -35,10 +52,11 @@ vi.mock('../use-create-climb', () => ({
     setHoldState: vi.fn(),
     startingCount: 0,
     finishCount: 0,
-    totalHolds: 0,
-    isValid: false,
+    totalHolds: mockAuroraCreateState.totalHolds,
+    isValid: mockAuroraCreateState.isValid,
     resetHolds: vi.fn(),
-    generateFramesString: vi.fn(() => 'test-frames'),
+    generateFramesString: mockGenerateAuroraFramesString,
+    loadHolds: mockLoadAuroraHolds,
   }),
 }));
 
@@ -98,6 +116,13 @@ vi.mock('../../providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: mockShowMessage }),
 }));
 
+vi.mock('../drafts-drawer', () => ({
+  default: (props: DraftsDrawerTestProps) => {
+    mockDraftsDrawerProps = props;
+    return props.open ? <div data-testid="drafts-drawer" /> : null;
+  },
+}));
+
 vi.mock('@/app/lib/climb-search-cache', () => ({
   refreshClimbSearchAfterSave: vi.fn(),
 }));
@@ -122,11 +147,48 @@ function renderComponent() {
   );
 }
 
+const auroraBoardDetails: BoardDetails = {
+  board_name: 'kilter',
+  layout_id: 1,
+  size_id: 2,
+  set_ids: [3, 4],
+  images_to_holds: {},
+  holdsData: [],
+  edge_left: 0,
+  edge_right: 100,
+  edge_bottom: 0,
+  edge_top: 100,
+  boardHeight: 100,
+  boardWidth: 100,
+};
+
+function renderAuroraComponent() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <CreateClimbForm boardType="aurora" angle={40} boardDetails={auroraBoardDetails} />
+    </QueryClientProvider>,
+  );
+}
+
 describe('CreateClimbForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueueActions = null;
     mockQueueData = null;
+    mockDraftsDrawerProps = null;
+    mockAuroraCreateState = {
+      isValid: false,
+      totalHolds: 0,
+    };
+    mockGenerateAuroraFramesString.mockReturnValue('test-frames');
+    mockSaveClimb.mockResolvedValue({ uuid: 'new-draft-1', createdAt: '2026-01-01T00:00:00.000Z', publishedAt: null });
+    mockUpdateClimb.mockResolvedValue({
+      uuid: 'loaded-draft-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      publishedAt: null,
+      isDraft: true,
+    });
   });
 
   it('shows a blocking duplicate error for MoonBoard climbs and disables save', async () => {
@@ -277,5 +339,59 @@ describe('CreateClimbForm', () => {
         );
       });
     });
+  });
+
+  it('detaches a loaded draft when that draft is deleted before the next save', async () => {
+    mockAuroraCreateState = {
+      isValid: true,
+      totalHolds: 2,
+    };
+    mockRequest.mockResolvedValue({ searchClimbs: { totalCount: 1 } });
+
+    renderAuroraComponent();
+
+    await waitFor(() => {
+      expect(mockDraftsDrawerProps?.onLoadDraft).toBeTruthy();
+    });
+
+    const loadedDraft = {
+      uuid: 'loaded-draft-1',
+      name: 'Loaded Draft',
+      description: 'Saved beta',
+      frames: '',
+      angle: 40,
+      is_draft: true,
+      created_at: '2026-01-01T00:00:00.000Z',
+      published_at: null,
+    } as Climb;
+
+    await act(async () => {
+      mockDraftsDrawerProps?.onLoadDraft?.(loadedDraft);
+    });
+
+    await act(async () => {
+      mockDraftsDrawerProps?.onDraftDeleted?.(loadedDraft);
+    });
+
+    const saveButton = screen
+      .getAllByLabelText('Save climb')
+      .find((element): element is HTMLButtonElement => element.tagName === 'BUTTON');
+    expect(saveButton).toBeTruthy();
+
+    fireEvent.click(saveButton!);
+
+    await waitFor(() => {
+      expect(mockSaveClimb).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockUpdateClimb).not.toHaveBeenCalled();
+    expect(mockSaveClimb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Loaded Draft',
+        description: 'Saved beta',
+        frames: 'test-frames',
+        is_draft: true,
+      }),
+    );
   });
 });

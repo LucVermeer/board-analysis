@@ -436,6 +436,14 @@
     "empty": {
       "title": "No drafts yet",
       "subtitle": "Save a climb as a draft to pick it up later."
+    },
+    "delete": {
+      "tooltip": "Delete draft",
+      "title": "Delete this draft?",
+      "description": "This removes the saved draft. Published climbs stay untouched.",
+      "confirm": "Delete",
+      "success": "Draft deleted.",
+      "error": "Couldn't delete that draft. Try again."
     }
   },
   "holdTypePicker": {

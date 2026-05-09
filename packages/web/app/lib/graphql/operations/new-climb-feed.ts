@@ -123,6 +123,12 @@ export const UPDATE_CLIMB_MUTATION = gql`
   }
 `;
 
+export const DELETE_DRAFT_CLIMB_MUTATION = gql`
+  mutation DeleteDraftClimb($uuid: ID!, $boardType: String!) {
+    deleteDraftClimb(uuid: $uuid, boardType: $boardType)
+  }
+`;
+
 export type GetNewClimbFeedVariables = {
   input: NewClimbFeedInput;
 };
@@ -185,4 +191,13 @@ export type UpdateClimbMutationVariables = {
 
 export type UpdateClimbMutationResponse = {
   updateClimb: UpdateClimbResult;
+};
+
+export type DeleteDraftClimbMutationVariables = {
+  uuid: string;
+  boardType: string;
+};
+
+export type DeleteDraftClimbMutationResponse = {
+  deleteDraftClimb: boolean;
 };
