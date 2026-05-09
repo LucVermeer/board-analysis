@@ -267,6 +267,29 @@ describe('ClimbsList virtualization', () => {
     const items = screen.getAllByTestId('climb-list-item');
     expect(items).toHaveLength(5);
   });
+
+  it('scrolls to the top when a new search replaces the climb list', () => {
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      value: scrollTo,
+    });
+
+    const props = {
+      boardDetails: makeBoardDetails(),
+      isFetching: false,
+      hasMore: false,
+      onLoadMore: vi.fn(),
+    };
+
+    const { rerender } = render(<ClimbsList {...props} climbs={allClimbs.slice(0, 3)} />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    rerender(<ClimbsList {...props} climbs={allClimbs.slice(50, 53)} />);
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'instant' });
+  });
 });
 
 describe('ClimbsList thumbnail vs row click', () => {
