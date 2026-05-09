@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import CollapsibleSection, { type CollapsibleSectionConfig } from '../collapsible-section';
+
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+let scrollIntoViewMock: ReturnType<typeof vi.fn>;
 
 function makeSections(): CollapsibleSectionConfig[] {
   return [
@@ -30,7 +33,44 @@ function makeSections(): CollapsibleSectionConfig[] {
   ];
 }
 
+function makeRect(top: number): DOMRect {
+  return {
+    x: 0,
+    y: top,
+    top,
+    left: 0,
+    right: 0,
+    bottom: top,
+    width: 0,
+    height: 0,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
 describe('CollapsibleSection', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    scrollIntoViewMock = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: originalScrollIntoView,
+    });
+  });
+
   describe('uncontrolled mode (no forcedActiveKey)', () => {
     it('starts with no section active when there is no defaultActive', () => {
       render(<CollapsibleSection sections={makeSections()} />);
@@ -44,6 +84,38 @@ describe('CollapsibleSection', () => {
       render(<CollapsibleSection sections={makeSections()} />);
       fireEvent.click(screen.getByText('Invite'));
       expect(screen.getByText('Invite others')).toBeDefined();
+    });
+
+    it('scrolls a user-opened section to the top of the nearest scroll container', () => {
+      render(
+        <div data-testid="scroll-parent" style={{ overflowY: 'auto' }}>
+          <CollapsibleSection sections={makeSections()} />
+        </div>,
+      );
+
+      const scrollParent = screen.getByTestId('scroll-parent') as HTMLElement;
+      const scrollToMock = vi.fn();
+      Object.defineProperty(scrollParent, 'scrollHeight', { configurable: true, value: 1000 });
+      Object.defineProperty(scrollParent, 'clientHeight', { configurable: true, value: 200 });
+      Object.defineProperty(scrollParent, 'scrollTop', { configurable: true, value: 20 });
+      Object.defineProperty(scrollParent, 'scrollTo', { configurable: true, value: scrollToMock });
+      scrollParent.getBoundingClientRect = vi.fn(() => makeRect(10));
+
+      const activityCard = screen.getByText('Activity').closest('[class*="sectionCard"]') as HTMLElement;
+      activityCard.getBoundingClientRect = vi.fn(() => makeRect(210));
+
+      fireEvent.click(screen.getByText('Activity'));
+
+      expect(screen.getByText('Recent activity')).toBeDefined();
+      expect(scrollToMock).toHaveBeenCalledTimes(1);
+      expect(scrollToMock).toHaveBeenCalledWith({
+        top: 220,
+        behavior: 'smooth',
+      });
+      expect(scrollIntoViewMock).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(275);
+      expect(scrollToMock).toHaveBeenCalledTimes(2);
     });
 
     it('clicking the title of an active section collapses it', () => {

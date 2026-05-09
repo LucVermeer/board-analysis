@@ -28,10 +28,46 @@ type CollapsibleSectionProps = {
   forcedActiveKey?: string | null;
 };
 
+const EXPAND_SCROLL_DELAY_MS = 275;
+
+function findScrollableParent(element: HTMLElement): HTMLElement | null {
+  let parent = element.parentElement;
+  let fallback: HTMLElement | null = null;
+  while (parent) {
+    const { overflowY } = window.getComputedStyle(parent);
+    const canScroll = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+    if (canScroll) {
+      if (parent.scrollHeight > parent.clientHeight) {
+        return parent;
+      }
+      fallback ??= parent;
+    }
+    parent = parent.parentElement;
+  }
+  return fallback;
+}
+
+function scrollSectionIntoView(sectionEl: HTMLElement): void {
+  const scrollParent = findScrollableParent(sectionEl);
+  if (!scrollParent) {
+    sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
+    return;
+  }
+
+  const sectionTop = sectionEl.getBoundingClientRect().top;
+  const parentTop = scrollParent.getBoundingClientRect().top;
+  scrollParent.scrollTo({
+    top: scrollParent.scrollTop + sectionTop - parentTop,
+    behavior: 'smooth',
+  });
+}
+
 const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ sections, defaultActiveKey, forcedActiveKey }) => {
   const sectionDefaultActive = sections.find((s) => s.defaultActive);
   const initialActiveKey = sectionDefaultActive?.key ?? defaultActiveKey ?? null;
   const [activeKey, setActiveKey] = useState<string | null>(initialActiveKey);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pendingScrollKeyRef = useRef<string | null>(null);
   // Preserve the initial default so we can restore it if we transition back
   // from controlled (forcedActiveKey set) to uncontrolled mode.
   const initialActiveKeyRef = useRef(initialActiveKey);
@@ -62,6 +98,39 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ sections, defau
   const effectiveActiveKey = forcedActiveKey !== undefined ? forcedActiveKey : activeKey;
   const interactionDisabled = forcedActiveKey !== undefined;
 
+  useEffect(() => {
+    const key = pendingScrollKeyRef.current;
+    if (!key || effectiveActiveKey !== key) return;
+    const sectionEl = sectionRefs.current[key];
+    if (!sectionEl) return;
+
+    let timeout: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      scrollSectionIntoView(sectionEl);
+      timeout = window.setTimeout(() => {
+        scrollSectionIntoView(sectionEl);
+        if (pendingScrollKeyRef.current === key) {
+          pendingScrollKeyRef.current = null;
+        }
+      }, EXPAND_SCROLL_DELAY_MS);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timeout !== undefined) {
+        window.clearTimeout(timeout);
+      }
+      if (pendingScrollKeyRef.current === key) {
+        pendingScrollKeyRef.current = null;
+      }
+    };
+  }, [effectiveActiveKey]);
+
+  const openSection = (key: string) => {
+    pendingScrollKeyRef.current = key;
+    setActiveKey(key);
+  };
+
   return (
     <div className={styles.steppedContainer}>
       {sections.map((section) => {
@@ -74,8 +143,11 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ sections, defau
         return (
           <div
             key={section.key}
+            ref={(node) => {
+              sectionRefs.current[section.key] = node;
+            }}
             className={`${styles.sectionCard} ${isActive ? styles.sectionCardActive : ''}`}
-            {...(!isActive && !interactionDisabled ? { onClick: () => setActiveKey(section.key) } : {})}
+            {...(!isActive && !interactionDisabled ? { onClick: () => openSection(section.key) } : {})}
           >
             <div
               className={`${styles.collapsedRow} ${isActive ? styles.collapsedRowActive : ''}`}
