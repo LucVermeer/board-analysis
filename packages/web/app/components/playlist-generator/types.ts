@@ -109,7 +109,7 @@ export const DEFAULT_VOLUME_OPTIONS: Omit<VolumeOptions, 'targetGrade'> = {
   mainSetVariability: 0,
   climbBias: 'unfamiliar',
   minAscents: 5,
-  minRating: 1.5,
+  minRating: 2,
   onlyTallClimbs: false,
 };
 
@@ -120,7 +120,7 @@ export const DEFAULT_PYRAMID_OPTIONS: Omit<PyramidOptions, 'targetGrade'> = {
   climbsPerStep: 1,
   climbBias: 'unfamiliar',
   minAscents: 5,
-  minRating: 1.5,
+  minRating: 2,
   onlyTallClimbs: false,
 };
 
@@ -131,7 +131,7 @@ export const DEFAULT_LADDER_OPTIONS: Omit<LadderOptions, 'targetGrade'> = {
   climbsPerStep: 2,
   climbBias: 'unfamiliar',
   minAscents: 5,
-  minRating: 1.5,
+  minRating: 2,
   onlyTallClimbs: false,
 };
 
@@ -141,7 +141,7 @@ export const DEFAULT_GRADE_FOCUS_OPTIONS: Omit<GradeFocusOptions, 'targetGrade'>
   numberOfClimbs: 15,
   climbBias: 'unfamiliar',
   minAscents: 5,
-  minRating: 1.5,
+  minRating: 2,
   onlyTallClimbs: false,
 };
 

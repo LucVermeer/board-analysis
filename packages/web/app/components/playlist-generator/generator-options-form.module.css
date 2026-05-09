@@ -89,14 +89,6 @@
   opacity: 0.4;
 }
 
-.inputNumber {
-  width: 80px;
-}
-
-.inputNumber :global(.MuiInputBase-input) {
-  text-align: right;
-}
-
 .resetContainer {
   display: flex;
   justify-content: center;

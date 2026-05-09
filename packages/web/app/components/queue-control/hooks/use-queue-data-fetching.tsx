@@ -11,6 +11,7 @@ import {
   type ClimbSearchResponse,
   type ClimbSearchCountResponse,
 } from '@/app/lib/graphql/operations/climb-search';
+import { normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { USER_SPECIFIC_SEARCH_PARAMS } from '@boardsesh/shared-schema';
 
@@ -83,6 +84,7 @@ export const useQueueDataFetching = ({
       minGrade: searchParams.minGrade || undefined,
       maxGrade: searchParams.maxGrade || undefined,
       minAscents: searchParams.minAscents || undefined,
+      minRating: normalizeMinRatingFilter(searchParams.minRating) || undefined,
       sortBy: searchParams.sortBy || 'ascents',
       sortOrder: searchParams.sortOrder || 'desc',
       name: searchParams.name || undefined,
@@ -161,6 +163,7 @@ export const useQueueDataFetching = ({
       minGrade: countSearchParams.minGrade || undefined,
       maxGrade: countSearchParams.maxGrade || undefined,
       minAscents: countSearchParams.minAscents || undefined,
+      minRating: normalizeMinRatingFilter(countSearchParams.minRating) || undefined,
       sortBy: countSearchParams.sortBy || 'ascents',
       sortOrder: countSearchParams.sortOrder || 'desc',
       name: countSearchParams.name || undefined,

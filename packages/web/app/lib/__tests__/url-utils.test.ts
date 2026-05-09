@@ -158,6 +158,15 @@ describe('searchParamsToUrlParams', () => {
     expect(result.toString()).toBe('');
   });
 
+  it('should normalize decimal minRating values to whole-star thresholds', () => {
+    const result = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      minRating: 2.5,
+    });
+
+    expect(result.get('minRating')).toBe('3');
+  });
+
   it('should treat undefined non-numeric fields as defaults without throwing', () => {
     const corrupt = {
       ...DEFAULT_SEARCH_PARAMS,
@@ -235,6 +244,15 @@ describe('parsedRouteSearchParamsToSearchParams', () => {
     expect(result.pageSize).toBe(50);
     expect(typeof result.minGrade).toBe('number');
     expect(typeof result.maxGrade).toBe('number');
+  });
+
+  it('should normalize legacy decimal minRating route params upward', () => {
+    const result = parsedRouteSearchParamsToSearchParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      minRating: '2.5' as unknown as number,
+    });
+
+    expect(result.minRating).toBe(3);
   });
 
   it('should use defaults when values are undefined', () => {
@@ -375,6 +393,11 @@ describe('urlParamsToSearchParams', () => {
       142: { ANY: 'include' },
       205: { STARTING: 'exclude', FOOT: 'include' },
     });
+  });
+
+  it('should normalize legacy decimal minRating URL params upward', () => {
+    const result = urlParamsToSearchParams(new URLSearchParams({ minRating: '2.5' }));
+    expect(result.minRating).toBe(3);
   });
 
   it('should accept legacy single-value hold params for backward compat', () => {

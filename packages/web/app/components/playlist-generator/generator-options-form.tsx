@@ -1,18 +1,22 @@
 'use client';
 
 import React from 'react';
+import MuiBox from '@mui/material/Box';
 import MuiSelect from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import MuiSwitch from '@mui/material/Switch';
-import TextField from '@mui/material/TextField';
 import MuiTooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import MuiButton from '@mui/material/Button';
+import type { SxProps, Theme } from '@mui/material/styles';
 import { RemoveOutlined, AddOutlined, RefreshOutlined } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { getGradesForBoard } from '@/app/lib/board-data';
+import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
+import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import type { BoardDetails } from '@/app/lib/types';
+import { getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
 import {
   type WorkoutType,
   type WarmUpType,
@@ -32,6 +36,16 @@ import {
 import styles from './generator-options-form.module.css';
 
 import { KILTER_HOMEWALL_LAYOUT_ID } from '@/app/lib/board-constants';
+
+const qualityBucketRowSx: SxProps<Theme> = {
+  alignItems: 'stretch',
+  borderBottom: 1,
+  borderColor: 'divider',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  py: 2,
+};
 
 type GeneratorOptionsFormProps = {
   workoutType: WorkoutType;
@@ -165,57 +179,62 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   );
 
   // Quality filters section
-  const renderQualityFilters = () => (
-    <>
-      <div className={styles.formRow}>
-        <Typography variant="body2" component="span" className={styles.label}>
-          {t('generator.options.minAscents')}
-        </Typography>
-        <TextField
-          type="number"
-          size="small"
-          value={options.minAscents}
-          onChange={(e) => updateOption('minAscents', Number(e.target.value) || 0)}
-          slotProps={{ htmlInput: { min: 0, max: 1000 } }}
-          className={styles.inputNumber}
-        />
-      </div>
+  const renderQualityFilters = () => {
+    const minRatingPickerValue = getMinRatingPickerValue(options.minRating);
 
-      <div className={styles.formRow}>
-        <Typography variant="body2" component="span" className={styles.label}>
-          {t('generator.options.minRating')}
-        </Typography>
-        <TextField
-          type="number"
-          size="small"
-          value={options.minRating}
-          onChange={(e) => updateOption('minRating', Number(e.target.value) || 0)}
-          slotProps={{ htmlInput: { min: 0, max: 3, step: 0.5 } }}
-          className={styles.inputNumber}
-        />
-      </div>
+    return (
+      <>
+        <MuiBox sx={qualityBucketRowSx}>
+          <Typography variant="body2" component="span" className={styles.label}>
+            {t('generator.options.minAscents')}
+          </Typography>
+          <MinAscentsBucketPicker
+            value={options.minAscents}
+            onChange={(minAscents) => updateOption('minAscents', minAscents)}
+            ariaLabel={t('generator.options.minAscents')}
+            getOptionLabel={(minAscents) =>
+              minAscents === 0
+                ? t('generator.options.any')
+                : t('generator.options.minAscentsOption', { count: minAscents })
+            }
+          />
+        </MuiBox>
 
-      {/* Climb Bias */}
-      {renderSelect<ClimbBias>(t('generator.options.climbBias'), options.climbBias, climbBiasOptions, (v) =>
-        updateOption('climbBias', v),
-      )}
-
-      {/* Tall Climbs Only - only for Kilter Homewall large size */}
-      {showTallClimbsFilter && (
         <div className={styles.formRow}>
-          <MuiTooltip title={t('generator.options.tallClimbsTooltip')}>
-            <Typography variant="body2" component="span" className={styles.label}>
-              {t('generator.options.tallClimbsLabel')}
-            </Typography>
-          </MuiTooltip>
-          <MuiSwitch
-            checked={options.onlyTallClimbs}
-            onChange={(_, checked) => updateOption('onlyTallClimbs', checked)}
+          <Typography variant="body2" component="span" className={styles.label}>
+            {t('generator.options.minRating')}
+          </Typography>
+          <InlineStarPicker
+            quality={minRatingPickerValue}
+            onSelect={(value) => updateOption('minRating', value ?? 0)}
+            ariaLabel={t('generator.options.minRating')}
+            clearLabel={t('generator.options.any')}
+            getStarLabel={(rating) => t('generator.options.minRatingOption', { count: rating })}
           />
         </div>
-      )}
-    </>
-  );
+
+        {/* Climb Bias */}
+        {renderSelect<ClimbBias>(t('generator.options.climbBias'), options.climbBias, climbBiasOptions, (v) =>
+          updateOption('climbBias', v),
+        )}
+
+        {/* Tall Climbs Only - only for Kilter Homewall large size */}
+        {showTallClimbsFilter && (
+          <div className={styles.formRow}>
+            <MuiTooltip title={t('generator.options.tallClimbsTooltip')}>
+              <Typography variant="body2" component="span" className={styles.label}>
+                {t('generator.options.tallClimbsLabel')}
+              </Typography>
+            </MuiTooltip>
+            <MuiSwitch
+              checked={options.onlyTallClimbs}
+              onChange={(_, checked) => updateOption('onlyTallClimbs', checked)}
+            />
+          </div>
+        )}
+      </>
+    );
+  };
 
   // Volume-specific options
   const renderVolumeOptions = () => {

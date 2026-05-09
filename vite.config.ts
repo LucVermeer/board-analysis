@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite-plus';
 
+const shellQuote = (filePath: string) => `'${filePath.replaceAll("'", "'\\''")}'`;
+const isGeneratedFile = (filePath: string) => filePath.includes('/generated/');
+
 export default defineConfig({
   fmt: {
     singleQuote: true,
@@ -24,7 +27,10 @@ export default defineConfig({
     ],
   },
   staged: {
-    '*.{ts,tsx,js,mjs,cjs}': 'vp check --fix',
+    '*.{ts,tsx,js,mjs,cjs}': (stagedFileNames) => {
+      const lintableFileNames = stagedFileNames.filter((fileName) => !isGeneratedFile(fileName));
+      return lintableFileNames.length > 0 ? `vp check --fix ${lintableFileNames.map(shellQuote).join(' ')}` : [];
+    },
   },
   run: {
     tasks: {

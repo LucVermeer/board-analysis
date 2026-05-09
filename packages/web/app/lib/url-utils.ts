@@ -16,6 +16,7 @@ import type {
 import { BOARD_NAME_PREFIX_REGEX } from '@/app/lib/board-constants';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { MOONBOARD_LAYOUTS } from '@/app/lib/moonboard-config';
+import { normalizeMinAscentsFilter, normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
 import { PAGE_LIMIT } from '../components/board-page/constants';
 
 // ---------- Shared URL query param helpers ----------
@@ -77,8 +78,8 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const gradeAccuracy = input.gradeAccuracy ?? DEFAULT_SEARCH_PARAMS.gradeAccuracy;
   const maxGrade = input.maxGrade ?? DEFAULT_SEARCH_PARAMS.maxGrade;
   const minGrade = input.minGrade ?? DEFAULT_SEARCH_PARAMS.minGrade;
-  const minAscents = input.minAscents ?? DEFAULT_SEARCH_PARAMS.minAscents;
-  const minRating = input.minRating ?? DEFAULT_SEARCH_PARAMS.minRating;
+  const minAscents = normalizeMinAscentsFilter(input.minAscents ?? DEFAULT_SEARCH_PARAMS.minAscents);
+  const minRating = normalizeMinRatingFilter(input.minRating ?? DEFAULT_SEARCH_PARAMS.minRating);
   const sortBy = input.sortBy ?? DEFAULT_SEARCH_PARAMS.sortBy;
   const sortOrder = input.sortOrder ?? DEFAULT_SEARCH_PARAMS.sortOrder;
   const name = input.name ?? DEFAULT_SEARCH_PARAMS.name;
@@ -268,9 +269,9 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     ...DEFAULT_SEARCH_PARAMS,
     gradeAccuracy: Number(urlParams.get('gradeAccuracy') ?? DEFAULT_SEARCH_PARAMS.gradeAccuracy),
     maxGrade: Number(urlParams.get('maxGrade') ?? DEFAULT_SEARCH_PARAMS.maxGrade),
-    minAscents: Number(urlParams.get('minAscents') ?? DEFAULT_SEARCH_PARAMS.minAscents),
+    minAscents: normalizeMinAscentsFilter(Number(urlParams.get('minAscents') ?? DEFAULT_SEARCH_PARAMS.minAscents)),
     minGrade: Number(urlParams.get('minGrade') ?? DEFAULT_SEARCH_PARAMS.minGrade),
-    minRating: Number(urlParams.get('minRating') ?? DEFAULT_SEARCH_PARAMS.minRating),
+    minRating: normalizeMinRatingFilter(Number(urlParams.get('minRating') ?? DEFAULT_SEARCH_PARAMS.minRating)),
     sortBy: (urlParams.get('sortBy') ?? DEFAULT_SEARCH_PARAMS.sortBy) as
       | 'ascents'
       | 'difficulty'
@@ -338,9 +339,9 @@ export const parsedRouteSearchParamsToSearchParams = (urlParams: SearchRequestPa
     settername,
     gradeAccuracy: Number(urlParams.gradeAccuracy ?? DEFAULT_SEARCH_PARAMS.gradeAccuracy),
     maxGrade: Number(urlParams.maxGrade ?? DEFAULT_SEARCH_PARAMS.maxGrade),
-    minAscents: Number(urlParams.minAscents ?? DEFAULT_SEARCH_PARAMS.minAscents),
+    minAscents: normalizeMinAscentsFilter(Number(urlParams.minAscents ?? DEFAULT_SEARCH_PARAMS.minAscents)),
     minGrade: Number(urlParams.minGrade ?? DEFAULT_SEARCH_PARAMS.minGrade),
-    minRating: Number(urlParams.minRating ?? DEFAULT_SEARCH_PARAMS.minRating),
+    minRating: normalizeMinRatingFilter(Number(urlParams.minRating ?? DEFAULT_SEARCH_PARAMS.minRating)),
     page: Number(urlParams.page ?? DEFAULT_SEARCH_PARAMS.page),
     pageSize: Number(urlParams.pageSize ?? DEFAULT_SEARCH_PARAMS.pageSize),
     // Next.js route search params come as strings, so coerce to boolean

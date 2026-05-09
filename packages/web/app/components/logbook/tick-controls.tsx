@@ -267,37 +267,40 @@ export const TickControls: React.FC<TickControlsProps> = ({
 export const InlineStarPicker: React.FC<{
   quality: number | null;
   onSelect: (value: number | null) => void;
-}> = ({ quality, onSelect }) => {
+  ariaLabel?: string;
+  clearLabel?: string;
+  getStarLabel?: (value: number) => string;
+}> = ({ quality, onSelect, ariaLabel, clearLabel, getStarLabel }) => {
   const { t } = useTranslation('climbs');
   return (
     <div
       className={`${styles.pickerRow} ${styles.pickerRowEnd}`}
       role="listbox"
-      aria-label={t('tick.controls.starRating')}
+      aria-label={ariaLabel ?? t('tick.controls.starRating')}
     >
       <ButtonBase
         onClick={() => onSelect(null)}
         className={`${styles.pickerItem} ${quality === null ? styles.pickerItemSelected : ''}`}
-        aria-label={t('tick.controls.noRating')}
+        aria-label={clearLabel ?? t('tick.controls.noRating')}
         aria-selected={quality === null}
         role="option"
       >
         <span className={styles.pickerClear}>—</span>
       </ButtonBase>
-      {[1, 2, 3, 4, 5].map((n) => (
+      {[1, 2, 3, 4, 5].map((rating) => (
         <ButtonBase
-          key={n}
-          onClick={() => onSelect(n)}
-          className={`${styles.pickerItem} ${n === quality ? styles.pickerItemSelected : ''}`}
-          aria-label={`${n} star${n > 1 ? 's' : ''}`}
-          aria-selected={n === quality}
+          key={rating}
+          onClick={() => onSelect(rating)}
+          className={`${styles.pickerItem} ${rating === quality ? styles.pickerItemSelected : ''}`}
+          aria-label={getStarLabel?.(rating) ?? t('tick.controls.starOption', { count: rating })}
+          aria-selected={rating === quality}
           role="option"
         >
           <StarIcon
             sx={{
               fontSize: 22,
-              color: n <= (quality ?? 0) ? themeTokens.colors.amber : 'inherit',
-              opacity: n <= (quality ?? 0) ? 1 : 0.3,
+              color: rating <= (quality ?? 0) ? themeTokens.colors.amber : 'inherit',
+              opacity: rating <= (quality ?? 0) ? 1 : 0.3,
             }}
           />
         </ButtonBase>

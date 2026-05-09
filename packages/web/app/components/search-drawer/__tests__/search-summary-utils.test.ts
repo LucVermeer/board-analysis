@@ -125,6 +125,10 @@ describe('getQualityPanelSummary vs Status (no duplication)', () => {
     expect(getQualityPanelSummary(makeParams({ minAscents: 1 }))).toContain('1+ ascents');
   });
 
+  it('rounds legacy decimal minRating summaries up to whole stars', () => {
+    expect(getQualityPanelSummary(makeParams({ minRating: 2.5 }))).toContain('3+ rating');
+  });
+
   it('does not include "N+ ascents" when minAscents is 2 (Established handles it)', () => {
     const parts = getQualityPanelSummary(makeParams({ minAscents: 2 }));
     expect(parts.find((p) => p.includes('ascents'))).toBeUndefined();
