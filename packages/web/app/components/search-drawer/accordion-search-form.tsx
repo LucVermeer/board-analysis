@@ -202,7 +202,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               onChange={(minAscents) => updateFilters({ minAscents })}
               ariaLabel={t('search.fields.minAscents')}
               getOptionLabel={(minAscents) =>
-                t('search.fields.minAscentsOption', { count: formatMinAscentsFilterCount(minAscents) })
+                t('search.fields.minAscentsOption', { value: formatMinAscentsFilterCount(minAscents) })
               }
             />
           </div>

@@ -193,7 +193,7 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
             onChange={(minAscents) => updateOption('minAscents', minAscents)}
             ariaLabel={t('generator.options.minAscents')}
             getOptionLabel={(minAscents) =>
-              t('generator.options.minAscentsOption', { count: formatMinAscentsFilterCount(minAscents) })
+              t('generator.options.minAscentsOption', { value: formatMinAscentsFilterCount(minAscents) })
             }
           />
         </MuiBox>
