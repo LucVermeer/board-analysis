@@ -1,29 +1,38 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { onCLS, onFCP, onINP, onLCP, onTTFB, type Metric } from 'web-vitals';
-import { pageview, track } from '@/app/lib/analytics';
-
-function reportVital(metric: Metric): void {
-  track('$web_vitals', {
-    metric: metric.name,
-    value: metric.value,
-    rating: metric.rating,
-    delta: metric.delta,
-    id: metric.id,
-    navigationType: metric.navigationType,
-  });
-}
+import { capturePosthog, pageview } from '@/app/lib/analytics';
+import { isAdminAnalyticsUrl } from '@/app/lib/analytics-paths';
 
 export default function AnalyticsClient() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const pathnameRef = useRef<string | null>(null);
   const vitalsRegistered = useRef(false);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     if (vitalsRegistered.current) return;
     vitalsRegistered.current = true;
+
+    const reportVital = (metric: Metric): void => {
+      const currentPath = pathnameRef.current;
+      if (currentPath && isAdminAnalyticsUrl(currentPath)) return;
+
+      capturePosthog('$web_vitals', {
+        metric: metric.name,
+        value: metric.value,
+        rating: metric.rating,
+        delta: metric.delta,
+        id: metric.id,
+        navigationType: metric.navigationType ?? null,
+      });
+    };
+
     onCLS(reportVital);
     onFCP(reportVital);
     onINP(reportVital);
@@ -33,10 +42,9 @@ export default function AnalyticsClient() {
 
   useEffect(() => {
     if (!pathname) return;
-    const search = searchParams?.toString();
-    const url = search ? `${pathname}?${search}` : pathname;
-    pageview(url);
-  }, [pathname, searchParams]);
+    if (isAdminAnalyticsUrl(pathname)) return;
+    pageview(pathname);
+  }, [pathname]);
 
   return null;
 }

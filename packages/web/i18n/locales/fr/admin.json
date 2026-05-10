@@ -24,7 +24,7 @@
   "retention": {
     "heading": "Rétention utilisateur",
     "subheading": "Parmi les utilisateurs inscrits pendant la semaine W, combien reviennent dans les N jours, à la fois pour les ticks (blocs enregistrés) et pour toute activité dans l'application.",
-    "definitions": "Cohorte = semaine d'inscription (UTC). Ticks = au moins un bloc enregistré dans Boardsesh (ticks importés depuis Aurora exclus). Toute activité = tick, hôte ou participation à une session, favori, playlist (créée ou épinglée), abonnement (utilisateur, ouvreur ou playlist), abonnement nouveaux blocs, commentaire, vote, vote de proposition ou envoi de feedback. D7 = actif dans les 7 jours suivant l'inscription. Les cohortes plus récentes que la fenêtre affichent —.",
+    "definitions": "Cohorte = semaine d'inscription (UTC). Ticks = au moins un bloc enregistré dans Boardsesh (ticks importés depuis Aurora exclus). Toute activité = tick, hôte ou participation à une session, favori, playlist créée ou épinglée, abonnement utilisateur, ouvreur ou playlist, abonnement aux nouveaux blocs, commentaire, vote, vote de proposition ou feedback. D7 = actif dans les 7 jours suivant l'inscription. Les cohortes plus récentes que la fenêtre affichent —.",
     "back": "Retour à l'administration",
     "table": {
       "cohortWeek": "Semaine de cohorte",

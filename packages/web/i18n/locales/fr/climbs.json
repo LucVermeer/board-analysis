@@ -441,6 +441,14 @@
     "empty": {
       "title": "Pas encore de brouillons",
       "subtitle": "Gardez un bloc en brouillon pour le reprendre plus tard."
+    },
+    "delete": {
+      "tooltip": "Supprimer le brouillon",
+      "title": "Supprimer ce brouillon ?",
+      "description": "Cela supprime le brouillon enregistré. Les blocs publiés restent inchangés.",
+      "confirm": "Supprimer",
+      "success": "Brouillon supprimé.",
+      "error": "Impossible de supprimer ce brouillon. Réessayez."
     }
   },
   "holdTypePicker": {
