@@ -45,6 +45,8 @@ export default async function PlaylistDetailPage(props: { params: Promise<Playli
     const lcpPreloadUrl = getPlaylistLcpPreloadUrl({
       boardType: parsed.board_name,
       layoutId: parsed.layout_id,
+      sizeId: parsed.size_id,
+      setIds: parsed.set_ids,
     });
 
     return (
