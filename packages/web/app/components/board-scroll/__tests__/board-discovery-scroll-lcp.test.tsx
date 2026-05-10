@@ -83,9 +83,7 @@ vi.mock('@/app/hooks/use-my-boards', () => ({
 vi.mock('@/app/hooks/use-bluetooth-scan', () => ({
   useBluetoothScan: () => ({
     devices: [],
-    resolvedBoards: new Map(
-      mockBleOnlyBoards.map((board) => [board.uuid, { kind: 'saved' as const, board }]),
-    ),
+    resolvedBoards: new Map(mockBleOnlyBoards.map((board) => [board.uuid, { kind: 'saved' as const, board }])),
     status: 'idle',
     startScan: vi.fn(),
   }),
