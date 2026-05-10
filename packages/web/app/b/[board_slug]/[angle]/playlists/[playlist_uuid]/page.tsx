@@ -9,6 +9,7 @@ import { generatePlaylistMetadata } from '@/app/lib/seo/playlist-metadata';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import I18nProvider from '@/app/components/providers/i18n-provider';
 import PlaylistDetailContent from '@/app/playlists/[playlist_uuid]/playlist-detail-content';
+import { getPlaylistLcpPreloadUrl } from '@/app/lib/lcp-preload-url';
 import styles from '@/app/components/library/playlist-view.module.css';
 
 type PlaylistDetailPageProps = {
@@ -34,8 +35,14 @@ export default async function BoardSlugPlaylistDetailPage(props: PlaylistDetailP
   const locale = await getLocale();
   const initialMyBoards = authToken ? await serverMyBoards(authToken) : null;
 
+  const lcpPreloadUrl = getPlaylistLcpPreloadUrl({
+    boardType: board.boardType,
+    layoutId: board.layoutId,
+  });
+
   return (
     <I18nProvider locale={locale} namespaces={['playlists']}>
+      {lcpPreloadUrl && <link rel="preload" as="image" href={lcpPreloadUrl} fetchPriority="high" />}
       <div className={styles.pageContainer}>
         <PlaylistDetailContent
           playlistUuid={params.playlist_uuid}

@@ -10,6 +10,7 @@ import { getServerTranslation } from '@/app/lib/i18n/server';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import I18nProvider from '@/app/components/providers/i18n-provider';
 import PlaylistDetailContent from '@/app/playlists/[playlist_uuid]/playlist-detail-content';
+import { getPlaylistLcpPreloadUrl } from '@/app/lib/lcp-preload-url';
 import styles from '@/app/components/library/playlist-view.module.css';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -38,8 +39,17 @@ export default async function PlaylistDetailPage(props: { params: Promise<Playli
     const locale = await getLocale();
     const initialMyBoards = authToken ? await serverMyBoards(authToken) : null;
 
+    // Preload the LCP board thumbnail. The route params alone are enough to
+    // derive the URL — no playlist fetch required — so the browser can start
+    // the request before the client chunk hydrates.
+    const lcpPreloadUrl = getPlaylistLcpPreloadUrl({
+      boardType: parsed.board_name,
+      layoutId: parsed.layout_id,
+    });
+
     return (
       <I18nProvider locale={locale} namespaces={['playlists']}>
+        {lcpPreloadUrl && <link rel="preload" as="image" href={lcpPreloadUrl} fetchPriority="high" />}
         <div className={styles.pageContainer}>
           <PlaylistDetailContent
             playlistUuid={params.playlist_uuid}
