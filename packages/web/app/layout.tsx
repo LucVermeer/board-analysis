@@ -71,7 +71,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={LOCALE_HTML_LANG[locale]} data-theme="dark" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <Analytics />
+        <Analytics beforeSend={(event) => (event.url.includes('/admin') ? null : event)} />
         <QueryClientProvider>
           <SessionProviderWrapper>
             <AppRouterCacheProvider>
@@ -100,7 +100,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </AppRouterCacheProvider>
           </SessionProviderWrapper>
         </QueryClientProvider>
-        <SpeedInsights />
+        <SpeedInsights beforeSend={(event) => (event.url.includes('/admin') ? null : event)} />
         {process.env.NODE_ENV === 'development' && <VercelToolbar />}
       </body>
     </html>
