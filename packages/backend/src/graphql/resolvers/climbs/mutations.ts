@@ -56,7 +56,9 @@ async function getUserProfile(userId: string) {
 
 async function resolveDifficultyId(boardType: string, grade?: string | null): Promise<number | null> {
   if (!grade) return null;
-  const fontPart = grade.split('/')[0].trim().toLowerCase();
+  const normalizedGrade = grade.trim().toLowerCase();
+  const rawFontPart = normalizedGrade.split('/')[0].trim();
+  const fontPart = rawFontPart === '5+' ? '5a' : rawFontPart;
 
   const [row] = await db
     .select({ difficulty: dbSchema.boardDifficultyGrades.difficulty })
@@ -64,8 +66,15 @@ async function resolveDifficultyId(boardType: string, grade?: string | null): Pr
     .where(
       and(
         eq(dbSchema.boardDifficultyGrades.boardType, boardType),
-        sql`LOWER(${dbSchema.boardDifficultyGrades.boulderName}) = ${fontPart}`,
+        sql`(
+          LOWER(${dbSchema.boardDifficultyGrades.boulderName}) = ${normalizedGrade}
+          OR LOWER(SPLIT_PART(${dbSchema.boardDifficultyGrades.boulderName}, '/', 1)) = ${fontPart}
+        )`,
       ),
+    )
+    .orderBy(
+      sql`CASE WHEN LOWER(${dbSchema.boardDifficultyGrades.boulderName}) = ${normalizedGrade} THEN 0 ELSE 1 END`,
+      dbSchema.boardDifficultyGrades.difficulty,
     )
     .limit(1);
 

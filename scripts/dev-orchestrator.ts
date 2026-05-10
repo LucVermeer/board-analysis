@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, existsSync, statSync } from 'node:fs';
-import { createConnection } from 'node:net';
+import { createConnection, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -230,10 +230,30 @@ async function checkBackendHealth(port: number, tls: TlsBundle | null): Promise<
   return false;
 }
 
-/**
- * Check if a port is in use by attempting a TCP connection
- */
-async function isPortInUse(port: number, timeout = 500): Promise<boolean> {
+type PortBindResult = 'available' | 'in-use' | 'unsupported';
+
+function getErrorCode(error: unknown): string | undefined {
+  return error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : undefined;
+}
+
+async function checkWildcardPortBind(port: number): Promise<PortBindResult> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', (error) => {
+      resolve(getErrorCode(error) === 'EADDRINUSE' ? 'in-use' : 'unsupported');
+    });
+    server.once('listening', () => {
+      server.close(() => {
+        resolve('available');
+      });
+    });
+    server.listen({ port, host: '0.0.0.0', exclusive: true });
+  });
+}
+
+async function isLocalhostPortInUse(port: number, timeout = 500): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ port, host: 'localhost' }, () => {
       socket.destroy();
@@ -250,6 +270,20 @@ async function isPortInUse(port: number, timeout = 500): Promise<boolean> {
       resolve(false);
     });
   });
+}
+
+/**
+ * Check if a port is in use by first attempting the same wildcard bind the dev
+ * servers use. If that probe is unsupported in a restricted environment, fall
+ * back to the older localhost connection probe.
+ */
+async function isPortInUse(port: number): Promise<boolean> {
+  const bindResult = await checkWildcardPortBind(port);
+  if (bindResult !== 'unsupported') {
+    return bindResult === 'in-use';
+  }
+
+  return isLocalhostPortInUse(port);
 }
 
 /**

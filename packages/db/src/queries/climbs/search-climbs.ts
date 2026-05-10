@@ -2,6 +2,7 @@ import { desc, sql, and, eq } from 'drizzle-orm';
 import type { DbInstance } from '../../client/postgres';
 import { boardClimbs, boardClimbStats } from '../../schema/index';
 import { createClimbFilters } from './create-climb-filters';
+import { getClimbStars } from './climb-stars';
 import { getGradeLabel } from './grade-lookup';
 import type { BoardRouteParams, ClimbSearchParams, ClimbRow, ClimbSearchResult } from './types';
 
@@ -22,17 +23,17 @@ type RawSelectResult = {
   published_at: string | null;
 };
 
-function mapResultToClimbRow(result: RawSelectResult, angle: number): ClimbRow {
+function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams): ClimbRow {
   return {
     uuid: result.uuid,
     setter_username: result.setter_username || '',
     name: result.name || '',
     frames: result.frames || '',
-    angle,
+    angle: params.angle,
     ascensionist_count: Number(result.ascensionist_count || 0),
     difficulty: getGradeLabel(result.difficulty_id),
     quality_average: result.quality_average?.toString() || '0',
-    stars: Math.round((Number(result.quality_average) || 0) * 5),
+    stars: getClimbStars(params.board_name, result.quality_average),
     difficulty_error: result.difficulty_error?.toString() || '0',
     benchmark_difficulty:
       result.benchmark_difficulty && result.benchmark_difficulty > 0 ? result.benchmark_difficulty.toString() : null,
@@ -209,7 +210,7 @@ async function statsDrivenSearch(
 
   const hasMore = results.length > pageSize;
   const trimmed = hasMore ? results.slice(0, pageSize) : results;
-  const climbs = trimmed.map((r) => mapResultToClimbRow(r, params.angle));
+  const climbs = trimmed.map((row) => mapResultToClimbRow(row, params));
   return { climbs, hasMore };
 }
 
@@ -321,6 +322,6 @@ async function standardSearch(
   const hasMore = results.length > pageSize;
   const trimmed = hasMore ? results.slice(0, pageSize) : results;
 
-  const climbs = trimmed.map((r) => mapResultToClimbRow(r, params.angle));
+  const climbs = trimmed.map((row) => mapResultToClimbRow(row, params));
   return { climbs, hasMore };
 }

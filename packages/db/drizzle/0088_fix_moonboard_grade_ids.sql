@@ -1,3 +1,6 @@
+-- Existing MoonBoard ticks already store shared BOULDER_GRADES difficulty IDs.
+-- The shifted IDs lived in the MoonBoard lookup labels, so remapping
+-- boardsesh_ticks.difficulty here would corrupt user-selected grades.
 INSERT INTO board_difficulty_grades (board_type, difficulty, boulder_name, route_name, is_listed)
 VALUES
   ('moonboard', 13, '5a/V1', NULL, true),

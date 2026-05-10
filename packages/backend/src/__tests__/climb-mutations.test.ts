@@ -53,6 +53,7 @@ function createMockChain(resolveValue: unknown = [], onValues?: (values: unknown
     'from',
     'where',
     'leftJoin',
+    'orderBy',
     'limit',
     'values',
     'returning',
@@ -120,7 +121,7 @@ describe('climb mutations', () => {
       .mockReturnValueOnce(
         createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
       )
-      .mockReturnValueOnce(createMockChain([{ difficulty: 12 }]));
+      .mockReturnValueOnce(createMockChain([{ difficulty: 17 }]));
     mockDb.insert.mockImplementation((table: unknown) =>
       createMockChain(undefined, (values) => insertCalls.push({ table, values })),
     );
@@ -171,6 +172,13 @@ describe('climb mutations', () => {
         holdState: 'FINISH',
       }),
     ]);
+    expect(insertCalls[2].values).toMatchObject({
+      boardType: 'moonboard',
+      angle: 40,
+      displayDifficulty: 17,
+      benchmarkDifficulty: null,
+      difficultyAverage: 17,
+    });
   });
 
   it('rejects duplicate MoonBoard climbs before inserting', async () => {

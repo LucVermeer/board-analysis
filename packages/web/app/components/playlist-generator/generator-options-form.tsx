@@ -11,7 +11,7 @@ import IconButton from '@mui/material/IconButton';
 import MuiButton from '@mui/material/Button';
 import { RemoveOutlined, AddOutlined, RefreshOutlined } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { TENSION_KILTER_GRADES } from '@/app/lib/board-data';
+import { getGradesForBoard } from '@/app/lib/board-data';
 import type { BoardDetails } from '@/app/lib/types';
 import {
   type WorkoutType,
@@ -49,7 +49,7 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   boardDetails,
 }) => {
   const { t } = useTranslation('playlists');
-  const grades = TENSION_KILTER_GRADES;
+  const grades = getGradesForBoard(boardDetails.board_name);
 
   const warmUpOptions = WARM_UP_OPTIONS.map((opt) => ({
     value: opt.value,
