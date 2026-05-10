@@ -12,29 +12,36 @@
  */
 
 const WEB_URL = process.env.BOARDSESH_WEB_URL;
-const CRON_SECRET = process.env.CRON_SECRET;
+const REVALIDATE_SECRET = process.env.REVALIDATE_SECRET;
+const REQUEST_TIMEOUT_MS = 5000;
 
 let warned = false;
 
 export async function notifyClimbRevalidated(climbUuid: string): Promise<void> {
-  if (!WEB_URL || !CRON_SECRET) {
+  if (!WEB_URL || !REVALIDATE_SECRET) {
     if (!warned) {
       console.warn(
-        '[web-revalidate] BOARDSESH_WEB_URL or CRON_SECRET not set; climb-cache invalidation disabled. Cached climb pages will refresh on the configured TTL.',
+        '[web-revalidate] BOARDSESH_WEB_URL or REVALIDATE_SECRET not set; climb-cache invalidation disabled. Cached climb pages will refresh on the configured TTL.',
       );
       warned = true;
     }
     return;
   }
 
+  // Bound the call so a slow or unreachable web service can't pile up
+  // pending promises under mutation load.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${WEB_URL}/api/internal/revalidate-climb`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${CRON_SECRET}`,
+        Authorization: `Bearer ${REVALIDATE_SECRET}`,
       },
       body: JSON.stringify({ climbUuid }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -42,5 +49,7 @@ export async function notifyClimbRevalidated(climbUuid: string): Promise<void> {
     }
   } catch (error) {
     console.warn(`[web-revalidate] climb-cache invalidation network error for ${climbUuid}:`, error);
+  } finally {
+    clearTimeout(timeout);
   }
 }

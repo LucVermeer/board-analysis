@@ -8,23 +8,23 @@ vi.mock('next/cache', () => ({
   revalidateTag: (...args: unknown[]) => mockRevalidateTag(...args),
 }));
 
-const ORIGINAL_SECRET = process.env.CRON_SECRET;
+const ORIGINAL_SECRET = process.env.REVALIDATE_SECRET;
 
 beforeEach(() => {
   mockRevalidateTag.mockClear();
-  process.env.CRON_SECRET = 'test-secret';
+  process.env.REVALIDATE_SECRET = 'test-secret';
 });
 
 afterEach(() => {
   if (ORIGINAL_SECRET === undefined) {
-    delete process.env.CRON_SECRET;
+    delete process.env.REVALIDATE_SECRET;
   } else {
-    process.env.CRON_SECRET = ORIGINAL_SECRET;
+    process.env.REVALIDATE_SECRET = ORIGINAL_SECRET;
   }
 });
 
 async function importPost() {
-  // Re-import per test so the module reads the current CRON_SECRET.
+  // Re-import per test so the module reads the current REVALIDATE_SECRET.
   vi.resetModules();
   const mod = await import('../route');
   return mod.POST;
@@ -48,7 +48,7 @@ describe('POST /api/internal/revalidate-climb', () => {
     expect(mockRevalidateTag).not.toHaveBeenCalled();
   });
 
-  it('returns 401 when bearer token does not match CRON_SECRET', async () => {
+  it('returns 401 when bearer token does not match REVALIDATE_SECRET', async () => {
     const POST = await importPost();
     const response = await POST(createRequest({ climbUuid: 'AC9F' }, 'Bearer wrong-secret'));
     expect(response.status).toBe(401);
@@ -83,8 +83,8 @@ describe('POST /api/internal/revalidate-climb', () => {
     expect(mockRevalidateTag).toHaveBeenCalledWith('climb-AC9FCF7F01FC44BD835CFC41CB2224DA', { expire: 0 });
   });
 
-  it('returns 401 when CRON_SECRET is unset (server misconfig)', async () => {
-    delete process.env.CRON_SECRET;
+  it('returns 401 when REVALIDATE_SECRET is unset (server misconfig)', async () => {
+    delete process.env.REVALIDATE_SECRET;
     const POST = await importPost();
     const response = await POST(createRequest({ climbUuid: 'AC9F' }, 'Bearer anything'));
     expect(response.status).toBe(401);
