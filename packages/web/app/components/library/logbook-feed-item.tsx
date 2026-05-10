@@ -44,7 +44,7 @@ import { formatBoardDisplayName } from '@/app/lib/string-utils';
 import { getDefaultBoardConfig } from '@/app/lib/default-board-configs';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getExcludedClimbActions } from '@/app/lib/climb-action-utils';
-import { TENSION_KILTER_GRADES, getGradesForBoard } from '@/app/lib/board-data';
+import { getGradesForBoard } from '@/app/lib/board-data';
 import AscentThumbnail from '@/app/components/activity-feed/ascent-thumbnail';
 import { InlineStarPicker, InlineGradePicker, InlineTriesPicker, type ExpandedControl } from '../logbook/tick-controls';
 import ClimbIcons from '@/app/components/climb-card/climb-icons';
@@ -52,6 +52,8 @@ import { ascentFeedItemToClimb } from './ascent-to-climb';
 import ascentStyles from '@/app/components/climb-card/ascent-status.module.css';
 import drawerCss from '@/app/components/swipeable-drawer/swipeable-drawer.module.css';
 import styles from './logbook-feed-item.module.css';
+
+type LogbookGradeOption = ReturnType<typeof getGradesForBoard>[number];
 
 const SwipeableDrawer = dynamic(() => import('../swipeable-drawer/swipeable-drawer'), {
   ssr: false,
@@ -148,6 +150,7 @@ function LogbookGradeRow({
   onExpandControl,
   gradeButtonRef,
   triesButtonRef,
+  grades,
 }: {
   consensusDifficultyName: string | null;
   qualityAverage: number | null;
@@ -162,6 +165,7 @@ function LogbookGradeRow({
   onExpandControl?: (control: ExpandedControl) => void;
   gradeButtonRef?: React.RefObject<HTMLButtonElement | null>;
   triesButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  grades: readonly LogbookGradeOption[];
 }) {
   const { t } = useTranslation('profile');
   const isDark = useIsDarkMode();
@@ -177,12 +181,12 @@ function LogbookGradeRow({
   const userColor = difficultyName ? getGradeColor(difficultyName, isDark) : undefined;
   const userLabel = userFormatted ?? (difficultyName || '\u2014');
 
-  // For editing mode, look up the editDifficulty in TENSION_KILTER_GRADES
+  // For editing mode, look up the selected grade in the current board's scale.
   const editGradeName = useMemo(() => {
     if (!isEditing || editDifficulty === undefined) return undefined;
-    const grade = TENSION_KILTER_GRADES.find((g) => g.difficulty_id === editDifficulty);
+    const grade = grades.find((g) => g.difficulty_id === editDifficulty);
     return grade?.difficulty_name;
-  }, [isEditing, editDifficulty]);
+  }, [isEditing, editDifficulty, grades]);
 
   const editGradeFormatted = editGradeName ? formatGrade(editGradeName) : null;
   const editGradeColor = editGradeName ? getGradeColor(editGradeName, isDark) : undefined;
@@ -716,6 +720,7 @@ const LogbookFeedItem: React.FC<LogbookFeedItemProps> = React.memo(
                   onExpandControl={setExpandedControl}
                   gradeButtonRef={gradeButtonRef}
                   triesButtonRef={triesButtonRef}
+                  grades={grades}
                 />
               </div>
 

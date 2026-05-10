@@ -8,7 +8,7 @@ import KeyboardArrowDownOutlined from '@mui/icons-material/KeyboardArrowDownOutl
 import ChatBubbleOutlineOutlined from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import type { Angle, Climb, BoardDetails } from '@/app/lib/types';
 import { useBoardProvider } from '../board-provider/board-provider-context';
-import { TENSION_KILTER_GRADES } from '@/app/lib/board-data';
+import { getGradesForBoard } from '@/app/lib/board-data';
 import { loadTickDraft } from '@/app/lib/tick-draft-db';
 import { useTickSave, buildTickTarget, type TickTarget } from '@/app/hooks/use-tick-save';
 import type { TickStatus } from '@/app/hooks/use-logbook';
@@ -164,7 +164,7 @@ export const QuickTickBar = forwardRef<QuickTickBarHandle, QuickTickBarProps>(
     const gradeButtonRef = useRef<HTMLButtonElement>(null);
     const triesButtonRef = useRef<HTMLButtonElement>(null);
 
-    const grades = TENSION_KILTER_GRADES;
+    const grades = useMemo(() => getGradesForBoard(boardDetails.board_name), [boardDetails.board_name]);
     const currentGradeId = difficulty;
 
     const consensusGradeId = useMemo(() => {

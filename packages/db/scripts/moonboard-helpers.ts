@@ -18,6 +18,31 @@ export const HOLD_STATE_CODES = {
 export const COLUMNS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'];
 export const NUM_COLUMNS = 11;
 
+// MoonBoard dump grade string -> shared difficulty ID.
+// "5+" is MoonBoard's lowest grade and maps to the shared 5a/V1 bucket.
+export const MOONBOARD_GRADE_TO_DIFFICULTY = {
+  '5+': 13,
+  '5A': 13,
+  '5B': 14,
+  '5C': 15,
+  '6A': 16,
+  '6A+': 17,
+  '6B': 18,
+  '6B+': 19,
+  '6C': 20,
+  '6C+': 21,
+  '7A': 22,
+  '7A+': 23,
+  '7B': 24,
+  '7B+': 25,
+  '7C': 26,
+  '7C+': 27,
+  '8A': 28,
+  '8A+': 29,
+  '8B': 30,
+  '8B+': 31,
+} as const;
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -28,6 +53,12 @@ export type MoonBoardMove = {
   isStart: boolean;
   isEnd: boolean;
 };
+
+export function moonBoardGradeToDifficultyId(grade: string): number | undefined {
+  const trimmedGrade = grade.trim();
+  const normalizedGrade = trimmedGrade === '5+' ? trimmedGrade : trimmedGrade.toUpperCase();
+  return MOONBOARD_GRADE_TO_DIFFICULTY[normalizedGrade as keyof typeof MOONBOARD_GRADE_TO_DIFFICULTY];
+}
 
 // =============================================================================
 // Helper functions

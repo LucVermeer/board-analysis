@@ -27,6 +27,13 @@ let capturedSwipeOptions: SwipeOptions | null = null;
 const updateTickAsyncMock = vi.fn();
 const setCurrentClimbMock = vi.fn();
 const dispatchOpenPlayDrawerMock = vi.fn();
+const boardDataMocks = vi.hoisted(() => ({
+  getGradesForBoard: vi.fn((boardName: string) =>
+    boardName === 'moonboard'
+      ? [{ difficulty_id: 18, difficulty_name: '6b/V4', v_grade: 'V4' }]
+      : [{ difficulty_id: 20, difficulty_name: '7a/V6', v_grade: 'V6' }],
+  ),
+}));
 // Holder so tests can swap queue-actions availability without remounting.
 const queueActionsState: { value: { setCurrentClimb: typeof setCurrentClimbMock } | null } = {
   value: { setCurrentClimb: setCurrentClimbMock },
@@ -108,11 +115,7 @@ vi.mock('@/app/lib/climb-action-utils', () => ({
 }));
 
 vi.mock('@/app/lib/board-data', () => ({
-  TENSION_KILTER_GRADES: [
-    { difficulty_id: 20, difficulty_name: '7a/V6', v_grade: 'V6' },
-    { difficulty_id: 21, difficulty_name: '7a+/V7', v_grade: 'V7' },
-  ],
-  getGradesForBoard: () => [{ difficulty_id: 20, difficulty_name: '7a/V6', v_grade: 'V6' }],
+  getGradesForBoard: boardDataMocks.getGradesForBoard,
 }));
 
 vi.mock('@/app/components/activity-feed/ascent-thumbnail', () => ({
@@ -208,6 +211,7 @@ beforeEach(() => {
   updateTickAsyncMock.mockReset();
   setCurrentClimbMock.mockReset();
   dispatchOpenPlayDrawerMock.mockReset();
+  boardDataMocks.getGradesForBoard.mockClear();
   queueActionsState.value = { setCurrentClimb: setCurrentClimbMock };
   updateTickState.isPending = false;
 });
@@ -228,6 +232,25 @@ describe('LogbookFeedItem', () => {
     expect(screen.getByLabelText('Save')).toBeDefined();
     expect(screen.getByLabelText('Cancel editing')).toBeDefined();
     expect(screen.queryByLabelText('More actions')).toBeNull();
+  });
+
+  it('uses MoonBoard grades for the editable user grade label', () => {
+    render(
+      <LogbookFeedItem
+        item={makeItem({
+          boardType: 'moonboard',
+          layoutId: 5,
+          difficulty: 18,
+          difficultyName: null,
+          consensusDifficulty: null,
+          consensusDifficultyName: null,
+        })}
+        isEditing
+      />,
+    );
+
+    expect(boardDataMocks.getGradesForBoard).toHaveBeenCalledWith('moonboard');
+    expect(screen.getByText('6b/V4')).toBeDefined();
   });
 
   it('disables swipe actions while editing', () => {
