@@ -58,6 +58,18 @@ You can also run pieces independently:
 - `vp run dev:backend` - Database + backend only
 - `vp run dev:web` - Database + web only
 
+### Sharing a local dev database over Tailscale
+
+If you have a bigger machine already running the dev database, smaller laptops can reuse it over your tailnet instead of starting Docker locally.
+
+1. On the host machine, sign into Tailscale and run `vp run db:up`. The compose stack publishes Postgres and Redis on the host, and the bootstrap makes the dev Postgres accept password auth from the tailnet.
+2. On the client machine, sign into the same tailnet and run `vp run dev` or `vp run db:up`. If no local Boardsesh Postgres is already running, the bootstrap scans online Tailscale peers for a Boardsesh dev DB and writes the selected connection to `.boardsesh/dev-db.env`.
+3. Backend and web dev startup read `.boardsesh/dev-db.env` automatically, so the checked-in `localhost` defaults do not mask the selected tailnet host.
+
+Local Docker still wins when it is already running. To force a specific peer, set `BOARDSESH_DEV_DB_HOST=<tailscale-host-or-ip>` before running `vp run db:up`.
+
+This is only for development data. The dev database uses the shared local password, so keep port 5432 behind your machine firewall/Tailscale access controls.
+
 ## Testing web changes on Android
 
 You don't have to rebuild the Android app every time you change the web UI. The **debug APK** shipped with each main build includes a Dev URL switcher that points the in-app WebView at any origin you choose — typically your laptop reached over [Tailscale](https://tailscale.com).

@@ -1,4 +1,10 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const rootDirectory = resolve(scriptDirectory, '../../..');
 
 type HostResolution = {
   hostname: string;
@@ -101,7 +107,30 @@ function overrideEnv(key: string, value: string): void {
   process.env[key] = value;
 }
 
+function applyGeneratedDevDbEnv(): void {
+  const envFile = join(rootDirectory, '.boardsesh', 'dev-db.env');
+  if (!existsSync(envFile)) return;
+
+  const inheritedKeys = new Set(Object.keys(process.env));
+  const lines = readFileSync(envFile, 'utf8').split(/\r?\n/);
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith('#')) continue;
+
+    const separatorIndex = trimmedLine.indexOf('=');
+    if (separatorIndex <= 0) continue;
+
+    const key = trimmedLine.slice(0, separatorIndex);
+    if (!/^[A-Z0-9_]+$/.test(key)) continue;
+    if (inheritedKeys.has(key)) continue;
+
+    process.env[key] = trimmedLine.slice(separatorIndex + 1);
+  }
+}
+
 function main(): void {
+  applyGeneratedDevDbEnv();
+
   const webPort = process.env.PORT || DEFAULT_WEB_PORT;
   const backendPort = process.env.BACKEND_PORT || DEFAULT_BACKEND_PORT;
   const resolution = resolveHostname();

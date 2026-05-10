@@ -2,7 +2,7 @@ services:
   postgres:
     image: ghcr.io/boardsesh/boardsesh-dev-db:latest
     shm_size: '256mb'
-    command: postgres -c max_connections=300 -c log_min_messages=warning
+    command: postgres -c listen_addresses='*' -c max_connections=300 -c log_min_messages=warning
     volumes:
       - db_data:/var/lib/postgresql/pgdata
     ports:

@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, existsSync, statSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
@@ -40,12 +40,39 @@ type ProcessRef = {
   process: ReturnType<typeof spawn> | null;
 };
 
+type DevDbEnv = Record<string, string>;
+
 const processes: { backend: ProcessRef; web: ProcessRef } = {
   backend: { process: null },
   web: { process: null },
 };
 
 let backendHealthy = false;
+
+function loadGeneratedDevDbEnv(): DevDbEnv {
+  const envFile = join(ROOT_DIR, '.boardsesh', 'dev-db.env');
+  if (!existsSync(envFile)) return {};
+
+  const env: DevDbEnv = {};
+  const inheritedKeys = new Set(Object.keys(process.env));
+  const lines = readFileSync(envFile, 'utf8').split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith('#')) continue;
+
+    const separatorIndex = trimmedLine.indexOf('=');
+    if (separatorIndex <= 0) continue;
+
+    const key = trimmedLine.slice(0, separatorIndex);
+    if (!/^[A-Z0-9_]+$/.test(key)) continue;
+    if (inheritedKeys.has(key)) continue;
+
+    env[key] = trimmedLine.slice(separatorIndex + 1);
+  }
+
+  return env;
+}
 
 /**
  * Resolve the Tailscale hostname from `tailscale status --json`. Returns null
@@ -308,13 +335,14 @@ async function findAvailablePort(basePort: number, maxAttempts = 10): Promise<nu
 /**
  * Start the backend in the background
  */
-function startBackend(port: number, tls: TlsBundle | null): ReturnType<typeof spawn> {
+function startBackend(port: number, tls: TlsBundle | null, devDbEnv: DevDbEnv): ReturnType<typeof spawn> {
   console.info(`[dev] Starting backend on port ${port}...`);
 
   const backendProcess = spawn('bun', ['run', '--filter=boardsesh-backend', 'dev'], {
     cwd: ROOT_DIR,
     stdio: ['inherit', 'inherit', 'inherit'],
     env: {
+      ...devDbEnv,
       ...process.env,
       PORT: String(port),
       ...(tls ? { DEV_HTTPS_CERT_FILE: tls.certFile, DEV_HTTPS_KEY_FILE: tls.keyFile } : {}),
@@ -340,13 +368,19 @@ function startBackend(port: number, tls: TlsBundle | null): ReturnType<typeof sp
 /**
  * Start the Next.js development server
  */
-function startWeb(port: number, backendPort: number, tls: TlsBundle | null): ReturnType<typeof spawn> {
+function startWeb(
+  port: number,
+  backendPort: number,
+  tls: TlsBundle | null,
+  devDbEnv: DevDbEnv,
+): ReturnType<typeof spawn> {
   console.info(`[dev] Starting web on port ${port}...`);
 
   const webProcess = spawn('bun', ['run', 'dev'], {
     cwd: join(ROOT_DIR, 'packages/web'),
     stdio: ['inherit', 'inherit', 'inherit'],
     env: {
+      ...devDbEnv,
       ...process.env,
       PORT: String(port),
       BACKEND_PORT: String(backendPort),
@@ -418,6 +452,7 @@ async function main(): Promise<void> {
 
   const requestedBackendPort = parseInt(process.env.BACKEND_PORT || String(DEFAULT_BACKEND_PORT), 10);
   const requestedWebPort = parseInt(process.env.PORT || String(DEFAULT_WEB_PORT), 10);
+  const devDbEnv = loadGeneratedDevDbEnv();
 
   // Backend port: explicit BACKEND_PORT must be respected (and must be free —
   // we won't shoot a process the user explicitly aimed us at). Otherwise we
@@ -443,9 +478,15 @@ async function main(): Promise<void> {
   if (tls) {
     console.info(`[dev] HTTPS enabled — https://${tls.hostname}:${webPort}`);
   }
+  if (devDbEnv.DATABASE_URL) {
+    console.info(
+      `[dev] Database: ${devDbEnv.BOARDSESH_DEV_DB_HOST ?? 'configured host'} ` +
+        `(${devDbEnv.BOARDSESH_DEV_DB_SOURCE ?? 'generated'})`,
+    );
+  }
   console.info();
 
-  processes.backend.process = startBackend(backendPort, tls);
+  processes.backend.process = startBackend(backendPort, tls, devDbEnv);
 
   console.info(`[dev] Waiting for backend to be healthy...`);
   backendHealthy = await checkBackendHealth(backendPort, tls);
@@ -455,7 +496,7 @@ async function main(): Promise<void> {
   }
   console.info(`[dev] ✓ Backend is healthy`);
 
-  processes.web.process = startWeb(webPort, backendPort, tls);
+  processes.web.process = startWeb(webPort, backendPort, tls, devDbEnv);
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

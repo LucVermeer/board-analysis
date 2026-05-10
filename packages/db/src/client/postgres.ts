@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { Logger, SQLWrapper } from 'drizzle-orm';
 import postgres from 'postgres';
-import { getConnectionConfig } from './config';
+import { getConnectionConfig, isLocalDevelopment } from './config';
 import * as schema from '../schema/index';
 import * as relations from '../relations/index';
 
@@ -31,12 +31,37 @@ const BASE_POOL_OPTIONS = {
 } as const;
 
 const LOCAL_HOST_PATTERN = /@(localhost|127\.0\.0\.1|\[::1\]|postgres|postgres-test)(:|\/|$)/;
+const TAILSCALE_IPV4_PATTERN = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./;
+
+function connectionHostname(connectionString: string): string | null {
+  try {
+    const parsedUrl = new URL(connectionString);
+    return parsedUrl.hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
+  } catch {
+    return null;
+  }
+}
+
+function isPlaintextDevelopmentDatabase(connectionString: string): boolean {
+  if (!isLocalDevelopment()) return false;
+
+  const hostname = connectionHostname(connectionString);
+  if (!hostname) return false;
+
+  const generatedDevDbHost = process.env.BOARDSESH_DEV_DB_HOST?.toLowerCase();
+  if (process.env.BOARDSESH_DEV_DB_PLAINTEXT === 'true' && generatedDevDbHost === hostname) {
+    return true;
+  }
+
+  return hostname.endsWith('.ts.net') || TAILSCALE_IPV4_PATTERN.test(hostname) || hostname.startsWith('fd7a:');
+}
 
 function buildPoolOptions(connectionString: string) {
   // postgres-js does not enforce TLS unless told. Force SSL for non-local
   // hosts so a misconfigured DATABASE_URL (missing `?sslmode=require`) cannot
-  // silently degrade to plaintext against Railway. Local docker stays plain.
-  const isLocal = LOCAL_HOST_PATTERN.test(connectionString);
+  // silently degrade to plaintext against Railway. Local docker and generated
+  // tailnet dev DB URLs stay plain.
+  const isLocal = LOCAL_HOST_PATTERN.test(connectionString) || isPlaintextDevelopmentDatabase(connectionString);
   return isLocal ? BASE_POOL_OPTIONS : { ...BASE_POOL_OPTIONS, ssl: 'require' as const };
 }
 

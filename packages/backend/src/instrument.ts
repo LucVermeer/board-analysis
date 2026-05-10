@@ -1,8 +1,41 @@
 // Sentry initialization. MUST be imported before anything else in the backend
 // entry point so OpenTelemetry can patch HTTP/Postgres/Redis/etc. modules
 // before they're loaded. See https://docs.sentry.io/platforms/javascript/guides/node/install/
-import 'dotenv/config';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
+
+const inheritedEnvKeys = new Set(Object.keys(process.env));
+const dotenvConfigPath = process.env.DOTENV_CONFIG_PATH;
+if (dotenvConfigPath) {
+  dotenv.config({ path: dotenvConfigPath });
+} else {
+  dotenv.config();
+}
+
+function applyGeneratedDevDbEnv(): void {
+  const sourceFile = fileURLToPath(import.meta.url);
+  const generatedEnvFile = resolve(dirname(sourceFile), '../../..', '.boardsesh', 'dev-db.env');
+  if (!existsSync(generatedEnvFile)) return;
+
+  const lines = readFileSync(generatedEnvFile, 'utf8').split(/\r?\n/);
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith('#')) continue;
+
+    const separatorIndex = trimmedLine.indexOf('=');
+    if (separatorIndex <= 0) continue;
+
+    const key = trimmedLine.slice(0, separatorIndex);
+    if (!/^[A-Z0-9_]+$/.test(key)) continue;
+    if (inheritedEnvKeys.has(key)) continue;
+
+    process.env[key] = trimmedLine.slice(separatorIndex + 1);
+  }
+}
+
+applyGeneratedDevDbEnv();
 dotenv.config({ path: '.env.development.local', override: true });
 
 import * as Sentry from '@sentry/node';
