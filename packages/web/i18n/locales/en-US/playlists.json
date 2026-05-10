@@ -159,7 +159,7 @@
       "minAscents": "Min Ascents",
       "minRating": "Min Rating",
       "any": "Any",
-      "minAscentsOption": "{{count}}+",
+      "minAscentsOption": "{{value}}+",
       "minRatingOption_one": "{{count}} star and up",
       "minRatingOption_other": "{{count}} stars and up",
       "climbBias": "Climb Bias",

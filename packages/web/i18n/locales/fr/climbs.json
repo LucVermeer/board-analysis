@@ -124,7 +124,7 @@
       "minAscents": "Enchaînements min",
       "minRating": "Note min",
       "any": "Tous",
-      "minAscentsOption": "{{count}}+",
+      "minAscentsOption": "{{value}}+",
       "minRatingOption_one": "{{count}} étoile et plus",
       "minRatingOption_other": "{{count}} étoiles et plus",
       "tallClimbsOnly": "Blocs hauts uniquement",
