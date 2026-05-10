@@ -6,6 +6,7 @@
  */
 import 'server-only';
 import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 // oxlint-disable-next-line no-restricted-imports -- raw postgres-js sql usage; migrate to drizzle
 import { rowsFromResult, sql } from '@/app/lib/db/db';
 import { getGradeLabel } from '@boardsesh/db/queries';
@@ -14,8 +15,9 @@ import type { Climb, ParsedBoardRouteParametersWithUuid, BoardName, LayoutId, Si
 import { getSizesForLayoutId, getAllLayouts, getSetsForLayoutAndSize } from '@/app/lib/board-constants';
 import { isNoMatchClimb } from '@/app/lib/no-match-climb';
 
-export const getClimb = cache(async (params: ParsedBoardRouteParametersWithUuid): Promise<Climb> => {
-  const result = rowsFromResult<Climb & { difficulty_id: number | null }>(await sql`
+async function fetchClimbFromDb(params: ParsedBoardRouteParametersWithUuid): Promise<Climb> {
+  const result = rowsFromResult<Climb & { difficulty_id: number | null }>(
+    await sql`
         SELECT climbs.uuid, climbs.setter_username, climbs.user_id as "userId", climbs.name, climbs.description,
         climbs.frames, COALESCE(climb_stats.angle, ${params.angle}) as angle, COALESCE(climb_stats.ascensionist_count, 0) as ascensionist_count,
         ROUND(climb_stats.display_difficulty::numeric, 0) as difficulty_id,
@@ -33,13 +35,26 @@ export const getClimb = cache(async (params: ParsedBoardRouteParametersWithUuid)
         AND climbs.uuid = ${params.climb_uuid}
         AND climbs.frames_count = 1
         limit 1
-      `);
+      `,
+  );
   const row = result[0];
   return {
     ...row,
     difficulty: getGradeLabel(row.difficulty_id),
     is_no_match: isNoMatchClimb(row.description),
   } as Climb;
+}
+
+export const getClimb = cache(async (params: ParsedBoardRouteParametersWithUuid): Promise<Climb> => {
+  const cachedFn = unstable_cache(
+    async () => fetchClimbFromDb(params),
+    ['climb', params.board_name, String(params.layout_id), params.climb_uuid, String(params.angle)],
+    {
+      revalidate: 3600,
+      tags: [`climb-${params.climb_uuid}`],
+    },
+  );
+  return cachedFn();
 });
 
 export type ClimbStatsForAngle = {
@@ -56,7 +71,8 @@ export type ClimbStatsForAngle = {
 export const getClimbStatsForAllAngles = async (
   params: ParsedBoardRouteParametersWithUuid,
 ): Promise<ClimbStatsForAngle[]> => {
-  const result = rowsFromResult<ClimbStatsForAngle & { difficulty_id: number | null }>(await sql`
+  const result = rowsFromResult<ClimbStatsForAngle & { difficulty_id: number | null }>(
+    await sql`
     SELECT
       climb_stats.angle,
       COALESCE(climb_stats.ascensionist_count, 0) as ascensionist_count,
@@ -70,7 +86,8 @@ export const getClimbStatsForAllAngles = async (
     WHERE climb_stats.board_type = ${params.board_name}
     AND climb_stats.climb_uuid = ${params.climb_uuid}
     ORDER BY climb_stats.angle ASC
-  `);
+  `,
+  );
   return result.map((row) => ({
     ...row,
     difficulty: getGradeLabel(row.difficulty_id),

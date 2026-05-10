@@ -1,5 +1,6 @@
 import { dbz } from '@/app/lib/db/db';
 import { eq, and } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 import { climbCommunityStatus } from '@/app/lib/db/schema';
 
 type FetchClimbDetailDataParams = {
@@ -8,7 +9,7 @@ type FetchClimbDetailDataParams = {
   angle: number;
 };
 
-export async function fetchClimbDetailData({ boardName, climbUuid, angle }: FetchClimbDetailDataParams) {
+async function fetchClimbDetailDataUncached({ boardName, climbUuid, angle }: FetchClimbDetailDataParams) {
   try {
     const [result] = await dbz
       .select({ communityGrade: climbCommunityStatus.communityGrade })
@@ -26,4 +27,16 @@ export async function fetchClimbDetailData({ boardName, climbUuid, angle }: Fetc
   } catch {
     return { communityGrade: null };
   }
+}
+
+export async function fetchClimbDetailData(params: FetchClimbDetailDataParams) {
+  const cachedFn = unstable_cache(
+    async () => fetchClimbDetailDataUncached(params),
+    ['climb-community', params.boardName, params.climbUuid, String(params.angle)],
+    {
+      revalidate: 3600,
+      tags: [`climb-${params.climbUuid}`],
+    },
+  );
+  return cachedFn();
 }
