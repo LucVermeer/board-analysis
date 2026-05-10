@@ -18,7 +18,7 @@ import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-as
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
-import { getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
+import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
 import SearchClimbNameInput from './search-climb-name-input';
 import SetterNameSelect from './setter-name-select';
 import ClimbSearchForm from './climb-search-form';
@@ -202,7 +202,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               onChange={(minAscents) => updateFilters({ minAscents })}
               ariaLabel={t('search.fields.minAscents')}
               getOptionLabel={(minAscents) =>
-                minAscents === 0 ? t('search.fields.any') : t('search.fields.minAscentsOption', { count: minAscents })
+                t('search.fields.minAscentsOption', { count: formatMinAscentsFilterCount(minAscents) })
               }
             />
           </div>
@@ -212,8 +212,10 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
             <InlineStarPicker
               quality={minRatingPickerValue}
               onSelect={(value) => updateFilters({ minRating: value ?? 0 })}
+              align="start"
               ariaLabel={t('search.fields.minRating')}
               clearLabel={t('search.fields.any')}
+              clearText={t('search.fields.any')}
               getStarLabel={(rating) => t('search.fields.minRatingOption', { count: rating })}
             />
           </div>

@@ -89,6 +89,14 @@ describe('AccordionSearchForm — quality filter controls', () => {
     expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minAscents: 0 });
   });
 
+  it('renders the requested Min Ascents buckets', () => {
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+
+    for (const label of ['0+', '1+', '10+', '100+', '1k+', '10k+']) {
+      expect(screen.getByRole('button', { name: label })).toBeDefined();
+    }
+  });
+
   it('Min Rating star picker emits whole-star thresholds', () => {
     render(<AccordionSearchForm boardDetails={boardDetails} />);
     fireEvent.click(screen.getByRole('option', { name: '4 stars and up' }));
@@ -98,7 +106,9 @@ describe('AccordionSearchForm — quality filter controls', () => {
   it('Min Rating clear option emits the 0 sentinel', () => {
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minRating: 3 };
     render(<AccordionSearchForm boardDetails={boardDetails} />);
-    fireEvent.click(screen.getByRole('option', { name: 'Any' }));
+    const anyRatingOption = screen.getByRole('option', { name: 'Any' });
+    expect(anyRatingOption.textContent).toBe('Any');
+    fireEvent.click(anyRatingOption);
     const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
     expect(lastCall).toEqual({ minRating: 0 });
     expect(lastCall?.minRating).not.toBeUndefined();

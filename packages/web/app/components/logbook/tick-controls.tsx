@@ -267,14 +267,18 @@ export const TickControls: React.FC<TickControlsProps> = ({
 export const InlineStarPicker: React.FC<{
   quality: number | null;
   onSelect: (value: number | null) => void;
+  align?: 'start' | 'end';
   ariaLabel?: string;
   clearLabel?: string;
+  clearText?: string;
   getStarLabel?: (value: number) => string;
-}> = ({ quality, onSelect, ariaLabel, clearLabel, getStarLabel }) => {
+}> = ({ quality, onSelect, align = 'end', ariaLabel, clearLabel, clearText, getStarLabel }) => {
   const { t } = useTranslation('climbs');
+  const alignmentClassName = align === 'start' ? styles.pickerRowStart : styles.pickerRowEnd;
+
   return (
     <div
-      className={`${styles.pickerRow} ${styles.pickerRowEnd}`}
+      className={`${styles.pickerRow} ${alignmentClassName}`}
       role="listbox"
       aria-label={ariaLabel ?? t('tick.controls.starRating')}
     >
@@ -285,7 +289,7 @@ export const InlineStarPicker: React.FC<{
         aria-selected={quality === null}
         role="option"
       >
-        <span className={styles.pickerClear}>—</span>
+        <span className={clearText ? undefined : styles.pickerClear}>{clearText ?? '—'}</span>
       </ButtonBase>
       {[1, 2, 3, 4, 5].map((rating) => (
         <ButtonBase

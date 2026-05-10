@@ -16,7 +16,7 @@ import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import type { BoardDetails } from '@/app/lib/types';
-import { getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
+import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
 import {
   type WorkoutType,
   type WarmUpType,
@@ -193,25 +193,25 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
             onChange={(minAscents) => updateOption('minAscents', minAscents)}
             ariaLabel={t('generator.options.minAscents')}
             getOptionLabel={(minAscents) =>
-              minAscents === 0
-                ? t('generator.options.any')
-                : t('generator.options.minAscentsOption', { count: minAscents })
+              t('generator.options.minAscentsOption', { count: formatMinAscentsFilterCount(minAscents) })
             }
           />
         </MuiBox>
 
-        <div className={styles.formRow}>
+        <MuiBox sx={qualityBucketRowSx}>
           <Typography variant="body2" component="span" className={styles.label}>
             {t('generator.options.minRating')}
           </Typography>
           <InlineStarPicker
             quality={minRatingPickerValue}
             onSelect={(value) => updateOption('minRating', value ?? 0)}
+            align="start"
             ariaLabel={t('generator.options.minRating')}
             clearLabel={t('generator.options.any')}
+            clearText={t('generator.options.any')}
             getStarLabel={(rating) => t('generator.options.minRatingOption', { count: rating })}
           />
-        </div>
+        </MuiBox>
 
         {/* Climb Bias */}
         {renderSelect<ClimbBias>(t('generator.options.climbBias'), options.climbBias, climbBiasOptions, (v) =>

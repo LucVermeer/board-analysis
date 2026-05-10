@@ -38,9 +38,9 @@ describe('GeneratorOptionsForm quality filters', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '25+' }));
+    fireEvent.click(screen.getByRole('button', { name: '1k+' }));
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ minAscents: 25 }));
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ minAscents: 1000 }));
   });
 
   it('Min Rating star picker emits whole-star thresholds', () => {

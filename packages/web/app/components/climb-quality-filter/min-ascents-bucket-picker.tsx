@@ -46,7 +46,7 @@ const MinAscentsBucketPicker: React.FC<MinAscentsBucketPickerProps> = ({
   getOptionLabel,
 }) => {
   const normalizedValue = normalizeMinAscentsFilter(value);
-  const minAscentsOptions = getMinAscentsFilterOptions(normalizedValue);
+  const minAscentsOptions = getMinAscentsFilterOptions();
 
   return (
     <MuiBox sx={bucketPickerWrapperSx}>

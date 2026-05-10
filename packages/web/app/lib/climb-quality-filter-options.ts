@@ -1,16 +1,20 @@
-export const MIN_ASCENTS_FILTER_OPTIONS = [0, 1, 2, 5, 10, 25, 50, 100] as const;
+export const MIN_ASCENTS_FILTER_OPTIONS = [0, 1, 10, 100, 1000, 10000] as const;
 
 export function normalizeMinAscentsFilter(value: number | null | undefined): number {
   if (value == null || !Number.isFinite(value) || value <= 0) return 0;
   return Math.floor(value);
 }
 
-export function getMinAscentsFilterOptions(value: number | null | undefined): number[] {
+export function getMinAscentsFilterOptions(): number[] {
+  return [...MIN_ASCENTS_FILTER_OPTIONS];
+}
+
+export function formatMinAscentsFilterCount(value: number): string {
   const normalizedValue = normalizeMinAscentsFilter(value);
-  if (normalizedValue === 0 || MIN_ASCENTS_FILTER_OPTIONS.some((option) => option === normalizedValue)) {
-    return [...MIN_ASCENTS_FILTER_OPTIONS];
+  if (normalizedValue >= 1000 && normalizedValue % 1000 === 0) {
+    return `${normalizedValue / 1000}k`;
   }
-  return [...MIN_ASCENTS_FILTER_OPTIONS, normalizedValue].sort((left, right) => left - right);
+  return String(normalizedValue);
 }
 
 export function normalizeMinRatingFilter(value: number | null | undefined): number {
