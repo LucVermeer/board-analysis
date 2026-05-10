@@ -102,15 +102,33 @@ void describe('createClimbFilters: projectsOnly', () => {
 });
 
 void describe('createClimbFilters: minRating', () => {
-  void it('scales whole-star minRating values to the stored 0-1 qualityAverage range', () => {
-    const f = createClimbFilters(params, { minRating: 4 });
-    assert.equal(f.climbStatsConditions.length, 1);
+  const ratingScaleCases: Array<{ minRating: number; expectedThreshold: string }> = [
+    { minRating: 1, expectedThreshold: '0.2' },
+    { minRating: 4, expectedThreshold: '0.8' },
+    { minRating: 5, expectedThreshold: '1' },
+  ];
 
-    const rendered = sqlToString(f.climbStatsConditions[0]);
-    assert.match(rendered, /quality_average/);
-    assert.match(rendered, />=/);
-    assert.match(rendered, /0\.8/);
-    assert.doesNotMatch(rendered, />=\s*4/);
+  for (const { minRating, expectedThreshold } of ratingScaleCases) {
+    void it(`scales minRating ${minRating} to stored threshold ${expectedThreshold}`, () => {
+      const filters = createClimbFilters(params, { minRating });
+      assert.equal(filters.climbStatsConditions.length, 1);
+
+      const rendered = sqlToString(filters.climbStatsConditions[0]);
+      assert.match(rendered, /quality_average/);
+      assert.match(rendered, />=/);
+      assert.match(rendered, new RegExp(`>=\\s*${expectedThreshold}`));
+      assert.doesNotMatch(rendered, new RegExp(`>=\\s*${minRating}(?:\\D|$)`));
+    });
+  }
+
+  void it('does not append a rating filter when minRating is 0', () => {
+    const filters = createClimbFilters(params, { minRating: 0 });
+    assert.equal(filters.climbStatsConditions.length, 0);
+  });
+
+  void it('does not append a rating filter when minRating is undefined', () => {
+    const filters = createClimbFilters(params, {});
+    assert.equal(filters.climbStatsConditions.length, 0);
   });
 });
 
