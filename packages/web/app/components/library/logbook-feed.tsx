@@ -25,6 +25,7 @@ import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useInfiniteScroll } from '@/app/hooks/use-infinite-scroll';
@@ -456,6 +457,22 @@ export default function LogbookFeed({ layoutStats, loadingLayoutStats }: Logbook
     isFetching: isFetchingNextPage,
   });
 
+  // --- Feed virtualization ---
+  // Items have variable heights (climb-name wrapping, optional comment row,
+  // edit-mode picker panel) so we rely on measureElement after the first paint.
+  // Estimate is the median collapsed height (96px thumbnail + content padding).
+  // Overscan of 8 rows ≈ 1200px headroom keeps scroll smooth.
+  const virtualizer = useWindowVirtualizer({
+    count: items.length,
+    estimateSize: () => 150,
+    overscan: 8,
+    getItemKey: (index) => items[index]?.uuid ?? index,
+    // Provide a fake viewport so the virtualizer renders items during SSR/initial mount.
+    // Without this, getVirtualItems() returns [] and the entire feed is hidden until measured.
+    initialRect: { width: 375, height: 812 },
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
   const pendingDeleteRef = useRef<{
     uuid: string;
     item: AscentFeedItem;
@@ -798,23 +815,46 @@ export default function LogbookFeed({ layoutStats, loadingLayoutStats }: Logbook
       {exportControls}
       <LogbookSwipeHintOrchestrator />
       <div className={feedStyles.feed}>
-        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          {items.map((item, index) => (
-            <LogbookFeedItem
-              key={item.uuid}
-              item={item}
-              showBoardType={showBoardType}
-              isEditing={editingItemUuid === item.uuid}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onCancelEdit={handleCloseEdit}
-              allowInstagramPosting={enableInstagramPosting}
-              allowInstagramLinking={enableInstagramLinking && !enableInstagramPosting}
-              // Orchestrator re-queries DOM at animation time, so re-sorts are safe.
-              isSwipeHintTarget={index === 0}
-            />
-          ))}
-        </Box>
+        <div
+          style={{
+            height: virtualizer.getTotalSize(),
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {virtualItems.map((virtualItem) => {
+            const item = items[virtualItem.index];
+            if (!item) return null;
+            return (
+              <div
+                key={virtualItem.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualItem.start}px)`,
+                  contain: 'layout style paint',
+                }}
+              >
+                <LogbookFeedItem
+                  item={item}
+                  showBoardType={showBoardType}
+                  isEditing={editingItemUuid === item.uuid}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onCancelEdit={handleCloseEdit}
+                  allowInstagramPosting={enableInstagramPosting}
+                  allowInstagramLinking={enableInstagramLinking && !enableInstagramPosting}
+                  // Orchestrator re-queries DOM at animation time, so re-sorts are safe.
+                  isSwipeHintTarget={virtualItem.index === 0}
+                />
+              </div>
+            );
+          })}
+        </div>
 
         <Box ref={sentinelRef} sx={{ display: 'flex', justifyContent: 'center', py: 2, minHeight: 20 }}>
           {isFetchingNextPage && <CircularProgress size={24} />}
