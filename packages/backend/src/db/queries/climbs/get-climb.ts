@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../../client';
 import { UNIFIED_TABLES, type BoardName } from '../util/table-select';
-import { getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
 import type { Climb } from '@boardsesh/shared-schema';
 
 type GetClimbParams = {
@@ -66,7 +66,7 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
       ascensionist_count: Number(row.ascensionist_count || 0),
       difficulty: getGradeLabel(row.difficulty_id),
       quality_average: row.quality_average?.toString() || '0',
-      stars: Math.round((Number(row.quality_average) || 0) * 5),
+      stars: getClimbStars(params.board_name, row.quality_average),
       difficulty_error: row.difficulty_error?.toString() || '0',
       benchmark_difficulty:
         row.benchmark_difficulty && row.benchmark_difficulty > 0 ? row.benchmark_difficulty.toString() : null,

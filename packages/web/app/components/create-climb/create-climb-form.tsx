@@ -47,8 +47,8 @@ import type { MoonBoardClimbDuplicateMatch, UpdateClimbInput } from '@boardsesh/
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import { convertLitUpHoldsStringToMap } from '../board-renderer/util';
 import type { LitUpHoldsMap } from '../board-renderer/types';
-import { MOONBOARD_GRADES, MOONBOARD_ANGLES } from '@/app/lib/moonboard-config';
-import { getSoftFontGradeColor } from '@/app/lib/grade-colors';
+import { getMoonBoardGradeLabel, MOONBOARD_GRADES, MOONBOARD_ANGLES } from '@/app/lib/moonboard-config';
+import { getSoftGradeColor } from '@/app/lib/grade-colors';
 import { useColorMode } from '@/app/hooks/use-color-mode';
 import { parseScreenshot } from '@boardsesh/moonboard-ocr/browser';
 import { convertOcrHoldsToMap } from '@/app/lib/moonboard-climbs-db';
@@ -307,6 +307,7 @@ export default function CreateClimbForm({
   const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
   const [userGrade, setUserGrade] = useState<string | undefined>(undefined);
   const [isBenchmark, setIsBenchmark] = useState(false);
+  const userGradeLabel = useMemo(() => (userGrade ? getMoonBoardGradeLabel(userGrade) : undefined), [userGrade]);
   const [selectedAngle, setSelectedAngle] = useState<number>(angle);
   const [moonBoardDuplicateMatch, setMoonBoardDuplicateMatch] = useState<MoonBoardClimbDuplicateMatch | null>(null);
   const [isCheckingMoonBoardDuplicate, setIsCheckingMoonBoardDuplicate] = useState(false);
@@ -1600,14 +1601,14 @@ export default function CreateClimbForm({
             </MuiTooltip>
           </>
         )}
-        {boardType === 'moonboard' && userGrade && (
+        {boardType === 'moonboard' && userGradeLabel && (
           <Typography
             variant="body2"
             component="span"
             className={styles.gradeBadge}
-            sx={{ color: getSoftFontGradeColor(userGrade, isDark) ?? 'var(--neutral-500)' }}
+            sx={{ color: getSoftGradeColor(userGradeLabel, isDark) ?? 'var(--neutral-500)' }}
           >
-            {userGrade}
+            {userGradeLabel}
           </Typography>
         )}
         <div className={styles.bottomControlsSaveSlot}>

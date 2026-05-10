@@ -617,6 +617,13 @@
       "when": 1778020628990,
       "tag": "0087_famous_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1778284800000,
+      "tag": "0088_fix_moonboard_grade_ids",
+      "breakpoints": true
     }
   ]
 }

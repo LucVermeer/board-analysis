@@ -4,30 +4,33 @@
 // Feature flag - enabled by default
 export const MOONBOARD_ENABLED = true;
 
-// MoonBoard grades - uses uppercase Font notation for display
-// These grades match the board_difficulty_grades table and BOULDER_GRADES in board-data.ts
-// MoonBoard supports grades from 5+ (V1) and above
+// MoonBoard grade values keep compatibility with the grade strings used by the
+// MoonBoard create flow; labels match board_difficulty_grades and BOULDER_GRADES.
 export const MOONBOARD_GRADES = [
-  { value: '5+', label: '5+ (V1)', difficultyId: 13 },
-  { value: '5B', label: '5B (V1)', difficultyId: 14 },
-  { value: '5C', label: '5C (V2)', difficultyId: 15 },
-  { value: '6A', label: '6A (V3)', difficultyId: 16 },
-  { value: '6A+', label: '6A+ (V3)', difficultyId: 17 },
-  { value: '6B', label: '6B (V4)', difficultyId: 18 },
-  { value: '6B+', label: '6B+ (V4)', difficultyId: 19 },
-  { value: '6C', label: '6C (V5)', difficultyId: 20 },
-  { value: '6C+', label: '6C+ (V5)', difficultyId: 21 },
-  { value: '7A', label: '7A (V6)', difficultyId: 22 },
-  { value: '7A+', label: '7A+ (V7)', difficultyId: 23 },
-  { value: '7B', label: '7B (V8)', difficultyId: 24 },
-  { value: '7B+', label: '7B+ (V8)', difficultyId: 25 },
-  { value: '7C', label: '7C (V9)', difficultyId: 26 },
-  { value: '7C+', label: '7C+ (V10)', difficultyId: 27 },
-  { value: '8A', label: '8A (V11)', difficultyId: 28 },
-  { value: '8A+', label: '8A+ (V12)', difficultyId: 29 },
-  { value: '8B', label: '8B (V13)', difficultyId: 30 },
-  { value: '8B+', label: '8B+ (V14)', difficultyId: 31 },
+  { value: '5+', label: '5a/V1', difficultyId: 13 },
+  { value: '5B', label: '5b/V1', difficultyId: 14 },
+  { value: '5C', label: '5c/V2', difficultyId: 15 },
+  { value: '6A', label: '6a/V3', difficultyId: 16 },
+  { value: '6A+', label: '6a+/V3', difficultyId: 17 },
+  { value: '6B', label: '6b/V4', difficultyId: 18 },
+  { value: '6B+', label: '6b+/V4', difficultyId: 19 },
+  { value: '6C', label: '6c/V5', difficultyId: 20 },
+  { value: '6C+', label: '6c+/V5', difficultyId: 21 },
+  { value: '7A', label: '7a/V6', difficultyId: 22 },
+  { value: '7A+', label: '7a+/V7', difficultyId: 23 },
+  { value: '7B', label: '7b/V8', difficultyId: 24 },
+  { value: '7B+', label: '7b+/V8', difficultyId: 25 },
+  { value: '7C', label: '7c/V9', difficultyId: 26 },
+  { value: '7C+', label: '7c+/V10', difficultyId: 27 },
+  { value: '8A', label: '8a/V11', difficultyId: 28 },
+  { value: '8A+', label: '8a+/V12', difficultyId: 29 },
+  { value: '8B', label: '8b/V13', difficultyId: 30 },
+  { value: '8B+', label: '8b+/V14', difficultyId: 31 },
 ] as const;
+
+export function getMoonBoardGradeLabel(value: string): string {
+  return MOONBOARD_GRADES.find((grade) => grade.value === value)?.label ?? value;
+}
 
 // MoonBoard layout types (equivalent to Aurora "layouts")
 export const MOONBOARD_LAYOUTS = {

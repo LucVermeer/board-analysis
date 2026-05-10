@@ -9,6 +9,7 @@ import {
   movesToFrames,
   moveToHoldState,
   MOONBOARD_UUID_NAMESPACE,
+  moonBoardGradeToDifficultyId,
   type MoonBoardMove,
 } from './moonboard-helpers.js';
 import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
@@ -82,44 +83,6 @@ const HOLDSETUP_TO_LAYOUT: Record<number, number> = {
   15: 4, // MoonBoard Masters 2017
   17: 5, // MoonBoard Masters 2019
   19: 6, // Mini MoonBoard 2020
-};
-
-// Grade string → difficulty ID (matching MOONBOARD_GRADES in moonboard-config.ts)
-// Note: "5+" from MoonBoard maps to 5a (difficulty 13 / V1)
-const GRADE_TO_DIFFICULTY: Record<string, number> = {
-  '5+': 13,
-  '6A': 16,
-  '6a': 16,
-  '6A+': 17,
-  '6a+': 17,
-  '6B': 18,
-  '6b': 18,
-  '6B+': 19,
-  '6b+': 19,
-  '6C': 20,
-  '6c': 20,
-  '6C+': 21,
-  '6c+': 21,
-  '7A': 22,
-  '7a': 22,
-  '7A+': 23,
-  '7a+': 23,
-  '7B': 24,
-  '7b': 24,
-  '7B+': 25,
-  '7b+': 25,
-  '7C': 26,
-  '7c': 26,
-  '7C+': 27,
-  '7c+': 27,
-  '8A': 28,
-  '8a': 28,
-  '8A+': 29,
-  '8a+': 29,
-  '8B': 30,
-  '8b': 30,
-  '8B+': 31,
-  '8b+': 31,
 };
 
 // =============================================================================
@@ -205,7 +168,7 @@ async function importMoonBoardProblems() {
           continue;
         }
 
-        const difficultyId = GRADE_TO_DIFFICULTY[problem.grade];
+        const difficultyId = moonBoardGradeToDifficultyId(problem.grade);
         if (difficultyId === undefined) {
           skippedGrade++;
           continue;

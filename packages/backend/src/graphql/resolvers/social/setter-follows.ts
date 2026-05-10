@@ -3,7 +3,7 @@ import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } 
 import { executeRows } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import {
   FollowSetterInputSchema,
@@ -297,7 +297,7 @@ export const setterFollowQueries = {
         ascensionist_count: Number(result.ascensionist_count || 0),
         difficulty: getGradeLabel(result.difficulty_id),
         quality_average: result.quality_average?.toString() || '0',
-        stars: Math.round((Number(result.quality_average) || 0) * 5),
+        stars: getClimbStars(boardName, result.quality_average),
         difficulty_error: result.difficulty_error?.toString() || '0',
         benchmark_difficulty:
           result.benchmark_difficulty && result.benchmark_difficulty > 0
@@ -319,8 +319,8 @@ export const setterFollowQueries = {
         .groupBy(dbSchema.boardClimbs.boardType);
 
       const setterBoardTypes = boardTypeResults
-        .map((r) => r.boardType)
-        .filter((bt): bt is string => bt !== null && isValidBoardName(bt));
+        .map((row) => row.boardType)
+        .filter((boardType): boardType is string => boardType !== null && isValidBoardName(boardType));
 
       if (setterBoardTypes.length === 0) {
         return { climbs: [], totalCount: 0, hasMore: false };
@@ -383,7 +383,7 @@ export const setterFollowQueries = {
       const trimmedResults = hasMore ? results.slice(0, limit) : results;
 
       const climbs: Climb[] = trimmedResults.map((result) => {
-        const bt = (result.boardType || 'kilter') as BoardName;
+        const boardName = (result.boardType || 'kilter') as BoardName;
         return {
           uuid: result.uuid,
           layoutId: result.layoutId,
@@ -395,13 +395,13 @@ export const setterFollowQueries = {
           ascensionist_count: Number(result.ascensionist_count || 0),
           difficulty: getGradeLabel(result.difficulty_id),
           quality_average: result.quality_average?.toString() || '0',
-          stars: Math.round((Number(result.quality_average) || 0) * 5),
+          stars: getClimbStars(boardName, result.quality_average),
           difficulty_error: result.difficulty_error?.toString() || '0',
           benchmark_difficulty:
             result.benchmark_difficulty && result.benchmark_difficulty > 0
               ? result.benchmark_difficulty.toString()
               : null,
-          boardType: bt,
+          boardType: boardName,
         };
       });
 
@@ -495,7 +495,9 @@ export const setterFollowQueries = {
       benchmark_difficulty: number | null;
     };
 
-    const rawRows = await executeRows<RawRow>(db, sql`
+    const rawRows = await executeRows<RawRow>(
+      db,
+      sql`
       WITH owned_climbs AS (
         SELECT
           c.uuid,
@@ -546,13 +548,14 @@ export const setterFollowQueries = {
       ORDER BY ${orderSql}, owned_climbs.uuid DESC
       LIMIT ${limit + 1}
       OFFSET ${offset}
-    `);
+    `,
+    );
 
     const hasMore = rawRows.length > limit;
     const trimmedResults = hasMore ? rawRows.slice(0, limit) : rawRows;
 
     const climbs: Climb[] = trimmedResults.map((result) => {
-      const bt = (result.board_type || 'kilter') as BoardName;
+      const boardName = (result.board_type || 'kilter') as BoardName;
       return {
         uuid: result.uuid,
         layoutId: result.layout_id,
@@ -564,13 +567,13 @@ export const setterFollowQueries = {
         ascensionist_count: Number(result.ascensionist_count || 0),
         difficulty: getGradeLabel(result.difficulty_id),
         quality_average: result.quality_average?.toString() || '0',
-        stars: Math.round((Number(result.quality_average) || 0) * 5),
+        stars: getClimbStars(boardName, result.quality_average),
         difficulty_error: result.difficulty_error?.toString() || '0',
         benchmark_difficulty:
           result.benchmark_difficulty && result.benchmark_difficulty > 0
             ? result.benchmark_difficulty.toString()
             : null,
-        boardType: bt,
+        boardType: boardName,
       };
     });
 

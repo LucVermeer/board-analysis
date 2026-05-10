@@ -1,7 +1,7 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { type Climb, type BoardName } from '@boardsesh/shared-schema';
 import { db } from '../../../../db/client';
-import { getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
 import { UNIFIED_TABLES } from '../../../../db/queries/util/table-select';
 
 const DEFAULT_ANGLE = 40;
@@ -87,7 +87,7 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
     if (!row) continue;
     const override = options?.angleOverrides?.get(key);
     const angle = override ?? row.statsAngle ?? DEFAULT_ANGLE;
-    const bt = (row.boardType || ref.boardType) as BoardName;
+    const boardName = (row.boardType || ref.boardType) as BoardName;
     climbs.push({
       uuid: row.climbUuid,
       layoutId: row.layoutId,
@@ -99,11 +99,11 @@ export async function hydrateClimbsByRefs(refs: ClimbRef[], options?: HydrateCli
       ascensionist_count: Number(row.ascensionist_count || 0),
       difficulty: getGradeLabel(row.difficulty_id),
       quality_average: row.quality_average?.toString() || '0',
-      stars: Math.round((Number(row.quality_average) || 0) * 5),
+      stars: getClimbStars(boardName, row.quality_average),
       difficulty_error: row.difficulty_error?.toString() || '0',
       benchmark_difficulty:
         row.benchmark_difficulty && row.benchmark_difficulty > 0 ? row.benchmark_difficulty.toString() : null,
-      boardType: bt,
+      boardType: boardName,
     });
   }
 

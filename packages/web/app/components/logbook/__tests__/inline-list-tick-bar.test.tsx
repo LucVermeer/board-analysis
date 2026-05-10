@@ -179,6 +179,37 @@ describe('InlineListTickBar', () => {
       vi.useRealTimers();
     });
 
+    it('saves a MoonBoard 6B tick with the shared difficulty id 18', async () => {
+      const moonboardDetails = makeBoardDetails({
+        board_name: 'moonboard' as BoardName,
+        layout_id: 5,
+        size_id: 1,
+        set_ids: [17, 18, 19, 21, 22, 231],
+        supportsMirroring: false,
+      });
+      const moonboardClimb = makeClimb({
+        uuid: 'moonboard-inline-climb-6b',
+        difficulty: '6b/V4',
+        angle: 40,
+        userAscents: 1,
+      });
+      render(<InlineListTickBar {...defaultProps} climb={moonboardClimb} boardDetails={moonboardDetails} />);
+
+      await act(async () => {
+        screen.getByTestId('quick-tick-grade').click();
+      });
+      await act(async () => {
+        screen.getByRole('option', { name: '6b/V4 (consensus)' }).click();
+      });
+      await act(async () => {
+        screen.getByRole('button', { name: 'Log ascent' }).click();
+      });
+
+      const call = mockSaveTick.mock.calls[0][0];
+      expect(call.layoutId).toBe(5);
+      expect(call.difficulty).toBe(18);
+    });
+
     // Confetti on attempts is intentional — it's a small celebration for logging
     // any climbing activity, encouraging users to keep trying. Matches queue control bar behavior.
     it('clicking the Log attempt button fires confetti and saves an attempt', async () => {

@@ -87,4 +87,5 @@ packages/db/docker/tmp/
 
 # local environment variables
 .env.local
+.boardsesh/
 eng.traineddata

@@ -22,6 +22,10 @@ type FeedItem = {
   status: string;
   climbName: string;
   climbedAt: string;
+  difficulty: number | null;
+  difficultyName: string | null;
+  consensusDifficulty: number | null;
+  consensusDifficultyName: string | null;
 };
 
 type FeedResult = {
@@ -84,10 +88,12 @@ const insertUser = async (id: string) => {
   `);
 };
 
-const insertClimb = async (uuid: string, name: string) => {
+const insertClimb = async (uuid: string, name: string, options: { boardType?: string; layoutId?: number } = {}) => {
+  const boardType = options.boardType ?? 'kilter';
+  const layoutId = options.layoutId ?? 1;
   await db.execute(sql`
     INSERT INTO board_climbs (uuid, board_type, layout_id, setter_username, name, frames, frames_count, is_draft, is_listed, edge_left, edge_right, edge_bottom, edge_top, created_at)
-    VALUES (${uuid}, 'kilter', 1, 'test-setter', ${name}, 'p1r1', 1, false, true, 0, 100, 0, 150, '2024-01-01')
+    VALUES (${uuid}, ${boardType}, ${layoutId}, 'test-setter', ${name}, 'p1r1', 1, false, true, 0, 100, 0, 150, '2024-01-01')
     ON CONFLICT (uuid) DO NOTHING
   `);
 };
@@ -99,18 +105,22 @@ const insertTick = async (params: {
   climbedAt: string;
   status: 'flash' | 'send' | 'attempt';
   attemptCount?: number;
+  boardType?: string;
+  difficulty?: number;
 }) => {
   const userId = params.userId ?? TEST_USER_ID;
   const attemptCount = params.attemptCount ?? 1;
+  const boardType = params.boardType ?? 'kilter';
   await db.execute(sql`
-    INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, attempt_count, climbed_at)
-    VALUES (${params.uuid}, ${userId}, 'kilter', ${params.climbUuid}, 40, ${params.status}, ${attemptCount}, ${params.climbedAt})
+    INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, attempt_count, difficulty, climbed_at)
+    VALUES (${params.uuid}, ${userId}, ${boardType}, ${params.climbUuid}, 40, ${params.status}, ${attemptCount}, ${params.difficulty ?? null}, ${params.climbedAt})
   `);
 };
 
 const cleanup = async () => {
   await db.execute(sql`DELETE FROM user_climb_percentiles WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
+  await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
   await db.execute(sql`DELETE FROM board_climbs WHERE uuid LIKE ${CLIMB_PREFIX + '%'}`);
 };
 
@@ -219,6 +229,57 @@ describe('tickQueries — behavior fixes', () => {
 
       expect(result.items.every((item) => item.status === 'attempt')).toBe(true);
       expect(result.items).toHaveLength(1);
+    });
+  });
+
+  describe('userAscentsFeed — MoonBoard grade ids', () => {
+    it('resolves MoonBoard 6B ticks from shared difficulty id 18', async () => {
+      const climbUuid = CLIMB_PREFIX + 'moonboard-6b';
+      await db.execute(sql`
+        INSERT INTO board_difficulty_grades (board_type, difficulty, boulder_name, route_name, is_listed)
+        VALUES ('moonboard', 18, '6b/V4', NULL, true)
+        ON CONFLICT (board_type, difficulty)
+        DO UPDATE SET
+          boulder_name = EXCLUDED.boulder_name,
+          route_name = EXCLUDED.route_name,
+          is_listed = EXCLUDED.is_listed
+      `);
+      await insertClimb(climbUuid, 'On fire - the real 6B', { boardType: 'moonboard', layoutId: 5 });
+      await db.execute(sql`
+        INSERT INTO board_climb_stats (
+          board_type,
+          climb_uuid,
+          angle,
+          display_difficulty,
+          ascensionist_count,
+          difficulty_average,
+          quality_average
+        )
+        VALUES ('moonboard', ${climbUuid}, 40, 18, 1, 18, 4)
+        ON CONFLICT (board_type, climb_uuid, angle)
+        DO UPDATE SET
+          display_difficulty = EXCLUDED.display_difficulty,
+          ascensionist_count = EXCLUDED.ascensionist_count,
+          difficulty_average = EXCLUDED.difficulty_average,
+          quality_average = EXCLUDED.quality_average
+      `);
+
+      await insertTick({
+        uuid: 'tick-moonboard-6b',
+        climbUuid,
+        boardType: 'moonboard',
+        difficulty: 18,
+        climbedAt: '2026-01-01 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { boardType: 'moonboard', limit: 50 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].difficulty).toBe(18);
+      expect(result.items[0].difficultyName).toBe('6b/V4');
+      expect(result.items[0].consensusDifficulty).toBe(18);
+      expect(result.items[0].consensusDifficultyName).toBe('6b/V4');
     });
   });
 

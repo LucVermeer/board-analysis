@@ -1,6 +1,8 @@
+/// <reference types="node" />
+
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, existsSync, statSync } from 'node:fs';
-import { createConnection } from 'node:net';
+import { mkdirSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { createConnection, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -40,12 +42,135 @@ type ProcessRef = {
   process: ReturnType<typeof spawn> | null;
 };
 
+type DevDbEnv = Record<string, string>;
+
+type CliOptions = {
+  qaNotesFilePath: string | null;
+};
+
+type DevBuildMetadata = {
+  branchName: string | null;
+  qaNotes: string | null;
+  qaNotesFilePath: string | null;
+};
+
 const processes: { backend: ProcessRef; web: ProcessRef } = {
   backend: { process: null },
   web: { process: null },
 };
 
 let backendHealthy = false;
+
+function parseCliOptions(args: string[]): CliOptions {
+  let qaNotesFilePath: string | null = null;
+
+  for (let argumentIndex = 0; argumentIndex < args.length; argumentIndex++) {
+    const argument = args[argumentIndex];
+    if (argument === '--') continue;
+
+    if (argument === '--qa-notes-file' || argument === '--qa-plan-file') {
+      const nextArgument = args[argumentIndex + 1];
+      if (!nextArgument || nextArgument.startsWith('--')) {
+        throw new Error(`${argument} requires a file path`);
+      }
+      qaNotesFilePath = nextArgument;
+      argumentIndex++;
+      continue;
+    }
+
+    for (const qaNotesPrefix of ['--qa-notes-file=', '--qa-plan-file=']) {
+      if (argument.startsWith(qaNotesPrefix)) {
+        const pathArgument = argument.slice(qaNotesPrefix.length).trim();
+        if (!pathArgument) {
+          throw new Error(`${qaNotesPrefix.slice(0, -1)} requires a file path`);
+        }
+        qaNotesFilePath = pathArgument;
+        break;
+      }
+    }
+
+    if (argument.startsWith('--qa-notes-file=') || argument.startsWith('--qa-plan-file=')) {
+      continue;
+    }
+
+    console.warn(`[dev] Ignoring unrecognized argument: ${argument}`);
+  }
+
+  return { qaNotesFilePath };
+}
+
+function runGitCommand(args: string[]): string | null {
+  try {
+    const output = execFileSync('git', args, {
+      cwd: ROOT_DIR,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveCurrentBranchName(): string | null {
+  const branchName = runGitCommand(['branch', '--show-current']);
+  if (branchName) return branchName;
+
+  const shortCommitSha = runGitCommand(['rev-parse', '--short', 'HEAD']);
+  return shortCommitSha ? `detached:${shortCommitSha}` : null;
+}
+
+function readQaNotesFile(qaNotesFilePath: string | null): string | null {
+  const defaultQaNotesPath = join(ROOT_DIR, '.boardsesh', 'qa-notes.md');
+  const selectedQaNotesFilePath = qaNotesFilePath ?? (existsSync(defaultQaNotesPath) ? defaultQaNotesPath : null);
+  if (!selectedQaNotesFilePath) return null;
+
+  const resolvedQaNotesFilePath = resolve(ROOT_DIR, selectedQaNotesFilePath);
+  try {
+    return readFileSync(resolvedQaNotesFilePath, 'utf8').split(String.fromCharCode(0)).join('').trim();
+  } catch (error) {
+    if (!qaNotesFilePath) return null;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not read --qa-notes-file at ${resolvedQaNotesFilePath}: ${message}`);
+  }
+}
+
+function resolveDevBuildMetadata(cliOptions: CliOptions): DevBuildMetadata {
+  const defaultQaNotesPath = join(ROOT_DIR, '.boardsesh', 'qa-notes.md');
+  const selectedQaNotesFilePath =
+    cliOptions.qaNotesFilePath ?? (existsSync(defaultQaNotesPath) ? defaultQaNotesPath : null);
+
+  return {
+    branchName: resolveCurrentBranchName(),
+    qaNotes: readQaNotesFile(cliOptions.qaNotesFilePath),
+    qaNotesFilePath: selectedQaNotesFilePath ? resolve(ROOT_DIR, selectedQaNotesFilePath) : null,
+  };
+}
+
+function loadGeneratedDevDbEnv(): DevDbEnv {
+  const envFile = join(ROOT_DIR, '.boardsesh', 'dev-db.env');
+  if (!existsSync(envFile)) return {};
+
+  const env: DevDbEnv = {};
+  const inheritedKeys = new Set(Object.keys(process.env));
+  const lines = readFileSync(envFile, 'utf8').split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith('#')) continue;
+
+    const separatorIndex = trimmedLine.indexOf('=');
+    if (separatorIndex <= 0) continue;
+
+    const key = trimmedLine.slice(0, separatorIndex);
+    if (!/^[A-Z0-9_]+$/.test(key)) continue;
+    if (inheritedKeys.has(key)) continue;
+
+    env[key] = trimmedLine.slice(separatorIndex + 1);
+  }
+
+  return env;
+}
 
 /**
  * Resolve the Tailscale hostname from `tailscale status --json`. Returns null
@@ -230,10 +355,30 @@ async function checkBackendHealth(port: number, tls: TlsBundle | null): Promise<
   return false;
 }
 
-/**
- * Check if a port is in use by attempting a TCP connection
- */
-async function isPortInUse(port: number, timeout = 500): Promise<boolean> {
+type PortBindResult = 'available' | 'in-use' | 'unsupported';
+
+function getErrorCode(error: unknown): string | undefined {
+  return error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : undefined;
+}
+
+async function checkWildcardPortBind(port: number): Promise<PortBindResult> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once('error', (error) => {
+      resolve(getErrorCode(error) === 'EADDRINUSE' ? 'in-use' : 'unsupported');
+    });
+    server.once('listening', () => {
+      server.close(() => {
+        resolve('available');
+      });
+    });
+    server.listen({ port, host: '0.0.0.0', exclusive: true });
+  });
+}
+
+async function isLocalhostPortInUse(port: number, timeout = 500): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ port, host: 'localhost' }, () => {
       socket.destroy();
@@ -250,6 +395,20 @@ async function isPortInUse(port: number, timeout = 500): Promise<boolean> {
       resolve(false);
     });
   });
+}
+
+/**
+ * Check if a port is in use by first attempting the same wildcard bind the dev
+ * servers use. If that probe is unsupported in a restricted environment, fall
+ * back to the older localhost connection probe.
+ */
+async function isPortInUse(port: number): Promise<boolean> {
+  const bindResult = await checkWildcardPortBind(port);
+  if (bindResult !== 'unsupported') {
+    return bindResult === 'in-use';
+  }
+
+  return isLocalhostPortInUse(port);
 }
 
 /**
@@ -274,13 +433,14 @@ async function findAvailablePort(basePort: number, maxAttempts = 10): Promise<nu
 /**
  * Start the backend in the background
  */
-function startBackend(port: number, tls: TlsBundle | null): ReturnType<typeof spawn> {
+function startBackend(port: number, tls: TlsBundle | null, devDbEnv: DevDbEnv): ReturnType<typeof spawn> {
   console.info(`[dev] Starting backend on port ${port}...`);
 
   const backendProcess = spawn('bun', ['run', '--filter=boardsesh-backend', 'dev'], {
     cwd: ROOT_DIR,
     stdio: ['inherit', 'inherit', 'inherit'],
     env: {
+      ...devDbEnv,
       ...process.env,
       PORT: String(port),
       ...(tls ? { DEV_HTTPS_CERT_FILE: tls.certFile, DEV_HTTPS_KEY_FILE: tls.keyFile } : {}),
@@ -306,16 +466,26 @@ function startBackend(port: number, tls: TlsBundle | null): ReturnType<typeof sp
 /**
  * Start the Next.js development server
  */
-function startWeb(port: number, backendPort: number, tls: TlsBundle | null): ReturnType<typeof spawn> {
+function startWeb(
+  port: number,
+  backendPort: number,
+  tls: TlsBundle | null,
+  devDbEnv: DevDbEnv,
+  devBuildMetadata: DevBuildMetadata,
+): ReturnType<typeof spawn> {
   console.info(`[dev] Starting web on port ${port}...`);
 
   const webProcess = spawn('bun', ['run', 'dev'], {
     cwd: join(ROOT_DIR, 'packages/web'),
     stdio: ['inherit', 'inherit', 'inherit'],
     env: {
+      ...devDbEnv,
       ...process.env,
       PORT: String(port),
       BACKEND_PORT: String(backendPort),
+      ...(devBuildMetadata.branchName ? { BOARDSESH_DEV_BRANCH_NAME: devBuildMetadata.branchName } : {}),
+      ...(devBuildMetadata.qaNotes ? { BOARDSESH_DEV_QA_NOTES: devBuildMetadata.qaNotes } : {}),
+      ...(devBuildMetadata.qaNotesFilePath ? { BOARDSESH_DEV_QA_NOTES_FILE: devBuildMetadata.qaNotesFilePath } : {}),
       ...(tls
         ? {
             DEV_HTTPS_CERT_FILE: tls.certFile,
@@ -377,6 +547,9 @@ async function shutdown() {
  * Main orchestrator
  */
 async function main(): Promise<void> {
+  const cliOptions = parseCliOptions(process.argv.slice(2));
+  const devBuildMetadata = resolveDevBuildMetadata(cliOptions);
+
   // Try to provision a Tailscale HTTPS cert so real phones (which require a
   // secure context for DeviceMotion, Web Bluetooth, clipboard, etc.) can
   // actually use those APIs against the dev server. Null → HTTP fallback.
@@ -384,6 +557,7 @@ async function main(): Promise<void> {
 
   const requestedBackendPort = parseInt(process.env.BACKEND_PORT || String(DEFAULT_BACKEND_PORT), 10);
   const requestedWebPort = parseInt(process.env.PORT || String(DEFAULT_WEB_PORT), 10);
+  const devDbEnv = loadGeneratedDevDbEnv();
 
   // Backend port: explicit BACKEND_PORT must be respected (and must be free —
   // we won't shoot a process the user explicitly aimed us at). Otherwise we
@@ -409,9 +583,21 @@ async function main(): Promise<void> {
   if (tls) {
     console.info(`[dev] HTTPS enabled — https://${tls.hostname}:${webPort}`);
   }
+  if (devDbEnv.DATABASE_URL) {
+    console.info(
+      `[dev] Database: ${devDbEnv.BOARDSESH_DEV_DB_HOST ?? 'configured host'} ` +
+        `(${devDbEnv.BOARDSESH_DEV_DB_SOURCE ?? 'generated'})`,
+    );
+  }
+  if (devBuildMetadata.branchName) {
+    console.info(`[dev] Branch: ${devBuildMetadata.branchName}`);
+  }
+  if (devBuildMetadata.qaNotesFilePath) {
+    console.info(`[dev] QA notes: ${devBuildMetadata.qaNotesFilePath}`);
+  }
   console.info();
 
-  processes.backend.process = startBackend(backendPort, tls);
+  processes.backend.process = startBackend(backendPort, tls, devDbEnv);
 
   console.info(`[dev] Waiting for backend to be healthy...`);
   backendHealthy = await checkBackendHealth(backendPort, tls);
@@ -421,7 +607,7 @@ async function main(): Promise<void> {
   }
   console.info(`[dev] ✓ Backend is healthy`);
 
-  processes.web.process = startWeb(webPort, backendPort, tls);
+  processes.web.process = startWeb(webPort, backendPort, tls, devDbEnv, devBuildMetadata);
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

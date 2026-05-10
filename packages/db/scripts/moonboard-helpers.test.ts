@@ -4,6 +4,7 @@ import {
   coordinateToHoldId,
   movesToFrames,
   moveToHoldState,
+  moonBoardGradeToDifficultyId,
   uuidv5,
   MOONBOARD_UUID_NAMESPACE,
   HOLD_STATE_CODES,
@@ -90,6 +91,28 @@ void describe('moveToHoldState', () => {
 
   void it('returns HAND for regular moves', () => {
     assert.equal(moveToHoldState({ problemId: 1, description: 'E5', isStart: false, isEnd: false }), 'HAND');
+  });
+});
+
+void describe('moonBoardGradeToDifficultyId', () => {
+  void it('maps MoonBoard 5-series grades into shared difficulty ids', () => {
+    assert.equal(moonBoardGradeToDifficultyId('5+'), 13);
+    assert.equal(moonBoardGradeToDifficultyId('5A'), 13);
+    assert.equal(moonBoardGradeToDifficultyId('5B'), 14);
+    assert.equal(moonBoardGradeToDifficultyId('5C'), 15);
+  });
+
+  void it('keeps MoonBoard 6B on the shared boulder grade id', () => {
+    assert.equal(moonBoardGradeToDifficultyId('6B'), 18);
+    assert.equal(moonBoardGradeToDifficultyId('6b'), 18);
+  });
+
+  void it('maps the top MoonBoard dump grade', () => {
+    assert.equal(moonBoardGradeToDifficultyId('8B+'), 31);
+  });
+
+  void it('returns undefined for unknown grades', () => {
+    assert.equal(moonBoardGradeToDifficultyId('9A'), undefined);
   });
 });
 

@@ -1,6 +1,7 @@
 // Playlist Generation Utilities
 
-import { TENSION_KILTER_GRADES } from '@/app/lib/board-data';
+import { getGradesForBoard } from '@/app/lib/board-data';
+import type { BoardName } from '@/app/lib/types';
 import {
   type GeneratorOptions,
   type PlannedClimbSlot,
@@ -11,16 +12,21 @@ import {
   WARM_UP_CONFIG,
 } from './types';
 
-const MIN_GRADE = TENSION_KILTER_GRADES[0].difficulty_id; // 10
-const MAX_GRADE = TENSION_KILTER_GRADES[TENSION_KILTER_GRADES.length - 1].difficulty_id; // 33
+type GradeScale = ReturnType<typeof getGradesForBoard>;
 
 // Clamp grade to valid range
-const clampGrade = (grade: number): number => {
-  return Math.max(MIN_GRADE, Math.min(MAX_GRADE, grade));
+const clampGrade = (grade: number, grades: GradeScale): number => {
+  const minGrade = grades[0]?.difficulty_id ?? grade;
+  const maxGrade = grades[grades.length - 1]?.difficulty_id ?? grade;
+  return Math.max(minGrade, Math.min(maxGrade, grade));
 };
 
 // Generate warm-up slots
-const generateWarmUp = (targetGrade: number, warmUpType: 'standard' | 'extended' | 'none'): PlannedClimbSlot[] => {
+const generateWarmUp = (
+  targetGrade: number,
+  warmUpType: 'standard' | 'extended' | 'none',
+  grades: GradeScale,
+): PlannedClimbSlot[] => {
   if (warmUpType === 'none') {
     return [];
   }
@@ -29,15 +35,16 @@ const generateWarmUp = (targetGrade: number, warmUpType: 'standard' | 'extended'
   const slots: PlannedClimbSlot[] = [];
 
   // Start from lower grades and work up
-  const startGrade = clampGrade(targetGrade - config.grades);
+  const startGrade = clampGrade(targetGrade - config.grades, grades);
+  const minGrade = grades[0]?.difficulty_id ?? startGrade;
   let index = 0;
 
   for (let grade = startGrade; grade < targetGrade; grade++) {
-    if (grade < MIN_GRADE) continue;
+    if (grade < minGrade) continue;
 
     for (let i = 0; i < config.climbsPerGrade; i++) {
       slots.push({
-        grade: clampGrade(grade),
+        grade: clampGrade(grade, grades),
         section: 'warmUp',
         index: index++,
       });
@@ -48,11 +55,11 @@ const generateWarmUp = (targetGrade: number, warmUpType: 'standard' | 'extended'
 };
 
 // Generate Volume workout plan
-export const generateVolumePlan = (options: VolumeOptions): PlannedClimbSlot[] => {
+export const generateVolumePlan = (options: VolumeOptions, grades: GradeScale): PlannedClimbSlot[] => {
   const slots: PlannedClimbSlot[] = [];
 
   // Add warm-up
-  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp);
+  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp, grades);
   slots.push(...warmUpSlots);
 
   // Add main set with variability
@@ -66,7 +73,7 @@ export const generateVolumePlan = (options: VolumeOptions): PlannedClimbSlot[] =
     } else {
       // Weighted distribution favoring target grade
       const offset = Math.round((Math.random() * 2 - 1) * options.mainSetVariability);
-      grade = clampGrade(options.targetGrade + offset);
+      grade = clampGrade(options.targetGrade + offset, grades);
     }
 
     slots.push({
@@ -80,11 +87,11 @@ export const generateVolumePlan = (options: VolumeOptions): PlannedClimbSlot[] =
 };
 
 // Generate Pyramid workout plan
-export const generatePyramidPlan = (options: PyramidOptions): PlannedClimbSlot[] => {
+export const generatePyramidPlan = (options: PyramidOptions, grades: GradeScale): PlannedClimbSlot[] => {
   const slots: PlannedClimbSlot[] = [];
 
   // Add warm-up
-  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp);
+  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp, grades);
   slots.push(...warmUpSlots);
 
   // Calculate step size
@@ -92,7 +99,7 @@ export const generatePyramidPlan = (options: PyramidOptions): PlannedClimbSlot[]
   const warmUpEndGrade =
     warmUpSlots.length > 0
       ? warmUpSlots[warmUpSlots.length - 1].grade
-      : clampGrade(options.targetGrade - options.numberOfSteps);
+      : clampGrade(options.targetGrade - options.numberOfSteps, grades);
 
   const stepsUp = Math.floor(options.numberOfSteps / 2) + 1;
   const stepsDown = options.numberOfSteps - stepsUp + 1;
@@ -103,7 +110,8 @@ export const generatePyramidPlan = (options: PyramidOptions): PlannedClimbSlot[]
 
   // Increasing phase
   for (let step = 0; step < stepsUp; step++) {
-    const grade = step === stepsUp - 1 ? options.targetGrade : clampGrade(warmUpEndGrade + gradeIncrement * step);
+    const grade =
+      step === stepsUp - 1 ? options.targetGrade : clampGrade(warmUpEndGrade + gradeIncrement * step, grades);
 
     for (let i = 0; i < options.climbsPerStep; i++) {
       slots.push({
@@ -116,7 +124,7 @@ export const generatePyramidPlan = (options: PyramidOptions): PlannedClimbSlot[]
 
   // Decreasing phase
   for (let step = 1; step < stepsDown; step++) {
-    const grade = clampGrade(options.targetGrade - gradeIncrement * step);
+    const grade = clampGrade(options.targetGrade - gradeIncrement * step, grades);
 
     for (let i = 0; i < options.climbsPerStep; i++) {
       slots.push({
@@ -131,18 +139,18 @@ export const generatePyramidPlan = (options: PyramidOptions): PlannedClimbSlot[]
 };
 
 // Generate Ladder workout plan
-export const generateLadderPlan = (options: LadderOptions): PlannedClimbSlot[] => {
+export const generateLadderPlan = (options: LadderOptions, grades: GradeScale): PlannedClimbSlot[] => {
   const slots: PlannedClimbSlot[] = [];
 
   // Add warm-up
-  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp);
+  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp, grades);
   slots.push(...warmUpSlots);
 
   // Calculate starting grade and step size
   const warmUpEndGrade =
     warmUpSlots.length > 0
       ? warmUpSlots[warmUpSlots.length - 1].grade
-      : clampGrade(options.targetGrade - options.numberOfSteps);
+      : clampGrade(options.targetGrade - options.numberOfSteps, grades);
 
   const gradeIncrement = Math.max(
     1,
@@ -154,7 +162,9 @@ export const generateLadderPlan = (options: LadderOptions): PlannedClimbSlot[] =
   // Increasing phase only (ladder goes up)
   for (let step = 0; step < options.numberOfSteps; step++) {
     const grade =
-      step === options.numberOfSteps - 1 ? options.targetGrade : clampGrade(warmUpEndGrade + gradeIncrement * step);
+      step === options.numberOfSteps - 1
+        ? options.targetGrade
+        : clampGrade(warmUpEndGrade + gradeIncrement * step, grades);
 
     for (let i = 0; i < options.climbsPerStep; i++) {
       slots.push({
@@ -169,11 +179,11 @@ export const generateLadderPlan = (options: LadderOptions): PlannedClimbSlot[] =
 };
 
 // Generate Grade Focus workout plan
-export const generateGradeFocusPlan = (options: GradeFocusOptions): PlannedClimbSlot[] => {
+export const generateGradeFocusPlan = (options: GradeFocusOptions, grades: GradeScale): PlannedClimbSlot[] => {
   const slots: PlannedClimbSlot[] = [];
 
   // Add warm-up
-  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp);
+  const warmUpSlots = generateWarmUp(options.targetGrade, options.warmUp, grades);
   slots.push(...warmUpSlots);
 
   // All climbs at target grade
@@ -191,24 +201,25 @@ export const generateGradeFocusPlan = (options: GradeFocusOptions): PlannedClimb
 };
 
 // Main function to generate plan based on options
-export const generateWorkoutPlan = (options: GeneratorOptions): PlannedClimbSlot[] => {
+export const generateWorkoutPlan = (options: GeneratorOptions, boardName: BoardName): PlannedClimbSlot[] => {
+  const grades = getGradesForBoard(boardName);
   switch (options.type) {
     case 'volume':
-      return generateVolumePlan(options);
+      return generateVolumePlan(options, grades);
     case 'pyramid':
-      return generatePyramidPlan(options);
+      return generatePyramidPlan(options, grades);
     case 'ladder':
-      return generateLadderPlan(options);
+      return generateLadderPlan(options, grades);
     case 'gradeFocus':
-      return generateGradeFocusPlan(options);
+      return generateGradeFocusPlan(options, grades);
     default:
       return [];
   }
 };
 
 // Get grade name from difficulty_id
-export const getGradeName = (difficultyId: number): string => {
-  const grade = TENSION_KILTER_GRADES.find((g) => g.difficulty_id === difficultyId);
+export const getGradeName = (difficultyId: number, boardName: BoardName): string => {
+  const grade = getGradesForBoard(boardName).find((g) => g.difficulty_id === difficultyId);
   return grade?.difficulty_name || `Grade ${difficultyId}`;
 };
 

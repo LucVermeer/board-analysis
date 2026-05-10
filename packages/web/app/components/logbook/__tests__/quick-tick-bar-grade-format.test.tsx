@@ -54,6 +54,10 @@ vi.mock('@/app/lib/board-data', () => ({
     { difficulty_id: 16, difficulty_name: '6a/V3', v_grade: 'V3', font_grade: '6a' },
     { difficulty_id: 22, difficulty_name: '7a/V6', v_grade: 'V6', font_grade: '7a' },
   ],
+  getGradesForBoard: () => [
+    { difficulty_id: 16, difficulty_name: '6a/V3', v_grade: 'V3', font_grade: '6a' },
+    { difficulty_id: 22, difficulty_name: '7a/V6', v_grade: 'V6', font_grade: '7a' },
+  ],
 }));
 
 vi.mock('react-swipeable', () => ({

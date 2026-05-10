@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load environment files (same as drizzle.config.ts)
+config({ path: path.resolve(__dirname, '../../../.boardsesh/dev-db.env') });
 config({ path: path.resolve(__dirname, '../../../.env.local') });
 config({ path: path.resolve(__dirname, '../../web/.env.local') });
 config({ path: path.resolve(__dirname, '../../web/.env.development.local') });

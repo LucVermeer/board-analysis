@@ -368,6 +368,46 @@ describe('QuickTickBar', () => {
       expect(call.quality).toBe(3);
     });
 
+    it('saves a MoonBoard 6B tick with the shared difficulty id 18', async () => {
+      const ref = React.createRef<QuickTickBarHandle>();
+      const moonboardDetails = makeBoardDetails({
+        board_name: 'moonboard' as BoardName,
+        layout_id: 5,
+        size_id: 1,
+        set_ids: [17, 18, 19, 21, 22, 231],
+        supportsMirroring: false,
+      });
+      const moonboardClimb = makeClimb({
+        uuid: 'moonboard-climb-6b',
+        difficulty: '6b/V4',
+        angle: 40,
+        userAscents: 1,
+      });
+      render(
+        <QuickTickBar
+          ref={ref}
+          {...defaultProps}
+          currentClimb={moonboardClimb}
+          boardDetails={moonboardDetails}
+          angle={40 as Angle}
+        />,
+      );
+
+      await act(async () => {
+        fireEvent.click(await screen.findByTestId('quick-tick-grade'));
+      });
+      await act(async () => {
+        screen.getByRole('option', { name: 'V4 (consensus)' }).click();
+      });
+      await act(async () => {
+        ref.current!.save();
+      });
+
+      const call = mockSaveTick.mock.calls[0][0];
+      expect(call.layoutId).toBe(5);
+      expect(call.difficulty).toBe(18);
+    });
+
     it('does not call onSave when saveTick rejects and leaves the bar mounted', async () => {
       mockSaveTick.mockRejectedValueOnce(new Error('network down'));
       const ref = React.createRef<QuickTickBarHandle>();

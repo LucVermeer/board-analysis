@@ -3,6 +3,7 @@ import { defineConfig } from 'drizzle-kit';
 import path from 'path';
 
 // Load environment from root or web package
+config({ path: path.resolve(process.cwd(), '../../.boardsesh/dev-db.env') });
 config({ path: path.resolve(process.cwd(), '../../.env.local') });
 config({ path: path.resolve(process.cwd(), '../web/.env.local') });
 config({ path: path.resolve(process.cwd(), '../web/.env.development.local') });

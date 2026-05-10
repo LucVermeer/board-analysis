@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import MuiRating from '@mui/material/Rating';
 import Chip from '@mui/material/Chip';
@@ -20,7 +20,7 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { track } from '@vercel/analytics';
 import type { Climb, BoardDetails } from '@/app/lib/types';
 import { type TickStatus, useBoardProvider } from '../board-provider/board-provider-context';
-import { TENSION_KILTER_GRADES, ANGLES } from '@/app/lib/board-data';
+import { getGradesForBoard, ANGLES } from '@/app/lib/board-data';
 import { isBetaVideoUrl, BETA_VIDEO_URL_VALIDATION_MESSAGE } from '@/app/lib/beta-video-url';
 
 import dayjs from 'dayjs';
@@ -60,7 +60,7 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
   const { t } = useTranslation('climbs');
   const { t: tProfile } = useTranslation('profile');
   const { saveTick, isAuthenticated } = useBoardProvider();
-  const grades = TENSION_KILTER_GRADES;
+  const grades = useMemo(() => getGradesForBoard(boardDetails.board_name), [boardDetails.board_name]);
   const angleOptions = ANGLES[boardDetails.board_name];
 
   const getInitialValues = (): LogAscentFormValues => ({

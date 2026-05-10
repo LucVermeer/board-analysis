@@ -74,8 +74,8 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
   // Generate the workout plan preview
   const plannedSlots = useMemo(() => {
     if (!options) return [];
-    return generateWorkoutPlan(options);
-  }, [options]);
+    return generateWorkoutPlan(options, boardDetails.board_name);
+  }, [options, boardDetails.board_name]);
 
   // Handle workout type selection
   const handleTypeSelect = useCallback(
@@ -286,7 +286,7 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
         <div className={styles.configureContainer}>
           {/* Chart Preview */}
           <div className={styles.chartSection}>
-            <GradeProgressionChart plannedSlots={plannedSlots} height={140} />
+            <GradeProgressionChart plannedSlots={plannedSlots} boardDetails={boardDetails} height={140} />
           </div>
 
           {/* Summary */}
@@ -296,8 +296,11 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
               const lastGrade = group.slots[group.slots.length - 1].grade;
               const range =
                 firstGrade === lastGrade
-                  ? getGradeName(firstGrade)
-                  : `${getGradeName(firstGrade)} - ${getGradeName(lastGrade)}`;
+                  ? getGradeName(firstGrade, boardDetails.board_name)
+                  : `${getGradeName(firstGrade, boardDetails.board_name)} - ${getGradeName(
+                      lastGrade,
+                      boardDetails.board_name,
+                    )}`;
               return (
                 <div key={group.section} className={styles.summaryRow}>
                   <Typography variant="body2" component="span" color="text.secondary">

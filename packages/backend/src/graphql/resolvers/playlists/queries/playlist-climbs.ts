@@ -2,7 +2,7 @@ import { eq, and, asc, sql } from 'drizzle-orm';
 import { type ConnectionContext, type Climb, type BoardName, SUPPORTED_BOARDS } from '@boardsesh/shared-schema';
 import { db } from '../../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { getGradeLabel } from '@boardsesh/db/queries';
+import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
 import { validateInput } from '../../shared/helpers';
 import { GetPlaylistClimbsInputSchema } from '../../../../validation/schemas';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../../db/queries/util/table-select';
@@ -102,7 +102,7 @@ async function fetchSpecificBoardClimbs(
     ascensionist_count: Number(result.ascensionist_count || 0),
     difficulty: getGradeLabel(result.difficulty_id),
     quality_average: result.quality_average?.toString() || '0',
-    stars: Math.round((Number(result.quality_average) || 0) * 5),
+    stars: getClimbStars(boardName, result.quality_average),
     difficulty_error: result.difficulty_error?.toString() || '0',
     benchmark_difficulty:
       result.benchmark_difficulty && result.benchmark_difficulty > 0 ? result.benchmark_difficulty.toString() : null,

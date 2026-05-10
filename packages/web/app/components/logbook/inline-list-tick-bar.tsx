@@ -9,7 +9,7 @@ import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import { PersonFallingIcon } from '@/app/components/icons/person-falling-icon';
 import type { Climb, BoardDetails, Angle } from '@/app/lib/types';
 import { useBoardProvider } from '../board-provider/board-provider-context';
-import { TENSION_KILTER_GRADES } from '@/app/lib/board-data';
+import { getGradesForBoard } from '@/app/lib/board-data';
 import { loadTickDraft } from '@/app/lib/tick-draft-db';
 import { useTickSave, buildTickTarget, type TickTarget } from '@/app/hooks/use-tick-save';
 import { themeTokens } from '@/app/theme/theme-config';
@@ -91,7 +91,7 @@ export const InlineListTickBar: React.FC<InlineListTickBarProps> = ({
   const saveButtonRef = useRef<HTMLButtonElement>(null);
   const attemptButtonRef = useRef<HTMLButtonElement>(null);
 
-  const grades = TENSION_KILTER_GRADES;
+  const grades = useMemo(() => getGradesForBoard(boardDetails.board_name), [boardDetails.board_name]);
 
   const currentGradeId = difficulty;
 

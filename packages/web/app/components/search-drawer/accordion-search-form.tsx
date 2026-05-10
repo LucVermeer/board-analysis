@@ -14,7 +14,7 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
-import { TENSION_KILTER_GRADES } from '@/app/lib/board-data';
+import { getGradesForBoard } from '@/app/lib/board-data';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
 import SearchClimbNameInput from './search-climb-name-input';
@@ -47,7 +47,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const { t } = useTranslation('climbs');
   const { uiSearchParams, updateFilters } = useUISearchParams();
   const { isAuthenticated } = useBoardProvider();
-  const grades = TENSION_KILTER_GRADES;
+  const grades = getGradesForBoard(boardDetails.board_name);
   const { openAuthModal } = useAuthModal();
   const [showSort, setShowSort] = useState(false);
 
