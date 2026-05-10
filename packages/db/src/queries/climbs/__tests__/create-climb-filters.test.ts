@@ -28,6 +28,9 @@ function sqlToString<T>(fragment: SQL<T>): string {
   const chunks = (fragment as unknown as { queryChunks?: unknown[] }).queryChunks ?? [];
   return chunks
     .map((chunk) => {
+      if (typeof chunk === 'string' || typeof chunk === 'number' || typeof chunk === 'boolean') {
+        return String(chunk);
+      }
       if (chunk && typeof chunk === 'object' && 'queryChunks' in chunk) {
         return sqlToString(chunk as SQL);
       }
@@ -95,6 +98,19 @@ void describe('createClimbFilters: projectsOnly', () => {
     // with no stats row are not dropped by the INNER JOIN.
     const f = createClimbFilters(params, { projectsOnly: true });
     assert.equal(f.climbStatsConditions.length, 0);
+  });
+});
+
+void describe('createClimbFilters: minRating', () => {
+  void it('scales whole-star minRating values to the stored 0-1 qualityAverage range', () => {
+    const f = createClimbFilters(params, { minRating: 4 });
+    assert.equal(f.climbStatsConditions.length, 1);
+
+    const rendered = sqlToString(f.climbStatsConditions[0]);
+    assert.match(rendered, /quality_average/);
+    assert.match(rendered, />=/);
+    assert.match(rendered, /0\.8/);
+    assert.doesNotMatch(rendered, />=\s*4/);
   });
 });
 

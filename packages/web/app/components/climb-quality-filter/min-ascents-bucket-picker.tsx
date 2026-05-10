@@ -56,9 +56,7 @@ const MinAscentsBucketPicker: React.FC<MinAscentsBucketPickerProps> = ({
         value={normalizedValue}
         aria-label={ariaLabel}
         onChange={(_, nextValue: number | null) => {
-          if (nextValue !== null) {
-            onChange(normalizeMinAscentsFilter(nextValue));
-          }
+          onChange(nextValue === null ? 0 : normalizeMinAscentsFilter(nextValue));
         }}
         sx={bucketPickerGroupSx}
       >

@@ -103,7 +103,8 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
   }
 
   if (searchParams.minRating) {
-    climbStatsConditions.push(sql`${boardClimbStats.qualityAverage} >= ${searchParams.minRating}`);
+    // qualityAverage is stored from 0-1; minRating arrives as whole stars from 1-5.
+    climbStatsConditions.push(sql`${boardClimbStats.qualityAverage} >= ${searchParams.minRating / 5}`);
   }
 
   if (searchParams.gradeAccuracy) {

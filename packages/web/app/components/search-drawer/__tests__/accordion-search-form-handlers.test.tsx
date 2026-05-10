@@ -81,6 +81,14 @@ describe('AccordionSearchForm — quality filter controls', () => {
     expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minAscents: 10 });
   });
 
+  it('Min Ascents selected zero bucket emits the 0 sentinel when clicked again', () => {
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '0+' }));
+
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minAscents: 0 });
+  });
+
   it('Min Rating star picker emits whole-star thresholds', () => {
     render(<AccordionSearchForm boardDetails={boardDetails} />);
     fireEvent.click(screen.getByRole('option', { name: '4 stars and up' }));
