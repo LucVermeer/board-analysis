@@ -30,5 +30,7 @@ export type MoonBoardRendererProps = {
   mirrored?: boolean;
   thumbnail?: boolean;
   fillHeight?: boolean;
+  /** Set fetchpriority="high" on the background image — use for the LCP-critical card on a page. */
+  fetchPriority?: 'high' | 'auto';
   onHoldClick?: (holdId: number, anchor: Element) => void;
 };

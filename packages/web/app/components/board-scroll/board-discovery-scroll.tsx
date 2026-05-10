@@ -252,11 +252,13 @@ export default function BoardDiscoveryScroll({
           );
         })}
 
-        {popularConfigs.map((config) => (
+        {popularConfigs.map((config, index) => (
           <BoardScrollCard
             key={`${config.boardType}-${config.layoutId}-${config.sizeId}`}
             popularConfig={config}
             onClick={() => onConfigClick(config)}
+            // First popular config is the LCP for unauthenticated visitors (no nearby/saved boards above it).
+            fetchPriority={index === 0 ? 'high' : undefined}
           />
         ))}
       </BoardScrollSection>

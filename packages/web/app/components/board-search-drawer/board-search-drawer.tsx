@@ -56,6 +56,13 @@ export default function BoardSearchDrawer({ open, onClose, onBoardOpen }: BoardS
   // re-running without adding locationResolved to its dep array (which would
   // cause a second no-op run every time the effect sets it to true).
   const locationResolvedRef = useRef(false);
+  // Defer mounting BoardSearchMap (and its OpenStreetMap tile downloads) until
+  // the drawer has been opened at least once. Sticky — once mounted we keep it
+  // alive across close/reopen so the map state and tile cache persist.
+  const [mapMounted, setMapMounted] = useState(false);
+  useEffect(() => {
+    if (open) setMapMounted(true);
+  }, [open]);
 
   // Ask for the user's location on first open. If granted we'll recenter to ~20km view.
   useEffect(() => {
@@ -217,16 +224,18 @@ export default function BoardSearchDrawer({ open, onClose, onBoardOpen }: BoardS
 
         {/* Map */}
         <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          <BoardSearchMap
-            center={center}
-            zoom={zoom}
-            boards={boards}
-            selectedBoardUuid={selectedBoardUuid}
-            userCoords={userCoords}
-            requestPermission={requestPermission}
-            onBoardClick={handleMarkerClick}
-            onViewportChange={handleViewportChange}
-          />
+          {mapMounted && (
+            <BoardSearchMap
+              center={center}
+              zoom={zoom}
+              boards={boards}
+              selectedBoardUuid={selectedBoardUuid}
+              userCoords={userCoords}
+              requestPermission={requestPermission}
+              onBoardClick={handleMarkerClick}
+              onViewportChange={handleViewportChange}
+            />
+          )}
         </Box>
 
         {/* Results carousel */}

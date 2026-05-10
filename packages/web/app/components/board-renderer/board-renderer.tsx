@@ -15,11 +15,22 @@ export type BoardProps = {
   fillHeight?: boolean;
   /** Custom max-height for the board SVG. Defaults to '55vh', or '10vh' for thumbnails. Ignored when fillHeight is true. */
   maxHeight?: string;
+  /** Set fetchpriority="high" on the first background image — use for the LCP-critical card on a page. */
+  fetchPriority?: 'high' | 'auto';
   onHoldClick?: (holdId: number, anchor: Element) => void;
 };
 
 const BoardRenderer = React.memo(
-  ({ boardDetails, thumbnail, maxHeight, fillHeight, litUpHoldsMap, mirrored, onHoldClick }: BoardProps) => {
+  ({
+    boardDetails,
+    thumbnail,
+    maxHeight,
+    fillHeight,
+    fetchPriority,
+    litUpHoldsMap,
+    mirrored,
+    onHoldClick,
+  }: BoardProps) => {
     const isMoonBoard = boardDetails.board_name === 'moonboard' && !!boardDetails.layoutFolder;
 
     // Only compute maxHeight when not using fillHeight - memoized to prevent recreation.
@@ -40,6 +51,7 @@ const BoardRenderer = React.memo(
           mirrored={mirrored}
           thumbnail={thumbnail}
           fillHeight={fillHeight}
+          fetchPriority={fetchPriority}
           onHoldClick={onHoldClick}
         />
       );
@@ -58,15 +70,22 @@ const BoardRenderer = React.memo(
         className={svgClassName}
         style={svgStyle}
       >
-        {Object.keys(boardDetails.images_to_holds).map((imageUrl) => (
-          <image
-            key={imageUrl}
-            href={getImageUrl(imageUrl, boardDetails.board_name, thumbnail)}
-            width={boardWidth}
-            height={boardHeight}
-            preserveAspectRatio="none"
-          />
-        ))}
+        {Object.keys(boardDetails.images_to_holds).map((imageUrl, index) => {
+          // SVG <image> supports the HTML `fetchpriority` (lowercase) attribute per spec;
+          // React's SVG prop types don't include it yet, so apply via spread.
+          const priorityHint =
+            index === 0 && fetchPriority ? ({ fetchpriority: fetchPriority } as Record<string, string>) : null;
+          return (
+            <image
+              key={imageUrl}
+              href={getImageUrl(imageUrl, boardDetails.board_name, thumbnail)}
+              width={boardWidth}
+              height={boardHeight}
+              preserveAspectRatio="none"
+              {...priorityHint}
+            />
+          );
+        })}
         {litUpHoldsMap && (
           <BoardLitupHolds
             onHoldClick={onHoldClick}
@@ -84,6 +103,7 @@ const BoardRenderer = React.memo(
     if (prevProps.thumbnail !== nextProps.thumbnail) return false;
     if (prevProps.maxHeight !== nextProps.maxHeight) return false;
     if (prevProps.fillHeight !== nextProps.fillHeight) return false;
+    if (prevProps.fetchPriority !== nextProps.fetchPriority) return false;
 
     // Compare mirrored and onHoldClick (passed to BoardLitupHolds)
     if (prevProps.mirrored !== nextProps.mirrored) return false;

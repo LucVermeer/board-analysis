@@ -11,6 +11,7 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
   mirrored = false,
   thumbnail = false,
   fillHeight = false,
+  fetchPriority,
   onHoldClick,
 }) => {
   const { width, height } = MOONBOARD_SIZE;
@@ -81,11 +82,14 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={svgStyle}>
-      {/* Render MoonBoard background first */}
+      {/* Render MoonBoard background first.
+          SVG <image> supports the HTML `fetchpriority` (lowercase) attribute per spec;
+          React's SVG prop types don't include it yet, so apply via spread. */}
       <image
         href={thumbnail ? '/images/moonboard/thumbs/moonboard-bg.webp' : '/images/moonboard/moonboard-bg.webp'}
         width="100%"
         height="100%"
+        {...(fetchPriority ? ({ fetchpriority: fetchPriority } as Record<string, string>) : null)}
       />
 
       {/* Render hold set images as overlay layers */}

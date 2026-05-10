@@ -37,6 +37,8 @@ type BoardScrollCardProps = {
   distanceMeters?: number | null;
   bluetoothNearby?: boolean;
   size?: 'default' | 'small';
+  /** Set fetchpriority="high" on the board thumbnail — use only for the LCP-critical card on a page. */
+  fetchPriority?: 'high' | 'auto';
   onClick: () => void;
 };
 
@@ -51,6 +53,7 @@ export default function BoardScrollCard({
   distanceMeters,
   bluetoothNearby,
   size = 'default',
+  fetchPriority,
   onClick,
 }: BoardScrollCardProps) {
   const boardDetails = useBoardDetails(userBoard, storedConfig, popularConfig);
@@ -103,7 +106,13 @@ export default function BoardScrollCard({
         className={`${styles.cardSquare} ${selected ? styles.cardSquareSelected : ''} ${disabled ? styles.cardSquareDisabled : ''}`}
       >
         {boardDetails ? (
-          <BoardRenderer mirrored={false} boardDetails={boardDetails} thumbnail fillHeight />
+          <BoardRenderer
+            mirrored={false}
+            boardDetails={boardDetails}
+            thumbnail
+            fillHeight
+            fetchPriority={fetchPriority}
+          />
         ) : (
           <div className={styles.cardFallback}>
             <DashboardOutlined sx={{ fontSize: iconSize }} />
