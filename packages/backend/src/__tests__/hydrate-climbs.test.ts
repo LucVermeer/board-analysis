@@ -35,6 +35,10 @@ vi.mock('../db/queries/util/table-select', () => ({
 
 vi.mock('@boardsesh/db/queries', () => ({
   getGradeLabel: (id: number | null | undefined) => (id == null ? '?' : `V${id}`),
+  getClimbStars: (_boardName: string | null | undefined, qualityAverage: number | string | null | undefined) => {
+    const numericQualityAverage = Number(qualityAverage);
+    return Number.isFinite(numericQualityAverage) ? Math.round(numericQualityAverage * 5) : 0;
+  },
 }));
 
 import { hydrateClimbsByRefs } from '../graphql/resolvers/playlists/helpers/hydrate-climbs';
