@@ -11,6 +11,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../db/queries/util/table-select';
 import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 import { publishSocialEvent } from '../../../events';
+import { notifyClimbRevalidated } from '../../../lib/web-revalidate';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import {
   buildMoonBoardClimbHoldRows,
@@ -365,6 +366,10 @@ export const climbMutations = {
       await populateDenormalizedColumns(db, validated.boardType, [validated.uuid]);
     }
 
+    // Tell the web app to drop the cached climb-view render so the edit
+    // shows up immediately instead of waiting for the 1h TTL.
+    void notifyClimbRevalidated(validated.uuid);
+
     // On a draft → published transition, announce the new climb so follower
     // feeds pick it up, the same way saveClimb does.
     if (transitioningToPublished) {
@@ -481,6 +486,10 @@ export const climbMutations = {
         throw new Error('Draft climb could not be deleted');
       }
     });
+
+    // Bust the climb-view cache so any prerendered draft page 404s on next hit
+    // instead of serving stale content from `unstable_cache`.
+    void notifyClimbRevalidated(validatedUuid);
 
     return true;
   },

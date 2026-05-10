@@ -5,6 +5,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../../shared/helpers';
 import { SetterOverrideInputSchema, FreezeClimbInputSchema } from '../../../../validation/schemas';
 import { requireAdminOrLeader } from '../roles';
+import { notifyClimbRevalidated } from '../../../../lib/web-revalidate';
 
 /**
  * Setter override: directly set community grade/benchmark status on a climb.
@@ -95,6 +96,8 @@ export async function setterOverrideCommunityStatus(_: unknown, { input }: { inp
       })
       .returning();
   }
+
+  void notifyClimbRevalidated(climbUuid);
 
   return {
     climbUuid: result.climbUuid,

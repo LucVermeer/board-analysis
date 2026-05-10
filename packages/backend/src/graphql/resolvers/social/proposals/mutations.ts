@@ -12,6 +12,7 @@ import {
   DeleteProposalInputSchema,
 } from '../../../../validation/schemas';
 import { publishSocialEvent } from '../../../../events/index';
+import { notifyClimbRevalidated } from '../../../../lib/web-revalidate';
 import { requireAdminOrLeader, getUserVoteWeight } from '../roles';
 import { resolveCommunitySetting } from '../community-settings';
 import crypto from 'crypto';
@@ -64,14 +65,17 @@ export const socialProposalMutations = {
       } else {
         try {
           // Look up display_difficulty from stats, then resolve grade name in-memory
-          const rows = await executeRows<{ difficulty_id: number | null }>(db, sql`
+          const rows = await executeRows<{ difficulty_id: number | null }>(
+            db,
+            sql`
             SELECT ROUND(cs.display_difficulty::numeric, 0) as difficulty_id
             FROM board_climb_stats cs
             WHERE cs.climb_uuid = ${climbUuid}
               AND cs.angle = ${angle}
               AND cs.board_type = ${boardType}
             LIMIT 1
-          `);
+          `,
+          );
           currentValue = getGradeLabel(rows[0]?.difficulty_id ?? null) || 'Unknown';
         } catch {
           currentValue = 'Unknown';
@@ -164,6 +168,7 @@ export const socialProposalMutations = {
         proposal.resolvedAt = approved.resolvedAt;
 
         await applyProposalEffect(proposal);
+        void notifyClimbRevalidated(climbUuid);
 
         publishSocialEvent({
           type: 'proposal.approved',
@@ -250,6 +255,7 @@ export const socialProposalMutations = {
         proposal.resolvedAt = approved.resolvedAt;
 
         await applyProposalEffect(proposal);
+        void notifyClimbRevalidated(proposal.climbUuid);
 
         publishSocialEvent({
           type: 'proposal.approved',
@@ -317,6 +323,7 @@ export const socialProposalMutations = {
 
     if (status === 'approved') {
       await applyProposalEffect(proposal);
+      void notifyClimbRevalidated(proposal.climbUuid);
     }
 
     const eventType = status === 'approved' ? 'proposal.approved' : 'proposal.rejected';
@@ -355,6 +362,7 @@ export const socialProposalMutations = {
 
     // Revert the proposal's effect
     await revertProposalEffect(proposal);
+    void notifyClimbRevalidated(proposal.climbUuid);
 
     // Hard-delete the proposal (votes cascade-delete via FK, lastProposalId set to null via FK)
     await db.delete(dbSchema.climbProposals).where(eq(dbSchema.climbProposals.id, proposal.id));
