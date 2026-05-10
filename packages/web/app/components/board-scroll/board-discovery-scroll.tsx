@@ -174,6 +174,22 @@ export default function BoardDiscoveryScroll({
     [router, onBoardClick],
   );
 
+  // The first board card the user sees is the LCP. The render order below is:
+  // discoverBoards → bleOnlyBoards → myBoards → popularConfigs. Pick whichever
+  // list has at least one item first and assign fetchPriority="high" to its
+  // first card. Without this, an authenticated user with myBoards would get the
+  // hint applied to popularConfigs[0] (lower in the page, not the LCP).
+  let lcpSection: 'discover' | 'ble' | 'my' | 'popular' | null = null;
+  if (discoverBoards.length > 0) {
+    lcpSection = 'discover';
+  } else if (bleOnlyBoards.length > 0) {
+    lcpSection = 'ble';
+  } else if (myBoards.length > 0) {
+    lcpSection = 'my';
+  } else if (popularConfigs.length > 0) {
+    lcpSection = 'popular';
+  }
+
   return (
     <>
       <BoardScrollSection
@@ -210,17 +226,18 @@ export default function BoardDiscoveryScroll({
         </div>
 
         {/* Nearby boards (if any) */}
-        {discoverBoards.map((board) => (
+        {discoverBoards.map((board, index) => (
           <BoardScrollCard
             key={board.uuid}
             userBoard={board}
             selected={selectedBoardUuid === board.uuid}
             onClick={() => onBoardClick(board)}
+            fetchPriority={lcpSection === 'discover' && index === 0 ? 'high' : undefined}
           />
         ))}
 
         {/* BLE-discovered boards NOT already in myBoards - animate in */}
-        {bleOnlyBoards.map((board) => (
+        {bleOnlyBoards.map((board, index) => (
           <div
             key={`ble-${board.uuid}`}
             className={`${styles.myBoardCardFadeIn} ${bleBoardsVisible ? styles.myBoardCardFadeInVisible : ''}`}
@@ -230,12 +247,13 @@ export default function BoardDiscoveryScroll({
               selected={selectedBoardUuid === board.uuid}
               onClick={() => handleBleBoardClick(board)}
               bluetoothNearby
+              fetchPriority={lcpSection === 'ble' && index === 0 ? 'high' : undefined}
             />
           </div>
         ))}
 
         {/* My boards - animate in, show bluetooth badge if found nearby */}
-        {myBoards.map((board) => {
+        {myBoards.map((board, index) => {
           const isBleNearby = !!board.serialNumber && bleSerialSet.has(board.serialNumber);
           return (
             <div
@@ -247,6 +265,7 @@ export default function BoardDiscoveryScroll({
                 selected={selectedBoardUuid === board.uuid}
                 onClick={() => (isBleNearby ? handleBleBoardClick(board) : onBoardClick(board))}
                 bluetoothNearby={isBleNearby}
+                fetchPriority={lcpSection === 'my' && index === 0 ? 'high' : undefined}
               />
             </div>
           );
@@ -257,8 +276,7 @@ export default function BoardDiscoveryScroll({
             key={`${config.boardType}-${config.layoutId}-${config.sizeId}`}
             popularConfig={config}
             onClick={() => onConfigClick(config)}
-            // First popular config is the LCP for unauthenticated visitors (no nearby/saved boards above it).
-            fetchPriority={index === 0 ? 'high' : undefined}
+            fetchPriority={lcpSection === 'popular' && index === 0 ? 'high' : undefined}
           />
         ))}
       </BoardScrollSection>

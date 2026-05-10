@@ -46,9 +46,15 @@ vi.mock('@/app/hooks/use-search-boards-map', () => ({
   },
 }));
 
+// MUI's SwipeableDrawer mounts its children in a portal even when the drawer
+// is closed (display:none). Mirror that here so closed-state mount checks are
+// meaningful — the real concern is whether children are *mounted*, not visible.
 vi.mock('@/app/components/swipeable-drawer/swipeable-drawer', () => ({
-  default: ({ open, children }: { open?: boolean; children?: React.ReactNode }) =>
-    open ? <div data-testid="drawer">{children}</div> : null,
+  default: ({ open, children }: { open?: boolean; children?: React.ReactNode }) => (
+    <div data-testid="drawer" data-open={open ? 'true' : 'false'}>
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock('@/app/components/board-entity/board-card', () => ({
@@ -250,5 +256,36 @@ describe('BoardSearchDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: /open/i }));
 
     expect(onBoardOpen).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'b1' }));
+  });
+
+  describe('BoardSearchMap deferred mount', () => {
+    it('does NOT mount BoardSearchMap on the very first render while the drawer is closed', () => {
+      render(<BoardSearchDrawer open={false} onClose={vi.fn()} onBoardOpen={vi.fn()} />);
+      // 99kB of OpenStreetMap tiles get downloaded the moment the map mounts.
+      // Keeping the map unmounted until the user opens the drawer is the LCP win.
+      expect(screen.queryByTestId('board-search-map')).toBeNull();
+    });
+
+    it('mounts BoardSearchMap on the same render that the drawer opens — no empty-frame flash', () => {
+      // Defends the inline `setHasOpenedOnce(true)` + `mapMounted = hasOpenedOnce || open`
+      // pattern. A useEffect-only approach would leave the map slot empty for one
+      // commit, briefly showing a blank Box.
+      const { rerender } = render(<BoardSearchDrawer open={false} onClose={vi.fn()} onBoardOpen={vi.fn()} />);
+      expect(screen.queryByTestId('board-search-map')).toBeNull();
+
+      rerender(<BoardSearchDrawer open onClose={vi.fn()} onBoardOpen={vi.fn()} />);
+      expect(screen.queryByTestId('board-search-map')).not.toBeNull();
+    });
+
+    it('keeps BoardSearchMap mounted after the drawer is closed (sticky)', () => {
+      // The sticky flag avoids paying the Leaflet init + tile fetch cost on
+      // every reopen and preserves any pan/zoom state across sessions.
+      const { rerender } = render(<BoardSearchDrawer open onClose={vi.fn()} onBoardOpen={vi.fn()} />);
+      expect(screen.queryByTestId('board-search-map')).not.toBeNull();
+
+      rerender(<BoardSearchDrawer open={false} onClose={vi.fn()} onBoardOpen={vi.fn()} />);
+      // Drawer is closed but map stays mounted — second open will be instant.
+      expect(screen.queryByTestId('board-search-map')).not.toBeNull();
+    });
   });
 });
