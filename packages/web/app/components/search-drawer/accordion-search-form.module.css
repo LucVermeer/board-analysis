@@ -43,12 +43,6 @@
   gap: 6px;
 }
 
-.compactInputGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .fullWidth {
   width: 100%;
 }
@@ -58,13 +52,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-}
-
-/* Quality metrics row */
-.qualityRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
 }
 
 /* Sort controls row */

@@ -97,6 +97,7 @@ export type ClimbSearchInput = {
   minGrade?: number;
   maxGrade?: number;
   minAscents?: number;
+  minRating?: number;
   sortBy?: string;
   sortOrder?: string;
   name?: string;

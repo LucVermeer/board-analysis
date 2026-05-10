@@ -28,6 +28,9 @@ function sqlToString<T>(fragment: SQL<T>): string {
   const chunks = (fragment as unknown as { queryChunks?: unknown[] }).queryChunks ?? [];
   return chunks
     .map((chunk) => {
+      if (typeof chunk === 'string' || typeof chunk === 'number' || typeof chunk === 'boolean') {
+        return String(chunk);
+      }
       if (chunk && typeof chunk === 'object' && 'queryChunks' in chunk) {
         return sqlToString(chunk as SQL);
       }
@@ -95,6 +98,37 @@ void describe('createClimbFilters: projectsOnly', () => {
     // with no stats row are not dropped by the INNER JOIN.
     const f = createClimbFilters(params, { projectsOnly: true });
     assert.equal(f.climbStatsConditions.length, 0);
+  });
+});
+
+void describe('createClimbFilters: minRating', () => {
+  const ratingScaleCases: Array<{ minRating: number; expectedThreshold: string }> = [
+    { minRating: 1, expectedThreshold: '0.2' },
+    { minRating: 4, expectedThreshold: '0.8' },
+    { minRating: 5, expectedThreshold: '1' },
+  ];
+
+  for (const { minRating, expectedThreshold } of ratingScaleCases) {
+    void it(`scales minRating ${minRating} to stored threshold ${expectedThreshold}`, () => {
+      const filters = createClimbFilters(params, { minRating });
+      assert.equal(filters.climbStatsConditions.length, 1);
+
+      const rendered = sqlToString(filters.climbStatsConditions[0]);
+      assert.match(rendered, /quality_average/);
+      assert.match(rendered, />=/);
+      assert.match(rendered, new RegExp(`>=\\s*${expectedThreshold}`));
+      assert.doesNotMatch(rendered, new RegExp(`>=\\s*${minRating}(?:\\D|$)`));
+    });
+  }
+
+  void it('does not append a rating filter when minRating is 0', () => {
+    const filters = createClimbFilters(params, { minRating: 0 });
+    assert.equal(filters.climbStatsConditions.length, 0);
+  });
+
+  void it('does not append a rating filter when minRating is undefined', () => {
+    const filters = createClimbFilters(params, {});
+    assert.equal(filters.climbStatsConditions.length, 0);
   });
 });
 

@@ -320,6 +320,32 @@ describe('useQueueDataFetching', () => {
     });
   });
 
+  it('passes normalized minRating to GraphQL search inputs', async () => {
+    const searchParamsWithLegacyRating = { ...mockSearchParams, minRating: 2.5 };
+
+    renderHook(
+      () =>
+        useQueueDataFetching({
+          searchParams: searchParamsWithLegacyRating,
+          countSearchParams: searchParamsWithLegacyRating,
+          queue: mockQueue,
+          parsedParams: mockParsedParams,
+          hasDoneFirstFetch: false,
+          setHasDoneFirstFetch: mockSetHasDoneFirstFetch,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      const requestInputs = mockGraphQLRequest.mock.calls
+        .map((call) => (call[1] as { input?: { minRating?: number } } | undefined)?.input)
+        .filter((input): input is { minRating?: number } => input !== undefined);
+
+      expect(requestInputs.length).toBeGreaterThan(0);
+      expect(requestInputs.every((input) => input.minRating === 3)).toBe(true);
+    });
+  });
+
   it('should handle empty search results', async () => {
     mockGraphQLRequest.mockResolvedValue({
       searchClimbs: {

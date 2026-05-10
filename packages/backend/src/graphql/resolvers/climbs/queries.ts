@@ -77,6 +77,7 @@ export const climbQueries = {
       minGrade: input.minGrade,
       maxGrade: input.maxGrade,
       minAscents: input.minAscents,
+      minRating: input.minRating,
       sortBy: input.sortBy ?? 'ascents',
       sortOrder: input.sortOrder ?? 'desc',
       name: input.name,

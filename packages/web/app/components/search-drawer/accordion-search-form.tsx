@@ -8,15 +8,17 @@ import MuiButton from '@mui/material/Button';
 import MuiSelect, { type SelectChangeEvent } from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import MuiSwitch from '@mui/material/Switch';
-import TextField from '@mui/material/TextField';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
+import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
+import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
+import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
 import SearchClimbNameInput from './search-climb-name-input';
 import SetterNameSelect from './setter-name-select';
 import ClimbSearchForm from './climb-search-form';
@@ -54,6 +56,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
   const isLargestSize = boardDetails.size_name?.toLowerCase().includes('12');
   const showTallClimbsFilter = isKilterHomewall && isLargestSize;
+  const minRatingPickerValue = getMinRatingPickerValue(uiSearchParams.minRating);
 
   let statusValue: 'any' | 'drafts' | 'established' | 'projects' = 'any';
   if (uiSearchParams.onlyDrafts) {
@@ -192,35 +195,29 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       getSummary: () => getQualityPanelSummary(uiSearchParams),
       content: (
         <div className={styles.panelContent}>
-          <div className={styles.qualityRow}>
-            <div className={styles.compactInputGroup}>
-              <span className={styles.fieldLabel}>{t('search.fields.minAscents')}</span>
-              <TextField
-                type="number"
-                slotProps={{ htmlInput: { min: 1 } }}
-                // 0 is the "no filter" sentinel (DEFAULT_SEARCH_PARAMS.minAscents),
-                // so render it as the empty placeholder rather than a literal "0".
-                value={uiSearchParams.minAscents || ''}
-                onChange={(e) => updateFilters({ minAscents: Number(e.target.value) || 0 })}
-                className={styles.fullWidth}
-                placeholder={t('search.fields.any')}
-                size="small"
-              />
-            </div>
-            <div className={styles.compactInputGroup}>
-              <span className={styles.fieldLabel}>{t('search.fields.minRating')}</span>
-              <TextField
-                type="number"
-                slotProps={{ htmlInput: { min: 1.0, max: 3.0, step: 0.1 } }}
-                // 0 is the "no filter" sentinel (DEFAULT_SEARCH_PARAMS.minRating),
-                // so render it as the empty placeholder rather than a literal "0".
-                value={uiSearchParams.minRating || ''}
-                onChange={(e) => updateFilters({ minRating: Number(e.target.value) || 0 })}
-                className={styles.fullWidth}
-                placeholder={t('search.fields.any')}
-                size="small"
-              />
-            </div>
+          <div className={styles.inputGroup}>
+            <span className={styles.fieldLabel}>{t('search.fields.minAscents')}</span>
+            <MinAscentsBucketPicker
+              value={uiSearchParams.minAscents}
+              onChange={(minAscents) => updateFilters({ minAscents })}
+              ariaLabel={t('search.fields.minAscents')}
+              getOptionLabel={(minAscents) =>
+                t('search.fields.minAscentsOption', { count: formatMinAscentsFilterCount(minAscents) })
+              }
+            />
+          </div>
+
+          <div className={styles.inputGroup}>
+            <span className={styles.fieldLabel}>{t('search.fields.minRating')}</span>
+            <InlineStarPicker
+              quality={minRatingPickerValue}
+              onSelect={(value) => updateFilters({ minRating: value ?? 0 })}
+              align="start"
+              ariaLabel={t('search.fields.minRating')}
+              clearLabel={t('search.fields.any')}
+              clearText={t('search.fields.any')}
+              getStarLabel={(rating) => t('search.fields.minRatingOption', { count: rating })}
+            />
           </div>
 
           <div className={styles.inputGroup}>

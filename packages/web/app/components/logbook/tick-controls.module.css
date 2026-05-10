@@ -146,6 +146,10 @@
   flex-wrap: wrap;
 }
 
+.pickerRowStart {
+  justify-content: flex-start;
+}
+
 /* Push picker items to the right — used for stars which sit above the right-aligned button */
 .pickerRowEnd {
   justify-content: flex-end;

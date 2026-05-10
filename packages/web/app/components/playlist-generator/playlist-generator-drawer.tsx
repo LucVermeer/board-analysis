@@ -21,6 +21,7 @@ import {
   ADD_CLIMB_TO_PLAYLIST,
 } from '@/app/lib/graphql/operations/playlists';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
+import { normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
 import { type WorkoutType, type GeneratorOptions, type PlannedClimbSlot, WORKOUT_TYPES } from './types';
 import WorkoutTypeSelector from './workout-type-selector';
 import GeneratorOptionsForm, { getDefaultOptions } from './generator-options-form';
@@ -114,7 +115,8 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
         angle,
         minGrade: grade,
         maxGrade: grade,
-        minAscents: options?.minAscents || 5,
+        minAscents: options?.minAscents ?? 5,
+        minRating: normalizeMinRatingFilter(options?.minRating) || undefined,
         sortBy: 'quality',
         sortOrder: 'desc',
         page: 1,

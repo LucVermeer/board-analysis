@@ -61,50 +61,62 @@ const boardDetails = {
   size_name: '12 x 12',
 } as unknown as BoardDetails;
 
-describe('AccordionSearchForm — numeric handlers never emit undefined', () => {
+describe('AccordionSearchForm — quality filter controls', () => {
   beforeEach(() => {
     mockUpdateFilters.mockClear();
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
   });
 
-  // Regression for Sentry issues 7434008446 / 7435688419 / 7439815956:
-  // clearing a numeric input previously dispatched `undefined`, which then
-  // crashed `searchParamsToUrlParams` in mobile Safari. The handlers must emit
-  // 0 (the DEFAULT_SEARCH_PARAMS sentinel) instead.
-  const findNumericInputs = () =>
-    screen
-      .getAllByPlaceholderText('Any')
-      .filter((el): el is HTMLInputElement => (el as HTMLInputElement).type === 'number');
-
-  it('Min Ascents emits 0 when cleared', () => {
-    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minAscents: 5 };
-    render(<AccordionSearchForm boardDetails={boardDetails} />);
-    // Source order: [0]=Min Ascents, [1]=Min Rating.
-    const minAscents = findNumericInputs()[0];
-    expect(minAscents.value).toBe('5');
-
-    fireEvent.change(minAscents, { target: { value: '' } });
-    const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
-    expect(lastCall).toEqual({ minAscents: 0 });
-    expect(lastCall?.minAscents).not.toBeUndefined();
+  // The old numeric-input Sentry regressions are covered by controls that always emit concrete sentinels.
+  it('renders quality controls without raw number inputs', () => {
+    const { container } = render(<AccordionSearchForm boardDetails={boardDetails} />);
+    expect(container.querySelector('input[type="number"]')).toBeNull();
   });
 
-  it('Min Rating emits 0 when cleared', () => {
-    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minRating: 2.5 };
+  it('Min Ascents preset emits the selected threshold', () => {
     render(<AccordionSearchForm boardDetails={boardDetails} />);
-    const minRating = findNumericInputs()[1];
-    expect(minRating.value).toBe('2.5');
 
-    fireEvent.change(minRating, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '10+' }));
+
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minAscents: 10 });
+  });
+
+  it('Min Ascents selected zero bucket emits the 0 sentinel when clicked again', () => {
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '0+' }));
+
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minAscents: 0 });
+  });
+
+  it('renders the requested Min Ascents buckets', () => {
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+
+    for (const label of ['0+', '1+', '10+', '100+', '1k+', '10k+']) {
+      expect(screen.getByRole('button', { name: label })).toBeDefined();
+    }
+  });
+
+  it('Min Rating star picker emits whole-star thresholds', () => {
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+    fireEvent.click(screen.getByRole('option', { name: '4 stars and up' }));
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minRating: 4 });
+  });
+
+  it('Min Rating clear option emits the 0 sentinel', () => {
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minRating: 3 };
+    render(<AccordionSearchForm boardDetails={boardDetails} />);
+    const anyRatingOption = screen.getByRole('option', { name: 'Any' });
+    expect(anyRatingOption.textContent).toBe('Any');
+    fireEvent.click(anyRatingOption);
     const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
     expect(lastCall).toEqual({ minRating: 0 });
     expect(lastCall?.minRating).not.toBeUndefined();
   });
 
-  it('Min Ascents emits the typed number verbatim', () => {
+  it('rounds a legacy decimal Min Rating up to the next whole-star display', () => {
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minRating: 2.5 };
     render(<AccordionSearchForm boardDetails={boardDetails} />);
-    const minAscents = findNumericInputs()[0];
-    fireEvent.change(minAscents, { target: { value: '12' } });
-    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minAscents: 12 });
+    expect(screen.getByRole('option', { name: '3 stars and up' }).getAttribute('aria-selected')).toBe('true');
   });
 });

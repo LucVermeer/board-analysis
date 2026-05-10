@@ -109,6 +109,7 @@ export const ClimbSearchInputSchema = z.object({
   minGrade: z.number().int().optional(),
   maxGrade: z.number().int().optional(),
   minAscents: z.number().int().min(0).optional(),
+  minRating: z.number().min(0).max(5).optional(),
   sortBy: z.string().optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
   name: z.string().max(200).optional(),

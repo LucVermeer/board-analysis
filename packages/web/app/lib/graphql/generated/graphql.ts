@@ -600,6 +600,8 @@ export type ClimbSearchInput = {
   minAscents?: InputMaybe<Scalars['Int']['input']>;
   /** Minimum difficulty grade ID */
   minGrade?: InputMaybe<Scalars['Int']['input']>;
+  /** Minimum quality rating */
+  minRating?: InputMaybe<Scalars['Float']['input']>;
   /** Filter by climb name (partial match) */
   name?: InputMaybe<Scalars['String']['input']>;
   /** Only show benchmark climbs */
