@@ -127,6 +127,81 @@
   display: block;
 }
 
+.devMetadataPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 8px 8px;
+  padding: 10px;
+  border: 1px solid var(--neutral-200);
+  border-radius: 8px;
+  background: var(--neutral-50);
+}
+
+.devMetadataRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.devMetadataIcon {
+  color: var(--neutral-500);
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.devMetadataText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.devMetadataLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+}
+
+.devMetadataValue,
+.devMetadataFile {
+  font-size: 12px;
+  color: var(--neutral-800);
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.devMetadataValue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+.devMetadataFile {
+  color: var(--neutral-500);
+}
+
+.qaNotes {
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--semantic-surface);
+  color: var(--neutral-800);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.qaNotesEmpty {
+  font-size: 12px;
+  color: var(--neutral-500);
+}
+
 .recentItemIcon {
   color: var(--neutral-400);
   font-size: 16px;

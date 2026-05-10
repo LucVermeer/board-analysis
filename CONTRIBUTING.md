@@ -70,6 +70,16 @@ Local Docker still wins when it is already running. To force a specific peer, se
 
 This is only for development data. The dev database uses the shared local password, so keep port 5432 behind your machine firewall/Tailscale access controls.
 
+### QA notes in the dev drawer
+
+`vp run dev` exposes the current git branch in the user drawer during development. To add notes for the person testing the branch, create `.boardsesh/qa-notes.md` before starting the dev server, or pass an explicit file:
+
+```bash
+vp run dev -- --qa-notes-file docs/my-qa-notes.md
+```
+
+The notes are only served by the dev server and `.boardsesh/` is ignored by git.
+
 ## Testing web changes on Android
 
 You don't have to rebuild the Android app every time you change the web UI. The **debug APK** shipped with each main build includes a Dev URL switcher that points the in-app WebView at any origin you choose — typically your laptop reached over [Tailscale](https://tailscale.com).

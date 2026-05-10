@@ -22,6 +22,8 @@ import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutl
 import GroupOutlined from '@mui/icons-material/GroupOutlined';
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
+import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined';
+import FactCheckOutlined from '@mui/icons-material/FactCheckOutlined';
 
 import { useSession, signOut } from 'next-auth/react';
 import { useColorMode } from '@/app/hooks/use-color-mode';
@@ -73,6 +75,12 @@ type UserDrawerProps = {
   boardConfigs?: BoardConfigData;
 };
 
+type DevMetadata = {
+  branchName: string | null;
+  qaNotes: string | null;
+  qaNotesFilePath: string | null;
+};
+
 export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerProps) {
   const { t } = useTranslation('common');
   const { data: session } = useSession();
@@ -94,6 +102,7 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
   const [showRating, setShowRating] = useState(false);
   const [showBugReport, setShowBugReport] = useState(false);
   const [showStoreReviewPrompt, setShowStoreReviewPrompt] = useState(false);
+  const [devMetadata, setDevMetadata] = useState<DevMetadata | null>(null);
 
   const { mode, toggleMode } = useColorMode();
   const isMoonboard = boardDetails?.board_name === 'moonboard';
@@ -111,6 +120,25 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
         });
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development' || !isOpen || devMetadata) return;
+
+    const controller = new AbortController();
+    fetch('/api/internal/dev-metadata', { cache: 'no-store', signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((metadata: DevMetadata | null) => {
+        if (!metadata) return;
+        setDevMetadata(metadata);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setDevMetadata({ branchName: null, qaNotes: null, qaNotesFilePath: null });
+        }
+      });
+
+    return () => controller.abort();
+  }, [isOpen, devMetadata]);
 
   const handleClose = () => setIsOpen(false);
   const handleDrawerTransitionEnd = useCallback((open: boolean) => {
@@ -346,6 +374,48 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
                   <span className={styles.menuItemLabel}>{t('userDrawer.development')}</span>
                 </LocaleLink>
               )}
+
+              {process.env.NODE_ENV === 'development' &&
+                (devMetadata?.branchName || devMetadata?.qaNotes || devMetadata?.qaNotesFilePath) && (
+                  <>
+                    <div className={styles.divider} />
+                    <MuiTypography
+                      variant="body2"
+                      component="span"
+                      color="text.secondary"
+                      className={styles.sectionLabel}
+                    >
+                      {t('userDrawer.devBuild')}
+                    </MuiTypography>
+                    <div className={styles.devMetadataPanel}>
+                      {devMetadata.branchName && (
+                        <div className={styles.devMetadataRow}>
+                          <AccountTreeOutlined className={styles.devMetadataIcon} />
+                          <div className={styles.devMetadataText}>
+                            <span className={styles.devMetadataLabel}>{t('userDrawer.branch')}</span>
+                            <span className={styles.devMetadataValue}>{devMetadata.branchName}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className={styles.devMetadataRow}>
+                        <FactCheckOutlined className={styles.devMetadataIcon} />
+                        <div className={styles.devMetadataText}>
+                          <span className={styles.devMetadataLabel}>{t('userDrawer.qaNotes')}</span>
+                          {devMetadata.qaNotesFilePath && (
+                            <span className={styles.devMetadataFile}>{devMetadata.qaNotesFilePath}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {devMetadata.qaNotes ? (
+                        <pre className={styles.qaNotes}>{devMetadata.qaNotes}</pre>
+                      ) : (
+                        <span className={styles.qaNotesEmpty}>{t('userDrawer.qaNotesEmpty')}</span>
+                      )}
+                    </div>
+                  </>
+                )}
 
               {boardDetails && !isMoonboard && (
                 <button

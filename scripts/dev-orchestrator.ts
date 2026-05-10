@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
@@ -42,12 +44,108 @@ type ProcessRef = {
 
 type DevDbEnv = Record<string, string>;
 
+type CliOptions = {
+  qaNotesFilePath: string | null;
+};
+
+type DevBuildMetadata = {
+  branchName: string | null;
+  qaNotes: string | null;
+  qaNotesFilePath: string | null;
+};
+
 const processes: { backend: ProcessRef; web: ProcessRef } = {
   backend: { process: null },
   web: { process: null },
 };
 
 let backendHealthy = false;
+
+function parseCliOptions(args: string[]): CliOptions {
+  let qaNotesFilePath: string | null = null;
+
+  for (let argumentIndex = 0; argumentIndex < args.length; argumentIndex++) {
+    const argument = args[argumentIndex];
+    if (argument === '--') continue;
+
+    if (argument === '--qa-notes-file' || argument === '--qa-plan-file') {
+      const nextArgument = args[argumentIndex + 1];
+      if (!nextArgument || nextArgument.startsWith('--')) {
+        throw new Error(`${argument} requires a file path`);
+      }
+      qaNotesFilePath = nextArgument;
+      argumentIndex++;
+      continue;
+    }
+
+    for (const qaNotesPrefix of ['--qa-notes-file=', '--qa-plan-file=']) {
+      if (argument.startsWith(qaNotesPrefix)) {
+        const pathArgument = argument.slice(qaNotesPrefix.length).trim();
+        if (!pathArgument) {
+          throw new Error(`${qaNotesPrefix.slice(0, -1)} requires a file path`);
+        }
+        qaNotesFilePath = pathArgument;
+        break;
+      }
+    }
+
+    if (argument.startsWith('--qa-notes-file=') || argument.startsWith('--qa-plan-file=')) {
+      continue;
+    }
+
+    console.warn(`[dev] Ignoring unrecognized argument: ${argument}`);
+  }
+
+  return { qaNotesFilePath };
+}
+
+function runGitCommand(args: string[]): string | null {
+  try {
+    const output = execFileSync('git', args, {
+      cwd: ROOT_DIR,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveCurrentBranchName(): string | null {
+  const branchName = runGitCommand(['branch', '--show-current']);
+  if (branchName) return branchName;
+
+  const shortCommitSha = runGitCommand(['rev-parse', '--short', 'HEAD']);
+  return shortCommitSha ? `detached:${shortCommitSha}` : null;
+}
+
+function readQaNotesFile(qaNotesFilePath: string | null): string | null {
+  const defaultQaNotesPath = join(ROOT_DIR, '.boardsesh', 'qa-notes.md');
+  const selectedQaNotesFilePath = qaNotesFilePath ?? (existsSync(defaultQaNotesPath) ? defaultQaNotesPath : null);
+  if (!selectedQaNotesFilePath) return null;
+
+  const resolvedQaNotesFilePath = resolve(ROOT_DIR, selectedQaNotesFilePath);
+  try {
+    return readFileSync(resolvedQaNotesFilePath, 'utf8').split(String.fromCharCode(0)).join('').trim();
+  } catch (error) {
+    if (!qaNotesFilePath) return null;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not read --qa-notes-file at ${resolvedQaNotesFilePath}: ${message}`);
+  }
+}
+
+function resolveDevBuildMetadata(cliOptions: CliOptions): DevBuildMetadata {
+  const defaultQaNotesPath = join(ROOT_DIR, '.boardsesh', 'qa-notes.md');
+  const selectedQaNotesFilePath =
+    cliOptions.qaNotesFilePath ?? (existsSync(defaultQaNotesPath) ? defaultQaNotesPath : null);
+
+  return {
+    branchName: resolveCurrentBranchName(),
+    qaNotes: readQaNotesFile(cliOptions.qaNotesFilePath),
+    qaNotesFilePath: selectedQaNotesFilePath ? resolve(ROOT_DIR, selectedQaNotesFilePath) : null,
+  };
+}
 
 function loadGeneratedDevDbEnv(): DevDbEnv {
   const envFile = join(ROOT_DIR, '.boardsesh', 'dev-db.env');
@@ -373,6 +471,7 @@ function startWeb(
   backendPort: number,
   tls: TlsBundle | null,
   devDbEnv: DevDbEnv,
+  devBuildMetadata: DevBuildMetadata,
 ): ReturnType<typeof spawn> {
   console.info(`[dev] Starting web on port ${port}...`);
 
@@ -384,6 +483,9 @@ function startWeb(
       ...process.env,
       PORT: String(port),
       BACKEND_PORT: String(backendPort),
+      ...(devBuildMetadata.branchName ? { BOARDSESH_DEV_BRANCH_NAME: devBuildMetadata.branchName } : {}),
+      ...(devBuildMetadata.qaNotes ? { BOARDSESH_DEV_QA_NOTES: devBuildMetadata.qaNotes } : {}),
+      ...(devBuildMetadata.qaNotesFilePath ? { BOARDSESH_DEV_QA_NOTES_FILE: devBuildMetadata.qaNotesFilePath } : {}),
       ...(tls
         ? {
             DEV_HTTPS_CERT_FILE: tls.certFile,
@@ -445,6 +547,9 @@ async function shutdown() {
  * Main orchestrator
  */
 async function main(): Promise<void> {
+  const cliOptions = parseCliOptions(process.argv.slice(2));
+  const devBuildMetadata = resolveDevBuildMetadata(cliOptions);
+
   // Try to provision a Tailscale HTTPS cert so real phones (which require a
   // secure context for DeviceMotion, Web Bluetooth, clipboard, etc.) can
   // actually use those APIs against the dev server. Null → HTTP fallback.
@@ -484,6 +589,12 @@ async function main(): Promise<void> {
         `(${devDbEnv.BOARDSESH_DEV_DB_SOURCE ?? 'generated'})`,
     );
   }
+  if (devBuildMetadata.branchName) {
+    console.info(`[dev] Branch: ${devBuildMetadata.branchName}`);
+  }
+  if (devBuildMetadata.qaNotesFilePath) {
+    console.info(`[dev] QA notes: ${devBuildMetadata.qaNotesFilePath}`);
+  }
   console.info();
 
   processes.backend.process = startBackend(backendPort, tls, devDbEnv);
@@ -496,7 +607,7 @@ async function main(): Promise<void> {
   }
   console.info(`[dev] ✓ Backend is healthy`);
 
-  processes.web.process = startWeb(webPort, backendPort, tls, devDbEnv);
+  processes.web.process = startWeb(webPort, backendPort, tls, devDbEnv, devBuildMetadata);
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
