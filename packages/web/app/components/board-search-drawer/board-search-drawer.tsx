@@ -59,19 +59,14 @@ export default function BoardSearchDrawer({ open, onClose, onBoardOpen }: BoardS
   // Defer mounting BoardSearchMap (and its OpenStreetMap tile downloads) until
   // the drawer has been opened at least once. Sticky — once true it stays true
   // across close/reopen so the map state and tile cache persist between sessions.
-  // Track the sticky flag in state, but derive `mapMounted` so the FIRST render
-  // after `open` flips to true already includes the map. Otherwise the user
-  // would see an empty Box for one frame while a useEffect-based update lands.
-  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
-  if (open && !hasOpenedOnce) {
-    // Conditional setState during render is the React idiom for "derive sticky
-    // state from a prop": React aborts this render and synchronously re-renders
-    // with the new state before committing to the DOM, so no extra commit
-    // happens. Mount stays alive across future open=false because hasOpenedOnce
-    // never resets back to false.
-    setHasOpenedOnce(true);
-  }
-  const mapMounted = hasOpenedOnce || open;
+  // A ref (not state) holds the flag because flipping it inside render via
+  // setState would force React to discard and re-run the render synchronously
+  // — wasted reconciliation work for a heavy drawer subtree. The render reads
+  // `open || hasOpenedOnceRef.current`, so the FIRST render after `open` flips
+  // to true already includes the map (no empty-Box flash).
+  const hasOpenedOnceRef = useRef(false);
+  if (open) hasOpenedOnceRef.current = true;
+  const mapMounted = open || hasOpenedOnceRef.current;
 
   // Ask for the user's location on first open. If granted we'll recenter to ~20km view.
   useEffect(() => {

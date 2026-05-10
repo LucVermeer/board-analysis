@@ -4,7 +4,6 @@ import React, { useMemo } from 'react';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
 import BluetoothOutlined from '@mui/icons-material/BluetoothOutlined';
 import BoardRenderer from '../board-renderer/board-renderer';
-import type { SvgFetchPriority } from '../board-renderer/types';
 import { useBoardDetails } from './board-thumbnail';
 import { formatCount, formatSends } from '@/app/lib/format-climb-stats';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
@@ -38,9 +37,6 @@ type BoardScrollCardProps = {
   distanceMeters?: number | null;
   bluetoothNearby?: boolean;
   size?: 'default' | 'small';
-  /** Set fetchpriority on the board thumbnail — 'high' for the LCP-critical
-   *  card on a page, 'low' to deprioritize background prefetches. */
-  fetchPriority?: SvgFetchPriority;
   onClick: () => void;
 };
 
@@ -55,7 +51,6 @@ export default function BoardScrollCard({
   distanceMeters,
   bluetoothNearby,
   size = 'default',
-  fetchPriority,
   onClick,
 }: BoardScrollCardProps) {
   const boardDetails = useBoardDetails(userBoard, storedConfig, popularConfig);
@@ -108,13 +103,7 @@ export default function BoardScrollCard({
         className={`${styles.cardSquare} ${selected ? styles.cardSquareSelected : ''} ${disabled ? styles.cardSquareDisabled : ''}`}
       >
         {boardDetails ? (
-          <BoardRenderer
-            mirrored={false}
-            boardDetails={boardDetails}
-            thumbnail
-            fillHeight
-            fetchPriority={fetchPriority}
-          />
+          <BoardRenderer mirrored={false} boardDetails={boardDetails} thumbnail fillHeight />
         ) : (
           <div className={styles.cardFallback}>
             <DashboardOutlined sx={{ fontSize: iconSize }} />

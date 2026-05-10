@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { getImageUrl } from './util';
 import type { BoardDetails } from '@/app/lib/types';
 import BoardLitupHolds from './board-litup-holds';
-import type { LitUpHoldsMap, SvgFetchPriority, SvgFetchPriorityAttrs } from './types';
+import type { LitUpHoldsMap } from './types';
 import styles from './board-renderer.module.css';
 import MoonBoardRenderer from '../moonboard-renderer/moonboard-renderer';
 
@@ -15,23 +15,16 @@ export type BoardProps = {
   fillHeight?: boolean;
   /** Custom max-height for the board SVG. Defaults to '55vh', or '10vh' for thumbnails. Ignored when fillHeight is true. */
   maxHeight?: string;
-  /** Set fetchpriority on the first background image — use 'high' for the
-   *  LCP-critical card on a page, 'low' to deprioritize background prefetches. */
-  fetchPriority?: SvgFetchPriority;
   onHoldClick?: (holdId: number, anchor: Element) => void;
 };
 
+// Note: there is no `fetchPriority` prop here — the Fetch Priority API does
+// not apply to inline SVG `<image>` elements, only HTML `<img>`/`<link>`/
+// `<script>`/`<iframe>`. To escalate the LCP image's priority, render
+// `<link rel="preload" as="image" fetchpriority="high">` from the page-level
+// server component instead (see `app/page.tsx`).
 const BoardRenderer = React.memo(
-  ({
-    boardDetails,
-    thumbnail,
-    maxHeight,
-    fillHeight,
-    fetchPriority,
-    litUpHoldsMap,
-    mirrored,
-    onHoldClick,
-  }: BoardProps) => {
+  ({ boardDetails, thumbnail, maxHeight, fillHeight, litUpHoldsMap, mirrored, onHoldClick }: BoardProps) => {
     const isMoonBoard = boardDetails.board_name === 'moonboard' && !!boardDetails.layoutFolder;
 
     // Only compute maxHeight when not using fillHeight - memoized to prevent recreation.
@@ -52,7 +45,6 @@ const BoardRenderer = React.memo(
           mirrored={mirrored}
           thumbnail={thumbnail}
           fillHeight={fillHeight}
-          fetchPriority={fetchPriority}
           onHoldClick={onHoldClick}
         />
       );
@@ -71,24 +63,15 @@ const BoardRenderer = React.memo(
         className={svgClassName}
         style={svgStyle}
       >
-        {Object.keys(boardDetails.images_to_holds).map((imageUrl, index) => {
-          // SVG <image> supports the HTML `fetchpriority` (lowercase) attribute
-          // per spec; React's SVG prop types don't include it yet, so apply via
-          // spread of a precisely-typed object (not Record<string, string>) so
-          // the value still has to satisfy SvgFetchPriority.
-          const priorityHint: SvgFetchPriorityAttrs | null =
-            index === 0 && fetchPriority ? { fetchpriority: fetchPriority } : null;
-          return (
-            <image
-              key={imageUrl}
-              href={getImageUrl(imageUrl, boardDetails.board_name, thumbnail)}
-              width={boardWidth}
-              height={boardHeight}
-              preserveAspectRatio="none"
-              {...priorityHint}
-            />
-          );
-        })}
+        {Object.keys(boardDetails.images_to_holds).map((imageUrl) => (
+          <image
+            key={imageUrl}
+            href={getImageUrl(imageUrl, boardDetails.board_name, thumbnail)}
+            width={boardWidth}
+            height={boardHeight}
+            preserveAspectRatio="none"
+          />
+        ))}
         {litUpHoldsMap && (
           <BoardLitupHolds
             onHoldClick={onHoldClick}
@@ -106,7 +89,6 @@ const BoardRenderer = React.memo(
     if (prevProps.thumbnail !== nextProps.thumbnail) return false;
     if (prevProps.maxHeight !== nextProps.maxHeight) return false;
     if (prevProps.fillHeight !== nextProps.fillHeight) return false;
-    if (prevProps.fetchPriority !== nextProps.fetchPriority) return false;
 
     // Compare mirrored and onHoldClick (passed to BoardLitupHolds)
     if (prevProps.mirrored !== nextProps.mirrored) return false;

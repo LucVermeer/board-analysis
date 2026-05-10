@@ -174,20 +174,6 @@ export default function BoardDiscoveryScroll({
     [router, onBoardClick],
   );
 
-  // Pick the section whose first card actually paints visibly on the first
-  // frame and assign fetchPriority="high" to that card. The render order is
-  // discoverBoards → bleOnlyBoards → myBoards → popularConfigs, but
-  // bleOnlyBoards and myBoards both start at opacity:0 and fade in via a
-  // requestAnimationFrame state flip — they cannot be the LCP candidate, so
-  // applying the hint to them would just download a non-LCP image early. Only
-  // discoverBoards and popularConfigs render visible from the first paint.
-  let lcpSection: 'discover' | 'popular' | null = null;
-  if (discoverBoards.length > 0) {
-    lcpSection = 'discover';
-  } else if (popularConfigs.length > 0) {
-    lcpSection = 'popular';
-  }
-
   return (
     <>
       <BoardScrollSection
@@ -223,20 +209,19 @@ export default function BoardDiscoveryScroll({
           </div>
         </div>
 
-        {/* Nearby boards (if any) */}
-        {discoverBoards.map((board, index) => (
+        {/* Nearby boards (if any). LCP-priority preload for the first card
+            comes from `<link rel="preload">` in the page-level server
+            component (see `app/page.tsx`), not a per-card prop. */}
+        {discoverBoards.map((board) => (
           <BoardScrollCard
             key={board.uuid}
             userBoard={board}
             selected={selectedBoardUuid === board.uuid}
             onClick={() => onBoardClick(board)}
-            fetchPriority={lcpSection === 'discover' && index === 0 ? 'high' : undefined}
           />
         ))}
 
-        {/* BLE-discovered boards NOT already in myBoards - animate in.
-            Cards start at opacity:0 (see myBoardCardFadeIn) so they're never
-            the LCP candidate; no fetchPriority hint needed. */}
+        {/* BLE-discovered boards NOT already in myBoards - animate in. */}
         {bleOnlyBoards.map((board) => (
           <div
             key={`ble-${board.uuid}`}
@@ -252,7 +237,7 @@ export default function BoardDiscoveryScroll({
         ))}
 
         {/* My boards - animate in (opacity:0 → 1), show bluetooth badge if
-            found nearby. Same fade-in story as bleOnlyBoards: never LCP. */}
+            found nearby. */}
         {myBoards.map((board) => {
           const isBleNearby = !!board.serialNumber && bleSerialSet.has(board.serialNumber);
           return (
@@ -270,12 +255,11 @@ export default function BoardDiscoveryScroll({
           );
         })}
 
-        {popularConfigs.map((config, index) => (
+        {popularConfigs.map((config) => (
           <BoardScrollCard
             key={`${config.boardType}-${config.layoutId}-${config.sizeId}`}
             popularConfig={config}
             onClick={() => onConfigClick(config)}
-            fetchPriority={lcpSection === 'popular' && index === 0 ? 'high' : undefined}
           />
         ))}
       </BoardScrollSection>

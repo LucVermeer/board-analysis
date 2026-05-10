@@ -1,5 +1,5 @@
 import type { MoonBoardCoordinate } from '@/app/lib/moonboard-config';
-import type { LitUpHoldsMap, SvgFetchPriority } from '../board-renderer/types';
+import type { LitUpHoldsMap } from '../board-renderer/types';
 
 // MoonBoard hold types (simpler than Aurora) - used for internal conversions
 export type MoonBoardHoldType = 'start' | 'hand' | 'finish';
@@ -30,8 +30,5 @@ export type MoonBoardRendererProps = {
   mirrored?: boolean;
   thumbnail?: boolean;
   fillHeight?: boolean;
-  /** Set fetchpriority on the background image — use 'high' for the
-   *  LCP-critical card on a page, 'low' to deprioritize background prefetches. */
-  fetchPriority?: SvgFetchPriority;
   onHoldClick?: (holdId: number, anchor: Element) => void;
 };

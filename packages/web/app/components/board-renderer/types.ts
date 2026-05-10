@@ -38,14 +38,6 @@ export type HeatmapData = {
 /** Thumbnail render width in pixels. Covers 3x retina at ~64px CSS display. */
 export const THUMBNAIL_WIDTH = 200;
 
-/** Fetch Priority hint for SVG `<image>` background tiles. Mirrors the Fetch
- *  Priority API spec values. Applied via attribute spread because React's SVG
- *  prop types don't yet model the lowercase `fetchpriority` HTML attribute. */
-export type SvgFetchPriority = 'high' | 'low' | 'auto';
-
-/** Spread shape for the lowercase `fetchpriority` attribute on `<image>`. */
-export type SvgFetchPriorityAttrs = { fetchpriority: SvgFetchPriority };
-
 // If adding more boards be sure to increment the DB version number for indexeddb
 export const supported_boards: BoardName[] = MOONBOARD_ENABLED
   ? ['kilter', 'tension', 'moonboard', 'decoy', 'touchstone', 'grasshopper', 'soill']
