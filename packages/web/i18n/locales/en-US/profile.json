@@ -29,8 +29,7 @@
   "page": {
     "lastThreeMonths": "Last 3 months",
     "activityChartLabel": "Activity over the last 3 months",
-    "displayNameFallback": "Climber",
-    "followerCountSummary": "{{followers}} followers · {{following}} following"
+    "displayNameFallback": "Climber"
   },
   "nav": {
     "statistics": {
