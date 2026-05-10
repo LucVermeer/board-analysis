@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { MOONBOARD_GRID, MOONBOARD_SIZE, getGridPosition, MOONBOARD_HOLD_STATES } from '@/app/lib/moonboard-config';
 import type { MoonBoardRendererProps } from './types';
+import type { SvgFetchPriorityAttrs } from '../board-renderer/types';
 
 const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
   layoutFolder,
@@ -83,13 +84,15 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
   return (
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={svgStyle}>
       {/* Render MoonBoard background first.
-          SVG <image> supports the HTML `fetchpriority` (lowercase) attribute per spec;
-          React's SVG prop types don't include it yet, so apply via spread. */}
+          SVG <image> supports the HTML `fetchpriority` (lowercase) attribute
+          per spec; React's SVG prop types don't include it yet, so apply via
+          a precisely-typed spread (SvgFetchPriorityAttrs) instead of a loose
+          Record<string, string> cast. */}
       <image
         href={thumbnail ? '/images/moonboard/thumbs/moonboard-bg.webp' : '/images/moonboard/moonboard-bg.webp'}
         width="100%"
         height="100%"
-        {...(fetchPriority ? ({ fetchpriority: fetchPriority } as Record<string, string>) : null)}
+        {...(fetchPriority ? ({ fetchpriority: fetchPriority } satisfies SvgFetchPriorityAttrs) : null)}
       />
 
       {/* Render hold set images as overlay layers */}

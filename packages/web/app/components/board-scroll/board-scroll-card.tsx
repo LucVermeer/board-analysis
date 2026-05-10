@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
 import BluetoothOutlined from '@mui/icons-material/BluetoothOutlined';
 import BoardRenderer from '../board-renderer/board-renderer';
+import type { SvgFetchPriority } from '../board-renderer/types';
 import { useBoardDetails } from './board-thumbnail';
 import { formatCount, formatSends } from '@/app/lib/format-climb-stats';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
@@ -37,8 +38,9 @@ type BoardScrollCardProps = {
   distanceMeters?: number | null;
   bluetoothNearby?: boolean;
   size?: 'default' | 'small';
-  /** Set fetchpriority="high" on the board thumbnail — use only for the LCP-critical card on a page. */
-  fetchPriority?: 'high' | 'auto';
+  /** Set fetchpriority on the board thumbnail — 'high' for the LCP-critical
+   *  card on a page, 'low' to deprioritize background prefetches. */
+  fetchPriority?: SvgFetchPriority;
   onClick: () => void;
 };
 

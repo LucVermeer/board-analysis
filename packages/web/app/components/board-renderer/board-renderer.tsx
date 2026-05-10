@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { getImageUrl } from './util';
 import type { BoardDetails } from '@/app/lib/types';
 import BoardLitupHolds from './board-litup-holds';
-import type { LitUpHoldsMap } from './types';
+import type { LitUpHoldsMap, SvgFetchPriority, SvgFetchPriorityAttrs } from './types';
 import styles from './board-renderer.module.css';
 import MoonBoardRenderer from '../moonboard-renderer/moonboard-renderer';
 
@@ -15,8 +15,9 @@ export type BoardProps = {
   fillHeight?: boolean;
   /** Custom max-height for the board SVG. Defaults to '55vh', or '10vh' for thumbnails. Ignored when fillHeight is true. */
   maxHeight?: string;
-  /** Set fetchpriority="high" on the first background image — use for the LCP-critical card on a page. */
-  fetchPriority?: 'high' | 'auto';
+  /** Set fetchpriority on the first background image — use 'high' for the
+   *  LCP-critical card on a page, 'low' to deprioritize background prefetches. */
+  fetchPriority?: SvgFetchPriority;
   onHoldClick?: (holdId: number, anchor: Element) => void;
 };
 
@@ -71,10 +72,12 @@ const BoardRenderer = React.memo(
         style={svgStyle}
       >
         {Object.keys(boardDetails.images_to_holds).map((imageUrl, index) => {
-          // SVG <image> supports the HTML `fetchpriority` (lowercase) attribute per spec;
-          // React's SVG prop types don't include it yet, so apply via spread.
-          const priorityHint =
-            index === 0 && fetchPriority ? ({ fetchpriority: fetchPriority } as Record<string, string>) : null;
+          // SVG <image> supports the HTML `fetchpriority` (lowercase) attribute
+          // per spec; React's SVG prop types don't include it yet, so apply via
+          // spread of a precisely-typed object (not Record<string, string>) so
+          // the value still has to satisfy SvgFetchPriority.
+          const priorityHint: SvgFetchPriorityAttrs | null =
+            index === 0 && fetchPriority ? { fetchpriority: fetchPriority } : null;
           return (
             <image
               key={imageUrl}

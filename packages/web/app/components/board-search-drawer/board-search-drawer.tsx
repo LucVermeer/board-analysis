@@ -65,8 +65,10 @@ export default function BoardSearchDrawer({ open, onClose, onBoardOpen }: BoardS
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   if (open && !hasOpenedOnce) {
     // Conditional setState during render is the React idiom for "derive sticky
-    // state from a prop" — React schedules a follow-up render with the new value
-    // rather than warning. Mount stays alive across future open=false.
+    // state from a prop": React aborts this render and synchronously re-renders
+    // with the new state before committing to the DOM, so no extra commit
+    // happens. Mount stays alive across future open=false because hasOpenedOnce
+    // never resets back to false.
     setHasOpenedOnce(true);
   }
   const mapMounted = hasOpenedOnce || open;
