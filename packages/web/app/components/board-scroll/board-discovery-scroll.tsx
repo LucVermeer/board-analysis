@@ -209,7 +209,9 @@ export default function BoardDiscoveryScroll({
           </div>
         </div>
 
-        {/* Nearby boards (if any) */}
+        {/* Nearby boards (if any). LCP-priority preload for the first card
+            comes from `<link rel="preload">` in the page-level server
+            component (see `app/page.tsx`), not a per-card prop. */}
         {discoverBoards.map((board) => (
           <BoardScrollCard
             key={board.uuid}
@@ -219,7 +221,7 @@ export default function BoardDiscoveryScroll({
           />
         ))}
 
-        {/* BLE-discovered boards NOT already in myBoards - animate in */}
+        {/* BLE-discovered boards NOT already in myBoards - animate in. */}
         {bleOnlyBoards.map((board) => (
           <div
             key={`ble-${board.uuid}`}
@@ -234,7 +236,8 @@ export default function BoardDiscoveryScroll({
           </div>
         ))}
 
-        {/* My boards - animate in, show bluetooth badge if found nearby */}
+        {/* My boards - animate in (opacity:0 → 1), show bluetooth badge if
+            found nearby. */}
         {myBoards.map((board) => {
           const isBleNearby = !!board.serialNumber && bleSerialSet.has(board.serialNumber);
           return (

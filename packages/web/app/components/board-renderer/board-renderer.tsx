@@ -18,6 +18,11 @@ export type BoardProps = {
   onHoldClick?: (holdId: number, anchor: Element) => void;
 };
 
+// Note: there is no `fetchPriority` prop here — the Fetch Priority API does
+// not apply to inline SVG `<image>` elements, only HTML `<img>`/`<link>`/
+// `<script>`/`<iframe>`. To escalate the LCP image's priority, render
+// `<link rel="preload" as="image" fetchpriority="high">` from the page-level
+// server component instead (see `app/page.tsx`).
 const BoardRenderer = React.memo(
   ({ boardDetails, thumbnail, maxHeight, fillHeight, litUpHoldsMap, mirrored, onHoldClick }: BoardProps) => {
     const isMoonBoard = boardDetails.board_name === 'moonboard' && !!boardDetails.layoutFolder;

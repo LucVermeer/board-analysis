@@ -81,7 +81,9 @@ const MoonBoardRenderer: React.FC<MoonBoardRendererProps> = ({
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={svgStyle}>
-      {/* Render MoonBoard background first */}
+      {/* Render MoonBoard background first. The Fetch Priority API does not
+          apply to inline SVG images; LCP-critical cards should be preloaded
+          via `<link rel="preload">` from the page-level server component. */}
       <image
         href={thumbnail ? '/images/moonboard/thumbs/moonboard-bg.webp' : '/images/moonboard/moonboard-bg.webp'}
         width="100%"
