@@ -5,7 +5,6 @@
  * performant.
  */
 import 'server-only';
-import { cache } from 'react';
 import { unstable_cache } from 'next/cache';
 // oxlint-disable-next-line no-restricted-imports -- raw postgres-js sql usage; migrate to drizzle
 import { rowsFromResult, sql } from '@/app/lib/db/db';
@@ -45,7 +44,7 @@ async function fetchClimbFromDb(params: ParsedBoardRouteParametersWithUuid): Pro
   } as Climb;
 }
 
-export const getClimb = cache(async (params: ParsedBoardRouteParametersWithUuid): Promise<Climb> => {
+export async function getClimb(params: ParsedBoardRouteParametersWithUuid): Promise<Climb> {
   const cachedFn = unstable_cache(
     async () => fetchClimbFromDb(params),
     ['climb', params.board_name, String(params.layout_id), params.climb_uuid, String(params.angle)],
@@ -55,7 +54,7 @@ export const getClimb = cache(async (params: ParsedBoardRouteParametersWithUuid)
     },
   );
   return cachedFn();
-});
+}
 
 export type ClimbStatsForAngle = {
   angle: number;

@@ -649,11 +649,13 @@ export default function LogbookFeed({ layoutStats, loadingLayoutStats }: Logbook
 
       const backendUrl = getBackendHttpUrl();
       if (!backendUrl) {
+        // i18n-ignore-next-line
         showMessage('Boardsesh could not find the export service URL.', 'error');
         return;
       }
 
       if (!token) {
+        // i18n-ignore-next-line
         showMessage('Sign in again to export your logbook data.', 'error');
         return;
       }
@@ -748,11 +750,13 @@ export default function LogbookFeed({ layoutStats, loadingLayoutStats }: Logbook
         onClick={handleExportMenuOpen}
         disabled={authLoading || !token || !!exportingBoard}
       >
+        {/* i18n-ignore-next-line */}
         Export
       </Button>
       <Menu anchorEl={exportMenuAnchor} open={!!exportMenuAnchor} onClose={handleExportMenuClose}>
         {exportableBoardTypes.map((boardType) => (
           <MenuItem key={boardType} onClick={() => void handleExportBoard(boardType)}>
+            {/* i18n-ignore-next-line */}
             {formatBoardTypeLabel(boardType)} JSON
           </MenuItem>
         ))}

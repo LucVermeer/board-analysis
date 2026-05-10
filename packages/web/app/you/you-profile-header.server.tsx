@@ -4,6 +4,7 @@ import MuiCard from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import { PersonOutlined } from '@mui/icons-material';
+import FollowerCount from '@/app/components/social/follower-count';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import type { UserProfile } from '@/app/profile/[user_id]/utils/profile-constants';
 import styles from '@/app/profile/[user_id]/profile-page.module.css';
@@ -28,12 +29,11 @@ export default async function YouProfileHeader({ profile }: YouProfileHeaderProp
             <Typography variant="h6" component="h1" className={styles.displayName}>
               {displayName}
             </Typography>
-            <Typography variant="body2" component="span" color="text.secondary">
-              {t('page.followerCountSummary', {
-                followers: profile.followerCount,
-                following: profile.followingCount,
-              })}
-            </Typography>
+            <FollowerCount
+              userId={profile.id}
+              followerCount={profile.followerCount}
+              followingCount={profile.followingCount}
+            />
           </div>
         </div>
       </CardContent>

@@ -19,9 +19,6 @@ import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createPageMetadata } from '@/app/lib/seo/metadata';
 
-export const revalidate = 3600;
-export const dynamicParams = true;
-
 export async function generateMetadata(props: { params: Promise<BoardRouteParametersWithUuid> }): Promise<Metadata> {
   const params = await props.params;
   const { t, locale } = await getServerTranslation('climbs');

@@ -38,6 +38,8 @@ export default async function BoardSlugPlaylistDetailPage(props: PlaylistDetailP
   const lcpPreloadUrl = getPlaylistLcpPreloadUrl({
     boardType: board.boardType,
     layoutId: board.layoutId,
+    sizeId: board.sizeId,
+    setIds: board.setIds ? board.setIds.split(',').map(Number).filter(Number.isFinite) : null,
   });
 
   return (
