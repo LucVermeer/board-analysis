@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     capture: vi.fn(),
     identify: vi.fn(),
     reset: vi.fn(),
+    setPersonProperties: vi.fn(),
   },
   vercelTrack: vi.fn(),
 }));
@@ -115,6 +116,31 @@ describe('analytics wrapper', () => {
     expect(mocks.posthog.identify).toHaveBeenCalledWith('profile-1', { email: 'one@example.com' });
     expect(mocks.posthog.alias).toHaveBeenCalledWith('user-1');
     expect(mocks.posthog.reset).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards set and setOnce person properties to PostHog', async () => {
+    const { setPersonProperties } = await import('../analytics');
+
+    expect(setPersonProperties({ language: 'es' })).toBe(true);
+    expect(setPersonProperties(undefined, { signup_at: '2026-05-11T00:00:00.000Z' })).toBe(true);
+
+    expect(mocks.posthog.setPersonProperties).toHaveBeenNthCalledWith(1, { language: 'es' }, undefined);
+    expect(mocks.posthog.setPersonProperties).toHaveBeenNthCalledWith(2, undefined, {
+      signup_at: '2026-05-11T00:00:00.000Z',
+    });
+  });
+
+  it('skips setPersonProperties on admin pages and outside production', async () => {
+    setWindowLocation('https://boardsesh.com/admin/retention');
+    const { setPersonProperties: adminSet } = await import('../analytics');
+    expect(adminSet({ language: 'es' })).toBe(false);
+    expect(mocks.posthog.setPersonProperties).not.toHaveBeenCalled();
+
+    vi.resetModules();
+    setWindowLocation('https://boardsesh-preview.vercel.app/b/kilter');
+    const { setPersonProperties: previewSet } = await import('../analytics');
+    expect(previewSet({ language: 'es' })).toBe(false);
+    expect(mocks.posthog.setPersonProperties).not.toHaveBeenCalled();
   });
 
   it('skips all analytics calls on admin pages', async () => {

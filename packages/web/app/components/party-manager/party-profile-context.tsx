@@ -5,9 +5,10 @@ import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { type PartyProfile, getPartyProfile, clearPartyProfile, ensurePartyProfile } from '@/app/lib/party-profile-db';
-import { alias, identify, reset, setPersonProperties } from '@/app/lib/analytics';
+import { alias, identify, reset, setPersonProperties, track } from '@/app/lib/analytics';
 import { isAdminAnalyticsUrl } from '@/app/lib/analytics-paths';
 import { hasRecordedPosthogAlias, recordPosthogAlias } from '@/app/lib/posthog-alias-storage';
+import { consumeFreshOAuthPending } from '@/app/lib/oauth-pending-db';
 
 type UserProfileData = {
   displayName: string | null;
@@ -93,6 +94,19 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
       }
       identify(userId, session.user.email ? { email: session.user.email } : undefined);
+      // Drain the OAuth-pending marker (if any) — this is the success signal
+      // for OAuth flows where the actual sign-in happens via a server-side
+      // redirect with no client callback to track from. Marker is set on
+      // OAuth button click in social-login-buttons.tsx and expires after 5
+      // minutes so an unrelated re-login won't fire a stale Login Succeeded.
+      void consumeFreshOAuthPending().then((marker) => {
+        if (marker) {
+          track('Login Succeeded', {
+            auth_method: marker.provider,
+            flow: marker.flow,
+          });
+        }
+      });
       lastAnalyticsDistinctId.current = userId;
       return;
     }

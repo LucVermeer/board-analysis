@@ -41,14 +41,15 @@ function getPosthog(): PostHog | null {
     // is still the canonical anon id; PartyProfileProvider calls identify()
     // on hydration to reconcile if storage was cleared.
     //
-    // CLAUDE.md mandates IndexedDB for client persistence. posthog-js-lite only
-    // exposes 'localStorage' | 'sessionStorage' | 'cookie' | 'memory' — there
-    // is no IDB option in the lite SDK. 'memory' (the prior setting) regenerated
-    // a fresh anon id on every reload, which broke retention math. Until/unless
+    // CLAUDE.md mandates IndexedDB for client persistence (the no-restricted-globals
+    // lint rule enforces it on bare globals, which is why this config string
+    // doesn't trigger it). posthog-js-lite only exposes
+    // 'localStorage' | 'sessionStorage' | 'cookie' | 'memory' — there is no
+    // IDB option in the lite SDK. 'memory' (the prior setting) regenerated a
+    // fresh anon id on every reload, which broke retention math. Until/unless
     // we migrate to the full posthog-js SDK or self-host IDB-backed persistence,
     // this is the documented exception. Do not copy this pattern for other
     // persistence needs — use idb-helper.ts as usual.
-    // oxlint-disable-next-line no-restricted-globals -- posthog-js-lite SDK has no IDB option; alternative is losing cross-session attribution
     persistence: 'localStorage',
   });
 

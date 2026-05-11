@@ -19,7 +19,7 @@ import MailOutlined from '@mui/icons-material/MailOutlined';
 import { signIn, useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
+import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
 import Logo from '@/app/components/brand/logo';
 import BackButton from '@/app/components/back-button';
 import SocialLoginButtons from '@/app/components/auth/social-login-buttons';
@@ -65,6 +65,7 @@ export default function AuthPageContent() {
   const { t } = useTranslation('auth');
   const { status } = useSession();
   const router = useLocaleRouter();
+  const pathnameWithoutLocale = usePathnameWithoutLocale();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
   const error = searchParams.get('error');
@@ -95,8 +96,14 @@ export default function AuthPageContent() {
         auth_method: 'oauth',
         failure_reason: safeAuthError(error),
       });
+      // Strip the ?error= param so a refresh or back-navigation doesn't fire
+      // Login Failed again and re-show the toast. preserve callbackUrl if set.
+      const cleanParams = new URLSearchParams(searchParams.toString());
+      cleanParams.delete('error');
+      const queryString = cleanParams.toString();
+      router.replace(queryString ? `${pathnameWithoutLocale}?${queryString}` : pathnameWithoutLocale);
     }
-  }, [error, showMessage, t]);
+  }, [error, showMessage, t, router, pathnameWithoutLocale, searchParams]);
 
   // Show success message when email is verified
   useEffect(() => {
