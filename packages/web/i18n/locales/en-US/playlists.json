@@ -60,7 +60,6 @@
     "errors": {
       "loadTitle": "Unable to Load Library",
       "loadDescription": "There was an error loading your library. Please try again.",
-      "loadFailed": "Failed to load your library",
       "tryAgain": "Try Again"
     }
   },

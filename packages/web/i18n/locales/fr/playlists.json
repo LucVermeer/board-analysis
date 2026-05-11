@@ -60,7 +60,6 @@
     "errors": {
       "loadTitle": "Impossible de charger la bibliothèque",
       "loadDescription": "Erreur lors du chargement de votre bibliothèque. Réessayez.",
-      "loadFailed": "Impossible de charger votre bibliothèque",
       "tryAgain": "Réessayer"
     }
   },

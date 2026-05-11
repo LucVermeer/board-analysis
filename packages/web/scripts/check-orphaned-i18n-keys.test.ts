@@ -334,3 +334,73 @@ describe('scope resolution', () => {
     expect(analysis.usedKeys.get('common')?.has('inner.label')).toBeFalsy();
   });
 });
+
+describe('conditional / logical t() arguments', () => {
+  it('records both branches of a ternary with string-literal sides', () => {
+    const analysis = analyze(`
+      import { useTranslation } from 'react-i18next';
+      export default function Foo({ flag }: { flag: boolean }) {
+        const { t } = useTranslation('common');
+        return <span>{t(flag ? 'pin.success' : 'pin.failed')}</span>;
+      }
+    `);
+    expect(analysis.usedKeys.get('common')?.has('pin.success')).toBe(true);
+    expect(analysis.usedKeys.get('common')?.has('pin.failed')).toBe(true);
+    expect(analysis.unanalyzable).toHaveLength(0);
+  });
+
+  it('records the literal branch of a `value ?? fallback` argument without hard-failing', () => {
+    const analysis = analyze(`
+      import { useTranslation } from 'react-i18next';
+      export default function Foo({ maybeKey }: { maybeKey: string | undefined }) {
+        const { t } = useTranslation('common');
+        return <span>{t(maybeKey ?? 'header.default')}</span>;
+      }
+    `);
+    expect(analysis.usedKeys.get('common')?.has('header.default')).toBe(true);
+    expect(analysis.unanalyzable).toHaveLength(0);
+  });
+
+  it('hard-fails a ternary where one branch is not a static expression', () => {
+    const analysis = analyze(`
+      import { useTranslation } from 'react-i18next';
+      export default function Foo({ flag, dyn }: { flag: boolean; dyn: string }) {
+        const { t } = useTranslation('common');
+        return <span>{t(flag ? 'pin.success' : dyn)}</span>;
+      }
+    `);
+    expect(analysis.usedKeys.get('common')?.has('pin.success')).toBe(true);
+    expect(analysis.unanalyzable).toHaveLength(1);
+  });
+});
+
+describe('*I18nKey property convention', () => {
+  it('records the literal value of a `fooI18nKey` property in every namespace', () => {
+    const analysis = analyze(
+      `
+      export const PRESETS = [
+        { slug: 'a', titleI18nKey: 'library.smart.fiveStars.title', descriptionI18nKey: 'library.smart.fiveStars.description' },
+      ];
+    `,
+      fakeTsPath,
+    );
+    const orphans = namespaceOrphans(
+      {
+        playlists: ['library.smart.fiveStars.title', 'library.smart.fiveStars.description', 'unused'],
+      },
+      [analysis],
+    );
+    expect(orphans.map((orphan) => orphan.key)).toEqual(['unused']);
+  });
+
+  it('treats `t(obj.fooI18nKey)` reads as resolved (no hard-fail)', () => {
+    const analysis = analyze(`
+      import { useTranslation } from 'react-i18next';
+      export default function Foo({ preset }: { preset: { titleI18nKey: string } }) {
+        const { t } = useTranslation('playlists');
+        return <span>{t(preset.titleI18nKey)}</span>;
+      }
+    `);
+    expect(analysis.unanalyzable).toHaveLength(0);
+  });
+});

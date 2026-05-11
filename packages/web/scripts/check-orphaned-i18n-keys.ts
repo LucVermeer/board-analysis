@@ -356,6 +356,52 @@ function analyzeFile(filePath: string, sourceOverride?: string): FileAnalysis {
     }
   }
 
+  // Returns true if the argument was statically resolvable (key recorded);
+  // false if the linter cannot determine the key and should hard-fail.
+  // Recurses through conditional/logical expressions so call shapes like
+  // `t(flag ? 'a.key' : 'b.key')` and `t(maybe ?? 'fallback.key')` record
+  // every literal branch.
+  function resolveArgument(arg: ts.Expression, ctx: NsContext): boolean {
+    if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) {
+      resolveStaticKey(arg.text, ctx);
+      return true;
+    }
+    if (ts.isTemplateExpression(arg)) {
+      resolveTemplateKey(arg, ctx);
+      return true;
+    }
+    if (ts.isParenthesizedExpression(arg)) {
+      return resolveArgument(arg.expression, ctx);
+    }
+    if (ts.isConditionalExpression(arg)) {
+      const left = resolveArgument(arg.whenTrue, ctx);
+      const right = resolveArgument(arg.whenFalse, ctx);
+      return left && right;
+    }
+    if (ts.isPropertyAccessExpression(arg) && /I18nKey$/.test(arg.name.text)) {
+      // `t(preset.titleI18nKey)` — the `*I18nKey` property visitor records
+      // the actual literal at the object definition site. Treat the read
+      // as resolved so we don't hard-fail.
+      return true;
+    }
+    if (
+      ts.isBinaryExpression(arg) &&
+      (arg.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        arg.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+    ) {
+      // `a || 'fallback'` / `a ?? 'fallback'`: if either side is statically
+      // resolvable, record it; only the static side contributes a catalog
+      // reference. We don't hard-fail because the non-literal branch is
+      // typically a value that itself resolved to a literal at a different
+      // call site (e.g. `preset.titleI18nKey`), or one we want to treat as
+      // "potentially used".
+      const leftResolved = resolveArgument(arg.left, ctx);
+      const rightResolved = resolveArgument(arg.right, ctx);
+      return leftResolved || rightResolved;
+    }
+    return false;
+  }
+
   function resolveTemplateKey(template: ts.TemplateExpression, ctx: NsContext) {
     const headText = template.head.text;
     const colonIndex = headText.indexOf(':');
@@ -424,11 +470,7 @@ function analyzeFile(filePath: string, sourceOverride?: string): FileAnalysis {
           ctx = ANY_CTX;
         }
         if (ctx && arg) {
-          if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) {
-            resolveStaticKey(arg.text, ctx);
-          } else if (ts.isTemplateExpression(arg)) {
-            resolveTemplateKey(arg, ctx);
-          } else if (callee.text === 't' || ctx !== ANY_CTX) {
+          if (!resolveArgument(arg, ctx) && (callee.text === 't' || ctx !== ANY_CTX)) {
             const start = arg.getStart(sourceFile);
             const { line, character } = sourceFile.getLineAndCharacterOfPosition(start);
             unanalyzable.push({
@@ -438,6 +480,25 @@ function analyzeFile(filePath: string, sourceOverride?: string): FileAnalysis {
               snippet: arg.getText(sourceFile).slice(0, 80),
             });
           }
+        }
+      }
+    }
+
+    // Object properties whose name ends in `I18nKey` are conventional
+    // i18n-key holders (e.g. `titleI18nKey: 'library.smart.fiveStars.title'`).
+    // The values get passed to `t(preset.titleI18nKey)` elsewhere, which the
+    // linter can't statically follow. Record the literal value as referenced
+    // in every namespace so the catalog entry is considered live.
+    if (ts.isPropertyAssignment(node)) {
+      const name = node.name;
+      let propertyName: string | undefined;
+      if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+        propertyName = name.text;
+      }
+      if (propertyName && /I18nKey$/.test(propertyName)) {
+        const init = node.initializer;
+        if (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init)) {
+          resolveStaticKey(init.text, ANY_CTX);
         }
       }
     }
