@@ -25,6 +25,19 @@ type FeedProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+// Cap cold-path SSR at 5s; on timeout, fall back to client-side fetch.
+const SSR_FETCH_TIMEOUT_MS = 5_000;
+
+function withSsrTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), SSR_FETCH_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 export default async function FeedPage({ searchParams }: FeedProps) {
   const params = await searchParams;
 
@@ -42,18 +55,25 @@ export default async function FeedPage({ searchParams }: FeedProps) {
 
   if (authToken) {
     const feedPromise =
-      tab === 'sessions' ? cachedSessionGroupedFeed(boardUuid, true).catch(() => null) : Promise.resolve(null);
-    const boardsPromise = serverMyBoards(authToken);
+      tab === 'sessions'
+        ? withSsrTimeout(
+            cachedSessionGroupedFeed(boardUuid, true).catch(() => null),
+            null,
+          )
+        : Promise.resolve(null);
+    const boardsPromise = withSsrTimeout(
+      serverMyBoards(authToken).catch(() => null),
+      null,
+    );
 
     const [feedResult, boardsResult] = await Promise.all([feedPromise, boardsPromise]);
     initialFeedResult = feedResult;
     initialMyBoards = boardsResult;
   } else if (tab === 'sessions') {
-    try {
-      initialFeedResult = await cachedSessionGroupedFeed(boardUuid, false);
-    } catch {
-      // Feed fetch failed, client will retry
-    }
+    initialFeedResult = await withSsrTimeout(
+      cachedSessionGroupedFeed(boardUuid, false).catch(() => null),
+      null,
+    );
   }
 
   const locale = await getLocale();
