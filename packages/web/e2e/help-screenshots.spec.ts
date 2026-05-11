@@ -18,6 +18,7 @@
  *     (default to the seeded dev user: test@boardsesh.com / test).
  */
 import { test, expect } from '@playwright/test';
+import { openDummySesh } from './helpers/dummy-sesh';
 import { waitForBoardListReady, waitForDrawerOpen } from './helpers/waits';
 
 const SCREENSHOT_DIR = 'public/help';
@@ -204,28 +205,9 @@ test.describe('Help Page Screenshots - Authenticated', () => {
   // to a dedicated `party-session-integration.spec.ts` that runs on a
   // separate cadence — don't put it back in the screenshot job.
   test('party mode active session', async ({ page }) => {
-    // No `test.slow()` — the real-backend handshake (the reason for the
-    // slow budget) is gone. Default 60s timeout is plenty.
-
-    // app-store-screenshots.spec.ts: 06-party-mode uses the same dispatch
-    // + drawer-wait dance. Worth extracting into helpers/dummy-sesh.ts
-    // once both PRs in the e2e-reliability series have landed; until
-    // then, keeping the two callsites in sync by inspection.
-    const dummyDrawer = page.locator('[data-swipeable-drawer="true"]:visible').first();
-    for (let attempt = 0; attempt < 10; attempt++) {
-      await page.evaluate(() => {
-        window.dispatchEvent(new CustomEvent('onboarding:open-dummy-sesh'));
-      });
-      try {
-        await dummyDrawer.waitFor({ timeout: 500 });
-        break;
-      } catch {
-        if (attempt === 9) throw new Error('Dummy sesh drawer never mounted after 10 dispatches');
-      }
-    }
-
-    // Matches app-store-screenshots.spec.ts's 800ms settle budget on the
-    // same drawer animation — keep the two in lockstep.
+    await openDummySesh(page);
+    // 800ms settle matches the budget app-store-screenshots: 06-party-mode
+    // uses for the same drawer animation.
     await page.waitForTimeout(800);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/party-mode-active.png` });
   });
