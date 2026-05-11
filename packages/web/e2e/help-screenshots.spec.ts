@@ -187,40 +187,40 @@ test.describe('Help Page Screenshots - Authenticated', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/settings-aurora.png` });
   });
 
-  // Keep this last: starting a real party session mutates shared backend
-  // state, so ordering it after the other tests avoids bleed-through.
-  test('party mode active session', async ({ page, context }) => {
+  // Was: this test created a real party session against the backend and
+  // waited for the `Session started!` toast. That timing depended on the
+  // local-mode pub/sub backend (no Redis in CI), a WebSocket subscription,
+  // and a "Sesh" submit button — three independent failure points that
+  // produced one of the suite's worst flake rates (~10 of the last 30
+  // failed runs on shard 7).
+  //
+  // It now reuses the `OnboardingDummySeshMount` dispatch path (same
+  // helper `app-store-screenshots.spec.ts` uses for `06-party-mode`),
+  // which mounts the SeshSettingsDrawer without touching the session
+  // backend. The screenshot still shows the active-session drawer; what
+  // it no longer shows is a real backend handshake.
+  //
+  // If you ever need true backend coverage for session creation, move it
+  // to a dedicated `party-session-integration.spec.ts` that runs on a
+  // separate cadence — don't put it back in the screenshot job.
+  test('party mode active session', async ({ page }) => {
     test.slow();
-    await context.grantPermissions(['geolocation']);
 
-    // Click the row itself, not its virtualizer parent — see note on
-    // `party mode modal` above.
-    const row = page.locator('#onboarding-climb-card');
-    await row.waitFor({ state: 'visible', timeout: 15_000 });
-    await row.click();
-
-    const queueBar = page.locator('[data-testid="queue-control-bar"]');
-    await expect(queueBar).toBeVisible({ timeout: 10_000 });
-
-    await queueBar.getByText('Start sesh').click();
-    await waitForDrawerOpen(page);
-
-    // Submit the session-creation form (the footer "Sesh" button).
-    await page.getByRole('button', { name: 'Sesh', exact: true }).last().click();
-    await expect(page.getByText('Session started!')).toBeVisible({ timeout: 30_000 });
-
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/party-mode-active.png` });
-
-    // Best-effort cleanup: try to stop the session so later runs start
-    // clean. Ignored if the button label changed post-session.
-    try {
-      await page.getByRole('button', { name: 'Sesh', exact: true }).click({ timeout: 5_000 });
-      await page
-        .getByRole('button', { name: 'Stop Session' })
-        .click({ timeout: 5_000 })
-        .catch(() => {});
-    } catch {
-      // Ignore cleanup failures
+    const dummyDrawer = page.locator('[data-swipeable-drawer="true"]:visible').first();
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('onboarding:open-dummy-sesh'));
+      });
+      try {
+        await dummyDrawer.waitFor({ timeout: 500 });
+        break;
+      } catch {
+        if (attempt === 9) throw new Error('Dummy sesh drawer never mounted after 10 dispatches');
+      }
     }
+
+    // Drawer animation settle.
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/party-mode-active.png` });
   });
 });
