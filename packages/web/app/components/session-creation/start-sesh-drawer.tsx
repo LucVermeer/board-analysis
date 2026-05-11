@@ -100,19 +100,23 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
       match = boards.find((b) => `/b/${b.slug}` === basePath);
     }
 
-    // Strategy 2: Match by numeric board identity from localBoardDetails
-    if (!match && localBoardDetails) {
-      const sortedLocalSetIds = [...localBoardDetails.set_ids].sort((a, b) => a - b).join(',');
+    // Strategy 2: Match by numeric board identity. Prefer the current route's
+    // resolved board details (from QueueBridgeInjector) over the persistent
+    // session's last-known board — the bridge is populated immediately on a
+    // board route, while localBoardDetails only syncs on navigation away.
+    const currentBoardDetails = bridgeBoardDetails ?? localBoardDetails;
+    if (!match && currentBoardDetails) {
+      const sortedSetIds = [...currentBoardDetails.set_ids].sort((a, b) => a - b).join(',');
       match = boards.find(
         (b) =>
-          b.boardType === localBoardDetails.board_name &&
-          b.layoutId === localBoardDetails.layout_id &&
-          b.sizeId === localBoardDetails.size_id &&
+          b.boardType === currentBoardDetails.board_name &&
+          b.layoutId === currentBoardDetails.layout_id &&
+          b.sizeId === currentBoardDetails.size_id &&
           b.setIds
             .split(',')
             .map(Number)
             .sort((a, b) => a - b)
-            .join(',') === sortedLocalSetIds,
+            .join(',') === sortedSetIds,
       );
     }
 
@@ -125,7 +129,8 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
       }
     }
 
-    // Strategy 4: Match by generic board route path (e.g. /kilter/homewall/10x12-full-ride/...)
+    // Strategy 4: Fallback for generic routes when no resolved board details
+    // are available — reconstruct each board's canonical URL and compare bases.
     if (!match && pathname && isBoardRoutePath(pathname) && !pathname.startsWith('/b/')) {
       const currentBasePath = getBaseBoardPath(pathname);
       match = boards.find((b) => {
@@ -146,7 +151,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     if (match) {
       setSelectedBoard(match);
     }
-  }, [open, boards, localBoardPath, localBoardDetails, pathname]);
+  }, [open, boards, localBoardPath, localBoardDetails, bridgeBoardDetails, pathname]);
 
   const isLoggedIn = status === 'authenticated';
 
@@ -373,7 +378,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
           </div>
         }
         placement="bottom"
-        height="60%"
+        height="100%"
         paperRef={paperRef}
         swipeEnabled={false}
         open={open}
