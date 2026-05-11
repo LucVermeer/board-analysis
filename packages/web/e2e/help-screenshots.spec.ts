@@ -102,8 +102,10 @@ test.describe('Help Page Screenshots', () => {
 
   test('login modal', async ({ page }) => {
     // Open user drawer → Sign in → auth modal with email/password form.
-    await page.getByLabel('User menu').click();
-    await page.getByRole('button', { name: 'Sign in' }).waitFor({ state: 'visible' });
+    const userMenu = page.getByLabel('User menu');
+    await userMenu.waitFor({ state: 'visible', timeout: 15_000 });
+    await userMenu.click();
+    await page.getByRole('button', { name: 'Sign in' }).waitFor({ state: 'visible', timeout: 15_000 });
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForSelector('input#login_email', { state: 'visible' });
     await page.screenshot({ path: `${SCREENSHOT_DIR}/login-modal.png` });
@@ -124,9 +126,15 @@ test.describe('Help Page Screenshots - Authenticated', () => {
     await page.goto(boardUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await waitForBoardListReady(page);
 
-    // Login via user drawer → auth modal
-    await page.getByLabel('User menu').click();
-    await page.getByRole('button', { name: 'Sign in' }).waitFor({ state: 'visible' });
+    // Login via user drawer → auth modal. Wait for the User menu trigger
+    // to be both attached and visible — previously the test relied on
+    // the (now-removed) `networkidle` wait to absorb the hydration gap
+    // before this click; without it, the click can fire before the
+    // header's onClick handler is mounted.
+    const userMenu = page.getByLabel('User menu');
+    await userMenu.waitFor({ state: 'visible', timeout: 15_000 });
+    await userMenu.click();
+    await page.getByRole('button', { name: 'Sign in' }).waitFor({ state: 'visible', timeout: 15_000 });
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForSelector('input#login_email', { state: 'visible' });
 
