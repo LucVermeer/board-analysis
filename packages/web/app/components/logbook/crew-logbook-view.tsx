@@ -93,7 +93,6 @@ export const CrewLogbookView: React.FC<CrewLogbookViewProps> = ({ currentClimb, 
               downvotes: item.downvotes,
               commentCount: item.commentCount,
             }}
-            currentClimbAngle={currentClimb.angle}
             showMirrorTag={showMirrorTag}
             user={{
               userId: item.userId,

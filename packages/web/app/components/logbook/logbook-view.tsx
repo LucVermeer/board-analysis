@@ -76,7 +76,6 @@ export const LogbookView: React.FC<LogbookViewProps> = ({ currentClimb }) => {
               downvotes: ascent.downvotes,
               commentCount: ascent.commentCount,
             }}
-            currentClimbAngle={currentClimb.angle}
             showMirrorTag={showMirrorTag}
           />
         ))}

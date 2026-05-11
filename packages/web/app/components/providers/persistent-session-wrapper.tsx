@@ -10,7 +10,7 @@ import { useCurrentClimb, useQueueList } from '../graphql-queue';
 import QueueControlBar from '../queue-control/queue-control-bar';
 import QueueControlBarShell from '../queue-control/queue-control-bar-shell';
 import BottomTabBar from '../bottom-tab-bar/bottom-tab-bar';
-import { BoardProvider } from '../board-provider/board-provider-context';
+import { BoardProvider, useBoardProvider } from '../board-provider/board-provider-context';
 import { ConnectionSettingsProvider } from '../connection-manager/connection-settings-context';
 import { WebSocketConnectionProvider } from '../connection-manager/websocket-connection-provider';
 import { BluetoothProvider } from '../board-bluetooth-control/bluetooth-context';
@@ -216,6 +216,7 @@ function RootQueueControlBarWithProviders({
 }) {
   const { currentClimb } = useCurrentClimb();
   const { queue } = useQueueList();
+  const { getLogbook } = useBoardProvider();
 
   const climbUuids = useMemo(() => {
     const queueUuids = queue.map((item) => item.climb?.uuid).filter(Boolean);
@@ -224,6 +225,18 @@ function RootQueueControlBarWithProviders({
     }
     return Array.from(new Set(queueUuids)).sort();
   }, [queue, currentClimb]);
+
+  // Ensure the play view drawer's "Your Logbook" section has data on
+  // non-board routes (e.g. /you, /profile) where useQueueDataFetching
+  // never mounts. React Query dedupes by key, so this is a no-op when
+  // the board route already requested the same UUIDs.
+  const climbUuidsKey = useMemo(() => climbUuids.join(','), [climbUuids]);
+  useEffect(() => {
+    if (climbUuids.length > 0) {
+      void getLogbook(climbUuids);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- climbUuidsKey covers climbUuids identity changes
+  }, [climbUuidsKey, getLogbook]);
 
   const { favoritesProviderProps, playlistsProviderProps } = useClimbActionsData({
     boardName: boardDetails.board_name,
