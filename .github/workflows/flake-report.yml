@@ -23,11 +23,7 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - uses: actions/checkout@v6
-        with:
-          # The PR's head SHA so the comment is associated with the right
-          # commit, not the merge commit.
-          ref: ${{ github.event.workflow_run.head_sha }}
+      # No checkout — the node script below reads only artifact JSON.
 
       - name: Resolve PR number for this workflow_run
         id: pr
@@ -55,19 +51,16 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           mkdir -p reports
-          # The e2e-tests workflow uploads `playwright-report-shard-N` per
-          # shard. Pull every one — gh names the directory after the
-          # artifact, so each shard's results.json lives at
-          # reports/playwright-report-shard-N/results.json.
-          #
-          # Don't swallow errors: if the artifact name pattern stops
-          # matching (upstream workflow rename), we want the workflow to
-          # surface the failure rather than silently posting "no flakes."
+          # The e2e-tests workflow uploads `playwright-report-shard-N`
+          # artifacts. `gh run download` exits 0 even when zero artifacts
+          # match the pattern (empty reports/ dir), so the empty-state
+          # handler below picks that case up. Network/auth failures still
+          # exit nonzero and fail this step — preferable to silently
+          # posting a misleading "no flakes" comment.
           gh run download "${RUN_ID}" \
             --repo "${REPO}" \
             --dir reports \
-            --pattern 'playwright-report-shard-*' \
-            || echo "::warning::No matching artifacts; flake report will be empty"
+            --pattern 'playwright-report-shard-*'
           ls -R reports || true
 
       - name: Compute flake list
@@ -82,8 +75,11 @@ jobs:
           const path = require('path');
 
           const root = 'reports';
-          const flaky = []; // { project, file, title, retries }
-          const failed = []; // { project, file, title }
+          // Dedup by (project, file, title) so a test that appears in
+          // multiple shards' JSON (shard split misconfig, retried after a
+          // shard re-run) doesn't show up twice in the report.
+          const flakyMap = new Map();
+          const failedMap = new Map();
 
           function walkSpecs(node, projectName) {
             if (!node) return;
@@ -100,10 +96,11 @@ jobs:
                 // detection doesn't accidentally fall through into the
                 // failed bucket.
                 const status = test.status;
+                const key = `${project}::${spec.file}::${spec.title}`;
                 if (status === 'flaky') {
-                  flaky.push({ project, file: spec.file, title: spec.title, retries: results.length - 1 });
+                  flakyMap.set(key, { project, file: spec.file, title: spec.title, retries: results.length - 1 });
                 } else if (status === 'unexpected') {
-                  failed.push({ project, file: spec.file, title: spec.title });
+                  failedMap.set(key, { project, file: spec.file, title: spec.title });
                 }
               }
             }
@@ -128,6 +125,9 @@ jobs:
               console.warn(`Failed to parse ${file}: ${err.message}`);
             }
           }
+
+          const flaky = Array.from(flakyMap.values());
+          const failed = Array.from(failedMap.values());
 
           const lines = ['### E2E Flake Report', ''];
           if (flaky.length === 0 && failed.length === 0) {
