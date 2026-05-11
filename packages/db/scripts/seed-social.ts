@@ -1,4 +1,4 @@
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, or, ilike, asc } from 'drizzle-orm';
 import { faker } from '@faker-js/faker';
 
 import { users } from '../src/schema/auth/users.js';
@@ -852,15 +852,15 @@ async function seedSocialData() {
     // documented in `packages/web/e2e/SEED_CONTRACT.md`.
     //
     // Constraints mirror the climb-list filter so the seeded climbs are
-    // guaranteed to appear on the page:
+    // guaranteed to appear on the page (mirrors create-climb-filters.ts):
     //   - boardType = kilter
     //   - layoutId = 1 (the "original" Kilter layout)
     //   - isListed = true
     //   - has board_climb_stats at angle 40
-    //   - required_set_ids <@ {1, 20}  (subset; matches the route's
+    //   - required_set_ids <@ ARRAY[1, 20]  (subset; matches the route's
     //     `required_set_ids <@ selected_sets` check)
-    //   - compatible_size_ids && {12x12 size IDs}  (the route enforces
-    //     `size_id = ANY(compatible_size_ids)` for the URL's product size)
+    //   - {chosen size_id} = ANY(compatible_size_ids)  (matches the route's
+    //     `${params.size_id} = ANY(compatible_size_ids)` check)
     //
     // Ordered by climb UUID so the selection is stable across seed runs.
     console.info('\n  Pinning deterministic e2e grid-badge ticks...');
@@ -871,24 +871,31 @@ async function seedSocialData() {
     const GRID_BADGE_ANGLE = 40;
     const GRID_BADGE_TICK_COUNT = 5;
 
-    // Resolve product sizes named like "12 x 12" / "12x12" on kilter.
-    // The board URL slug "12x12-square" derives from the size name via
-    // generateSizeSlug(name, description), so we match by name pattern
-    // rather than hard-coding a numeric ID (the ID isn't stable across
-    // dev DB image rebuilds for non-LED layouts).
-    const kilter12x12SizeRows = await db
+    // Resolve a single product_size_id matching the "12x12-square" slug.
+    // The route URL parsing maps a slug to one size_id, so the seed needs
+    // one ID too — not an array — to mirror the route's
+    // `${size_id} = ANY(compatible_size_ids)` filter exactly. Ordered by
+    // id so re-runs against the same dev DB image are deterministic.
+    const kilter12x12SizeRow = await db
       .select({ id: boardProductSizes.id })
       .from(boardProductSizes)
       .where(
         and(
           eq(boardProductSizes.boardType, 'kilter'),
-          sql`(${boardProductSizes.name} ILIKE '12 x 12%' OR ${boardProductSizes.name} ILIKE '12x12%')`,
+          or(ilike(boardProductSizes.name, '12 x 12%'), ilike(boardProductSizes.name, '12x12%')),
         ),
-      );
-    const kilter12x12SizeIds = kilter12x12SizeRows.map((r) => r.id);
+      )
+      .orderBy(asc(boardProductSizes.id))
+      .limit(1);
+    const kilter12x12SizeId = kilter12x12SizeRow[0]?.id;
+
+    const setIdLiterals = sql.join(
+      KILTER_SCREW_BOLT_SET_IDS.map((id) => sql`${id}`),
+      sql`, `,
+    );
 
     const gridBadgeClimbs =
-      kilter12x12SizeIds.length === 0
+      kilter12x12SizeId === undefined
         ? []
         : await db
             .select({ uuid: boardClimbs.uuid })
@@ -906,8 +913,8 @@ async function seedSocialData() {
                 eq(boardClimbs.layoutId, KILTER_ORIGINAL_LAYOUT_ID),
                 eq(boardClimbs.isListed, true),
                 eq(boardClimbStats.angle, GRID_BADGE_ANGLE),
-                sql`${boardClimbs.requiredSetIds} <@ ${KILTER_SCREW_BOLT_SET_IDS}::int[]`,
-                sql`${boardClimbs.compatibleSizeIds} && ${kilter12x12SizeIds}::int[]`,
+                sql`${boardClimbs.requiredSetIds} <@ ARRAY[${setIdLiterals}]::int[]`,
+                sql`${kilter12x12SizeId} = ANY(${boardClimbs.compatibleSizeIds})`,
               ),
             )
             .orderBy(boardClimbs.uuid)
@@ -916,7 +923,7 @@ async function seedSocialData() {
     if (gridBadgeClimbs.length === 0) {
       console.warn(
         '  ⚠️  No kilter climbs match the grid-badge fixture filter (layout 1, sets ⊆ {1,20}, ' +
-          `compatible with sizes [${kilter12x12SizeIds.join(',') || 'none-found'}], angle 40). ` +
+          `size_id=${kilter12x12SizeId ?? 'none-found'}, angle 40). ` +
           'The grid-mode-ascent-badge spec will continue to flake until the dev DB image carries climbs ' +
           'on this combo.',
       );
