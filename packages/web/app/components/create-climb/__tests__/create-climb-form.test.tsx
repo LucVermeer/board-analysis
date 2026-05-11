@@ -288,9 +288,7 @@ describe('CreateClimbForm', () => {
     });
 
     await waitFor(() => {
-      const saveButton = getSaveButton();
-      expect(saveButton).toBeTruthy();
-      expect(saveButton?.disabled).toBe(true);
+      expect(screen.getByLabelText<HTMLButtonElement>('Save climb').disabled).toBe(true);
     });
   });
 
