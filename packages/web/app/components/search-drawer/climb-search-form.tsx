@@ -10,8 +10,9 @@ import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import MuiTooltip from '@mui/material/Tooltip';
-import LayersIcon from '@mui/icons-material/Layers';
-import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import CircularProgress from '@mui/material/CircularProgress';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 
 import type {
   BoardDetails,
@@ -61,10 +62,28 @@ const RECT_STROKE_OPACITY = 0.9;
 // render when the URL has no holds filter set.
 const EMPTY_HOLDS_FILTER: HoldsFilter = Object.freeze({}) as HoldsFilter;
 
+const renderHeatmapButtonContent = ({
+  showHeatmap,
+  heatmapLoading,
+}: {
+  showHeatmap: boolean;
+  heatmapLoading: boolean;
+}) => {
+  if (showHeatmap && heatmapLoading) {
+    return <CircularProgress size={16} data-testid="heatmap-loading-spinner" />;
+  }
+  if (showHeatmap) {
+    return <LocalFireDepartmentIcon fontSize="small" />;
+  }
+  return <LocalFireDepartmentOutlinedIcon fontSize="small" />;
+};
+
 const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
   const { t } = useTranslation('climbs');
   const { uiSearchParams, updateFilters } = useUISearchParams();
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const handleHeatmapLoadingChange = useCallback((loading: boolean) => setHeatmapLoading(loading), []);
   const pathname = usePathname();
   const angle = useMemo(() => getAngleFromPath(pathname), [pathname]);
 
@@ -108,6 +127,11 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
   const defaultZone = useMemo(() => buildDefaultZone(dims), [dims]);
   const handleRadius = useMemo(() => computeHandleRadius(dims), [dims]);
   const handleHitRadius = handleRadius * 2.25;
+  // Centre-handle visuals: a thin crosshair plus a small dot replace the
+  // big circle so holds underneath the centre stay visible and tappable.
+  const crosshairArm = handleRadius * 1.2;
+  const crosshairStrokeWidth = Math.max(boardWidth, boardHeight) * 0.0035;
+  const centerDotRadius = handleRadius * 0.4;
 
   // Local zone mirrors the URL param so dragging stays smooth without
   // hammering the search debounce on every pointermove.
@@ -212,6 +236,26 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
     autoAssignOnFirstTap: false,
   });
 
+  // Belt-and-suspenders guard: even though the exclusion rects now eat
+  // pointer events for dimmed holds, a hold whose visible click circle
+  // straddles the zone boundary can still register a tap from inside.
+  // Drop those so the user can't add filters that the backend zone filter
+  // would immediately discard. When `localZone` is null there is no zone
+  // constraint, so every tap goes through.
+  const handleHoldClickInsideZone = useCallback(
+    (holdId: number, anchor: Element) => {
+      if (localZone) {
+        const hold = holdsById.get(holdId);
+        // Unknown holdId can't be the user's intent under an active zone
+        // — BoardRenderer's click targets all map to holds in holdsData,
+        // so a miss here means a stale or fabricated id. Drop it.
+        if (!hold || !isHoldInsideZone(hold, localZone, dims)) return;
+      }
+      picker.handleHoldClick(holdId, anchor);
+    },
+    [dims, holdsById, localZone, picker],
+  );
+
   // The backend zone filter requires every hold of a climb to fit inside
   // the box. So a filter-hold sitting outside the zone guarantees zero
   // matches — drop it instead of leaving the user staring at empty results.
@@ -271,13 +315,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
       event.stopPropagation();
       const grid = svgPointToGrid(event.clientX, event.clientY);
       if (!grid) return;
-      const nextZone = applyDrag(
-        drag.startBox,
-        drag.mode,
-        grid.x - drag.startGridX,
-        grid.y - drag.startGridY,
-        dims,
-      );
+      const nextZone = applyDrag(drag.startBox, drag.mode, grid.x - drag.startGridX, grid.y - drag.startGridY, dims);
       drag.latestBox = nextZone;
       setLocalZone(nextZone);
     },
@@ -419,7 +457,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               }}
               aria-label={showHeatmap ? t('search.holds.hideHeatmap') : t('search.holds.showHeatmap')}
             >
-              {showHeatmap ? <LayersIcon fontSize="small" /> : <LayersOutlinedIcon fontSize="small" />}
+              {renderHeatmapButtonContent({ showHeatmap, heatmapLoading })}
             </IconButton>
           </MuiTooltip>
         </Stack>
@@ -430,7 +468,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
           boardDetails={tightenedBoardDetails}
           litUpHoldsMap={{}}
           mirrored={false}
-          onHoldClick={picker.handleHoldClick}
+          onHoldClick={handleHoldClickInsideZone}
         />
         {/* Heatmap below the filter rings so the wash colours sit behind the
             user's selections instead of dimming them. */}
@@ -441,6 +479,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
           opacity={0.7}
           enabled={showHeatmap}
           filtersOverride={uiSearchParams}
+          onLoadingChange={handleHeatmapLoadingChange}
         />
         <SearchHoldFilterOverlay
           boardDetails={boardDetails}
@@ -470,6 +509,10 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               pointerEvents="stroke"
               {...dragHandlers}
             />
+            {/* Exclusion rects opt back in to pointer events so taps on a
+                dimmed hold are absorbed here instead of falling through to
+                BoardRenderer underneath — the parent svg keeps pointer-events:
+                none so events do not propagate further. */}
             <rect
               data-testid="zone-exclusion-top"
               x={0}
@@ -478,7 +521,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               height={rectSvg.y}
               fill={themeTokens.neutral[900]}
               fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="none"
+              pointerEvents="all"
             />
             <rect
               data-testid="zone-exclusion-bottom"
@@ -488,7 +531,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               height={Math.max(0, boardHeight - (rectSvg.y + rectSvg.height))}
               fill={themeTokens.neutral[900]}
               fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="none"
+              pointerEvents="all"
             />
             <rect
               data-testid="zone-exclusion-left"
@@ -498,7 +541,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               height={rectSvg.height}
               fill={themeTokens.neutral[900]}
               fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="none"
+              pointerEvents="all"
             />
             <rect
               data-testid="zone-exclusion-right"
@@ -508,7 +551,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               height={rectSvg.height}
               fill={themeTokens.neutral[900]}
               fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="none"
+              pointerEvents="all"
             />
             <rect
               data-testid="zone-selection-outline"
@@ -522,9 +565,10 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               strokeWidth={Math.max(boardWidth, boardHeight) * 0.005}
               pointerEvents="none"
             />
-            {/* Centre move handle replaces dragging the rect body so holds
-                under the zone fill stay tappable. Sized to match the corner
-                handles so it's a proper touch target on mobile. */}
+            {/* Centre move handle: a thin crosshair plus a small centre dot
+                so the affordance stays visible without covering the holds
+                underneath. The invisible hit-target circle below it keeps
+                the touch target the same size as the corner handles. */}
             <circle
               data-testid="zone-hit-move"
               cx={rectSvg.centerX}
@@ -538,22 +582,53 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               pointerEvents="all"
               {...dragHandlers}
             />
-            <circle
+            {/* Purely decorative: the invisible `zone-hit-move` circle above
+                is the single source of truth for drag input. Marking the
+                whole group `pointer-events: none` keeps hover/cursor
+                behaviour consistent regardless of whether the user lands on
+                a crosshair line, the centre dot, or the gap between them. */}
+            <g
               data-testid="zone-handle-move"
-              cx={rectSvg.centerX}
-              cy={rectSvg.centerY}
-              r={handleRadius}
-              fill={themeTokens.colors.primary}
-              fillOpacity={HANDLE_OPACITY}
-              stroke={themeTokens.neutral[50]}
-              strokeWidth={handleRadius * 0.25}
-              onPointerDown={beginDrag('move')}
               className={styles.zoneDragHandle}
               data-swipe-blocked=""
-              cursor="move"
-              pointerEvents="auto"
-              {...dragHandlers}
-            />
+              pointerEvents="none"
+            >
+              <line
+                data-testid="zone-handle-move-crosshair-h"
+                x1={rectSvg.centerX - crosshairArm}
+                y1={rectSvg.centerY}
+                x2={rectSvg.centerX + crosshairArm}
+                y2={rectSvg.centerY}
+                stroke={themeTokens.colors.primary}
+                strokeOpacity={RECT_STROKE_OPACITY}
+                strokeWidth={crosshairStrokeWidth}
+                strokeLinecap="round"
+                pointerEvents="none"
+              />
+              <line
+                data-testid="zone-handle-move-crosshair-v"
+                x1={rectSvg.centerX}
+                y1={rectSvg.centerY - crosshairArm}
+                x2={rectSvg.centerX}
+                y2={rectSvg.centerY + crosshairArm}
+                stroke={themeTokens.colors.primary}
+                strokeOpacity={RECT_STROKE_OPACITY}
+                strokeWidth={crosshairStrokeWidth}
+                strokeLinecap="round"
+                pointerEvents="none"
+              />
+              <circle
+                data-testid="zone-handle-move-dot"
+                cx={rectSvg.centerX}
+                cy={rectSvg.centerY}
+                r={centerDotRadius}
+                fill={themeTokens.colors.primary}
+                fillOpacity={HANDLE_OPACITY}
+                stroke={themeTokens.neutral[50]}
+                strokeWidth={centerDotRadius * 0.35}
+                pointerEvents="none"
+              />
+            </g>
             {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
               const handleX = corner === 'nw' || corner === 'sw' ? localZone.edgeLeft : localZone.edgeRight;
               const handleY = corner === 'nw' || corner === 'ne' ? localZone.edgeTop : localZone.edgeBottom;
