@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import ClimbIcons from './climb-icons';
+import MarqueeText from './marquee-text';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import { formatSends, formatQuality } from '@/app/lib/format-climb-stats';
@@ -54,6 +55,9 @@ export type ClimbTitleProps = {
   /** When provided, replaces the computed subtitle in `gradePosition='right'` mode.
    *  Used by logbook items to show ascent-specific info (time ago, status, etc.). */
   subtitleOverride?: React.ReactNode;
+  /** When true, the climb name marquees if it overflows. Used for the "active" climb
+   *  (selected list item, current queue climb, drawer/detail header). */
+  isActive?: boolean;
 };
 
 // --- Static sx objects hoisted to module scope (no reactive deps) ---
@@ -184,6 +188,7 @@ const ClimbTitle: React.FC<ClimbTitleProps> = React.memo(
     favorited = false,
     isNoMatch = false,
     subtitleOverride,
+    isActive = false,
   }) => {
     const { t } = useTranslation('climbs');
     const isDark = useIsDarkMode();
@@ -259,10 +264,12 @@ const ClimbTitle: React.FC<ClimbTitleProps> = React.memo(
     };
 
     const nameElement = (
-      <Typography variant="body2" component="span" sx={nameSx}>
-        {climb.name}
-        <ClimbIcons benchmarkDifficulty={climb.benchmark_difficulty} isNoMatch={resolvedIsNoMatch} />
-      </Typography>
+      <MarqueeText active={isActive}>
+        <Typography variant="body2" component="span" sx={nameSx}>
+          {climb.name}
+          <ClimbIcons benchmarkDifficulty={climb.benchmark_difficulty} isNoMatch={resolvedIsNoMatch} />
+        </Typography>
+      </MarqueeText>
     );
 
     const gradeElement = (
@@ -425,7 +432,8 @@ const ClimbTitle: React.FC<ClimbTitleProps> = React.memo(
         prev.gradePosition === next.gradePosition &&
         prev.favorited === next.favorited &&
         prev.isNoMatch === next.isNoMatch &&
-        prev.subtitleOverride === next.subtitleOverride
+        prev.subtitleOverride === next.subtitleOverride &&
+        prev.isActive === next.isActive
       );
     }
 
@@ -458,7 +466,8 @@ const ClimbTitle: React.FC<ClimbTitleProps> = React.memo(
       prev.gradePosition === next.gradePosition &&
       prev.favorited === next.favorited &&
       prev.isNoMatch === next.isNoMatch &&
-      prev.subtitleOverride === next.subtitleOverride
+      prev.subtitleOverride === next.subtitleOverride &&
+      prev.isActive === next.isActive
     );
   },
 );

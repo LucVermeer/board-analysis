@@ -6,6 +6,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import ClimbIcons from '@/app/components/climb-card/climb-icons';
+import MarqueeText from '@/app/components/climb-card/marquee-text';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
 import { formatSends } from '@/app/lib/format-climb-stats';
@@ -102,21 +103,20 @@ export default function ClimbDetailHeader({ climb, communityGrade }: ClimbDetail
         }}
       >
         {/* Name row */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '100%' }}>
-          <Typography
-            variant="body1"
-            component="span"
-            sx={{
-              fontSize: themeTokens.typography.fontSize.lg,
-              fontWeight: themeTokens.typography.fontWeight.bold,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {climb.name}
-            <ClimbIcons benchmarkDifficulty={climb.benchmark_difficulty} isNoMatch={!!climb.is_no_match} />
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '100%', minWidth: 0 }}>
+          <MarqueeText active>
+            <Typography
+              variant="body1"
+              component="span"
+              sx={{
+                fontSize: themeTokens.typography.fontSize.lg,
+                fontWeight: themeTokens.typography.fontWeight.bold,
+              }}
+            >
+              {climb.name}
+              <ClimbIcons benchmarkDifficulty={climb.benchmark_difficulty} isNoMatch={!!climb.is_no_match} />
+            </Typography>
+          </MarqueeText>
         </Box>
 
         {/* Details row: quality + setter */}

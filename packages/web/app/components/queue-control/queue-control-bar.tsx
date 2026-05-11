@@ -1224,7 +1224,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                           cursor: tickBarActive ? 'default' : undefined,
                         }}
                       >
-                        <ClimbTitle climb={displayedClimb} gradePosition="right" showSetterInfo />
+                        <ClimbTitle climb={displayedClimb} gradePosition="right" showSetterInfo isActive />
                       </div>
 
                       {/* Peek text — shows next/previous climb sliding in from the edge */}
