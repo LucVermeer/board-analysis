@@ -73,6 +73,10 @@ export default function PageError({ error, reset }: { error: Error & { digest?: 
       }, 0);
       return () => window.clearTimeout(handle);
     }
+    // Either not a translator error, or the auto-reset budget is exhausted —
+    // meaning the previous reset() did not clear the error. Surface the visible
+    // fallback so the user is not stuck staring at a blank page.
+    setAutoResetting(false);
     Sentry.captureException(error);
   }, [error, reset]);
 

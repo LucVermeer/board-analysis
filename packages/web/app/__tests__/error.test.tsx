@@ -92,4 +92,36 @@ describe('PageError translator-DOM auto-recovery', () => {
     expect(reset).not.toHaveBeenCalled();
     expect(captureException).toHaveBeenCalledWith(error);
   });
+
+  it('shows the visible fallback when the translator error survives the first auto-reset', () => {
+    const firstError = makeNotFoundError(
+      "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+    );
+    const reset = vi.fn();
+    const { rerender, container } = render(<PageError error={firstError} reset={reset} />);
+
+    // First render renders null while the auto-reset is in flight.
+    expect(container.textContent ?? '').not.toContain('Something broke');
+
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(reset).toHaveBeenCalledTimes(1);
+
+    // The translator is still mutating the DOM, so the same NotFoundError fires
+    // again. The boundary should now surface the visible fallback instead of
+    // leaving the user staring at a blank page.
+    const secondError = makeNotFoundError(
+      "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+    );
+    rerender(<PageError error={secondError} reset={reset} />);
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(reset).toHaveBeenCalledTimes(1); // no second auto-reset
+    expect(container.textContent).toContain('Something broke');
+    expect(container.textContent).toContain('Try again');
+    expect(captureException).toHaveBeenCalledWith(secondError);
+  });
 });
