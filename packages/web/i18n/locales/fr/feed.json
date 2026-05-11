@@ -37,20 +37,7 @@
     "urlLabel": "URL de la vidéo beta",
     "urlLabelForClimb": "URL de la vidéo beta pour {{name}}",
     "defaultHelper": "Collez l'URL d'un reel/post Instagram public ou d'une vidéo TikTok pour partager votre beta.",
-    "cancel": "Annuler",
-    "unableToLoad": "Impossible de charger la vidéo",
-    "viewLink": "Voir",
-    "videoTitle": "Vidéo beta",
-    "videoTitleByUser": "Vidéo beta par {{name}}",
-    "modalTitle": "Vidéo beta",
-    "modalTitleByUser": "Beta par @{{name}}",
-    "viewOnInstagram": "Voir sur Instagram",
-    "showLess": "Voir moins",
-    "showMore_one": "Voir 1 vidéo de plus",
-    "showMore_other": "Voir {{count}} vidéos de plus",
-    "noVideosAvailable": "Aucune vidéo beta disponible",
-    "angleSuffix": "{{angle}}°",
-    "unknownUser": "inconnu"
+    "cancel": "Annuler"
   },
   "commentFeed": {
     "empty": "Aucun commentaire pour l'instant",
