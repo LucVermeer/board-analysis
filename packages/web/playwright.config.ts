@@ -32,8 +32,10 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3000',
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    /* Trace every retry, not just the first. With `retries: 3`, the previous
+     * `on-first-retry` setting meant retries 2 and 3 produced no trace —
+     * exactly when a test is most stuck and the trace is most useful. */
+    trace: 'on-all-retries',
     /* Capture a screenshot on failure for easier CI debugging */
     screenshot: 'only-on-failure',
     /* Timeout for individual actions (click, fill, etc.) */
