@@ -238,7 +238,7 @@ export async function endStaleInactiveSessions(thresholdMs: number): Promise<num
   const now = new Date();
   const result = await db
     .update(sessions)
-    .set({ status: 'ended', endedAt: now })
+    .set({ status: 'ended', endedAt: now, lastActivity: now })
     .where(and(eq(sessions.status, 'active'), eq(sessions.isPermanent, false), lt(sessions.lastActivity, cutoff)))
     .returning({ id: sessions.id });
   if (result.length > 0) {

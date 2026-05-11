@@ -16,7 +16,7 @@ type SessionSummaryDialogProps = {
   summary: SessionSummary | null;
   boardType?: string;
   existingWorkoutId?: string | null;
-  /** When true, the session was auto-finished after inactivity. Hides HealthKit save and changes the title. */
+  /** When true, the session was auto-finished after inactivity. Changes the dialog title. */
   autoFinished?: boolean;
   onDismiss: () => void;
 };
@@ -33,17 +33,14 @@ export default function SessionSummaryDialog({
   const { enabled: autoSyncEnabled, loaded: autoSyncLoaded } = useHealthKitAutoSync();
   const autoSyncedFor = useRef<string | null>(null);
 
-  // Auto-sync on first dialog open for a given session. Skipped when the
-  // session was auto-finished — the user didn't intend to end it here, so we
-  // shouldn't write anything to HealthKit on their behalf.
+  // Auto-sync on first dialog open for a given session.
   useEffect(() => {
-    if (autoFinished) return;
     if (!summary || !available || !autoSyncLoaded) return;
     if (!autoSyncEnabled) return;
     if (autoSyncedFor.current === summary.sessionId) return;
     autoSyncedFor.current = summary.sessionId;
     void save();
-  }, [summary, available, autoSyncEnabled, autoSyncLoaded, save, autoFinished]);
+  }, [summary, available, autoSyncEnabled, autoSyncLoaded, save]);
 
   let buttonLabel = t('summary.saveToAppleHealth');
   if (state === 'saving') {
@@ -61,7 +58,7 @@ export default function SessionSummaryDialog({
       <DialogTitle>{dialogTitle}</DialogTitle>
       <DialogContent>{summary && <SessionSummaryView summary={summary} />}</DialogContent>
       <DialogActions>
-        {available && !autoFinished && (
+        {available && (
           <Button
             onClick={() => void save()}
             variant="outlined"

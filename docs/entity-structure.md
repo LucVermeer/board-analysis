@@ -289,11 +289,11 @@ A session represents a climbing session on one or more boards — the real-time 
 2. **Inactive** — no users connected, state preserved in Redis
 3. **Ended** — explicitly closed or auto-ended after inactivity
 
-**Planned auto-end behavior (M11):**
+**Auto-end behavior:**
 
-- Periodic job (every 5 min) checks for inactive sessions past configurable timeout
-- Sessions with `is_permanent = true` are exempt
-- On end: `ended_at` is set, summary is generated (grade distribution, hardest climb, participants)
+- Periodic sweep (every 1 min) on `RoomManager` calls `endStaleInactiveSessions` to mark any session where `status='active'`, `is_permanent=false`, and `last_activity < NOW() - 1 hour` as `status='ended'` with `ended_at` stamped.
+- Sessions with `is_permanent = true` are exempt.
+- The web client lazily surfaces auto-ended sessions: on app open it pre-flights a `GET_SESSION_SUMMARY` against the persisted session and, if `endedAt` is truthy, opens the existing `SessionSummaryDialog` in `autoFinished` mode (title becomes "Session Finished").
 
 ---
 

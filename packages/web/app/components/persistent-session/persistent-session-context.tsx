@@ -129,7 +129,8 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       if (val) lifecycle.activateSession(val);
     },
     onSessionAutoFinished: lifecycle.setAutoFinishedSummary,
-    wsAuthTokenRef,
+    wsAuthToken,
+    isAuthLoading,
   });
 
   // 4. Queue mutations: GraphQL mutation wrappers

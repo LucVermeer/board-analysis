@@ -96,6 +96,7 @@ class RoomManager {
           console.error('[RoomManager] Inactivity sweep failed:', err);
         });
       }, INACTIVITY_SWEEP_INTERVAL_MS);
+      this.inactivitySweepInterval.unref();
       console.info(
         `[RoomManager] Inactivity sweep enabled (threshold ${INACTIVITY_THRESHOLD_MS / 60000}m, interval ${INACTIVITY_SWEEP_INTERVAL_MS / 60000}m)`,
       );

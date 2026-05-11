@@ -415,13 +415,23 @@ Sessions support the following configurable properties set at creation time:
 
 ### Session Ending and Summaries
 
-Sessions only end when a client explicitly calls `endSession`. Last-user disconnects, grace-period expiry, and Redis TTL expiry do not mark a session as ended; they only evict hot state and force later restoration from Redis or Postgres.
+Sessions end one of two ways: an explicit `endSession` call from a client, or the backend's inactivity sweep (see below). Last-user disconnects, grace-period expiry, and Redis TTL expiry do not mark a session as ended; they only evict hot state and force later restoration from Redis or Postgres.
 
 When a session ends via `endSession`:
 
 - `endedAt` timestamp is recorded in Postgres
 - A `SessionEnded` event is broadcast to all connected clients
 - A `SessionSummary` is generated and returned to the caller
+
+#### Inactivity sweep (auto-finish)
+
+`RoomManager.initialize()` starts a background interval (`INACTIVITY_SWEEP_INTERVAL_MS`, currently 1 minute) that calls `endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS)` from `session-discovery.ts`. The sweep marks every session where `status='active' AND isPermanent=false AND lastActivity < NOW() - 1 hour` as `status='ended'` and stamps `endedAt`. Permanent sessions are exempt. The sweep does no Redis or `WriteScheduler` cleanup — by definition no clients are connected (otherwise `lastActivity` would have been refreshed via the debounced queue-write path), so there's no hot state to evict.
+
+Because the sweep mutates rows asynchronously to any connected clients, no `SessionEnded` broadcast is emitted. Instead, the client surfaces it lazily on the next app open:
+
+1. `useQueueStorage.restoreState` waits for `useWsAuthToken` to resolve, then runs a pre-flight `GET_SESSION_SUMMARY` query against the persisted session.
+2. If the response's `summary.endedAt` is truthy, `ACTIVE_SESSION_KEY` is cleared from IndexedDB and `setAutoFinishedSummary` opens the root `SessionSummaryDialog` in `autoFinished` mode.
+3. The dialog title becomes "Session Finished"; HealthKit auto-sync and the save button behave the same as a manually-ended session — the workout happened regardless of how it was closed.
 
 **Session Summary** includes:
 

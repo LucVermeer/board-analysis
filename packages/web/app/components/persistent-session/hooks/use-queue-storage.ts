@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type MutableRefObject } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import type { BoardDetails } from '@/app/lib/types';
@@ -12,7 +12,8 @@ type UseQueueStorageArgs = {
   setActiveSession: (val: ActiveSessionInfo | null) => void;
   /** Called when a restored session was already auto-finished by the backend */
   onSessionAutoFinished: (summary: SessionSummary, boardType: string | null) => void;
-  wsAuthTokenRef: MutableRefObject<string | null>;
+  wsAuthToken: string | null;
+  isAuthLoading: boolean;
 };
 
 export type QueueStorageState = {
@@ -37,13 +38,15 @@ export function useQueueStorage({
   activeSession,
   setActiveSession,
   onSessionAutoFinished,
-  wsAuthTokenRef,
+  wsAuthToken,
+  isAuthLoading,
 }: UseQueueStorageArgs): QueueStorageState & QueueStorageActions {
   const [localQueue, setLocalQueue] = useState<LocalClimbQueueItem[]>([]);
   const [localCurrentClimbQueueItem, setLocalCurrentClimbQueueItem] = useState<LocalClimbQueueItem | null>(null);
   const [localBoardPath, setLocalBoardPath] = useState<string | null>(null);
   const [localBoardDetails, setLocalBoardDetails] = useState<BoardDetails | null>(null);
   const [isLocalQueueLoaded, setIsLocalQueueLoaded] = useState(false);
+  const hasRestoredRef = useRef(false);
 
   // Ref for activeSession so callbacks have stable identity
   const activeSessionRef = useRef(activeSession);
@@ -56,22 +59,24 @@ export function useQueueStorage({
     }
   }, []);
 
-  // Auto-restore session state on mount (party session only — local queues are no longer persisted)
+  // Restore party session once auth has resolved. Waiting for !isAuthLoading
+  // ensures the pre-flight auto-finished check has a real token to send —
+  // otherwise it short-circuits on the `!authToken` guard and the finished
+  // dialog never appears on a cold start.
   useEffect(() => {
+    if (isAuthLoading) return;
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+
     async function restoreState() {
-      // Try to restore party session
       try {
         const persisted = await getPreference<ActiveSessionInfo>(ACTIVE_SESSION_KEY);
         if (persisted && persisted.sessionId && persisted.boardPath && persisted.boardDetails) {
           if (DEBUG) console.info('[PersistentSession] Restoring persisted session:', persisted.sessionId);
 
-          // Pre-flight: check if the session was auto-finished while the app was closed.
-          // The backend marks sessions as ended after 1h of inactivity (see RoomManager
-          // inactivity sweep). When that happened we surface the summary instead of
-          // re-joining a dead session.
           const autoFinishedHandled = await maybeHandleAutoFinishedSession(
             persisted,
-            wsAuthTokenRef.current,
+            wsAuthToken,
             onSessionAutoFinished,
           );
           if (autoFinishedHandled) {
@@ -91,8 +96,7 @@ export function useQueueStorage({
     }
 
     void restoreState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only on mount
+  }, [isAuthLoading, wsAuthToken, onSessionAutoFinished, setActiveSession]);
 
   // Local queue management (in-memory only)
   const setLocalQueueState = useCallback(

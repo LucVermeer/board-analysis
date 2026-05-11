@@ -22,26 +22,29 @@ vi.mock('../../graphql-queue/graphql-client', () => ({
 }));
 
 // Mock the HTTP GraphQL client used by the auto-finished pre-flight check on
-// session restore. Returning null mirrors a session with no ticks, which the
-// pre-flight treats as "silently clear" — but the tests using this mock pre-
-// populate IndexedDB themselves, so we make the request return a fresh-active
-// shape (endedAt=null) to keep the existing restore path intact.
+// session restore. `mockHttpRequest` is hoisted via vi.hoisted so individual
+// tests can override the response with mockResolvedValueOnce — default is an
+// active session (endedAt=null) which preserves existing restore behaviour.
+const { mockHttpRequest } = vi.hoisted(() => ({
+  mockHttpRequest: vi.fn().mockResolvedValue({
+    sessionSummary: {
+      sessionId: 'mocked',
+      endedAt: null,
+      startedAt: null,
+      durationMinutes: 0,
+      totalSends: 0,
+      totalAttempts: 0,
+      gradeDistribution: [],
+      hardestClimb: null,
+      participants: [],
+      goal: null,
+    },
+  }),
+}));
+
 vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: vi.fn(() => ({
-    request: vi.fn().mockResolvedValue({
-      sessionSummary: {
-        sessionId: 'mocked',
-        endedAt: null,
-        startedAt: null,
-        durationMinutes: 0,
-        totalSends: 0,
-        totalAttempts: 0,
-        gradeDistribution: [],
-        hardestClimb: null,
-        participants: [],
-        goal: null,
-      },
-    }),
+    request: mockHttpRequest,
   })),
 }));
 
@@ -250,6 +253,52 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     await waitFor(async () => {
       const stored = await getPreference(ACTIVE_SESSION_KEY);
       expect(stored).toEqual(sessionInfo);
+    });
+  });
+
+  it('surfaces the finished-session dialog when the backend has auto-ended the persisted session', async () => {
+    const boardDetails = createTestBoardDetails();
+    const sessionInfo = {
+      sessionId: 'session-stale',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails,
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+
+    const autoFinishedSummary = {
+      sessionId: 'session-stale',
+      endedAt: '2026-05-11T09:00:00.000Z',
+      startedAt: '2026-05-11T07:30:00.000Z',
+      durationMinutes: 90,
+      totalSends: 3,
+      totalAttempts: 7,
+      gradeDistribution: [],
+      hardestClimb: null,
+      participants: [],
+      goal: null,
+    };
+    mockHttpRequest.mockResolvedValueOnce({ sessionSummary: autoFinishedSummary });
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.sessionSummaryAutoFinished).toBe(true);
+    });
+
+    expect(result.current.sessionSummary).toEqual(autoFinishedSummary);
+    expect(result.current.sessionSummaryBoardType).toBe('kilter');
+    expect(result.current.activeSession).toBeNull();
+
+    await waitFor(async () => {
+      const stored = await getPreference(ACTIVE_SESSION_KEY);
+      expect(stored).toBeNull();
     });
   });
 
