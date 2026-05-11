@@ -6,6 +6,21 @@ const SKELETON = '.MuiSkeleton-root';
 
 export async function waitForBoardListReady(page: Page, timeout = 30_000): Promise<void> {
   await page.waitForSelector(CLIMB_CARD_OR_ONBOARDING, { timeout });
+  // The climb-card selector goes visible the moment SSR HTML paints, which
+  // can precede React's first client-side commit by a noticeable gap on
+  // slower CI runners. Without a hydration guard, the very next click in
+  // a test sometimes lands before the onClick handler is attached and is
+  // silently dropped — the source of "clicked the button but nothing
+  // happened" flakes in app-store-screenshots / help-screenshots. Two
+  // consecutive `requestAnimationFrame` callbacks bracket at least one
+  // React commit cycle, which is a cheap and reliable post-hydration
+  // signal without needing a product-side marker.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
 }
 
 export function drawer(page: Page, index = 0): Locator {
