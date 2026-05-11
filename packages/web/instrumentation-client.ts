@@ -35,8 +35,18 @@ Sentry.init({
       return null;
     }
 
-    // Ignore Safari/WebKit "Load failed" errors caused by in-flight fetch requests
-    // being aborted during page navigation (e.g., RSC fetches interrupted by route changes)
+    // Ignore in-flight fetches aborted by page navigation. Different browsers
+    // surface this differently:
+    //   - Chrome/Firefox: TypeError "Failed to fetch"
+    //   - Older Safari/WebKit: TypeError "Load failed" or "cancelled"
+    // These exact-string matches are intentionally narrow — they're the
+    // platform-emitted messages, not generic substrings that could swallow
+    // unrelated errors.
+    //
+    // We deliberately do NOT filter out `AbortError` here. AbortError is also
+    // raised by user-controlled AbortControllers (timeouts, manual cancels)
+    // and a blanket filter would mask real bugs. Instead, handle aborts at
+    // the call site using `isAbortError` from `@/app/lib/is-abort-error`.
     if (errorMessage === 'Load failed' || errorMessage === 'Failed to fetch' || errorMessage === 'cancelled') {
       return null;
     }
