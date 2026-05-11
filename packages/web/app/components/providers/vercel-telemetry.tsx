@@ -9,8 +9,7 @@ import { isAdminAnalyticsUrl } from '@/app/lib/analytics-paths';
 // passed from a Server Component (RootLayout) to a Client Component, so the
 // configuration lives here in the client boundary.
 const dropAdminEvents = <Event extends { url: string }>(event: Event): Event | null => {
-  const baseUrl = typeof window === 'undefined' ? undefined : window.location.origin;
-  return isAdminAnalyticsUrl(event.url, baseUrl) ? null : event;
+  return isAdminAnalyticsUrl(event.url) ? null : event;
 };
 
 export function VercelAnalytics() {
