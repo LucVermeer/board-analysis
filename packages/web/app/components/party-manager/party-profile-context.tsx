@@ -126,9 +126,17 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // changes — not on every navigation (the identity effect above re-runs on
   // pathname changes, which would be wasteful for a property that rarely
   // changes).
+  //
+  // Guards mirror the identity effect above: skip while session status is still
+  // loading or before the IDB profile resolves (otherwise we'd attach `language`
+  // to PostHog's transient anon id and have to merge it later), and skip on
+  // admin URLs to keep admin sessions out of analytics entirely.
   useEffect(() => {
+    if (sessionStatus === 'loading') return;
+    if (pathname && isAdminAnalyticsUrl(pathname)) return;
+    if (!profile?.id) return;
     setPersonProperties({ language: i18n.language });
-  }, [i18n.language]);
+  }, [i18n.language, pathname, profile?.id, sessionStatus]);
 
   // Fetch custom user profile (displayName, avatarUrl) when authenticated
   useEffect(() => {

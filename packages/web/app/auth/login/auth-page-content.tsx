@@ -35,31 +35,7 @@ import { TabPanel } from '@/app/components/ui/tab-panel';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { themeTokens } from '@/app/theme/theme-config';
 import { track, setPersonProperties } from '@/app/lib/analytics';
-
-// NextAuth's documented error codes. The ?error= query param is user-supplied
-// (anyone can craft a URL), so we whitelist before forwarding to analytics so
-// the failure_reason property doesn't carry arbitrary attacker-controlled
-// strings into PostHog.
-const KNOWN_AUTH_ERRORS: ReadonlySet<string> = new Set([
-  'Configuration',
-  'AccessDenied',
-  'Verification',
-  'Default',
-  'OAuthSignin',
-  'OAuthCallback',
-  'OAuthCreateAccount',
-  'OAuthAccountNotLinked',
-  'EmailCreateAccount',
-  'EmailSignin',
-  'Callback',
-  'CredentialsSignin',
-  'SessionRequired',
-]);
-
-function safeAuthError(value: string | null | undefined): string {
-  if (!value) return 'unknown';
-  return KNOWN_AUTH_ERRORS.has(value) ? value : 'unknown';
-}
+import { authMethodFromError, safeAuthError } from './auth-error-classification';
 
 export default function AuthPageContent() {
   const { t } = useTranslation('auth');
@@ -89,11 +65,12 @@ export default function AuthPageContent() {
       } else {
         showMessage(t('login.toasts.authFailed'), 'error');
       }
-      // NextAuth redirects back to /auth/login?error=... after a failed OAuth
-      // round-trip. Surface this as Login Failed so the auth funnel captures
-      // OAuth-provider rejections (cancel, provider error, callback mismatch).
+      // NextAuth redirects back to /auth/login?error=... after either a failed
+      // OAuth round-trip or — under some flows — a credentials redirect path.
+      // CredentialsSignin is the credentials code; everything else in the known
+      // enum is OAuth-shaped. Tag accordingly so funnel splits stay honest.
       track('Login Failed', {
-        auth_method: 'oauth',
+        auth_method: authMethodFromError(error),
         failure_reason: safeAuthError(error),
       });
       // Strip the ?error= param so a refresh or back-navigation doesn't fire

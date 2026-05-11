@@ -199,4 +199,51 @@ describe('PartyProfileProvider PostHog identity wiring', () => {
 
     expect(mocks.track).not.toHaveBeenCalledWith('Login Succeeded', expect.anything());
   });
+
+  it('attaches `language` once the IDB profile resolves, even for unauthenticated visitors', async () => {
+    mocks.session.status = 'unauthenticated';
+    mocks.session.data = null;
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(mocks.setPersonProperties).toHaveBeenCalledWith({ language: 'en-US' });
+    });
+  });
+
+  it('does not attach `language` on admin URLs', async () => {
+    mocks.route.pathname = '/admin/retention';
+    mocks.session.status = 'authenticated';
+    mocks.session.data = {
+      user: { id: 'user-5', email: 'five@example.com' },
+    };
+
+    renderProvider();
+
+    // Give the effect a tick — the identity effect short-circuits on admin too,
+    // so there's no other promise to await; flush microtasks via setImmediate.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.setPersonProperties).not.toHaveBeenCalled();
+  });
+
+  it('does not attach `language` while the IDB profile is still loading', async () => {
+    let resolveProfile: (value: { id: string }) => void = () => {};
+    mocks.ensurePartyProfile.mockReturnValue(
+      new Promise((resolve) => {
+        resolveProfile = resolve;
+      }),
+    );
+
+    renderProvider();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.setPersonProperties).not.toHaveBeenCalled();
+
+    // Resolve the profile to verify the effect fires once it's available.
+    resolveProfile({ id: 'profile-1' });
+    await waitFor(() => {
+      expect(mocks.setPersonProperties).toHaveBeenCalledWith({ language: 'en-US' });
+    });
+  });
 });

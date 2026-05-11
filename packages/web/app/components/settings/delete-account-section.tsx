@@ -91,9 +91,12 @@ export default function DeleteAccountSection() {
         input: { removeSetterName },
       });
 
-      // Account deleted — sign out and redirect to home
-      track('Logout', { method: 'account_deleted' });
+      // Account deleted — sign out and redirect to home. Track AFTER signOut
+      // resolves so a network failure on signOut doesn't record a Logout that
+      // never actually happened (the GraphQL deletion already succeeded, but
+      // the auth session won't be cleared until signOut completes).
       await signOut({ callbackUrl: '/' });
+      track('Logout', { method: 'account_deleted' });
     } catch (error) {
       console.error('Delete account error:', error);
       let message = t('deleteAccount.error');
