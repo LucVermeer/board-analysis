@@ -53,4 +53,27 @@ describe('Vercel telemetry providers', () => {
 
     expectAdminFilter(mocks.speedBeforeSend);
   });
+
+  // Regression guard for #2061 (Sentry BOARDSESH-65): RootLayout is a Server
+  // Component, so any function prop on these wrappers would be serialized
+  // across the RSC boundary and throw "Functions cannot be passed directly
+  // to Client Components". Keep the wrappers prop-less so contributors
+  // can't accidentally pass `beforeSend` (or any callback) from the layout.
+  it('exports no-arg wrappers so the layout cannot pass function props', () => {
+    expect(VercelAnalytics.length).toBe(0);
+    expect(VercelSpeedInsights.length).toBe(0);
+  });
+
+  it('keeps the beforeSend identity stable across renders', () => {
+    render(<VercelAnalytics />);
+    const first = mocks.analyticsBeforeSend;
+    mocks.analyticsBeforeSend = undefined;
+    render(<VercelAnalytics />);
+
+    // Module-scoped function — same reference each render. Inlining it as
+    // `<Analytics beforeSend={(e) => ...} />` would create a fresh function
+    // each call, which still works at runtime but defeats the stability
+    // contract @vercel/analytics relies on for its `useEffect([beforeSend])`.
+    expect(mocks.analyticsBeforeSend).toBe(first);
+  });
 });
