@@ -194,9 +194,9 @@ test.describe('Bottom Tab Bar - Queue Integration', () => {
     await page.goto(boardUrl);
     await waitForBoardListReady(page);
 
-    // Add a climb to the queue
+    // Add a climb to the queue. waitForBoardListReady already asserts
+    // the climb card is present, so we can dblclick directly.
     const climbCard = page.locator('#onboarding-climb-card');
-    await expect(climbCard).toBeVisible({ timeout: 15000 });
     await climbCard.dblclick();
 
     // Both bars should be visible
@@ -215,9 +215,9 @@ test.describe('Bottom Tab Bar - Queue Integration', () => {
     await page.goto(boardUrl);
     await waitForBoardListReady(page);
 
-    // Add a climb to the queue and capture its name
+    // Add a climb to the queue and capture its name.
+    // waitForBoardListReady already asserts the card is present.
     const climbCard = page.locator('#onboarding-climb-card');
-    await expect(climbCard).toBeVisible({ timeout: 15000 });
     await climbCard.dblclick();
 
     await expect(page.locator(queueControlBar)).toBeVisible({ timeout: 10000 });
