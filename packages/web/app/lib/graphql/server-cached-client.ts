@@ -20,6 +20,7 @@ export {
   serverGroupedNotifications,
   serverPlaylist,
   serverPlaylistClimbs,
+  serverSmartPlaylist,
 } from './server-graphql';
 
 export const USER_CLIMB_PERCENTILE_CACHE_TAG = 'user-climb-percentile';

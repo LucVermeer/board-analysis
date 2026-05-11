@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import MuiButton from '@mui/material/Button';
@@ -15,6 +15,7 @@ import {
   type GetSmartPlaylistQueryResponse,
   type GetSmartPlaylistQueryVariables,
   type SmartPlaylistMeta,
+  type SmartPlaylistResult,
   type SmartPlaylistType,
   GET_SMART_PLAYLIST,
 } from '@/app/lib/graphql/operations/playlists';
@@ -37,9 +38,17 @@ type Props = {
   smartPlaylistSlug: SmartPlaylistSlug;
   userId: string;
   initialMyBoards?: UserBoard[] | null;
+  /** SSR-fetched first page so the hero + climbs paint without a spinner. */
+  initialSmartPlaylist?: SmartPlaylistResult | null;
 };
 
-export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistSlug, userId, initialMyBoards }: Props) {
+export default function SmartPlaylistContent({
+  smartPlaylistType,
+  smartPlaylistSlug,
+  userId,
+  initialMyBoards,
+  initialSmartPlaylist,
+}: Props) {
   const { t } = useTranslation('playlists');
   const { showMessage } = useSnackbar();
   const { token, isLoading: tokenLoading } = useWsAuthToken();
@@ -47,6 +56,9 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
 
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(() => findMatchingBoard(initialMyBoards));
   const { boards: myBoards, isLoading: boardsLoading } = useMyBoards(true, 50, initialMyBoards);
+  // Mark SSR data fresh so react-query honours staleTime instead of triggering
+  // an immediate refetch (initialDataUpdatedAt defaults to 0 = epoch).
+  const ssrInitialUpdatedAtRef = useRef(initialSmartPlaylist ? Date.now() : 0);
 
   const {
     data: pagedData,
@@ -77,6 +89,18 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length : undefined),
     staleTime: 5 * 60 * 1000,
+    // Only seed when selectedBoard is null — that's the only state where the
+    // SSR fetch (no boardName filter) matches the client query key. Once the
+    // user picks a board chip the key changes to `selectedBoard.uuid` and a
+    // fresh fetch is correct.
+    initialData:
+      initialSmartPlaylist && !selectedBoard
+        ? {
+            pages: [initialSmartPlaylist],
+            pageParams: [0],
+          }
+        : undefined,
+    initialDataUpdatedAt: ssrInitialUpdatedAtRef.current,
   });
 
   const allClimbs: Climb[] = useMemo(
@@ -84,7 +108,7 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
     [pagedData],
   );
 
-  const meta: SmartPlaylistMeta | undefined = pagedData?.pages[0]?.meta;
+  const meta: SmartPlaylistMeta | undefined = pagedData?.pages[0]?.meta ?? initialSmartPlaylist?.meta;
 
   const boardTypes = useMemo(() => {
     const types = new Set<string>();
@@ -113,7 +137,9 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
     });
   }, [smartPlaylistSlug, smartPlaylistType, userId, t, meta, preset.titleI18nKey, showMessage]);
 
-  if (tokenLoading || isLoading) {
+  // With SSR data we have meta + first page; skip the full-page spinner.
+  // Only gate on tokenLoading when we don't have SSR-seeded content yet.
+  if ((tokenLoading || isLoading) && !meta) {
     return (
       <div className={styles.loadingContainer}>
         <LoadingSpinner size={48} />

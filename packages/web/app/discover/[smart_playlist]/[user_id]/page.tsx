@@ -2,7 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getServerAuthToken } from '@/app/lib/auth/server-auth';
-import { serverMyBoards } from '@/app/lib/graphql/server-cached-client';
+import { serverMyBoards, serverSmartPlaylist } from '@/app/lib/graphql/server-cached-client';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createNoIndexMetadata } from '@/app/lib/seo/metadata';
 import I18nProvider from '@/app/components/providers/i18n-provider';
@@ -43,7 +43,13 @@ export default async function SmartPlaylistPage({ params }: { params: Promise<Ro
 
   const authToken = await getServerAuthToken();
   const { locale } = await getServerTranslation('playlists');
-  const initialMyBoards = authToken ? await serverMyBoards(authToken) : null;
+  const [initialMyBoards, initialSmartPlaylist] = await Promise.all([
+    authToken ? serverMyBoards(authToken) : null,
+    // First render on the client uses `selectedBoard = null` (selectedBoard is
+    // only set when the user picks a board chip), so omit boardName here to
+    // line up with the client's first `useInfiniteQuery` key (`'all'`).
+    serverSmartPlaylist(authToken, { type: preset.type, userId: user_id, page: 0, pageSize: 20 }),
+  ]);
 
   return (
     <I18nProvider locale={locale} namespaces={['playlists', 'climbs', 'feed']}>
@@ -53,6 +59,7 @@ export default async function SmartPlaylistPage({ params }: { params: Promise<Ro
           smartPlaylistSlug={preset.slug}
           userId={user_id}
           initialMyBoards={initialMyBoards}
+          initialSmartPlaylist={initialSmartPlaylist}
         />
       </div>
     </I18nProvider>
