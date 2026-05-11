@@ -1,7 +1,7 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -11,9 +11,13 @@ import Typography from '@mui/material/Typography';
 // alive. The root `global-error.tsx` only fires when the root layout itself
 // throws.
 //
-// This boundary lives outside the I18nProvider tree's guarantee that the
-// `errors` namespace is preloaded, so we use the same inline-copy pattern as
-// `global-error.tsx`. Keep these strings in sync with `errors.json#boundary.*`.
+// HARDCODED COPY — DELIBERATE. This boundary renders when a render error has
+// already broken the React tree, so it cannot depend on I18nProvider being
+// alive or on the `errors` namespace being loaded. The strings below mirror
+// `errors.json#boundary.{title,retry}` for the same locales — if you change
+// one, update the other. Same pattern as `global-error.tsx`. `check:i18n`
+// does not flag object-literal strings (only JSX text and certain
+// attributes), so no i18n-ignore markers are required.
 const COPY = {
   'en-US': {
     title: 'Something broke',
@@ -55,14 +59,26 @@ function isTranslatorDomError(error: Error): boolean {
 // user is not stuck in an invisible loop.
 const MAX_AUTO_RESETS = 1;
 
+// Module-level counter so the auto-reset budget bounds total recoveries across
+// the tab session, not just within a single mounted boundary. Without this,
+// every navigation gives a fresh component instance with count = 0, so a
+// persistently-mutating translator could trigger unlimited silent resets — one
+// per page the user visits — and the user would never see the visible
+// fallback. Persists for the lifetime of the tab.
+let sessionAutoResetCount = 0;
+
+// Test-only escape hatch. Production code must not call this.
+export function __resetSessionAutoResetCountForTesting() {
+  sessionAutoResetCount = 0;
+}
+
 export default function PageError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const [locale] = useState<LocaleKey>(detectLocale);
-  const autoResetCountRef = useRef(0);
   const [autoResetting, setAutoResetting] = useState(false);
 
   useEffect(() => {
-    if (isTranslatorDomError(error) && autoResetCountRef.current < MAX_AUTO_RESETS) {
-      autoResetCountRef.current += 1;
+    if (isTranslatorDomError(error) && sessionAutoResetCount < MAX_AUTO_RESETS) {
+      sessionAutoResetCount += 1;
       setAutoResetting(true);
       // Sentry still captures so we can keep an eye on volume even after the
       // silent recovery succeeds. Defer the reset so React unmounts the error

@@ -356,12 +356,11 @@ export default function HomePageContent({ boardConfigs, initialPopularConfigs }:
   );
 
   return (
-    // translate="no" prevents in-browser translators (Google Translate, etc.)
-    // from mutating React-controlled DOM nodes inside the home cards. The
-    // translator was orphaning text nodes between renders and crashing the
-    // reconciler with insertBefore NotFoundError on this page. See issue #2064.
+    // Page-level translate="no" was removed because it blocked browser
+    // translation of every static UI label on this page. The error boundary
+    // (app/error.tsx) auto-recovers from any residual translator-DOM
+    // NotFoundError (issue #2064).
     <Box
-      translate="no"
       sx={{
         minHeight: '100dvh',
         display: 'flex',

@@ -27,12 +27,13 @@ export default async function YouLogbookPage() {
   const profileStats = await cachedUserProfileStats(userId);
   const layoutStats = profileStats?.layoutStats ?? [];
 
-  // translate="no" prevents in-browser translators (Google Translate, etc.) from
-  // mutating React-controlled DOM nodes inside this virtualized list. The
-  // translator was orphaning text nodes between renders and crashing the
-  // reconciler with removeChild NotFoundError. See issue #2064.
+  // Per-element protection for translator-DOM crashes (issue #2064) lives on
+  // the LogbookFeedItem itself (climb-name span). The page-level wrapper used
+  // to live here but was removed because it blocked browser translation of
+  // every static UI label on the page. The error boundary auto-recovers from
+  // any residual NotFoundError.
   return (
-    <Box translate="no">
+    <Box>
       <Suspense fallback={<LogbookLoading />}>
         <LogbookFeed layoutStats={layoutStats} loadingLayoutStats={false} />
       </Suspense>

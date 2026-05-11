@@ -10,7 +10,7 @@ vi.mock('@sentry/nextjs', () => ({
   captureException: (...args: unknown[]) => captureException(...args),
 }));
 
-import PageError from '../error';
+import PageError, { __resetSessionAutoResetCountForTesting } from '../error';
 
 function makeNotFoundError(message: string): Error {
   const error = new Error(message);
@@ -22,6 +22,7 @@ afterEach(() => {
   cleanup();
   captureException.mockClear();
   vi.useRealTimers();
+  __resetSessionAutoResetCountForTesting();
 });
 
 describe('PageError visible fallback', () => {
@@ -123,5 +124,35 @@ describe('PageError translator-DOM auto-recovery', () => {
     expect(container.textContent).toContain('Something broke');
     expect(container.textContent).toContain('Try again');
     expect(captureException).toHaveBeenCalledWith(secondError);
+  });
+
+  it('does not auto-reset across navigations once the session budget is exhausted', () => {
+    const firstError = makeNotFoundError(
+      "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+    );
+    const firstReset = vi.fn();
+    const { unmount } = render(<PageError error={firstError} reset={firstReset} />);
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(firstReset).toHaveBeenCalledTimes(1);
+
+    // Simulate the user navigating to another page: previous boundary unmounts,
+    // a new one mounts with a fresh error. The module-level counter must keep
+    // the budget bounded — otherwise every navigation grants a new silent
+    // recovery and the user never sees the fallback.
+    unmount();
+
+    const secondError = makeNotFoundError(
+      "Failed to execute 'insertBefore' on 'Node': The node before which the new node is to be inserted is not a child of this node.",
+    );
+    const secondReset = vi.fn();
+    const { container } = render(<PageError error={secondError} reset={secondReset} />);
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(secondReset).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Something broke');
   });
 });
