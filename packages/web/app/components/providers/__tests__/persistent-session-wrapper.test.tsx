@@ -72,6 +72,7 @@ vi.mock('../../bottom-tab-bar/bottom-tab-bar', () => ({
 
 vi.mock('../../board-provider/board-provider-context', () => ({
   BoardProvider: ({ children }: { children: React.ReactNode }) => children,
+  useBoardProvider: () => ({ getLogbook: vi.fn() }),
 }));
 
 vi.mock('../../connection-manager/connection-settings-context', () => ({
