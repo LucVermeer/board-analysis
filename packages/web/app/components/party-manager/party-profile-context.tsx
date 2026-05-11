@@ -3,10 +3,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { type PartyProfile, getPartyProfile, clearPartyProfile, ensurePartyProfile } from '@/app/lib/party-profile-db';
-import { alias, identify, reset } from '@/app/lib/analytics';
+import { alias, identify, reset, setPersonProperties, track } from '@/app/lib/analytics';
 import { isAdminAnalyticsUrl } from '@/app/lib/analytics-paths';
 import { hasRecordedPosthogAlias, recordPosthogAlias } from '@/app/lib/posthog-alias-storage';
+import { consumeFreshOAuthPending } from '@/app/lib/oauth-pending-db';
 
 type UserProfileData = {
   displayName: string | null;
@@ -33,6 +35,7 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isLoading, setIsLoading] = useState(true);
   const { data: session, status: sessionStatus } = useSession();
   const pathname = usePathname();
+  const { i18n } = useTranslation();
   const lastAnalyticsDistinctId = useRef<string | null>(null);
 
   // Load party profile on mount
@@ -91,6 +94,19 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
       }
       identify(userId, session.user.email ? { email: session.user.email } : undefined);
+      // Drain the OAuth-pending marker (if any) — this is the success signal
+      // for OAuth flows where the actual sign-in happens via a server-side
+      // redirect with no client callback to track from. Marker is set on
+      // OAuth button click in social-login-buttons.tsx and expires after 5
+      // minutes so an unrelated re-login won't fire a stale Login Succeeded.
+      void consumeFreshOAuthPending().then((marker) => {
+        if (marker) {
+          track('Login Succeeded', {
+            auth_method: marker.provider,
+            flow: marker.flow,
+          });
+        }
+      });
       lastAnalyticsDistinctId.current = userId;
       return;
     }
@@ -104,6 +120,23 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
       lastAnalyticsDistinctId.current = profileId;
     }
   }, [pathname, profile?.id, sessionStatus, session?.user?.id, session?.user?.email]);
+
+  // Keep PostHog's `language` person property in sync with the active locale.
+  // Scoped to its own effect so it only fires when the language actually
+  // changes — not on every navigation (the identity effect above re-runs on
+  // pathname changes, which would be wasteful for a property that rarely
+  // changes).
+  //
+  // Guards mirror the identity effect above: skip while session status is still
+  // loading or before the IDB profile resolves (otherwise we'd attach `language`
+  // to PostHog's transient anon id and have to merge it later), and skip on
+  // admin URLs to keep admin sessions out of analytics entirely.
+  useEffect(() => {
+    if (sessionStatus === 'loading') return;
+    if (pathname && isAdminAnalyticsUrl(pathname)) return;
+    if (!profile?.id) return;
+    setPersonProperties({ language: i18n.language });
+  }, [i18n.language, pathname, profile?.id, sessionStatus]);
 
   // Fetch custom user profile (displayName, avatarUrl) when authenticated
   useEffect(() => {

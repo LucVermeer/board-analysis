@@ -19,7 +19,7 @@ import MailOutlined from '@mui/icons-material/MailOutlined';
 import { signIn, useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
+import { useLocaleRouter, usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
 import Logo from '@/app/components/brand/logo';
 import BackButton from '@/app/components/back-button';
 import SocialLoginButtons from '@/app/components/auth/social-login-buttons';
@@ -34,11 +34,14 @@ import {
 import { TabPanel } from '@/app/components/ui/tab-panel';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { themeTokens } from '@/app/theme/theme-config';
+import { track, setPersonProperties } from '@/app/lib/analytics';
+import { authMethodFromError, safeAuthError } from './auth-error-classification';
 
 export default function AuthPageContent() {
   const { t } = useTranslation('auth');
   const { status } = useSession();
   const router = useLocaleRouter();
+  const pathnameWithoutLocale = usePathnameWithoutLocale();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
   const error = searchParams.get('error');
@@ -62,8 +65,22 @@ export default function AuthPageContent() {
       } else {
         showMessage(t('login.toasts.authFailed'), 'error');
       }
+      // NextAuth redirects back to /auth/login?error=... after either a failed
+      // OAuth round-trip or — under some flows — a credentials redirect path.
+      // CredentialsSignin is the credentials code; everything else in the known
+      // enum is OAuth-shaped. Tag accordingly so funnel splits stay honest.
+      track('Login Failed', {
+        auth_method: authMethodFromError(error),
+        failure_reason: safeAuthError(error),
+      });
+      // Strip the ?error= param so a refresh or back-navigation doesn't fire
+      // Login Failed again and re-show the toast. preserve callbackUrl if set.
+      const cleanParams = new URLSearchParams(searchParams.toString());
+      cleanParams.delete('error');
+      const queryString = cleanParams.toString();
+      router.replace(queryString ? `${pathnameWithoutLocale}?${queryString}` : pathnameWithoutLocale);
     }
-  }, [error, showMessage, t]);
+  }, [error, showMessage, t, router, pathnameWithoutLocale, searchParams]);
 
   // Show success message when email is verified
   useEffect(() => {
@@ -86,6 +103,7 @@ export default function AuthPageContent() {
 
     try {
       setLoginLoading(true);
+      track('Login Attempted', { auth_method: 'credentials' });
 
       const result = await signIn('credentials', {
         email: loginValues.email,
@@ -95,8 +113,13 @@ export default function AuthPageContent() {
 
       if (result?.error) {
         showMessage(t('login.toasts.invalidCredentials'), 'error');
+        track('Login Failed', {
+          auth_method: 'credentials',
+          failure_reason: safeAuthError(result.error),
+        });
       } else if (result?.ok) {
         showMessage(t('login.toasts.loggedIn'), 'success');
+        track('Login Succeeded', { auth_method: 'credentials' });
         router.push(callbackUrl);
       }
     } catch (error) {
@@ -134,6 +157,26 @@ export default function AuthPageContent() {
         return;
       }
 
+      track('Signup Completed', {
+        auth_method: 'credentials',
+        requires_verification: Boolean(data.requiresVerification),
+      });
+      // First-touch attribution — written once and never overwritten.
+      // PostHog merges these onto the authenticated user once alias() runs
+      // in party-profile-context after the auto-signin below.
+      //
+      // Caveat: if requires_verification is true, we hit the early return below
+      // and the auto-signin never runs, so alias() may not fire in this session.
+      // signup_at / signup_auth_method then live on the anonymous distinct_id
+      // until the user comes back to verify and log in — at which point PostHog
+      // merges them onto the authenticated user. Until that merge they're
+      // visible in Live Events under the anon profile, which can briefly skew
+      // person-property dashboards.
+      setPersonProperties(undefined, {
+        signup_at: new Date().toISOString(),
+        signup_auth_method: 'credentials',
+      });
+
       // Check if email verification is required
       if (data.requiresVerification) {
         showMessage(t('login.toasts.checkEmail'), 'info');
@@ -152,6 +195,10 @@ export default function AuthPageContent() {
       });
 
       if (loginResult?.ok) {
+        track('Login Succeeded', {
+          auth_method: 'credentials',
+          is_first_login: true,
+        });
         router.push(callbackUrl);
       } else {
         setActiveTab('login');

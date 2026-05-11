@@ -36,10 +36,21 @@ function getPosthog(): PostHog | null {
     host,
     autocapture: false,
     captureHistoryEvents: false,
-    // PartyProfileProvider identifies the IndexedDB party-profile UUID after
-    // hydration. Events captured before that resolve use PostHog's temporary
-    // in-memory anonymous ID and are not guaranteed to merge later.
-    persistence: 'memory',
+    // Persist distinct_id in localStorage so anonymous → authed merges and
+    // cross-session retention cohorts work. The IndexedDB party-profile UUID
+    // is still the canonical anon id; PartyProfileProvider calls identify()
+    // on hydration to reconcile if storage was cleared.
+    //
+    // CLAUDE.md mandates IndexedDB for client persistence (the no-restricted-globals
+    // lint rule enforces it on bare globals, which is why this config string
+    // doesn't trigger it). posthog-js-lite only exposes
+    // 'localStorage' | 'sessionStorage' | 'cookie' | 'memory' — there is no
+    // IDB option in the lite SDK. 'memory' (the prior setting) regenerated a
+    // fresh anon id on every reload, which broke retention math. Until/unless
+    // we migrate to the full posthog-js SDK or self-host IDB-backed persistence,
+    // this is the documented exception. Do not copy this pattern for other
+    // persistence needs — use idb-helper.ts as usual.
+    persistence: 'localStorage',
   });
 
   return posthogClient;
@@ -90,6 +101,18 @@ export function identify(distinctId: string, properties?: PosthogProperties): bo
   const posthog = getPosthog();
   if (!posthog) return false;
   posthog.identify(distinctId, properties);
+  return true;
+}
+
+// Sets person properties on the current distinct_id. `setOnce` properties are
+// only written if they don't already exist on the user (use for first-touch
+// attributes like signup_at, auth_method). `set` overwrites every call.
+export function setPersonProperties(set?: PosthogProperties, setOnce?: PosthogProperties): boolean {
+  if (isCurrentAdminAnalyticsPage()) return false;
+
+  const posthog = getPosthog();
+  if (!posthog) return false;
+  posthog.setPersonProperties(set, setOnce);
   return true;
 }
 

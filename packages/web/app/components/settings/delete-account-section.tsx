@@ -14,6 +14,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import { signOut } from 'next-auth/react';
+import { track } from '@/app/lib/analytics';
 import { Trans, useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { ClientError } from 'graphql-request';
@@ -90,8 +91,12 @@ export default function DeleteAccountSection() {
         input: { removeSetterName },
       });
 
-      // Account deleted — sign out and redirect to home
+      // Account deleted — sign out and redirect to home. Track AFTER signOut
+      // resolves so a network failure on signOut doesn't record a Logout that
+      // never actually happened (the GraphQL deletion already succeeded, but
+      // the auth session won't be cleared until signOut completes).
       await signOut({ callbackUrl: '/' });
+      track('Logout', { method: 'account_deleted' });
     } catch (error) {
       console.error('Delete account error:', error);
       let message = t('deleteAccount.error');

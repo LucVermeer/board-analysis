@@ -14,13 +14,14 @@ const {
   mockShowMessage,
   mockParseSerialNumber,
   mockFetch,
+  mockTrack,
 } = vi.hoisted(() => {
   const mockAdapter = {
     isAvailable: vi.fn(),
     requestAndConnect: vi.fn(),
     disconnect: vi.fn(),
     write: vi.fn(),
-    onDisconnect: vi.fn(() => vi.fn()),
+    onDisconnect: vi.fn<(handler: () => void) => () => void>(() => () => {}),
   };
 
   return {
@@ -52,6 +53,7 @@ const {
     mockShowMessage: vi.fn(),
     mockParseSerialNumber: vi.fn<(name: string) => string | undefined>(() => undefined),
     mockFetch: vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 204 }))),
+    mockTrack: vi.fn(),
   };
 });
 
@@ -83,7 +85,7 @@ vi.mock('@/app/components/providers/snackbar-provider', () => ({
 }));
 
 vi.mock('@/app/lib/analytics', () => ({
-  track: vi.fn(),
+  track: mockTrack,
 }));
 
 vi.mock('@/app/lib/ble/capacitor-utils', () => ({
@@ -249,7 +251,7 @@ describe('useBoardBluetooth', () => {
     expect(result.current.isConnected).toBe(true);
 
     act(() => {
-      result.current.disconnect();
+      void result.current.disconnect();
     });
 
     expect(mockAdapter.disconnect).toHaveBeenCalled();
@@ -306,7 +308,7 @@ describe('useBoardBluetooth', () => {
     expect(onConnectionChange).toHaveBeenCalledWith(true);
 
     act(() => {
-      result.current.disconnect();
+      void result.current.disconnect();
     });
 
     expect(onConnectionChange).toHaveBeenCalledWith(false);
@@ -388,5 +390,112 @@ describe('useBoardBluetooth', () => {
     expect(recordCall).toBeDefined();
     const body = JSON.parse((recordCall![1] as RequestInit).body as string);
     expect(body.boardUuid).toBe('board-uuid-xyz');
+  });
+
+  describe('Bluetooth Disconnected analytics', () => {
+    function findDisconnectCall(): [string, Record<string, unknown>] | undefined {
+      return mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Disconnected') as
+        | [string, Record<string, unknown>]
+        | undefined;
+    }
+
+    it("fires reason='user' on explicit disconnect() with the connection duration", async () => {
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockTrack.mockClear();
+
+      await act(async () => {
+        await result.current.disconnect();
+      });
+
+      const call = findDisconnectCall();
+      expect(call).toBeDefined();
+      expect(call![1].reason).toBe('user');
+      expect(typeof call![1].duration_connected_ms).toBe('number');
+      expect(call![1].duration_connected_ms as number).toBeGreaterThanOrEqual(0);
+    });
+
+    it("fires reason='lost' when the adapter reports an unexpected disconnect", async () => {
+      let capturedHandler: (() => void) | null = null;
+      mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
+        capturedHandler = handler;
+        return vi.fn();
+      });
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockTrack.mockClear();
+
+      act(() => {
+        capturedHandler?.();
+      });
+
+      const call = findDisconnectCall();
+      expect(call).toBeDefined();
+      expect(call![1].reason).toBe('lost');
+      expect(typeof call![1].duration_connected_ms).toBe('number');
+    });
+
+    it("fires reason='reconnect' when connect() tears down an existing adapter", async () => {
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockTrack.mockClear();
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      const call = findDisconnectCall();
+      expect(call).toBeDefined();
+      expect(call![1].reason).toBe('reconnect');
+      expect(typeof call![1].duration_connected_ms).toBe('number');
+    });
+
+    it("fires reason='navigation' when the component unmounts while still connected", async () => {
+      const { result, unmount } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockTrack.mockClear();
+
+      unmount();
+
+      const call = findDisconnectCall();
+      expect(call).toBeDefined();
+      expect(call![1].reason).toBe('navigation');
+      expect(typeof call![1].duration_connected_ms).toBe('number');
+    });
+
+    it('does not double-fire when disconnect() is followed by unmount', async () => {
+      const { result, unmount } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      await act(async () => {
+        await result.current.disconnect();
+      });
+
+      mockTrack.mockClear();
+      unmount();
+
+      const call = findDisconnectCall();
+      expect(call).toBeUndefined();
+    });
   });
 });

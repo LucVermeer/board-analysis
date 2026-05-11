@@ -2,15 +2,20 @@ import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { PartyProfileProvider } from '../party-profile-context';
 
+type OAuthMarker = { provider: string; flow: 'web' | 'native'; attempted_at: number };
+
 const mocks = vi.hoisted(() => ({
   alias: vi.fn(),
   clearPartyProfile: vi.fn(),
+  consumeFreshOAuthPending: vi.fn<() => Promise<OAuthMarker | null>>(),
   ensurePartyProfile: vi.fn(),
   getPartyProfile: vi.fn(),
   hasRecordedPosthogAlias: vi.fn(),
   identify: vi.fn(),
   recordPosthogAlias: vi.fn(),
   reset: vi.fn(),
+  setPersonProperties: vi.fn(),
+  track: vi.fn(),
   route: {
     pathname: '/',
   },
@@ -31,10 +36,16 @@ vi.mock('next/navigation', () => ({
   usePathname: () => mocks.route.pathname,
 }));
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ i18n: { language: 'en-US' } }),
+}));
+
 vi.mock('@/app/lib/analytics', () => ({
   alias: mocks.alias,
   identify: mocks.identify,
   reset: mocks.reset,
+  setPersonProperties: mocks.setPersonProperties,
+  track: mocks.track,
 }));
 
 vi.mock('@/app/lib/party-profile-db', () => ({
@@ -46,6 +57,10 @@ vi.mock('@/app/lib/party-profile-db', () => ({
 vi.mock('@/app/lib/posthog-alias-storage', () => ({
   hasRecordedPosthogAlias: mocks.hasRecordedPosthogAlias,
   recordPosthogAlias: mocks.recordPosthogAlias,
+}));
+
+vi.mock('@/app/lib/oauth-pending-db', () => ({
+  consumeFreshOAuthPending: mocks.consumeFreshOAuthPending,
 }));
 
 function renderProvider() {
@@ -66,6 +81,7 @@ describe('PartyProfileProvider PostHog identity wiring', () => {
     mocks.ensurePartyProfile.mockResolvedValue({ id: 'profile-1' });
     mocks.getPartyProfile.mockResolvedValue({ id: 'profile-1' });
     mocks.hasRecordedPosthogAlias.mockReturnValue(false);
+    mocks.consumeFreshOAuthPending.mockResolvedValue(null);
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -139,5 +155,95 @@ describe('PartyProfileProvider PostHog identity wiring', () => {
     expect(mocks.hasRecordedPosthogAlias).toHaveBeenCalledWith('profile-1', 'user-2');
     expect(mocks.alias).toHaveBeenCalledWith('user-2');
     expect(mocks.recordPosthogAlias).toHaveBeenCalledWith('profile-1', 'user-2');
+  });
+
+  it('fires Login Succeeded with provider when a fresh OAuth marker is present at authentication', async () => {
+    mocks.consumeFreshOAuthPending.mockResolvedValue({
+      provider: 'google',
+      flow: 'web',
+      attempted_at: Date.now(),
+    });
+    mocks.session.status = 'authenticated';
+    mocks.session.data = {
+      user: {
+        id: 'user-3',
+        email: 'three@example.com',
+      },
+    };
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(mocks.track).toHaveBeenCalledWith('Login Succeeded', {
+        auth_method: 'google',
+        flow: 'web',
+      });
+    });
+  });
+
+  it('does not fire Login Succeeded when no OAuth marker exists', async () => {
+    mocks.consumeFreshOAuthPending.mockResolvedValue(null);
+    mocks.session.status = 'authenticated';
+    mocks.session.data = {
+      user: {
+        id: 'user-4',
+        email: 'four@example.com',
+      },
+    };
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(mocks.identify).toHaveBeenCalledWith('user-4', { email: 'four@example.com' });
+    });
+
+    expect(mocks.track).not.toHaveBeenCalledWith('Login Succeeded', expect.anything());
+  });
+
+  it('attaches `language` once the IDB profile resolves, even for unauthenticated visitors', async () => {
+    mocks.session.status = 'unauthenticated';
+    mocks.session.data = null;
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(mocks.setPersonProperties).toHaveBeenCalledWith({ language: 'en-US' });
+    });
+  });
+
+  it('does not attach `language` on admin URLs', async () => {
+    mocks.route.pathname = '/admin/retention';
+    mocks.session.status = 'authenticated';
+    mocks.session.data = {
+      user: { id: 'user-5', email: 'five@example.com' },
+    };
+
+    renderProvider();
+
+    // Give the effect a tick — the identity effect short-circuits on admin too,
+    // so there's no other promise to await; flush microtasks via setImmediate.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.setPersonProperties).not.toHaveBeenCalled();
+  });
+
+  it('does not attach `language` while the IDB profile is still loading', async () => {
+    let resolveProfile: (value: { id: string }) => void = () => {};
+    mocks.ensurePartyProfile.mockReturnValue(
+      new Promise((resolve) => {
+        resolveProfile = resolve;
+      }),
+    );
+
+    renderProvider();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.setPersonProperties).not.toHaveBeenCalled();
+
+    // Resolve the profile to verify the effect fires once it's available.
+    resolveProfile({ id: 'profile-1' });
+    await waitFor(() => {
+      expect(mocks.setPersonProperties).toHaveBeenCalledWith({ language: 'en-US' });
+    });
   });
 });

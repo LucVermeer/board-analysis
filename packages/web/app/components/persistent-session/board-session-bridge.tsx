@@ -6,6 +6,7 @@ import { usePersistentSessionState, usePersistentSessionActions } from './persis
 import type { BoardDetails, ParsedBoardRouteParameters } from '@/app/lib/types';
 import { getBaseBoardPath } from '@/app/lib/url-utils';
 import { getClimbSessionCookie } from '@/app/lib/climb-session-cookie';
+import { track } from '@/app/lib/analytics';
 
 type BoardSessionBridgeProps = {
   boardDetails: BoardDetails;
@@ -49,6 +50,18 @@ const BoardSessionBridge: React.FC<BoardSessionBridgeProps> = ({ boardDetails, p
       // This ensures session continuity when navigating between climbs or changing angles
       const activeSessionBasePath = activeSession?.boardPath ? getBaseBoardPath(activeSession.boardPath) : '';
       if (activeSession?.sessionId !== sessionIdFromCookie || activeSessionBasePath !== baseBoardPath) {
+        // Fire Session Joined only on a genuine new-session entry (cookie path —
+        // link, QR, resume from history). Hosts create via start-sesh-drawer
+        // which calls activateSession before this bridge mounts, so they're
+        // already on the matching session and skip this branch. Board reconfig
+        // within the same session also skips.
+        if (activeSession?.sessionId !== sessionIdFromCookie) {
+          track('Session Joined', {
+            session_id: sessionIdFromCookie,
+            board_name: boardDetailsRef.current.board_name,
+            layout_id: boardDetailsRef.current.layout_id,
+          });
+        }
         // Store the full pathname (including angle and view segment like /list)
         // This allows the /join redirect to send users to the exact page with angle
         activateSession({

@@ -9,6 +9,8 @@ import { signIn } from 'next-auth/react';
 import { useTranslation } from 'react-i18next';
 import { isNativeApp } from '@/app/lib/ble/capacitor-utils';
 import { buildNativeOAuthSignInUrl } from '@/app/lib/auth/native-oauth-url';
+import { track } from '@/app/lib/analytics';
+import { setOAuthPending } from '@/app/lib/oauth-pending-db';
 
 // Note: OAuth provider icons and button colors use brand-specific colors
 // per Google/Apple/Facebook brand guidelines, not design system tokens
@@ -82,6 +84,18 @@ export default function SocialLoginButtons({ callbackUrl = '/', disabled = false
   }, []);
 
   const handleSocialSignIn = (provider: string) => {
+    const flow = isCapacitorApp ? 'native' : 'web';
+    track('Login Attempted', {
+      auth_method: provider,
+      flow,
+    });
+    // Drop an IDB marker that party-profile-context consumes on the next
+    // authenticated-session detection to emit Login Succeeded. NextAuth handles
+    // OAuth success via server-side redirect, so there's no explicit client
+    // callback to track from — the marker bridges the gap. Stale markers expire
+    // after 5 minutes (see oauth-pending-db).
+    void setOAuthPending({ provider, flow, attempted_at: Date.now() });
+
     if (isCapacitorApp) {
       const browser = window.Capacitor?.Plugins?.Browser;
       if (!browser) return;
