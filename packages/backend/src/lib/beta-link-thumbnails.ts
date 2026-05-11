@@ -1,6 +1,13 @@
 import { getPublicUrl, isS3Configured, uploadToS3 } from '../storage/s3';
+import { assertAllowedImageHost, type ImageHostKind } from './safe-image-fetch';
 
 export { isS3Configured };
+
+// Cap the cached thumbnail at 5 MB. IG/TikTok thumbnails are ~50–500 KB in
+// practice; anything past 5 MB is either a hostile response or something
+// other than the image we expect. AbortSignal.timeout only bounds wall-clock,
+// not bytes, so this is the byte-level back-stop.
+const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
 
 const STATIC_THUMBNAIL_PREFIX = '/static/beta-link-thumbnails/';
 
@@ -61,7 +68,52 @@ export function isOurS3Url(url: string | null): boolean {
   return false;
 }
 
-async function cacheRemoteThumbnail(key: string, sourceUrl: string): Promise<string | null> {
+async function readBodyWithCap(res: Response, maxBytes: number): Promise<Buffer | null> {
+  // Streaming path with hard byte cap. Wall-clock is bounded by the fetch
+  // timeout but bytes aren't, so without this a hostile server over a fast
+  // pipe could exhaust memory before AbortSignal.timeout fires.
+  if (res.body) {
+    const reader = res.body.getReader();
+    let total = 0;
+    const chunks: Uint8Array[] = [];
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // best-effort
+        }
+        return null;
+      }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks);
+  }
+  // Fallback for environments / mocks where `res.body` isn't a ReadableStream.
+  // Fetch the whole buffer, then enforce the cap on the result. Less
+  // protective than streaming (the byte cap doesn't help if Node already
+  // buffered the whole response) but at least keeps the runtime check in
+  // place for the upload step.
+  const arrayBuffer = await res.arrayBuffer();
+  if (arrayBuffer.byteLength > maxBytes) return null;
+  return Buffer.from(arrayBuffer);
+}
+
+async function cacheRemoteThumbnail(key: string, sourceUrl: string, kind: ImageHostKind): Promise<string | null> {
+  // SSRF defense: the source URL is derived from attacker-controlled HTML
+  // (og:image / oembed.thumbnail_url), so refuse anything that isn't on the
+  // platform's CDN allowlist or that resolves to a private IP.
+  try {
+    await assertAllowedImageHost(sourceUrl, kind);
+  } catch (err) {
+    console.warn('[BetaLinks] rejected thumbnail source URL:', (err as Error).message);
+    return null;
+  }
+
   try {
     const res = await fetch(sourceUrl, {
       headers: { 'User-Agent': USER_AGENT, Accept: 'image/*,*/*;q=0.8' },
@@ -69,9 +121,16 @@ async function cacheRemoteThumbnail(key: string, sourceUrl: string): Promise<str
       cache: 'no-store',
     });
     if (!res.ok) return null;
-    const arrayBuffer = await res.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     const contentType = res.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) {
+      console.warn(`[BetaLinks] rejected thumbnail with content-type ${contentType}`);
+      return null;
+    }
+    const buffer = await readBodyWithCap(res, MAX_THUMBNAIL_BYTES);
+    if (!buffer) {
+      console.warn(`[BetaLinks] thumbnail body exceeded ${MAX_THUMBNAIL_BYTES} bytes; aborted`);
+      return null;
+    }
     await uploadToS3(buffer, key, contentType);
     return getStaticThumbnailUrl(key);
   } catch (err) {
@@ -81,9 +140,9 @@ async function cacheRemoteThumbnail(key: string, sourceUrl: string): Promise<str
 }
 
 export function cacheInstagramThumbnail(mediaId: string, fbcdnUrl: string): Promise<string | null> {
-  return cacheRemoteThumbnail(instagramThumbnailKey(mediaId), fbcdnUrl);
+  return cacheRemoteThumbnail(instagramThumbnailKey(mediaId), fbcdnUrl, 'instagram');
 }
 
 export function cacheTikTokThumbnail(cacheId: string, tiktokCdnUrl: string): Promise<string | null> {
-  return cacheRemoteThumbnail(tiktokThumbnailKey(cacheId), tiktokCdnUrl);
+  return cacheRemoteThumbnail(tiktokThumbnailKey(cacheId), tiktokCdnUrl, 'tiktok');
 }

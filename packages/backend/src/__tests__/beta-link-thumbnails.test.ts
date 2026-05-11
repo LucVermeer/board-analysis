@@ -9,6 +9,17 @@ vi.mock('../storage/s3', () => ({
   })),
 }));
 
+// Bypass the SSRF allowlist + DNS lookup in this test so we exercise the
+// caching path without hitting the network. The guard is unit-tested in
+// safe-image-fetch.test.ts.
+vi.mock('../lib/safe-image-fetch', async () => {
+  const actual = await vi.importActual<typeof import('../lib/safe-image-fetch')>('../lib/safe-image-fetch');
+  return {
+    ...actual,
+    assertAllowedImageHost: vi.fn(async () => {}),
+  };
+});
+
 import {
   cacheInstagramThumbnail,
   cacheTikTokThumbnail,
