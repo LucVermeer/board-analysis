@@ -59,15 +59,23 @@ jobs:
           # shard. Pull every one — gh names the directory after the
           # artifact, so each shard's results.json lives at
           # reports/playwright-report-shard-N/results.json.
+          #
+          # Don't swallow errors: if the artifact name pattern stops
+          # matching (upstream workflow rename), we want the workflow to
+          # surface the failure rather than silently posting "no flakes."
           gh run download "${RUN_ID}" \
             --repo "${REPO}" \
             --dir reports \
-            --pattern 'playwright-report-shard-*' || true
+            --pattern 'playwright-report-shard-*' \
+            || echo "::warning::No matching artifacts; flake report will be empty"
           ls -R reports || true
 
       - name: Compute flake list
         if: steps.pr.outputs.pr != ''
         id: flake
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           node << 'NODEEOF'
           const fs = require('fs');
@@ -101,9 +109,12 @@ jobs:
             }
           }
 
-          if (!fs.existsSync(root)) {
-            console.log('No reports directory; nothing to report');
-            fs.writeFileSync('flake-summary.md', '');
+          if (!fs.existsSync(root) || fs.readdirSync(root).length === 0) {
+            const runUrl = `https://github.com/${process.env.REPO}/actions/runs/${process.env.RUN_ID}`;
+            fs.writeFileSync(
+              'flake-summary.md',
+              `### E2E Flake Report\n\nNo shard artifacts found — the upstream [E2E run](${runUrl}) may have been cancelled or its artifact names changed.\n`,
+            );
             return;
           }
 
