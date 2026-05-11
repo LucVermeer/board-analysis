@@ -312,9 +312,19 @@ export function useBoardBluetooth({
           return false;
         }
 
-        // Clean up any existing adapter
+        // Clean up any existing adapter. Emit Bluetooth Disconnected for the
+        // outgoing session before we tear it down so the prior connection's
+        // duration isn't silently discarded from the reliability funnel.
         if (adapterRef.current) {
+          const previousConnectedAt = connectedAtRef.current;
+          connectedAtRef.current = null;
           unsubDisconnectRef.current?.();
+          if (previousConnectedAt !== null) {
+            track('Bluetooth Disconnected', {
+              reason: 'reconnect',
+              duration_connected_ms: Date.now() - previousConnectedAt,
+            });
+          }
           await adapterRef.current.disconnect();
         }
 
@@ -385,11 +395,25 @@ export function useBoardBluetooth({
 
   // Clean up on unmount — reject any pending picker promise so the adapter's
   // finally block calls stopLEScan, then tear down the BLE connection.
+  // If the connection is still live at unmount (e.g. user navigated away with
+  // a board paired), emit a Bluetooth Disconnected event so the reliability
+  // funnel has a third category beyond user-initiated and hardware drops.
+  // explicit-disconnect via disconnect() and hardware drops via
+  // handleDisconnection both clear connectedAtRef first, so this only fires
+  // for genuine "still connected at unmount" paths.
   useEffect(() => {
     return () => {
       pickerRejectRef.current?.(new Error('Component unmounted'));
       pickerRejectRef.current = null;
+      const connectedAt = connectedAtRef.current;
+      connectedAtRef.current = null;
       unsubDisconnectRef.current?.();
+      if (connectedAt !== null) {
+        track('Bluetooth Disconnected', {
+          reason: 'navigation',
+          duration_connected_ms: Date.now() - connectedAt,
+        });
+      }
       void adapterRef.current?.disconnect();
     };
   }, []);

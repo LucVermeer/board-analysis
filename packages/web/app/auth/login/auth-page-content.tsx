@@ -36,6 +36,31 @@ import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { themeTokens } from '@/app/theme/theme-config';
 import { track, setPersonProperties } from '@/app/lib/analytics';
 
+// NextAuth's documented error codes. The ?error= query param is user-supplied
+// (anyone can craft a URL), so we whitelist before forwarding to analytics so
+// the failure_reason property doesn't carry arbitrary attacker-controlled
+// strings into PostHog.
+const KNOWN_AUTH_ERRORS: ReadonlySet<string> = new Set([
+  'Configuration',
+  'AccessDenied',
+  'Verification',
+  'Default',
+  'OAuthSignin',
+  'OAuthCallback',
+  'OAuthCreateAccount',
+  'OAuthAccountNotLinked',
+  'EmailCreateAccount',
+  'EmailSignin',
+  'Callback',
+  'CredentialsSignin',
+  'SessionRequired',
+]);
+
+function safeAuthError(value: string | null | undefined): string {
+  if (!value) return 'unknown';
+  return KNOWN_AUTH_ERRORS.has(value) ? value : 'unknown';
+}
+
 export default function AuthPageContent() {
   const { t } = useTranslation('auth');
   const { status } = useSession();
@@ -68,7 +93,7 @@ export default function AuthPageContent() {
       // OAuth-provider rejections (cancel, provider error, callback mismatch).
       track('Login Failed', {
         auth_method: 'oauth',
-        failure_reason: error,
+        failure_reason: safeAuthError(error),
       });
     }
   }, [error, showMessage, t]);
@@ -106,7 +131,7 @@ export default function AuthPageContent() {
         showMessage(t('login.toasts.invalidCredentials'), 'error');
         track('Login Failed', {
           auth_method: 'credentials',
-          failure_reason: result.error,
+          failure_reason: safeAuthError(result.error),
         });
       } else if (result?.ok) {
         showMessage(t('login.toasts.loggedIn'), 'success');
@@ -155,6 +180,14 @@ export default function AuthPageContent() {
       // First-touch attribution — written once and never overwritten.
       // PostHog merges these onto the authenticated user once alias() runs
       // in party-profile-context after the auto-signin below.
+      //
+      // Caveat: if requires_verification is true, we hit the early return below
+      // and the auto-signin never runs, so alias() may not fire in this session.
+      // signup_at / signup_auth_method then live on the anonymous distinct_id
+      // until the user comes back to verify and log in — at which point PostHog
+      // merges them onto the authenticated user. Until that merge they're
+      // visible in Live Events under the anon profile, which can briefly skew
+      // person-property dashboards.
       setPersonProperties(undefined, {
         signup_at: new Date().toISOString(),
         signup_auth_method: 'credentials',

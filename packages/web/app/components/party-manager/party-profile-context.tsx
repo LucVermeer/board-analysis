@@ -93,9 +93,6 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
       }
       identify(userId, session.user.email ? { email: session.user.email } : undefined);
-      // Refresh the user's current language each time the identity effect runs
-      // so cohorts by locale stay accurate when users switch between en-US/es.
-      setPersonProperties({ language: i18n.language });
       lastAnalyticsDistinctId.current = userId;
       return;
     }
@@ -108,7 +105,16 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
       identify(profileId);
       lastAnalyticsDistinctId.current = profileId;
     }
-  }, [pathname, profile?.id, sessionStatus, session?.user?.id, session?.user?.email, i18n.language]);
+  }, [pathname, profile?.id, sessionStatus, session?.user?.id, session?.user?.email]);
+
+  // Keep PostHog's `language` person property in sync with the active locale.
+  // Scoped to its own effect so it only fires when the language actually
+  // changes — not on every navigation (the identity effect above re-runs on
+  // pathname changes, which would be wasteful for a property that rarely
+  // changes).
+  useEffect(() => {
+    setPersonProperties({ language: i18n.language });
+  }, [i18n.language]);
 
   // Fetch custom user profile (displayName, avatarUrl) when authenticated
   useEffect(() => {
