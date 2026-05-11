@@ -357,7 +357,12 @@ jobs:
           NEXT_PUBLIC_WS_URL: ws://localhost:8080/graphql
 
       - name: Run Playwright shard ${{ matrix.shard }}/8
-        run: bunx playwright test --shard=${{ matrix.shard }}/8
+        # `--project=chromium` keeps screenshot specs (app-store/help/layout)
+        # out of the functional shards. Those projects already run in the
+        # dedicated `screenshots` job below; without this filter every
+        # screenshot test ran twice per PR and contributed double to the
+        # flake budget.
+        run: bunx playwright test --project=chromium --shard=${{ matrix.shard }}/8
         working-directory: packages/web
         env:
           PLAYWRIGHT_TEST_BASE_URL: http://localhost:3000
