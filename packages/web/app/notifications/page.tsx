@@ -8,6 +8,7 @@ import { createNoIndexMetadata } from '@/app/lib/seo/metadata';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import I18nProvider from '@/app/components/providers/i18n-provider';
+import { withSsrTimeout } from '@/app/lib/ssr-timeout';
 
 export async function generateMetadata() {
   const { t, locale } = await getServerTranslation('notifications');
@@ -28,11 +29,13 @@ export default async function NotificationsPage() {
 
   let initialData = null;
   if (authToken) {
-    try {
-      initialData = await serverGroupedNotifications(authToken);
-    } catch (error) {
-      console.error('[notifications/page] SSR fetch failed, falling back to client:', error);
-    }
+    initialData = await withSsrTimeout(
+      serverGroupedNotifications(authToken).catch((error) => {
+        console.error('[notifications/page] SSR fetch failed, falling back to client:', error);
+        return null;
+      }),
+      null,
+    );
   }
 
   return (

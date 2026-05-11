@@ -7,6 +7,7 @@ import { createPageMetadata } from '@/app/lib/seo/metadata';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { getLocale } from '@/app/lib/i18n/get-locale';
 import I18nProvider from '@/app/components/providers/i18n-provider';
+import { withSsrTimeout } from '@/app/lib/ssr-timeout';
 
 export async function generateMetadata() {
   const { t, locale } = await getServerTranslation('feed');
@@ -24,19 +25,6 @@ const VALID_TABS: FeedTab[] = ['sessions', 'proposals', 'comments'];
 type FeedProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
-
-// Cap cold-path SSR at 5s; on timeout, fall back to client-side fetch.
-const SSR_FETCH_TIMEOUT_MS = 5_000;
-
-function withSsrTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<T>((resolve) => {
-    timer = setTimeout(() => resolve(fallback), SSR_FETCH_TIMEOUT_MS);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  });
-}
 
 export default async function FeedPage({ searchParams }: FeedProps) {
   const params = await searchParams;
