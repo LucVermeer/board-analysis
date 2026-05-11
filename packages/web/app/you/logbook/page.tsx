@@ -1,6 +1,5 @@
 import React, { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import Box from '@mui/material/Box';
 import LogbookFeed from '@/app/components/library/logbook-feed';
 import LogbookLoading from './loading';
 import { cachedUserProfileStats } from '@/app/lib/graphql/server-cached-client';
@@ -28,15 +27,11 @@ export default async function YouLogbookPage() {
   const layoutStats = profileStats?.layoutStats ?? [];
 
   // Per-element protection for translator-DOM crashes (issue #2064) lives on
-  // the LogbookFeedItem itself (climb-name span). The page-level wrapper used
-  // to live here but was removed because it blocked browser translation of
-  // every static UI label on the page. The error boundary auto-recovers from
-  // any residual NotFoundError.
+  // the LogbookFeedItem itself (climb-name span). The error boundary
+  // auto-recovers from any residual NotFoundError.
   return (
-    <Box>
-      <Suspense fallback={<LogbookLoading />}>
-        <LogbookFeed layoutStats={layoutStats} loadingLayoutStats={false} />
-      </Suspense>
-    </Box>
+    <Suspense fallback={<LogbookLoading />}>
+      <LogbookFeed layoutStats={layoutStats} loadingLayoutStats={false} />
+    </Suspense>
   );
 }

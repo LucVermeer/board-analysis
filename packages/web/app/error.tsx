@@ -1,7 +1,7 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -27,6 +27,10 @@ const COPY = {
     title: 'Algo se rompió',
     retry: 'Reintentar',
   },
+  fr: {
+    title: 'Ça a cassé',
+    retry: 'Réessayer',
+  },
 } as const;
 
 type LocaleKey = keyof typeof COPY;
@@ -35,6 +39,7 @@ function detectLocale(): LocaleKey {
   if (typeof window === 'undefined') return 'en-US';
   const { pathname } = window.location;
   if (pathname === '/es' || pathname.startsWith('/es/')) return 'es';
+  if (pathname === '/fr' || pathname.startsWith('/fr/')) return 'fr';
   return 'en-US';
 }
 
@@ -67,16 +72,28 @@ const MAX_AUTO_RESETS = 1;
 // fallback. Persists for the lifetime of the tab.
 let sessionAutoResetCount = 0;
 
-// Test-only escape hatch. Production code must not call this.
+// Test-only escape hatch. The NODE_ENV check makes the body dead code in
+// production builds — bundlers inline `process.env.NODE_ENV === 'production'`
+// and the minifier eliminates the assignment, so the production bundle ships
+// an empty function rather than the test reset path.
 export function __resetSessionAutoResetCountForTesting() {
+  if (process.env.NODE_ENV === 'production') return;
   sessionAutoResetCount = 0;
 }
 
 export default function PageError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const [locale] = useState<LocaleKey>(detectLocale);
   const [autoResetting, setAutoResetting] = useState(false);
+  // Track which error instance has already been routed through this effect so
+  // we don't double-capture if `reset` identity changes mid-flight (the dep
+  // array would re-fire the effect with the same `error`). Next.js stabilises
+  // `reset` today, but the guard makes the design robust to that changing.
+  const handledErrorRef = useRef<Error | null>(null);
 
   useEffect(() => {
+    if (handledErrorRef.current === error) return;
+    handledErrorRef.current = error;
+
     if (isTranslatorDomError(error) && sessionAutoResetCount < MAX_AUTO_RESETS) {
       sessionAutoResetCount += 1;
       setAutoResetting(true);

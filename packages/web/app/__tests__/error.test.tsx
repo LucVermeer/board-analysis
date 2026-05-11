@@ -43,6 +43,13 @@ describe('PageError visible fallback', () => {
     expect(container.textContent).toContain('Reintentar');
   });
 
+  it('renders French copy on /fr', () => {
+    window.history.pushState({}, '', '/fr/foo');
+    const { container } = render(<PageError error={new Error('boom')} reset={() => {}} />);
+    expect(container.textContent).toContain('Ça a cassé');
+    expect(container.textContent).toContain('Réessayer');
+  });
+
   it('reports non-translator errors to Sentry without auto-reset', () => {
     const error = new Error('upstream failure');
     const reset = vi.fn();
@@ -124,6 +131,24 @@ describe('PageError translator-DOM auto-recovery', () => {
     expect(container.textContent).toContain('Something broke');
     expect(container.textContent).toContain('Try again');
     expect(captureException).toHaveBeenCalledWith(secondError);
+  });
+
+  it('does not double-capture the same error when reset identity changes', () => {
+    const error = makeNotFoundError(
+      "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+    );
+    const firstReset = vi.fn();
+    const secondReset = vi.fn();
+    const { rerender } = render(<PageError error={error} reset={firstReset} />);
+    // Re-render with a NEW reset reference but the SAME error before the
+    // scheduled reset fires. The previous effect's cleanup cancels the
+    // setTimeout; the new effect must not re-capture or re-tag the error.
+    rerender(<PageError error={error} reset={secondReset} />);
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(error, { tags: { autoRecovered: 'translator-dom' } });
   });
 
   it('does not auto-reset across navigations once the session budget is exhausted', () => {
