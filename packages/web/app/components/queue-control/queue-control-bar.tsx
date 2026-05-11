@@ -579,35 +579,41 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     playViewPaperRef.current = el;
   }, []);
 
+  const hasCurrentClimb = !!currentClimb;
   useEffect(() => {
-    if (!currentClimb || activeDrawer !== 'none' || tickBarActive || playViewHintPlayedRef.current) return;
+    if (!hasCurrentClimb || activeDrawer !== 'none' || tickBarActive || playViewHintPlayedRef.current) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const animations: Animation[] = [];
 
     const peekOnce = (el: HTMLElement): Promise<void> => {
-      const slideUp = el.animate(
-        [{ transform: 'translateY(100%)' }, { transform: 'translateY(calc(100% - 120px))' }],
-        { duration: 400, easing: 'ease-out', fill: 'forwards' },
-      );
+      const slideUp = el.animate([{ transform: 'translateY(100%)' }, { transform: 'translateY(calc(100% - 120px))' }], {
+        duration: 400,
+        easing: 'ease-out',
+        fill: 'forwards',
+      });
       animations.push(slideUp);
 
-      return slideUp.finished.then(() => {
-        if (cancelled) return;
-        return new Promise<void>((r) => { timer = setTimeout(r, 800); });
-      }).then(() => {
-        if (cancelled) return;
-        const slideDown = el.animate(
-          [{ transform: 'translateY(calc(100% - 120px))' }, { transform: 'translateY(100%)' }],
-          { duration: 300, easing: 'ease-out', fill: 'forwards' },
-        );
-        animations.push(slideDown);
-        return slideDown.finished as Promise<unknown> as Promise<void>;
-      });
+      return slideUp.finished
+        .then(() => {
+          if (cancelled) return;
+          return new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 800);
+          });
+        })
+        .then(() => {
+          if (cancelled) return;
+          const slideDown = el.animate(
+            [{ transform: 'translateY(calc(100% - 120px))' }, { transform: 'translateY(100%)' }],
+            { duration: 300, easing: 'ease-out', fill: 'forwards' },
+          );
+          animations.push(slideDown);
+          return slideDown.finished as Promise<unknown> as Promise<void>;
+        });
     };
 
-    getPreference<boolean>('swipeHint:playViewSeen').then((seen) => {
+    void getPreference<boolean>('swipeHint:playViewSeen').then((seen) => {
       if (cancelled || seen) return;
       if (!window.matchMedia('(pointer: coarse)').matches) return;
 
@@ -618,21 +624,26 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
         playViewHintPlayedRef.current = true;
 
-        // The drawer is off-screen with visibility: hidden — temporarily show it
+        // The drawer is off-screen with visibility: hidden — temporarily show it.
+        // Restore both visibility and transform in finally so a cancelled hint
+        // doesn't leak `fill: forwards` keyframes onto MUI's Slide Paper.
         const origVisibility = el.style.visibility;
+        const origTransform = el.style.transform;
         el.style.visibility = 'visible';
 
         try {
           await peekOnce(el);
           if (cancelled) return;
-          await new Promise<void>((r) => { timer = setTimeout(r, 300); });
+          await new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 300);
+          });
           if (cancelled) return;
           await peekOnce(el);
           if (cancelled) return;
+          void setPreference('swipeHint:playViewSeen', true);
+        } finally {
           el.style.visibility = origVisibility;
-          setPreference('swipeHint:playViewSeen', true);
-        } catch {
-          el.style.visibility = origVisibility;
+          el.style.transform = origTransform;
         }
       }, 2000);
     });
@@ -640,9 +651,9 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     return () => {
       cancelled = true;
       clearTimeout(timer);
-      for (const a of animations) a.cancel();
+      for (const animation of animations) animation.cancel();
     };
-  }, [currentClimb, activeDrawer, tickBarActive]);
+  }, [hasCurrentClimb, activeDrawer, tickBarActive]);
 
   // Close expanded participants when tick mode opens
   useEffect(() => {

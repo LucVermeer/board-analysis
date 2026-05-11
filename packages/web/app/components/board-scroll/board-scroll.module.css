@@ -436,6 +436,7 @@
     width: 100px;
   }
 
+  /* Must override the .cardScroll rule above (same specificity, later wins) */
   .cardScrollCollapsed {
     width: 73px;
   }

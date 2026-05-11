@@ -452,11 +452,14 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     scrollContainer.style.overflowY = isBoardZoomed ? 'hidden' : '';
   }, [isBoardZoomed, isOpen]);
 
-  const playPaperRef = useRef<HTMLDivElement>(null);
-  const combinedPaperRef = useCallback((el: HTMLDivElement | null) => {
-    (playPaperRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-    onPaperRef?.(el);
-  }, [onPaperRef]);
+  const playPaperRef = useRef<HTMLDivElement | null>(null);
+  const combinedPaperRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      playPaperRef.current = el;
+      onPaperRef?.(el);
+    },
+    [onPaperRef],
+  );
 
   // Custom swipe-to-close for nested disablePortal drawers (actions + playlist)
   const handleCloseActions = useCallback(() => setIsActionsOpen(false), []);

@@ -92,7 +92,12 @@ export default function BoardScrollCard({
   }, [userBoard, storedConfig, popularConfig, boardConfigs]);
 
   const isSmall = size === 'small' || size === 'collapsed';
-  const sizeClass = size === 'small' ? styles.cardScrollSmall : size === 'collapsed' ? styles.cardScrollCollapsed : '';
+  const sizeClassByVariant: Record<'default' | 'small' | 'collapsed', string> = {
+    default: '',
+    small: styles.cardScrollSmall,
+    collapsed: styles.cardScrollCollapsed,
+  };
+  const sizeClass = sizeClassByVariant[size];
   const iconSize = isSmall ? 24 : 32;
 
   const handleClick = disabled ? undefined : onClick;

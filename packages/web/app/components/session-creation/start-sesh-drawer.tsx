@@ -129,7 +129,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     if (!match && pathname && isBoardRoutePath(pathname) && !pathname.startsWith('/b/')) {
       const currentBasePath = getBaseBoardPath(pathname);
       match = boards.find((b) => {
-        if (!b.layoutName || !b.sizeName || !b.setNames) return false;
+        if (!b.layoutName || !b.sizeName || !b.setNames || b.setNames.length === 0) return false;
         const boardUrl = constructClimbListWithSlugs(
           b.boardType,
           b.layoutName,
@@ -310,10 +310,10 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
       <Typography sx={{ fontSize: 16, fontWeight: 600, color: 'var(--neutral-900)', mb: 1.5 }}>
         {t('creation.boardsNearYou')}
       </Typography>
-      <Collapse in={showCollapsed} unmountOnExit>
+      <Collapse in={showCollapsed} mountOnEnter unmountOnExit>
         <Box
           data-testid="selected-board-card"
-          sx={{ position: 'relative', width: 'fit-content', mb: 1 }}
+          sx={{ position: 'relative', width: 'fit-content', mb: 1, cursor: 'pointer' }}
           onClick={() => setBoardSelectorExpanded(true)}
         >
           <BoardScrollCard
@@ -324,7 +324,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
             size="collapsed"
             onClick={() => setBoardSelectorExpanded(true)}
           />
-          {/* Grey overlay + edit icon */}
+          {/* Grey overlay + edit icon — pointerEvents:none so clicks pass through to the card */}
           <Box
             sx={{
               position: 'absolute',
@@ -333,19 +333,18 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
               right: 0,
               aspectRatio: 1,
               borderRadius: '6px',
-              bgcolor: 'rgba(0, 0, 0, 0.3)',
+              bgcolor: themeTokens.semantic.overlayLight,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer',
               pointerEvents: 'none',
             }}
           >
-            <EditOutlined sx={{ color: '#fff', fontSize: 20 }} />
+            <EditOutlined sx={{ color: 'common.white', fontSize: 20 }} />
           </Box>
         </Box>
       </Collapse>
-      <Collapse in={!showCollapsed} unmountOnExit>
+      {!showCollapsed && (
         <BoardDiscoveryScroll
           onBoardClick={handleDiscoveryBoardClick}
           onConfigClick={handleConfigClick}
@@ -354,7 +353,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
           myBoards={boards}
           hideTitle
         />
-      </Collapse>
+      )}
       {boardsError && (
         <Typography variant="body2" color="error" sx={{ mt: 0.5 }}>
           {boardsError}
