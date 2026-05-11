@@ -106,6 +106,43 @@ describe('validateAndEnrichBetaLinkInsert (gate)', () => {
     );
     expect(mockApplyRateLimit).not.toHaveBeenCalled();
   });
+
+  // Locks in that the rate limit fires before the dedup DB probe for IG
+  // URLs. If the order flips, an authenticated caller could enumerate "is
+  // this shortcode attached to any climb on this board?" without burning
+  // budget by watching the error variant (cross-climb vs same-climb vs
+  // none). The fetch mock will throw if we reach the IG-fetch step, so the
+  // rate limiter has to short-circuit before either the DB or the network
+  // is touched.
+  it('applies the rate limit before any DB or network access for Instagram URLs', async () => {
+    const order: string[] = [];
+    mockApplyRateLimit.mockImplementationOnce(async () => {
+      order.push('rate-limit');
+      throw new Error('rate limited');
+    });
+    mockDbSelect.mockImplementation((() => {
+      order.push('db');
+      return {
+        from: () => ({
+          innerJoin: () => ({ where: () => Promise.resolve([]) }),
+        }),
+      };
+    }) as unknown as () => never);
+
+    await expect(
+      validateAndEnrichBetaLinkInsert(
+        fakeCtx,
+        'kilter',
+        '00000000-0000-0000-0000-000000000000',
+        'https://www.instagram.com/reel/ABC123xyz/',
+        { onSameClimbDup: 'throw' },
+      ),
+    ).rejects.toThrow('rate limited');
+
+    expect(order).toEqual(['rate-limit']);
+    expect(mockDbSelect).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('videoUrlForTickStatus', () => {

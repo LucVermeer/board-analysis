@@ -29,8 +29,12 @@ async function readBodyWithCap(res: Response, maxBytes: number): Promise<string>
     // Some fetch implementations / tests return a mock without a streamable
     // body. Fall back to res.text() + post-hoc length check so we still
     // enforce the cap, just at the cost of buffering up to maxBytes first.
+    //
+    // text.length counts UTF-16 code units, not bytes; a body full of 4-byte
+    // UTF-8 characters can slip past a byte-denominated cap. Measure actual
+    // UTF-8 byte length instead.
     const text = await res.text();
-    if (text.length > maxBytes) {
+    if (Buffer.byteLength(text, 'utf8') > maxBytes) {
       throw new Error('html body exceeded cap');
     }
     return text;

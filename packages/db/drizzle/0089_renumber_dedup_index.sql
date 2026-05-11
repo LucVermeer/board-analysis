@@ -1,3 +1,10 @@
+-- All three statements (ADD COLUMN, backfill UPDATE, CREATE INDEX) run inside
+-- a single transaction: drizzle's pg-core migrator wraps every pending
+-- migration in one `session.transaction(...)` and dispatches each statement
+-- via tx.execute (see drizzle-orm/pg-core/dialect.js). The
+-- `--> statement-breakpoint` markers only split the file for the driver; they
+-- do not commit between statements. If CREATE INDEX fails, the column add
+-- and backfill roll back together — no half-applied schema.
 ALTER TABLE "board_beta_links" ADD COLUMN "shortcode" text;--> statement-breakpoint
 -- Backfill shortcode for existing Instagram links so the new dedup query
 -- finds them. Captures the post/reel/tv id from canonical IG URLs; non-IG

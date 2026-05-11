@@ -44,8 +44,8 @@ export type ShortcodeConflict = { kind: 'none' } | { kind: 'same-climb' } | { ki
 // treats same-climb as a silent skip since the user just wanted to log a
 // climb, not re-attach beta).
 //
-// Uses the indexed `shortcode` column added in 0083_lumpy_champions for an
-// exact-match lookup — no LIKE prefilter, no JS post-filter.
+// Uses the indexed `shortcode` column added in 0089_renumber_dedup_index for
+// an exact-match lookup — no LIKE prefilter, no JS post-filter.
 //
 // Race: two concurrent attaches of the same shortcode can both pass this
 // check. The (boardType, climbUuid, link) PK + onConflictDoNothing makes
@@ -147,11 +147,13 @@ export type ValidateAndEnrichOptions = {
 //   1. Non-Instagram URLs (TikTok, etc.) bypass the deep checks and return
 //      `action: 'insert'` with null enrichment — the read-time `betaLinks`
 //      resolver will enrich them lazily.
-//   2. Run the cross-climb dedup check. Cross-climb dup -> friendly error
+//   2. Apply the per-user rate limit on beta-link writes — 30/min, well above
+//      legitimate use, well below what would let a caller probe IG shortcode
+//      existence at scale via the dedup query below. The limit gates the DB
+//      probe as well as the outbound IG fetch.
+//   3. Run the cross-climb dedup check. Cross-climb dup -> friendly error
 //      via InstagramBetaValidationError. Same-climb dup -> branch on the
 //      caller's `onSameClimbDup`.
-//   3. Apply the per-user rate limit on outbound IG fetches — 30/min, well
-//      above legitimate use, well below what would get our IP rate-limited.
 //   4. Fetch the canonical post page, validate it's public + the caption
 //      mentions the climb name.
 //   5. Eagerly cache the thumbnail to S3 if configured (best-effort; the
@@ -169,6 +171,12 @@ export async function validateAndEnrichBetaLinkInsert(
     return { action: 'insert', thumbnail: null, foreignUsername: null };
   }
 
+  // Rate limit before the dedup probe so an authenticated caller can't
+  // enumerate "is this IG shortcode attached anywhere?" by watching the
+  // error variant (cross-climb vs same-climb vs none) without consuming
+  // budget. See review of PR #1745.
+  await applyRateLimit(ctx, 30, 'instagram-beta-validation');
+
   const conflict = await findInstagramShortcodeConflict(boardType, climbUuid, url);
   if (conflict.kind === 'cross-climb') {
     throw new InstagramBetaValidationError(crossClimbDupMessage(conflict.climbName));
@@ -179,8 +187,6 @@ export async function validateAndEnrichBetaLinkInsert(
     }
     return { action: 'skip-existing' };
   }
-
-  await applyRateLimit(ctx, 30, 'instagram-beta-validation');
 
   const metadata = await validateInstagramBetaLink(url);
   const enriched = await enrichInstagramBetaInsert(metadata);
