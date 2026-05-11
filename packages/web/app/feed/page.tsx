@@ -25,16 +25,7 @@ type FeedProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-// SSR fetch budget: if the cold-path GraphQL handshake doesn't return
-// within this window, fall back to `initialFeedResult = null` and let the
-// client take over. The page still renders quickly; the client's React
-// Query hook fetches the real data once it mounts.
-//
-// Previously this page had no SSR timeout. On cold cache against a slow
-// backend (e.g. CI's local-pub/sub mode without REDIS_URL), the SSR fetch
-// could exceed Playwright's 30s navigation timeout — the recurring
-// shard-4 flake mode in the bottom-tab-bar persistence test, which falls
-// back to `page.goto('/feed')` after the click-doesn't-navigate symptom.
+// Cap cold-path SSR at 5s; on timeout, fall back to client-side fetch.
 const SSR_FETCH_TIMEOUT_MS = 5_000;
 
 function withSsrTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
