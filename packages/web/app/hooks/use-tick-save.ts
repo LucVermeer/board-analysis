@@ -172,6 +172,7 @@ export function useTickSave(options: UseTickSaveOptions): {
             hasComment: comment.length > 0,
           });
           void clearTickDraft(climb.uuid, Number(targetAngle));
+          saving.current = false;
         })
         .catch(() => {
           track('Quick Tick Failed', {

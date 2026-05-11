@@ -246,7 +246,7 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
     setCommentFocused(false);
     setIsFlash(!hasPriorHistoryForClimb(currentClimb, logbook));
     setTickBarExpanded(false);
-  }, [currentClimb.uuid, currentClimb, logbook]);
+  }, [currentClimb, logbook]);
 
   return (
     <div className={`${styles.tickBarContainer} ${isTickBarActive ? styles.tickBarContainerActive : ''}`}>
