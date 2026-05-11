@@ -227,8 +227,8 @@ export async function endSession(
   console.info(`[RoomManager] Session ${sessionId} explicitly ended`);
 }
 
-// Arbitrary 64-bit key for the inactivity-sweep advisory lock. Picked to be
-// distinct from any other advisory lock the app might add later.
+// Advisory lock slot for the inactivity sweep. Postgres accepts a bigint,
+// any value distinct from other future advisory locks in this app is fine.
 const INACTIVITY_SWEEP_LOCK_KEY = 19551850;
 
 /**
