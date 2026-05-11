@@ -56,7 +56,7 @@ const FeedbackDialogBody: React.FC<Omit<FeedbackDialogProps, 'open'>> = ({
   secondaryAction,
 }) => {
   const { t } = useTranslation('settings');
-  const { mutate } = useSubmitAppFeedback();
+  const { mutateAsync } = useSubmitAppFeedback();
   const { showMessage } = useSnackbar();
   const isBug = mode === 'bug';
   const resolvedTitle = title ?? (isBug ? t('feedbackDialog.titleBug') : t('feedbackDialog.titleRating'));
@@ -78,24 +78,20 @@ const FeedbackDialogBody: React.FC<Omit<FeedbackDialogProps, 'open'>> = ({
       void setFeedbackStatus('submitted');
     }
 
-    mutate(
-      {
-        rating: isBug ? null : values.rating,
-        comment: values.comment,
-        source,
-      },
-      {
-        onSuccess: () => {
-          showMessage(isBug ? t('feedbackDialog.successBug') : t('feedbackDialog.successRating'), 'success');
-          // Fire chained follow-ups (e.g. "also leave a store review?") only
-          // on successful submission. Otherwise we'd be prompting the user to
-          // publicly review the app right after telling them their feedback
-          // didn't save.
-          onSubmitted?.(values);
-        },
-        onError: () => showMessage(t('feedbackDialog.errorRating'), 'warning'),
-      },
-    );
+    // mutateAsync outlives the observer; per-call options on mutate() die with the component on onClose().
+    mutateAsync({
+      rating: isBug ? null : values.rating,
+      comment: values.comment,
+      source,
+    })
+      .then(() => {
+        showMessage(isBug ? t('feedbackDialog.successBug') : t('feedbackDialog.successRating'), 'success');
+        // Chain only on success — don't push a failed submission toward a public app store review.
+        onSubmitted?.(values);
+      })
+      .catch(() => {
+        showMessage(t('feedbackDialog.errorRating'), 'warning');
+      });
     onClose();
   };
 

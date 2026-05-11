@@ -23,7 +23,7 @@ type BannerBodyProps = {
 const FeedbackPromptBannerBody: React.FC<BannerBodyProps> = ({ onDismiss, onSubmitted, titleId }) => {
   const { t } = useTranslation('common');
   const { t: tSettings } = useTranslation('settings');
-  const { mutate } = useSubmitAppFeedback();
+  const { mutateAsync } = useSubmitAppFeedback();
   const { showMessage } = useSnackbar();
 
   const handleSubmit = (values: { rating: number | null; comment: string | null }) => {
@@ -32,17 +32,14 @@ const FeedbackPromptBannerBody: React.FC<BannerBodyProps> = ({ onDismiss, onSubm
     if (values.rating >= 3 && isNativeApp()) {
       void requestInAppReview();
     }
-    mutate(
-      {
-        rating: values.rating,
-        comment: values.comment,
-        source: 'prompt',
-      },
-      {
-        onSuccess: () => showMessage(tSettings('feedbackBanner.successToast'), 'success'),
-        onError: () => showMessage(tSettings('feedbackBanner.errorToast'), 'warning'),
-      },
-    );
+    // mutateAsync outlives the observer; per-call options on mutate() die when Fade unmounts this body.
+    mutateAsync({
+      rating: values.rating,
+      comment: values.comment,
+      source: 'prompt',
+    })
+      .then(() => showMessage(tSettings('feedbackBanner.successToast'), 'success'))
+      .catch(() => showMessage(tSettings('feedbackBanner.errorToast'), 'warning'));
   };
 
   return (
