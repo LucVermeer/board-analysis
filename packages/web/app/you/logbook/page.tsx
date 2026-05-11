@@ -26,6 +26,9 @@ export default async function YouLogbookPage() {
   const profileStats = await cachedUserProfileStats(userId);
   const layoutStats = profileStats?.layoutStats ?? [];
 
+  // Per-element protection for translator-DOM crashes (issue #2064) lives on
+  // the LogbookFeedItem itself (climb-name span). The error boundary
+  // auto-recovers from any residual NotFoundError.
   return (
     <Suspense fallback={<LogbookLoading />}>
       <LogbookFeed layoutStats={layoutStats} loadingLayoutStats={false} />

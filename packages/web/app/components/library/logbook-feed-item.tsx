@@ -669,12 +669,16 @@ const LogbookFeedItem: React.FC<LogbookFeedItemProps> = React.memo(
 
               {/* Center section */}
               <div className={styles.center}>
+                {/* Climb names are user-generated proper nouns and must never be
+                    translated. The `translate="no"` also gives in-browser translators
+                    a stable element boundary, preventing the React reconciliation
+                    crashes from issue #2064. */}
                 <Typography variant="body2" component="div" sx={nameSx}>
-                  {item.climbName}
+                  <span translate="no">{item.climbName}</span>
                   <ClimbIcons isNoMatch={!!item.isNoMatch} isBenchmark={!!item.isBenchmark} />
                 </Typography>
                 <Typography variant="body2" component="div" color="text.secondary" sx={subtitleSx}>
-                  {subtitle}
+                  <span>{subtitle}</span>
                 </Typography>
 
                 {/* Picker panel (edit mode only) */}
