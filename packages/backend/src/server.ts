@@ -259,25 +259,8 @@ export async function startServer(): Promise<ServerResources> {
   // Periodic TTL refresh for active sessions (every 2 minutes)
   const ttlRefreshInterval = setInterval(async () => {
     try {
-      if (redisClientManager.isRedisConnected() && roomManager['redisStore']) {
-        const activeSessions = roomManager.getAllActiveSessions();
-
-        if (activeSessions.length > 0) {
-          console.info(`[Server] Refreshing TTL for ${activeSessions.length} active sessions`);
-
-          // Batch refresh to avoid overwhelming Redis
-          const batchSize = 50;
-          for (let i = 0; i < activeSessions.length; i += batchSize) {
-            const batch = activeSessions.slice(i, i + batchSize);
-            await Promise.all(
-              batch.map((sessionId) =>
-                roomManager['redisStore']!.refreshTTL(sessionId).catch((err) =>
-                  console.error(`[Server] TTL refresh failed for ${sessionId}:`, err),
-                ),
-              ),
-            );
-          }
-        }
+      if (redisClientManager.isRedisConnected()) {
+        await roomManager.refreshActiveSessionTTLs();
       }
     } catch (error) {
       console.error('[Server] Error in periodic TTL refresh:', error);

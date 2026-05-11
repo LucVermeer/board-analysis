@@ -213,9 +213,9 @@ describe('Daemon Integration Tests', () => {
     server.httpServer.close();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Dispose all clients created during the test
-    activeClients.forEach((client) => client.dispose());
+    await Promise.all(activeClients.map((client) => client.dispose()));
     activeClients.length = 0;
     // Clear per-test UUID cache
     testClimbUuids.clear();
@@ -605,7 +605,7 @@ describe('Daemon Integration Tests', () => {
       );
 
       // Client 1 disconnects
-      void client1.dispose();
+      await client1.dispose();
       // Remove from activeClients so afterEach doesn't try to dispose again
       const idx = activeClients.indexOf(client1);
       if (idx > -1) activeClients.splice(idx, 1);
@@ -640,7 +640,7 @@ describe('Daemon Integration Tests', () => {
       );
 
       // Client 2 disconnects
-      void client2.dispose();
+      await client2.dispose();
       const idx = activeClients.indexOf(client2);
       if (idx > -1) activeClients.splice(idx, 1);
 
@@ -704,7 +704,7 @@ describe('Daemon Integration Tests', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Client 2 disconnects
-      void client2.dispose();
+      await client2.dispose();
       const idx = activeClients.indexOf(client2);
       if (idx > -1) activeClients.splice(idx, 1);
 
@@ -739,7 +739,7 @@ describe('Daemon Integration Tests', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Client 1 disconnects (leader leaves)
-      void client1.dispose();
+      await client1.dispose();
       const idx = activeClients.indexOf(client1);
       if (idx > -1) activeClients.splice(idx, 1);
 
@@ -773,7 +773,7 @@ describe('Daemon Integration Tests', () => {
       });
 
       // Disconnect
-      void client1.dispose();
+      await client1.dispose();
       const idx = activeClients.indexOf(client1);
       if (idx > -1) activeClients.splice(idx, 1);
 
@@ -812,7 +812,7 @@ describe('Daemon Integration Tests', () => {
       });
 
       // Client 1 disconnects
-      void client1.dispose();
+      await client1.dispose();
       const idx = activeClients.indexOf(client1);
       if (idx > -1) activeClients.splice(idx, 1);
 
