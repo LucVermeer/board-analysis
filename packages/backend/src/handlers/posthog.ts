@@ -37,11 +37,9 @@ function readBody(req: IncomingMessage, limitBytes: number): Promise<Buffer | { 
  * Reverse proxy for PostHog ingestion.
  *
  * Forwards POST /api/posthog/<rest> → https://us.i.posthog.com/<rest>, preserving
- * the query string and request body. The whole point is to make events first-party
- * so ad-blockers that target *.posthog.com don't drop them.
- *
- * posthog-js-lite uses Content-Type: text/plain and no custom headers, so the
- * browser treats this as a CORS-safelisted "simple" request — no preflight.
+ * the query string, request body bytes, and Content-Encoding header (the JS SDK
+ * gzips the /batch/ payload when CompressionStream is available, so the body is
+ * binary, not text).
  */
 export async function handlePosthogProxy(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   if (!applyCorsHeaders(req, res)) return;
@@ -68,8 +66,12 @@ export async function handlePosthogProxy(req: IncomingMessage, res: ServerRespon
 
   const upstreamUrl = `${POSTHOG_UPSTREAM}${rest}${url.search}`;
   const headers: Record<string, string> = {
-    'Content-Type': typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : 'text/plain',
+    'Content-Type': typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : 'application/json',
   };
+  const contentEncoding = req.headers['content-encoding'];
+  if (typeof contentEncoding === 'string' && contentEncoding.length > 0) {
+    headers['Content-Encoding'] = contentEncoding;
+  }
   const clientIp = getClientIp(req);
   if (clientIp) headers['X-Forwarded-For'] = clientIp;
 
@@ -78,13 +80,15 @@ export async function handlePosthogProxy(req: IncomingMessage, res: ServerRespon
   const startedAt = Date.now();
 
   try {
-    // PostHog ingestion only accepts text payloads (JSON in a text/plain body),
-    // so it's safe to forward as a UTF-8 string. Avoids @types/node BodyInit
-    // friction with Buffer/Uint8Array.
+    // Forward the raw bytes — the SDK may have gzipped the payload, in which
+    // case UTF-8 decoding would corrupt it. Buffer is a Uint8Array at runtime
+    // and undici accepts it; the cast is just to satisfy @types/node's
+    // BodyInit (which excludes Buffer for SharedArrayBuffer-vs-ArrayBuffer
+    // reasons).
     const upstream = await fetch(upstreamUrl, {
       method: 'POST',
       headers,
-      body: body.toString('utf8'),
+      body: body as unknown as BodyInit,
       signal: controller.signal,
     });
     const responseBody = Buffer.from(await upstream.arrayBuffer());

@@ -1,3 +1,6 @@
+// @ts-nocheck — __tests__ is excluded from tsconfig.json, so the type-aware
+// lint can't resolve node globals (process, NodeJS.ErrnoException) or `node:*`
+// import specifiers. Type-checking happens at test-run time via vitest.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vite-plus/test';
@@ -264,7 +267,10 @@ describe('CORS Handler', () => {
       const res = createMockRes();
       applyCorsHeaders(req, res);
 
-      expect(res.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, Content-Encoding',
+      );
     });
 
     it('returns false and sends 200 for OPTIONS requests', () => {

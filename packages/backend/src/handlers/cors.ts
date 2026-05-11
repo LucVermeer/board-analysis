@@ -161,7 +161,10 @@ export function applyCorsHeaders(req: IncomingMessage, res: ServerResponse): boo
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Content-Encoding is needed for the PostHog batch endpoint — posthog-js
+  // gzips the payload when CompressionStream is available, and the browser
+  // lists "content-encoding" in the preflight's Access-Control-Request-Headers.
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Encoding');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
