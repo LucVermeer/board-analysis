@@ -129,6 +129,14 @@ export default function PlaylistDetailContent({
   );
   const lastAccessedUpdatedRef = useRef(false);
   const defaultBoardAppliedRef = useRef(!!selectedBoard);
+  // Tracks whether we have any playlist data (SSR or fetched). Read inside
+  // fetchPlaylist's loading guard to avoid feeding reactive state back into
+  // its dependency list — putting `playlist` in deps creates an infinite
+  // setState → callback-recreate → effect-rerun loop.
+  const hasPlaylistDataRef = useRef(!!initialPlaylist);
+  // Treat SSR-seeded react-query data as fresh under staleTime; without this,
+  // initialDataUpdatedAt defaults to 0 and triggers an immediate refetch.
+  const ssrInitialClimbsUpdatedAtRef = useRef(initialClimbs ? Date.now() : 0);
   const { token, isLoading: tokenLoading } = useWsAuthToken();
 
   // Fetch user's boards (with SSR initial data to avoid loading skeleton).
@@ -157,7 +165,7 @@ export default function PlaylistDetailContent({
     if (tokenLoading) return;
 
     try {
-      if (!playlist) setLoading(true);
+      if (!hasPlaylistDataRef.current) setLoading(true);
       setError(null);
 
       const response = await executeGraphQL<GetPlaylistQueryResponse, GetPlaylistQueryVariables>(
@@ -171,6 +179,7 @@ export default function PlaylistDetailContent({
         return;
       }
 
+      hasPlaylistDataRef.current = true;
       setPlaylist(response.playlist);
     } catch (err) {
       console.error('Error fetching playlist:', err);
@@ -178,7 +187,7 @@ export default function PlaylistDetailContent({
     } finally {
       setLoading(false);
     }
-  }, [playlistUuid, token, tokenLoading, playlist]);
+  }, [playlistUuid, token, tokenLoading]);
 
   useEffect(() => {
     void fetchPlaylist();
@@ -256,6 +265,9 @@ export default function PlaylistDetailContent({
           pageParams: [0],
         }
       : undefined,
+    // Without this, react-query treats initialData as epoch-stale and fires
+    // an immediate refetch, defeating the SSR optimisation.
+    initialDataUpdatedAt: ssrInitialClimbsUpdatedAtRef.current,
   });
 
   const allClimbs: Climb[] = useMemo(
@@ -371,7 +383,10 @@ export default function PlaylistDetailContent({
 
   const generatorAngle = playlist ? getDefaultAngleForBoard(playlist.boardType) : 40;
 
-  if (loading || tokenLoading) {
+  // With SSR data we have content to render, so don't gate on tokenLoading.
+  // Showing the spinner during the first-tick auth bootstrap defeats the
+  // no-spinner goal of seeding initialPlaylist from the server.
+  if (loading || (tokenLoading && !playlist)) {
     return (
       <div className={styles.loadingContainer}>
         <LoadingSpinner size={48} />

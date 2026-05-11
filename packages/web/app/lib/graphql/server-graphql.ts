@@ -2,14 +2,18 @@ import 'server-only';
 import { type RequestDocument, type Variables, GraphQLClient } from 'graphql-request';
 import { getGraphQLHttpUrl } from './client';
 import type { GroupedNotificationConnection, UserBoard } from '@boardsesh/shared-schema';
-import type { GetMyBoardsQueryResponse } from '@/app/lib/graphql/operations/boards';
-import type {
-  Playlist,
-  GetAllUserPlaylistsQueryResponse,
-  GetPlaylistQueryResponse,
-  GetPlaylistClimbsQueryResponse,
-  GetPlaylistClimbsInput,
+import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@/app/lib/graphql/operations/boards';
+import {
+  GET_ALL_USER_PLAYLISTS,
+  GET_PLAYLIST,
+  GET_PLAYLIST_CLIMBS,
+  type Playlist,
+  type GetAllUserPlaylistsQueryResponse,
+  type GetPlaylistQueryResponse,
+  type GetPlaylistClimbsQueryResponse,
+  type GetPlaylistClimbsInput,
 } from '@/app/lib/graphql/operations/playlists';
+import { GET_GROUPED_NOTIFICATIONS } from '@/app/lib/graphql/operations/notifications';
 
 /**
  * Execute a GraphQL query with an auth token (non-cached, per-user data).
@@ -38,8 +42,6 @@ export async function executeAuthenticatedGraphQL<T = unknown, V extends Variabl
  * NOT cached — personalized data is per-user.
  */
 export async function serverMyBoards(authToken: string): Promise<UserBoard[] | null> {
-  const { GET_MY_BOARDS } = await import('@/app/lib/graphql/operations/boards');
-
   try {
     const response = await executeAuthenticatedGraphQL<GetMyBoardsQueryResponse>(
       GET_MY_BOARDS,
@@ -47,7 +49,8 @@ export async function serverMyBoards(authToken: string): Promise<UserBoard[] | n
       authToken,
     );
     return response.myBoards.boards;
-  } catch {
+  } catch (error) {
+    console.error('serverMyBoards failed:', error);
     return null;
   }
 }
@@ -68,13 +71,13 @@ export async function serverUserPlaylists(
   authToken: string,
   input: { boardType?: string; layoutId?: number; page?: number; pageSize?: number } = {},
 ): Promise<ServerUserPlaylistsResult | null> {
-  const { GET_ALL_USER_PLAYLISTS } = await import('@/app/lib/graphql/operations/playlists');
   type Response = GetAllUserPlaylistsQueryResponse;
 
   try {
     const response = await executeAuthenticatedGraphQL<Response>(GET_ALL_USER_PLAYLISTS, { input }, authToken);
     return response.allUserPlaylists;
-  } catch {
+  } catch (error) {
+    console.error('serverUserPlaylists failed:', error);
     return null;
   }
 }
@@ -88,7 +91,6 @@ export async function serverGroupedNotifications(
   limit: number = 20,
   offset: number = 0,
 ): Promise<GroupedNotificationConnection> {
-  const { GET_GROUPED_NOTIFICATIONS } = await import('@/app/lib/graphql/operations/notifications');
   type Response = { groupedNotifications: GroupedNotificationConnection };
 
   const data = await executeAuthenticatedGraphQL<Response>(GET_GROUPED_NOTIFICATIONS, { limit, offset }, authToken);
@@ -100,8 +102,6 @@ export async function serverGroupedNotifications(
  * Server-side fetch of a single playlist.
  */
 export async function serverPlaylist(authToken: string | undefined, playlistId: string): Promise<Playlist | null> {
-  const { GET_PLAYLIST } = await import('@/app/lib/graphql/operations/playlists');
-
   try {
     const response = await executeAuthenticatedGraphQL<GetPlaylistQueryResponse>(
       GET_PLAYLIST,
@@ -109,7 +109,8 @@ export async function serverPlaylist(authToken: string | undefined, playlistId: 
       authToken,
     );
     return response.playlist;
-  } catch {
+  } catch (error) {
+    console.error('serverPlaylist failed:', error);
     return null;
   }
 }
@@ -121,8 +122,6 @@ export async function serverPlaylistClimbs(
   authToken: string | undefined,
   input: GetPlaylistClimbsInput,
 ): Promise<GetPlaylistClimbsQueryResponse['playlistClimbs'] | null> {
-  const { GET_PLAYLIST_CLIMBS } = await import('@/app/lib/graphql/operations/playlists');
-
   try {
     const response = await executeAuthenticatedGraphQL<GetPlaylistClimbsQueryResponse>(
       GET_PLAYLIST_CLIMBS,
@@ -130,7 +129,8 @@ export async function serverPlaylistClimbs(
       authToken,
     );
     return response.playlistClimbs;
-  } catch {
+  } catch (error) {
+    console.error('serverPlaylistClimbs failed:', error);
     return null;
   }
 }
