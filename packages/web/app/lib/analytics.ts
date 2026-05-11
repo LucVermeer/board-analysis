@@ -36,10 +36,11 @@ function getPosthog(): PostHog | null {
     host,
     autocapture: false,
     captureHistoryEvents: false,
-    // PartyProfileProvider identifies the IndexedDB party-profile UUID after
-    // hydration. Events captured before that resolve use PostHog's temporary
-    // in-memory anonymous ID and are not guaranteed to merge later.
-    persistence: 'memory',
+    // Persist distinct_id in localStorage so anonymous → authed merges and
+    // cross-session retention cohorts work. The IndexedDB party-profile UUID
+    // is still the canonical anon id; PartyProfileProvider calls identify()
+    // on hydration to reconcile if storage was cleared.
+    persistence: 'localStorage',
   });
 
   return posthogClient;
@@ -90,6 +91,18 @@ export function identify(distinctId: string, properties?: PosthogProperties): bo
   const posthog = getPosthog();
   if (!posthog) return false;
   posthog.identify(distinctId, properties);
+  return true;
+}
+
+// Sets person properties on the current distinct_id. `setOnce` properties are
+// only written if they don't already exist on the user (use for first-touch
+// attributes like signup_at, auth_method). `set` overwrites every call.
+export function setPersonProperties(set?: PosthogProperties, setOnce?: PosthogProperties): boolean {
+  if (isCurrentAdminAnalyticsPage()) return false;
+
+  const posthog = getPosthog();
+  if (!posthog) return false;
+  posthog.setPersonProperties(set, setOnce);
   return true;
 }
 

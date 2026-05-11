@@ -65,7 +65,7 @@ describe('analytics wrapper', () => {
         autocapture: false,
         captureHistoryEvents: false,
         host: 'https://posthog.example',
-        persistence: 'memory',
+        persistence: 'localStorage',
       }),
     );
     expect(mocks.posthog.capture).toHaveBeenCalledWith('Climb Opened', { kept: 'yes', count: 2 });

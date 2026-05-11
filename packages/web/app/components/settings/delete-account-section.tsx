@@ -14,6 +14,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import { signOut } from 'next-auth/react';
+import { track } from '@/app/lib/analytics';
 import { Trans, useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { ClientError } from 'graphql-request';
@@ -91,6 +92,7 @@ export default function DeleteAccountSection() {
       });
 
       // Account deleted — sign out and redirect to home
+      track('Logout', { method: 'account_deleted' });
       await signOut({ callbackUrl: '/' });
     } catch (error) {
       console.error('Delete account error:', error);

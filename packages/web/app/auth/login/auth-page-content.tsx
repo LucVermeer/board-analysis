@@ -34,6 +34,7 @@ import {
 import { TabPanel } from '@/app/components/ui/tab-panel';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { themeTokens } from '@/app/theme/theme-config';
+import { track, setPersonProperties } from '@/app/lib/analytics';
 
 export default function AuthPageContent() {
   const { t } = useTranslation('auth');
@@ -62,6 +63,13 @@ export default function AuthPageContent() {
       } else {
         showMessage(t('login.toasts.authFailed'), 'error');
       }
+      // NextAuth redirects back to /auth/login?error=... after a failed OAuth
+      // round-trip. Surface this as Login Failed so the auth funnel captures
+      // OAuth-provider rejections (cancel, provider error, callback mismatch).
+      track('Login Failed', {
+        auth_method: 'oauth',
+        failure_reason: error,
+      });
     }
   }, [error, showMessage, t]);
 
@@ -86,6 +94,7 @@ export default function AuthPageContent() {
 
     try {
       setLoginLoading(true);
+      track('Login Attempted', { auth_method: 'credentials' });
 
       const result = await signIn('credentials', {
         email: loginValues.email,
@@ -95,8 +104,13 @@ export default function AuthPageContent() {
 
       if (result?.error) {
         showMessage(t('login.toasts.invalidCredentials'), 'error');
+        track('Login Failed', {
+          auth_method: 'credentials',
+          failure_reason: result.error,
+        });
       } else if (result?.ok) {
         showMessage(t('login.toasts.loggedIn'), 'success');
+        track('Login Succeeded', { auth_method: 'credentials' });
         router.push(callbackUrl);
       }
     } catch (error) {
@@ -134,6 +148,18 @@ export default function AuthPageContent() {
         return;
       }
 
+      track('Signup Completed', {
+        auth_method: 'credentials',
+        requires_verification: Boolean(data.requiresVerification),
+      });
+      // First-touch attribution — written once and never overwritten.
+      // PostHog merges these onto the authenticated user once alias() runs
+      // in party-profile-context after the auto-signin below.
+      setPersonProperties(undefined, {
+        signup_at: new Date().toISOString(),
+        signup_auth_method: 'credentials',
+      });
+
       // Check if email verification is required
       if (data.requiresVerification) {
         showMessage(t('login.toasts.checkEmail'), 'info');
@@ -152,6 +178,10 @@ export default function AuthPageContent() {
       });
 
       if (loginResult?.ok) {
+        track('Login Succeeded', {
+          auth_method: 'credentials',
+          is_first_login: true,
+        });
         router.push(callbackUrl);
       } else {
         setActiveTab('login');

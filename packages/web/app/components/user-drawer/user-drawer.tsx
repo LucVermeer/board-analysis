@@ -57,6 +57,7 @@ import type { BoardDetails, BoardName, BoardRouteIdentity } from '@/app/lib/type
 import { SUPPORTED_BOARDS } from '@/app/lib/board-data';
 import type { UserBoard, PopularBoardConfig } from '@boardsesh/shared-schema';
 import { useBoardSwitchGuard } from '@/app/components/board-lock/use-board-switch-guard';
+import { track } from '@/app/lib/analytics';
 import {
   type StoredSession,
   getRecentSessions,
@@ -217,6 +218,7 @@ export default function UserDrawer({ boardDetails, boardConfigs }: UserDrawerPro
   );
 
   const handleSignOut = () => {
+    track('Logout', { method: 'manual' });
     void signOut();
     handleClose();
   };

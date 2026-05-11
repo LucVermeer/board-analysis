@@ -106,6 +106,9 @@ export function useBoardBluetooth({
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
+  // Timestamp of the most recent successful BLE connect — drives the
+  // duration_connected_ms property on Bluetooth Disconnected events.
+  const connectedAtRef = useRef<number | null>(null);
 
   // Device picker state for custom Capacitor scanning.
   // pickerRejectRef holds the pending promise's reject so unmount cleanup
@@ -141,8 +144,19 @@ export function useBoardBluetooth({
     });
   }, []);
 
-  // Handler for device disconnection
+  // Handler for device disconnection — fires when the adapter reports a
+  // gattserverdisconnected event. User-initiated disconnects via disconnect()
+  // null `unsubDisconnectRef` first, so this only ever runs on unexpected
+  // drops (signal loss, board power-off, OS BLE stack reset).
   const handleDisconnection = useCallback(() => {
+    const connectedAt = connectedAtRef.current;
+    connectedAtRef.current = null;
+    if (connectedAt !== null) {
+      track('Bluetooth Disconnected', {
+        reason: 'lost',
+        duration_connected_ms: Date.now() - connectedAt,
+      });
+    }
     setIsConnected(false);
     onConnectionChange?.(false);
   }, [onConnectionChange]);
@@ -312,6 +326,7 @@ export function useBoardBluetooth({
         unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
         adapterRef.current = adapter;
 
+        connectedAtRef.current = Date.now();
         track('Bluetooth Connection Success', {
           boardLayout: `${boardDetails.layout_name}`,
         });
@@ -351,12 +366,20 @@ export function useBoardBluetooth({
   // Disconnect from the board — update state synchronously for immediate UI
   // feedback, then await the native BLE disconnect in the background.
   const disconnect = useCallback(async () => {
+    const connectedAt = connectedAtRef.current;
+    connectedAtRef.current = null;
     unsubDisconnectRef.current?.();
     unsubDisconnectRef.current = null;
     const adapter = adapterRef.current;
     adapterRef.current = null;
     setIsConnected(false);
     onConnectionChange?.(false);
+    if (connectedAt !== null) {
+      track('Bluetooth Disconnected', {
+        reason: 'user',
+        duration_connected_ms: Date.now() - connectedAt,
+      });
+    }
     await adapter?.disconnect();
   }, [onConnectionChange]);
 

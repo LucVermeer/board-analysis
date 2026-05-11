@@ -3,8 +3,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { type PartyProfile, getPartyProfile, clearPartyProfile, ensurePartyProfile } from '@/app/lib/party-profile-db';
-import { alias, identify, reset } from '@/app/lib/analytics';
+import { alias, identify, reset, setPersonProperties } from '@/app/lib/analytics';
 import { isAdminAnalyticsUrl } from '@/app/lib/analytics-paths';
 import { hasRecordedPosthogAlias, recordPosthogAlias } from '@/app/lib/posthog-alias-storage';
 
@@ -33,6 +34,7 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isLoading, setIsLoading] = useState(true);
   const { data: session, status: sessionStatus } = useSession();
   const pathname = usePathname();
+  const { i18n } = useTranslation();
   const lastAnalyticsDistinctId = useRef<string | null>(null);
 
   // Load party profile on mount
@@ -91,6 +93,9 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
       }
       identify(userId, session.user.email ? { email: session.user.email } : undefined);
+      // Refresh the user's current language each time the identity effect runs
+      // so cohorts by locale stay accurate when users switch between en-US/es.
+      setPersonProperties({ language: i18n.language });
       lastAnalyticsDistinctId.current = userId;
       return;
     }
@@ -103,7 +108,7 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
       identify(profileId);
       lastAnalyticsDistinctId.current = profileId;
     }
-  }, [pathname, profile?.id, sessionStatus, session?.user?.id, session?.user?.email]);
+  }, [pathname, profile?.id, sessionStatus, session?.user?.id, session?.user?.email, i18n.language]);
 
   // Fetch custom user profile (displayName, avatarUrl) when authenticated
   useEffect(() => {

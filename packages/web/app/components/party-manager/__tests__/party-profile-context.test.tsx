@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   identify: vi.fn(),
   recordPosthogAlias: vi.fn(),
   reset: vi.fn(),
+  setPersonProperties: vi.fn(),
   route: {
     pathname: '/',
   },
@@ -31,10 +32,15 @@ vi.mock('next/navigation', () => ({
   usePathname: () => mocks.route.pathname,
 }));
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ i18n: { language: 'en-US' } }),
+}));
+
 vi.mock('@/app/lib/analytics', () => ({
   alias: mocks.alias,
   identify: mocks.identify,
   reset: mocks.reset,
+  setPersonProperties: mocks.setPersonProperties,
 }));
 
 vi.mock('@/app/lib/party-profile-db', () => ({
@@ -92,10 +98,7 @@ describe('PartyProfileProvider PostHog identity wiring', () => {
     });
 
     expect(mocks.reset).not.toHaveBeenCalled();
-    expect(mocks.identify.mock.calls).toEqual([
-      ['profile-1'],
-      ['user-1', { email: 'one@example.com' }],
-    ]);
+    expect(mocks.identify.mock.calls).toEqual([['profile-1'], ['user-1', { email: 'one@example.com' }]]);
     expect(mocks.hasRecordedPosthogAlias).toHaveBeenCalledWith('profile-1', 'user-1');
     expect(mocks.alias).toHaveBeenCalledWith('user-1');
     expect(mocks.recordPosthogAlias).toHaveBeenCalledWith('profile-1', 'user-1');
