@@ -18,17 +18,14 @@
  *
  * See: https://github.com/boardsesh/boardsesh/issues/1559
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { loginAs } from './helpers/auth';
+import { waitForBoardListReady } from './helpers/waits';
 
 const BOARD_URL = '/kilter/original/12x12-square/screw_bolt/40/list';
 const BOARD_URL_ONLY_COMPLETED = `${BOARD_URL}?showOnlyCompleted=true`;
 const ASCENT_BADGE = '[data-testid="ascent-badge"]';
 const CLIMB_CARD = '[data-testid="climb-card"]';
-
-async function waitForClimbs(page: Page) {
-  await page.waitForSelector(`${CLIMB_CARD}, #onboarding-climb-card`, { timeout: 30_000 });
-}
 
 test.describe('Grid mode — ascent badge', () => {
   test.setTimeout(90_000);
@@ -38,9 +35,9 @@ test.describe('Grid mode — ascent badge', () => {
     // its post-login wait, and query strings can be re-ordered by NextAuth's
     // callbackUrl validation), then navigate to the filtered URL.
     await loginAs(page, BOARD_URL);
-    await waitForClimbs(page);
+    await waitForBoardListReady(page);
     await page.goto(BOARD_URL_ONLY_COMPLETED, { waitUntil: 'domcontentloaded' });
-    await waitForClimbs(page);
+    await waitForBoardListReady(page);
 
     // showOnlyCompleted=true restricts the list to climbs the test user
     // has flashed or sent at the current angle, so every visible card
@@ -62,7 +59,7 @@ test.describe('Grid mode — ascent badge', () => {
   test('no ascent badge shown when logged out', async ({ page }) => {
     // Visit without logging in
     await page.goto(BOARD_URL, { waitUntil: 'domcontentloaded' });
-    await waitForClimbs(page);
+    await waitForBoardListReady(page);
 
     // Unauthenticated cold loads can take a while to hydrate the virtualizer,
     // so switch to grid mode and wait generously for the first card to paint.

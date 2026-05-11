@@ -18,6 +18,7 @@
  *     (default to the seeded dev user: test@boardsesh.com / test).
  */
 import { test, expect } from '@playwright/test';
+import { waitForBoardListReady, waitForDrawerOpen } from './helpers/waits';
 
 const SCREENSHOT_DIR = 'public/help';
 const boardUrl = '/kilter/original/12x12-square/screw_bolt/40/list';
@@ -35,11 +36,7 @@ test.describe('Help Page Screenshots', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto(boardUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page
-      .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 30000 })
-      .catch(() => page.waitForLoadState('domcontentloaded'));
-    // Wait for React hydration before firing any clicks
-    await page.waitForLoadState('networkidle').catch(() => {});
+    await waitForBoardListReady(page);
   });
 
   test('main interface', async ({ page }) => {
@@ -49,13 +46,13 @@ test.describe('Help Page Screenshots', () => {
   test('search filters', async ({ page }) => {
     // Open the filters drawer via the header button (aria-label="Open filters").
     await page.getByRole('button', { name: 'Open filters' }).click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10_000 });
+    await waitForDrawerOpen(page);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/search-filters.png` });
   });
 
   test('search by hold', async ({ page }) => {
     await page.getByRole('button', { name: 'Open filters' }).click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10_000 });
+    await waitForDrawerOpen(page);
     // Expand the "Holds & Zone" accordion section (the panel was renamed when
     // hold and zone search were consolidated — see PR #1986).
     await page.getByText('Holds & Zone', { exact: true }).click();
@@ -64,7 +61,7 @@ test.describe('Help Page Screenshots', () => {
 
   test('heatmap', async ({ page }) => {
     await page.getByRole('button', { name: 'Open filters' }).click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10_000 });
+    await waitForDrawerOpen(page);
     await page.getByText('Holds & Zone', { exact: true }).click();
     await page.getByRole('button', { name: 'Show heatmap' }).click();
     await page.waitForSelector('text=Loading heatmap...', { state: 'hidden', timeout: 10_000 }).catch(() => {});
@@ -82,7 +79,7 @@ test.describe('Help Page Screenshots', () => {
     const thumbnail = page.locator('#onboarding-climb-card [data-testid="climb-thumbnail"]');
     await thumbnail.waitFor({ state: 'visible', timeout: 15_000 });
     await thumbnail.click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 15_000 });
+    await waitForDrawerOpen(page, 0, 15_000);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/climb-detail.png` });
   });
 
@@ -99,7 +96,7 @@ test.describe('Help Page Screenshots', () => {
     await expect(queueBar).toBeVisible({ timeout: 10_000 });
 
     await queueBar.getByText('Start sesh').click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10_000 });
+    await waitForDrawerOpen(page);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/party-mode.png` });
   });
 
@@ -125,10 +122,7 @@ test.describe('Help Page Screenshots - Authenticated', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto(boardUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page
-      .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 30000 })
-      .catch(() => page.waitForLoadState('domcontentloaded'));
-    await page.waitForLoadState('networkidle').catch(() => {});
+    await waitForBoardListReady(page);
 
     // Login via user drawer → auth modal
     await page.getByLabel('User menu').click();
@@ -146,7 +140,7 @@ test.describe('Help Page Screenshots - Authenticated', () => {
 
   test('personal progress filters', async ({ page }) => {
     await page.getByRole('button', { name: 'Open filters' }).click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10_000 });
+    await waitForDrawerOpen(page);
     // Expand the Progress accordion (user-specific filters: attempts, completions).
     await page.getByText('Progress', { exact: true }).click();
     await page.screenshot({ path: `${SCREENSHOT_DIR}/personal-progress.png` });
@@ -201,7 +195,7 @@ test.describe('Help Page Screenshots - Authenticated', () => {
     await expect(queueBar).toBeVisible({ timeout: 10_000 });
 
     await queueBar.getByText('Start sesh').click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10_000 });
+    await waitForDrawerOpen(page);
 
     // Submit the session-creation form (the footer "Sesh" button).
     await page.getByRole('button', { name: 'Sesh', exact: true }).last().click();

@@ -1,5 +1,6 @@
 import { type Page, test, expect } from '@playwright/test';
 import { loginAs } from './helpers/auth';
+import { waitForBoardListReady } from './helpers/waits';
 
 /**
  * E2E tests for the bottom tab bar navigation.
@@ -191,9 +192,7 @@ test.describe('Bottom Tab Bar - Active State', () => {
 test.describe('Bottom Tab Bar - Queue Integration', () => {
   test('queue bar and bottom tab bar should coexist with correct climb', async ({ page }) => {
     await page.goto(boardUrl);
-    await page
-      .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 30000 })
-      .catch(() => page.waitForLoadState('domcontentloaded'));
+    await waitForBoardListReady(page);
 
     // Add a climb to the queue
     const climbCard = page.locator('#onboarding-climb-card');
@@ -214,9 +213,7 @@ test.describe('Bottom Tab Bar - Queue Integration', () => {
 
   test('queue bar should persist with correct climb across tab navigations', async ({ page }) => {
     await page.goto(boardUrl);
-    await page
-      .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 30000 })
-      .catch(() => page.waitForLoadState('domcontentloaded'));
+    await waitForBoardListReady(page);
 
     // Add a climb to the queue and capture its name
     const climbCard = page.locator('#onboarding-climb-card');
