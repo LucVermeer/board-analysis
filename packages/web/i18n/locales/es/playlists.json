@@ -23,6 +23,12 @@
       "smart": "Tus selecciones",
       "discover": "Descubre"
     },
+    "pin": {
+      "pinAriaLabel": "Fijar playlist",
+      "unpinAriaLabel": "Desfijar playlist",
+      "pinFailed": "No se pudo fijar la playlist",
+      "unpinFailed": "No se pudo desfijar la playlist"
+    },
     "smart": {
       "fiveStars": {
         "title": "Cinco estrellas",
