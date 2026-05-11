@@ -204,8 +204,13 @@ test.describe('Help Page Screenshots - Authenticated', () => {
   // to a dedicated `party-session-integration.spec.ts` that runs on a
   // separate cadence — don't put it back in the screenshot job.
   test('party mode active session', async ({ page }) => {
-    test.slow();
+    // No `test.slow()` — the real-backend handshake (the reason for the
+    // slow budget) is gone. Default 60s timeout is plenty.
 
+    // app-store-screenshots.spec.ts: 06-party-mode uses the same dispatch
+    // + drawer-wait dance. Worth extracting into helpers/dummy-sesh.ts
+    // once both PRs in the e2e-reliability series have landed; until
+    // then, keeping the two callsites in sync by inspection.
     const dummyDrawer = page.locator('[data-swipeable-drawer="true"]:visible').first();
     for (let attempt = 0; attempt < 10; attempt++) {
       await page.evaluate(() => {
@@ -219,8 +224,9 @@ test.describe('Help Page Screenshots - Authenticated', () => {
       }
     }
 
-    // Drawer animation settle.
-    await page.waitForTimeout(400);
+    // Matches app-store-screenshots.spec.ts's 800ms settle budget on the
+    // same drawer animation — keep the two in lockstep.
+    await page.waitForTimeout(800);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/party-mode-active.png` });
   });
 });
