@@ -7,7 +7,12 @@ import { userFollows } from '../src/schema/app/follows.js';
 import { boardseshTicks } from '../src/schema/app/ascents.js';
 import { userBoards, boardFollows } from '../src/schema/app/boards.js';
 import { boardSessions } from '../src/schema/app/sessions.js';
-import { boardClimbs, boardClimbStats, boardDifficultyGrades } from '../src/schema/boards/unified.js';
+import {
+  boardClimbs,
+  boardClimbStats,
+  boardDifficultyGrades,
+  boardProductSizes,
+} from '../src/schema/boards/unified.js';
 import { notifications } from '../src/schema/app/notifications.js';
 import { comments, votes } from '../src/schema/app/social.js';
 import { feedItems } from '../src/schema/app/feed.js';
@@ -841,48 +846,77 @@ async function seedSocialData() {
     // `/kilter/original/12x12-square/screw_bolt/40/list?showOnlyCompleted=true`
     // and asserts that at least one ascent badge renders. With the random
     // tick distribution above, the 2000 test-user ticks rarely include a
-    // climb on this exact (layout, sets, angle) combo — the spec's flake
-    // root cause. Pinning 5 SEND ticks here turns the assumption into a
-    // contract documented in `packages/web/e2e/SEED_CONTRACT.md`.
+    // climb on this exact (layout, sets, angle, size) combo — the spec's
+    // flake root cause. Pinning 5 SEND ticks on climbs that match the
+    // ACTUAL filter the route applies turns the assumption into a contract
+    // documented in `packages/web/e2e/SEED_CONTRACT.md`.
     //
-    // Constraints on the climbs we pick:
+    // Constraints mirror the climb-list filter so the seeded climbs are
+    // guaranteed to appear on the page:
     //   - boardType = kilter
     //   - layoutId = 1 (the "original" Kilter layout)
-    //   - isListed = true (otherwise the climb won't appear in the search)
+    //   - isListed = true
     //   - has board_climb_stats at angle 40
-    //   - requiredSetIds overlaps {1, 20} = Bolt Ons + Screw Ons (the
-    //     "screw_bolt" URL slug)
+    //   - required_set_ids <@ {1, 20}  (subset; matches the route's
+    //     `required_set_ids <@ selected_sets` check)
+    //   - compatible_size_ids && {12x12 size IDs}  (the route enforces
+    //     `size_id = ANY(compatible_size_ids)` for the URL's product size)
     //
     // Ordered by climb UUID so the selection is stable across seed runs.
     console.info('\n  Pinning deterministic e2e grid-badge ticks...');
 
     const KILTER_ORIGINAL_LAYOUT_ID = 1;
+    // Bolt Ons (1) + Screw Ons (20) — the "screw_bolt" URL slug picks both.
     const KILTER_SCREW_BOLT_SET_IDS = [1, 20];
     const GRID_BADGE_ANGLE = 40;
     const GRID_BADGE_TICK_COUNT = 5;
 
-    const gridBadgeClimbs = await db
-      .select({ uuid: boardClimbs.uuid })
-      .from(boardClimbs)
-      .innerJoin(
-        boardClimbStats,
-        and(eq(boardClimbs.uuid, boardClimbStats.climbUuid), eq(boardClimbs.boardType, boardClimbStats.boardType)),
-      )
+    // Resolve product sizes named like "12 x 12" / "12x12" on kilter.
+    // The board URL slug "12x12-square" derives from the size name via
+    // generateSizeSlug(name, description), so we match by name pattern
+    // rather than hard-coding a numeric ID (the ID isn't stable across
+    // dev DB image rebuilds for non-LED layouts).
+    const kilter12x12SizeRows = await db
+      .select({ id: boardProductSizes.id })
+      .from(boardProductSizes)
       .where(
         and(
-          eq(boardClimbs.boardType, 'kilter'),
-          eq(boardClimbs.layoutId, KILTER_ORIGINAL_LAYOUT_ID),
-          eq(boardClimbs.isListed, true),
-          eq(boardClimbStats.angle, GRID_BADGE_ANGLE),
-          sql`${boardClimbs.requiredSetIds} && ${KILTER_SCREW_BOLT_SET_IDS}::int[]`,
+          eq(boardProductSizes.boardType, 'kilter'),
+          sql`(${boardProductSizes.name} ILIKE '12 x 12%' OR ${boardProductSizes.name} ILIKE '12x12%')`,
         ),
-      )
-      .orderBy(boardClimbs.uuid)
-      .limit(GRID_BADGE_TICK_COUNT);
+      );
+    const kilter12x12SizeIds = kilter12x12SizeRows.map((r) => r.id);
+
+    const gridBadgeClimbs =
+      kilter12x12SizeIds.length === 0
+        ? []
+        : await db
+            .select({ uuid: boardClimbs.uuid })
+            .from(boardClimbs)
+            .innerJoin(
+              boardClimbStats,
+              and(
+                eq(boardClimbs.uuid, boardClimbStats.climbUuid),
+                eq(boardClimbs.boardType, boardClimbStats.boardType),
+              ),
+            )
+            .where(
+              and(
+                eq(boardClimbs.boardType, 'kilter'),
+                eq(boardClimbs.layoutId, KILTER_ORIGINAL_LAYOUT_ID),
+                eq(boardClimbs.isListed, true),
+                eq(boardClimbStats.angle, GRID_BADGE_ANGLE),
+                sql`${boardClimbs.requiredSetIds} <@ ${KILTER_SCREW_BOLT_SET_IDS}::int[]`,
+                sql`${boardClimbs.compatibleSizeIds} && ${kilter12x12SizeIds}::int[]`,
+              ),
+            )
+            .orderBy(boardClimbs.uuid)
+            .limit(GRID_BADGE_TICK_COUNT);
 
     if (gridBadgeClimbs.length === 0) {
       console.warn(
-        '  ⚠️  No kilter climbs match the grid-badge fixture filter (layout 1, sets ∩ {1,20}, angle 40). ' +
+        '  ⚠️  No kilter climbs match the grid-badge fixture filter (layout 1, sets ⊆ {1,20}, ' +
+          `compatible with sizes [${kilter12x12SizeIds.join(',') || 'none-found'}], angle 40). ` +
           'The grid-mode-ascent-badge spec will continue to flake until the dev DB image carries climbs ' +
           'on this combo.',
       );
