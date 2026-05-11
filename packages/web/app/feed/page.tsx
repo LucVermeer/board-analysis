@@ -25,6 +25,25 @@ type FeedProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+// SSR fetch budget: if the cold-path GraphQL handshake doesn't return
+// within this window, fall back to `initialFeedResult = null` and let the
+// client take over. The page still renders quickly; the client's React
+// Query hook fetches the real data once it mounts.
+//
+// Previously this page had no SSR timeout. On cold cache against a slow
+// backend (e.g. CI's local-pub/sub mode without REDIS_URL), the SSR fetch
+// could exceed Playwright's 30s navigation timeout — the recurring
+// shard-4 flake mode in the bottom-tab-bar persistence test, which falls
+// back to `page.goto('/feed')` after the click-doesn't-navigate symptom.
+const SSR_FETCH_TIMEOUT_MS = 5_000;
+
+function withSsrTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), SSR_FETCH_TIMEOUT_MS)),
+  ]);
+}
+
 export default async function FeedPage({ searchParams }: FeedProps) {
   const params = await searchParams;
 
@@ -42,18 +61,25 @@ export default async function FeedPage({ searchParams }: FeedProps) {
 
   if (authToken) {
     const feedPromise =
-      tab === 'sessions' ? cachedSessionGroupedFeed(boardUuid, true).catch(() => null) : Promise.resolve(null);
-    const boardsPromise = serverMyBoards(authToken);
+      tab === 'sessions'
+        ? withSsrTimeout(
+            cachedSessionGroupedFeed(boardUuid, true).catch(() => null),
+            null,
+          )
+        : Promise.resolve(null);
+    const boardsPromise = withSsrTimeout(
+      serverMyBoards(authToken).catch(() => null),
+      null,
+    );
 
     const [feedResult, boardsResult] = await Promise.all([feedPromise, boardsPromise]);
     initialFeedResult = feedResult;
     initialMyBoards = boardsResult;
   } else if (tab === 'sessions') {
-    try {
-      initialFeedResult = await cachedSessionGroupedFeed(boardUuid, false);
-    } catch {
-      // Feed fetch failed, client will retry
-    }
+    initialFeedResult = await withSsrTimeout(
+      cachedSessionGroupedFeed(boardUuid, false).catch(() => null),
+      null,
+    );
   }
 
   const locale = await getLocale();
