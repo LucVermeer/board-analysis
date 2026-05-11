@@ -81,7 +81,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <ColorModeProvider>
                 <I18nProvider
                   locale={locale}
-                  namespaces={['common', 'playlists', 'session', 'auth', 'settings', 'boards', 'climbs']}
+                  namespaces={[
+                    'common',
+                    'playlists',
+                    'session',
+                    'auth',
+                    'settings',
+                    'boards',
+                    'climbs',
+                    'profile',
+                    'feed',
+                  ]}
                 >
                   <SnackbarProvider>
                     <AuthModalProvider>

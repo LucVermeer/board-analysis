@@ -169,7 +169,7 @@ export default function AngleSelector({
                     </Typography>
                   )}
                   <Typography variant="body2" component="span" color="text.secondary" sx={{ fontSize: 10 }}>
-                    {t('angleSelector.sends', { count: stats.ascensionist_count ?? 0 })}
+                    {t('angleSelector.sends', { count: Number(stats.ascensionist_count ?? 0) })}
                   </Typography>
                 </Box>
               </Box>
