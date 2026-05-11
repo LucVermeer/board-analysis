@@ -9,7 +9,9 @@ type FakeReqOptions = {
   method: string;
   origin?: string;
   body?: string;
+  bodyBytes?: Uint8Array;
   contentType?: string;
+  contentEncoding?: string;
   forwardedFor?: string;
   remoteAddress?: string;
 };
@@ -19,6 +21,7 @@ function createFakeReq(options: FakeReqOptions): ProxyReq {
   const headers: Record<string, string> = {};
   if (options.origin) headers.origin = options.origin;
   if (options.contentType) headers['content-type'] = options.contentType;
+  if (options.contentEncoding) headers['content-encoding'] = options.contentEncoding;
   if (options.forwardedFor) headers['x-forwarded-for'] = options.forwardedFor;
 
   const req = {
@@ -36,8 +39,8 @@ function createFakeReq(options: FakeReqOptions): ProxyReq {
   // (a Web standard global) so we don't need to import Node's Buffer here —
   // the handler concats with Buffer.concat which accepts ArrayBufferView.
   queueMicrotask(() => {
-    if (options.body !== undefined) {
-      const bytes = new TextEncoder().encode(options.body);
+    const bytes = options.bodyBytes ?? (options.body !== undefined ? new TextEncoder().encode(options.body) : null);
+    if (bytes) {
       listeners.data?.forEach((cb) => cb(bytes));
     }
     listeners.end?.forEach((cb) => cb());
@@ -145,27 +148,57 @@ describe('PostHog Proxy Handler', () => {
       method: 'POST',
       origin: 'https://boardsesh.com',
       body: '{"event":"test"}',
-      contentType: 'text/plain',
+      contentType: 'application/json',
       forwardedFor: '203.0.113.7, 10.0.0.1',
     });
     const res = createFakeRes();
 
-    await handlePosthogProxy(req, res.asProxyRes, buildUrl('/api/posthog/i/v0/e/', '?ip=1'));
+    await handlePosthogProxy(req, res.asProxyRes, buildUrl('/api/posthog/batch/', '?ip=1'));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callArgs = fetchMock.mock.calls[0] as [string, RequestInit];
     const upstreamUrl = callArgs[0];
     const init = callArgs[1];
-    expect(upstreamUrl).toBe('https://us.i.posthog.com/i/v0/e/?ip=1');
+    expect(upstreamUrl).toBe('https://us.i.posthog.com/batch/?ip=1');
     expect(init.method).toBe('POST');
     const headers = init.headers as Record<string, string>;
-    expect(headers['Content-Type']).toBe('text/plain');
+    expect(headers['Content-Type']).toBe('application/json');
     expect(headers['X-Forwarded-For']).toBe('203.0.113.7');
-    expect(init.body).toBe('{"event":"test"}');
+    // Body must be forwarded as bytes (the SDK may have gzipped it).
+    expect(init.body).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(init.body as Uint8Array)).toBe('{"event":"test"}');
+    // No Content-Encoding when the request didn't have one.
+    expect(headers['Content-Encoding']).toBeUndefined();
 
     expect(res.status).toBe(200);
     expect(res.headers['Content-Type']).toBe('application/json');
     expect(res.body).toBe('{"status":1}');
+  });
+
+  it('forwards Content-Encoding so upstream can decompress gzipped batch payloads', async () => {
+    fetchMock.mockResolvedValue(new Response('1', { status: 200 }));
+
+    // Simulate the binary blob the SDK builds via CompressionStream — the
+    // bytes themselves don't need to be valid gzip; the handler just forwards
+    // them along with the Content-Encoding header.
+    const gzippedBytes = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0xde, 0xad, 0xbe, 0xef]);
+    const req = createFakeReq({
+      method: 'POST',
+      origin: 'https://boardsesh.com',
+      bodyBytes: gzippedBytes,
+      contentType: 'application/json',
+      contentEncoding: 'gzip',
+    });
+    const res = createFakeRes();
+
+    await handlePosthogProxy(req, res.asProxyRes, buildUrl('/api/posthog/batch/'));
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Content-Encoding']).toBe('gzip');
+    expect(init.body).toBeInstanceOf(Uint8Array);
+    const forwarded = init.body as Uint8Array;
+    expect(Array.from(forwarded)).toEqual(Array.from(gzippedBytes));
   });
 
   it('falls back to socket.remoteAddress for X-Forwarded-For when header is absent', async () => {
