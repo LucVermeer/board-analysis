@@ -24,6 +24,7 @@ Sentry.init({
   beforeSend(event, hint) {
     const error = hint.originalException;
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorName = error instanceof Error ? error.name : '';
 
     // Ignore browser extension errors (runtime.sendMessage, etc.)
     if (
@@ -35,9 +36,18 @@ Sentry.init({
       return null;
     }
 
-    // Ignore Safari/WebKit "Load failed" errors caused by in-flight fetch requests
-    // being aborted during page navigation (e.g., RSC fetches interrupted by route changes)
+    // Ignore in-flight fetches aborted by page navigation. Different browsers
+    // surface this differently:
+    //   - Chrome/Firefox: TypeError "Failed to fetch"
+    //   - Older Safari/WebKit: TypeError "Load failed" or "cancelled"
+    //   - iOS 18 Safari: AbortError DOMException (code 20) on the underlying RSC
+    //     fetch when the user leaves the page mid-request.
+    // None of these are real bugs — they're the expected exit path for a
+    // request the user no longer cares about.
     if (errorMessage === 'Load failed' || errorMessage === 'Failed to fetch' || errorMessage === 'cancelled') {
+      return null;
+    }
+    if (errorName === 'AbortError' || errorMessage === 'AbortError: AbortError') {
       return null;
     }
 
