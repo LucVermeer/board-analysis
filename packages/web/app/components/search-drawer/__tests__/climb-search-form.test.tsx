@@ -144,11 +144,20 @@ const filterAllThreeHolds: HoldsFilter = {
   103: { FOOT: 'exclude' },
 };
 
+// Reset every module-level mock between tests. Older suites only zeroed
+// the call mocks they directly asserted on, which set a trap for any new
+// test reading a stale captured callback or call count.
+const resetSharedMocks = () => {
+  mockUpdateFilters.mockClear();
+  pickerHandleHoldClickMock.mockClear();
+  capturedBoardRendererOnHoldClick = null;
+  capturedHeatmapOnLoadingChange = null;
+  capturedSetHoldFilter = null;
+  mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
+};
+
 describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
-  beforeEach(() => {
-    mockUpdateFilters.mockClear();
-    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
-  });
+  beforeEach(resetSharedMocks);
 
   it('clicking Draw zone keeps only the holds inside the default zone', () => {
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, holdsFilter: filterAllThreeHolds };
@@ -361,10 +370,7 @@ describe('ClimbSearchForm — drag handles', () => {
     }
   });
 
-  beforeEach(() => {
-    mockUpdateFilters.mockClear();
-    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
-  });
+  beforeEach(resetSharedMocks);
 
   // Sanity: confirm the SVG-pixel coords used by the drag test correspond
   // to the grid coords we expect, so a future change to gridToSvg/svgToGrid
@@ -503,12 +509,14 @@ describe('ClimbSearchForm — drag handles', () => {
     };
     render(<ClimbSearchForm boardDetails={boardDetails} />);
 
-    const moveHandle = screen.getByTestId('zone-handle-move');
+    // The visible crosshair group is decorative (pointer-events: none); the
+    // hit-circle below is the actual drag target, matching the browser path.
+    const moveTarget = screen.getByTestId('zone-hit-move');
 
     // Centre starts at grid (72, 78) → SVG (540, 585). Drag to grid (82, 88) → SVG (615, 510).
-    fireEvent.pointerDown(moveHandle, { clientX: 540, clientY: 585, pointerId: 1 });
-    fireEvent.pointerMove(moveHandle, { clientX: 615, clientY: 510, pointerId: 1 });
-    fireEvent.pointerUp(moveHandle, { clientX: 615, clientY: 510, pointerId: 1 });
+    fireEvent.pointerDown(moveTarget, { clientX: 540, clientY: 585, pointerId: 1 });
+    fireEvent.pointerMove(moveTarget, { clientX: 615, clientY: 510, pointerId: 1 });
+    fireEvent.pointerUp(moveTarget, { clientX: 615, clientY: 510, pointerId: 1 });
 
     const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
       | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
@@ -523,12 +531,7 @@ describe('ClimbSearchForm — drag handles', () => {
 });
 
 describe('ClimbSearchForm — in-zone hold tap guard', () => {
-  beforeEach(() => {
-    mockUpdateFilters.mockClear();
-    pickerHandleHoldClickMock.mockClear();
-    capturedBoardRendererOnHoldClick = null;
-    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
-  });
+  beforeEach(resetSharedMocks);
 
   it('drops taps on holds outside the active zone before the picker opens', () => {
     const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
@@ -570,11 +573,7 @@ describe('ClimbSearchForm — in-zone hold tap guard', () => {
 });
 
 describe('ClimbSearchForm — heatmap toggle', () => {
-  beforeEach(() => {
-    mockUpdateFilters.mockClear();
-    capturedHeatmapOnLoadingChange = null;
-    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
-  });
+  beforeEach(resetSharedMocks);
 
   it('renders the fire icon (not the layers icon) when the heatmap is off', () => {
     render(<ClimbSearchForm boardDetails={boardDetails} />);

@@ -240,12 +240,17 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
   // pointer events for dimmed holds, a hold whose visible click circle
   // straddles the zone boundary can still register a tap from inside.
   // Drop those so the user can't add filters that the backend zone filter
-  // would immediately discard. `isHoldInsideZone` returns true when
-  // `localZone` is null, so the no-zone case keeps every tap.
+  // would immediately discard. When `localZone` is null there is no zone
+  // constraint, so every tap goes through.
   const handleHoldClickInsideZone = useCallback(
     (holdId: number, anchor: Element) => {
-      const hold = holdsById.get(holdId);
-      if (hold && !isHoldInsideZone(hold, localZone, dims)) return;
+      if (localZone) {
+        const hold = holdsById.get(holdId);
+        // Unknown holdId can't be the user's intent under an active zone
+        // — BoardRenderer's click targets all map to holds in holdsData,
+        // so a miss here means a stale or fabricated id. Drop it.
+        if (!hold || !isHoldInsideZone(hold, localZone, dims)) return;
+      }
       picker.handleHoldClick(holdId, anchor);
     },
     [dims, holdsById, localZone, picker],
@@ -577,14 +582,16 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
               pointerEvents="all"
               {...dragHandlers}
             />
+            {/* Purely decorative: the invisible `zone-hit-move` circle above
+                is the single source of truth for drag input. Marking the
+                whole group `pointer-events: none` keeps hover/cursor
+                behaviour consistent regardless of whether the user lands on
+                a crosshair line, the centre dot, or the gap between them. */}
             <g
               data-testid="zone-handle-move"
               className={styles.zoneDragHandle}
               data-swipe-blocked=""
-              cursor="move"
-              pointerEvents="auto"
-              onPointerDown={beginDrag('move')}
-              {...dragHandlers}
+              pointerEvents="none"
             >
               <line
                 data-testid="zone-handle-move-crosshair-h"
@@ -596,6 +603,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
                 strokeOpacity={RECT_STROKE_OPACITY}
                 strokeWidth={crosshairStrokeWidth}
                 strokeLinecap="round"
+                pointerEvents="none"
               />
               <line
                 data-testid="zone-handle-move-crosshair-v"
@@ -607,6 +615,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
                 strokeOpacity={RECT_STROKE_OPACITY}
                 strokeWidth={crosshairStrokeWidth}
                 strokeLinecap="round"
+                pointerEvents="none"
               />
               <circle
                 data-testid="zone-handle-move-dot"
@@ -617,6 +626,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
                 fillOpacity={HANDLE_OPACITY}
                 stroke={themeTokens.neutral[50]}
                 strokeWidth={centerDotRadius * 0.35}
+                pointerEvents="none"
               />
             </g>
             {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
