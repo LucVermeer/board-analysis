@@ -5,6 +5,10 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  /* Verifies server reachability, test-user login, and pre-warms SSR routes
+   * once before any worker starts. Fails fast with a precise error message
+   * if seeded data has drifted. See e2e/SEED_CONTRACT.md. */
+  globalSetup: require.resolve('./e2e/global-setup'),
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

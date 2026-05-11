@@ -47,26 +47,9 @@ function bottomTabButton(page: Page, name: string, exact = false) {
 test.describe('Queue Persistence - Local Mode', () => {
   const boardUrl = '/kilter/original/12x12-square/screw_bolt/40/list';
 
-  // Warm the SSR routes the persistence tests navigate to. Both pages call
-  // cached GraphQL on the server (cachedDiscoverPlaylists, cachedSessionGroupedFeed)
-  // and trigger Next.js's dev-mode compile-on-first-hit. Without this, the
-  // first navigation to either route during a test races a cold-path
-  // backend round-trip against the per-navigation timeout — which is the
-  // shard-5 flake mode this suite kept tripping. Once warmed, the
-  // unstable_cache returns in well under 1 s for the rest of the run.
-  test.beforeAll(async ({ browser, baseURL }) => {
-    // Manually-created contexts don't inherit `use.baseURL` from the project
-    // config, so relative gotos would otherwise fail with an invalid URL.
-    const context = await browser.newContext({ baseURL });
-    const warmupPage = await context.newPage();
-    try {
-      await warmupPage.goto('/playlists', { timeout: 60_000, waitUntil: 'domcontentloaded' });
-      await warmupPage.goto('/feed', { timeout: 60_000, waitUntil: 'domcontentloaded' });
-    } finally {
-      await context.close();
-    }
-  });
-
+  // /playlists and /feed are pre-warmed once by global-setup.ts so the first
+  // navigation during a test doesn't race a cold-path backend round-trip
+  // against the navigation timeout (the recurring shard-5 flake mode).
   test.beforeEach(async ({ page }) => {
     await page.goto(boardUrl);
     await waitForBoardPage(page);
