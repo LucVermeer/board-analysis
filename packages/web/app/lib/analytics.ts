@@ -1,6 +1,7 @@
 import { track as vercelTrack } from '@vercel/analytics';
 import { PostHog } from 'posthog-js-lite';
 import { analyticsPathname, isAdminAnalyticsUrl } from './analytics-paths';
+import { getBackendHttpUrl } from './backend-url';
 
 // Mirror @vercel/analytics' AllowedPropertyValues so existing call sites
 // type-check unchanged when they swap to this wrapper.
@@ -24,7 +25,12 @@ function getPosthog(): PostHog | null {
 
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   if (!apiKey) return null;
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com';
+  // Default to the boardsesh backend's PostHog reverse proxy so events look
+  // first-party to ad-blockers. NEXT_PUBLIC_POSTHOG_HOST overrides for incident
+  // recovery (point straight at us.i.posthog.com if the proxy is down).
+  const backendUrl = getBackendHttpUrl();
+  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? (backendUrl ? `${backendUrl}/api/posthog` : null);
+  if (!host) return null;
 
   posthogClient = new PostHog(apiKey, {
     host,
