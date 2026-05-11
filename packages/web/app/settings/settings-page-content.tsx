@@ -358,7 +358,12 @@ export default function SettingsPageContent() {
   }
 
   return (
+    // translate="no" prevents in-browser translators (Google Translate, etc.)
+    // from mutating React-controlled DOM nodes. The translator was orphaning
+    // text nodes between renders and crashing the reconciler with removeChild
+    // NotFoundError on this page. See issue #2064.
     <Box
+      translate="no"
       sx={{
         minHeight: '100vh',
         paddingTop: 'var(--global-header-height)',
