@@ -38,10 +38,13 @@ type FeedProps = {
 const SSR_FETCH_TIMEOUT_MS = 5_000;
 
 function withSsrTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), SSR_FETCH_TIMEOUT_MS)),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), SSR_FETCH_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
 }
 
 export default async function FeedPage({ searchParams }: FeedProps) {
