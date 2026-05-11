@@ -23,6 +23,7 @@ import {
   getDifficultyMapping,
 } from '../utils/profile-constants';
 import { getGradeColor, getGradeTextColor } from '@/app/lib/grade-colors';
+import { isAbortError } from '@/app/lib/is-abort-error';
 import {
   filterLogbookByTimeframe,
   buildAggregatedStackedBars,
@@ -31,22 +32,6 @@ import {
   buildStatisticsSummary,
   buildVPointsTimeline,
 } from '../utils/chart-data-builders';
-
-/**
- * Recognise the "request was aborted" exit path so callers can swallow it
- * silently. Page navigation in modern browsers aborts in-flight fetches; the
- * resulting rejection is not a real error and shouldn't surface as a snackbar
- * or unhandled rejection (see Sentry BOARDSESH-1F).
- */
-function isAbortError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  if (error.name === 'AbortError') return true;
-  // graphql-request wraps the underlying fetch failure; the original DOMException
-  // surfaces on `.cause` in modern runtimes.
-  const cause = (error as { cause?: unknown }).cause;
-  if (cause instanceof Error && cause.name === 'AbortError') return true;
-  return false;
-}
 
 type InitialData = {
   initialProfile?: UserProfile;
@@ -169,8 +154,11 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       const client = createGraphQLHttpClient(null);
       const response = await client.request<GetUserClimbPercentileQueryResponse>(GET_USER_CLIMB_PERCENTILE, { userId });
       setPercentile(response.userClimbPercentile);
-    } catch {
-      // Percentile is not critical — silently fail (this also covers AbortError on navigation).
+    } catch (error) {
+      if (isAbortError(error)) return;
+      // Percentile is not critical — silently fail (no snackbar) but keep a
+      // console breadcrumb for real failures so they're not invisible in dev.
+      console.error('Error fetching climb percentile:', error);
     }
   }, [userId]);
 

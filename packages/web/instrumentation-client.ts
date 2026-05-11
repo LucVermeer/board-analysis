@@ -24,7 +24,6 @@ Sentry.init({
   beforeSend(event, hint) {
     const error = hint.originalException;
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorName = error instanceof Error ? error.name : '';
 
     // Ignore browser extension errors (runtime.sendMessage, etc.)
     if (
@@ -40,14 +39,15 @@ Sentry.init({
     // surface this differently:
     //   - Chrome/Firefox: TypeError "Failed to fetch"
     //   - Older Safari/WebKit: TypeError "Load failed" or "cancelled"
-    //   - iOS 18 Safari: AbortError DOMException (code 20) on the underlying RSC
-    //     fetch when the user leaves the page mid-request.
-    // None of these are real bugs — they're the expected exit path for a
-    // request the user no longer cares about.
+    // These exact-string matches are intentionally narrow — they're the
+    // platform-emitted messages, not generic substrings that could swallow
+    // unrelated errors.
+    //
+    // We deliberately do NOT filter out `AbortError` here. AbortError is also
+    // raised by user-controlled AbortControllers (timeouts, manual cancels)
+    // and a blanket filter would mask real bugs. Instead, handle aborts at
+    // the call site using `isAbortError` from `@/app/lib/is-abort-error`.
     if (errorMessage === 'Load failed' || errorMessage === 'Failed to fetch' || errorMessage === 'cancelled') {
-      return null;
-    }
-    if (errorName === 'AbortError' || errorMessage === 'AbortError: AbortError') {
       return null;
     }
 
