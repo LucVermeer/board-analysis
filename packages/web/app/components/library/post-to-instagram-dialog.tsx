@@ -8,19 +8,18 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
-import CircularProgress from '@mui/material/CircularProgress';
 import Chip from '@mui/material/Chip';
 import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
 import ArrowBackIosNewOutlined from '@mui/icons-material/ArrowBackIosNewOutlined';
 import InstagramIcon from '@mui/icons-material/Instagram';
 import VideocamOutlined from '@mui/icons-material/VideocamOutlined';
 import { useQuery } from '@tanstack/react-query';
-import BetaVideos from '@/app/components/beta-videos/beta-videos';
+import BoardseshBetaList from '@/app/components/beta-videos/boardsesh-beta-list';
 import AttachBetaLinkForm from '@/app/components/beta-videos/attach-beta-link-form';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { buildInstagramCaption, copyAndOpenInstagram, getBoardDisplayName } from '@/app/lib/instagram-posting';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
-import { mapBetaLinksResponse } from '@/app/lib/beta-video-url';
+import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
 import { themeTokens } from '@/app/theme/theme-config';
@@ -70,6 +69,7 @@ export default function PostToInstagramDialog({ open, onClose, item }: PostToIns
     enabled: open && !!item,
     staleTime: 5 * 60 * 1000,
   });
+  const dedupedBetaLinks = useMemo(() => dedupeBetaLinks(betaLinks), [betaLinks]);
 
   const caption = useMemo(() => {
     if (!item) return '';
@@ -103,13 +103,7 @@ export default function PostToInstagramDialog({ open, onClose, item }: PostToIns
   if (!item) return null;
 
   let betaVideosContent: React.ReactNode;
-  if (betaLinksLoading) {
-    betaVideosContent = (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-        <CircularProgress size={24} />
-      </Box>
-    );
-  } else if (betaLinksError) {
+  if (betaLinksError) {
     betaVideosContent = (
       <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <Typography variant="body2" color="error">
@@ -126,11 +120,7 @@ export default function PostToInstagramDialog({ open, onClose, item }: PostToIns
       </Box>
     );
   } else {
-    betaVideosContent = (
-      <Box sx={{ mt: 1 }}>
-        <BetaVideos betaLinks={betaLinks} />
-      </Box>
-    );
+    betaVideosContent = <BoardseshBetaList links={dedupedBetaLinks} isLoading={betaLinksLoading} />;
   }
 
   return (

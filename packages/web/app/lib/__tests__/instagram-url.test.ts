@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
+import { getInstagramMediaId, isInstagramUrl } from '@boardsesh/shared-schema';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
 import { dedupeBetaLinks } from '../beta-video-url';
-import { getInstagramEmbedUrl, getInstagramMediaId, isInstagramUrl } from '../instagram-url';
 
 function makeBetaLink(overrides: Partial<BetaLink>): BetaLink {
   return {
@@ -20,12 +20,6 @@ describe('instagram-url', () => {
   it('extracts the Instagram media id from post and reel links', () => {
     expect(getInstagramMediaId('https://www.instagram.com/reel/DJ5Cw5OIS82/')).toBe('DJ5Cw5OIS82');
     expect(getInstagramMediaId('https://www.instagram.com/p/DEdQNTzScjp/?img_index=1')).toBe('DEdQNTzScjp');
-  });
-
-  it('builds embed URLs from the extracted media id', () => {
-    expect(getInstagramEmbedUrl('https://www.instagram.com/reel/DJ5Cw5OIS82/')).toBe(
-      'https://www.instagram.com/p/DJ5Cw5OIS82/embed',
-    );
   });
 
   describe('isInstagramUrl', () => {
