@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, screen } from '@testing-library/react';
+import { render, fireEvent, screen, act } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import type {
   BoardDetails,
@@ -39,16 +39,31 @@ vi.mock('@vercel/analytics', () => ({
   track: vi.fn(),
 }));
 
+// Capture the BoardRenderer onHoldClick prop so tests can simulate a hold tap
+// without rendering the real BoardRenderer (which would drag in the whole
+// board image pipeline). The form wraps its picker callback with an in-zone
+// guard, so this is the only way to exercise that wrapper in tests.
+type CapturedOnHoldClick = (holdId: number, anchor: Element) => void;
+let capturedBoardRendererOnHoldClick: CapturedOnHoldClick | null = null;
 vi.mock('../../board-renderer/board-renderer', () => ({
-  default: () => null,
+  default: ({ onHoldClick }: { onHoldClick?: CapturedOnHoldClick }) => {
+    capturedBoardRendererOnHoldClick = onHoldClick ?? null;
+    return null;
+  },
 }));
 
 vi.mock('../../create-climb/hold-type-picker', () => ({
   default: () => null,
 }));
 
+// Capture the heatmap overlay's onLoadingChange callback so a test can flip
+// the form into "heatmap is loading" without actually fetching.
+let capturedHeatmapOnLoadingChange: ((loading: boolean) => void) | null = null;
 vi.mock('../../create-climb/create-climb-heatmap-overlay', () => ({
-  default: () => null,
+  default: ({ onLoadingChange }: { onLoadingChange?: (loading: boolean) => void }) => {
+    capturedHeatmapOnLoadingChange = onLoadingChange ?? null;
+    return null;
+  },
 }));
 
 vi.mock('../search-hold-filter-overlay', () => ({
@@ -61,6 +76,9 @@ vi.mock('../search-hold-filter-overlay', () => ({
 // null), so we shortcut by talking to the form's setter.
 type CapturedSetHoldFilter = (holdId: number, type: HoldFilterType, nextMode: HoldFilterMode | undefined) => void;
 let capturedSetHoldFilter: CapturedSetHoldFilter | null = null;
+// Captured so tests can verify whether the form's in-zone guard let a tap
+// reach the picker.
+const pickerHandleHoldClickMock = vi.fn();
 
 vi.mock('../use-search-hold-picker', () => ({
   useSearchHoldPicker: (options: { setHoldFilter: CapturedSetHoldFilter }) => {
@@ -69,7 +87,7 @@ vi.mock('../use-search-hold-picker', () => ({
       anchorEl: null,
       activeHoldId: null,
       currentEntry: {},
-      handleHoldClick: vi.fn(),
+      handleHoldClick: pickerHandleHoldClickMock,
       handleFilterChange: vi.fn(),
       handleClearAll: vi.fn(),
       handleClose: vi.fn(),
@@ -219,7 +237,9 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
       }
       expect(node.getAttribute('fill')).toBe('#111827');
       expect(node.getAttribute('fill-opacity')).toBe('0.42');
-      expect(node.getAttribute('pointer-events')).toBe('none');
+      // Exclusion rects must absorb pointer events so taps on dimmed holds
+      // outside the zone never reach BoardRenderer underneath (issue #2040).
+      expect(node.getAttribute('pointer-events')).toBe('all');
     };
 
     expectAttrs('zone-exclusion-top', { x: '0', y: '0', width: '1080', height: '232.5' });
@@ -384,12 +404,16 @@ describe('ClimbSearchForm — drag handles', () => {
 
     const seHandleRadius = Number(screen.getByTestId('zone-handle-se').getAttribute('r'));
     const seHitRadius = Number(screen.getByTestId('zone-hit-se').getAttribute('r'));
-    const moveHandleRadius = Number(screen.getByTestId('zone-handle-move').getAttribute('r'));
+    // The visible move handle is now a crosshair + small dot, not a single
+    // big circle. Compare the hit radius against the centre-dot radius so
+    // the "much bigger than the visible mark" guarantee survives the
+    // visual swap that landed for issue #2040.
+    const moveDotRadius = Number(screen.getByTestId('zone-handle-move-dot').getAttribute('r'));
     const moveHitRadius = Number(screen.getByTestId('zone-hit-move').getAttribute('r'));
     const moveBorderHitTarget = screen.getByTestId('zone-hit-move-border');
 
     expect(seHitRadius).toBeGreaterThan(seHandleRadius * 2);
-    expect(moveHitRadius).toBeGreaterThan(moveHandleRadius * 2);
+    expect(moveHitRadius).toBeGreaterThan(moveDotRadius * 2);
     expect(Number(moveBorderHitTarget.getAttribute('stroke-width'))).toBe(seHitRadius);
     expect(moveBorderHitTarget.getAttribute('pointer-events')).toBe('stroke');
     expect(screen.getByTestId('zone-hit-se').closest('[data-swipe-blocked]')).toBe(screen.getByTestId('zone-hit-se'));
@@ -397,6 +421,24 @@ describe('ClimbSearchForm — drag handles', () => {
       screen.getByTestId('zone-hit-move'),
     );
     expect(moveBorderHitTarget.closest('[data-swipe-blocked]')).toBe(moveBorderHitTarget);
+  });
+
+  it('draws the centre move handle as a crosshair so holds underneath stay visible', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: startZone,
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    // The visible move handle is a <g> containing two crosshair lines and a
+    // small centre dot. The dot must be meaningfully smaller than a hold
+    // (r=30 in this test board) so it doesn't cover holds underneath.
+    expect(screen.getByTestId('zone-handle-move').tagName.toLowerCase()).toBe('g');
+    expect(screen.getByTestId('zone-handle-move-crosshair-h')).toBeTruthy();
+    expect(screen.getByTestId('zone-handle-move-crosshair-v')).toBeTruthy();
+    const dotRadius = Number(screen.getByTestId('zone-handle-move-dot').getAttribute('r'));
+    expect(dotRadius).toBeLessThan(30);
   });
 
   it('dragging the SE corner shrinks the zone and prunes holds outside the new box', () => {
@@ -477,5 +519,95 @@ describe('ClimbSearchForm — drag handles', () => {
     expect(dragCall?.zoneBox).toEqual({ edgeLeft: 39, edgeRight: 125, edgeBottom: 41, edgeTop: 135 });
     // Hold 101 at grid (60, 80) is still inside; the two outer holds are pruned.
     expect(dragCall?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
+  });
+});
+
+describe('ClimbSearchForm — in-zone hold tap guard', () => {
+  beforeEach(() => {
+    mockUpdateFilters.mockClear();
+    pickerHandleHoldClickMock.mockClear();
+    capturedBoardRendererOnHoldClick = null;
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
+  });
+
+  it('drops taps on holds outside the active zone before the picker opens', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, zoneBox: startZone };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    expect(capturedBoardRendererOnHoldClick).not.toBeNull();
+    const fakeAnchor = document.createElement('div');
+    // Hold 103 is at grid (140, 150) — outside the active zone.
+    capturedBoardRendererOnHoldClick!(outsideTopRightHold.id, fakeAnchor);
+
+    expect(pickerHandleHoldClickMock).not.toHaveBeenCalled();
+  });
+
+  it('passes taps on holds inside the active zone through to the picker', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, zoneBox: startZone };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    expect(capturedBoardRendererOnHoldClick).not.toBeNull();
+    const fakeAnchor = document.createElement('div');
+    // Hold 101 at grid (60, 80) is inside the zone.
+    capturedBoardRendererOnHoldClick!(insideHold.id, fakeAnchor);
+
+    expect(pickerHandleHoldClickMock).toHaveBeenCalledTimes(1);
+    expect(pickerHandleHoldClickMock).toHaveBeenCalledWith(insideHold.id, fakeAnchor);
+  });
+
+  it('passes every tap through when no zone is set', () => {
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, zoneBox: null };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    expect(capturedBoardRendererOnHoldClick).not.toBeNull();
+    const fakeAnchor = document.createElement('div');
+    capturedBoardRendererOnHoldClick!(outsideTopRightHold.id, fakeAnchor);
+
+    expect(pickerHandleHoldClickMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ClimbSearchForm — heatmap toggle', () => {
+  beforeEach(() => {
+    mockUpdateFilters.mockClear();
+    capturedHeatmapOnLoadingChange = null;
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
+  });
+
+  it('renders the fire icon (not the layers icon) when the heatmap is off', () => {
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+    const button = screen.getByRole('button', { name: 'Show heatmap' });
+    // MUI's icons render as <svg data-testid="LocalFireDepartmentOutlinedIcon">
+    // in tests. Querying via the inner svg's data-testid is the most stable
+    // way to assert which icon is mounted.
+    expect(button.querySelector('[data-testid="LocalFireDepartmentOutlinedIcon"]')).toBeTruthy();
+    expect(button.querySelector('[data-testid="LayersOutlinedIcon"]')).toBeNull();
+  });
+
+  it('shows the filled fire icon when the heatmap is enabled', () => {
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show heatmap' }));
+    const button = screen.getByRole('button', { name: 'Hide heatmap' });
+    expect(button.querySelector('[data-testid="LocalFireDepartmentIcon"]')).toBeTruthy();
+  });
+
+  it('swaps the icon for a spinner while the heatmap data is loading', () => {
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show heatmap' }));
+
+    expect(capturedHeatmapOnLoadingChange).not.toBeNull();
+    // The overlay reports loading=true while its fetch is in flight.
+    act(() => capturedHeatmapOnLoadingChange!(true));
+
+    const button = screen.getByRole('button', { name: 'Hide heatmap' });
+    expect(screen.getByTestId('heatmap-loading-spinner')).toBeTruthy();
+    expect(button.querySelector('[data-testid="LocalFireDepartmentIcon"]')).toBeNull();
+
+    act(() => capturedHeatmapOnLoadingChange!(false));
+    // Once loading clears, the fire icon comes back.
+    expect(screen.queryByTestId('heatmap-loading-spinner')).toBeNull();
+    expect(button.querySelector('[data-testid="LocalFireDepartmentIcon"]')).toBeTruthy();
   });
 });
