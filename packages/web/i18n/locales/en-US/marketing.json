@@ -2,7 +2,8 @@
   "metadata": {
     "home": {
       "title": "Boardsesh - Train smarter on your climbing board",
-      "description": "Track your sends across Kilter, Tension, and MoonBoard. One app for your boards."
+      "description": "Track your sends across Kilter, Tension, and MoonBoard. One app for your boards.",
+      "ogDescription": "Works with Kilter, Tension, and MoonBoard. Track sessions, control LEDs, climb together."
     },
     "about": {
       "title": "About",

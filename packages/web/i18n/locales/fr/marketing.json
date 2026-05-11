@@ -2,7 +2,8 @@
   "metadata": {
     "home": {
       "title": "Boardsesh - Entraînez-vous mieux sur votre board d'escalade",
-      "description": "Notez vos enchaînements sur Kilter, Tension et MoonBoard. Une seule app pour vos boards."
+      "description": "Notez vos enchaînements sur Kilter, Tension et MoonBoard. Une seule app pour vos boards.",
+      "ogDescription": "Compatible avec Kilter, Tension et MoonBoard. Suivez vos sessions, pilotez les LEDs, grimpez ensemble."
     },
     "about": {
       "title": "À propos",

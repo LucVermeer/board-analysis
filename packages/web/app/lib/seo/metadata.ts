@@ -10,6 +10,7 @@ export const DEFAULT_OG_IMAGE_PATH = '/opengraph-image';
 type PageMetadataOptions = {
   title: string;
   description: string;
+  ogDescription?: string;
   path?: string;
   imagePath?: string | null;
   imageAlt?: string;
@@ -54,6 +55,7 @@ function buildLanguageAlternates(basePath: string): Record<string, string> {
 export function createPageMetadata({
   title,
   description,
+  ogDescription,
   path,
   imagePath = DEFAULT_OG_IMAGE_PATH,
   imageAlt,
@@ -84,7 +86,7 @@ export function createPageMetadata({
     keywords,
     openGraph: {
       title: fullTitle,
-      description,
+      description: ogDescription ?? description,
       type: openGraphType,
       url: canonicalPath,
       siteName: SITE_NAME,

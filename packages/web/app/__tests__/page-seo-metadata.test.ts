@@ -13,6 +13,7 @@ const settingsPage = await import('../settings/page');
 
 const aboutMetadata = await aboutPage.generateMetadata();
 const feedMetadata = await feedPage.generateMetadata();
+const loginMetadata = await loginPage.generateMetadata();
 const playlistsMetadata = await playlistsPage.generateMetadata();
 const settingsMetadata = await settingsPage.generateMetadata();
 
@@ -62,7 +63,7 @@ describe('page metadata exports', () => {
 
   it('keeps utility pages out of search by default', () => {
     expect(settingsMetadata.robots).toEqual({ index: false, follow: true });
-    expect(loginPage.metadata.robots).toEqual({ index: false, follow: true });
+    expect(loginMetadata.robots).toEqual({ index: false, follow: true });
   });
 
   it('keeps the activity feed indexable so it surfaces public climbing activity', () => {
@@ -81,6 +82,6 @@ describe('page metadata exports', () => {
 
   it('sets canonical URLs on noindex pages so the route intent stays explicit', () => {
     expect(settingsMetadata.alternates?.canonical).toBe('/settings');
-    expect(loginPage.metadata.alternates?.canonical).toBe('/auth/login');
+    expect(loginMetadata.alternates?.canonical).toBe('/auth/login');
   });
 });

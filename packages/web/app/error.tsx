@@ -13,10 +13,8 @@ import Typography from '@mui/material/Typography';
 //
 // HARDCODED COPY — DELIBERATE. This boundary renders when a render error has
 // already broken the React tree, so it cannot depend on I18nProvider being
-// alive or on the `errors` namespace being loaded. The strings below mirror
-// `errors.json#boundary.{title,retry}` for the same locales — if you change
-// one, update the other. Same pattern as `global-error.tsx`. `check:i18n`
-// does not flag object-literal strings (only JSX text and certain
+// alive or on any namespace being loaded. Same pattern as `global-error.tsx`.
+// `check:i18n` does not flag object-literal strings (only JSX text and certain
 // attributes), so no i18n-ignore markers are required.
 const COPY = {
   'en-US': {
