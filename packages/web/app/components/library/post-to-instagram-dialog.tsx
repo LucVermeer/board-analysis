@@ -120,7 +120,11 @@ export default function PostToInstagramDialog({ open, onClose, item }: PostToIns
       </Box>
     );
   } else {
-    betaVideosContent = <BoardseshBetaList links={dedupedBetaLinks} isLoading={betaLinksLoading} />;
+    betaVideosContent = (
+      <Box sx={{ mt: 1 }}>
+        <BoardseshBetaList links={dedupedBetaLinks} isLoading={betaLinksLoading} />
+      </Box>
+    );
   }
 
   return (
