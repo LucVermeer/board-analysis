@@ -1,8 +1,9 @@
 // app/layout.tsx
-import React from 'react';
+import React, { Suspense } from 'react';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import ColorModeProvider from './components/providers/color-mode-provider';
 import { VercelAnalytics, VercelSpeedInsights } from './components/providers/vercel-telemetry';
+import AnalyticsClient from './components/analytics-client';
 import SessionProviderWrapper from './components/providers/session-provider';
 import QueryClientProvider from './components/providers/query-client-provider';
 import { NavigationLoadingProvider } from './components/providers/navigation-loading-provider';
@@ -71,6 +72,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={LOCALE_HTML_LANG[locale]} data-theme="dark" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <VercelAnalytics />
+        <Suspense fallback={null}>
+          <AnalyticsClient />
+        </Suspense>
         <QueryClientProvider>
           <SessionProviderWrapper>
             <AppRouterCacheProvider>

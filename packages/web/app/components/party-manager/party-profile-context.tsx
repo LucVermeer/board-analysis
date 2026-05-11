@@ -1,8 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { type PartyProfile, getPartyProfile, clearPartyProfile, ensurePartyProfile } from '@/app/lib/party-profile-db';
+import { alias, identify, reset } from '@/app/lib/analytics';
+import { isAdminAnalyticsUrl } from '@/app/lib/analytics-paths';
+import { hasRecordedPosthogAlias, recordPosthogAlias } from '@/app/lib/posthog-alias-storage';
 
 type UserProfileData = {
   displayName: string | null;
@@ -28,6 +32,8 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { data: session, status: sessionStatus } = useSession();
+  const pathname = usePathname();
+  const lastAnalyticsDistinctId = useRef<string | null>(null);
 
   // Load party profile on mount
   useEffect(() => {
@@ -55,6 +61,49 @@ export const PartyProfileProvider: React.FC<{ children: React.ReactNode }> = ({ 
       mounted = false;
     };
   }, []);
+
+  // Wire PostHog identity so anonymous → authenticated cohorts merge for D30
+  // retention. The IndexedDB party-profile UUID is the anonymous distinct_id;
+  // on login we alias it to session.user.id then switch identity. PostHog
+  // server-side merges historical anonymous events into the authed user.
+  // There is still a short cold-load gap before IndexedDB resolves the profile;
+  // events in that gap use PostHog's temporary in-memory anonymous ID.
+  useEffect(() => {
+    if (sessionStatus === 'loading') return;
+    if (pathname && isAdminAnalyticsUrl(pathname)) return;
+    const profileId = profile?.id;
+    if (!profileId) return;
+
+    if (sessionStatus === 'authenticated' && session?.user?.id) {
+      const userId = session.user.id;
+      if (lastAnalyticsDistinctId.current === userId) return;
+
+      if (lastAnalyticsDistinctId.current && lastAnalyticsDistinctId.current !== profileId) {
+        reset();
+      }
+      if (lastAnalyticsDistinctId.current !== profileId) {
+        identify(profileId);
+        lastAnalyticsDistinctId.current = profileId;
+      }
+      if (profileId !== userId && !hasRecordedPosthogAlias(profileId, userId)) {
+        if (alias(userId)) {
+          recordPosthogAlias(profileId, userId);
+        }
+      }
+      identify(userId, session.user.email ? { email: session.user.email } : undefined);
+      lastAnalyticsDistinctId.current = userId;
+      return;
+    }
+
+    if (sessionStatus === 'unauthenticated') {
+      if (lastAnalyticsDistinctId.current === profileId) return;
+      if (lastAnalyticsDistinctId.current && lastAnalyticsDistinctId.current !== profileId) {
+        reset();
+      }
+      identify(profileId);
+      lastAnalyticsDistinctId.current = profileId;
+    }
+  }, [pathname, profile?.id, sessionStatus, session?.user?.id, session?.user?.email]);
 
   // Fetch custom user profile (displayName, avatarUrl) when authenticated
   useEffect(() => {
