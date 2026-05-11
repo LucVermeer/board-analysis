@@ -835,6 +835,81 @@ async function seedSocialData() {
     console.info(`  Fixture ticks: ${fixtureTickRecords.length}`);
 
     // =========================================================================
+    // Step 8.51: Pin deterministic test-user ticks for the e2e grid-badge spec
+    // =========================================================================
+    // `grid-mode-ascent-badge.spec.ts` navigates to
+    // `/kilter/original/12x12-square/screw_bolt/40/list?showOnlyCompleted=true`
+    // and asserts that at least one ascent badge renders. With the random
+    // tick distribution above, the 2000 test-user ticks rarely include a
+    // climb on this exact (layout, sets, angle) combo — the spec's flake
+    // root cause. Pinning 5 SEND ticks here turns the assumption into a
+    // contract documented in `packages/web/e2e/SEED_CONTRACT.md`.
+    //
+    // Constraints on the climbs we pick:
+    //   - boardType = kilter
+    //   - layoutId = 1 (the "original" Kilter layout)
+    //   - isListed = true (otherwise the climb won't appear in the search)
+    //   - has board_climb_stats at angle 40
+    //   - requiredSetIds overlaps {1, 20} = Bolt Ons + Screw Ons (the
+    //     "screw_bolt" URL slug)
+    //
+    // Ordered by climb UUID so the selection is stable across seed runs.
+    console.info('\n  Pinning deterministic e2e grid-badge ticks...');
+
+    const KILTER_ORIGINAL_LAYOUT_ID = 1;
+    const KILTER_SCREW_BOLT_SET_IDS = [1, 20];
+    const GRID_BADGE_ANGLE = 40;
+    const GRID_BADGE_TICK_COUNT = 5;
+
+    const gridBadgeClimbs = await db
+      .select({ uuid: boardClimbs.uuid })
+      .from(boardClimbs)
+      .innerJoin(
+        boardClimbStats,
+        and(eq(boardClimbs.uuid, boardClimbStats.climbUuid), eq(boardClimbs.boardType, boardClimbStats.boardType)),
+      )
+      .where(
+        and(
+          eq(boardClimbs.boardType, 'kilter'),
+          eq(boardClimbs.layoutId, KILTER_ORIGINAL_LAYOUT_ID),
+          eq(boardClimbs.isListed, true),
+          eq(boardClimbStats.angle, GRID_BADGE_ANGLE),
+          sql`${boardClimbs.requiredSetIds} && ${KILTER_SCREW_BOLT_SET_IDS}::int[]`,
+        ),
+      )
+      .orderBy(boardClimbs.uuid)
+      .limit(GRID_BADGE_TICK_COUNT);
+
+    if (gridBadgeClimbs.length === 0) {
+      console.warn(
+        '  ⚠️  No kilter climbs match the grid-badge fixture filter (layout 1, sets ∩ {1,20}, angle 40). ' +
+          'The grid-mode-ascent-badge spec will continue to flake until the dev DB image carries climbs ' +
+          'on this combo.',
+      );
+    } else {
+      const gridBadgeBaseTime = FIXTURE_BASE_TIMESTAMP + 30 * DAY_MS;
+      const gridBadgeRecords = gridBadgeClimbs.map((climb, i) => ({
+        // Stable uuid → re-runs are idempotent via the onConflictDoNothing below.
+        uuid: `fx-tick-grid-badge-${String(i + 1).padStart(2, '0')}`,
+        userId: TEST_USER_ID,
+        boardType: 'kilter' as const,
+        climbUuid: climb.uuid,
+        angle: GRID_BADGE_ANGLE,
+        isMirror: false,
+        status: 'send' as const,
+        attemptCount: 3,
+        quality: 4,
+        difficulty: null,
+        isBenchmark: false,
+        comment: '',
+        climbedAt: new Date(gridBadgeBaseTime + i * 15 * 60 * 1000).toISOString(),
+        boardId: null,
+      }));
+      await db.insert(boardseshTicks).values(gridBadgeRecords).onConflictDoNothing();
+      console.info(`  Grid-badge ticks: ${gridBadgeRecords.length} (test user, kilter layout 1, angle 40)`);
+    }
+
+    // =========================================================================
     // Step 8.55: Seed party mode sessions (real sessions with multiple users)
     // =========================================================================
     console.info('\n  Seeding party mode sessions...');
