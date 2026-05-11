@@ -74,12 +74,11 @@ export function useQueueStorage({
         if (persisted && persisted.sessionId && persisted.boardPath && persisted.boardDetails) {
           if (DEBUG) console.info('[PersistentSession] Restoring persisted session:', persisted.sessionId);
 
-          const autoFinishedHandled = await maybeHandleAutoFinishedSession(
-            persisted,
-            wsAuthToken,
-            onSessionAutoFinished,
-          );
-          if (autoFinishedHandled) {
+          const autoFinished = await fetchAutoFinishedSummary(persisted, wsAuthToken);
+          if (autoFinished) {
+            if (DEBUG) console.info('[PersistentSession] Session was auto-finished, showing summary');
+            await removePreference(ACTIVE_SESSION_KEY);
+            onSessionAutoFinished(autoFinished.summary, autoFinished.boardType);
             setIsLocalQueueLoaded(true);
             return;
           }
@@ -136,25 +135,12 @@ export function useQueueStorage({
   };
 }
 
-/**
- * Returns true if the persisted session was already auto-finished by the
- * backend. In that case the persisted entry is cleared and the caller-provided
- * callback is invoked to open the finished-session dialog. Returns false when
- * the session is still active (or its state is unknown) and should be activated
- * normally — the existing join/reconnect path will handle "session gone" the
- * same way it always has.
- *
- * Detection key: `summary.endedAt` is set (the backend's inactivity sweep
- * stamps `ended_at` when it auto-ends a session). A null summary is ambiguous
- * (a fresh session with no ticks looks the same as a missing session) so we
- * fall through rather than silently clearing.
- */
-async function maybeHandleAutoFinishedSession(
+// Null summary is ambiguous (fresh session with no ticks vs. missing) so we treat it as "still active".
+export async function fetchAutoFinishedSummary(
   persisted: ActiveSessionInfo,
   authToken: string | null,
-  onSessionAutoFinished: (summary: SessionSummary, boardType: string | null) => void,
-): Promise<boolean> {
-  if (!authToken) return false;
+): Promise<{ summary: SessionSummary; boardType: string | null } | null> {
+  if (!authToken) return null;
   try {
     const httpClient = createGraphQLHttpClient(authToken);
     const response = await httpClient.request<GetSessionSummaryResponse>(GET_SESSION_SUMMARY, {
@@ -162,14 +148,11 @@ async function maybeHandleAutoFinishedSession(
     });
     const summary = response?.sessionSummary ?? null;
     if (summary?.endedAt) {
-      if (DEBUG) console.info('[PersistentSession] Session was auto-finished, showing summary');
-      await removePreference(ACTIVE_SESSION_KEY);
-      onSessionAutoFinished(summary, persisted.parsedParams?.board_name ?? null);
-      return true;
+      return { summary, boardType: persisted.parsedParams?.board_name ?? null };
     }
-    return false;
+    return null;
   } catch (error) {
     if (DEBUG) console.warn('[PersistentSession] Auto-finished pre-check failed, falling through:', error);
-    return false;
+    return null;
   }
 }

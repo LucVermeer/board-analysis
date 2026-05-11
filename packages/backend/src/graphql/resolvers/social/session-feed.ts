@@ -1,5 +1,5 @@
 import { eq, and, desc, sql, count as drizzleCount, isNull, inArray } from 'drizzle-orm';
-import { dbRead as db } from '../../../db/client';
+import { db, dbRead } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { getGradeLabel } from '@boardsesh/db/queries';
 import { rowsFromResult } from '@boardsesh/db/client';
@@ -28,6 +28,7 @@ export const sessionFeedQueries = {
    * Always chronological (newest first). Uses offset pagination.
    */
   sessionGroupedFeed: async (_: unknown, { input }: { input?: Record<string, unknown> }) => {
+    const feedDb = dbRead;
     const validatedInput = validateInput(ActivityFeedInputSchema, input || {}, 'input');
     const limit = validatedInput.limit ?? 20;
     const userId = validatedInput.userId || null;
@@ -38,7 +39,7 @@ export const sessionFeedQueries = {
     let boardTypeFilter: string | null = null;
     let layoutIdFilter: number | null = null;
     if (validatedInput.boardUuid) {
-      const board = await db
+      const board = await feedDb
         .select({
           boardType: dbSchema.userBoards.boardType,
           layoutId: dbSchema.userBoards.layoutId,
@@ -78,7 +79,7 @@ export const sessionFeedQueries = {
           ? sql`LEFT JOIN board_climbs cf ON cf.uuid = t.climb_uuid AND cf.board_type = t.board_type`
           : sql``;
 
-      sessionRows = await db.execute(sql`
+      sessionRows = await feedDb.execute(sql`
         WITH eligible_party_sessions AS (
           SELECT DISTINCT t.session_id
           FROM boardsesh_ticks t
@@ -179,10 +180,10 @@ export const sessionFeedQueries = {
     const filterOptions: SessionFeedFilterOptions = { boardTypeFilter, layoutIdFilter };
 
     const [participantMap, gradeDistMap, metaMap, boardTypesMap] = await Promise.all([
-      fetchParticipantsBatch(sessionIds, filterOptions),
-      fetchGradeDistributionBatch(sessionIds, filterOptions),
-      fetchSessionMetaBatch(sessionIds, sessionTypes),
-      fetchBoardTypesBatch(sessionIds, filterOptions),
+      fetchParticipantsBatch(feedDb, sessionIds, filterOptions),
+      fetchGradeDistributionBatch(feedDb, sessionIds, filterOptions),
+      fetchSessionMetaBatch(feedDb, sessionIds, sessionTypes),
+      fetchBoardTypesBatch(feedDb, sessionIds, filterOptions),
     ]);
 
     const sessions: SessionFeedItem[] = resultRows.map((row) => {
@@ -596,6 +597,7 @@ async function fetchParticipants(
  * Returns a Map from sessionId to participants array.
  */
 async function fetchParticipantsBatch(
+  feedDb: typeof dbRead,
   sessionIds: string[],
   { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, SessionFeedParticipant[]>> {
@@ -608,7 +610,7 @@ async function fetchParticipantsBatch(
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
 
-  const result = await db.execute(sql`
+  const result = await feedDb.execute(sql`
     SELECT
       COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
       t.user_id AS "userId",
@@ -665,6 +667,7 @@ async function fetchParticipantsBatch(
  * Returns a Map from sessionId to grade distribution array.
  */
 async function fetchGradeDistributionBatch(
+  feedDb: typeof dbRead,
   sessionIds: string[],
   { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, SessionGradeDistributionItem[]>> {
@@ -677,7 +680,7 @@ async function fetchGradeDistributionBatch(
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
 
-  const result = await db.execute(sql`
+  const result = await feedDb.execute(sql`
     SELECT
       COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
       COALESCE(t.difficulty, ROUND(bcs.display_difficulty)::int) AS diff_num,
@@ -725,6 +728,7 @@ async function fetchGradeDistributionBatch(
  * Returns a Map from sessionId to metadata.
  */
 async function fetchSessionMetaBatch(
+  feedDb: typeof dbRead,
   sessionIds: string[],
   sessionTypes: Map<string, string>,
 ): Promise<Map<string, { name: string | null; goal: string | null; ownerUserId: string | null }>> {
@@ -737,7 +741,7 @@ async function fetchSessionMetaBatch(
 
   // Batch fetch party sessions
   if (partyIds.length > 0) {
-    const partyRows = await db
+    const partyRows = await feedDb
       .select({
         id: dbSchema.boardSessions.id,
         name: dbSchema.boardSessions.name,
@@ -754,7 +758,7 @@ async function fetchSessionMetaBatch(
 
   // Batch fetch inferred sessions
   if (inferredIds.length > 0) {
-    const inferredRows = await db
+    const inferredRows = await feedDb
       .select({
         id: dbSchema.inferredSessions.id,
         name: dbSchema.inferredSessions.name,
@@ -777,6 +781,7 @@ async function fetchSessionMetaBatch(
  * Returns a Map from sessionId to board types array.
  */
 async function fetchBoardTypesBatch(
+  feedDb: typeof dbRead,
   sessionIds: string[],
   { boardTypeFilter, layoutIdFilter }: SessionFeedFilterOptions,
 ): Promise<Map<string, string[]>> {
@@ -789,7 +794,7 @@ async function fetchBoardTypesBatch(
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
 
-  const result = await db.execute(sql`
+  const result = await feedDb.execute(sql`
     SELECT
       COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
       ARRAY_AGG(DISTINCT t.board_type) AS board_types

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { type Client, createGraphQLClient, execute, subscribe } from '../../graphql-queue/graphql-client';
 import {
   INITIAL_RETRY_DELAY_MS,
@@ -23,6 +23,7 @@ import { computeQueueStateHash } from '@/app/utils/hash';
 import { setPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@/app/lib/graphql/operations/sessions';
+import { fetchAutoFinishedSummary } from './use-queue-storage';
 import { upsertSessionUser } from '../event-utils';
 import { TransientJoinError } from '../errors';
 import {
@@ -252,6 +253,43 @@ export function useSessionLifecycle({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, only .current changes
   }, [deactivateSession]);
+
+  // Re-run the auto-finished pre-flight when the tab returns to visible — backend may have swept the session.
+  const visibilityCheckInFlightRef = useRef(false);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    async function checkIfAutoFinished() {
+      if (visibilityCheckInFlightRef.current) return;
+      const active = activeSessionRef.current;
+      if (!active) return;
+      visibilityCheckInFlightRef.current = true;
+      try {
+        const result = await fetchAutoFinishedSummary(active, wsAuthTokenRef.current);
+        if (!result) return;
+        if (activeSessionRef.current?.sessionId !== active.sessionId) return;
+        deactivateSession();
+        setAutoFinishedSummary(result.summary, result.boardType);
+      } finally {
+        visibilityCheckInFlightRef.current = false;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') void checkIfAutoFinished();
+    }
+    function handlePageShow(event: PageTransitionEvent) {
+      if (event.persisted) void checkIfAutoFinished();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, callbacks are useCallback([])-stable
+  }, [deactivateSession, setAutoFinishedSummary]);
 
   // Connect to session when activeSession changes
   useEffect(() => {
