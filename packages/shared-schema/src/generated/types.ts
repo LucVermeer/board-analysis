@@ -12,13 +12,13 @@ export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & { [P in K]-?: NonNullable<T[P]> };
 /** All built-in and custom scalars, mapped to their actual values */
 export type Scalars = {
-  ID: { input: string; output: string; }
-  String: { input: string; output: string; }
-  Boolean: { input: boolean; output: boolean; }
-  Int: { input: number; output: number; }
-  Float: { input: number; output: number; }
+  ID: { input: string; output: string };
+  String: { input: string; output: string };
+  Boolean: { input: boolean; output: boolean };
+  Int: { input: number; output: number };
+  Float: { input: number; output: number };
   /** Arbitrary JSON data */
-  JSON: { input: unknown; output: unknown; }
+  JSON: { input: unknown; output: unknown };
 };
 
 /** Input for activity feed queries. */
@@ -94,12 +94,7 @@ export type ActivityFeedItem = {
   type: ActivityFeedItemType;
 };
 
-export type ActivityFeedItemType =
-  | 'ascent'
-  | 'comment'
-  | 'new_climb'
-  | 'proposal_approved'
-  | 'session_summary';
+export type ActivityFeedItemType = 'ascent' | 'comment' | 'new_climb' | 'proposal_approved' | 'session_summary';
 
 /** Cursor-based paginated activity feed result. */
 export type ActivityFeedResult = {
@@ -785,9 +780,7 @@ export type CommunityRoleAssignment = {
   userId: Scalars['ID']['output'];
 };
 
-export type CommunityRoleType =
-  | 'admin'
-  | 'community_leader';
+export type CommunityRoleType = 'admin' | 'community_leader';
 
 /** A community setting key-value pair. */
 export type CommunitySetting = {
@@ -1645,9 +1638,7 @@ export type GymMemberConnection = {
   totalCount: Scalars['Int']['output'];
 };
 
-export type GymMemberRole =
-  | 'admin'
-  | 'member';
+export type GymMemberRole = 'admin' | 'member';
 
 /** Input for listing gym members. */
 export type GymMembersInput = {
@@ -1968,24 +1959,20 @@ export type Mutation = {
   voteOnProposal: Proposal;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationAddClimbToPlaylistArgs = {
   input: AddClimbToPlaylistInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationAddCommentArgs = {
   input: AddCommentInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationAddGymMemberArgs = {
   input: AddGymMemberInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationAddQueueItemArgs = {
@@ -1993,18 +1980,15 @@ export type MutationAddQueueItemArgs = {
   position?: InputMaybe<Scalars['Int']['input']>;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationAddUserToSessionArgs = {
   input: AddUserToSessionInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationAttachBetaLinkArgs = {
   input: AttachBetaLinkInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationAuthorizeControllerForSessionArgs = {
@@ -2012,72 +1996,60 @@ export type MutationAuthorizeControllerForSessionArgs = {
   sessionId: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationControllerHeartbeatArgs = {
   sessionId: Scalars['ID']['input'];
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationCreateBoardArgs = {
   input: CreateBoardInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationCreateGymArgs = {
   input: CreateGymInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationCreatePlaylistArgs = {
   input: CreatePlaylistInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationCreateProposalArgs = {
   input: CreateProposalInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationCreateSessionArgs = {
   input: CreateSessionInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationDeleteAccountArgs = {
   input: DeleteAccountInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationDeleteAuroraCredentialArgs = {
   boardType: Scalars['String']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationDeleteBoardArgs = {
   boardUuid: Scalars['ID']['input'];
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationDeleteCommentArgs = {
   commentUuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationDeleteControllerArgs = {
   controllerId: Scalars['ID']['input'];
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationDeleteDraftClimbArgs = {
@@ -2085,78 +2057,65 @@ export type MutationDeleteDraftClimbArgs = {
   uuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationDeleteGymArgs = {
   gymUuid: Scalars['ID']['input'];
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationDeletePlaylistArgs = {
   playlistId: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationDeleteProposalArgs = {
   input: DeleteProposalInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationDeleteTickArgs = {
   uuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationEndSessionArgs = {
   sessionId: Scalars['ID']['input'];
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationFollowBoardArgs = {
   input: FollowBoardInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationFollowGymArgs = {
   input: FollowGymInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationFollowPlaylistArgs = {
   input: FollowPlaylistInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationFollowSetterArgs = {
   input: FollowSetterInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationFollowUserArgs = {
   input: FollowInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationFreezeClimbArgs = {
   input: FreezeClimbInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationGrantRoleArgs = {
   input: GrantRoleInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationJoinSessionArgs = {
@@ -2169,12 +2128,10 @@ export type MutationJoinSessionArgs = {
   username?: InputMaybe<Scalars['String']['input']>;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationLinkBoardToGymArgs = {
   input: LinkBoardToGymInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationMarkGroupNotificationsReadArgs = {
@@ -2183,18 +2140,15 @@ export type MutationMarkGroupNotificationsReadArgs = {
   type: NotificationType;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationMarkNotificationReadArgs = {
   notificationUuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationMirrorCurrentClimbArgs = {
   mirrored: Scalars['Boolean']['input'];
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationNavigateQueueArgs = {
@@ -2204,42 +2158,35 @@ export type MutationNavigateQueueArgs = {
   sessionId: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationPinPlaylistArgs = {
   input: PinPlaylistInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationRegisterControllerArgs = {
   input: RegisterControllerInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationRemoveClimbFromPlaylistArgs = {
   input: RemoveClimbFromPlaylistInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationRemoveGymMemberArgs = {
   input: RemoveGymMemberInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationRemoveQueueItemArgs = {
   uuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationRemoveUserFromSessionArgs = {
   input: RemoveUserFromSessionInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationReorderQueueItemArgs = {
@@ -2248,55 +2195,46 @@ export type MutationReorderQueueItemArgs = {
   uuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationReplaceQueueItemArgs = {
   item: ClimbQueueItemInput;
   uuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationResolveProposalArgs = {
   input: ResolveProposalInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationRevokeRoleArgs = {
   input: RevokeRoleInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationSaveAuroraCredentialArgs = {
   input: SaveAuroraCredentialInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationSaveClimbArgs = {
   input: SaveClimbInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationSaveMoonBoardClimbArgs = {
   input: SaveMoonBoardClimbInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationSaveTickArgs = {
   input: SaveTickInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationSendDeviceLogsArgs = {
   input: SendDeviceLogsInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationSetClimbFromLedPositionsArgs = {
@@ -2305,12 +2243,10 @@ export type MutationSetClimbFromLedPositionsArgs = {
   sessionId: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationSetCommunitySettingsArgs = {
   input: SetCommunitySettingInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationSetCurrentClimbArgs = {
@@ -2319,13 +2255,11 @@ export type MutationSetCurrentClimbArgs = {
   shouldAddToQueue?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationSetInferredSessionHealthKitWorkoutIdArgs = {
   sessionId: Scalars['ID']['input'];
   workoutId: Scalars['String']['input'];
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationSetQueueArgs = {
@@ -2333,120 +2267,100 @@ export type MutationSetQueueArgs = {
   queue: Array<ClimbQueueItemInput>;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationSetterOverrideCommunityStatusArgs = {
   input: SetterOverrideInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationSubmitAppFeedbackArgs = {
   input: SubmitAppFeedbackInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationSubscribeNewClimbsArgs = {
   input: NewClimbSubscriptionInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationToggleFavoriteArgs = {
   input: ToggleFavoriteInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUnfollowBoardArgs = {
   input: FollowBoardInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUnfollowGymArgs = {
   input: FollowGymInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUnfollowPlaylistArgs = {
   input: FollowPlaylistInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUnfollowSetterArgs = {
   input: FollowSetterInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUnfollowUserArgs = {
   input: FollowInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUnpinPlaylistArgs = {
   input: PinPlaylistInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUnsubscribeNewClimbsArgs = {
   input: NewClimbSubscriptionInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUpdateBoardArgs = {
   input: UpdateBoardInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUpdateClimbArgs = {
   input: UpdateClimbInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUpdateCommentArgs = {
   input: UpdateCommentInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUpdateGymArgs = {
   input: UpdateGymInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUpdateInferredSessionArgs = {
   input: UpdateInferredSessionInput;
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUpdatePlaylistArgs = {
   input: UpdatePlaylistInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUpdatePlaylistLastAccessedArgs = {
   playlistId: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUpdateProfileArgs = {
   input: UpdateProfileInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationUpdateTickArgs = {
@@ -2454,19 +2368,16 @@ export type MutationUpdateTickArgs = {
   uuid: Scalars['ID']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationUpdateUsernameArgs = {
   avatarUrl?: InputMaybe<Scalars['String']['input']>;
   username: Scalars['String']['input'];
 };
 
-
 /** Root mutation type for all write operations. */
 export type MutationVoteArgs = {
   input: VoteInput;
 };
-
 
 /** Root mutation type for all write operations. */
 export type MutationVoteOnProposalArgs = {
@@ -2805,16 +2716,9 @@ export type ProposalConnection = {
   totalCount: Scalars['Int']['output'];
 };
 
-export type ProposalStatus =
-  | 'approved'
-  | 'open'
-  | 'rejected'
-  | 'superseded';
+export type ProposalStatus = 'approved' | 'open' | 'rejected' | 'superseded';
 
-export type ProposalType =
-  | 'benchmark'
-  | 'classic'
-  | 'grade';
+export type ProposalType = 'benchmark' | 'classic' | 'grade';
 
 /** Vote tally for a proposal. */
 export type ProposalVoteSummary = {
@@ -3158,18 +3062,15 @@ export type Query = {
   voteSummary: VoteSummary;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryActivityFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryAllUserPlaylistsArgs = {
   input: GetAllUserPlaylistsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryAnglesArgs = {
@@ -3177,12 +3078,10 @@ export type QueryAnglesArgs = {
   layoutId: Scalars['Int']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryAuroraCredentialArgs = {
   boardType: Scalars['String']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryBetaLinksArgs = {
@@ -3190,36 +3089,30 @@ export type QueryBetaLinksArgs = {
   climbUuid: Scalars['String']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryBoardArgs = {
   boardUuid: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryBoardBySlugArgs = {
   slug: Scalars['String']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryBoardLeaderboardArgs = {
   input: BoardLeaderboardInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryBoardsBySerialNumbersArgs = {
   serialNumbers: Array<Scalars['String']['input']>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryBrowseProposalsArgs = {
   input: BrowseProposalsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryBulkClimbCommunityStatusArgs = {
@@ -3228,18 +3121,15 @@ export type QueryBulkClimbCommunityStatusArgs = {
   climbUuids: Array<Scalars['String']['input']>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryBulkVoteSummariesArgs = {
   input: BulkVoteSummaryInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryCheckMoonBoardClimbDuplicatesArgs = {
   input: CheckMoonBoardClimbDuplicatesInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryClimbArgs = {
@@ -3251,13 +3141,11 @@ export type QueryClimbArgs = {
   sizeId: Scalars['Int']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryClimbClassicStatusArgs = {
   boardType: Scalars['String']['input'];
   climbUuid: Scalars['String']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryClimbCommunityStatusArgs = {
@@ -3266,12 +3154,10 @@ export type QueryClimbCommunityStatusArgs = {
   climbUuid: Scalars['String']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryClimbProposalsArgs = {
   input: GetClimbProposalsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryClimbStatsHistoryArgs = {
@@ -3279,18 +3165,15 @@ export type QueryClimbStatsHistoryArgs = {
   climbUuid: Scalars['ID']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryCommentsArgs = {
   input: CommentsInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryCommunityRolesArgs = {
   boardType?: InputMaybe<Scalars['String']['input']>;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryCommunitySettingsArgs = {
@@ -3298,19 +3181,16 @@ export type QueryCommunitySettingsArgs = {
   scopeKey: Scalars['String']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryDiscoverPlaylistsArgs = {
   input: DiscoverPlaylistsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryEventsReplayArgs = {
   sessionId: Scalars['ID']['input'];
   sinceSequence: Scalars['Int']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryFavoritesArgs = {
@@ -3319,48 +3199,40 @@ export type QueryFavoritesArgs = {
   climbUuids: Array<Scalars['String']['input']>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryFollowersArgs = {
   input: FollowListInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryFollowingArgs = {
   input: FollowListInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryFollowingAscentsFeedArgs = {
   input?: InputMaybe<FollowingAscentsFeedInput>;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryFollowingClimbAscentsArgs = {
   input: FollowingClimbAscentsInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryGlobalAscentsFeedArgs = {
   input?: InputMaybe<FollowingAscentsFeedInput>;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryGlobalCommentFeedArgs = {
   input?: InputMaybe<GlobalCommentFeedInput>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryGradesArgs = {
   boardName: Scalars['String']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryGroupedNotificationsArgs = {
@@ -3368,54 +3240,45 @@ export type QueryGroupedNotificationsArgs = {
   offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryGymArgs = {
   gymUuid: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryGymBySlugArgs = {
   slug: Scalars['String']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryGymMembersArgs = {
   input: GymMembersInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryIsFollowingArgs = {
   userId: Scalars['ID']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryMyBoardSerialConfigsArgs = {
   serialNumbers: Array<Scalars['String']['input']>;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryMyBoardsArgs = {
   input?: InputMaybe<MyBoardsInput>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryMyGymsArgs = {
   input?: InputMaybe<MyGymsInput>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryMyPinnedPlaylistsArgs = {
   input: GetMyPinnedPlaylistsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryNearbySessionsArgs = {
@@ -3424,12 +3287,10 @@ export type QueryNearbySessionsArgs = {
   radiusMeters?: InputMaybe<Scalars['Float']['input']>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryNewClimbFeedArgs = {
   input: NewClimbFeedInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryNotificationsArgs = {
@@ -3438,144 +3299,120 @@ export type QueryNotificationsArgs = {
   unreadOnly?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryPlaylistArgs = {
   playlistId: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryPlaylistClimbsArgs = {
   input: GetPlaylistClimbsInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryPlaylistCreatorsArgs = {
   input: GetPlaylistCreatorsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryPlaylistsForClimbArgs = {
   input: GetPlaylistsForClimbInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryPlaylistsForClimbsArgs = {
   input: GetPlaylistsForClimbsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryPopularBoardConfigsArgs = {
   input?: InputMaybe<PopularBoardConfigsInput>;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryPublicProfileArgs = {
   userId: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QuerySearchBoardsArgs = {
   input: SearchBoardsInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QuerySearchClimbsArgs = {
   input: ClimbSearchInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QuerySearchGymsArgs = {
   input: SearchGymsInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QuerySearchPlaylistsArgs = {
   input: SearchPlaylistsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QuerySearchUsersArgs = {
   input: SearchUsersInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QuerySearchUsersAndSettersArgs = {
   input: SearchUsersInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QuerySessionArgs = {
   sessionId: Scalars['ID']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QuerySessionDetailArgs = {
   sessionId: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QuerySessionGroupedFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
 };
 
-
 /** Root query type for all read operations. */
 export type QuerySessionSummaryArgs = {
   sessionId: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QuerySetterClimbsArgs = {
   input: SetterClimbsInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QuerySetterClimbsFullArgs = {
   input: SetterClimbsFullInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QuerySetterProfileArgs = {
   input: SetterProfileInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QuerySmartPlaylistArgs = {
   input: GetSmartPlaylistInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryTicksArgs = {
   input: GetTicksInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryTrendingFeedArgs = {
   input?: InputMaybe<ActivityFeedInput>;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryUserAscentsFeedArgs = {
@@ -3583,24 +3420,20 @@ export type QueryUserAscentsFeedArgs = {
   userId: Scalars['ID']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryUserClimbPercentileArgs = {
   userId: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryUserClimbsArgs = {
   input: UserClimbsInput;
 };
 
-
 /** Root query type for all read operations. */
 export type QueryUserFavoriteClimbsArgs = {
   input: GetUserFavoriteClimbsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryUserGroupedAscentsFeedArgs = {
@@ -3608,25 +3441,21 @@ export type QueryUserGroupedAscentsFeedArgs = {
   userId: Scalars['ID']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryUserPlaylistsArgs = {
   input: GetUserPlaylistsInput;
 };
-
 
 /** Root query type for all read operations. */
 export type QueryUserProfileStatsArgs = {
   userId: Scalars['ID']['input'];
 };
 
-
 /** Root query type for all read operations. */
 export type QueryUserTicksArgs = {
   boardType: Scalars['String']['input'];
   userId: Scalars['ID']['input'];
 };
-
 
 /** Root query type for all read operations. */
 export type QueryVoteSummaryArgs = {
@@ -3635,7 +3464,13 @@ export type QueryVoteSummaryArgs = {
 };
 
 /** Union of possible queue events. */
-export type QueueEvent = ClimbMirrored | CurrentClimbChanged | FullSync | QueueItemAdded | QueueItemRemoved | QueueReordered;
+export type QueueEvent =
+  | ClimbMirrored
+  | CurrentClimbChanged
+  | FullSync
+  | QueueItemAdded
+  | QueueItemRemoved
+  | QueueReordered;
 
 /** Event when an item is added to the queue. */
 export type QueueItemAdded = {
@@ -4354,10 +4189,7 @@ export type SmartPlaylistResult = {
  * - MOST_REPEATED: climbs the user has logged the most attempts on
  * - PROJECTS: climbs with the most attempts that have never been sent
  */
-export type SmartPlaylistType =
-  | 'FIVE_STARS'
-  | 'MOST_REPEATED'
-  | 'PROJECTS';
+export type SmartPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS';
 
 export type SocialEntityType =
   | 'board'
@@ -4369,11 +4201,7 @@ export type SocialEntityType =
   | 'session'
   | 'tick';
 
-export type SortMode =
-  | 'controversial'
-  | 'hot'
-  | 'new'
-  | 'top';
+export type SortMode = 'controversial' | 'hot' | 'new' | 'top';
 
 /** Input for submitAppFeedback mutation. */
 export type SubmitAppFeedbackInput = {
@@ -4426,19 +4254,16 @@ export type Subscription = {
   sessionUpdates: SessionEvent;
 };
 
-
 /** Root subscription type for real-time updates. */
 export type SubscriptionCommentUpdatesArgs = {
   entityId: Scalars['String']['input'];
   entityType: SocialEntityType;
 };
 
-
 /** Root subscription type for real-time updates. */
 export type SubscriptionControllerEventsArgs = {
   sessionId: Scalars['ID']['input'];
 };
-
 
 /** Root subscription type for real-time updates. */
 export type SubscriptionNewClimbCreatedArgs = {
@@ -4446,12 +4271,10 @@ export type SubscriptionNewClimbCreatedArgs = {
   layoutId: Scalars['Int']['input'];
 };
 
-
 /** Root subscription type for real-time updates. */
 export type SubscriptionQueueUpdatesArgs = {
   sessionId: Scalars['ID']['input'];
 };
-
 
 /** Root subscription type for real-time updates. */
 export type SubscriptionSessionUpdatesArgs = {
@@ -4520,13 +4343,7 @@ export type TickStatus =
   /** Completed after multiple attempts */
   | 'send';
 
-export type TimePeriod =
-  | 'all'
-  | 'day'
-  | 'hour'
-  | 'month'
-  | 'week'
-  | 'year';
+export type TimePeriod = 'all' | 'day' | 'hour' | 'month' | 'week' | 'year';
 
 /** Input for toggling a climb as favorite. */
 export type ToggleFavoriteInput = {
@@ -4934,31 +4751,32 @@ export type ResolversObject<TObject> = WithIndex<TObject>;
 
 export type ResolverTypeWrapper<T> = Promise<T> | T;
 
-
 export type ResolverWithResolve<TResult, TParent, TContext, TArgs> = {
   resolve: ResolverFn<TResult, TParent, TContext, TArgs>;
 };
-export type Resolver<TResult, TParent = {}, TContext = {}, TArgs = {}> = ResolverFn<TResult, TParent, TContext, TArgs> | ResolverWithResolve<TResult, TParent, TContext, TArgs>;
+export type Resolver<TResult, TParent = {}, TContext = {}, TArgs = {}> =
+  | ResolverFn<TResult, TParent, TContext, TArgs>
+  | ResolverWithResolve<TResult, TParent, TContext, TArgs>;
 
 export type ResolverFn<TResult, TParent, TContext, TArgs> = (
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => Promise<TResult> | TResult;
 
 export type SubscriptionSubscribeFn<TResult, TParent, TContext, TArgs> = (
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => AsyncIterable<TResult> | Promise<AsyncIterable<TResult>>;
 
 export type SubscriptionResolveFn<TResult, TParent, TContext, TArgs> = (
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => TResult | Promise<TResult>;
 
 export interface SubscriptionSubscriberObject<TResult, TKey extends string, TParent, TContext, TArgs> {
@@ -4982,10 +4800,14 @@ export type SubscriptionResolver<TResult, TKey extends string, TParent = {}, TCo
 export type TypeResolveFn<TTypes, TParent = {}, TContext = {}> = (
   parent: TParent,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => Maybe<TTypes> | Promise<Maybe<TTypes>>;
 
-export type IsTypeOfResolverFn<T = {}, TContext = {}> = (obj: T, context: TContext, info: GraphQLResolveInfo) => boolean | Promise<boolean>;
+export type IsTypeOfResolverFn<T = {}, TContext = {}> = (
+  obj: T,
+  context: TContext,
+  info: GraphQLResolveInfo,
+) => boolean | Promise<boolean>;
 
 export type NextResolverFn<T> = () => Promise<T>;
 
@@ -4994,17 +4816,16 @@ export type DirectiveResolverFn<TResult = {}, TParent = {}, TContext = {}, TArgs
   parent: TParent,
   args: TArgs,
   context: TContext,
-  info: GraphQLResolveInfo
+  info: GraphQLResolveInfo,
 ) => TResult | Promise<TResult>;
 
 /** Mapping of union types */
 export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = ResolversObject<{
-  CommentEvent: ( CommentAdded ) | ( CommentDeleted ) | ( CommentUpdated );
-  ControllerEvent: ( ControllerPing ) | ( ControllerQueueSync ) | ( LedUpdate );
-  QueueEvent: ( ClimbMirrored ) | ( CurrentClimbChanged ) | ( FullSync ) | ( QueueItemAdded ) | ( QueueItemRemoved ) | ( QueueReordered );
-  SessionEvent: ( LeaderChanged ) | ( SessionEnded ) | ( SessionStatsUpdated ) | ( UserJoined ) | ( UserLeft );
+  CommentEvent: CommentAdded | CommentDeleted | CommentUpdated;
+  ControllerEvent: ControllerPing | ControllerQueueSync | LedUpdate;
+  QueueEvent: ClimbMirrored | CurrentClimbChanged | FullSync | QueueItemAdded | QueueItemRemoved | QueueReordered;
+  SessionEvent: LeaderChanged | SessionEnded | SessionStatsUpdated | UserJoined | UserLeft;
 }>;
-
 
 /** Mapping between all available schema types and the resolvers types */
 export type ResolversTypes = ResolversObject<{
@@ -5075,7 +4896,9 @@ export type ResolversTypes = ResolversObject<{
   DiscoverPlaylistsResult: ResolverTypeWrapper<DiscoverPlaylistsResult>;
   DiscoverablePlaylist: ResolverTypeWrapper<DiscoverablePlaylist>;
   DiscoverableSession: ResolverTypeWrapper<DiscoverableSession>;
-  EventsReplayResponse: ResolverTypeWrapper<Omit<EventsReplayResponse, 'events'> & { events: Array<ResolversTypes['QueueEvent']> }>;
+  EventsReplayResponse: ResolverTypeWrapper<
+    Omit<EventsReplayResponse, 'events'> & { events: Array<ResolversTypes['QueueEvent']> }
+  >;
   FavoritesCount: ResolverTypeWrapper<FavoritesCount>;
   FeedbackContextInput: FeedbackContextInput;
   Float: ResolverTypeWrapper<Scalars['Float']['output']>;
@@ -5487,7 +5310,10 @@ export type ResolversParentTypes = ResolversObject<{
   ZoneBoxInput: ZoneBoxInput;
 }>;
 
-export type ActivityFeedItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ActivityFeedItem'] = ResolversParentTypes['ActivityFeedItem']> = ResolversObject<{
+export type ActivityFeedItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ActivityFeedItem'] = ResolversParentTypes['ActivityFeedItem'],
+> = ResolversObject<{
   actorAvatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   actorDisplayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   actorId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -5519,26 +5345,38 @@ export type ActivityFeedItemResolvers<ContextType = ConnectionContext, ParentTyp
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ActivityFeedResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ActivityFeedResult'] = ResolversParentTypes['ActivityFeedResult']> = ResolversObject<{
+export type ActivityFeedResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ActivityFeedResult'] = ResolversParentTypes['ActivityFeedResult'],
+> = ResolversObject<{
   cursor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   items?: Resolver<Array<ResolversTypes['ActivityFeedItem']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type AllUserPlaylistsResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['AllUserPlaylistsResult'] = ResolversParentTypes['AllUserPlaylistsResult']> = ResolversObject<{
+export type AllUserPlaylistsResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AllUserPlaylistsResult'] = ResolversParentTypes['AllUserPlaylistsResult'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   playlists?: Resolver<Array<ResolversTypes['Playlist']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type AngleResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Angle'] = ResolversParentTypes['Angle']> = ResolversObject<{
+export type AngleResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Angle'] = ResolversParentTypes['Angle'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type AscentFeedItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['AscentFeedItem'] = ResolversParentTypes['AscentFeedItem']> = ResolversObject<{
+export type AscentFeedItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AscentFeedItem'] = ResolversParentTypes['AscentFeedItem'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -5563,14 +5401,20 @@ export type AscentFeedItemResolvers<ContextType = ConnectionContext, ParentType 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type AscentFeedResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['AscentFeedResult'] = ResolversParentTypes['AscentFeedResult']> = ResolversObject<{
+export type AscentFeedResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AscentFeedResult'] = ResolversParentTypes['AscentFeedResult'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   items?: Resolver<Array<ResolversTypes['AscentFeedItem']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type AuroraCredentialResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['AuroraCredential'] = ResolversParentTypes['AuroraCredential']> = ResolversObject<{
+export type AuroraCredentialResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AuroraCredential'] = ResolversParentTypes['AuroraCredential'],
+> = ResolversObject<{
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   syncedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   token?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -5579,7 +5423,10 @@ export type AuroraCredentialResolvers<ContextType = ConnectionContext, ParentTyp
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type AuroraCredentialStatusResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['AuroraCredentialStatus'] = ResolversParentTypes['AuroraCredentialStatus']> = ResolversObject<{
+export type AuroraCredentialStatusResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['AuroraCredentialStatus'] = ResolversParentTypes['AuroraCredentialStatus'],
+> = ResolversObject<{
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   hasToken?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   syncedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -5588,7 +5435,10 @@ export type AuroraCredentialStatusResolvers<ContextType = ConnectionContext, Par
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type BetaLinkResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['BetaLink'] = ResolversParentTypes['BetaLink']> = ResolversObject<{
+export type BetaLinkResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BetaLink'] = ResolversParentTypes['BetaLink'],
+> = ResolversObject<{
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -5599,7 +5449,10 @@ export type BetaLinkResolvers<ContextType = ConnectionContext, ParentType extend
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type BoardLeaderboardResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['BoardLeaderboard'] = ResolversParentTypes['BoardLeaderboard']> = ResolversObject<{
+export type BoardLeaderboardResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardLeaderboard'] = ResolversParentTypes['BoardLeaderboard'],
+> = ResolversObject<{
   boardUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   entries?: Resolver<Array<ResolversTypes['BoardLeaderboardEntry']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -5608,7 +5461,10 @@ export type BoardLeaderboardResolvers<ContextType = ConnectionContext, ParentTyp
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type BoardLeaderboardEntryResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['BoardLeaderboardEntry'] = ResolversParentTypes['BoardLeaderboardEntry']> = ResolversObject<{
+export type BoardLeaderboardEntryResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardLeaderboardEntry'] = ResolversParentTypes['BoardLeaderboardEntry'],
+> = ResolversObject<{
   hardestGrade?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   hardestGradeName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   rank?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -5621,7 +5477,10 @@ export type BoardLeaderboardEntryResolvers<ContextType = ConnectionContext, Pare
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type BoardSerialConfigResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['BoardSerialConfig'] = ResolversParentTypes['BoardSerialConfig']> = ResolversObject<{
+export type BoardSerialConfigResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['BoardSerialConfig'] = ResolversParentTypes['BoardSerialConfig'],
+> = ResolversObject<{
   boardName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   boardSlug?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   boardUuid?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
@@ -5633,7 +5492,10 @@ export type BoardSerialConfigResolvers<ContextType = ConnectionContext, ParentTy
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Climb'] = ResolversParentTypes['Climb']> = ResolversObject<{
+export type ClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Climb'] = ResolversParentTypes['Climb'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   ascensionist_count?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   benchmark_difficulty?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -5659,7 +5521,10 @@ export type ClimbResolvers<ContextType = ConnectionContext, ParentType extends R
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbClassicStatusResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbClassicStatus'] = ResolversParentTypes['ClimbClassicStatus']> = ResolversObject<{
+export type ClimbClassicStatusResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbClassicStatus'] = ResolversParentTypes['ClimbClassicStatus'],
+> = ResolversObject<{
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   isClassic?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -5667,7 +5532,10 @@ export type ClimbClassicStatusResolvers<ContextType = ConnectionContext, ParentT
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbCommunityStatusResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbCommunityStatus'] = ResolversParentTypes['ClimbCommunityStatus']> = ResolversObject<{
+export type ClimbCommunityStatusResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbCommunityStatus'] = ResolversParentTypes['ClimbCommunityStatus'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -5682,26 +5550,38 @@ export type ClimbCommunityStatusResolvers<ContextType = ConnectionContext, Paren
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbMatchResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbMatchResult'] = ResolversParentTypes['ClimbMatchResult']> = ResolversObject<{
+export type ClimbMatchResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbMatchResult'] = ResolversParentTypes['ClimbMatchResult'],
+> = ResolversObject<{
   climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   climbUuid?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   matched?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbMirroredResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbMirrored'] = ResolversParentTypes['ClimbMirrored']> = ResolversObject<{
+export type ClimbMirroredResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbMirrored'] = ResolversParentTypes['ClimbMirrored'],
+> = ResolversObject<{
   mirrored?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbPlaylistMembershipResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbPlaylistMembership'] = ResolversParentTypes['ClimbPlaylistMembership']> = ResolversObject<{
+export type ClimbPlaylistMembershipResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbPlaylistMembership'] = ResolversParentTypes['ClimbPlaylistMembership'],
+> = ResolversObject<{
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   playlistUuids?: Resolver<Array<ResolversTypes['ID']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbQueueItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbQueueItem'] = ResolversParentTypes['ClimbQueueItem']> = ResolversObject<{
+export type ClimbQueueItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbQueueItem'] = ResolversParentTypes['ClimbQueueItem'],
+> = ResolversObject<{
   addedBy?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   addedByUser?: Resolver<Maybe<ResolversTypes['QueueItemUser']>, ParentType, ContextType>;
   climb?: Resolver<ResolversTypes['Climb'], ParentType, ContextType>;
@@ -5711,14 +5591,20 @@ export type ClimbQueueItemResolvers<ContextType = ConnectionContext, ParentType 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbSearchResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbSearchResult'] = ResolversParentTypes['ClimbSearchResult']> = ResolversObject<{
+export type ClimbSearchResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbSearchResult'] = ResolversParentTypes['ClimbSearchResult'],
+> = ResolversObject<{
   climbs?: Resolver<Array<ResolversTypes['Climb']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ClimbStatsHistoryEntryResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ClimbStatsHistoryEntry'] = ResolversParentTypes['ClimbStatsHistoryEntry']> = ResolversObject<{
+export type ClimbStatsHistoryEntryResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ClimbStatsHistoryEntry'] = ResolversParentTypes['ClimbStatsHistoryEntry'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   ascensionistCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -5728,7 +5614,10 @@ export type ClimbStatsHistoryEntryResolvers<ContextType = ConnectionContext, Par
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CommentResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Comment'] = ResolversParentTypes['Comment']> = ResolversObject<{
+export type CommentResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Comment'] = ResolversParentTypes['Comment'],
+> = ResolversObject<{
   body?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   downvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -5748,12 +5637,18 @@ export type CommentResolvers<ContextType = ConnectionContext, ParentType extends
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CommentAddedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CommentAdded'] = ResolversParentTypes['CommentAdded']> = ResolversObject<{
+export type CommentAddedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CommentAdded'] = ResolversParentTypes['CommentAdded'],
+> = ResolversObject<{
   comment?: Resolver<ResolversTypes['Comment'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CommentConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CommentConnection'] = ResolversParentTypes['CommentConnection']> = ResolversObject<{
+export type CommentConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CommentConnection'] = ResolversParentTypes['CommentConnection'],
+> = ResolversObject<{
   comments?: Resolver<Array<ResolversTypes['Comment']>, ParentType, ContextType>;
   cursor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -5761,23 +5656,35 @@ export type CommentConnectionResolvers<ContextType = ConnectionContext, ParentTy
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CommentDeletedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CommentDeleted'] = ResolversParentTypes['CommentDeleted']> = ResolversObject<{
+export type CommentDeletedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CommentDeleted'] = ResolversParentTypes['CommentDeleted'],
+> = ResolversObject<{
   commentUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   entityId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   entityType?: Resolver<ResolversTypes['SocialEntityType'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CommentEventResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CommentEvent'] = ResolversParentTypes['CommentEvent']> = ResolversObject<{
+export type CommentEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CommentEvent'] = ResolversParentTypes['CommentEvent'],
+> = ResolversObject<{
   __resolveType: TypeResolveFn<'CommentAdded' | 'CommentDeleted' | 'CommentUpdated', ParentType, ContextType>;
 }>;
 
-export type CommentUpdatedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CommentUpdated'] = ResolversParentTypes['CommentUpdated']> = ResolversObject<{
+export type CommentUpdatedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CommentUpdated'] = ResolversParentTypes['CommentUpdated'],
+> = ResolversObject<{
   comment?: Resolver<ResolversTypes['Comment'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CommunityRoleAssignmentResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CommunityRoleAssignment'] = ResolversParentTypes['CommunityRoleAssignment']> = ResolversObject<{
+export type CommunityRoleAssignmentResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CommunityRoleAssignment'] = ResolversParentTypes['CommunityRoleAssignment'],
+> = ResolversObject<{
   boardType?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grantedBy?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -5790,7 +5697,10 @@ export type CommunityRoleAssignmentResolvers<ContextType = ConnectionContext, Pa
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CommunitySettingResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CommunitySetting'] = ResolversParentTypes['CommunitySetting']> = ResolversObject<{
+export type CommunitySettingResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CommunitySetting'] = ResolversParentTypes['CommunitySetting'],
+> = ResolversObject<{
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   key?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -5802,11 +5712,17 @@ export type CommunitySettingResolvers<ContextType = ConnectionContext, ParentTyp
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ControllerEventResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ControllerEvent'] = ResolversParentTypes['ControllerEvent']> = ResolversObject<{
+export type ControllerEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ControllerEvent'] = ResolversParentTypes['ControllerEvent'],
+> = ResolversObject<{
   __resolveType: TypeResolveFn<'ControllerPing' | 'ControllerQueueSync' | 'LedUpdate', ParentType, ContextType>;
 }>;
 
-export type ControllerInfoResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ControllerInfo'] = ResolversParentTypes['ControllerInfo']> = ResolversObject<{
+export type ControllerInfoResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ControllerInfo'] = ResolversParentTypes['ControllerInfo'],
+> = ResolversObject<{
   boardName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -5819,12 +5735,18 @@ export type ControllerInfoResolvers<ContextType = ConnectionContext, ParentType 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ControllerPingResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ControllerPing'] = ResolversParentTypes['ControllerPing']> = ResolversObject<{
+export type ControllerPingResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ControllerPing'] = ResolversParentTypes['ControllerPing'],
+> = ResolversObject<{
   timestamp?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ControllerQueueItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ControllerQueueItem'] = ResolversParentTypes['ControllerQueueItem']> = ResolversObject<{
+export type ControllerQueueItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ControllerQueueItem'] = ResolversParentTypes['ControllerQueueItem'],
+> = ResolversObject<{
   climbUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   gradeColor?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -5833,19 +5755,28 @@ export type ControllerQueueItemResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ControllerQueueSyncResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ControllerQueueSync'] = ResolversParentTypes['ControllerQueueSync']> = ResolversObject<{
+export type ControllerQueueSyncResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ControllerQueueSync'] = ResolversParentTypes['ControllerQueueSync'],
+> = ResolversObject<{
   currentIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   queue?: Resolver<Array<ResolversTypes['ControllerQueueItem']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ControllerRegistrationResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ControllerRegistration'] = ResolversParentTypes['ControllerRegistration']> = ResolversObject<{
+export type ControllerRegistrationResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ControllerRegistration'] = ResolversParentTypes['ControllerRegistration'],
+> = ResolversObject<{
   apiKey?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   controllerId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type CurrentClimbChangedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['CurrentClimbChanged'] = ResolversParentTypes['CurrentClimbChanged']> = ResolversObject<{
+export type CurrentClimbChangedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['CurrentClimbChanged'] = ResolversParentTypes['CurrentClimbChanged'],
+> = ResolversObject<{
   clientId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   correlationId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   item?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType>;
@@ -5853,19 +5784,28 @@ export type CurrentClimbChangedResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type DeleteAccountInfoResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['DeleteAccountInfo'] = ResolversParentTypes['DeleteAccountInfo']> = ResolversObject<{
+export type DeleteAccountInfoResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['DeleteAccountInfo'] = ResolversParentTypes['DeleteAccountInfo'],
+> = ResolversObject<{
   publishedClimbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type DiscoverPlaylistsResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['DiscoverPlaylistsResult'] = ResolversParentTypes['DiscoverPlaylistsResult']> = ResolversObject<{
+export type DiscoverPlaylistsResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['DiscoverPlaylistsResult'] = ResolversParentTypes['DiscoverPlaylistsResult'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   playlists?: Resolver<Array<ResolversTypes['DiscoverablePlaylist']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type DiscoverablePlaylistResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['DiscoverablePlaylist'] = ResolversParentTypes['DiscoverablePlaylist']> = ResolversObject<{
+export type DiscoverablePlaylistResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['DiscoverablePlaylist'] = ResolversParentTypes['DiscoverablePlaylist'],
+> = ResolversObject<{
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   color?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -5882,7 +5822,10 @@ export type DiscoverablePlaylistResolvers<ContextType = ConnectionContext, Paren
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type DiscoverableSessionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['DiscoverableSession'] = ResolversParentTypes['DiscoverableSession']> = ResolversObject<{
+export type DiscoverableSessionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['DiscoverableSession'] = ResolversParentTypes['DiscoverableSession'],
+> = ResolversObject<{
   boardPath?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   color?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -5900,26 +5843,38 @@ export type DiscoverableSessionResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type EventsReplayResponseResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['EventsReplayResponse'] = ResolversParentTypes['EventsReplayResponse']> = ResolversObject<{
+export type EventsReplayResponseResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['EventsReplayResponse'] = ResolversParentTypes['EventsReplayResponse'],
+> = ResolversObject<{
   currentSequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   events?: Resolver<Array<ResolversTypes['QueueEvent']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FavoritesCountResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['FavoritesCount'] = ResolversParentTypes['FavoritesCount']> = ResolversObject<{
+export type FavoritesCountResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['FavoritesCount'] = ResolversParentTypes['FavoritesCount'],
+> = ResolversObject<{
   boardName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   count?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FollowConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['FollowConnection'] = ResolversParentTypes['FollowConnection']> = ResolversObject<{
+export type FollowConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['FollowConnection'] = ResolversParentTypes['FollowConnection'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   users?: Resolver<Array<ResolversTypes['PublicUserProfile']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FollowingAscentFeedItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['FollowingAscentFeedItem'] = ResolversParentTypes['FollowingAscentFeedItem']> = ResolversObject<{
+export type FollowingAscentFeedItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['FollowingAscentFeedItem'] = ResolversParentTypes['FollowingAscentFeedItem'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -5947,37 +5902,57 @@ export type FollowingAscentFeedItemResolvers<ContextType = ConnectionContext, Pa
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FollowingAscentsFeedResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['FollowingAscentsFeedResult'] = ResolversParentTypes['FollowingAscentsFeedResult']> = ResolversObject<{
+export type FollowingAscentsFeedResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['FollowingAscentsFeedResult'] =
+    ResolversParentTypes['FollowingAscentsFeedResult'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   items?: Resolver<Array<ResolversTypes['FollowingAscentFeedItem']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FollowingClimbAscentsResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['FollowingClimbAscentsResult'] = ResolversParentTypes['FollowingClimbAscentsResult']> = ResolversObject<{
+export type FollowingClimbAscentsResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['FollowingClimbAscentsResult'] =
+    ResolversParentTypes['FollowingClimbAscentsResult'],
+> = ResolversObject<{
   items?: Resolver<Array<ResolversTypes['FollowingAscentFeedItem']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type FullSyncResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['FullSync'] = ResolversParentTypes['FullSync']> = ResolversObject<{
+export type FullSyncResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['FullSync'] = ResolversParentTypes['FullSync'],
+> = ResolversObject<{
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   state?: Resolver<ResolversTypes['QueueState'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GradeResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Grade'] = ResolversParentTypes['Grade']> = ResolversObject<{
+export type GradeResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Grade'] = ResolversParentTypes['Grade'],
+> = ResolversObject<{
   difficultyId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GradeCountResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GradeCount'] = ResolversParentTypes['GradeCount']> = ResolversObject<{
+export type GradeCountResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GradeCount'] = ResolversParentTypes['GradeCount'],
+> = ResolversObject<{
   count?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GroupedAscentFeedItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GroupedAscentFeedItem'] = ResolversParentTypes['GroupedAscentFeedItem']> = ResolversObject<{
+export type GroupedAscentFeedItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GroupedAscentFeedItem'] = ResolversParentTypes['GroupedAscentFeedItem'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   bestQuality?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
@@ -6000,14 +5975,20 @@ export type GroupedAscentFeedItemResolvers<ContextType = ConnectionContext, Pare
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GroupedAscentFeedResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GroupedAscentFeedResult'] = ResolversParentTypes['GroupedAscentFeedResult']> = ResolversObject<{
+export type GroupedAscentFeedResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GroupedAscentFeedResult'] = ResolversParentTypes['GroupedAscentFeedResult'],
+> = ResolversObject<{
   groups?: Resolver<Array<ResolversTypes['GroupedAscentFeedItem']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GroupedNotificationResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GroupedNotification'] = ResolversParentTypes['GroupedNotification']> = ResolversObject<{
+export type GroupedNotificationResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GroupedNotification'] = ResolversParentTypes['GroupedNotification'],
+> = ResolversObject<{
   actorCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   actors?: Resolver<Array<ResolversTypes['GroupedNotificationActor']>, ParentType, ContextType>;
   boardType?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6025,14 +6006,22 @@ export type GroupedNotificationResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GroupedNotificationActorResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GroupedNotificationActor'] = ResolversParentTypes['GroupedNotificationActor']> = ResolversObject<{
+export type GroupedNotificationActorResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GroupedNotificationActor'] =
+    ResolversParentTypes['GroupedNotificationActor'],
+> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GroupedNotificationConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GroupedNotificationConnection'] = ResolversParentTypes['GroupedNotificationConnection']> = ResolversObject<{
+export type GroupedNotificationConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GroupedNotificationConnection'] =
+    ResolversParentTypes['GroupedNotificationConnection'],
+> = ResolversObject<{
   groups?: Resolver<Array<ResolversTypes['GroupedNotification']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6040,7 +6029,10 @@ export type GroupedNotificationConnectionResolvers<ContextType = ConnectionConte
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GymResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Gym'] = ResolversParentTypes['Gym']> = ResolversObject<{
+export type GymResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Gym'] = ResolversParentTypes['Gym'],
+> = ResolversObject<{
   address?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   boardCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6066,14 +6058,20 @@ export type GymResolvers<ContextType = ConnectionContext, ParentType extends Res
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GymConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GymConnection'] = ResolversParentTypes['GymConnection']> = ResolversObject<{
+export type GymConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GymConnection'] = ResolversParentTypes['GymConnection'],
+> = ResolversObject<{
   gyms?: Resolver<Array<ResolversTypes['Gym']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GymMemberResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GymMember'] = ResolversParentTypes['GymMember']> = ResolversObject<{
+export type GymMemberResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GymMember'] = ResolversParentTypes['GymMember'],
+> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   displayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6082,7 +6080,10 @@ export type GymMemberResolvers<ContextType = ConnectionContext, ParentType exten
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type GymMemberConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['GymMemberConnection'] = ResolversParentTypes['GymMemberConnection']> = ResolversObject<{
+export type GymMemberConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['GymMemberConnection'] = ResolversParentTypes['GymMemberConnection'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   members?: Resolver<Array<ResolversTypes['GymMember']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6093,7 +6094,10 @@ export interface JsonScalarConfig extends GraphQLScalarTypeConfig<ResolversTypes
   name: 'JSON';
 }
 
-export type LayoutStatsResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['LayoutStats'] = ResolversParentTypes['LayoutStats']> = ResolversObject<{
+export type LayoutStatsResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['LayoutStats'] = ResolversParentTypes['LayoutStats'],
+> = ResolversObject<{
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   distinctClimbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   gradeCounts?: Resolver<Array<ResolversTypes['GradeCount']>, ParentType, ContextType>;
@@ -6102,12 +6106,18 @@ export type LayoutStatsResolvers<ContextType = ConnectionContext, ParentType ext
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type LeaderChangedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['LeaderChanged'] = ResolversParentTypes['LeaderChanged']> = ResolversObject<{
+export type LeaderChangedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['LeaderChanged'] = ResolversParentTypes['LeaderChanged'],
+> = ResolversObject<{
   leaderId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type LedCommandResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['LedCommand'] = ResolversParentTypes['LedCommand']> = ResolversObject<{
+export type LedCommandResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['LedCommand'] = ResolversParentTypes['LedCommand'],
+> = ResolversObject<{
   b?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   g?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   position?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6115,7 +6125,10 @@ export type LedCommandResolvers<ContextType = ConnectionContext, ParentType exte
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type LedUpdateResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['LedUpdate'] = ResolversParentTypes['LedUpdate']> = ResolversObject<{
+export type LedUpdateResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['LedUpdate'] = ResolversParentTypes['LedUpdate'],
+> = ResolversObject<{
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardPath?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   clientId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6129,7 +6142,11 @@ export type LedUpdateResolvers<ContextType = ConnectionContext, ParentType exten
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type MoonBoardClimbDuplicateMatchResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['MoonBoardClimbDuplicateMatch'] = ResolversParentTypes['MoonBoardClimbDuplicateMatch']> = ResolversObject<{
+export type MoonBoardClimbDuplicateMatchResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['MoonBoardClimbDuplicateMatch'] =
+    ResolversParentTypes['MoonBoardClimbDuplicateMatch'],
+> = ResolversObject<{
   clientKey?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   existingClimbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   existingClimbUuid?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
@@ -6137,97 +6154,486 @@ export type MoonBoardClimbDuplicateMatchResolvers<ContextType = ConnectionContex
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type MutationResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
-  addClimbToPlaylist?: Resolver<ResolversTypes['PlaylistClimb'], ParentType, ContextType, RequireFields<MutationAddClimbToPlaylistArgs, 'input'>>;
-  addComment?: Resolver<ResolversTypes['Comment'], ParentType, ContextType, RequireFields<MutationAddCommentArgs, 'input'>>;
-  addGymMember?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationAddGymMemberArgs, 'input'>>;
-  addQueueItem?: Resolver<ResolversTypes['ClimbQueueItem'], ParentType, ContextType, RequireFields<MutationAddQueueItemArgs, 'item'>>;
-  addUserToSession?: Resolver<Maybe<ResolversTypes['SessionDetail']>, ParentType, ContextType, RequireFields<MutationAddUserToSessionArgs, 'input'>>;
-  attachBetaLink?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationAttachBetaLinkArgs, 'input'>>;
-  authorizeControllerForSession?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationAuthorizeControllerForSessionArgs, 'controllerId' | 'sessionId'>>;
-  controllerHeartbeat?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationControllerHeartbeatArgs, 'sessionId'>>;
-  createBoard?: Resolver<ResolversTypes['UserBoard'], ParentType, ContextType, RequireFields<MutationCreateBoardArgs, 'input'>>;
+export type MutationResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation'],
+> = ResolversObject<{
+  addClimbToPlaylist?: Resolver<
+    ResolversTypes['PlaylistClimb'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAddClimbToPlaylistArgs, 'input'>
+  >;
+  addComment?: Resolver<
+    ResolversTypes['Comment'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAddCommentArgs, 'input'>
+  >;
+  addGymMember?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAddGymMemberArgs, 'input'>
+  >;
+  addQueueItem?: Resolver<
+    ResolversTypes['ClimbQueueItem'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAddQueueItemArgs, 'item'>
+  >;
+  addUserToSession?: Resolver<
+    Maybe<ResolversTypes['SessionDetail']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationAddUserToSessionArgs, 'input'>
+  >;
+  attachBetaLink?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAttachBetaLinkArgs, 'input'>
+  >;
+  authorizeControllerForSession?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationAuthorizeControllerForSessionArgs, 'controllerId' | 'sessionId'>
+  >;
+  controllerHeartbeat?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationControllerHeartbeatArgs, 'sessionId'>
+  >;
+  createBoard?: Resolver<
+    ResolversTypes['UserBoard'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateBoardArgs, 'input'>
+  >;
   createGym?: Resolver<ResolversTypes['Gym'], ParentType, ContextType, RequireFields<MutationCreateGymArgs, 'input'>>;
-  createPlaylist?: Resolver<ResolversTypes['Playlist'], ParentType, ContextType, RequireFields<MutationCreatePlaylistArgs, 'input'>>;
-  createProposal?: Resolver<ResolversTypes['Proposal'], ParentType, ContextType, RequireFields<MutationCreateProposalArgs, 'input'>>;
-  createSession?: Resolver<ResolversTypes['Session'], ParentType, ContextType, RequireFields<MutationCreateSessionArgs, 'input'>>;
-  deleteAccount?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteAccountArgs, 'input'>>;
-  deleteAuroraCredential?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteAuroraCredentialArgs, 'boardType'>>;
-  deleteBoard?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteBoardArgs, 'boardUuid'>>;
-  deleteComment?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteCommentArgs, 'commentUuid'>>;
-  deleteController?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteControllerArgs, 'controllerId'>>;
-  deleteDraftClimb?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteDraftClimbArgs, 'boardType' | 'uuid'>>;
-  deleteGym?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteGymArgs, 'gymUuid'>>;
-  deletePlaylist?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeletePlaylistArgs, 'playlistId'>>;
-  deleteProposal?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteProposalArgs, 'input'>>;
-  deleteTick?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationDeleteTickArgs, 'uuid'>>;
-  endSession?: Resolver<Maybe<ResolversTypes['SessionSummary']>, ParentType, ContextType, RequireFields<MutationEndSessionArgs, 'sessionId'>>;
-  followBoard?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationFollowBoardArgs, 'input'>>;
-  followGym?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationFollowGymArgs, 'input'>>;
-  followPlaylist?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationFollowPlaylistArgs, 'input'>>;
-  followSetter?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationFollowSetterArgs, 'input'>>;
-  followUser?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationFollowUserArgs, 'input'>>;
-  freezeClimb?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationFreezeClimbArgs, 'input'>>;
-  grantRole?: Resolver<ResolversTypes['CommunityRoleAssignment'], ParentType, ContextType, RequireFields<MutationGrantRoleArgs, 'input'>>;
-  joinSession?: Resolver<ResolversTypes['Session'], ParentType, ContextType, RequireFields<MutationJoinSessionArgs, 'boardPath' | 'sessionId'>>;
+  createPlaylist?: Resolver<
+    ResolversTypes['Playlist'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreatePlaylistArgs, 'input'>
+  >;
+  createProposal?: Resolver<
+    ResolversTypes['Proposal'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateProposalArgs, 'input'>
+  >;
+  createSession?: Resolver<
+    ResolversTypes['Session'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationCreateSessionArgs, 'input'>
+  >;
+  deleteAccount?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteAccountArgs, 'input'>
+  >;
+  deleteAuroraCredential?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteAuroraCredentialArgs, 'boardType'>
+  >;
+  deleteBoard?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteBoardArgs, 'boardUuid'>
+  >;
+  deleteComment?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteCommentArgs, 'commentUuid'>
+  >;
+  deleteController?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteControllerArgs, 'controllerId'>
+  >;
+  deleteDraftClimb?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteDraftClimbArgs, 'boardType' | 'uuid'>
+  >;
+  deleteGym?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteGymArgs, 'gymUuid'>
+  >;
+  deletePlaylist?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeletePlaylistArgs, 'playlistId'>
+  >;
+  deleteProposal?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteProposalArgs, 'input'>
+  >;
+  deleteTick?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationDeleteTickArgs, 'uuid'>
+  >;
+  endSession?: Resolver<
+    Maybe<ResolversTypes['SessionSummary']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationEndSessionArgs, 'sessionId'>
+  >;
+  followBoard?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationFollowBoardArgs, 'input'>
+  >;
+  followGym?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationFollowGymArgs, 'input'>
+  >;
+  followPlaylist?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationFollowPlaylistArgs, 'input'>
+  >;
+  followSetter?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationFollowSetterArgs, 'input'>
+  >;
+  followUser?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationFollowUserArgs, 'input'>
+  >;
+  freezeClimb?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationFreezeClimbArgs, 'input'>
+  >;
+  grantRole?: Resolver<
+    ResolversTypes['CommunityRoleAssignment'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationGrantRoleArgs, 'input'>
+  >;
+  joinSession?: Resolver<
+    ResolversTypes['Session'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationJoinSessionArgs, 'boardPath' | 'sessionId'>
+  >;
   leaveSession?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
-  linkBoardToGym?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationLinkBoardToGymArgs, 'input'>>;
+  linkBoardToGym?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationLinkBoardToGymArgs, 'input'>
+  >;
   markAllNotificationsRead?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
-  markGroupNotificationsRead?: Resolver<ResolversTypes['Int'], ParentType, ContextType, RequireFields<MutationMarkGroupNotificationsReadArgs, 'type'>>;
-  markNotificationRead?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationMarkNotificationReadArgs, 'notificationUuid'>>;
-  mirrorCurrentClimb?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType, RequireFields<MutationMirrorCurrentClimbArgs, 'mirrored'>>;
-  navigateQueue?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType, RequireFields<MutationNavigateQueueArgs, 'direction' | 'sessionId'>>;
-  pinPlaylist?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationPinPlaylistArgs, 'input'>>;
-  registerController?: Resolver<ResolversTypes['ControllerRegistration'], ParentType, ContextType, RequireFields<MutationRegisterControllerArgs, 'input'>>;
-  removeClimbFromPlaylist?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationRemoveClimbFromPlaylistArgs, 'input'>>;
-  removeGymMember?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationRemoveGymMemberArgs, 'input'>>;
-  removeQueueItem?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationRemoveQueueItemArgs, 'uuid'>>;
-  removeUserFromSession?: Resolver<Maybe<ResolversTypes['SessionDetail']>, ParentType, ContextType, RequireFields<MutationRemoveUserFromSessionArgs, 'input'>>;
-  reorderQueueItem?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationReorderQueueItemArgs, 'newIndex' | 'oldIndex' | 'uuid'>>;
-  replaceQueueItem?: Resolver<ResolversTypes['ClimbQueueItem'], ParentType, ContextType, RequireFields<MutationReplaceQueueItemArgs, 'item' | 'uuid'>>;
-  resolveProposal?: Resolver<ResolversTypes['Proposal'], ParentType, ContextType, RequireFields<MutationResolveProposalArgs, 'input'>>;
-  revokeRole?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationRevokeRoleArgs, 'input'>>;
-  saveAuroraCredential?: Resolver<ResolversTypes['AuroraCredentialStatus'], ParentType, ContextType, RequireFields<MutationSaveAuroraCredentialArgs, 'input'>>;
-  saveClimb?: Resolver<ResolversTypes['SaveClimbResult'], ParentType, ContextType, RequireFields<MutationSaveClimbArgs, 'input'>>;
-  saveMoonBoardClimb?: Resolver<ResolversTypes['SaveClimbResult'], ParentType, ContextType, RequireFields<MutationSaveMoonBoardClimbArgs, 'input'>>;
+  markGroupNotificationsRead?: Resolver<
+    ResolversTypes['Int'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationMarkGroupNotificationsReadArgs, 'type'>
+  >;
+  markNotificationRead?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationMarkNotificationReadArgs, 'notificationUuid'>
+  >;
+  mirrorCurrentClimb?: Resolver<
+    Maybe<ResolversTypes['ClimbQueueItem']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationMirrorCurrentClimbArgs, 'mirrored'>
+  >;
+  navigateQueue?: Resolver<
+    Maybe<ResolversTypes['ClimbQueueItem']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationNavigateQueueArgs, 'direction' | 'sessionId'>
+  >;
+  pinPlaylist?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationPinPlaylistArgs, 'input'>
+  >;
+  registerController?: Resolver<
+    ResolversTypes['ControllerRegistration'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRegisterControllerArgs, 'input'>
+  >;
+  removeClimbFromPlaylist?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRemoveClimbFromPlaylistArgs, 'input'>
+  >;
+  removeGymMember?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRemoveGymMemberArgs, 'input'>
+  >;
+  removeQueueItem?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRemoveQueueItemArgs, 'uuid'>
+  >;
+  removeUserFromSession?: Resolver<
+    Maybe<ResolversTypes['SessionDetail']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationRemoveUserFromSessionArgs, 'input'>
+  >;
+  reorderQueueItem?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationReorderQueueItemArgs, 'newIndex' | 'oldIndex' | 'uuid'>
+  >;
+  replaceQueueItem?: Resolver<
+    ResolversTypes['ClimbQueueItem'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationReplaceQueueItemArgs, 'item' | 'uuid'>
+  >;
+  resolveProposal?: Resolver<
+    ResolversTypes['Proposal'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationResolveProposalArgs, 'input'>
+  >;
+  revokeRole?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationRevokeRoleArgs, 'input'>
+  >;
+  saveAuroraCredential?: Resolver<
+    ResolversTypes['AuroraCredentialStatus'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSaveAuroraCredentialArgs, 'input'>
+  >;
+  saveClimb?: Resolver<
+    ResolversTypes['SaveClimbResult'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSaveClimbArgs, 'input'>
+  >;
+  saveMoonBoardClimb?: Resolver<
+    ResolversTypes['SaveClimbResult'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSaveMoonBoardClimbArgs, 'input'>
+  >;
   saveTick?: Resolver<ResolversTypes['Tick'], ParentType, ContextType, RequireFields<MutationSaveTickArgs, 'input'>>;
-  sendDeviceLogs?: Resolver<ResolversTypes['SendDeviceLogsResponse'], ParentType, ContextType, RequireFields<MutationSendDeviceLogsArgs, 'input'>>;
-  setClimbFromLedPositions?: Resolver<ResolversTypes['ClimbMatchResult'], ParentType, ContextType, RequireFields<MutationSetClimbFromLedPositionsArgs, 'sessionId'>>;
-  setCommunitySettings?: Resolver<ResolversTypes['CommunitySetting'], ParentType, ContextType, RequireFields<MutationSetCommunitySettingsArgs, 'input'>>;
-  setCurrentClimb?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType, Partial<MutationSetCurrentClimbArgs>>;
-  setInferredSessionHealthKitWorkoutId?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationSetInferredSessionHealthKitWorkoutIdArgs, 'sessionId' | 'workoutId'>>;
-  setQueue?: Resolver<ResolversTypes['QueueState'], ParentType, ContextType, RequireFields<MutationSetQueueArgs, 'queue'>>;
-  setterOverrideCommunityStatus?: Resolver<ResolversTypes['ClimbCommunityStatus'], ParentType, ContextType, RequireFields<MutationSetterOverrideCommunityStatusArgs, 'input'>>;
-  submitAppFeedback?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationSubmitAppFeedbackArgs, 'input'>>;
-  subscribeNewClimbs?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationSubscribeNewClimbsArgs, 'input'>>;
-  toggleFavorite?: Resolver<ResolversTypes['ToggleFavoriteResult'], ParentType, ContextType, RequireFields<MutationToggleFavoriteArgs, 'input'>>;
-  unfollowBoard?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUnfollowBoardArgs, 'input'>>;
-  unfollowGym?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUnfollowGymArgs, 'input'>>;
-  unfollowPlaylist?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUnfollowPlaylistArgs, 'input'>>;
-  unfollowSetter?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUnfollowSetterArgs, 'input'>>;
-  unfollowUser?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUnfollowUserArgs, 'input'>>;
-  unpinPlaylist?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUnpinPlaylistArgs, 'input'>>;
-  unsubscribeNewClimbs?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUnsubscribeNewClimbsArgs, 'input'>>;
-  updateBoard?: Resolver<ResolversTypes['UserBoard'], ParentType, ContextType, RequireFields<MutationUpdateBoardArgs, 'input'>>;
-  updateClimb?: Resolver<ResolversTypes['UpdateClimbResult'], ParentType, ContextType, RequireFields<MutationUpdateClimbArgs, 'input'>>;
-  updateComment?: Resolver<ResolversTypes['Comment'], ParentType, ContextType, RequireFields<MutationUpdateCommentArgs, 'input'>>;
+  sendDeviceLogs?: Resolver<
+    ResolversTypes['SendDeviceLogsResponse'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSendDeviceLogsArgs, 'input'>
+  >;
+  setClimbFromLedPositions?: Resolver<
+    ResolversTypes['ClimbMatchResult'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetClimbFromLedPositionsArgs, 'sessionId'>
+  >;
+  setCommunitySettings?: Resolver<
+    ResolversTypes['CommunitySetting'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetCommunitySettingsArgs, 'input'>
+  >;
+  setCurrentClimb?: Resolver<
+    Maybe<ResolversTypes['ClimbQueueItem']>,
+    ParentType,
+    ContextType,
+    Partial<MutationSetCurrentClimbArgs>
+  >;
+  setInferredSessionHealthKitWorkoutId?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetInferredSessionHealthKitWorkoutIdArgs, 'sessionId' | 'workoutId'>
+  >;
+  setQueue?: Resolver<
+    ResolversTypes['QueueState'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetQueueArgs, 'queue'>
+  >;
+  setterOverrideCommunityStatus?: Resolver<
+    ResolversTypes['ClimbCommunityStatus'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetterOverrideCommunityStatusArgs, 'input'>
+  >;
+  submitAppFeedback?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSubmitAppFeedbackArgs, 'input'>
+  >;
+  subscribeNewClimbs?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSubscribeNewClimbsArgs, 'input'>
+  >;
+  toggleFavorite?: Resolver<
+    ResolversTypes['ToggleFavoriteResult'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationToggleFavoriteArgs, 'input'>
+  >;
+  unfollowBoard?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUnfollowBoardArgs, 'input'>
+  >;
+  unfollowGym?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUnfollowGymArgs, 'input'>
+  >;
+  unfollowPlaylist?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUnfollowPlaylistArgs, 'input'>
+  >;
+  unfollowSetter?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUnfollowSetterArgs, 'input'>
+  >;
+  unfollowUser?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUnfollowUserArgs, 'input'>
+  >;
+  unpinPlaylist?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUnpinPlaylistArgs, 'input'>
+  >;
+  unsubscribeNewClimbs?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUnsubscribeNewClimbsArgs, 'input'>
+  >;
+  updateBoard?: Resolver<
+    ResolversTypes['UserBoard'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateBoardArgs, 'input'>
+  >;
+  updateClimb?: Resolver<
+    ResolversTypes['UpdateClimbResult'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateClimbArgs, 'input'>
+  >;
+  updateComment?: Resolver<
+    ResolversTypes['Comment'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateCommentArgs, 'input'>
+  >;
   updateGym?: Resolver<ResolversTypes['Gym'], ParentType, ContextType, RequireFields<MutationUpdateGymArgs, 'input'>>;
-  updateInferredSession?: Resolver<Maybe<ResolversTypes['SessionDetail']>, ParentType, ContextType, RequireFields<MutationUpdateInferredSessionArgs, 'input'>>;
-  updatePlaylist?: Resolver<ResolversTypes['Playlist'], ParentType, ContextType, RequireFields<MutationUpdatePlaylistArgs, 'input'>>;
-  updatePlaylistLastAccessed?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUpdatePlaylistLastAccessedArgs, 'playlistId'>>;
-  updateProfile?: Resolver<ResolversTypes['UserProfile'], ParentType, ContextType, RequireFields<MutationUpdateProfileArgs, 'input'>>;
-  updateTick?: Resolver<ResolversTypes['Tick'], ParentType, ContextType, RequireFields<MutationUpdateTickArgs, 'input' | 'uuid'>>;
-  updateUsername?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<MutationUpdateUsernameArgs, 'username'>>;
+  updateInferredSession?: Resolver<
+    Maybe<ResolversTypes['SessionDetail']>,
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateInferredSessionArgs, 'input'>
+  >;
+  updatePlaylist?: Resolver<
+    ResolversTypes['Playlist'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdatePlaylistArgs, 'input'>
+  >;
+  updatePlaylistLastAccessed?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdatePlaylistLastAccessedArgs, 'playlistId'>
+  >;
+  updateProfile?: Resolver<
+    ResolversTypes['UserProfile'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateProfileArgs, 'input'>
+  >;
+  updateTick?: Resolver<
+    ResolversTypes['Tick'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateTickArgs, 'input' | 'uuid'>
+  >;
+  updateUsername?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationUpdateUsernameArgs, 'username'>
+  >;
   vote?: Resolver<ResolversTypes['VoteSummary'], ParentType, ContextType, RequireFields<MutationVoteArgs, 'input'>>;
-  voteOnProposal?: Resolver<ResolversTypes['Proposal'], ParentType, ContextType, RequireFields<MutationVoteOnProposalArgs, 'input'>>;
+  voteOnProposal?: Resolver<
+    ResolversTypes['Proposal'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationVoteOnProposalArgs, 'input'>
+  >;
 }>;
 
-export type NewClimbCreatedEventResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['NewClimbCreatedEvent'] = ResolversParentTypes['NewClimbCreatedEvent']> = ResolversObject<{
+export type NewClimbCreatedEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['NewClimbCreatedEvent'] = ResolversParentTypes['NewClimbCreatedEvent'],
+> = ResolversObject<{
   climb?: Resolver<ResolversTypes['NewClimbFeedItem'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type NewClimbFeedItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['NewClimbFeedItem'] = ResolversParentTypes['NewClimbFeedItem']> = ResolversObject<{
+export type NewClimbFeedItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['NewClimbFeedItem'] = ResolversParentTypes['NewClimbFeedItem'],
+> = ResolversObject<{
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6242,14 +6648,20 @@ export type NewClimbFeedItemResolvers<ContextType = ConnectionContext, ParentTyp
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type NewClimbFeedResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['NewClimbFeedResult'] = ResolversParentTypes['NewClimbFeedResult']> = ResolversObject<{
+export type NewClimbFeedResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['NewClimbFeedResult'] = ResolversParentTypes['NewClimbFeedResult'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   items?: Resolver<Array<ResolversTypes['NewClimbFeedItem']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type NewClimbSubscriptionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['NewClimbSubscription'] = ResolversParentTypes['NewClimbSubscription']> = ResolversObject<{
+export type NewClimbSubscriptionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['NewClimbSubscription'] = ResolversParentTypes['NewClimbSubscription'],
+> = ResolversObject<{
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -6257,7 +6669,10 @@ export type NewClimbSubscriptionResolvers<ContextType = ConnectionContext, Paren
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type NotificationResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Notification'] = ResolversParentTypes['Notification']> = ResolversObject<{
+export type NotificationResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Notification'] = ResolversParentTypes['Notification'],
+> = ResolversObject<{
   actorAvatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   actorDisplayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   actorId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6275,7 +6690,10 @@ export type NotificationResolvers<ContextType = ConnectionContext, ParentType ex
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type NotificationConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['NotificationConnection'] = ResolversParentTypes['NotificationConnection']> = ResolversObject<{
+export type NotificationConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['NotificationConnection'] = ResolversParentTypes['NotificationConnection'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   notifications?: Resolver<Array<ResolversTypes['Notification']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6283,12 +6701,18 @@ export type NotificationConnectionResolvers<ContextType = ConnectionContext, Par
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type NotificationEventResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['NotificationEvent'] = ResolversParentTypes['NotificationEvent']> = ResolversObject<{
+export type NotificationEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['NotificationEvent'] = ResolversParentTypes['NotificationEvent'],
+> = ResolversObject<{
   notification?: Resolver<ResolversTypes['Notification'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type OutlierAnalysisResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['OutlierAnalysis'] = ResolversParentTypes['OutlierAnalysis']> = ResolversObject<{
+export type OutlierAnalysisResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['OutlierAnalysis'] = ResolversParentTypes['OutlierAnalysis'],
+> = ResolversObject<{
   currentGrade?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   gradeDifference?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   isOutlier?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -6297,7 +6721,10 @@ export type OutlierAnalysisResolvers<ContextType = ConnectionContext, ParentType
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PlaylistResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Playlist'] = ResolversParentTypes['Playlist']> = ResolversObject<{
+export type PlaylistResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Playlist'] = ResolversParentTypes['Playlist'],
+> = ResolversObject<{
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   color?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6318,7 +6745,10 @@ export type PlaylistResolvers<ContextType = ConnectionContext, ParentType extend
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PlaylistClimbResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['PlaylistClimb'] = ResolversParentTypes['PlaylistClimb']> = ResolversObject<{
+export type PlaylistClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PlaylistClimb'] = ResolversParentTypes['PlaylistClimb'],
+> = ResolversObject<{
   addedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6328,21 +6758,30 @@ export type PlaylistClimbResolvers<ContextType = ConnectionContext, ParentType e
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PlaylistClimbsResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['PlaylistClimbsResult'] = ResolversParentTypes['PlaylistClimbsResult']> = ResolversObject<{
+export type PlaylistClimbsResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PlaylistClimbsResult'] = ResolversParentTypes['PlaylistClimbsResult'],
+> = ResolversObject<{
   climbs?: Resolver<Array<ResolversTypes['Climb']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PlaylistCreatorResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['PlaylistCreator'] = ResolversParentTypes['PlaylistCreator']> = ResolversObject<{
+export type PlaylistCreatorResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PlaylistCreator'] = ResolversParentTypes['PlaylistCreator'],
+> = ResolversObject<{
   displayName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   playlistCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   userId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PopularBoardConfigResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['PopularBoardConfig'] = ResolversParentTypes['PopularBoardConfig']> = ResolversObject<{
+export type PopularBoardConfigResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PopularBoardConfig'] = ResolversParentTypes['PopularBoardConfig'],
+> = ResolversObject<{
   boardCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6358,20 +6797,30 @@ export type PopularBoardConfigResolvers<ContextType = ConnectionContext, ParentT
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PopularBoardConfigConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['PopularBoardConfigConnection'] = ResolversParentTypes['PopularBoardConfigConnection']> = ResolversObject<{
+export type PopularBoardConfigConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PopularBoardConfigConnection'] =
+    ResolversParentTypes['PopularBoardConfigConnection'],
+> = ResolversObject<{
   configs?: Resolver<Array<ResolversTypes['PopularBoardConfig']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ProfileStatsResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ProfileStats'] = ResolversParentTypes['ProfileStats']> = ResolversObject<{
+export type ProfileStatsResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ProfileStats'] = ResolversParentTypes['ProfileStats'],
+> = ResolversObject<{
   layoutStats?: Resolver<Array<ResolversTypes['LayoutStats']>, ParentType, ContextType>;
   totalDistinctClimbs?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ProposalResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Proposal'] = ResolversParentTypes['Proposal']> = ResolversObject<{
+export type ProposalResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Proposal'] = ResolversParentTypes['Proposal'],
+> = ResolversObject<{
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbAscensionistCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
@@ -6404,14 +6853,20 @@ export type ProposalResolvers<ContextType = ConnectionContext, ParentType extend
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ProposalConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ProposalConnection'] = ResolversParentTypes['ProposalConnection']> = ResolversObject<{
+export type ProposalConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ProposalConnection'] = ResolversParentTypes['ProposalConnection'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   proposals?: Resolver<Array<ResolversTypes['Proposal']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ProposalVoteSummaryResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ProposalVoteSummary'] = ResolversParentTypes['ProposalVoteSummary']> = ResolversObject<{
+export type ProposalVoteSummaryResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ProposalVoteSummary'] = ResolversParentTypes['ProposalVoteSummary'],
+> = ResolversObject<{
   isApproved?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   requiredUpvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   weightedDownvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6419,7 +6874,10 @@ export type ProposalVoteSummaryResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type PublicUserProfileResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['PublicUserProfile'] = ResolversParentTypes['PublicUserProfile']> = ResolversObject<{
+export type PublicUserProfileResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PublicUserProfile'] = ResolversParentTypes['PublicUserProfile'],
+> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   followerCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6429,121 +6887,498 @@ export type PublicUserProfileResolvers<ContextType = ConnectionContext, ParentTy
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueryResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
-  activityFeed?: Resolver<ResolversTypes['ActivityFeedResult'], ParentType, ContextType, Partial<QueryActivityFeedArgs>>;
-  allUserPlaylists?: Resolver<ResolversTypes['AllUserPlaylistsResult'], ParentType, ContextType, RequireFields<QueryAllUserPlaylistsArgs, 'input'>>;
-  angles?: Resolver<Array<ResolversTypes['Angle']>, ParentType, ContextType, RequireFields<QueryAnglesArgs, 'boardName' | 'layoutId'>>;
-  auroraCredential?: Resolver<Maybe<ResolversTypes['AuroraCredential']>, ParentType, ContextType, RequireFields<QueryAuroraCredentialArgs, 'boardType'>>;
+export type QueryResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query'],
+> = ResolversObject<{
+  activityFeed?: Resolver<
+    ResolversTypes['ActivityFeedResult'],
+    ParentType,
+    ContextType,
+    Partial<QueryActivityFeedArgs>
+  >;
+  allUserPlaylists?: Resolver<
+    ResolversTypes['AllUserPlaylistsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryAllUserPlaylistsArgs, 'input'>
+  >;
+  angles?: Resolver<
+    Array<ResolversTypes['Angle']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryAnglesArgs, 'boardName' | 'layoutId'>
+  >;
+  auroraCredential?: Resolver<
+    Maybe<ResolversTypes['AuroraCredential']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryAuroraCredentialArgs, 'boardType'>
+  >;
   auroraCredentials?: Resolver<Array<ResolversTypes['AuroraCredentialStatus']>, ParentType, ContextType>;
-  betaLinks?: Resolver<Array<ResolversTypes['BetaLink']>, ParentType, ContextType, RequireFields<QueryBetaLinksArgs, 'boardType' | 'climbUuid'>>;
-  board?: Resolver<Maybe<ResolversTypes['UserBoard']>, ParentType, ContextType, RequireFields<QueryBoardArgs, 'boardUuid'>>;
-  boardBySlug?: Resolver<Maybe<ResolversTypes['UserBoard']>, ParentType, ContextType, RequireFields<QueryBoardBySlugArgs, 'slug'>>;
-  boardLeaderboard?: Resolver<ResolversTypes['BoardLeaderboard'], ParentType, ContextType, RequireFields<QueryBoardLeaderboardArgs, 'input'>>;
-  boardsBySerialNumbers?: Resolver<Array<ResolversTypes['UserBoard']>, ParentType, ContextType, RequireFields<QueryBoardsBySerialNumbersArgs, 'serialNumbers'>>;
-  browseProposals?: Resolver<ResolversTypes['ProposalConnection'], ParentType, ContextType, RequireFields<QueryBrowseProposalsArgs, 'input'>>;
-  bulkClimbCommunityStatus?: Resolver<Array<ResolversTypes['ClimbCommunityStatus']>, ParentType, ContextType, RequireFields<QueryBulkClimbCommunityStatusArgs, 'angle' | 'boardType' | 'climbUuids'>>;
-  bulkVoteSummaries?: Resolver<Array<ResolversTypes['VoteSummary']>, ParentType, ContextType, RequireFields<QueryBulkVoteSummariesArgs, 'input'>>;
-  checkMoonBoardClimbDuplicates?: Resolver<Array<ResolversTypes['MoonBoardClimbDuplicateMatch']>, ParentType, ContextType, RequireFields<QueryCheckMoonBoardClimbDuplicatesArgs, 'input'>>;
-  climb?: Resolver<Maybe<ResolversTypes['Climb']>, ParentType, ContextType, RequireFields<QueryClimbArgs, 'angle' | 'boardName' | 'climbUuid' | 'layoutId' | 'setIds' | 'sizeId'>>;
-  climbClassicStatus?: Resolver<ResolversTypes['ClimbClassicStatus'], ParentType, ContextType, RequireFields<QueryClimbClassicStatusArgs, 'boardType' | 'climbUuid'>>;
-  climbCommunityStatus?: Resolver<ResolversTypes['ClimbCommunityStatus'], ParentType, ContextType, RequireFields<QueryClimbCommunityStatusArgs, 'angle' | 'boardType' | 'climbUuid'>>;
-  climbProposals?: Resolver<ResolversTypes['ProposalConnection'], ParentType, ContextType, RequireFields<QueryClimbProposalsArgs, 'input'>>;
-  climbStatsHistory?: Resolver<Array<ResolversTypes['ClimbStatsHistoryEntry']>, ParentType, ContextType, RequireFields<QueryClimbStatsHistoryArgs, 'boardName' | 'climbUuid'>>;
-  comments?: Resolver<ResolversTypes['CommentConnection'], ParentType, ContextType, RequireFields<QueryCommentsArgs, 'input'>>;
-  communityRoles?: Resolver<Array<ResolversTypes['CommunityRoleAssignment']>, ParentType, ContextType, Partial<QueryCommunityRolesArgs>>;
-  communitySettings?: Resolver<Array<ResolversTypes['CommunitySetting']>, ParentType, ContextType, RequireFields<QueryCommunitySettingsArgs, 'scope' | 'scopeKey'>>;
+  betaLinks?: Resolver<
+    Array<ResolversTypes['BetaLink']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBetaLinksArgs, 'boardType' | 'climbUuid'>
+  >;
+  board?: Resolver<
+    Maybe<ResolversTypes['UserBoard']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardArgs, 'boardUuid'>
+  >;
+  boardBySlug?: Resolver<
+    Maybe<ResolversTypes['UserBoard']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardBySlugArgs, 'slug'>
+  >;
+  boardLeaderboard?: Resolver<
+    ResolversTypes['BoardLeaderboard'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardLeaderboardArgs, 'input'>
+  >;
+  boardsBySerialNumbers?: Resolver<
+    Array<ResolversTypes['UserBoard']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBoardsBySerialNumbersArgs, 'serialNumbers'>
+  >;
+  browseProposals?: Resolver<
+    ResolversTypes['ProposalConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryBrowseProposalsArgs, 'input'>
+  >;
+  bulkClimbCommunityStatus?: Resolver<
+    Array<ResolversTypes['ClimbCommunityStatus']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBulkClimbCommunityStatusArgs, 'angle' | 'boardType' | 'climbUuids'>
+  >;
+  bulkVoteSummaries?: Resolver<
+    Array<ResolversTypes['VoteSummary']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryBulkVoteSummariesArgs, 'input'>
+  >;
+  checkMoonBoardClimbDuplicates?: Resolver<
+    Array<ResolversTypes['MoonBoardClimbDuplicateMatch']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryCheckMoonBoardClimbDuplicatesArgs, 'input'>
+  >;
+  climb?: Resolver<
+    Maybe<ResolversTypes['Climb']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryClimbArgs, 'angle' | 'boardName' | 'climbUuid' | 'layoutId' | 'setIds' | 'sizeId'>
+  >;
+  climbClassicStatus?: Resolver<
+    ResolversTypes['ClimbClassicStatus'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryClimbClassicStatusArgs, 'boardType' | 'climbUuid'>
+  >;
+  climbCommunityStatus?: Resolver<
+    ResolversTypes['ClimbCommunityStatus'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryClimbCommunityStatusArgs, 'angle' | 'boardType' | 'climbUuid'>
+  >;
+  climbProposals?: Resolver<
+    ResolversTypes['ProposalConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryClimbProposalsArgs, 'input'>
+  >;
+  climbStatsHistory?: Resolver<
+    Array<ResolversTypes['ClimbStatsHistoryEntry']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryClimbStatsHistoryArgs, 'boardName' | 'climbUuid'>
+  >;
+  comments?: Resolver<
+    ResolversTypes['CommentConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryCommentsArgs, 'input'>
+  >;
+  communityRoles?: Resolver<
+    Array<ResolversTypes['CommunityRoleAssignment']>,
+    ParentType,
+    ContextType,
+    Partial<QueryCommunityRolesArgs>
+  >;
+  communitySettings?: Resolver<
+    Array<ResolversTypes['CommunitySetting']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryCommunitySettingsArgs, 'scope' | 'scopeKey'>
+  >;
   defaultBoard?: Resolver<Maybe<ResolversTypes['UserBoard']>, ParentType, ContextType>;
   deleteAccountInfo?: Resolver<ResolversTypes['DeleteAccountInfo'], ParentType, ContextType>;
-  discoverPlaylists?: Resolver<ResolversTypes['DiscoverPlaylistsResult'], ParentType, ContextType, RequireFields<QueryDiscoverPlaylistsArgs, 'input'>>;
-  eventsReplay?: Resolver<ResolversTypes['EventsReplayResponse'], ParentType, ContextType, RequireFields<QueryEventsReplayArgs, 'sessionId' | 'sinceSequence'>>;
-  favorites?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType, RequireFields<QueryFavoritesArgs, 'angle' | 'boardName' | 'climbUuids'>>;
-  followers?: Resolver<ResolversTypes['FollowConnection'], ParentType, ContextType, RequireFields<QueryFollowersArgs, 'input'>>;
-  following?: Resolver<ResolversTypes['FollowConnection'], ParentType, ContextType, RequireFields<QueryFollowingArgs, 'input'>>;
-  followingAscentsFeed?: Resolver<ResolversTypes['FollowingAscentsFeedResult'], ParentType, ContextType, Partial<QueryFollowingAscentsFeedArgs>>;
-  followingClimbAscents?: Resolver<ResolversTypes['FollowingClimbAscentsResult'], ParentType, ContextType, RequireFields<QueryFollowingClimbAscentsArgs, 'input'>>;
-  globalAscentsFeed?: Resolver<ResolversTypes['FollowingAscentsFeedResult'], ParentType, ContextType, Partial<QueryGlobalAscentsFeedArgs>>;
-  globalCommentFeed?: Resolver<ResolversTypes['CommentConnection'], ParentType, ContextType, Partial<QueryGlobalCommentFeedArgs>>;
-  grades?: Resolver<Array<ResolversTypes['Grade']>, ParentType, ContextType, RequireFields<QueryGradesArgs, 'boardName'>>;
-  groupedNotifications?: Resolver<ResolversTypes['GroupedNotificationConnection'], ParentType, ContextType, Partial<QueryGroupedNotificationsArgs>>;
+  discoverPlaylists?: Resolver<
+    ResolversTypes['DiscoverPlaylistsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryDiscoverPlaylistsArgs, 'input'>
+  >;
+  eventsReplay?: Resolver<
+    ResolversTypes['EventsReplayResponse'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryEventsReplayArgs, 'sessionId' | 'sinceSequence'>
+  >;
+  favorites?: Resolver<
+    Array<ResolversTypes['String']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryFavoritesArgs, 'angle' | 'boardName' | 'climbUuids'>
+  >;
+  followers?: Resolver<
+    ResolversTypes['FollowConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryFollowersArgs, 'input'>
+  >;
+  following?: Resolver<
+    ResolversTypes['FollowConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryFollowingArgs, 'input'>
+  >;
+  followingAscentsFeed?: Resolver<
+    ResolversTypes['FollowingAscentsFeedResult'],
+    ParentType,
+    ContextType,
+    Partial<QueryFollowingAscentsFeedArgs>
+  >;
+  followingClimbAscents?: Resolver<
+    ResolversTypes['FollowingClimbAscentsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryFollowingClimbAscentsArgs, 'input'>
+  >;
+  globalAscentsFeed?: Resolver<
+    ResolversTypes['FollowingAscentsFeedResult'],
+    ParentType,
+    ContextType,
+    Partial<QueryGlobalAscentsFeedArgs>
+  >;
+  globalCommentFeed?: Resolver<
+    ResolversTypes['CommentConnection'],
+    ParentType,
+    ContextType,
+    Partial<QueryGlobalCommentFeedArgs>
+  >;
+  grades?: Resolver<
+    Array<ResolversTypes['Grade']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGradesArgs, 'boardName'>
+  >;
+  groupedNotifications?: Resolver<
+    ResolversTypes['GroupedNotificationConnection'],
+    ParentType,
+    ContextType,
+    Partial<QueryGroupedNotificationsArgs>
+  >;
   gym?: Resolver<Maybe<ResolversTypes['Gym']>, ParentType, ContextType, RequireFields<QueryGymArgs, 'gymUuid'>>;
-  gymBySlug?: Resolver<Maybe<ResolversTypes['Gym']>, ParentType, ContextType, RequireFields<QueryGymBySlugArgs, 'slug'>>;
-  gymMembers?: Resolver<ResolversTypes['GymMemberConnection'], ParentType, ContextType, RequireFields<QueryGymMembersArgs, 'input'>>;
-  isFollowing?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType, RequireFields<QueryIsFollowingArgs, 'userId'>>;
-  myBoardSerialConfigs?: Resolver<Array<ResolversTypes['BoardSerialConfig']>, ParentType, ContextType, RequireFields<QueryMyBoardSerialConfigsArgs, 'serialNumbers'>>;
+  gymBySlug?: Resolver<
+    Maybe<ResolversTypes['Gym']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryGymBySlugArgs, 'slug'>
+  >;
+  gymMembers?: Resolver<
+    ResolversTypes['GymMemberConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryGymMembersArgs, 'input'>
+  >;
+  isFollowing?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryIsFollowingArgs, 'userId'>
+  >;
+  myBoardSerialConfigs?: Resolver<
+    Array<ResolversTypes['BoardSerialConfig']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryMyBoardSerialConfigsArgs, 'serialNumbers'>
+  >;
   myBoards?: Resolver<ResolversTypes['UserBoardConnection'], ParentType, ContextType, Partial<QueryMyBoardsArgs>>;
   myControllers?: Resolver<Array<ResolversTypes['ControllerInfo']>, ParentType, ContextType>;
   myGyms?: Resolver<ResolversTypes['GymConnection'], ParentType, ContextType, Partial<QueryMyGymsArgs>>;
   myNewClimbSubscriptions?: Resolver<Array<ResolversTypes['NewClimbSubscription']>, ParentType, ContextType>;
-  myPinnedPlaylists?: Resolver<Array<ResolversTypes['Playlist']>, ParentType, ContextType, RequireFields<QueryMyPinnedPlaylistsArgs, 'input'>>;
+  myPinnedPlaylists?: Resolver<
+    Array<ResolversTypes['Playlist']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryMyPinnedPlaylistsArgs, 'input'>
+  >;
   myRoles?: Resolver<Array<ResolversTypes['CommunityRoleAssignment']>, ParentType, ContextType>;
   mySessions?: Resolver<Array<ResolversTypes['DiscoverableSession']>, ParentType, ContextType>;
   mySmartPlaylistCounts?: Resolver<Array<ResolversTypes['SmartPlaylistCount']>, ParentType, ContextType>;
-  nearbySessions?: Resolver<Array<ResolversTypes['DiscoverableSession']>, ParentType, ContextType, RequireFields<QueryNearbySessionsArgs, 'latitude' | 'longitude'>>;
-  newClimbFeed?: Resolver<ResolversTypes['NewClimbFeedResult'], ParentType, ContextType, RequireFields<QueryNewClimbFeedArgs, 'input'>>;
-  notifications?: Resolver<ResolversTypes['NotificationConnection'], ParentType, ContextType, Partial<QueryNotificationsArgs>>;
-  playlist?: Resolver<Maybe<ResolversTypes['Playlist']>, ParentType, ContextType, RequireFields<QueryPlaylistArgs, 'playlistId'>>;
-  playlistClimbs?: Resolver<ResolversTypes['PlaylistClimbsResult'], ParentType, ContextType, RequireFields<QueryPlaylistClimbsArgs, 'input'>>;
-  playlistCreators?: Resolver<Array<ResolversTypes['PlaylistCreator']>, ParentType, ContextType, RequireFields<QueryPlaylistCreatorsArgs, 'input'>>;
-  playlistsForClimb?: Resolver<Array<ResolversTypes['ID']>, ParentType, ContextType, RequireFields<QueryPlaylistsForClimbArgs, 'input'>>;
-  playlistsForClimbs?: Resolver<Array<ResolversTypes['ClimbPlaylistMembership']>, ParentType, ContextType, RequireFields<QueryPlaylistsForClimbsArgs, 'input'>>;
-  popularBoardConfigs?: Resolver<ResolversTypes['PopularBoardConfigConnection'], ParentType, ContextType, Partial<QueryPopularBoardConfigsArgs>>;
+  nearbySessions?: Resolver<
+    Array<ResolversTypes['DiscoverableSession']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryNearbySessionsArgs, 'latitude' | 'longitude'>
+  >;
+  newClimbFeed?: Resolver<
+    ResolversTypes['NewClimbFeedResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryNewClimbFeedArgs, 'input'>
+  >;
+  notifications?: Resolver<
+    ResolversTypes['NotificationConnection'],
+    ParentType,
+    ContextType,
+    Partial<QueryNotificationsArgs>
+  >;
+  playlist?: Resolver<
+    Maybe<ResolversTypes['Playlist']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryPlaylistArgs, 'playlistId'>
+  >;
+  playlistClimbs?: Resolver<
+    ResolversTypes['PlaylistClimbsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryPlaylistClimbsArgs, 'input'>
+  >;
+  playlistCreators?: Resolver<
+    Array<ResolversTypes['PlaylistCreator']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryPlaylistCreatorsArgs, 'input'>
+  >;
+  playlistsForClimb?: Resolver<
+    Array<ResolversTypes['ID']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryPlaylistsForClimbArgs, 'input'>
+  >;
+  playlistsForClimbs?: Resolver<
+    Array<ResolversTypes['ClimbPlaylistMembership']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryPlaylistsForClimbsArgs, 'input'>
+  >;
+  popularBoardConfigs?: Resolver<
+    ResolversTypes['PopularBoardConfigConnection'],
+    ParentType,
+    ContextType,
+    Partial<QueryPopularBoardConfigsArgs>
+  >;
   profile?: Resolver<Maybe<ResolversTypes['UserProfile']>, ParentType, ContextType>;
-  publicProfile?: Resolver<Maybe<ResolversTypes['PublicUserProfile']>, ParentType, ContextType, RequireFields<QueryPublicProfileArgs, 'userId'>>;
-  searchBoards?: Resolver<ResolversTypes['UserBoardConnection'], ParentType, ContextType, RequireFields<QuerySearchBoardsArgs, 'input'>>;
-  searchClimbs?: Resolver<ResolversTypes['ClimbSearchResult'], ParentType, ContextType, RequireFields<QuerySearchClimbsArgs, 'input'>>;
-  searchGyms?: Resolver<ResolversTypes['GymConnection'], ParentType, ContextType, RequireFields<QuerySearchGymsArgs, 'input'>>;
-  searchPlaylists?: Resolver<ResolversTypes['SearchPlaylistsResult'], ParentType, ContextType, RequireFields<QuerySearchPlaylistsArgs, 'input'>>;
-  searchUsers?: Resolver<ResolversTypes['UserSearchConnection'], ParentType, ContextType, RequireFields<QuerySearchUsersArgs, 'input'>>;
-  searchUsersAndSetters?: Resolver<ResolversTypes['UnifiedSearchConnection'], ParentType, ContextType, RequireFields<QuerySearchUsersAndSettersArgs, 'input'>>;
-  session?: Resolver<Maybe<ResolversTypes['Session']>, ParentType, ContextType, RequireFields<QuerySessionArgs, 'sessionId'>>;
-  sessionDetail?: Resolver<Maybe<ResolversTypes['SessionDetail']>, ParentType, ContextType, RequireFields<QuerySessionDetailArgs, 'sessionId'>>;
-  sessionGroupedFeed?: Resolver<ResolversTypes['SessionFeedResult'], ParentType, ContextType, Partial<QuerySessionGroupedFeedArgs>>;
-  sessionSummary?: Resolver<Maybe<ResolversTypes['SessionSummary']>, ParentType, ContextType, RequireFields<QuerySessionSummaryArgs, 'sessionId'>>;
-  setterClimbs?: Resolver<ResolversTypes['SetterClimbsConnection'], ParentType, ContextType, RequireFields<QuerySetterClimbsArgs, 'input'>>;
-  setterClimbsFull?: Resolver<ResolversTypes['PlaylistClimbsResult'], ParentType, ContextType, RequireFields<QuerySetterClimbsFullArgs, 'input'>>;
-  setterProfile?: Resolver<Maybe<ResolversTypes['SetterProfile']>, ParentType, ContextType, RequireFields<QuerySetterProfileArgs, 'input'>>;
-  smartPlaylist?: Resolver<ResolversTypes['SmartPlaylistResult'], ParentType, ContextType, RequireFields<QuerySmartPlaylistArgs, 'input'>>;
+  publicProfile?: Resolver<
+    Maybe<ResolversTypes['PublicUserProfile']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryPublicProfileArgs, 'userId'>
+  >;
+  searchBoards?: Resolver<
+    ResolversTypes['UserBoardConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySearchBoardsArgs, 'input'>
+  >;
+  searchClimbs?: Resolver<
+    ResolversTypes['ClimbSearchResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySearchClimbsArgs, 'input'>
+  >;
+  searchGyms?: Resolver<
+    ResolversTypes['GymConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySearchGymsArgs, 'input'>
+  >;
+  searchPlaylists?: Resolver<
+    ResolversTypes['SearchPlaylistsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySearchPlaylistsArgs, 'input'>
+  >;
+  searchUsers?: Resolver<
+    ResolversTypes['UserSearchConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySearchUsersArgs, 'input'>
+  >;
+  searchUsersAndSetters?: Resolver<
+    ResolversTypes['UnifiedSearchConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySearchUsersAndSettersArgs, 'input'>
+  >;
+  session?: Resolver<
+    Maybe<ResolversTypes['Session']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySessionArgs, 'sessionId'>
+  >;
+  sessionDetail?: Resolver<
+    Maybe<ResolversTypes['SessionDetail']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySessionDetailArgs, 'sessionId'>
+  >;
+  sessionGroupedFeed?: Resolver<
+    ResolversTypes['SessionFeedResult'],
+    ParentType,
+    ContextType,
+    Partial<QuerySessionGroupedFeedArgs>
+  >;
+  sessionSummary?: Resolver<
+    Maybe<ResolversTypes['SessionSummary']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySessionSummaryArgs, 'sessionId'>
+  >;
+  setterClimbs?: Resolver<
+    ResolversTypes['SetterClimbsConnection'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySetterClimbsArgs, 'input'>
+  >;
+  setterClimbsFull?: Resolver<
+    ResolversTypes['PlaylistClimbsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySetterClimbsFullArgs, 'input'>
+  >;
+  setterProfile?: Resolver<
+    Maybe<ResolversTypes['SetterProfile']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySetterProfileArgs, 'input'>
+  >;
+  smartPlaylist?: Resolver<
+    ResolversTypes['SmartPlaylistResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QuerySmartPlaylistArgs, 'input'>
+  >;
   ticks?: Resolver<Array<ResolversTypes['Tick']>, ParentType, ContextType, RequireFields<QueryTicksArgs, 'input'>>;
-  trendingFeed?: Resolver<ResolversTypes['ActivityFeedResult'], ParentType, ContextType, Partial<QueryTrendingFeedArgs>>;
+  trendingFeed?: Resolver<
+    ResolversTypes['ActivityFeedResult'],
+    ParentType,
+    ContextType,
+    Partial<QueryTrendingFeedArgs>
+  >;
   unreadNotificationCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   userActiveBoards?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
-  userAscentsFeed?: Resolver<ResolversTypes['AscentFeedResult'], ParentType, ContextType, RequireFields<QueryUserAscentsFeedArgs, 'userId'>>;
-  userClimbPercentile?: Resolver<ResolversTypes['UserClimbPercentile'], ParentType, ContextType, RequireFields<QueryUserClimbPercentileArgs, 'userId'>>;
-  userClimbs?: Resolver<ResolversTypes['PlaylistClimbsResult'], ParentType, ContextType, RequireFields<QueryUserClimbsArgs, 'input'>>;
-  userFavoriteClimbs?: Resolver<ResolversTypes['PlaylistClimbsResult'], ParentType, ContextType, RequireFields<QueryUserFavoriteClimbsArgs, 'input'>>;
+  userAscentsFeed?: Resolver<
+    ResolversTypes['AscentFeedResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserAscentsFeedArgs, 'userId'>
+  >;
+  userClimbPercentile?: Resolver<
+    ResolversTypes['UserClimbPercentile'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserClimbPercentileArgs, 'userId'>
+  >;
+  userClimbs?: Resolver<
+    ResolversTypes['PlaylistClimbsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserClimbsArgs, 'input'>
+  >;
+  userFavoriteClimbs?: Resolver<
+    ResolversTypes['PlaylistClimbsResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserFavoriteClimbsArgs, 'input'>
+  >;
   userFavoritesCounts?: Resolver<Array<ResolversTypes['FavoritesCount']>, ParentType, ContextType>;
-  userGroupedAscentsFeed?: Resolver<ResolversTypes['GroupedAscentFeedResult'], ParentType, ContextType, RequireFields<QueryUserGroupedAscentsFeedArgs, 'userId'>>;
-  userPlaylists?: Resolver<Array<ResolversTypes['Playlist']>, ParentType, ContextType, RequireFields<QueryUserPlaylistsArgs, 'input'>>;
-  userProfileStats?: Resolver<ResolversTypes['ProfileStats'], ParentType, ContextType, RequireFields<QueryUserProfileStatsArgs, 'userId'>>;
-  userTicks?: Resolver<Array<ResolversTypes['Tick']>, ParentType, ContextType, RequireFields<QueryUserTicksArgs, 'boardType' | 'userId'>>;
-  voteSummary?: Resolver<ResolversTypes['VoteSummary'], ParentType, ContextType, RequireFields<QueryVoteSummaryArgs, 'entityId' | 'entityType'>>;
+  userGroupedAscentsFeed?: Resolver<
+    ResolversTypes['GroupedAscentFeedResult'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserGroupedAscentsFeedArgs, 'userId'>
+  >;
+  userPlaylists?: Resolver<
+    Array<ResolversTypes['Playlist']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserPlaylistsArgs, 'input'>
+  >;
+  userProfileStats?: Resolver<
+    ResolversTypes['ProfileStats'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserProfileStatsArgs, 'userId'>
+  >;
+  userTicks?: Resolver<
+    Array<ResolversTypes['Tick']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryUserTicksArgs, 'boardType' | 'userId'>
+  >;
+  voteSummary?: Resolver<
+    ResolversTypes['VoteSummary'],
+    ParentType,
+    ContextType,
+    RequireFields<QueryVoteSummaryArgs, 'entityId' | 'entityType'>
+  >;
 }>;
 
-export type QueueEventResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueEvent'] = ResolversParentTypes['QueueEvent']> = ResolversObject<{
-  __resolveType: TypeResolveFn<'ClimbMirrored' | 'CurrentClimbChanged' | 'FullSync' | 'QueueItemAdded' | 'QueueItemRemoved' | 'QueueReordered', ParentType, ContextType>;
+export type QueueEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueEvent'] = ResolversParentTypes['QueueEvent'],
+> = ResolversObject<{
+  __resolveType: TypeResolveFn<
+    'ClimbMirrored' | 'CurrentClimbChanged' | 'FullSync' | 'QueueItemAdded' | 'QueueItemRemoved' | 'QueueReordered',
+    ParentType,
+    ContextType
+  >;
 }>;
 
-export type QueueItemAddedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueItemAdded'] = ResolversParentTypes['QueueItemAdded']> = ResolversObject<{
+export type QueueItemAddedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueItemAdded'] = ResolversParentTypes['QueueItemAdded'],
+> = ResolversObject<{
   item?: Resolver<ResolversTypes['ClimbQueueItem'], ParentType, ContextType>;
   position?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueueItemRemovedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueItemRemoved'] = ResolversParentTypes['QueueItemRemoved']> = ResolversObject<{
+export type QueueItemRemovedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueItemRemoved'] = ResolversParentTypes['QueueItemRemoved'],
+> = ResolversObject<{
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueueItemUserResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueItemUser'] = ResolversParentTypes['QueueItemUser']> = ResolversObject<{
+export type QueueItemUserResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueItemUser'] = ResolversParentTypes['QueueItemUser'],
+> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   username?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueueNavigationContextResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueNavigationContext'] = ResolversParentTypes['QueueNavigationContext']> = ResolversObject<{
+export type QueueNavigationContextResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueNavigationContext'] = ResolversParentTypes['QueueNavigationContext'],
+> = ResolversObject<{
   currentIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   nextClimb?: Resolver<Maybe<ResolversTypes['QueueNavigationItem']>, ParentType, ContextType>;
   previousClimbs?: Resolver<Array<ResolversTypes['QueueNavigationItem']>, ParentType, ContextType>;
@@ -6551,14 +7386,20 @@ export type QueueNavigationContextResolvers<ContextType = ConnectionContext, Par
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueueNavigationItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueNavigationItem'] = ResolversParentTypes['QueueNavigationItem']> = ResolversObject<{
+export type QueueNavigationItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueNavigationItem'] = ResolversParentTypes['QueueNavigationItem'],
+> = ResolversObject<{
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   gradeColor?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueueReorderedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueReordered'] = ResolversParentTypes['QueueReordered']> = ResolversObject<{
+export type QueueReorderedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueReordered'] = ResolversParentTypes['QueueReordered'],
+> = ResolversObject<{
   newIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   oldIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6566,7 +7407,10 @@ export type QueueReorderedResolvers<ContextType = ConnectionContext, ParentType 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type QueueStateResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['QueueState'] = ResolversParentTypes['QueueState']> = ResolversObject<{
+export type QueueStateResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['QueueState'] = ResolversParentTypes['QueueState'],
+> = ResolversObject<{
   currentClimbQueueItem?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType>;
   queue?: Resolver<Array<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6574,7 +7418,10 @@ export type QueueStateResolvers<ContextType = ConnectionContext, ParentType exte
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SaveClimbResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SaveClimbResult'] = ResolversParentTypes['SaveClimbResult']> = ResolversObject<{
+export type SaveClimbResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SaveClimbResult'] = ResolversParentTypes['SaveClimbResult'],
+> = ResolversObject<{
   createdAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   publishedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   synced?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -6582,20 +7429,29 @@ export type SaveClimbResultResolvers<ContextType = ConnectionContext, ParentType
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SearchPlaylistsResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SearchPlaylistsResult'] = ResolversParentTypes['SearchPlaylistsResult']> = ResolversObject<{
+export type SearchPlaylistsResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SearchPlaylistsResult'] = ResolversParentTypes['SearchPlaylistsResult'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   playlists?: Resolver<Array<ResolversTypes['DiscoverablePlaylist']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SendDeviceLogsResponseResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SendDeviceLogsResponse'] = ResolversParentTypes['SendDeviceLogsResponse']> = ResolversObject<{
+export type SendDeviceLogsResponseResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SendDeviceLogsResponse'] = ResolversParentTypes['SendDeviceLogsResponse'],
+> = ResolversObject<{
   accepted?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   success?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Session'] = ResolversParentTypes['Session']> = ResolversObject<{
+export type SessionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Session'] = ResolversParentTypes['Session'],
+> = ResolversObject<{
   boardPath?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   clientId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   color?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6612,7 +7468,10 @@ export type SessionResolvers<ContextType = ConnectionContext, ParentType extends
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionDetailResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionDetail'] = ResolversParentTypes['SessionDetail']> = ResolversObject<{
+export type SessionDetailResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionDetail'] = ResolversParentTypes['SessionDetail'],
+> = ResolversObject<{
   boardTypes?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   downvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6638,7 +7497,10 @@ export type SessionDetailResolvers<ContextType = ConnectionContext, ParentType e
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionDetailTickResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionDetailTick'] = ResolversParentTypes['SessionDetailTick']> = ResolversObject<{
+export type SessionDetailTickResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionDetailTick'] = ResolversParentTypes['SessionDetailTick'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6663,17 +7525,30 @@ export type SessionDetailTickResolvers<ContextType = ConnectionContext, ParentTy
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionEndedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionEnded'] = ResolversParentTypes['SessionEnded']> = ResolversObject<{
+export type SessionEndedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionEnded'] = ResolversParentTypes['SessionEnded'],
+> = ResolversObject<{
   newPath?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   reason?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionEventResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionEvent'] = ResolversParentTypes['SessionEvent']> = ResolversObject<{
-  __resolveType: TypeResolveFn<'LeaderChanged' | 'SessionEnded' | 'SessionStatsUpdated' | 'UserJoined' | 'UserLeft', ParentType, ContextType>;
+export type SessionEventResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionEvent'] = ResolversParentTypes['SessionEvent'],
+> = ResolversObject<{
+  __resolveType: TypeResolveFn<
+    'LeaderChanged' | 'SessionEnded' | 'SessionStatsUpdated' | 'UserJoined' | 'UserLeft',
+    ParentType,
+    ContextType
+  >;
 }>;
 
-export type SessionFeedItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionFeedItem'] = ResolversParentTypes['SessionFeedItem']> = ResolversObject<{
+export type SessionFeedItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionFeedItem'] = ResolversParentTypes['SessionFeedItem'],
+> = ResolversObject<{
   boardTypes?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   downvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6697,7 +7572,10 @@ export type SessionFeedItemResolvers<ContextType = ConnectionContext, ParentType
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionFeedParticipantResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionFeedParticipant'] = ResolversParentTypes['SessionFeedParticipant']> = ResolversObject<{
+export type SessionFeedParticipantResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionFeedParticipant'] = ResolversParentTypes['SessionFeedParticipant'],
+> = ResolversObject<{
   attempts?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6707,20 +7585,30 @@ export type SessionFeedParticipantResolvers<ContextType = ConnectionContext, Par
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionFeedResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionFeedResult'] = ResolversParentTypes['SessionFeedResult']> = ResolversObject<{
+export type SessionFeedResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionFeedResult'] = ResolversParentTypes['SessionFeedResult'],
+> = ResolversObject<{
   cursor?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   sessions?: Resolver<Array<ResolversTypes['SessionFeedItem']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionGradeCountResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionGradeCount'] = ResolversParentTypes['SessionGradeCount']> = ResolversObject<{
+export type SessionGradeCountResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionGradeCount'] = ResolversParentTypes['SessionGradeCount'],
+> = ResolversObject<{
   count?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionGradeDistributionItemResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionGradeDistributionItem'] = ResolversParentTypes['SessionGradeDistributionItem']> = ResolversObject<{
+export type SessionGradeDistributionItemResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionGradeDistributionItem'] =
+    ResolversParentTypes['SessionGradeDistributionItem'],
+> = ResolversObject<{
   attempt?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   flash?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6728,14 +7616,20 @@ export type SessionGradeDistributionItemResolvers<ContextType = ConnectionContex
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionHardestClimbResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionHardestClimb'] = ResolversParentTypes['SessionHardestClimb']> = ResolversObject<{
+export type SessionHardestClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionHardestClimb'] = ResolversParentTypes['SessionHardestClimb'],
+> = ResolversObject<{
   climbName?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbUuid?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   grade?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionParticipantResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionParticipant'] = ResolversParentTypes['SessionParticipant']> = ResolversObject<{
+export type SessionParticipantResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionParticipant'] = ResolversParentTypes['SessionParticipant'],
+> = ResolversObject<{
   attempts?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6744,7 +7638,10 @@ export type SessionParticipantResolvers<ContextType = ConnectionContext, ParentT
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionStatsUpdatedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionStatsUpdated'] = ResolversParentTypes['SessionStatsUpdated']> = ResolversObject<{
+export type SessionStatsUpdatedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionStatsUpdated'] = ResolversParentTypes['SessionStatsUpdated'],
+> = ResolversObject<{
   boardTypes?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   durationMinutes?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   goal?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6760,7 +7657,10 @@ export type SessionStatsUpdatedResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionSummaryResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionSummary'] = ResolversParentTypes['SessionSummary']> = ResolversObject<{
+export type SessionSummaryResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionSummary'] = ResolversParentTypes['SessionSummary'],
+> = ResolversObject<{
   durationMinutes?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   endedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   goal?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6774,7 +7674,10 @@ export type SessionSummaryResolvers<ContextType = ConnectionContext, ParentType 
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SessionUserResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SessionUser'] = ResolversParentTypes['SessionUser']> = ResolversObject<{
+export type SessionUserResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionUser'] = ResolversParentTypes['SessionUser'],
+> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   isLeader?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -6783,7 +7686,10 @@ export type SessionUserResolvers<ContextType = ConnectionContext, ParentType ext
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SetterClimbResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SetterClimb'] = ResolversParentTypes['SetterClimb']> = ResolversObject<{
+export type SetterClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SetterClimb'] = ResolversParentTypes['SetterClimb'],
+> = ResolversObject<{
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   ascensionistCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6796,14 +7702,20 @@ export type SetterClimbResolvers<ContextType = ConnectionContext, ParentType ext
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SetterClimbsConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SetterClimbsConnection'] = ResolversParentTypes['SetterClimbsConnection']> = ResolversObject<{
+export type SetterClimbsConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SetterClimbsConnection'] = ResolversParentTypes['SetterClimbsConnection'],
+> = ResolversObject<{
   climbs?: Resolver<Array<ResolversTypes['SetterClimb']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SetterProfileResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SetterProfile'] = ResolversParentTypes['SetterProfile']> = ResolversObject<{
+export type SetterProfileResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SetterProfile'] = ResolversParentTypes['SetterProfile'],
+> = ResolversObject<{
   boardTypes?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   climbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   followerCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6815,7 +7727,10 @@ export type SetterProfileResolvers<ContextType = ConnectionContext, ParentType e
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SetterSearchResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SetterSearchResult'] = ResolversParentTypes['SetterSearchResult']> = ResolversObject<{
+export type SetterSearchResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SetterSearchResult'] = ResolversParentTypes['SetterSearchResult'],
+> = ResolversObject<{
   boardTypes?: Resolver<Array<ResolversTypes['String']>, ParentType, ContextType>;
   climbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   isFollowedByMe?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
@@ -6823,13 +7738,19 @@ export type SetterSearchResultResolvers<ContextType = ConnectionContext, ParentT
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SmartPlaylistCountResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SmartPlaylistCount'] = ResolversParentTypes['SmartPlaylistCount']> = ResolversObject<{
+export type SmartPlaylistCountResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SmartPlaylistCount'] = ResolversParentTypes['SmartPlaylistCount'],
+> = ResolversObject<{
   count?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   type?: Resolver<ResolversTypes['SmartPlaylistType'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SmartPlaylistMetaResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SmartPlaylistMeta'] = ResolversParentTypes['SmartPlaylistMeta']> = ResolversObject<{
+export type SmartPlaylistMetaResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SmartPlaylistMeta'] = ResolversParentTypes['SmartPlaylistMeta'],
+> = ResolversObject<{
   climbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   type?: Resolver<ResolversTypes['SmartPlaylistType'], ParentType, ContextType>;
   userAvatar?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6838,7 +7759,10 @@ export type SmartPlaylistMetaResolvers<ContextType = ConnectionContext, ParentTy
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SmartPlaylistResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['SmartPlaylistResult'] = ResolversParentTypes['SmartPlaylistResult']> = ResolversObject<{
+export type SmartPlaylistResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SmartPlaylistResult'] = ResolversParentTypes['SmartPlaylistResult'],
+> = ResolversObject<{
   climbs?: Resolver<Array<ResolversTypes['Climb']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   meta?: Resolver<ResolversTypes['SmartPlaylistMeta'], ParentType, ContextType>;
@@ -6846,16 +7770,57 @@ export type SmartPlaylistResultResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type SubscriptionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Subscription'] = ResolversParentTypes['Subscription']> = ResolversObject<{
-  commentUpdates?: SubscriptionResolver<ResolversTypes['CommentEvent'], "commentUpdates", ParentType, ContextType, RequireFields<SubscriptionCommentUpdatesArgs, 'entityId' | 'entityType'>>;
-  controllerEvents?: SubscriptionResolver<ResolversTypes['ControllerEvent'], "controllerEvents", ParentType, ContextType, RequireFields<SubscriptionControllerEventsArgs, 'sessionId'>>;
-  newClimbCreated?: SubscriptionResolver<ResolversTypes['NewClimbCreatedEvent'], "newClimbCreated", ParentType, ContextType, RequireFields<SubscriptionNewClimbCreatedArgs, 'boardType' | 'layoutId'>>;
-  notificationReceived?: SubscriptionResolver<ResolversTypes['NotificationEvent'], "notificationReceived", ParentType, ContextType>;
-  queueUpdates?: SubscriptionResolver<ResolversTypes['QueueEvent'], "queueUpdates", ParentType, ContextType, RequireFields<SubscriptionQueueUpdatesArgs, 'sessionId'>>;
-  sessionUpdates?: SubscriptionResolver<ResolversTypes['SessionEvent'], "sessionUpdates", ParentType, ContextType, RequireFields<SubscriptionSessionUpdatesArgs, 'sessionId'>>;
+export type SubscriptionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Subscription'] = ResolversParentTypes['Subscription'],
+> = ResolversObject<{
+  commentUpdates?: SubscriptionResolver<
+    ResolversTypes['CommentEvent'],
+    'commentUpdates',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionCommentUpdatesArgs, 'entityId' | 'entityType'>
+  >;
+  controllerEvents?: SubscriptionResolver<
+    ResolversTypes['ControllerEvent'],
+    'controllerEvents',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionControllerEventsArgs, 'sessionId'>
+  >;
+  newClimbCreated?: SubscriptionResolver<
+    ResolversTypes['NewClimbCreatedEvent'],
+    'newClimbCreated',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionNewClimbCreatedArgs, 'boardType' | 'layoutId'>
+  >;
+  notificationReceived?: SubscriptionResolver<
+    ResolversTypes['NotificationEvent'],
+    'notificationReceived',
+    ParentType,
+    ContextType
+  >;
+  queueUpdates?: SubscriptionResolver<
+    ResolversTypes['QueueEvent'],
+    'queueUpdates',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionQueueUpdatesArgs, 'sessionId'>
+  >;
+  sessionUpdates?: SubscriptionResolver<
+    ResolversTypes['SessionEvent'],
+    'sessionUpdates',
+    ParentType,
+    ContextType,
+    RequireFields<SubscriptionSessionUpdatesArgs, 'sessionId'>
+  >;
 }>;
 
-export type TickResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['Tick'] = ResolversParentTypes['Tick']> = ResolversObject<{
+export type TickResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['Tick'] = ResolversParentTypes['Tick'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   attemptCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   auroraId?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6883,19 +7848,28 @@ export type TickResolvers<ContextType = ConnectionContext, ParentType extends Re
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type ToggleFavoriteResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['ToggleFavoriteResult'] = ResolversParentTypes['ToggleFavoriteResult']> = ResolversObject<{
+export type ToggleFavoriteResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['ToggleFavoriteResult'] = ResolversParentTypes['ToggleFavoriteResult'],
+> = ResolversObject<{
   favorited?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UnifiedSearchConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UnifiedSearchConnection'] = ResolversParentTypes['UnifiedSearchConnection']> = ResolversObject<{
+export type UnifiedSearchConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UnifiedSearchConnection'] = ResolversParentTypes['UnifiedSearchConnection'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   results?: Resolver<Array<ResolversTypes['UnifiedSearchResult']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UnifiedSearchResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UnifiedSearchResult'] = ResolversParentTypes['UnifiedSearchResult']> = ResolversObject<{
+export type UnifiedSearchResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UnifiedSearchResult'] = ResolversParentTypes['UnifiedSearchResult'],
+> = ResolversObject<{
   matchReason?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   recentAscentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   setter?: Resolver<Maybe<ResolversTypes['SetterSearchResult']>, ParentType, ContextType>;
@@ -6903,7 +7877,10 @@ export type UnifiedSearchResultResolvers<ContextType = ConnectionContext, Parent
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UpdateClimbResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UpdateClimbResult'] = ResolversParentTypes['UpdateClimbResult']> = ResolversObject<{
+export type UpdateClimbResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UpdateClimbResult'] = ResolversParentTypes['UpdateClimbResult'],
+> = ResolversObject<{
   createdAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   isDraft?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   publishedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
@@ -6911,7 +7888,10 @@ export type UpdateClimbResultResolvers<ContextType = ConnectionContext, ParentTy
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserBoardResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserBoard'] = ResolversParentTypes['UserBoard']> = ResolversObject<{
+export type UserBoardResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserBoard'] = ResolversParentTypes['UserBoard'],
+> = ResolversObject<{
   angle?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   commentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
@@ -6950,31 +7930,46 @@ export type UserBoardResolvers<ContextType = ConnectionContext, ParentType exten
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserBoardConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserBoardConnection'] = ResolversParentTypes['UserBoardConnection']> = ResolversObject<{
+export type UserBoardConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserBoardConnection'] = ResolversParentTypes['UserBoardConnection'],
+> = ResolversObject<{
   boards?: Resolver<Array<ResolversTypes['UserBoard']>, ParentType, ContextType>;
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserClimbPercentileResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserClimbPercentile'] = ResolversParentTypes['UserClimbPercentile']> = ResolversObject<{
+export type UserClimbPercentileResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserClimbPercentile'] = ResolversParentTypes['UserClimbPercentile'],
+> = ResolversObject<{
   percentile?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   totalActiveUsers?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   totalDistinctClimbs?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserJoinedResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserJoined'] = ResolversParentTypes['UserJoined']> = ResolversObject<{
+export type UserJoinedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserJoined'] = ResolversParentTypes['UserJoined'],
+> = ResolversObject<{
   user?: Resolver<ResolversTypes['SessionUser'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserLeftResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserLeft'] = ResolversParentTypes['UserLeft']> = ResolversObject<{
+export type UserLeftResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserLeft'] = ResolversParentTypes['UserLeft'],
+> = ResolversObject<{
   userId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserProfileResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserProfile'] = ResolversParentTypes['UserProfile']> = ResolversObject<{
+export type UserProfileResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserProfile'] = ResolversParentTypes['UserProfile'],
+> = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   displayName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   email?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
@@ -6982,21 +7977,30 @@ export type UserProfileResolvers<ContextType = ConnectionContext, ParentType ext
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserSearchConnectionResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserSearchConnection'] = ResolversParentTypes['UserSearchConnection']> = ResolversObject<{
+export type UserSearchConnectionResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserSearchConnection'] = ResolversParentTypes['UserSearchConnection'],
+> = ResolversObject<{
   hasMore?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   results?: Resolver<Array<ResolversTypes['UserSearchResult']>, ParentType, ContextType>;
   totalCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type UserSearchResultResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['UserSearchResult'] = ResolversParentTypes['UserSearchResult']> = ResolversObject<{
+export type UserSearchResultResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserSearchResult'] = ResolversParentTypes['UserSearchResult'],
+> = ResolversObject<{
   matchReason?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   recentAscentCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   user?: Resolver<ResolversTypes['PublicUserProfile'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
-export type VoteSummaryResolvers<ContextType = ConnectionContext, ParentType extends ResolversParentTypes['VoteSummary'] = ResolversParentTypes['VoteSummary']> = ResolversObject<{
+export type VoteSummaryResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['VoteSummary'] = ResolversParentTypes['VoteSummary'],
+> = ResolversObject<{
   downvotes?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   entityId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   entityType?: Resolver<ResolversTypes['SocialEntityType'], ParentType, ContextType>;
@@ -7141,4 +8145,3 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   UserSearchResult?: UserSearchResultResolvers<ContextType>;
   VoteSummary?: VoteSummaryResolvers<ContextType>;
 }>;
-
