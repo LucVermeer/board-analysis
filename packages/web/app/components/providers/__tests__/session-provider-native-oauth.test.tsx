@@ -303,6 +303,49 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
     expect(mockRemove).toHaveBeenCalled();
   });
 
+  it('swallows "No active window to close!" rejection from Browser.close (iOS)', async () => {
+    // Simulate the iOS Capacitor browser plugin throwing when the SFSafariViewController
+    // was already dismissed by the OS in response to the custom-scheme deep link.
+    // See: https://github.com/ionic-team/capacitor-plugins/issues/1899
+    mockClose.mockRejectedValueOnce(new Error('No active window to close!'));
+    mockSignIn.mockResolvedValue({ url: '/dashboard', error: null });
+    setupCapacitorMock();
+
+    const unhandledRejections: PromiseRejectionEvent[] = [];
+    const captureRejection = (event: PromiseRejectionEvent) => {
+      unhandledRejections.push(event);
+      event.preventDefault();
+    };
+    window.addEventListener('unhandledrejection', captureRejection);
+
+    try {
+      render(
+        <SessionProviderWrapper>
+          <div>child</div>
+        </SessionProviderWrapper>,
+      );
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      await act(async () => {
+        capturedListener?.({
+          url: 'com.boardsesh.app://auth/callback?transferToken=abc123&next=/dashboard',
+        });
+        // Give the deferred async listener body a tick to settle.
+        await new Promise((r) => setTimeout(r, 0));
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(mockClose).toHaveBeenCalled();
+      expect(mockLocationAssign).toHaveBeenCalledWith('/dashboard');
+      expect(unhandledRejections).toHaveLength(0);
+    } finally {
+      window.removeEventListener('unhandledrejection', captureRejection);
+    }
+  });
+
   it('removes listener if component unmounts before registration completes', async () => {
     setupCapacitorMock();
     let resolveListener: ((value: { remove: () => Promise<void> }) => void) | null = null;
