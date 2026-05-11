@@ -11,12 +11,12 @@ specific failures came up:
   groups need to browse independently.
 - **Accidental sends.** The current bar lets you swipe to a climb without
   enough friction; the LEDs change before anyone's actually ready.
-- **Noisy history.** Users only care about what's *been on the board*, not the
+- **Noisy history.** Users only care about what's _been on the board_, not the
   full queue history with duplicates and upcoming items.
 
 We don't want to throw the shared queue out — it's mature, the wiring works,
 and it'll matter more once the playlist generator moves to session start.
-What we're changing is the *binding*: instead of one shared `currentClimb`
+What we're changing is the _binding_: instead of one shared `currentClimb`
 that everyone mutates, each climber gets their own `pick`, plus exactly one
 person at a time is the **active climber** whose pick is on the LEDs.
 
@@ -57,6 +57,7 @@ flowchart LR
 ```
 
 **Invariants**
+
 1. Exactly 0 or 1 active climbers per session at a time.
 2. `currentClimbQueueItem === picks[activeClimberUserId]` whenever
    `activeClimberUserId` is set. Server enforces this; clients never write
@@ -80,12 +81,14 @@ same key the existing `addedBy` field uses (see `QueueItemUser.id` in
 ### New DB tables / columns (in `packages/db/src/schema/app/`)
 
 **Add to `boardSessionQueues`** (`packages/db/src/schema/app/sessions.ts`):
+
 - `activeClimberId TEXT NULL` — opaque session-user identity (`SessionUser.id`),
   no FK so it works for anonymous joiners. Cleared on disconnect (cleanup
   hook in `useSessionLifecycle` or server-side leave).
 
 **New `boardSessionPicks` table** (new file
 `packages/db/src/schema/app/session-picks.ts`):
+
 ```
 sessionId   TEXT NOT NULL → boardSessions.id (cascade)
 userId      TEXT NOT NULL                       -- SessionUser.id
@@ -94,12 +97,14 @@ updatedAt   TIMESTAMP NOT NULL DEFAULT now()
 PRIMARY KEY (sessionId, userId)
 INDEX (sessionId)
 ```
+
 Picks live in their own table (not in a `jsonb` map on `boardSessionQueues`)
 so the existing optimistic-locking version on `boardSessionQueues` doesn't
 serialise every per-user swipe. One pick update = one row upsert.
 
 **New `boardSessionSends` table** (new file
 `packages/db/src/schema/app/session-sends.ts`):
+
 ```
 id              BIGSERIAL PRIMARY KEY
 sessionId       TEXT NOT NULL → boardSessions.id (cascade)
@@ -112,6 +117,7 @@ createdAt       TIMESTAMP NOT NULL DEFAULT now()
 INDEX (sessionId, createdAt DESC)
 INDEX (sessionId, climbUuid)
 ```
+
 Append-only. `boardSends` query reads `DISTINCT ON (climb_uuid)` ordered by
 `created_at DESC` for the dedup'd history view.
 
@@ -121,6 +127,7 @@ update is automatic (CLAUDE.md: "Never manually create migration SQL files").
 ### GraphQL schema (`packages/shared-schema/src/schema/queue.ts`)
 
 Add types:
+
 ```graphql
 type UserPick {
   userId: ID!
@@ -136,11 +143,12 @@ type BoardSend {
   activeClimberId: ID!
   mirrored: Boolean!
   createdAt: String!
-  climb: Climb!     # joined for the history view
+  climb: Climb! # joined for the history view
 }
 ```
 
 Extend `QueueState`:
+
 ```graphql
 type QueueState {
   # ...existing fields...
@@ -150,11 +158,25 @@ type QueueState {
 ```
 
 Extend the `QueueEvent` union with three new event types:
+
 ```graphql
-type PickChanged       { sequence: Int!, userId: ID!, pick: ClimbQueueItem! }
-type PickCleared       { sequence: Int!, userId: ID! }
-type ActiveClimberChanged { sequence: Int!, userId: ID }   # null when nobody active
-type BoardSendAdded    { sequence: Int!, send: BoardSend! }
+type PickChanged {
+  sequence: Int!
+  userId: ID!
+  pick: ClimbQueueItem!
+}
+type PickCleared {
+  sequence: Int!
+  userId: ID!
+}
+type ActiveClimberChanged {
+  sequence: Int!
+  userId: ID
+} # null when nobody active
+type BoardSendAdded {
+  sequence: Int!
+  send: BoardSend!
+}
 ```
 
 These ride the existing `queueUpdates` subscription channel, so the
@@ -164,6 +186,7 @@ client-side fan-out machinery in `useEventProcessor` /
 ### GraphQL operations (`packages/shared-schema/src/operations.ts`)
 
 Add three mutations and one query:
+
 ```graphql
 setMyPick(item: ClimbQueueItemInput!, correlationId: ID): UserPick!
 claimTurn(correlationId: ID): ClimbQueueItem!
@@ -217,6 +240,7 @@ catch block from `setCurrentClimb`.
 ### Queries — `packages/backend/src/graphql/resolvers/queue/queries.ts`
 
 New `boardSends(sessionId, deduplicate, limit)`:
+
 - Validate session membership (`requireSessionMember`).
 - Drizzle query: when `deduplicate=true`, use `db.execute(sql`...`)` with `DISTINCT ON (climb_uuid) ... ORDER BY climb_uuid, created_at DESC` then re-sort by `created_at DESC` in JS (DISTINCT ON requires the discriminator to lead the ORDER BY). When `deduplicate=false`, plain `db.select().orderBy(desc(createdAt)).limit(limit)`. Both paths join `climbs` (or whichever per-board climb table the session's `boardPath` resolves to) for the `climb` field.
 - This is one of the legitimate raw-SQL exceptions per CLAUDE.md (DISTINCT ON isn't expressible cleanly in Drizzle's query builder).
@@ -230,6 +254,7 @@ payload picks up `picks` and `activeClimberId` automatically once
 `roomManager.getQueueState` returns them.
 
 `packages/backend/src/services/room-manager` needs:
+
 - `getQueueState` to also load picks + activeClimberId.
 - A new `updatePick(sessionId, userId, pick)` and `setActiveClimber(sessionId, userId | null)` helper, plus `appendBoardSend(sessionId, send)`.
 
@@ -242,6 +267,7 @@ payload picks up `picks` and `activeClimberId` automatically once
 ### Reducer + types — `packages/web/app/components/queue-control/`
 
 `types.ts`:
+
 ```ts
 type UserPick = { userId: string; pick: ClimbQueueItem; updatedAt: string };
 
@@ -249,22 +275,29 @@ type QueueState = {
   // ...existing fields...
   picks: Record<string /* userId */, ClimbQueueItem>;
   activeClimberId: string | null;
-  pendingPickUpdates: string[];        // correlation IDs (mirror pendingCurrentClimbUpdates)
+  pendingPickUpdates: string[]; // correlation IDs (mirror pendingCurrentClimbUpdates)
   pendingActiveClimberUpdates: string[];
 };
 
 type QueueAction =
   // ...existing...
   | { type: 'SET_MY_PICK'; payload: { userId: string; pick: ClimbQueueItem; correlationId: string } }
-  | { type: 'DELTA_PICK_CHANGED'; payload: { userId: string; pick: ClimbQueueItem; isServerEvent?: boolean; serverCorrelationId?: string } }
+  | {
+      type: 'DELTA_PICK_CHANGED';
+      payload: { userId: string; pick: ClimbQueueItem; isServerEvent?: boolean; serverCorrelationId?: string };
+    }
   | { type: 'DELTA_PICK_CLEARED'; payload: { userId: string } }
-  | { type: 'DELTA_ACTIVE_CLIMBER_CHANGED'; payload: { userId: string | null; isServerEvent?: boolean; serverCorrelationId?: string } }
-  | { type: 'DELTA_BOARD_SEND_ADDED'; payload: { send: BoardSend } };  // currently only used by analytics; history reads from React Query
+  | {
+      type: 'DELTA_ACTIVE_CLIMBER_CHANGED';
+      payload: { userId: string | null; isServerEvent?: boolean; serverCorrelationId?: string };
+    }
+  | { type: 'DELTA_BOARD_SEND_ADDED'; payload: { send: BoardSend } }; // currently only used by analytics; history reads from React Query
 ```
 
 `reducer.ts`:
+
 - Add cases for the new actions, mirroring the echo-suppression pattern from `DELTA_UPDATE_CURRENT_CLIMB` (correlation-ID list, dedup by uuid, etc.).
-- The existing `DELTA_UPDATE_CURRENT_CLIMB` stays as is — it now fires *as a consequence* of `setMyPick(activeUser)` / `claimTurn` / `yieldTurn`, never directly from a UI swipe. No reducer-level branching needed.
+- The existing `DELTA_UPDATE_CURRENT_CLIMB` stays as is — it now fires _as a consequence_ of `setMyPick(activeUser)` / `claimTurn` / `yieldTurn`, never directly from a UI swipe. No reducer-level branching needed.
 
 ### Mutation surface — `packages/web/app/components/persistent-session/hooks/use-queue-mutations.ts`
 
@@ -316,6 +349,7 @@ attribution by `activeClimberId`.
 ### Queue control bar (`queue-control-bar.tsx`)
 
 The always-visible session surface. Adapt:
+
 - **Thumbnail** = active climber's pick (i.e. `currentClimbQueueItem`).
   Reuse `ClimbThumbnail` as today.
 - **Active climber avatar** overlays the thumbnail (small, anchored
@@ -334,11 +368,13 @@ The always-visible session surface. Adapt:
 ### Play view drawer (`packages/web/app/components/play-view/play-view-drawer.tsx`)
 
 Add a `mode: 'spectate' | 'edit'` state with these resolution rules at open time:
+
 - I'm active → `edit`.
 - Opened from the queue control bar → `spectate` (see invariants above).
 - Opened from search results / climb detail / liked list / etc. → `edit` on my own pick.
 
 **Spectate mode:**
+
 - Renders the active climber's pick on the board canvas. Reuse
   `BoardRenderer` / the existing `SwipeBoardCarousel`'s static-render
   variant — but disable the swipe handlers (`useCardSwipeNavigation`
@@ -352,6 +388,7 @@ Add a `mode: 'spectate' | 'edit'` state with these resolution rules at open time
 - Lightbulb is hidden (claiming requires switching to edit first).
 
 **Edit mode:**
+
 - Carousel/swipe handlers call `setMyPick` (via
   `useQueueActions().setMyPick`) — not `setCurrentClimb`. The server
   cascades to `currentClimbQueueItem` automatically when I'm active; the
@@ -385,6 +422,7 @@ current pick.
 The expanded participant bar in `queue-control-bar.tsx:1194–1250` becomes
 a richer per-user list — keep it inline in the bar (no new drawer is
 strictly needed; the expand/collapse animation already exists). Per row:
+
 - Avatar (reuse `TickBadgeAvatar`).
 - Username + pick climb name + grade. (If no pick: "No pick yet" — row disabled.)
 - Lightbulb icon next to the active climber's name (filled). No
@@ -395,7 +433,7 @@ strictly needed; the expand/collapse animation already exists). Per row:
   - Empty-pick row → no-op (disabled style).
   - BT pre-connect rule applies in both cases.
 - No swipe-through-other-people's-state. The row only reflects their
-  *current* pick — there's no surface to navigate someone else's
+  _current_ pick — there's no surface to navigate someone else's
   imagined queue.
 
 ### Queue drawer (`packages/web/app/components/queue-control/queue-list.tsx`)
@@ -404,6 +442,7 @@ Major refactor target. The drawer becomes two stacked surfaces controlled
 by a top tab strip:
 
 **Tab 1 — "Sent to board" (default)**
+
 - Backed by a new `useBoardSends(sessionId)` React Query hook (in
   `queue-control/hooks/`) that issues the `boardSends` query with
   `deduplicate=true`. Subscribes to `BoardSendAdded` deltas via the
@@ -417,6 +456,7 @@ by a top tab strip:
   from the queue.
 
 **Tab 2 — "Plan ahead" (existing shared queue, reframed)**
+
 - A scope switcher at the top: **My queue** (default — `addedBy === me`),
   **All** (everyone, queue order), and one button per connected peer
   (filters to their items).
@@ -442,6 +482,7 @@ queue drawer becomes purely planning + history.
 ### Files touched (summary)
 
 Schema / DB:
+
 - `packages/db/src/schema/app/sessions.ts` (add column)
 - `packages/db/src/schema/app/session-picks.ts` (new)
 - `packages/db/src/schema/app/session-sends.ts` (new)
@@ -449,6 +490,7 @@ Schema / DB:
 - `packages/db/drizzle/...` (generated via `bunx drizzle-kit generate`)
 
 Shared schema:
+
 - `packages/shared-schema/src/schema/queue.ts`
 - `packages/shared-schema/src/schema/mutations.ts`
 - `packages/shared-schema/src/schema/queries.ts`
@@ -457,6 +499,7 @@ Shared schema:
 - `packages/shared-schema/src/operations.ts`
 
 Backend:
+
 - `packages/backend/src/graphql/resolvers/queue/mutations.ts`
 - `packages/backend/src/graphql/resolvers/queue/queries.ts` (add `boardSends`)
 - `packages/backend/src/graphql/resolvers/queue/type-resolvers.ts` (new union members)
@@ -465,6 +508,7 @@ Backend:
 - `packages/backend/test/...` (new tests for `setMyPick`, `claimTurn`, `yieldTurn`, `boardSends`, dedup)
 
 Frontend state:
+
 - `packages/web/app/components/queue-control/types.ts`
 - `packages/web/app/components/queue-control/reducer.ts`
 - `packages/web/app/components/queue-control/__tests__/reducer.test.ts` (new pick action coverage)
@@ -476,6 +520,7 @@ Frontend state:
 - `packages/web/app/components/graphql-queue/QueueContext.tsx`
 
 Frontend UI:
+
 - `packages/web/app/components/play-view/play-view-drawer.tsx`
 - `packages/web/app/[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/play/[climb_uuid]/play-view-client.tsx`
 - `packages/web/app/components/queue-control/queue-list.tsx`
@@ -488,6 +533,7 @@ Frontend UI:
 - `packages/web/app/components/board-bluetooth-control/` (no code change; called from new sites)
 
 i18n catalog:
+
 - `packages/web/i18n/locales/en-US/session.json` — new keys for "Pick this
   climb", "Take the wall", "No pick yet", "<user> sent <climb>", history
   tab labels, plan-ahead scope chips, transfer icon ARIA, etc.
@@ -505,17 +551,17 @@ i18n catalog:
 
 ## Behaviour matrix
 
-| Scenario | UI surface tapped | Mutation | LEDs change? | History append? | Other clients see |
-|---|---|---|---|---|---|
-| Non-active climber swipes | Play view (edit) | `setMyPick` | No | No | `PickChanged` for that user |
-| Active climber swipes | Play view (edit) | `setMyPick` (cascades) | Yes | Yes | `PickChanged`, `CurrentClimbChanged`, `BoardSendAdded` |
-| Tap own outlined lightbulb | Play view (edit) | `claimTurn` (BT prompt if needed) | Yes | Yes | `ActiveClimberChanged`, `CurrentClimbChanged`, `BoardSendAdded` |
-| Tap own filled lightbulb | Play view (edit) | `claimTurn` (idempotent re-light) | Yes (re-light) | Yes | `CurrentClimbChanged`, `BoardSendAdded` |
-| Tap peer's row in avatar drawer | Bar | `yieldTurn(peer)` (BT prompt if needed) | Yes | Yes | `ActiveClimberChanged(peer)`, `CurrentClimbChanged`, `BoardSendAdded` |
-| Tap own row in avatar drawer | Bar | `claimTurn` | Yes (if not already active) | Yes | same as outlined-lightbulb tap |
-| Tap row in plan-ahead queue | Queue drawer | `setMyPick` | only if I'm active | only if I'm active | `PickChanged`, optional `CurrentClimbChanged` + `BoardSendAdded` |
-| Tap transfer icon (spectate) | Play view | local — switch mode to edit | No | No | nothing |
-| Disconnect | (lifecycle) | `clearMyPick` (or server-side cleanup) | If I was active, yes | No | `PickCleared`, `ActiveClimberChanged(null)`, `CurrentClimbChanged(null)` |
+| Scenario                        | UI surface tapped | Mutation                                | LEDs change?                | History append?    | Other clients see                                                        |
+| ------------------------------- | ----------------- | --------------------------------------- | --------------------------- | ------------------ | ------------------------------------------------------------------------ |
+| Non-active climber swipes       | Play view (edit)  | `setMyPick`                             | No                          | No                 | `PickChanged` for that user                                              |
+| Active climber swipes           | Play view (edit)  | `setMyPick` (cascades)                  | Yes                         | Yes                | `PickChanged`, `CurrentClimbChanged`, `BoardSendAdded`                   |
+| Tap own outlined lightbulb      | Play view (edit)  | `claimTurn` (BT prompt if needed)       | Yes                         | Yes                | `ActiveClimberChanged`, `CurrentClimbChanged`, `BoardSendAdded`          |
+| Tap own filled lightbulb        | Play view (edit)  | `claimTurn` (idempotent re-light)       | Yes (re-light)              | Yes                | `CurrentClimbChanged`, `BoardSendAdded`                                  |
+| Tap peer's row in avatar drawer | Bar               | `yieldTurn(peer)` (BT prompt if needed) | Yes                         | Yes                | `ActiveClimberChanged(peer)`, `CurrentClimbChanged`, `BoardSendAdded`    |
+| Tap own row in avatar drawer    | Bar               | `claimTurn`                             | Yes (if not already active) | Yes                | same as outlined-lightbulb tap                                           |
+| Tap row in plan-ahead queue     | Queue drawer      | `setMyPick`                             | only if I'm active          | only if I'm active | `PickChanged`, optional `CurrentClimbChanged` + `BoardSendAdded`         |
+| Tap transfer icon (spectate)    | Play view         | local — switch mode to edit             | No                          | No                 | nothing                                                                  |
+| Disconnect                      | (lifecycle)       | `clearMyPick` (or server-side cleanup)  | If I was active, yes        | No                 | `PickCleared`, `ActiveClimberChanged(null)`, `CurrentClimbChanged(null)` |
 
 ## Open decisions (need user input before build)
 
@@ -545,7 +591,7 @@ i18n catalog:
    `useBluetoothContext` is per-client. Either (a) add a
    `bluetoothConnected: boolean` field to `SessionUser` and have each
    client publish their state via an existing presence event, or (b)
-   simplify v1 to "prompt only if *I* am not BT-connected". Recommended: (b)
+   simplify v1 to "prompt only if _I_ am not BT-connected". Recommended: (b)
    for v1 — it covers the dominant case (one phone is the LED driver) and
    skips a presence-protocol expansion.
 7. **Active-climber identity for anonymous users.** Use `SessionUser.id`

@@ -38,7 +38,9 @@ export async function GET(request: NextRequest) {
       executeRows<{
         difficulty: number;
         cnt: number;
-      }>(dbz, sql`
+      }>(
+        dbz,
+        sql`
         SELECT bt.difficulty, COUNT(*) as cnt
         FROM boardsesh_ticks bt
         JOIN board_climbs bc ON bc.uuid = bt.climb_uuid
@@ -47,7 +49,8 @@ export async function GET(request: NextRequest) {
           AND bt.difficulty IS NOT NULL
         GROUP BY bt.difficulty
         ORDER BY bt.difficulty
-      `),
+      `,
+      ),
     ]);
     const dbMs = performance.now() - dbT0;
     const gradeRows = gradeResult;
