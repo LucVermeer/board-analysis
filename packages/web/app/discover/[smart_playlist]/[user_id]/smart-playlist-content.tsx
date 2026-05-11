@@ -59,6 +59,10 @@ export default function SmartPlaylistContent({
   // Mark SSR data fresh so react-query honours staleTime instead of triggering
   // an immediate refetch (initialDataUpdatedAt defaults to 0 = epoch).
   const ssrInitialUpdatedAtRef = useRef(initialSmartPlaylist ? Date.now() : 0);
+  // Snapshot the key the SSR payload was fetched for. Without this gate, the
+  // same initialData would be reused for every board-chip switch (and any
+  // future key changes) instead of triggering a real fetch.
+  const ssrSmartKeyRef = useRef({ boardUuid: selectedBoard?.uuid ?? null });
 
   const {
     data: pagedData,
@@ -89,18 +93,19 @@ export default function SmartPlaylistContent({
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length : undefined),
     staleTime: 5 * 60 * 1000,
-    // Only seed when selectedBoard is null — that's the only state where the
-    // SSR fetch (no boardName filter) matches the client query key. Once the
-    // user picks a board chip the key changes to `selectedBoard.uuid` and a
-    // fresh fetch is correct.
+    // Only seed when the current query key still matches the tuple the SSR
+    // payload was fetched for. Beyond the obvious first-render case this
+    // also avoids re-applying stale SSR data if the user switches away from
+    // and back to the default view much later.
     initialData:
-      initialSmartPlaylist && !selectedBoard
+      initialSmartPlaylist && (selectedBoard?.uuid ?? null) === ssrSmartKeyRef.current.boardUuid
         ? {
             pages: [initialSmartPlaylist],
             pageParams: [0],
           }
         : undefined,
-    initialDataUpdatedAt: ssrInitialUpdatedAtRef.current,
+    initialDataUpdatedAt:
+      (selectedBoard?.uuid ?? null) === ssrSmartKeyRef.current.boardUuid ? ssrInitialUpdatedAtRef.current : 0,
   });
 
   const allClimbs: Climb[] = useMemo(

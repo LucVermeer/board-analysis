@@ -137,6 +137,15 @@ export default function PlaylistDetailContent({
   // Treat SSR-seeded react-query data as fresh under staleTime; without this,
   // initialDataUpdatedAt defaults to 0 and triggers an immediate refetch.
   const ssrInitialClimbsUpdatedAtRef = useRef(initialClimbs ? Date.now() : 0);
+  // Snapshot the query-key components that the SSR climbs payload was fetched
+  // for. `initialData` is shared across keys, so without this gate a board
+  // chip switch or a post-edit `listRefreshKey` bump would re-seed the new
+  // key with the original SSR page and (because `initialDataUpdatedAt` puts
+  // it inside `staleTime`) skip the fetch entirely.
+  const ssrClimbsKeyRef = useRef({
+    boardUuid: selectedBoard?.uuid ?? null,
+    refreshKey: 0,
+  });
   const { token, isLoading: tokenLoading } = useWsAuthToken();
 
   // Fetch user's boards (with SSR initial data to avoid loading skeleton).
@@ -183,7 +192,13 @@ export default function PlaylistDetailContent({
       setPlaylist(response.playlist);
     } catch (err) {
       console.error('Error fetching playlist:', err);
-      setError('load-failed');
+      // Keep the SSR-rendered content on screen if a background refetch
+      // hits a transient network error — we'd rather show slightly stale
+      // data than blow it away with a full-page error state. Only escalate
+      // when we genuinely have nothing to display.
+      if (!hasPlaylistDataRef.current) {
+        setError('load-failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -221,6 +236,15 @@ export default function PlaylistDetailContent({
 
   // === Playlist climbs data fetching (all-boards mode by default) ===
 
+  // Only feed initialData to react-query when the current query key matches
+  // the tuple the SSR climbs page was fetched for. Without this guard, every
+  // new key (board switch, listRefreshKey bump after edits, …) would adopt
+  // the same SSR page as fresh data and skip the actual fetch.
+  const ssrClimbsApplicable =
+    !!initialClimbs &&
+    (selectedBoard?.uuid ?? null) === ssrClimbsKeyRef.current.boardUuid &&
+    listRefreshKey === ssrClimbsKeyRef.current.refreshKey;
+
   const {
     data: climbsData,
     fetchNextPage,
@@ -252,22 +276,27 @@ export default function PlaylistDetailContent({
       } satisfies GetPlaylistClimbsQueryVariables);
       return response.playlistClimbs;
     },
-    enabled: !tokenLoading && !!token,
+    // Public playlists are readable without a token (the backend resolver
+    // gates with verifyPlaylistAccess(userId ?? null)), so don't gate the
+    // query on auth — otherwise signed-out viewers see the SSR first page
+    // and "load more" silently does nothing.
+    enabled: !tokenLoading,
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
       if (!lastPage.hasMore) return undefined;
       return allPages.length;
     },
     staleTime: 5 * 60 * 1000,
-    initialData: initialClimbs
+    initialData: ssrClimbsApplicable
       ? {
           pages: [initialClimbs],
           pageParams: [0],
         }
       : undefined,
     // Without this, react-query treats initialData as epoch-stale and fires
-    // an immediate refetch, defeating the SSR optimisation.
-    initialDataUpdatedAt: ssrInitialClimbsUpdatedAtRef.current,
+    // an immediate refetch, defeating the SSR optimisation. Only meaningful
+    // when initialData itself is being supplied.
+    initialDataUpdatedAt: ssrClimbsApplicable ? ssrInitialClimbsUpdatedAtRef.current : 0,
   });
 
   const allClimbs: Climb[] = useMemo(
