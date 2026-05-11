@@ -1,4 +1,5 @@
 import { type Page, test, expect } from '@playwright/test';
+import { waitForBoardListReady } from './helpers/waits';
 
 /**
  * E2E tests for queue persistence across navigation.
@@ -13,9 +14,7 @@ const queueControlBar = '[data-testid="queue-control-bar"]';
 // Helper to wait for the board page to be ready
 async function waitForBoardPage(page: Page) {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', {
-    timeout: 30000,
-  });
+  await waitForBoardListReady(page);
 }
 
 // Helper to add a climb to the queue via double-click and return the climb name

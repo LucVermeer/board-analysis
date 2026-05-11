@@ -22,8 +22,9 @@
  *   - 6.9" (iPhone 16 Pro Max): 1320x2868 -- App Store Connect accepts 6.5" for this slot
  *   - 12.9" iPad: 2048x2732 -- optional, not covered here
  */
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import path from 'path';
+import { drawer, waitForBoardListReady, waitForDrawerOpen, waitForSkeletonsGone } from './helpers/waits';
 
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../../mobile/screenshots');
 const boardUrl = '/kilter/original/12x12-square/screw_bolt/40/list';
@@ -60,26 +61,15 @@ test.describe('App Store Screenshots', () => {
       sessionStorage.setItem('boardsesh:e2e-suppress-install-card', '1');
     });
     await page.goto(boardUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page
-      .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 60_000 })
-      .catch(() => page.waitForLoadState('networkidle'));
-    // Let React finish hydrating before any test body fires events —
-    // clicking before `onClick` handlers are attached is a common source
-    // of "click looked fine but nothing happened" flakes.
-    await page.waitForLoadState('networkidle').catch(() => {});
+    await waitForBoardListReady(page, 60_000);
   });
 
   test('01-climb-list', async ({ page }) => {
-    // Main browse interface showing climb cards with grades and ratings.
-    // Wait until every MUI skeleton has unmounted so no shimmering loading
-    // shadows leak into the shot, then give the queue-hint intro animation
-    // time to finish.
-    await page
-      .waitForFunction(() => document.querySelectorAll('.MuiSkeleton-root').length === 0, null, {
-        timeout: 30_000,
-      })
-      .catch(() => {});
-    await page.waitForTimeout(10_000);
+    // Main browse interface. Wait for every MUI skeleton to unmount so no
+    // shimmering loading shadows leak into the shot. Once skeletons are
+    // gone, the queue-hint intro animation gets a 600ms settle window.
+    await waitForSkeletonsGone(page);
+    await page.waitForTimeout(600);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/01-climb-list.png` });
   });
 
@@ -88,7 +78,7 @@ test.describe('App Store Screenshots', () => {
     // Note: `#onboarding-search-button` is the search input wrapper, not the
     // filter trigger — it focuses the textbox but does not open the drawer.
     await page.getByRole('button', { name: 'Open filters' }).click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10000 });
+    await waitForDrawerOpen(page);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/02-search-filters.png` });
   });
 
@@ -97,14 +87,15 @@ test.describe('App Store Screenshots', () => {
     // AND dispatch the open-play-drawer event, so it reliably lands in the
     // right state on both desktop and mobile without relying on dblclick.
     const thumbnail = page.locator('#onboarding-climb-card [data-testid="climb-thumbnail"]');
-    await thumbnail.waitFor({ state: 'visible', timeout: 15000 });
+    await thumbnail.waitFor({ state: 'visible', timeout: 15_000 });
     await thumbnail.click();
 
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 15000 });
+    await waitForDrawerOpen(page, 0, 15_000);
     // Board renderer fetches the layout SVG + hold images asynchronously after
-    // the drawer animates in. Wait 5s so the board has fully painted before
-    // the screenshot.
-    await page.waitForTimeout(5_000);
+    // the drawer animates in. Wait for the in-drawer skeletons to clear, then
+    // a brief settle for SVG paint.
+    await waitForSkeletonsGone(page, 20_000);
+    await page.waitForTimeout(500);
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/03-board-view.png` });
   });
@@ -118,36 +109,35 @@ test.describe('App Store Screenshots', () => {
     const secondRow = page.locator('#onboarding-climb-card-2');
     await firstRow.waitFor({ state: 'visible', timeout: 15_000 });
     await secondRow.waitFor({ state: 'visible', timeout: 15_000 });
+
+    const queueBar = page.locator('[data-testid="queue-control-bar"]');
     await firstRow.click();
-    await page.waitForTimeout(300);
+    await expect(queueBar).toBeVisible({ timeout: 10_000 });
     await secondRow.click();
-    await page.waitForTimeout(300);
+    // Brief settle so the queue reducer applies the second add before the
+    // third click — there's no per-add DOM signal that's safe to assert on
+    // without depending on the climb name (varies per seed).
+    await page.waitForTimeout(150);
     await firstRow.click();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(150);
 
     // Open the play drawer (tap the thumbnail), then press the in-drawer
     // queue button so the screenshot shows the actual queue list, not the
     // climb browser with the queue bar at the bottom.
     const thumbnail = firstRow.locator('[data-testid="climb-thumbnail"]');
     await thumbnail.click();
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 15000 });
+    await waitForDrawerOpen(page, 0, 15_000);
 
     await page.getByRole('button', { name: 'Open queue' }).click();
     // The queue drawer is the second swipeable drawer (stacked above play).
-    await page.locator('[data-swipeable-drawer="true"]:visible').nth(1).waitFor({ timeout: 10_000 });
+    await waitForDrawerOpen(page, 1);
     // Toggle history so previously-played climbs are listed alongside the
     // current one — otherwise the queue panel would only show the active
     // climb (already-played items are hidden by default).
     const historyToggle = page.locator('button:has(svg[data-testid="HistoryOutlinedIcon"])').first();
     await historyToggle.click().catch(() => {});
-    // Let the queue drawer's Suggestions section finish loading so its
-    // skeleton placeholders unmount before the screenshot.
-    await page
-      .waitForFunction(() => document.querySelectorAll('.MuiSkeleton-root').length === 0, null, {
-        timeout: 20_000,
-      })
-      .catch(() => {});
-    await page.waitForTimeout(800);
+    // Wait for the Suggestions section's skeletons to unmount before the shot.
+    await waitForSkeletonsGone(page, 20_000);
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/04-queue.png` });
   });
@@ -165,11 +155,10 @@ test.describe('App Store Screenshots', () => {
     const dialog = page.getByRole('dialog').filter({ hasText: /select your board/i });
     await dialog.waitFor({ timeout: 15_000 });
     // Board-thumbnail SVGs inside each picker card load hold images
-    // asynchronously. Wait for the network to settle and give the SVG paint
-    // a moment to finish so the cards never appear with placeholder/broken
-    // imagery in the screenshot.
-    await page.waitForLoadState('networkidle').catch(() => {});
-    await page.waitForTimeout(2_000);
+    // asynchronously. Wait for the in-dialog skeletons to clear, then a
+    // brief settle for SVG paint.
+    await waitForSkeletonsGone(page, 15_000);
+    await page.waitForTimeout(400);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/05-bluetooth.png` });
   });
 
@@ -177,20 +166,35 @@ test.describe('App Store Screenshots', () => {
     // Reuse the dummy SeshSettingsDrawer the onboarding tour uses — it's
     // mounted globally by OnboardingDummySeshMount and listens for a custom
     // event. This avoids hitting the real session backend for the screenshot.
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('onboarding:open-dummy-sesh'));
-    });
-    await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 10_000 });
-    await page.waitForTimeout(800);
+    //
+    // Poll the dispatch up to 10× because the event listener is attached in
+    // a `useEffect` on the mount component, which can run after the test
+    // body fires if hydration is still in progress. Each iteration re-fires
+    // the event and waits 500ms for the drawer to mount.
+    const drawerLocator = drawer(page);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('onboarding:open-dummy-sesh'));
+      });
+      try {
+        await drawerLocator.waitFor({ timeout: 500 });
+        break;
+      } catch {
+        if (attempt === 9) throw new Error('Dummy sesh drawer never mounted after 10 dispatches');
+      }
+    }
+    // Drawer animation settle.
+    await page.waitForTimeout(400);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/06-party-mode.png` });
   });
 
   // Home page (board selection) screenshot -- navigates away from boardUrl
   test('00-home', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    // Wait for board selection cards to render
-    await page.waitForTimeout(1000);
+    // Wait for at least one board selection card before the screenshot.
+    // The home page renders MuiCard-based selectors for each supported board.
+    await page.locator('.MuiCard-root, [data-testid="board-selection-card"]').first().waitFor({ timeout: 15_000 });
+    await waitForSkeletonsGone(page, 10_000);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/00-home.png` });
   });
 });

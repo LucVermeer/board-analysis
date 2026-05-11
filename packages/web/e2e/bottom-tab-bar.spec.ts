@@ -1,5 +1,6 @@
 import { type Page, test, expect } from '@playwright/test';
 import { loginAs } from './helpers/auth';
+import { waitForBoardListReady } from './helpers/waits';
 
 /**
  * E2E tests for the bottom tab bar navigation.
@@ -191,13 +192,11 @@ test.describe('Bottom Tab Bar - Active State', () => {
 test.describe('Bottom Tab Bar - Queue Integration', () => {
   test('queue bar and bottom tab bar should coexist with correct climb', async ({ page }) => {
     await page.goto(boardUrl);
-    await page
-      .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 30000 })
-      .catch(() => page.waitForLoadState('domcontentloaded'));
+    await waitForBoardListReady(page);
 
-    // Add a climb to the queue
+    // Add a climb to the queue. waitForBoardListReady already asserts
+    // the climb card is present, so we can dblclick directly.
     const climbCard = page.locator('#onboarding-climb-card');
-    await expect(climbCard).toBeVisible({ timeout: 15000 });
     await climbCard.dblclick();
 
     // Both bars should be visible
@@ -214,13 +213,11 @@ test.describe('Bottom Tab Bar - Queue Integration', () => {
 
   test('queue bar should persist with correct climb across tab navigations', async ({ page }) => {
     await page.goto(boardUrl);
-    await page
-      .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 30000 })
-      .catch(() => page.waitForLoadState('domcontentloaded'));
+    await waitForBoardListReady(page);
 
-    // Add a climb to the queue and capture its name
+    // Add a climb to the queue and capture its name.
+    // waitForBoardListReady already asserts the card is present.
     const climbCard = page.locator('#onboarding-climb-card');
-    await expect(climbCard).toBeVisible({ timeout: 15000 });
     await climbCard.dblclick();
 
     await expect(page.locator(queueControlBar)).toBeVisible({ timeout: 10000 });

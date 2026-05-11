@@ -19,6 +19,7 @@
 import { test } from '@playwright/test';
 import path from 'path';
 import { mkdirSync } from 'fs';
+import { waitForBoardListReady, waitForDrawerOpen } from './helpers/waits';
 
 const SCREENSHOT_DIR = path.resolve(__dirname, 'screenshots/layouts');
 mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -81,9 +82,7 @@ test.describe('Layout Screenshots', () => {
       await page.goto(layout.url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
       // Wait for the first climb card to render (board image assets may be slow)
-      await page
-        .waitForSelector('#onboarding-climb-card, [data-testid="climb-card"]', { timeout: 60_000 })
-        .catch(() => page.waitForLoadState('networkidle'));
+      await waitForBoardListReady(page, 60_000);
 
       // ── 2. Screenshot: climb list ───────────────────────────────────────────
       await page.screenshot({
@@ -98,7 +97,7 @@ test.describe('Layout Screenshots', () => {
       await thumbnail.click();
 
       // ── 4. Wait for the play-view drawer ───────────────────────────────────
-      await page.locator('[data-swipeable-drawer="true"]:visible').first().waitFor({ timeout: 15_000 });
+      await waitForDrawerOpen(page, 0, 15_000);
 
       // ── 5. Screenshot: play-view drawer ────────────────────────────────────
       await page.screenshot({

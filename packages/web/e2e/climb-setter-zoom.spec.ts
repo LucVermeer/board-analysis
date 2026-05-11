@@ -80,7 +80,10 @@ test.describe('Climb Setter - Zoomable Board', () => {
     await expect(boardSvg).toBeVisible({ timeout: 30_000 });
 
     // Give images a moment to finish decoding before capturing the baseline.
-    await page.waitForLoadState('networkidle').catch(() => {});
+    // Boardsesh holds long-lived WebSocket subscriptions (party mode etc.)
+    // that keep `networkidle` from ever firing in this app, so this is a
+    // bounded settle rather than a network-quiet wait.
+    await page.waitForTimeout(400);
 
     // Baseline screenshot: zoomed-out board with header + action bar visible.
     const beforePath = testInfo.outputPath('create-screen-initial.png');
