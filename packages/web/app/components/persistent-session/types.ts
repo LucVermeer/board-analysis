@@ -128,7 +128,8 @@ export type PersistentSessionStateType = {
   sessionSummaryBoardType: string | null;
   sessionSummaryHealthKitWorkoutId: string | null;
   // True when the summary is shown because the session was auto-finished after
-  // inactivity. The dialog hides the HealthKit save action in this mode.
+  // inactivity. The dialog title changes ("Session Finished" vs "Session Summary");
+  // HealthKit behaves the same as a manually-ended session.
   sessionSummaryAutoFinished: boolean;
 };
 

@@ -95,7 +95,13 @@ export function useQueueStorage({
     }
 
     void restoreState();
-  }, [isAuthLoading, wsAuthToken, onSessionAutoFinished, setActiveSession]);
+    // `wsAuthToken` is intentionally not in the deps: restoration is gated by
+    // `isAuthLoading` and runs once (guarded by hasRestoredRef). When this
+    // effect re-runs because isAuthLoading flipped, the new closure captures
+    // the freshly-resolved token. Token rotation after that should not
+    // re-restore.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthLoading, onSessionAutoFinished, setActiveSession]);
 
   // Local queue management (in-memory only)
   const setLocalQueueState = useCallback(

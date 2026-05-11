@@ -313,6 +313,35 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     });
   });
 
+  it('falls through to normal activation when the auto-finished pre-flight rejects', async () => {
+    const sessionInfo = {
+      sessionId: 'session-network-flake',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+    mockHttpRequest.mockRejectedValueOnce(new Error('network down'));
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.activeSession).toEqual(sessionInfo);
+    });
+
+    expect(result.current.sessionSummaryAutoFinished).toBe(false);
+    expect(result.current.sessionSummary).toBeNull();
+
+    const stored = await getPreference(ACTIVE_SESSION_KEY);
+    expect(stored).toEqual(sessionInfo);
+  });
+
   it('waits for auth to load before running mount pre-flight', async () => {
     mockWsAuth.token = null;
     mockWsAuth.isLoading = true;
