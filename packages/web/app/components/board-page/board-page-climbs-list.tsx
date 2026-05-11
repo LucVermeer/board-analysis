@@ -1,6 +1,5 @@
 'use client';
-import React, { useMemo, useEffect, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import React, { useMemo, useRef } from 'react';
 import type { Climb, ParsedBoardRouteParameters, BoardDetails } from '@/app/lib/types';
 import { useQueueActions, useCurrentClimb, useSearchData } from '../graphql-queue';
 import ClimbsList from './climbs-list';
@@ -25,16 +24,6 @@ const BoardPageClimbsList = ({
   const { currentClimb } = useCurrentClimb();
   const { climbSearchResults, hasMoreResults, hasDoneFirstFetch, isFetchingClimbs } = useSearchData();
   const { setCurrentClimb, addToQueue, fetchMoreClimbs } = useQueueActions();
-
-  const searchParams = useSearchParams();
-  const page = searchParams.get('page');
-
-  // Scroll to top when search params reset to page 0
-  useEffect(() => {
-    if (page === '0' && hasDoneFirstFetch && isFetchingClimbs) {
-      window.scrollTo({ top: 0, behavior: 'instant' });
-    }
-  }, [page, hasDoneFirstFetch, isFetchingClimbs]);
 
   // Queue Context provider uses React Query infinite to fetch results, which can only happen clientside.
   // That data equals null at the start, so when its null we use the initialClimbs array which we

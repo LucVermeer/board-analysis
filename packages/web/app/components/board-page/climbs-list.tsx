@@ -317,6 +317,7 @@ const ClimbsList = ({
   const INITIAL_BATCH = 6;
   const [visibleCount, setVisibleCount] = useState(climbs.length);
   const prevClimbsRef = useRef(climbs);
+  const shouldScrollToTopRef = useRef(false);
 
   if (climbs !== prevClimbsRef.current) {
     const prevClimbs = prevClimbsRef.current;
@@ -327,10 +328,19 @@ const ClimbsList = ({
     if (changeType === 'append' || changeType === 'same') {
       // Show all items immediately — no batching for appended pages or unchanged data
       setVisibleCount(climbs.length);
-    } else if (climbs.length > INITIAL_BATCH) {
-      setVisibleCount(INITIAL_BATCH);
+    } else {
+      shouldScrollToTopRef.current = true;
+      if (climbs.length > INITIAL_BATCH) {
+        setVisibleCount(INITIAL_BATCH);
+      }
     }
   }
+
+  useEffect(() => {
+    if (!shouldScrollToTopRef.current) return;
+    shouldScrollToTopRef.current = false;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [climbs]);
 
   useEffect(() => {
     if (visibleCount < climbs.length) {
