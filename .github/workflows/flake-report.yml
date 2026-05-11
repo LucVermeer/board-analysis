@@ -1,0 +1,168 @@
+name: E2E Flake Report
+
+# Runs after E2E Tests on a PR. Aggregates the per-shard JSON reports the
+# Playwright JSON reporter emits and surfaces every test that passed only
+# after a retry — the canonical signal for "this test is flaky." Posts a
+# sticky PR comment so the flake state is visible without digging into
+# the HTML reports.
+#
+# This is informational, not a merge gate. Failure of this workflow never
+# blocks a PR.
+
+on:
+  workflow_run:
+    workflows: ['E2E Tests']
+    types: [completed]
+
+jobs:
+  report:
+    name: Build flake report
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      actions: read
+    steps:
+      # No checkout — the node script below reads only artifact JSON.
+
+      - name: Resolve PR number for this workflow_run
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          # workflow_run doesn't carry the PR number directly. Look it up by
+          # head SHA. Skip the report if no open PR matches (push-to-main runs).
+          PR=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/pulls" \
+            --jq '.[] | select(.state == "open") | .number' | head -n 1)
+          if [ -z "$PR" ]; then
+            echo "No open PR for SHA ${HEAD_SHA}; skipping report"
+            echo "pr=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "pr=${PR}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all Playwright report artifacts
+        if: steps.pr.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          mkdir -p reports
+          # The e2e-tests workflow uploads `playwright-report-shard-N`
+          # artifacts. `gh run download` exits 0 even when zero artifacts
+          # match the pattern (empty reports/ dir), so the empty-state
+          # handler below picks that case up. Network/auth failures still
+          # exit nonzero and fail this step — preferable to silently
+          # posting a misleading "no flakes" comment.
+          gh run download "${RUN_ID}" \
+            --repo "${REPO}" \
+            --dir reports \
+            --pattern 'playwright-report-shard-*'
+          ls -R reports || true
+
+      - name: Compute flake list
+        if: steps.pr.outputs.pr != ''
+        id: flake
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          node << 'NODEEOF'
+          const fs = require('fs');
+          const path = require('path');
+
+          const root = 'reports';
+          // Dedup by (project, file, title) so a test that appears in
+          // multiple shards' JSON (shard split misconfig, retried after a
+          // shard re-run) doesn't show up twice in the report.
+          const flakyMap = new Map();
+          const failedMap = new Map();
+
+          function walkSpecs(node, projectName) {
+            if (!node) return;
+            if (Array.isArray(node.suites)) for (const child of node.suites) walkSpecs(child, projectName);
+            if (Array.isArray(node.specs)) for (const spec of node.specs) {
+              for (const test of spec.tests || []) {
+                const project = test.projectName || projectName || 'unknown';
+                const results = test.results || [];
+                if (results.length === 0) continue;
+                // Playwright's `test.status` is the overall outcome:
+                // `expected` (pass first try), `flaky` (failed once or more
+                // then passed), `unexpected` (failed all retries), or
+                // `skipped`. Branch on those four explicitly so flake
+                // detection doesn't accidentally fall through into the
+                // failed bucket.
+                const status = test.status;
+                const key = `${project}::${spec.file}::${spec.title}`;
+                if (status === 'flaky') {
+                  flakyMap.set(key, { project, file: spec.file, title: spec.title, retries: results.length - 1 });
+                } else if (status === 'unexpected') {
+                  failedMap.set(key, { project, file: spec.file, title: spec.title });
+                }
+              }
+            }
+          }
+
+          if (!fs.existsSync(root) || fs.readdirSync(root).length === 0) {
+            const runUrl = `https://github.com/${process.env.REPO}/actions/runs/${process.env.RUN_ID}`;
+            fs.writeFileSync(
+              'flake-summary.md',
+              `### E2E Flake Report\n\nNo shard artifacts found — the upstream [E2E run](${runUrl}) may have been cancelled or its artifact names changed.\n`,
+            );
+            return;
+          }
+
+          for (const dir of fs.readdirSync(root)) {
+            const file = path.join(root, dir, 'results.json');
+            if (!fs.existsSync(file)) continue;
+            try {
+              const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+              for (const suite of json.suites || []) walkSpecs(suite, suite.title);
+            } catch (err) {
+              console.warn(`Failed to parse ${file}: ${err.message}`);
+            }
+          }
+
+          const flaky = Array.from(flakyMap.values());
+          const failed = Array.from(failedMap.values());
+
+          const lines = ['### E2E Flake Report', ''];
+          if (flaky.length === 0 && failed.length === 0) {
+            lines.push('No flaky tests detected — every spec passed on its first attempt.');
+          } else {
+            if (flaky.length > 0) {
+              lines.push(`**${flaky.length} test${flaky.length === 1 ? '' : 's'} passed only after a retry:**`, '');
+              flaky
+                .sort((a, b) => b.retries - a.retries || a.file.localeCompare(b.file))
+                .forEach((entry) => {
+                  lines.push(`- \`[${entry.project}]\` ${entry.file} — *${entry.title}* (retried ${entry.retries}×)`);
+                });
+              lines.push('');
+            }
+            if (failed.length > 0) {
+              lines.push(`**${failed.length} test${failed.length === 1 ? '' : 's'} failed all retries:**`, '');
+              failed.forEach((entry) => {
+                lines.push(`- \`[${entry.project}]\` ${entry.file} — *${entry.title}*`);
+              });
+              lines.push('');
+            }
+            lines.push(
+              '> Flaky tests still pass the build, but every retry is debt. ' +
+                'See `packages/web/e2e/SEED_CONTRACT.md` for what each spec assumes.',
+            );
+          }
+
+          fs.writeFileSync('flake-summary.md', lines.join('\n'));
+          console.log(lines.join('\n'));
+          NODEEOF
+
+      - name: Upsert sticky PR comment
+        if: steps.pr.outputs.pr != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          number: ${{ steps.pr.outputs.pr }}
+          header: e2e-flake-report
+          path: flake-summary.md

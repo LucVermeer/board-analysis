@@ -18,8 +18,11 @@ export default defineConfig({
   /* Raise the default assertion timeout from Playwright's 5 s to 10 s */
   expect: { timeout: 10_000 },
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  /* In CI: emit both the HTML report (uploaded as an artifact) and GitHub Annotations */
-  reporter: process.env.CI ? [['html'], ['github']] : 'html',
+  /* In CI: emit HTML (artifact), GitHub Annotations, and a JSON file the
+   * flake-report workflow consumes to surface tests that passed-on-retry. */
+  reporter: process.env.CI
+    ? [['html'], ['github'], ['json', { outputFile: 'playwright-report/results.json' }]]
+    : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
