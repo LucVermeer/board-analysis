@@ -74,29 +74,33 @@ export function parseBoardRouteParams<T extends BoardRouteParameters>(
 export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSearchParams => {
   // Coalesce any missing/undefined fields to their defaults. Stored recent searches
   // (IndexedDB) and partial filter updates can leak undefined values into this path,
-  // which would otherwise crash on `.toString()`.
-  const gradeAccuracy = input.gradeAccuracy ?? DEFAULT_SEARCH_PARAMS.gradeAccuracy;
-  const maxGrade = input.maxGrade ?? DEFAULT_SEARCH_PARAMS.maxGrade;
-  const minGrade = input.minGrade ?? DEFAULT_SEARCH_PARAMS.minGrade;
-  const minAscents = normalizeMinAscentsFilter(input.minAscents ?? DEFAULT_SEARCH_PARAMS.minAscents);
-  const minRating = normalizeMinRatingFilter(input.minRating ?? DEFAULT_SEARCH_PARAMS.minRating);
-  const sortBy = input.sortBy ?? DEFAULT_SEARCH_PARAMS.sortBy;
-  const sortOrder = input.sortOrder ?? DEFAULT_SEARCH_PARAMS.sortOrder;
-  const name = input.name ?? DEFAULT_SEARCH_PARAMS.name;
-  const onlyClassics = input.onlyClassics ?? DEFAULT_SEARCH_PARAMS.onlyClassics;
-  const onlyTallClimbs = input.onlyTallClimbs ?? DEFAULT_SEARCH_PARAMS.onlyTallClimbs;
-  const settername = input.settername ?? DEFAULT_SEARCH_PARAMS.settername;
-  const setternameSuggestion = input.setternameSuggestion ?? DEFAULT_SEARCH_PARAMS.setternameSuggestion;
-  const holdsFilter = input.holdsFilter ?? DEFAULT_SEARCH_PARAMS.holdsFilter;
-  const hideAttempted = input.hideAttempted ?? DEFAULT_SEARCH_PARAMS.hideAttempted;
-  const hideCompleted = input.hideCompleted ?? DEFAULT_SEARCH_PARAMS.hideCompleted;
-  const showOnlyAttempted = input.showOnlyAttempted ?? DEFAULT_SEARCH_PARAMS.showOnlyAttempted;
-  const showOnlyCompleted = input.showOnlyCompleted ?? DEFAULT_SEARCH_PARAMS.showOnlyCompleted;
-  const onlyDrafts = input.onlyDrafts ?? DEFAULT_SEARCH_PARAMS.onlyDrafts;
-  const projectsOnly = input.projectsOnly ?? DEFAULT_SEARCH_PARAMS.projectsOnly;
-  const zoneBox = input.zoneBox ?? DEFAULT_SEARCH_PARAMS.zoneBox;
-  const page = input.page ?? DEFAULT_SEARCH_PARAMS.page;
-  const pageSize = input.pageSize ?? DEFAULT_SEARCH_PARAMS.pageSize;
+  // which would otherwise crash on `.toString()`. See BOARDSESH-30, BOARDSESH-2Z,
+  // BOARDSESH-31, BOARDSESH-33, BOARDSESH-34, BOARDSESH-38 (all collapsed under #2067).
+  // The `input ?? {}` first line also defends against a hypothetical caller passing
+  // null/undefined — every field is then individually coalesced below.
+  const safeInput = (input ?? {}) as Partial<SearchRequestPagination>;
+  const gradeAccuracy = safeInput.gradeAccuracy ?? DEFAULT_SEARCH_PARAMS.gradeAccuracy;
+  const maxGrade = safeInput.maxGrade ?? DEFAULT_SEARCH_PARAMS.maxGrade;
+  const minGrade = safeInput.minGrade ?? DEFAULT_SEARCH_PARAMS.minGrade;
+  const minAscents = normalizeMinAscentsFilter(safeInput.minAscents ?? DEFAULT_SEARCH_PARAMS.minAscents);
+  const minRating = normalizeMinRatingFilter(safeInput.minRating ?? DEFAULT_SEARCH_PARAMS.minRating);
+  const sortBy = safeInput.sortBy ?? DEFAULT_SEARCH_PARAMS.sortBy;
+  const sortOrder = safeInput.sortOrder ?? DEFAULT_SEARCH_PARAMS.sortOrder;
+  const name = safeInput.name ?? DEFAULT_SEARCH_PARAMS.name;
+  const onlyClassics = safeInput.onlyClassics ?? DEFAULT_SEARCH_PARAMS.onlyClassics;
+  const onlyTallClimbs = safeInput.onlyTallClimbs ?? DEFAULT_SEARCH_PARAMS.onlyTallClimbs;
+  const settername = safeInput.settername ?? DEFAULT_SEARCH_PARAMS.settername;
+  const setternameSuggestion = safeInput.setternameSuggestion ?? DEFAULT_SEARCH_PARAMS.setternameSuggestion;
+  const holdsFilter = safeInput.holdsFilter ?? DEFAULT_SEARCH_PARAMS.holdsFilter;
+  const hideAttempted = safeInput.hideAttempted ?? DEFAULT_SEARCH_PARAMS.hideAttempted;
+  const hideCompleted = safeInput.hideCompleted ?? DEFAULT_SEARCH_PARAMS.hideCompleted;
+  const showOnlyAttempted = safeInput.showOnlyAttempted ?? DEFAULT_SEARCH_PARAMS.showOnlyAttempted;
+  const showOnlyCompleted = safeInput.showOnlyCompleted ?? DEFAULT_SEARCH_PARAMS.showOnlyCompleted;
+  const onlyDrafts = safeInput.onlyDrafts ?? DEFAULT_SEARCH_PARAMS.onlyDrafts;
+  const projectsOnly = safeInput.projectsOnly ?? DEFAULT_SEARCH_PARAMS.projectsOnly;
+  const zoneBox = safeInput.zoneBox ?? DEFAULT_SEARCH_PARAMS.zoneBox;
+  const page = safeInput.page ?? DEFAULT_SEARCH_PARAMS.page;
+  const pageSize = safeInput.pageSize ?? DEFAULT_SEARCH_PARAMS.pageSize;
 
   const params: Record<string, string> = {};
 
@@ -162,7 +166,13 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   if (projectsOnly !== DEFAULT_SEARCH_PARAMS.projectsOnly) {
     params.projectsOnly = projectsOnly.toString();
   }
-  if (zoneBox) {
+  if (
+    zoneBox &&
+    zoneBox.edgeLeft != null &&
+    zoneBox.edgeRight != null &&
+    zoneBox.edgeBottom != null &&
+    zoneBox.edgeTop != null
+  ) {
     params.zoneEdgeLeft = zoneBox.edgeLeft.toString();
     params.zoneEdgeRight = zoneBox.edgeRight.toString();
     params.zoneEdgeBottom = zoneBox.edgeBottom.toString();
