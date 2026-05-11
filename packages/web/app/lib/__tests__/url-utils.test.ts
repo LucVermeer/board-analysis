@@ -192,6 +192,42 @@ describe('searchParamsToUrlParams', () => {
     expect(result.toString()).toBe('');
   });
 
+  it('should not throw when input itself is null or undefined', () => {
+    // Defense in depth for #2067 — even if a future caller accidentally passes a
+    // nullish value (e.g. uninitialised reducer state), the serializer should
+    // fall back to defaults instead of crashing on `.toString()`.
+    let resultFromUndefined!: URLSearchParams;
+    expect(() => {
+      resultFromUndefined = searchParamsToUrlParams(undefined as unknown as SearchRequestPagination);
+    }).not.toThrow();
+    expect(resultFromUndefined.toString()).toBe('');
+
+    let resultFromNull!: URLSearchParams;
+    expect(() => {
+      resultFromNull = searchParamsToUrlParams(null as unknown as SearchRequestPagination);
+    }).not.toThrow();
+    expect(resultFromNull.toString()).toBe('');
+  });
+
+  it('should not throw when zoneBox has missing edge fields', () => {
+    // Defense in depth: a corrupted zoneBox object with undefined edges should
+    // not crash the serializer with `.toString()` on undefined. We omit the
+    // whole zone filter rather than emitting partial params.
+    const corruptZoneBox = {
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: { edgeLeft: undefined, edgeRight: undefined, edgeBottom: undefined, edgeTop: undefined },
+    } as unknown as SearchRequestPagination;
+
+    let result!: URLSearchParams;
+    expect(() => {
+      result = searchParamsToUrlParams(corruptZoneBox);
+    }).not.toThrow();
+    expect(result.has('zoneEdgeLeft')).toBe(false);
+    expect(result.has('zoneEdgeRight')).toBe(false);
+    expect(result.has('zoneEdgeBottom')).toBe(false);
+    expect(result.has('zoneEdgeTop')).toBe(false);
+  });
+
   describe('with a single undefined numeric field (legacy persisted state)', () => {
     const numericFields = [
       'gradeAccuracy',
