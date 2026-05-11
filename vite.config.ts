@@ -75,7 +75,7 @@ export default defineConfig({
       // print-schema concatenates the modular gql typeDefs into a single SDL
       // file that graphql-codegen reads as its schema input.
       codegen: {
-        command: 'bun packages/shared-schema/scripts/print-schema.ts && graphql-codegen',
+        command: 'bun packages/shared-schema/scripts/print-schema.ts && graphql-codegen && vp fmt',
       },
 
       // --- Build (topological order via dependsOn) ---
