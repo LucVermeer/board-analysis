@@ -146,14 +146,6 @@
       "hardest": "Plus dur"
     }
   },
-  "boardHeatmap": {
-    "loading": "Chargement de la carte de chaleur...",
-    "legend": {
-      "low": "Faible ({{value}})",
-      "mid": "Moyen ({{value}})",
-      "high": "Élevé ({{value}})"
-    }
-  },
   "boardConfigSelects": {
     "board": "Board",
     "layout": "Layout",

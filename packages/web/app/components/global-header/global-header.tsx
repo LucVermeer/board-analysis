@@ -36,10 +36,8 @@ import styles from './global-header.module.css';
 
 const BADGE_SMALL_SX = { '& .MuiBadge-badge': themeTokens.badge.small } as const;
 
-/** Route prefix → translation key for pages that show a simple title header instead of the default search/sesh header */
-const TITLE_HEADER_PAGES: Record<string, string> = {
-  '/aurora-migration': 'header.auroraMigration',
-};
+/** Route prefixes that render a simple title header instead of the default search/sesh header */
+const TITLE_HEADER_PAGE_PREFIXES = ['/aurora-migration'] as const;
 
 /** Pages where the global header is completely hidden */
 const HIDDEN_HEADER_PAGES = ['/'];
@@ -144,15 +142,15 @@ function getProfileHeaderConfig(pathname: string, t: (key: string) => string): P
     };
   }
 
-  const childPageTitleKeys: Record<string, string> = {
-    statistics: 'header.statistics',
-    sessions: 'header.sessions',
-    climbs: 'header.createdClimbs',
+  const childPageTitles: Record<string, string> = {
+    statistics: t('header.statistics'),
+    sessions: t('header.sessions'),
+    climbs: t('header.createdClimbs'),
   };
 
   return {
     userId,
-    title: t(childPageTitleKeys[childPage] ?? 'header.profile'),
+    title: childPageTitles[childPage] ?? t('header.profile'),
     backUrl: `/profile/${userId}`,
     isRoot: false,
   };
@@ -348,8 +346,12 @@ export default function GlobalHeader({ boardConfigs }: GlobalHeaderProps) {
     );
   }
 
-  // Check if current page wants a simple title header
-  const titleHeaderPage = Object.entries(TITLE_HEADER_PAGES).find(([prefix]) => pathname.startsWith(prefix));
+  // Translation keys live alongside the prefix list so the i18n linter can
+  // statically follow `t('header.…')` to the catalog entry.
+  const titleHeaderTitles: Record<(typeof TITLE_HEADER_PAGE_PREFIXES)[number], string> = {
+    '/aurora-migration': t('header.auroraMigration'),
+  };
+  const titleHeaderPagePrefix = TITLE_HEADER_PAGE_PREFIXES.find((prefix) => pathname.startsWith(prefix));
 
   // Pathname-derived gate: lets us SSR the filter and queue buttons before the
   // board-route bridge injectors run on the client. The bridge callbacks
@@ -379,8 +381,8 @@ export default function GlobalHeader({ boardConfigs }: GlobalHeaderProps) {
   const searchPlaceholder = isClimbListPage ? t('header.searchClimbsPlaceholder') : t('header.searchPlaceholder');
 
   // Simple title header for specific pages (back button + title, no search/sesh)
-  if (titleHeaderPage) {
-    return <CenteredHeader left={<BackButton fallbackUrl="/" />} title={t(titleHeaderPage[1])} />;
+  if (titleHeaderPagePrefix) {
+    return <CenteredHeader left={<BackButton fallbackUrl="/" />} title={titleHeaderTitles[titleHeaderPagePrefix]} />;
   }
 
   return (

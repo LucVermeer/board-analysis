@@ -189,11 +189,21 @@
       "subtitle": "Découvrez les fonctionnalités de Boardsesh et tirez le meilleur de vos sessions"
     },
     "sections": {
-      "visualization": { "label": "Visualisation et analyse" },
-      "collaboration": { "label": "Sessions et collaboration" },
-      "training": { "label": "Entraînement et workouts" },
-      "search": { "label": "Recherche et découverte" },
-      "connectivity": { "label": "Sync et connectivité" }
+      "visualization": {
+        "label": "Visualisation et analyse"
+      },
+      "collaboration": {
+        "label": "Sessions et collaboration"
+      },
+      "training": {
+        "label": "Entraînement et workouts"
+      },
+      "search": {
+        "label": "Recherche et découverte"
+      },
+      "connectivity": {
+        "label": "Sync et connectivité"
+      }
     },
     "heatmap": {
       "q": "Comment utiliser la heatmap ?",

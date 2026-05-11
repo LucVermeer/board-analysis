@@ -1,14 +1,19 @@
 import React, { Suspense } from 'react';
 import { createNoIndexMetadata } from '@/app/lib/seo/metadata';
 import { getLocale } from '@/app/lib/i18n/get-locale';
+import { getServerTranslation } from '@/app/lib/i18n/server';
 import I18nProvider from '@/app/components/providers/i18n-provider';
 import AuthPageContent from './auth-page-content';
 
-export const metadata = createNoIndexMetadata({
-  title: 'Login',
-  description: 'Sign in or create an account on Boardsesh',
-  path: '/auth/login',
-});
+export async function generateMetadata() {
+  const { t, locale } = await getServerTranslation('auth');
+  return createNoIndexMetadata({
+    title: t('metadata.login.title'),
+    description: t('metadata.login.description'),
+    path: '/auth/login',
+    locale,
+  });
+}
 
 function AuthPageFallback() {
   return (

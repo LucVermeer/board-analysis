@@ -1,10 +1,5 @@
 {
   "metadata": {
-    "boardHome": {
-      "title": "{{boardName}} sur Boardsesh",
-      "description": "Parcourez les blocs et les sessions sur {{boardName}}",
-      "fallbackTitle": "Board introuvable"
-    },
     "list": {
       "title": "Blocs {{boardName}} à {{angle}}°",
       "description": "Parcourez les blocs sur {{boardName}} à {{angle}}°",
@@ -42,12 +37,6 @@
     }
   },
   "list": {
-    "empty": {
-      "title": "Aucun bloc ne correspond à vos filtres",
-      "subtitle": "Assouplissez les filtres et réessayez"
-    },
-    "loading": "Chargement des blocs...",
-    "loadMore": "Charger plus",
     "noMore": "Plus de blocs",
     "viewMode": {
       "list": "Vue liste",
@@ -58,7 +47,6 @@
       "description": "Celui-ci sort du mur. Il vous faut une taille au-dessus pour l'enchaîner."
     },
     "sort": {
-      "label": "Trier",
       "ascents": "Enchaînements",
       "popular": "Populaires",
       "difficulty": "Difficulté",
@@ -74,8 +62,6 @@
     "createNewClimb": "Créer un nouveau bloc"
   },
   "share": {
-    "title": "{{climbName}} sur Boardsesh",
-    "text": "Jetez un œil à {{climbName}} sur Boardsesh",
     "actionLabel": "Partager",
     "actionText": "Jetez un œil à « {{climbName}} » ({{difficulty}}) sur Boardsesh",
     "linkCopied": "Lien copié",
@@ -99,7 +85,6 @@
     "sends_other": "{{count}} enchaînements"
   },
   "search": {
-    "drawerTitle": "Recherche et filtres",
     "categories": {
       "climbs": "Blocs",
       "boards": "Boards",
@@ -112,8 +97,7 @@
       "gyms": "Rechercher des salles...",
       "users": "Rechercher des grimpeurs...",
       "playlists": "Rechercher des playlists...",
-      "climbs": "Rechercher des blocs...",
-      "setters": "Rechercher des ouvreurs..."
+      "climbs": "Rechercher des blocs..."
     },
     "fields": {
       "climbName": "Nom du bloc",
@@ -138,13 +122,9 @@
     "panels": {
       "quality": "Qualité",
       "status": "Statut d'enchaînement",
-      "progress": "Progression",
-      "holds": "Prises",
-      "holdsTitle": "Rechercher par prise",
       "zone": "Zone",
       "holdsAndZone": "Prises et zone",
-      "anyDefault": "Toutes",
-      "allClimbs": "Tous les blocs"
+      "anyDefault": "Toutes"
     },
     "status": {
       "any": "Tous",
@@ -176,13 +156,7 @@
     "results": {
       "count": "résultats"
     },
-    "setters": {
-      "loading": "Chargement...",
-      "openDropdown": "Ouvrez le menu pour voir les ouvreurs",
-      "noSetters": "Aucun ouvreur trouvé"
-    },
     "holds": {
-      "tapToToggle": "Touchez une prise pour l'inclure ou l'exclure",
       "include": "Inclure",
       "exclude": "Exclure",
       "included": "{{count}} incluses",
@@ -191,7 +165,6 @@
       "hideHeatmap": "Masquer la carte de chaleur"
     },
     "zone": {
-      "description": "Faites glisser la zone pour limiter les résultats aux voies qui s'y inscrivent.",
       "draw": "Dessiner la zone",
       "clear": "Effacer la zone"
     },
@@ -199,15 +172,6 @@
       "description": "Touchez des prises pour filtrer, ou dessinez une zone pour limiter les résultats aux voies qui s'y inscrivent."
     },
     "sortToggle": "Trier"
-  },
-  "statsFilter": {
-    "drawerTitle": "Filtres",
-    "fields": {
-      "board": "Board",
-      "timeRange": "Période",
-      "from": "Du",
-      "to": "Au"
-    }
   },
   "create": {
     "auth": {
@@ -317,31 +281,19 @@
     "title": {
       "noClimbSelected": "Aucun bloc sélectionné",
       "project": "projet",
-      "projectAtAngle": "projet @ {{angle}}°",
-      "draftBy": "Brouillon de {{name}}",
-      "by": "Par {{name}}",
-      "byWithSends": "Par {{name}} - {{sends}}"
+      "projectAtAngle": "projet @ {{angle}}°"
     },
     "list": {
       "moreActions": "Plus d'actions",
       "tickError": "Croix non enregistrée, gardée en brouillon"
     },
     "detailHeader": {
-      "project": "projet",
-      "unknownSetter": "Ouvreur inconnu"
+      "project": "projet"
     }
   },
   "detail": {
     "sections": {
-      "beta": "Beta",
-      "logbook": "Votre carnet",
-      "logbookEmpty": "Pas de croix",
-      "crewLogbook": "Carnet du crew",
-      "crewLogbookSummary": "Les enchaînements de votre crew",
-      "community": "Communauté",
-      "communitySummary": "Votes, commentaires, propositions",
-      "analytics": "Statistiques",
-      "analyticsSummary": "Enchaînements, tendances de qualité"
+      "beta": "Beta"
     }
   },
   "multiboardList": {
@@ -402,12 +354,6 @@
       "importFailed": "Import échoué : {{error}}",
       "importWarnings": "Avertissements d'import :",
       "checkingMoonBoardDuplicate": "On vérifie si ce bloc MoonBoard existe déjà..."
-    },
-    "clear": {
-      "title": "Effacer le bloc",
-      "description": "Toutes les prises seront retirées et le formulaire remis à zéro. On y va ?",
-      "confirm": "Effacer",
-      "tooltip": "Effacer toutes les prises"
     },
     "settings": {
       "tooltip": "Paramètres du bloc",

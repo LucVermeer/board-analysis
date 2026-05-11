@@ -16,14 +16,8 @@
     "signInPrompt": "Inicia sesión para ver un feed de los escaladores que sigues."
   },
   "ascentsFeed": {
-    "attempts": "{{count}} intentos",
-    "deleteAscent": {
-      "title": "Eliminar ascenso",
-      "description": "¿Seguro? No se puede deshacer."
-    },
     "mirrored": "Espejo",
     "benchmark": "Referencia",
-    "setBy": "Por {{name}}",
     "empty": "Aún no hay ascensos"
   },
   "betaVideos": {

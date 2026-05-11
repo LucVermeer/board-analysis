@@ -116,6 +116,10 @@ export default defineConfig({
         command: 'bun packages/web/scripts/check-untranslated-strings.ts',
         cache: false,
       },
+      'check:i18n:orphans': {
+        command: 'bun packages/web/scripts/check-orphaned-i18n-keys.ts',
+        cache: false,
+      },
       build: {
         command: 'true',
         dependsOn: ['build:backend', 'build:web'],

@@ -60,7 +60,6 @@
     "errors": {
       "loadTitle": "No se pudo cargar la biblioteca",
       "loadDescription": "Hubo un error al cargar tu biblioteca. Inténtalo de nuevo.",
-      "loadFailed": "No se pudo cargar tu biblioteca",
       "tryAgain": "Reintentar"
     }
   },
@@ -93,8 +92,6 @@
       "notFoundDescription": "Esta playlist puede haber sido eliminada o no tienes permiso para verla.",
       "loadTitle": "No se pudo cargar la playlist",
       "loadDescription": "Hubo un error al cargar esta playlist. Inténtalo de nuevo.",
-      "loadFailed": "No se pudo cargar la playlist",
-      "notFound": "Playlist no encontrada",
       "tryAgain": "Reintentar"
     }
   },
@@ -176,12 +173,6 @@
       "unfamiliar": "Sin probar",
       "attempted": "Intentados",
       "any": "Cualquiera"
-    },
-    "effortLevels": {
-      "moderate": "Moderado",
-      "challenging": "Exigente",
-      "veryDifficult": "Muy difícil",
-      "maxEffort": "Esfuerzo máximo"
     },
     "workoutTypes": {
       "volume": {

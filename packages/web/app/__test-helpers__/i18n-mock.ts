@@ -29,7 +29,6 @@ import enAuth from '@/i18n/locales/en-US/auth.json';
 import enBoards from '@/i18n/locales/en-US/boards.json';
 import enClimbs from '@/i18n/locales/en-US/climbs.json';
 import enCommon from '@/i18n/locales/en-US/common.json';
-import enErrors from '@/i18n/locales/en-US/errors.json';
 import enFeed from '@/i18n/locales/en-US/feed.json';
 import enMarketing from '@/i18n/locales/en-US/marketing.json';
 import enNotifications from '@/i18n/locales/en-US/notifications.json';
@@ -46,7 +45,6 @@ const CATALOGS: Record<string, unknown> = {
   boards: enBoards,
   climbs: enClimbs,
   common: enCommon,
-  errors: enErrors,
   feed: enFeed,
   marketing: enMarketing,
   notifications: enNotifications,

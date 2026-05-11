@@ -189,11 +189,21 @@
       "subtitle": "Learn about Boardsesh features and get the most out of your climbing sessions"
     },
     "sections": {
-      "visualization": { "label": "Visualization & Analysis" },
-      "collaboration": { "label": "Session & Collaboration" },
-      "training": { "label": "Training & Workouts" },
-      "search": { "label": "Search & Discovery" },
-      "connectivity": { "label": "Sync & Connectivity" }
+      "visualization": {
+        "label": "Visualization & Analysis"
+      },
+      "collaboration": {
+        "label": "Session & Collaboration"
+      },
+      "training": {
+        "label": "Training & Workouts"
+      },
+      "search": {
+        "label": "Search & Discovery"
+      },
+      "connectivity": {
+        "label": "Sync & Connectivity"
+      }
     },
     "heatmap": {
       "q": "How do I use the heatmap feature?",

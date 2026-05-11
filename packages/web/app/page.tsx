@@ -13,6 +13,7 @@ export async function generateMetadata() {
   return createPageMetadata({
     title: t('metadata.home.title'),
     description: t('metadata.home.description'),
+    ogDescription: t('metadata.home.ogDescription'),
     path: '/',
     locale,
   });

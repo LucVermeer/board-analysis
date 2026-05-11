@@ -1,10 +1,7 @@
 {
   "metadata": {
     "detail": {
-      "title": "Sesión de escalada",
-      "description": "Sesión de escalada en Boardsesh",
-      "notFoundTitle": "Sesión no encontrada",
-      "notFoundDescription": "Esta sesión no existe o ya terminó."
+      "notFoundTitle": "Sesión no encontrada"
     },
     "join": {
       "title": "Únete a la sesión",
@@ -22,20 +19,11 @@
     }
   },
   "detail": {
-    "title": "Sesión",
     "subtitleSends_one": "{{count}} encadene",
     "subtitleSends_other": "{{count}} encadenes",
     "participantsClimbing": "{{names}} escalando en Boardsesh",
     "sessionNameOnBoardsesh": "{{name}} en Boardsesh",
-    "host": "Anfitrión: {{name}}",
-    "participants": "Participantes",
-    "climbs": "Bloques",
     "climbsCount": "Bloques ({{count}})",
-    "duration": "Duración",
-    "startedAt": "Empezó {{time}}",
-    "empty": "Sin encadenes todavía",
-    "endSession": "Terminar sesión",
-    "leaveSession": "Salir de la sesión",
     "share": "Compartir sesión",
     "shareTitle": "Sesión de escalada",
     "shareText": "Mira esta sesión de escalada en Boardsesh",
@@ -47,7 +35,6 @@
     "delete": "Eliminar",
     "climberFallback": "Escalador",
     "unknownClimb": "Bloque desconocido",
-    "anonymous": "Anónimo",
     "attemptOnNth": "al {{ordinal}} intento",
     "totalAttempts": "{{count}} en total",
     "attemptCount_one": "{{count}} intento",
@@ -56,7 +43,6 @@
     "ordinalSecond": "{{n}}º",
     "ordinalThird": "{{n}}º",
     "ordinalDefault": "{{n}}º",
-    "joiningSession": "Uniéndote a la sesión...",
     "sessionNotesPlaceholder": "Notas de la sesión u objetivo...",
     "noClimbsYet": "Sin bloques todavía",
     "logSomeClimbs": "Registra algunos bloques para ver el desglose por grados",
@@ -85,8 +71,7 @@
     "hardestLabel": "Más duro: {{grade}}",
     "notFound": {
       "title": "Sesión no encontrada",
-      "subtitle": "No se pudo encontrar esta sesión. Puede que haya sido eliminada.",
-      "back": "Volver a Boardsesh"
+      "subtitle": "No se pudo encontrar esta sesión. Puede que haya sido eliminada."
     },
     "userSearch": {
       "title": "Añadir escalador",
@@ -95,42 +80,13 @@
     }
   },
   "join": {
-    "title": "Únete a la sesión",
-    "subtitle": "A la pared",
-    "description": "Te han invitado a una sesión de escalada.",
-    "joinButton": "Únete a la sesión",
-    "joining": "Uniéndote a la sesión...",
-    "leaderName": "Sesión de {{name}}",
-    "scanQr": "O escanea el código QR del anfitrión",
-    "enterId": "O pega el ID de una sesión",
-    "errors": {
-      "notFound": "Sesión no encontrada",
-      "ended": "Esta sesión ya terminó",
-      "joinFailed": "No se pudo unir a la sesión"
-    }
+    "joining": "Uniéndote a la sesión..."
   },
   "settings": {
-    "drawerTitle": "Ajustes de la sesión",
     "fallbackTitle": "Sesión",
-    "partyMode": {
-      "label": "Modo Party",
-      "subtitle": "Comparte tu cola con el grupo"
-    },
-    "name": "Nombre de la sesión",
-    "namePlaceholder": "Sesh del viernes",
-    "color": "Color de la sesión",
-    "leader": "Líder de la sesión",
-    "leaveSession": "Salir de la sesión",
-    "endSession": "Terminar sesión",
     "stopSession": "Detener sesión",
     "dismiss": "Cerrar",
     "loadFailed": "No se pudieron cargar todos los detalles de la sesión. Las estadísticas en directo continuarán cuando estén disponibles.",
-    "endSessionConfirm": {
-      "title": "¿Terminar esta sesión?",
-      "description": "Tu grupo se desconectará.",
-      "confirm": "Terminar",
-      "cancel": "Cancelar"
-    },
     "share": {
       "shareTitle": "Únete a mi sesión de escalada",
       "shareText": "Métete y escala conmigo en Boardsesh",
@@ -146,11 +102,7 @@
     }
   },
   "creation": {
-    "title": "Empezar una sesión",
-    "subtitle": "Escalad juntos en tiempo real",
     "drawerTitle": "Empezar sesión",
-    "create": "Empezar sesión",
-    "creating": "Empezando...",
     "submitDefault": "Sesh",
     "dialogTitle": "Crear sesión",
     "dialogSubmit": "Crear sesión",
@@ -178,19 +130,14 @@
     }
   },
   "summary": {
-    "title": "Resumen de la sesión",
     "dialogTitle": "Resumen de la sesión",
-    "totalClimbs": "Bloques totales",
     "sends": "Encadenes",
     "attempts": "Intentos",
     "duration": "Duración",
     "hardestSend": "Encadene más duro:",
-    "shareSummary": "Compartir resumen",
     "goal": "Objetivo:",
     "gradeDistribution": "Distribución de grados",
     "participants": "Participantes",
-    "anonymous": "Anónimo",
-    "participantStats": "{{sends}} encadenes / {{attempts}} intentos",
     "done": "Hecho",
     "saveToAppleHealth": "Guardar en Apple Health",
     "savingToAppleHealth": "Guardando en Apple Health…",
@@ -213,7 +160,6 @@
     "cancelReconnect": "Cancelar",
     "tickError": "No se pudo guardar tu marca. Inténtalo otra vez.",
     "tickCommentPlaceholder": "Comentario...",
-    "tickCommentAria": "Comentario de marca",
     "tickAttemptLabel": "intento",
     "reconnect": {
       "connectionError": "Error de conexión – reintentando…",
@@ -221,9 +167,7 @@
     },
     "tickBar": {
       "collapse": "Contraer",
-      "expand": "Expandir",
-      "collapseAria": "Contraer barra de marca",
-      "expandAria": "Expandir barra de marca"
+      "expand": "Expandir"
     },
     "ariaLabels": {
       "leaveSession": "Salir de la sesión",
@@ -271,7 +215,6 @@
     },
     "tickBar": {
       "commentPlaceholder": "Comentario...",
-      "commentAria": "Comentario de marca",
       "closeAria": "Cerrar barra de marca",
       "collapseAria": "Contraer barra de marca",
       "expandAria": "Expandir barra de marca",

@@ -3,12 +3,10 @@
 import * as Sentry from '@sentry/nextjs';
 import { useEffect, useState } from 'react';
 
-// This is a Next.js root error boundary that renders when the root layout itself
-// fails. It lives outside the normal provider tree, so we can't rely on
-// I18nProvider here. Instead we read the locale prefix off the URL on the
-// client and look up copy from this small inline map. The same strings are
-// mirrored in `errors.json#globalError.*` for nested error boundaries that DO
-// have access to i18n — keep them in sync.
+// This is a Next.js root error boundary that renders when the root layout
+// itself fails. It lives outside the normal provider tree, so we can't rely
+// on I18nProvider here. Instead we read the locale prefix off the URL on the
+// client and look up copy from this small inline map.
 const COPY = {
   'en-US': {
     htmlLang: 'en',

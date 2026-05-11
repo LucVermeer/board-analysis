@@ -1,10 +1,7 @@
 {
   "metadata": {
     "detail": {
-      "title": "Climbing Session",
-      "description": "Climbing session on Boardsesh",
-      "notFoundTitle": "Session Not Found",
-      "notFoundDescription": "This session doesn't exist or has ended."
+      "notFoundTitle": "Session Not Found"
     },
     "join": {
       "title": "Join Session",
@@ -22,20 +19,11 @@
     }
   },
   "detail": {
-    "title": "Session",
     "subtitleSends_one": "{{count}} send",
     "subtitleSends_other": "{{count}} sends",
     "participantsClimbing": "{{names}} climbing on Boardsesh",
     "sessionNameOnBoardsesh": "{{name}} on Boardsesh",
-    "host": "Host: {{name}}",
-    "participants": "Participants",
-    "climbs": "Climbs",
     "climbsCount": "Climbs ({{count}})",
-    "duration": "Duration",
-    "startedAt": "Started {{time}}",
-    "empty": "No sends yet",
-    "endSession": "End session",
-    "leaveSession": "Leave session",
     "share": "Share session",
     "shareTitle": "Climbing Session",
     "shareText": "Check out this climbing session on Boardsesh",
@@ -47,7 +35,6 @@
     "delete": "Delete",
     "climberFallback": "Climber",
     "unknownClimb": "Unknown Climb",
-    "anonymous": "Anonymous",
     "attemptOnNth": "on {{ordinal}} attempt",
     "totalAttempts": "{{count}} total",
     "attemptCount_one": "{{count}} attempt",
@@ -56,7 +43,6 @@
     "ordinalSecond": "{{n}}nd",
     "ordinalThird": "{{n}}rd",
     "ordinalDefault": "{{n}}th",
-    "joiningSession": "Joining session...",
     "sessionNotesPlaceholder": "Session notes or goal...",
     "noClimbsYet": "No climbs yet",
     "logSomeClimbs": "Log some climbs to see your grade breakdown",
@@ -85,8 +71,7 @@
     "hardestLabel": "Hardest: {{grade}}",
     "notFound": {
       "title": "Session Not Found",
-      "subtitle": "This session could not be found. It may have been removed.",
-      "back": "Back to Boardsesh"
+      "subtitle": "This session could not be found. It may have been removed."
     },
     "userSearch": {
       "title": "Add Climber",
@@ -95,42 +80,13 @@
     }
   },
   "join": {
-    "title": "Join Session",
-    "subtitle": "Get on the wall",
-    "description": "You've been invited to a climbing session.",
-    "joinButton": "Join session",
-    "joining": "Joining session...",
-    "leaderName": "Hosted by {{name}}",
-    "scanQr": "Or scan a QR code from the host",
-    "enterId": "Or paste a session ID",
-    "errors": {
-      "notFound": "Session not found",
-      "ended": "This session has ended",
-      "joinFailed": "Couldn't join session"
-    }
+    "joining": "Joining session..."
   },
   "settings": {
-    "drawerTitle": "Session settings",
     "fallbackTitle": "Session",
-    "partyMode": {
-      "label": "Party Mode",
-      "subtitle": "Share your queue with the crew"
-    },
-    "name": "Session name",
-    "namePlaceholder": "Friday night sesh",
-    "color": "Session color",
-    "leader": "Session leader",
-    "leaveSession": "Leave session",
-    "endSession": "End session",
     "stopSession": "Stop session",
     "dismiss": "Dismiss",
     "loadFailed": "Couldn't load full session details. Live stats will continue when available.",
-    "endSessionConfirm": {
-      "title": "End this session?",
-      "description": "Your crew will be disconnected.",
-      "confirm": "End",
-      "cancel": "Cancel"
-    },
     "share": {
       "shareTitle": "Join my climbing session",
       "shareText": "Jump in and climb with me on Boardsesh",
@@ -146,11 +102,7 @@
     }
   },
   "creation": {
-    "title": "Start a session",
-    "subtitle": "Climb together in real time",
     "drawerTitle": "Start session",
-    "create": "Start session",
-    "creating": "Starting...",
     "submitDefault": "Sesh",
     "dialogTitle": "Create Session",
     "dialogSubmit": "Create Session",
@@ -178,19 +130,14 @@
     }
   },
   "summary": {
-    "title": "Session summary",
     "dialogTitle": "Session Summary",
-    "totalClimbs": "Total climbs",
     "sends": "Sends",
     "attempts": "Attempts",
     "duration": "Duration",
     "hardestSend": "Hardest send:",
-    "shareSummary": "Share summary",
     "goal": "Goal:",
     "gradeDistribution": "Grade Distribution",
     "participants": "Participants",
-    "anonymous": "Anonymous",
-    "participantStats": "{{sends}} sends / {{attempts}} attempts",
     "done": "Done",
     "saveToAppleHealth": "Save to Apple Health",
     "savingToAppleHealth": "Saving to Apple Health…",
@@ -213,7 +160,6 @@
     "cancelReconnect": "Cancel",
     "tickError": "Couldn't save your tick. Give it another go.",
     "tickCommentPlaceholder": "Comment...",
-    "tickCommentAria": "Tick comment",
     "tickAttemptLabel": "attempt",
     "reconnect": {
       "connectionError": "Connection error – retrying…",
@@ -221,9 +167,7 @@
     },
     "tickBar": {
       "collapse": "Collapse",
-      "expand": "Expand",
-      "collapseAria": "Collapse tick bar",
-      "expandAria": "Expand tick bar"
+      "expand": "Expand"
     },
     "ariaLabels": {
       "leaveSession": "Leave session",
@@ -271,7 +215,6 @@
     },
     "tickBar": {
       "commentPlaceholder": "Comment...",
-      "commentAria": "Tick comment",
       "closeAria": "Close tick bar",
       "collapseAria": "Collapse tick bar",
       "expandAria": "Expand tick bar",

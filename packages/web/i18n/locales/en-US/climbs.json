@@ -1,10 +1,5 @@
 {
   "metadata": {
-    "boardHome": {
-      "title": "{{boardName}} on Boardsesh",
-      "description": "Browse climbs and sessions on {{boardName}}",
-      "fallbackTitle": "Board Not Found"
-    },
     "list": {
       "title": "{{boardName}} climbs at {{angle}}°",
       "description": "Browse climbs on {{boardName}} at {{angle}}°",
@@ -42,12 +37,6 @@
     }
   },
   "list": {
-    "empty": {
-      "title": "No climbs match your filters",
-      "subtitle": "Loosen up the filters and try again"
-    },
-    "loading": "Loading climbs...",
-    "loadMore": "Load more",
     "noMore": "No more climbs",
     "viewMode": {
       "list": "List view",
@@ -58,7 +47,6 @@
       "description": "This one runs off the edge of your wall. You'll need a bigger size to send it."
     },
     "sort": {
-      "label": "Sort",
       "ascents": "Ascents",
       "popular": "Popular",
       "difficulty": "Difficulty",
@@ -74,8 +62,6 @@
     "createNewClimb": "Create new climb"
   },
   "share": {
-    "title": "{{climbName}} on Boardsesh",
-    "text": "Check out {{climbName}} on Boardsesh",
     "actionLabel": "Share",
     "actionText": "Check out \"{{climbName}}\" ({{difficulty}}) on Boardsesh",
     "linkCopied": "Link copied",
@@ -99,7 +85,6 @@
     "sends_other": "{{count}} sends"
   },
   "search": {
-    "drawerTitle": "Search & filter",
     "categories": {
       "climbs": "Climbs",
       "boards": "Boards",
@@ -112,8 +97,7 @@
       "gyms": "Search gyms...",
       "users": "Search climbers...",
       "playlists": "Search playlists...",
-      "climbs": "Search climbs...",
-      "setters": "Search setters..."
+      "climbs": "Search climbs..."
     },
     "fields": {
       "climbName": "Climb Name",
@@ -138,13 +122,9 @@
     "panels": {
       "quality": "Quality",
       "status": "Ascent Status",
-      "progress": "Progress",
-      "holds": "Holds",
-      "holdsTitle": "Search by Hold",
       "zone": "Zone",
       "holdsAndZone": "Holds & Zone",
-      "anyDefault": "Any",
-      "allClimbs": "All climbs"
+      "anyDefault": "Any"
     },
     "status": {
       "any": "Any",
@@ -176,13 +156,7 @@
     "results": {
       "count": "results"
     },
-    "setters": {
-      "loading": "Loading...",
-      "openDropdown": "Open dropdown to see setters",
-      "noSetters": "No setters found"
-    },
     "holds": {
-      "tapToToggle": "Tap a hold to include or exclude it",
       "include": "Include",
       "exclude": "Exclude",
       "included": "{{count}} included",
@@ -191,7 +165,6 @@
       "hideHeatmap": "Hide heatmap"
     },
     "zone": {
-      "description": "Drag the box to limit results to climbs that fit inside it.",
       "draw": "Draw zone",
       "clear": "Clear zone"
     },
@@ -199,15 +172,6 @@
       "description": "Tap holds to filter, or draw a zone to limit results to climbs that fit inside it."
     },
     "sortToggle": "Sort"
-  },
-  "statsFilter": {
-    "drawerTitle": "Filters",
-    "fields": {
-      "board": "Board",
-      "timeRange": "Time Range",
-      "from": "From",
-      "to": "To"
-    }
   },
   "create": {
     "auth": {
@@ -317,31 +281,19 @@
     "title": {
       "noClimbSelected": "No climb selected",
       "project": "project",
-      "projectAtAngle": "project @ {{angle}}°",
-      "draftBy": "Draft by {{name}}",
-      "by": "By {{name}}",
-      "byWithSends": "By {{name}} - {{sends}}"
+      "projectAtAngle": "project @ {{angle}}°"
     },
     "list": {
       "moreActions": "More actions",
       "tickError": "Couldn't save your tick — it's saved as a draft"
     },
     "detailHeader": {
-      "project": "project",
-      "unknownSetter": "Unknown setter"
+      "project": "project"
     }
   },
   "detail": {
     "sections": {
-      "beta": "Beta",
-      "logbook": "Your Logbook",
-      "logbookEmpty": "No ascents",
-      "crewLogbook": "Crew Logbook",
-      "crewLogbookSummary": "See your crew's sends",
-      "community": "Community",
-      "communitySummary": "Votes, comments, proposals",
-      "analytics": "Analytics",
-      "analyticsSummary": "Ascents, quality trends"
+      "beta": "Beta"
     }
   },
   "multiboardList": {
@@ -402,12 +354,6 @@
       "importFailed": "Import Failed: {{error}}",
       "importWarnings": "Import Warnings:",
       "checkingMoonBoardDuplicate": "Checking whether this MoonBoard climb already exists..."
-    },
-    "clear": {
-      "title": "Clear climb",
-      "description": "This will clear all holds and reset the form. Are you sure?",
-      "confirm": "Clear",
-      "tooltip": "Clear all holds"
     },
     "settings": {
       "tooltip": "Climb settings",

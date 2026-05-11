@@ -37,7 +37,6 @@ export const SEED_NAMESPACES = [
   'you',
   'admin',
   'aurora',
-  'errors',
   'boards',
 ] as const;
 export type SeedNamespace = (typeof SEED_NAMESPACES)[number];
