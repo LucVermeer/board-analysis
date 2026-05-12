@@ -133,6 +133,16 @@ Sum of V-grade values for sends in a session — the metric a lot of climbers al
 
 The headline insight: 100 V-points is a real stretch goal for an individual (top 12% of active tickers have ever done it once), but trivially reachable for a crew. A 5-person session at average solo P90 (≈62 each) is 310 V-points; 10 people at P50 (≈19 each) is 190 V-points; 10 people pushing for 100 each is the explicit "1000 V-points crew session" Platinum tier.
 
+### 3.8 Beta videos and the supply gap
+
+`board_beta_links` carries the catalog of community beta videos. The recently-added `created_by_user_id` column attributes each new submission to a climber.
+
+- 45,796 beta links in the system today, **0 with user attribution** (all imported from Aurora/IG bulk-scrape before the column existed).
+- 16,802 unique climbs have at least one beta video.
+- **23,630 climbs are sent regularly by tracked users but have no beta video at all.** Of those, 10,150 have ≥2 sends, 2,705 have ≥5 sends, 1,132 have ≥10 sends.
+
+That last bullet is the supply gap — climbers want beta on these, the data proves it, and nobody's posting yet. Achievement design should aggressively reward filling that gap (see §4.7).
+
 ---
 
 ## 4. Achievement taxonomy
@@ -271,11 +281,43 @@ These align with the existing social tables (`comments`, `feed_items`, `board_fo
 | `social.first_follow`       | Followed your first climber                                        |
 | `social.session_added`      | Got added to another climber's session via `session_member_overrides` |
 | `social.crew_session`       | Session has ≥3 distinct participants (party or override)           |
-| `social.beta_giver`         | Posted a comment on 5 different climbs                             |
+| `social.commenter`          | Posted a comment on 5 different climbs                             |
 | `social.first_party`        | Created your first party-mode session                              |
 | `social.public_session`     | Made a discoverable session that someone else joined               |
 
-### 4.7 Hidden / easter-egg achievements
+### 4.7 Beta video contributor achievements
+
+`board_beta_links.created_by_user_id` was added recently — every new beta video posted in-app now carries the climber who shared it. This unlocks a contributor track that rewards the people who actually fill the beta gap.
+
+The data state today (snapshot 2026-05-12):
+
+- 45,796 beta links exist, **0 currently attributed to a user** (all imported from Aurora/IG without attribution).
+- 16,802 unique climbs have at least one beta video.
+- **23,630 climbs have been sent by tracked users but have no beta video yet** — that's the supply gap. 10,150 of those have ≥2 sends, 2,705 have ≥5 sends, **1,132 have ≥10 sends and zero beta**.
+
+These tiers can't be calibrated against historical data (the column is empty). Initial thresholds are conservative; recalibrate at 30/90 days post-launch using the SQL in Appendix B.
+
+| ID                          | Trigger                                                                                       | Why it matters |
+| --------------------------- | --------------------------------------------------------------------------------------------- | -------------- |
+| `beta.first_share`          | Posted your first attributed beta video                                                       | Onboarding moment |
+| `beta.contributor.{n}`      | 5 / 25 / 100 / 500 beta videos posted                                                         | Volume tier    |
+| `beta.first_on_climb`       | You posted the first beta video for a climb (the row's PK was previously empty for that climb)| **23k climbs eligible today** — highest-impact contribution |
+| `beta.fills_demand`         | Posted beta on a climb with ≥5 prior sends and no prior beta                                  | 2,705 climbs eligible — these are the ones people are actively looking up |
+| `beta.from_the_source`      | Posted beta on a climb you've personally sent                                                 | "I climbed it, here's how" — the credible-source moment |
+| `beta.hard_send.{V}`        | Posted beta on a climb at V8 / V10 / V12 that you've sent                                     | Rewards the rare voices on hard projects |
+| `beta.benchmark`            | Posted beta on a benchmark climb (`is_benchmark=true`)                                        | Benchmarks are the most-attempted climbs in the catalog |
+| `beta.session_share`        | Posted a beta video for a climb you sent in the last 24h                                      | Session-scope — fires on the session detail page |
+
+Implementation notes:
+
+- Trigger: `beta_link_created` — a new event fired by the resolver/route that inserts into `board_beta_links`. Payload = full row.
+- `beta.first_on_climb` evaluator: `SELECT COUNT(*) FROM board_beta_links WHERE board_type=$1 AND climb_uuid=$2` *excluding the just-inserted row*. If 0, fire. Idempotent because the unique award row keys on `(user_id, achievement_id, variant=climb_uuid)`.
+- `beta.from_the_source` evaluator: `EXISTS` query against `boardsesh_ticks` with the same user/climb/board and `status IN ('send','flash')`. The data already has the index `boardsesh_ticks_climb_idx` to support this cheaply.
+- `beta.fills_demand` evaluator: count prior sends on the climb (`boardsesh_ticks` with same climb_uuid + board_type + status in send/flash) and prior beta links. Fires on the threshold cross.
+- **No backfill** for any beta achievement — the column is empty before today, so backfill would award nothing. Run the evaluators forward-only.
+- **Quality gate.** A future open question (§9) — do we wait for view counts or upvotes before awarding `beta.contributor.500`? For v1, no — the social cost of spamming junk videos to a friend graph is enough deterrent. Revisit if it becomes a problem.
+
+### 4.8 Hidden / easter-egg achievements
 
 Small, opt-out, never-loud. A few examples:
 
@@ -297,7 +339,7 @@ Display these without the criteria spelled out; they show up in the user's colle
 -- Tiers live in a single row using a JSONB array for thresholds.
 CREATE TABLE achievement_definitions (
   id              TEXT PRIMARY KEY,            -- e.g. 'session.send_count'
-  family          TEXT NOT NULL,               -- 'session' | 'lifetime' | 'rhythm' | 'grade' | 'explore' | 'social' | 'hidden'
+  family          TEXT NOT NULL,               -- 'session' | 'lifetime' | 'rhythm' | 'grade' | 'explore' | 'social' | 'beta' | 'hidden'
   scope           TEXT NOT NULL,               -- 'session' | 'lifetime' | 'periodic'
   display_name    TEXT NOT NULL,               -- i18n key, not raw text
   description_key TEXT NOT NULL,
@@ -504,6 +546,13 @@ Success criterion: every active user (213 in last 30d) sees ≥1 achievement on 
 - Year-in-review generator.
 - Profile achievements row.
 
+### Phase 4.5: beta contributor track (1 week)
+
+- New `beta_link_created` trigger emitted from the beta-link insert path.
+- All §4.7 evaluators: `first_share`, `contributor.{n}`, `first_on_climb`, `fills_demand`, `from_the_source`, `hard_send`, `benchmark`, `session_share`.
+- A "Climbs that need beta" surface on the climb-detail and `/you` pages — pulls from the §3.8 supply-gap query — to make the achievement progress legible. Without this surface the achievements fire but feel arbitrary.
+- Recalibration check at 30 days: re-run the SQL in Appendix B; bump tier thresholds if any tier is granted to >40% of contributors.
+
 ### Phase 5: instrumentation + iteration (ongoing)
 
 - PostHog event for every achievement granted (`{achievement_id, tier, source: 'realtime'|'backfill'}`).
@@ -702,4 +751,22 @@ WITH dg AS (
 )
 SELECT inferred_session_id, SUM(v_points) AS v_points
 FROM tick_v GROUP BY 1 ORDER BY v_points DESC LIMIT 50;
+
+-- Beta supply gap: most-sent climbs with no beta video yet
+WITH no_beta AS (
+  SELECT DISTINCT board_type, climb_uuid FROM boardsesh_ticks WHERE status IN ('send','flash')
+  EXCEPT
+  SELECT DISTINCT board_type, climb_uuid FROM board_beta_links
+)
+SELECT t.board_type, t.climb_uuid, COUNT(*) AS sends
+FROM boardsesh_ticks t JOIN no_beta n USING (board_type, climb_uuid)
+WHERE t.status IN ('send','flash')
+GROUP BY 1,2 HAVING COUNT(*) >= 5 ORDER BY sends DESC LIMIT 100;
+
+-- Beta contributor recalibration (run 30/90 days post-launch)
+SELECT created_by_user_id, COUNT(*) AS posts,
+  COUNT(DISTINCT climb_uuid) AS distinct_climbs
+FROM board_beta_links
+WHERE created_by_user_id IS NOT NULL
+GROUP BY 1 ORDER BY posts DESC;
 ```
