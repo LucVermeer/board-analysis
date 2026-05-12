@@ -30,6 +30,8 @@ import { constructBoardSlugListUrl, constructClimbListWithSlugs, tryConstructSlu
 import { getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
 import type { UserBoard, PopularBoardConfig } from '@boardsesh/shared-schema';
+import type { RecentBetaLinkRow } from '@/app/lib/server-recent-beta-links';
+import HomeRecentBetaSection from '@/app/components/beta-videos/home-recent-beta-section';
 import { track } from '@/app/lib/analytics';
 import { setClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import { useOnboardingTourOptional } from '@/app/components/onboarding/onboarding-tour-provider';
@@ -48,6 +50,7 @@ const BoardSelectorDrawer = dynamic(() => import('@/app/components/board-selecto
 type HomePageContentProps = {
   boardConfigs: BoardConfigData;
   initialPopularConfigs?: PopularBoardConfig[];
+  initialRecentBeta?: RecentBetaLinkRow[];
 };
 
 type OnboardingCardAccent = 'action' | 'social' | 'help' | 'v11' | 'v12' | 'v13' | 'none';
@@ -231,7 +234,11 @@ function InstallAppCard({ platform }: { platform: InstallPlatform }) {
   );
 }
 
-export default function HomePageContent({ boardConfigs, initialPopularConfigs }: HomePageContentProps) {
+export default function HomePageContent({
+  boardConfigs,
+  initialPopularConfigs,
+  initialRecentBeta = [],
+}: HomePageContentProps) {
   const { t } = useTranslation('marketing');
   const { status } = useSession();
   const router = useLocaleRouter();
@@ -537,6 +544,9 @@ export default function HomePageContent({ boardConfigs, initialPopularConfigs }:
             onClick={() => window.open('https://discord.gg/YXA8GsXfQK', '_blank', 'noopener,noreferrer')}
           />
         </Box>
+
+        {/* Recent beta videos from across the community */}
+        <HomeRecentBetaSection initialRecentBeta={initialRecentBeta} />
 
         {/* Authenticated users: nudge to feed */}
         {isAuthenticated && (

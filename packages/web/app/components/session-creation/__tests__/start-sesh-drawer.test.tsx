@@ -291,10 +291,7 @@ describe('StartSeshDrawer', () => {
     await submitSesh();
 
     await waitFor(() => {
-      expect(mockCreateSession).toHaveBeenCalledWith(
-        expect.anything(),
-        '/kilter/original/12x12/screw_bolt/40/list',
-      );
+      expect(mockCreateSession).toHaveBeenCalledWith(expect.anything(), '/kilter/original/12x12/screw_bolt/40/list');
     });
     expect(mockRouterPush).toHaveBeenCalled();
   });
@@ -316,10 +313,7 @@ describe('StartSeshDrawer', () => {
     });
     // boardPath should reflect the CURRENT (bridge) route, not the stale
     // localBoardPath — i.e. auto-select picked the bridge-side custom config.
-    expect(mockCreateSession).toHaveBeenCalledWith(
-      expect.anything(),
-      '/kilter/original/12x12/screw_bolt/40/list',
-    );
+    expect(mockCreateSession).toHaveBeenCalledWith(expect.anything(), '/kilter/original/12x12/screw_bolt/40/list');
   });
 
   it('shows collapsed card when board is auto-selected', async () => {

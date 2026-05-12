@@ -79,6 +79,10 @@ vi.mock('@/app/components/board-scroll/board-discovery-scroll', () => ({
   default: () => null,
 }));
 
+vi.mock('@/app/components/beta-videos/home-recent-beta-section', () => ({
+  default: () => null,
+}));
+
 // --- Helpers ---
 
 function makeActiveSession(overrides: Partial<ActiveSessionInfo> = {}): ActiveSessionInfo {

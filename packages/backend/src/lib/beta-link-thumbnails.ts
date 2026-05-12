@@ -9,6 +9,9 @@ export { isS3Configured };
 // not bytes, so this is the byte-level back-stop.
 const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
 
+// Keep in sync with STATIC_THUMBNAIL_PREFIX in
+// ../graphql/resolvers/beta-videos/queries.ts — the recentBetaLinks SQL
+// LIKE filter relies on the same prefix to pre-trim to cached rows.
 const STATIC_THUMBNAIL_PREFIX = '/static/beta-link-thumbnails/';
 
 /**

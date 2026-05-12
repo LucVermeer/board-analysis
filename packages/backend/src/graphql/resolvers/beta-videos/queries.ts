@@ -1,6 +1,6 @@
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc, isNotNull, like } from 'drizzle-orm';
 import { fetchInstagramMeta, getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
 import { fetchTikTokMeta, getTikTokCacheId, isTikTokUrl } from '../../../lib/tiktok-meta';
 import {
@@ -20,6 +20,20 @@ type BetaLinkResult = {
   isListed: boolean | null;
   createdAt: string | null;
 };
+
+type RecentBetaLinkResult = {
+  betaLink: BetaLinkResult;
+  climbName: string | null;
+  boardType: string;
+};
+
+// Mirrors STATIC_THUMBNAIL_PREFIX in ../../../lib/beta-link-thumbnails. Keep
+// the two in sync — the recentBetaLinks query uses a SQL LIKE filter to
+// pre-trim to rows that already have a cached S3 thumbnail, so the prefix
+// must match what isOurS3Url's static-prefix branch accepts.
+const STATIC_THUMBNAIL_PREFIX = '/static/beta-link-thumbnails/';
+const RECENT_BETA_LINKS_MAX_LIMIT = 50;
+const RECENT_BETA_LINKS_DEFAULT_LIMIT = 20;
 
 // We never surface KayaClimb beta links — we don't want to drive traffic to a
 // competing climbing app from our slider. Filter them out at the resolver.
@@ -221,5 +235,47 @@ export const betaLinkQueries = {
     const enriched = await Promise.all(rows.map((row) => limit(() => enrichRowSafe(row))));
 
     return enriched.filter((r): r is BetaLinkResult => r !== null);
+  },
+
+  // Powers the home-screen "Fresh beta" slider. We deliberately read only
+  // pre-cached rows here — fanning out the live IG/TikTok enrichment in
+  // `betaLinks` across the whole table is the failure mode this resolver
+  // exists to avoid.
+  recentBetaLinks: async (
+    _: unknown,
+    { limit, boardType }: { limit?: number | null; boardType?: string | null },
+  ): Promise<RecentBetaLinkResult[]> => {
+    const cappedLimit = Math.min(Math.max(limit ?? RECENT_BETA_LINKS_DEFAULT_LIMIT, 1), RECENT_BETA_LINKS_MAX_LIMIT);
+
+    // LEFT JOIN: beta links can land before their climb during sync, and we
+    // still want them in the slider — UI tolerates a null climbName.
+    const rows = await db
+      .select({ betaLink: dbSchema.boardBetaLinks, climbName: dbSchema.boardClimbs.name })
+      .from(dbSchema.boardBetaLinks)
+      .leftJoin(
+        dbSchema.boardClimbs,
+        and(
+          eq(dbSchema.boardBetaLinks.boardType, dbSchema.boardClimbs.boardType),
+          eq(dbSchema.boardBetaLinks.climbUuid, dbSchema.boardClimbs.uuid),
+        ),
+      )
+      .where(
+        and(
+          eq(dbSchema.boardBetaLinks.isListed, true),
+          isNotNull(dbSchema.boardBetaLinks.thumbnail),
+          like(dbSchema.boardBetaLinks.thumbnail, `${STATIC_THUMBNAIL_PREFIX}%`),
+          boardType ? eq(dbSchema.boardBetaLinks.boardType, boardType) : undefined,
+        ),
+      )
+      .orderBy(desc(dbSchema.boardBetaLinks.createdAt))
+      .limit(cappedLimit);
+
+    return rows
+      .filter((r) => !isKayaClimbUrl(r.betaLink.link))
+      .map((r) => ({
+        betaLink: passthroughResult(r.betaLink),
+        climbName: r.climbName,
+        boardType: r.betaLink.boardType,
+      }));
   },
 };

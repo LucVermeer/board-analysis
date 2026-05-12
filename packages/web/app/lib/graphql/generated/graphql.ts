@@ -2956,6 +2956,11 @@ export type Query = {
   profile?: Maybe<UserProfile>;
   /** Get a public user profile by ID. */
   publicProfile?: Maybe<PublicUserProfile>;
+  /**
+   * Most recent beta videos across all climbs. Returns only rows whose
+   * thumbnails are already cached in our S3; no live IG/TikTok enrichment.
+   */
+  recentBetaLinks: Array<RecentBetaLink>;
   /** Search public boards. */
   searchBoards: UserBoardConnection;
   /**
@@ -3332,6 +3337,12 @@ export type QueryPublicProfileArgs = {
 };
 
 /** Root query type for all read operations. */
+export type QueryRecentBetaLinksArgs = {
+  boardType?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Root query type for all read operations. */
 export type QuerySearchBoardsArgs = {
   input: SearchBoardsInput;
 };
@@ -3553,6 +3564,17 @@ export type QueueState = {
   sequence: Scalars['Int']['output'];
   /** Hash of the current state for consistency checking */
   stateHash: Scalars['String']['output'];
+};
+
+/**
+ * A recent beta link enriched with the parent climb's display name. Used
+ * by the home-page slider where multiple climbs are aggregated together.
+ */
+export type RecentBetaLink = {
+  __typename?: 'RecentBetaLink';
+  betaLink: BetaLink;
+  boardType: Scalars['String']['output'];
+  climbName?: Maybe<Scalars['String']['output']>;
 };
 
 export type RegisterControllerInput = {
@@ -4772,6 +4794,30 @@ export type GetBetaLinksQuery = {
     thumbnail?: string | null;
     isListed?: boolean | null;
     createdAt?: string | null;
+  }>;
+};
+
+export type GetRecentBetaLinksQueryVariables = Exact<{
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  boardType?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+export type GetRecentBetaLinksQuery = {
+  __typename?: 'Query';
+  recentBetaLinks: Array<{
+    __typename?: 'RecentBetaLink';
+    climbName?: string | null;
+    boardType: string;
+    betaLink: {
+      __typename?: 'BetaLink';
+      climbUuid: string;
+      link: string;
+      foreignUsername?: string | null;
+      angle?: number | null;
+      thumbnail?: string | null;
+      isListed?: boolean | null;
+      createdAt?: string | null;
+    };
   }>;
 };
 
@@ -6946,6 +6992,72 @@ export const GetBetaLinksDocument = {
     },
   ],
 } as unknown as DocumentNode<GetBetaLinksQuery, GetBetaLinksQueryVariables>;
+export const GetRecentBetaLinksDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetRecentBetaLinks' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'limit' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recentBetaLinks' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'limit' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'boardType' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'boardType' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'betaLink' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'link' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'foreignUsername' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'thumbnail' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'isListed' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetRecentBetaLinksQuery, GetRecentBetaLinksQueryVariables>;
 export const ClimbStatsHistoryDocument = {
   kind: 'Document',
   definitions: [

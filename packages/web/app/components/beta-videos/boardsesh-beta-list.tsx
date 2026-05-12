@@ -7,12 +7,21 @@ import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
 import BoardseshBetaCard from './boardsesh-beta-card';
 import styles from './boardsesh-beta.module.css';
 
+type BoardseshBetaListSource = 'home' | 'drawer';
+
 type BoardseshBetaListProps = {
   links: BetaLink[];
   isLoading: boolean;
+  /**
+   * When set, each card renders a top-anchored climb-name chip resolved
+   * from this function. Used by the home-screen slider where the cards
+   * come from many different climbs.
+   */
+  getClimbName?: (link: BetaLink) => string | null | undefined;
+  source?: BoardseshBetaListSource;
 };
 
-const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({ links, isLoading }) => {
+const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({ links, isLoading, getClimbName, source = 'drawer' }) => {
   const { t } = useTranslation('common');
   return (
     <div className={styles.section}>
@@ -28,7 +37,7 @@ const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({ links, isLoading 
         ) : (
           <>
             {links.map((link) => (
-              <BoardseshBetaCard key={link.link} link={link} />
+              <BoardseshBetaCard key={link.link} link={link} climbName={getClimbName?.(link) ?? null} source={source} />
             ))}
             {links.length === 0 && <span className={styles.emptyText}>{t('betaVideos.empty')}</span>}
           </>

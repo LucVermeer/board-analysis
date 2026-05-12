@@ -75,7 +75,7 @@ export function dedupeBetaLinks(betaLinks: BetaLink[]): BetaLink[] {
  * the rest of the web app. Used by both `BoardseshBetaList` and the IG
  * post dialog.
  */
-type BetaLinksGqlRow = {
+export type BetaLinksGqlRow = {
   climbUuid: string;
   link: string;
   foreignUsername: string | null;
@@ -85,14 +85,18 @@ type BetaLinksGqlRow = {
   createdAt: string | null;
 };
 
+export function mapBetaLinkRow(row: BetaLinksGqlRow): BetaLink {
+  return {
+    climb_uuid: row.climbUuid,
+    link: row.link,
+    foreign_username: row.foreignUsername,
+    angle: row.angle,
+    thumbnail: absolutizeThumbnail(row.thumbnail),
+    is_listed: row.isListed ?? false,
+    created_at: row.createdAt ?? '',
+  };
+}
+
 export function mapBetaLinksResponse(rows: BetaLinksGqlRow[]): BetaLink[] {
-  return rows.map((b) => ({
-    climb_uuid: b.climbUuid,
-    link: b.link,
-    foreign_username: b.foreignUsername,
-    angle: b.angle,
-    thumbnail: absolutizeThumbnail(b.thumbnail),
-    is_listed: b.isListed ?? false,
-    created_at: b.createdAt ?? '',
-  }));
+  return rows.map(mapBetaLinkRow);
 }

@@ -72,6 +72,22 @@
   line-height: 1.4;
 }
 
+.climbChip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--overlay-dark);
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
 .platformBadge {
   position: absolute;
   top: 6px;
