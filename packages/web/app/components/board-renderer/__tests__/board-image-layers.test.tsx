@@ -143,4 +143,54 @@ describe('BoardImageLayers', () => {
     expect(img.getAttribute('width')).toBe('1080');
     expect(img.getAttribute('height')).toBe('1350');
   });
+
+  describe('loading attribute', () => {
+    it('lazy on thumbnails without fetchPriority=high (climb-list use case)', () => {
+      const { container } = render(
+        <BoardImageLayers boardDetails={mockBoardDetails} frames="p1r42" mirrored={false} thumbnail />,
+      );
+      expect(container.querySelector('img')!.getAttribute('loading')).toBe('lazy');
+    });
+
+    it('eager on thumbnails when fetchPriority=high (LCP thumbnail)', () => {
+      const { container } = render(
+        <BoardImageLayers
+          boardDetails={mockBoardDetails}
+          frames="p1r42"
+          mirrored={false}
+          thumbnail
+          fetchPriority="high"
+        />,
+      );
+      expect(container.querySelector('img')!.getAttribute('loading')).toBeNull();
+    });
+
+    it('eager on non-thumbnail (full-board) renders regardless of fetchPriority', () => {
+      // climb-card-cover and swipe-board-carousel render full-size without
+      // fetchPriority and are typically the in-viewport LCP target.
+      const { container } = render(
+        <BoardImageLayers boardDetails={mockBoardDetails} frames="p1r42" mirrored={false} />,
+      );
+      expect(container.querySelector('img')!.getAttribute('loading')).toBeNull();
+    });
+
+    it('eager on non-thumbnail background-only renders', () => {
+      const { container } = render(<BoardImageLayers boardDetails={mockBoardDetails} mirrored={false} />);
+      container.querySelectorAll('img').forEach((img) => {
+        expect(img.getAttribute('loading')).toBeNull();
+      });
+    });
+
+    it('first background image is eager when thumbnail + fetchPriority=high', () => {
+      const { container } = render(
+        <BoardImageLayers boardDetails={mockBoardDetails} mirrored={false} thumbnail fetchPriority="high" />,
+      );
+      const imgs = container.querySelectorAll('img');
+      expect(imgs[0].getAttribute('loading')).toBeNull();
+      // Subsequent background layers stay lazy.
+      for (let i = 1; i < imgs.length; i++) {
+        expect(imgs[i].getAttribute('loading')).toBe('lazy');
+      }
+    });
+  });
 });
