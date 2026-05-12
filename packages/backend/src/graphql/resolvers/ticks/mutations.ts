@@ -372,7 +372,6 @@ export const tickMutations = {
             thumbnail: betaPlan.thumbnail,
             foreignUsername: betaPlan.foreignUsername,
             createdAt: now,
-            createdByUserId: userId,
           })
           .onConflictDoNothing();
       }
@@ -435,7 +434,6 @@ export const tickMutations = {
     requireAuthenticated(ctx);
 
     const validated = validateInput(AttachBetaLinkInputSchema, input, 'input');
-    const userId = ctx.userId!;
     const now = new Date().toISOString();
 
     // Validation runs first — it's an outbound HTTP fetch we don't want to
@@ -473,7 +471,6 @@ export const tickMutations = {
           thumbnail: betaPlan.thumbnail,
           foreignUsername: betaPlan.foreignUsername,
           createdAt: now,
-          createdByUserId: userId,
         })
         .onConflictDoNothing();
     } catch (err) {

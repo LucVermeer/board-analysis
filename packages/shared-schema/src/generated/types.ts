@@ -3032,13 +3032,6 @@ export type Query = {
    * Includes enriched climb data for display.
    */
   userAscentsFeed: AscentFeedResult;
-  /**
-   * Beta videos contributed by a specific Boardsesh user, ordered
-   * most-recent-first. Matches both videos this user added directly and
-   * videos posted under the Instagram handle linked from their profile.
-   * Returns only rows whose thumbnails are cached in our S3.
-   */
-  userBetaLinks: Array<RecentBetaLink>;
   /** Get a user's percentile ranking based on distinct climbs ascended. */
   userClimbPercentile: UserClimbPercentile;
   /**
@@ -3436,12 +3429,6 @@ export type QueryTrendingFeedArgs = {
 export type QueryUserAscentsFeedArgs = {
   input?: InputMaybe<AscentFeedInput>;
   userId: Scalars['ID']['input'];
-};
-
-/** Root query type for all read operations. */
-export type QueryUserBetaLinksArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  userId: Scalars['String']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -7326,12 +7313,6 @@ export type QueryResolvers<
     ParentType,
     ContextType,
     RequireFields<QueryUserAscentsFeedArgs, 'userId'>
-  >;
-  userBetaLinks?: Resolver<
-    Array<ResolversTypes['RecentBetaLink']>,
-    ParentType,
-    ContextType,
-    RequireFields<QueryUserBetaLinksArgs, 'limit' | 'userId'>
   >;
   userClimbPercentile?: Resolver<
     ResolversTypes['UserClimbPercentile'],
