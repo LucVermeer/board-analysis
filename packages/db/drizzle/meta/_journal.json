@@ -638,6 +638,13 @@
       "when": 1778544098841,
       "tag": "0090_partial_shortcode_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1778976000000,
+      "tag": "0091_backfill_session_ended_at",
+      "breakpoints": true
     }
   ]
 }

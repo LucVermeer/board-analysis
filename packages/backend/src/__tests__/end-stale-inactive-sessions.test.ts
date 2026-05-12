@@ -14,20 +14,43 @@ function minutesAgo(minutes: number): Date {
 describe('endStaleInactiveSessions', () => {
   it('ends active, non-permanent sessions whose lastActivity is older than the threshold', async () => {
     const sessionId = uuidv4();
+    const lastActivity = minutesAgo(90);
     await db.insert(sessions).values({
       id: sessionId,
       boardPath: '/kilter/1/2/3/40',
       status: 'active',
       isPermanent: false,
-      lastActivity: minutesAgo(90),
+      lastActivity,
     });
 
     await endStaleInactiveSessions(ONE_HOUR_MS);
 
     const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
     expect(row?.status).toBe('ended');
-    expect(row?.endedAt).not.toBeNull();
-    expect(row?.lastActivity.getTime()).toBeGreaterThan(minutesAgo(1).getTime());
+    // endedAt mirrors the pre-sweep lastActivity so duration reflects when the
+    // user actually stopped, not when the sweep ran.
+    expect(row?.endedAt?.getTime()).toBe(lastActivity.getTime());
+    // lastActivity itself is not touched by the sweep.
+    expect(row?.lastActivity.getTime()).toBe(lastActivity.getTime());
+  });
+
+  it('uses the original lastActivity as endedAt even for sessions stale by hours', async () => {
+    const sessionId = uuidv4();
+    const lastActivity = minutesAgo(180);
+    await db.insert(sessions).values({
+      id: sessionId,
+      boardPath: '/kilter/1/2/3/40',
+      status: 'active',
+      isPermanent: false,
+      lastActivity,
+    });
+
+    await endStaleInactiveSessions(ONE_HOUR_MS);
+
+    const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
+    expect(row?.status).toBe('ended');
+    expect(row?.endedAt?.getTime()).toBe(lastActivity.getTime());
+    expect(row?.lastActivity.getTime()).toBe(lastActivity.getTime());
   });
 
   it('leaves permanent sessions untouched regardless of lastActivity', async () => {
