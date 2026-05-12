@@ -8,7 +8,7 @@ import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-l
 import { cachedSearchClimbs } from '@/app/lib/db/queries/climbs/search-climbs';
 import { hasUserSpecificFilters } from '@/app/lib/list-page-cache';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
-import { MAX_PAGE_SIZE } from '@/app/components/board-page/constants';
+import { MAX_PAGE_SIZE, SSR_INITIAL_PAGE_SIZE } from '@/app/components/board-page/constants';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth/auth-options';
 import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
@@ -56,13 +56,17 @@ export default async function DynamicResultsPage(props: {
 
   const searchParamsObject: SearchRequestPagination = parsedRouteSearchParamsToSearchParams(searchParams);
 
-  // For the SSR version we increase the pageSize so it also gets whatever page number
-  // is in the search params. Without this, it would load the SSR version of the page on page 2
-  // which would then flicker once SWR runs on the client.
-  const requestedPageSize = (Number(searchParamsObject.page) + 1) * Number(searchParamsObject.pageSize);
-
-  // Enforce max page size to prevent excessive database queries
-  searchParamsObject.pageSize = Math.min(requestedPageSize, MAX_PAGE_SIZE);
+  const requestedPage = Number(searchParamsObject.page);
+  if (requestedPage === 0) {
+    // First-viewport SSR: ship a small initial batch and let SWR fetch the rest.
+    searchParamsObject.pageSize = SSR_INITIAL_PAGE_SIZE;
+  } else {
+    // page>0 (deep-link): aggregate pages 0..N so SSR matches what SWR will
+    // fetch, preventing a flicker as cached pages backfill. Enforce max page
+    // size to prevent excessive database queries.
+    const requestedPageSize = (requestedPage + 1) * Number(searchParamsObject.pageSize);
+    searchParamsObject.pageSize = Math.min(requestedPageSize, MAX_PAGE_SIZE);
+  }
   searchParamsObject.page = 0;
 
   const hasProgressFilters = hasUserSpecificFilters(searchParamsObject);
