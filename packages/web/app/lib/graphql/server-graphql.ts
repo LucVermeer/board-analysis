@@ -93,12 +93,16 @@ export async function serverGroupedNotifications(
   authToken: string,
   limit: number = 20,
   offset: number = 0,
-): Promise<GroupedNotificationConnection> {
+): Promise<GroupedNotificationConnection | null> {
   type Response = { groupedNotifications: GroupedNotificationConnection };
 
-  const data = await executeAuthenticatedGraphQL<Response>(GET_GROUPED_NOTIFICATIONS, { limit, offset }, authToken);
-
-  return data.groupedNotifications;
+  try {
+    const data = await executeAuthenticatedGraphQL<Response>(GET_GROUPED_NOTIFICATIONS, { limit, offset }, authToken);
+    return data.groupedNotifications;
+  } catch (error) {
+    console.error('serverGroupedNotifications failed:', error);
+    return null;
+  }
 }
 
 /**

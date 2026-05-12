@@ -64,6 +64,12 @@ export default function SmartPlaylistContent({
   // same initialData would be reused for every board-chip switch (and any
   // future key changes) instead of triggering a real fetch.
   const ssrSmartKeyRef = useRef({ boardUuid: selectedBoard?.uuid ?? null });
+  // Single source of truth for "is the SSR payload still applicable to the
+  // live query key?" — used to gate both `initialData` and
+  // `initialDataUpdatedAt` so they can never disagree.
+  const ssrSmartApplicable = ssrSeedMatchesQueryKey(!!initialSmartPlaylist, ssrSmartKeyRef.current, {
+    boardUuid: selectedBoard?.uuid ?? null,
+  });
 
   const {
     data: pagedData,
@@ -99,18 +105,13 @@ export default function SmartPlaylistContent({
     // also avoids re-applying stale SSR data if the user switches away from
     // and back to the default view much later.
     initialData:
-      initialSmartPlaylist &&
-      ssrSeedMatchesQueryKey(true, ssrSmartKeyRef.current, { boardUuid: selectedBoard?.uuid ?? null })
+      ssrSmartApplicable && initialSmartPlaylist
         ? {
             pages: [initialSmartPlaylist],
             pageParams: [0],
           }
         : undefined,
-    initialDataUpdatedAt: ssrSeedMatchesQueryKey(!!initialSmartPlaylist, ssrSmartKeyRef.current, {
-      boardUuid: selectedBoard?.uuid ?? null,
-    })
-      ? ssrInitialUpdatedAtRef.current
-      : 0,
+    initialDataUpdatedAt: ssrSmartApplicable ? ssrInitialUpdatedAtRef.current : 0,
   });
 
   const allClimbs: Climb[] = useMemo(
@@ -157,6 +158,14 @@ export default function SmartPlaylistContent({
     );
   }
 
+  // Note: when SSR-seeded `initialData` is in play, react-query keeps the
+  // overall query state as `success` even if a background refetch errors —
+  // `isError` only flips when there's no `data` to fall back to. That means
+  // a transient network blip after hydration leaves the SSR-rendered hero +
+  // climbs on screen instead of replacing them with the error UI. This is
+  // intentional resilience: same trade-off as `fetchPlaylist`'s catch block
+  // in PlaylistDetailContent. The error UI here only fires on a true cold
+  // failure (no SSR, no cache, refetch errored).
   if (isError || !meta) {
     return (
       <div className={styles.errorContainer}>

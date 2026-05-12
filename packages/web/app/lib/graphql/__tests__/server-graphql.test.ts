@@ -22,6 +22,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
 
 // Import after vi.mock so the mocks are applied to the helpers' transitive deps.
 import {
+  serverGroupedNotifications,
   serverMyBoards,
   serverPlaylist,
   serverPlaylistClimbs,
@@ -53,6 +54,21 @@ describe('server-graphql helpers', () => {
 
       expect(result).toBeNull();
       expect(errorSpy).toHaveBeenCalledWith('serverPlaylist failed:', expect.any(Error));
+      errorSpy.mockRestore();
+    });
+
+    it('returns null without logging when the GraphQL response is { playlist: null } (not-found)', async () => {
+      // The backend returns a 200 + `{ playlist: null }` for an unknown UUID
+      // rather than throwing. We must surface that as `null` so the page
+      // route can render the not-found state — and NOT log it as a failure,
+      // since "playlist doesn't exist" is a normal user outcome.
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      requestMock.mockResolvedValueOnce({ playlist: null });
+
+      const result = await serverPlaylist('auth-token', 'missing-uuid');
+
+      expect(result).toBeNull();
+      expect(errorSpy).not.toHaveBeenCalled();
       errorSpy.mockRestore();
     });
   });
@@ -156,6 +172,17 @@ describe('server-graphql helpers', () => {
 
       expect(result).toBeNull();
       expect(errorSpy).toHaveBeenCalledWith('serverUserPlaylists failed:', expect.any(Error));
+      errorSpy.mockRestore();
+    });
+
+    it('serverGroupedNotifications logs + returns null on failure', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      requestMock.mockRejectedValueOnce(new Error('boom'));
+
+      const result = await serverGroupedNotifications('auth-token');
+
+      expect(result).toBeNull();
+      expect(errorSpy).toHaveBeenCalledWith('serverGroupedNotifications failed:', expect.any(Error));
       errorSpy.mockRestore();
     });
   });
