@@ -7,7 +7,7 @@ import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
 import BoardseshBetaCard from './boardsesh-beta-card';
 import styles from './boardsesh-beta.module.css';
 
-type BoardseshBetaListSource = 'home' | 'drawer';
+type BoardseshBetaListSource = 'home' | 'drawer' | 'profile';
 
 type BoardseshBetaListProps = {
   links: BetaLink[];

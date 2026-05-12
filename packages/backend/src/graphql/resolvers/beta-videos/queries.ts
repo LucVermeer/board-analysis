@@ -1,6 +1,6 @@
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { eq, and, desc, isNotNull, like } from 'drizzle-orm';
+import { eq, and, desc, isNotNull, like, or, sql } from 'drizzle-orm';
 import { fetchInstagramMeta, getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
 import { fetchTikTokMeta, getTikTokCacheId, isTikTokUrl } from '../../../lib/tiktok-meta';
 import {
@@ -30,6 +30,25 @@ type RecentBetaLinkResult = {
 
 const RECENT_BETA_LINKS_MAX_LIMIT = 50;
 const RECENT_BETA_LINKS_DEFAULT_LIMIT = 20;
+const USER_BETA_LINKS_MAX_LIMIT = 100;
+const USER_BETA_LINKS_DEFAULT_LIMIT = 50;
+// Cap rows per foreign_username on the home slider so a single climber's
+// bulk upload doesn't push the rest of the community off the strip. NULL
+// usernames are uncapped per product direction (per-user issue is the
+// known-handle case).
+const HOME_PER_USER_CAP = 3;
+
+// Extract an Instagram handle from `userProfiles.instagramUrl`. The field
+// holds a profile URL — we only want the handle so we can match against
+// `board_beta_links.foreign_username`. Returns null for anything that
+// doesn't look like a recognisable instagram.com profile URL.
+function extractInstagramHandle(profileUrl: string | null): string | null {
+  if (!profileUrl) return null;
+  const trimmed = profileUrl.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([A-Za-z0-9._]+)\/?/i);
+  return match ? match[1] : null;
+}
 
 // We never surface KayaClimb beta links — we don't want to drive traffic to a
 // competing climbing app from our slider. Filter them out at the resolver.
@@ -237,14 +256,114 @@ export const betaLinkQueries = {
   // pre-cached rows here — fanning out the live IG/TikTok enrichment in
   // `betaLinks` across the whole table is the failure mode this resolver
   // exists to avoid.
+  //
+  // Window function caps rows per `foreign_username` at HOME_PER_USER_CAP so
+  // a single climber's burst upload can't dominate the strip. Rows with a
+  // NULL foreign_username are uncapped (per product direction — the dedup
+  // problem is the known-handle case).
   recentBetaLinks: async (
     _: unknown,
     { limit, boardType }: { limit?: number | null; boardType?: string | null },
   ): Promise<RecentBetaLinkResult[]> => {
     const cappedLimit = Math.min(Math.max(limit ?? RECENT_BETA_LINKS_DEFAULT_LIMIT, 1), RECENT_BETA_LINKS_MAX_LIMIT);
+    const boardFilter = boardType ?? null;
 
-    // LEFT JOIN: beta links can land before their climb during sync, and we
-    // still want them in the slider — UI tolerates a null climbName.
+    const result = await db.execute<{
+      board_type: string;
+      climb_uuid: string;
+      link: string;
+      foreign_username: string | null;
+      angle: number | null;
+      thumbnail: string | null;
+      is_listed: boolean | null;
+      created_at: string | null;
+      climb_name: string | null;
+    }>(sql`
+      WITH ranked AS (
+        SELECT
+          bl.board_type,
+          bl.climb_uuid,
+          bl.link,
+          bl.foreign_username,
+          bl.angle,
+          bl.thumbnail,
+          bl.is_listed,
+          bl.created_at,
+          bc.name AS climb_name,
+          ROW_NUMBER() OVER (
+            PARTITION BY bl.foreign_username
+            ORDER BY bl.created_at DESC
+          ) AS user_rank
+        FROM ${dbSchema.boardBetaLinks} bl
+        LEFT JOIN ${dbSchema.boardClimbs} bc
+          ON bc.board_type = bl.board_type AND bc.uuid = bl.climb_uuid
+        WHERE bl.is_listed = true
+          AND bl.thumbnail IS NOT NULL
+          AND bl.thumbnail LIKE ${`${STATIC_THUMBNAIL_PREFIX}%`}
+          AND (${boardFilter}::text IS NULL OR bl.board_type = ${boardFilter})
+      )
+      SELECT board_type, climb_uuid, link, foreign_username, angle, thumbnail, is_listed, created_at, climb_name
+      FROM ranked
+      WHERE foreign_username IS NULL OR user_rank <= ${HOME_PER_USER_CAP}
+      ORDER BY created_at DESC
+      LIMIT ${cappedLimit}
+    `);
+
+    // Different postgres drivers shape db.execute output differently —
+    // normalise to a plain array. Matches the pattern in
+    // resolvers/playlists/queries/smart-playlists.ts.
+    const rows = (Array.isArray(result) ? result : (result as { rows?: unknown[] }).rows) ?? [];
+
+    return (
+      rows as Array<{
+        board_type: string;
+        climb_uuid: string;
+        link: string;
+        foreign_username: string | null;
+        angle: number | null;
+        thumbnail: string | null;
+        is_listed: boolean | null;
+        created_at: string | null;
+        climb_name: string | null;
+      }>
+    )
+      .filter((r) => !isKayaClimbUrl(r.link))
+      .map((r) => ({
+        betaLink: {
+          climbUuid: r.climb_uuid,
+          link: r.link,
+          foreignUsername: r.foreign_username,
+          angle: r.angle,
+          thumbnail: isOurS3Url(r.thumbnail) ? r.thumbnail : null,
+          isListed: r.is_listed,
+          createdAt: r.created_at,
+        },
+        climbName: r.climb_name,
+        boardType: r.board_type,
+      }));
+  },
+
+  // Powers the profile-page "Their beta" slider. Returns videos this user
+  // either added (created_by_user_id match) OR posted under the IG handle
+  // parsed from their userProfiles.instagramUrl. The OR semantics also
+  // surface videos someone else uploaded that point at this user's IG —
+  // intentional. Pre-cached thumbnails only; no live enrichment.
+  userBetaLinks: async (
+    _: unknown,
+    { userId, limit }: { userId: string; limit?: number | null },
+  ): Promise<RecentBetaLinkResult[]> => {
+    const cappedLimit = Math.min(Math.max(limit ?? USER_BETA_LINKS_DEFAULT_LIMIT, 1), USER_BETA_LINKS_MAX_LIMIT);
+
+    // Look up the user's IG handle from their profile, if set. Independent
+    // query so we don't pay the cost of a second join when no profile row
+    // exists.
+    const profileRows = await db
+      .select({ instagramUrl: dbSchema.userProfiles.instagramUrl })
+      .from(dbSchema.userProfiles)
+      .where(eq(dbSchema.userProfiles.userId, userId))
+      .limit(1);
+    const igHandle = extractInstagramHandle(profileRows[0]?.instagramUrl ?? null);
+
     const rows = await db
       .select({ betaLink: dbSchema.boardBetaLinks, climbName: dbSchema.boardClimbs.name })
       .from(dbSchema.boardBetaLinks)
@@ -260,7 +379,12 @@ export const betaLinkQueries = {
           eq(dbSchema.boardBetaLinks.isListed, true),
           isNotNull(dbSchema.boardBetaLinks.thumbnail),
           like(dbSchema.boardBetaLinks.thumbnail, `${STATIC_THUMBNAIL_PREFIX}%`),
-          boardType ? eq(dbSchema.boardBetaLinks.boardType, boardType) : undefined,
+          igHandle
+            ? or(
+                eq(dbSchema.boardBetaLinks.createdByUserId, userId),
+                eq(dbSchema.boardBetaLinks.foreignUsername, igHandle),
+              )
+            : eq(dbSchema.boardBetaLinks.createdByUserId, userId),
         ),
       )
       .orderBy(desc(dbSchema.boardBetaLinks.createdAt))
