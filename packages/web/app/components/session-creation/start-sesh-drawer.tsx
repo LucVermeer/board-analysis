@@ -9,6 +9,7 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
 import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import drawerCss from '../swipeable-drawer/swipeable-drawer.module.css';
 import { useDrawerDragResize } from '@/app/hooks/use-drawer-drag-resize';
@@ -52,7 +53,15 @@ type StartSeshDrawerProps = {
 export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardConfigs }: StartSeshDrawerProps) {
   const { t } = useTranslation('session');
   const { status } = useSession();
-  const { paperRef, dragHandlers } = useDrawerDragResize({ open, onClose });
+  // Keep the drawer at full height — pin both heights so the close handler
+  // doesn't reset the inline style back to 60% (the hook's default), which
+  // would override the `height="100%"` prop on the next open.
+  const { paperRef, dragHandlers } = useDrawerDragResize({
+    open,
+    onClose,
+    initialHeight: '100%',
+    expandedHeight: '100%',
+  });
   const router = useLocaleRouter();
   const { showMessage } = useSnackbar();
   const { createSession, isCreating } = useCreateSession();
@@ -80,55 +89,71 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const hasAutoSelectedRef = useRef(false);
   const formSubmitRef = useRef<(() => void) | null>(null);
 
-  // Reset auto-selection tracking when drawer closes
+  // Reset auto-selection tracking and expander state when the drawer closes.
+  // handleClose covers user-initiated closes, but the parent can also flip
+  // `open` to false directly (navigation, external dismiss) — in that case
+  // we still need to drop the expanded state so the next open isn't stale.
   useEffect(() => {
     if (!open) {
       hasAutoSelectedRef.current = false;
+      setBoardSelectorExpanded(false);
     }
   }, [open]);
 
-  // Auto-select the current board when the drawer opens
+  // Auto-select the current board when the drawer opens.
+  //
+  // Named-board routes (/b/{slug}) auto-select the named UserBoard so the
+  // session is attributed to that specific board. Generic routes
+  // (/{board}/{layout}/{size}/{sets}/{angle}/...) auto-select a *custom*
+  // config built from the route's resolved details — we deliberately do NOT
+  // match a UserBoard with the same numeric identity, because the same
+  // layout/size/set combo can map to many different physical boards and
+  // attributing a generic-URL session to a named board would silently log
+  // climbs against the wrong board.
   useEffect(() => {
-    if (!open || boards.length === 0 || hasAutoSelectedRef.current) return;
+    if (!open || hasAutoSelectedRef.current) return;
 
-    let match: (typeof boards)[number] | undefined;
-
-    // Strategy 1: Match by slug from /b/{slug} routes
-    if (localBoardPath) {
-      const basePath = getBaseBoardPath(localBoardPath);
-      match = boards.find((b) => `/b/${b.slug}` === basePath);
+    // Prefer the current pathname over the persistent session's last route —
+    // the user's intent is whatever they're looking at now.
+    const effectivePathname = pathname && isBoardRoutePath(pathname) ? pathname : localBoardPath;
+    if (!effectivePathname) {
+      hasAutoSelectedRef.current = true;
+      return;
     }
 
-    // Strategy 2: Match by numeric board identity from localBoardDetails
-    if (!match && localBoardDetails) {
-      const sortedLocalSetIds = [...localBoardDetails.set_ids].sort((a, b) => a - b).join(',');
-      match = boards.find(
-        (b) =>
-          b.boardType === localBoardDetails.board_name &&
-          b.layoutId === localBoardDetails.layout_id &&
-          b.sizeId === localBoardDetails.size_id &&
-          b.setIds
-            .split(',')
-            .map(Number)
-            .sort((a, b) => a - b)
-            .join(',') === sortedLocalSetIds,
-      );
+    // Named-board route → select the matching UserBoard by slug.
+    if (effectivePathname.startsWith('/b/')) {
+      if (boards.length === 0) return; // wait for boards to load
+      const basePath = getBaseBoardPath(effectivePathname);
+      const namedMatch = boards.find((b) => `/b/${b.slug}` === basePath);
+      hasAutoSelectedRef.current = true;
+      if (namedMatch) setSelectedBoard(namedMatch);
+      return;
     }
 
-    // Strategy 3: Match by slug from current pathname
-    if (!match && pathname?.startsWith('/b/')) {
-      const segments = pathname.split('/').filter(Boolean);
-      if (segments.length >= 2) {
-        const slug = segments[1];
-        match = boards.find((b) => b.slug === slug);
-      }
-    }
+    // Generic board route → build a custom config from the route's resolved
+    // board details (bridge for the current route, fall back to the session).
+    const effectiveBoardDetails = bridgeBoardDetails ?? localBoardDetails;
+    if (!effectiveBoardDetails) return; // wait for details to resolve
 
+    const angle = bridgeAngle ?? getDefaultAngleForBoard(effectiveBoardDetails.board_name);
+    const displayName =
+      effectiveBoardDetails.layout_name && effectiveBoardDetails.size_name
+        ? [effectiveBoardDetails.layout_name, effectiveBoardDetails.size_name].filter(Boolean).join(' · ')
+        : `${effectiveBoardDetails.board_name.charAt(0).toUpperCase()}${effectiveBoardDetails.board_name.slice(1)}`;
+
+    setSelectedCustomPath(effectivePathname);
+    setSelectedCustomConfig({
+      name: displayName,
+      board: effectiveBoardDetails.board_name,
+      layoutId: effectiveBoardDetails.layout_id,
+      sizeId: effectiveBoardDetails.size_id,
+      setIds: [...effectiveBoardDetails.set_ids],
+      angle,
+      createdAt: new Date().toISOString(),
+    });
     hasAutoSelectedRef.current = true;
-    if (match) {
-      setSelectedBoard(match);
-    }
-  }, [open, boards, localBoardPath, localBoardDetails, pathname]);
+  }, [open, boards, localBoardPath, localBoardDetails, bridgeBoardDetails, bridgeAngle, pathname]);
 
   const isLoggedIn = status === 'authenticated';
 
@@ -285,53 +310,55 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
 
   const hasSelection = selectedBoard || selectedCustomConfig;
 
+  const showCollapsed = !!hasSelection && !boardSelectorExpanded;
+
   const boardSelector = (
     <Box>
-      {hasSelection && !boardSelectorExpanded ? (
-        <Box>
-          <Typography sx={{ fontSize: 16, fontWeight: 600, color: 'var(--neutral-900)', mb: 1.5 }}>
-            {t('creation.boardsNearYou')}
-          </Typography>
-          <Box
-            data-testid="selected-board-card"
-            sx={{ position: 'relative', width: 'fit-content' }}
+      <Typography sx={{ fontSize: 16, fontWeight: 600, color: 'text.primary', mb: 1.5 }}>
+        {t('creation.boardsNearYou')}
+      </Typography>
+      <Collapse in={showCollapsed} mountOnEnter unmountOnExit>
+        <Box
+          data-testid="selected-board-card"
+          sx={{ position: 'relative', width: 'fit-content', mb: 1, cursor: 'pointer' }}
+          onClick={() => setBoardSelectorExpanded(true)}
+        >
+          <BoardScrollCard
+            userBoard={selectedBoard ?? undefined}
+            storedConfig={selectedCustomConfig ?? undefined}
+            boardConfigs={boardConfigs}
+            selected
+            size="collapsed"
             onClick={() => setBoardSelectorExpanded(true)}
+          />
+          {/* Grey overlay + edit icon — pointerEvents:none so clicks pass through to the card */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              aspectRatio: 1,
+              borderRadius: '6px',
+              bgcolor: themeTokens.semantic.overlayLight,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
           >
-            <BoardScrollCard
-              userBoard={selectedBoard ?? undefined}
-              storedConfig={selectedCustomConfig ?? undefined}
-              boardConfigs={boardConfigs}
-              selected
-              onClick={() => setBoardSelectorExpanded(true)}
-            />
-            {/* Grey overlay + edit icon */}
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                aspectRatio: 1,
-                borderRadius: '8px',
-                bgcolor: 'rgba(0, 0, 0, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                pointerEvents: 'none',
-              }}
-            >
-              <EditOutlined sx={{ color: '#fff', fontSize: 28 }} />
-            </Box>
+            <EditOutlined sx={{ color: 'common.white', fontSize: 20 }} />
           </Box>
         </Box>
-      ) : (
+      </Collapse>
+      {!showCollapsed && (
         <BoardDiscoveryScroll
           onBoardClick={handleDiscoveryBoardClick}
           onConfigClick={handleConfigClick}
           onCustomClick={() => setShowBoardDrawer(true)}
           selectedBoardUuid={selectedBoard?.uuid}
           myBoards={boards}
+          hideTitle
         />
       )}
       {boardsError && (
@@ -353,7 +380,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
           </div>
         }
         placement="bottom"
-        height="60%"
+        height="100%"
         paperRef={paperRef}
         swipeEnabled={false}
         open={open}

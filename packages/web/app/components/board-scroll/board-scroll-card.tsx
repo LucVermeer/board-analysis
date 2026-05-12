@@ -36,7 +36,7 @@ type BoardScrollCardProps = {
   disabledText?: string;
   distanceMeters?: number | null;
   bluetoothNearby?: boolean;
-  size?: 'default' | 'small';
+  size?: 'default' | 'small' | 'collapsed';
   onClick: () => void;
 };
 
@@ -91,14 +91,20 @@ export default function BoardScrollCard({
     return { name: cardName, meta: cardMeta };
   }, [userBoard, storedConfig, popularConfig, boardConfigs]);
 
-  const isSmall = size === 'small';
+  const isSmall = size === 'small' || size === 'collapsed';
+  const sizeClassByVariant: Record<'default' | 'small' | 'collapsed', string> = {
+    default: '',
+    small: styles.cardScrollSmall,
+    collapsed: styles.cardScrollCollapsed,
+  };
+  const sizeClass = sizeClassByVariant[size];
   const iconSize = isSmall ? 24 : 32;
 
   const handleClick = disabled ? undefined : onClick;
   const displayMeta = disabled && disabledText ? disabledText : meta;
 
   return (
-    <div className={`${styles.cardScroll} ${isSmall ? styles.cardScrollSmall : ''}`} onClick={handleClick}>
+    <div className={`${styles.cardScroll} ${sizeClass}`} onClick={handleClick}>
       <div
         className={`${styles.cardSquare} ${selected ? styles.cardSquareSelected : ''} ${disabled ? styles.cardSquareDisabled : ''}`}
       >

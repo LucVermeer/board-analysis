@@ -46,6 +46,8 @@ type BoardDiscoveryScrollProps = {
   initialPopularConfigs?: PopularBoardConfig[];
   /** Externally-provided boards to display inline (avoids double-fetch when parent already calls useMyBoards) */
   myBoards?: UserBoard[];
+  /** Hide the section title (useful when parent renders its own title) */
+  hideTitle?: boolean;
 };
 
 export default function BoardDiscoveryScroll({
@@ -55,6 +57,7 @@ export default function BoardDiscoveryScroll({
   selectedBoardUuid,
   initialPopularConfigs,
   myBoards: externalMyBoards,
+  hideTitle,
 }: BoardDiscoveryScrollProps) {
   const { t } = useTranslation('boards');
   const { status } = useSession();
@@ -177,7 +180,7 @@ export default function BoardDiscoveryScroll({
   return (
     <>
       <BoardScrollSection
-        title={t('discovery.section.nearby')}
+        title={hideTitle ? undefined : t('discovery.section.nearby')}
         loading={isBoardsLoading && popularConfigs.length === 0 && myBoards.length === 0}
         onLoadMore={loadMore}
         hasMore={hasMore}

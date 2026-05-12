@@ -280,19 +280,46 @@ describe('StartSeshDrawer', () => {
     expect(mockRouterPush).toHaveBeenCalled();
   });
 
-  it('auto-selects board from localBoardDetails (generic route)', async () => {
+  it('auto-selects a custom config on generic routes (from persistent session)', async () => {
     mockLocalBoardPath = '/kilter/original/12x12/screw_bolt/40/list';
     mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
 
-    // Board should be auto-selected via strategy 2
+    // Generic route → custom config auto-selected; submit uses the
+    // generic path, not a /b/{slug} attribution to any named UserBoard.
+    await submitSesh();
+
+    await waitFor(() => {
+      expect(mockCreateSession).toHaveBeenCalledWith(
+        expect.anything(),
+        '/kilter/original/12x12/screw_bolt/40/list',
+      );
+    });
+    expect(mockRouterPush).toHaveBeenCalled();
+  });
+
+  it('prefers bridgeBoardDetails over localBoardDetails on the current generic route', async () => {
+    // User is currently on a kilter route (bridge populated). The persistent
+    // session still holds a stale tension route — bridge should win.
+    mockPathname = '/kilter/original/12x12/screw_bolt/40/list';
+    mockBridgeBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+    mockBridgeAngle = 40;
+    mockLocalBoardPath = '/tension/some-layout/8x10/main/30/list';
+    mockLocalBoardDetails = { board_name: 'tension', layout_id: 99, size_id: 99, set_ids: [99, 99] };
+
+    render(<StartSeshDrawer open onClose={vi.fn()} />);
     await submitSesh();
 
     await waitFor(() => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
-    expect(mockRouterPush).toHaveBeenCalled();
+    // boardPath should reflect the CURRENT (bridge) route, not the stale
+    // localBoardPath — i.e. auto-select picked the bridge-side custom config.
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.anything(),
+      '/kilter/original/12x12/screw_bolt/40/list',
+    );
   });
 
   it('shows collapsed card when board is auto-selected', async () => {
@@ -418,20 +445,21 @@ describe('StartSeshDrawer', () => {
     expect(screen.queryByText('Change')).toBeNull();
   });
 
-  it('matches board details even when set_ids are in different order', async () => {
-    // localBoardDetails has set_ids in reverse order compared to UserBoard.setIds "1,2"
+  it('does not attribute a generic route to a same-config named UserBoard', async () => {
+    // localBoardDetails has the exact numeric identity of the "Kilter" mock
+    // UserBoard (layoutId 1, sizeId 10, setIds "1,2"). Pre-fix logic would
+    // match by IDs and auto-select Kilter — that's the attribution bug.
+    // Post-fix: generic route stays on a custom config, NOT /b/kilter-...
     mockLocalBoardPath = '/kilter/original/12x12/screw_bolt/40/list';
-    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [2, 1] };
+    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
 
     render(<StartSeshDrawer open onClose={vi.fn()} />);
-
-    // Should auto-select Kilter despite reversed set_ids order
     await submitSesh();
 
     await waitFor(() => {
       expect(mockCreateSession).toHaveBeenCalled();
     });
-    expect(mockRouterPush).toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalledWith(expect.anything(), expect.stringMatching(/^\/b\//));
   });
 
   it('prioritizes slug match over board details match', async () => {

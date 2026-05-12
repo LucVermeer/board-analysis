@@ -403,6 +403,29 @@
   font-size: 11px;
 }
 
+/* Collapsed size variant (40% of default) */
+.cardScrollCollapsed {
+  width: 73px;
+}
+
+.cardScrollCollapsed .cardSquare {
+  margin-bottom: 2px;
+  border-radius: 6px;
+}
+
+.cardScrollCollapsed .cardSquareSelected {
+  outline-width: 2px;
+  outline-offset: -2px;
+}
+
+.cardScrollCollapsed .cardName {
+  font-size: 11px;
+}
+
+.cardScrollCollapsed .cardMeta {
+  font-size: 10px;
+}
+
 /* Mobile */
 @media (max-width: 767px) {
   .cardScroll {
@@ -411,6 +434,11 @@
 
   .cardScrollSmall {
     width: 100px;
+  }
+
+  /* Must override the .cardScroll rule above (same specificity, later wins) */
+  .cardScrollCollapsed {
+    width: 73px;
   }
 }
 
@@ -428,5 +456,9 @@
 
   .cardScrollSmall {
     width: 120px;
+  }
+
+  .cardScrollCollapsed {
+    width: 83px;
   }
 }
