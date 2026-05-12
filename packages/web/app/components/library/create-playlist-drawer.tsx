@@ -144,7 +144,7 @@ export default function CreatePlaylistDrawer({
       onTransitionEnd={onTransitionEnd}
       styles={{
         wrapper: { height: 'auto' },
-        body: { padding: themeTokens.spacing[4] },
+        body: { padding: `${themeTokens.spacing[4]}px` },
       }}
       extra={
         <MuiButton variant="contained" onClick={handleSubmit} disabled={submitting}>

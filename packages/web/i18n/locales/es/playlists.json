@@ -152,6 +152,7 @@
     "summaryRow_other": "{{count}} bloques ({{range}})",
     "options": {
       "warmUp": "Calentamiento",
+      "targetAngle": "Ángulo objetivo",
       "targetGrade": "Grado objetivo",
       "minAscents": "Encadenes mínimos",
       "minRating": "Valoración mínima",

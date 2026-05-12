@@ -8,7 +8,11 @@ import Button from '@mui/material/Button';
 import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
+import AutoFixHighOutlined from '@mui/icons-material/AutoFixHighOutlined';
+import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
 import Collapse from '@mui/material/Collapse';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import drawerCss from '../swipeable-drawer/swipeable-drawer.module.css';
@@ -31,6 +35,9 @@ import {
   tryConstructSlugListUrl,
 } from '@/app/lib/url-utils';
 import { getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
+import { useBoardDetails } from '@/app/components/board-scroll/board-thumbnail';
+import { PlaylistGeneratorDrawer, type WorkoutType } from '@/app/components/playlist-generator';
+import type { ClimbQueueItem } from '@/app/components/queue-control/types';
 import { isBoardRoutePath } from '@/app/lib/board-route-paths';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { setClimbSessionCookie } from '@/app/lib/climb-session-cookie';
@@ -86,8 +93,24 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const [showBoardDrawer, setShowBoardDrawer] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [boardSelectorExpanded, setBoardSelectorExpanded] = useState(false);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [generatedQueue, setGeneratedQueue] = useState<ClimbQueueItem[]>([]);
+  const [generatedWorkoutType, setGeneratedWorkoutType] = useState<WorkoutType | null>(null);
   const hasAutoSelectedRef = useRef(false);
   const formSubmitRef = useRef<(() => void) | null>(null);
+  // Per-run buffer for in-flight generations. We accumulate here instead of
+  // mutating generatedQueue directly so that dismissing the generator
+  // mid-run preserves the prior queue. Committed to generatedQueue on
+  // onComplete only when at least one climb was added.
+  const runBufferRef = useRef<ClimbQueueItem[]>([]);
+
+  const selectedBoardDetails = useBoardDetails(selectedBoard ?? undefined, selectedCustomConfig ?? undefined);
+  const generatorBoardDetails = selectedBoardDetails ?? bridgeBoardDetails ?? localBoardDetails ?? null;
+  const generatorDefaultAngle =
+    selectedBoard?.angle ??
+    selectedCustomConfig?.angle ??
+    bridgeAngle ??
+    (generatorBoardDetails ? getDefaultAngleForBoard(generatorBoardDetails.board_name) : 40);
 
   // Reset auto-selection tracking and expander state when the drawer closes.
   // handleClose covers user-initiated closes, but the parent can also flip
@@ -163,6 +186,10 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedCustomPath(null);
     setSelectedCustomConfig(null);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
+    setGeneratorOpen(false);
+    runBufferRef.current = [];
     setFormKey((k) => k + 1);
   }, [onClose]);
 
@@ -171,6 +198,12 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedCustomPath(null);
     setSelectedCustomConfig(null);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
+    // Close the generator if it was open against the old board — its
+    // boardDetails prop is about to become stale.
+    setGeneratorOpen(false);
+    runBufferRef.current = [];
   }, []);
 
   const handleDiscoveryBoardClick = useCallback(
@@ -212,6 +245,12 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     });
     setSelectedBoard(null);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
+    // Close the generator if it was open against the old board — its
+    // boardDetails prop is about to become stale.
+    setGeneratorOpen(false);
+    runBufferRef.current = [];
   }, []);
 
   const handleCustomSelect = (url: string, config?: StoredBoardConfig) => {
@@ -220,7 +259,22 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedBoard(null);
     setShowBoardDrawer(false);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
+    setGeneratorOpen(false);
+    runBufferRef.current = [];
   };
+
+  const handleClearGenerated = useCallback(() => {
+    if (generatedQueue.length === 0) return;
+    track('Session Queue Generated Cleared', {
+      workoutType: generatedWorkoutType,
+      savedCount: generatedQueue.length,
+      boardName: generatorBoardDetails?.board_name ?? '',
+    });
+    setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
+  }, [generatedQueue.length, generatedWorkoutType, generatorBoardDetails]);
 
   const handleSubmit = async (formData: SessionCreationFormData) => {
     let boardPath: string | undefined;
@@ -261,9 +315,15 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
       const effectiveCurrentClimb = localCurrentClimbQueueItem ?? bridgeCurrentClimbQueueItem;
       const boardsMatch = effectiveBaseBoardPath != null && effectiveBaseBoardPath === getBaseBoardPath(boardPath);
 
-      // Transfer existing queue to the new session if on the same board
-      if (boardsMatch && (effectiveQueue.length > 0 || effectiveCurrentClimb)) {
-        setInitialQueueForSession(sessionId, effectiveQueue, effectiveCurrentClimb, formData.name);
+      // Merge any existing same-board queue with the generated queue: existing
+      // first, generated appended. The generated queue is always for the
+      // selected board by construction, so it bypasses the boardsMatch gate.
+      const carriedQueue = boardsMatch ? effectiveQueue : [];
+      const carriedCurrent = boardsMatch ? effectiveCurrentClimb : null;
+      const initialQueue = [...carriedQueue, ...generatedQueue];
+      const initialCurrent = carriedCurrent ?? generatedQueue[0] ?? null;
+      if (initialQueue.length > 0 || initialCurrent) {
+        setInitialQueueForSession(sessionId, initialQueue, initialCurrent, formData.name);
       }
 
       setClimbSessionCookie(sessionId);
@@ -297,6 +357,8 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
         boardName: effectiveBoardDetails?.board_name ?? '',
         hasGoal: !!formData.goal,
         isDiscoverable: !!formData.discoverable,
+        generatedQueueCount: generatedQueue.length,
+        generatedWorkoutType: generatedWorkoutType ?? undefined,
       });
 
       handleClose();
@@ -369,6 +431,66 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     </Box>
   );
 
+  const generateEntry =
+    generatedQueue.length > 0 ? (
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{
+          p: 1.25,
+          borderRadius: 1,
+          border: `1px solid ${themeTokens.colors.primary}`,
+          bgcolor: themeTokens.semantic.selectedLight,
+        }}
+      >
+        <AutoFixHighOutlined fontSize="small" sx={{ color: 'primary.main' }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {t('creation.generateQueue.summary', { count: generatedQueue.length })}
+          </Typography>
+        </Box>
+        <Button
+          size="small"
+          variant="text"
+          // Don't wipe the current queue on click. If the user dismisses
+          // the generator mid-flow, the previous queue is still intact.
+          // The generator drawer pushes climbs incrementally via onAddClimb,
+          // which appends — so without clearing, a fresh run would mix old
+          // and new climbs. We clear once on the first append of the new run
+          // (handled in the onAddClimb callback below).
+          onClick={() => setGeneratorOpen(true)}
+          disabled={!generatorBoardDetails}
+        >
+          {t('creation.generateQueue.regenerate')}
+        </Button>
+        <IconButton
+          size="small"
+          onClick={handleClearGenerated}
+          aria-label={t('creation.generateQueue.clear')}
+        >
+          <CloseOutlined fontSize="small" />
+        </IconButton>
+      </Stack>
+    ) : (
+      <Button
+        variant="outlined"
+        fullWidth
+        startIcon={<AutoFixHighOutlined />}
+        onClick={() => setGeneratorOpen(true)}
+        disabled={!generatorBoardDetails}
+      >
+        {generatorBoardDetails ? t('creation.generateQueue.button') : t('creation.generateQueue.buttonHint')}
+      </Button>
+    );
+
+  const formHeader = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {boardSelector}
+      {generateEntry}
+    </Box>
+  );
+
   return (
     <>
       <SwipeableDrawer
@@ -420,7 +542,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
             onSubmit={handleSubmit}
             isSubmitting={isCreating}
             submitLabel={t('creation.submitDefault')}
-            headerContent={boardSelector}
+            headerContent={formHeader}
             isAnonymous={!isLoggedIn}
             renderSubmit={({ onSubmit: formSubmit }) => {
               formSubmitRef.current = formSubmit;
@@ -453,6 +575,62 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
           boardConfigs={boardConfigs}
           placement="top"
           onBoardSelected={handleCustomSelect}
+        />
+      )}
+
+      {generatorBoardDetails && (
+        <PlaylistGeneratorDrawer
+          open={generatorOpen}
+          onClose={() => {
+            // Drop any in-flight buffer so a future Regenerate doesn't pick
+            // up half a previous run.
+            runBufferRef.current = [];
+            setGeneratorOpen(false);
+          }}
+          boardDetails={generatorBoardDetails}
+          defaultAngle={generatorDefaultAngle}
+          targetType="session"
+          // Stamp the user-chosen angle onto the queue item's climb so the
+          // session queue uses it verbatim. The search response's climb.angle
+          // typically matches the queried angle today, but trusting that
+          // coupling is fragile — pin it explicitly.
+          //
+          // We accumulate into `runBufferRef` rather than `generatedQueue` so
+          // that dismissing the generator mid-run leaves the previous queue
+          // intact. The buffer is committed by `onComplete` below, only when
+          // at least one climb was actually saved.
+          onAddClimb={async (climb, _slot, angle) => {
+            const safeUuid =
+              typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : `gen-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            runBufferRef.current.push({
+              uuid: safeUuid,
+              climb: { ...climb, angle },
+              suggested: true,
+            });
+          }}
+          onComplete={({ added, failed, total, workoutType }) => {
+            if (added > 0) {
+              setGeneratedQueue(runBufferRef.current);
+              setGeneratedWorkoutType(workoutType);
+              track('Session Queue Generated', {
+                workoutType,
+                boardName: generatorBoardDetails.board_name,
+                angle: generatorDefaultAngle,
+                savedCount: added,
+                failedCount: failed,
+              });
+            }
+            runBufferRef.current = [];
+            if (failed === 0 && added > 0) {
+              showMessage(t('creation.generateQueue.addedAll', { count: total }), 'success');
+            } else if (added > 0) {
+              showMessage(t('creation.generateQueue.addedPartial', { added, failed }), 'warning');
+            } else {
+              showMessage(t('creation.generateQueue.failed'), 'error');
+            }
+          }}
         />
       )}
     </>

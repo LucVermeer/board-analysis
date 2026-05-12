@@ -152,6 +152,7 @@
     "summaryRow_other": "{{count}} climbs ({{range}})",
     "options": {
       "warmUp": "Warm Up",
+      "targetAngle": "Target Angle",
       "targetGrade": "Target Grade",
       "minAscents": "Min Ascents",
       "minRating": "Min Rating",

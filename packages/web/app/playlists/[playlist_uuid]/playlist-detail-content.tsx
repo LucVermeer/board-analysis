@@ -50,6 +50,9 @@ import {
   type GetPlaylistClimbsQueryVariables,
   type GetPlaylistClimbsInput,
   type PlaylistClimbsResult,
+  type AddClimbToPlaylistMutationResponse,
+  type AddClimbToPlaylistMutationVariables,
+  ADD_CLIMB_TO_PLAYLIST,
 } from '@/app/lib/graphql/operations/playlists';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { shareWithFallback } from '@/app/lib/share-utils';
@@ -643,10 +646,36 @@ export default function PlaylistDetailContent({
         <PlaylistGeneratorDrawer
           open={generatorOpen}
           onClose={() => setGeneratorOpen(false)}
-          playlistUuid={playlistUuid}
           boardDetails={generatorBoardDetails}
-          angle={generatorAngle}
-          onSuccess={handlePlaylistUpdated}
+          defaultAngle={generatorAngle}
+          targetType="playlist"
+          onAddClimb={async (climb, _slot, angle) => {
+            await executeGraphQL<AddClimbToPlaylistMutationResponse, AddClimbToPlaylistMutationVariables>(
+              ADD_CLIMB_TO_PLAYLIST,
+              {
+                input: {
+                  playlistId: playlistUuid,
+                  climbUuid: climb.uuid,
+                  angle,
+                },
+              },
+              token,
+            );
+          }}
+          onComplete={({ added, failed, total }) => {
+            if (failed === 0) {
+              showMessage(t('generator.messages.addedAll', { count: total }), 'success');
+            } else if (added > 0) {
+              showMessage(t('generator.messages.addedPartial', { added, failed }), 'warning');
+            } else {
+              showMessage(t('generator.messages.failed'), 'error');
+            }
+            // Only refetch if we actually wrote to the playlist; full failures
+            // change nothing on the server side.
+            if (added > 0) {
+              handlePlaylistUpdated();
+            }
+          }}
         />
       )}
     </>
