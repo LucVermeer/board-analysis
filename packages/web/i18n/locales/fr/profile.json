@@ -28,8 +28,7 @@
   "page": {
     "lastThreeMonths": "3 derniers mois",
     "activityChartLabel": "Activité des 3 derniers mois",
-    "displayNameFallback": "Grimpeur",
-    "betaVideos": "Leur beta"
+    "displayNameFallback": "Grimpeur"
   },
   "nav": {
     "statistics": {
