@@ -24,6 +24,19 @@ function sanitizeInstagramUsername(candidate: string | null | undefined): string
   return INSTAGRAM_USERNAME_REGEX.test(candidate) ? candidate : null;
 }
 
+// Sentinel for body-size-cap rejections. Surfaced through the catch in
+// fetchInstagramMetaUncached so the outer wrapper can map it to
+// transient_error WITHOUT recording a circuit-breaker failure: an oversized
+// body is a defense against our own memory pressure, not a signal that IG
+// is degraded. Tripping the breaker on a single bad response would stop
+// legitimate fetches for the whole cooldown window.
+class HtmlBodyTooLargeError extends Error {
+  constructor() {
+    super('html body exceeded cap');
+    this.name = 'HtmlBodyTooLargeError';
+  }
+}
+
 async function readBodyWithCap(res: Response, maxBytes: number): Promise<string> {
   if (!res.body) {
     // Some fetch implementations / tests return a mock without a streamable
@@ -35,7 +48,7 @@ async function readBodyWithCap(res: Response, maxBytes: number): Promise<string>
     // UTF-8 byte length instead.
     const text = await res.text();
     if (Buffer.byteLength(text, 'utf8') > maxBytes) {
-      throw new Error('html body exceeded cap');
+      throw new HtmlBodyTooLargeError();
     }
     return text;
   }
@@ -53,7 +66,7 @@ async function readBodyWithCap(res: Response, maxBytes: number): Promise<string>
       } catch {
         // best-effort
       }
-      throw new Error('html body exceeded cap');
+      throw new HtmlBodyTooLargeError();
     }
     html += decoder.decode(value, { stream: true });
   }
@@ -81,6 +94,14 @@ export type InstagramMetaResult =
   | { status: 'ok'; thumbnail: string; username: string | null }
   | { status: 'gone' }
   | { status: 'transient_error' };
+
+// Internal variant carries a hint about whether this transient_error should
+// count toward the circuit breaker. Body-cap rejections don't — they're a
+// local defense, not an IG-availability signal.
+type UncachedResult =
+  | { status: 'ok'; thumbnail: string; username: string | null }
+  | { status: 'gone' }
+  | { status: 'transient_error'; tripBreaker: boolean };
 
 function decodeHtmlEntities(s: string): string {
   return s
@@ -135,7 +156,7 @@ export function clearInstagramMetaCache(): void {
   circuit.reset();
 }
 
-async function fetchInstagramMetaUncached(url: string): Promise<InstagramMetaResult> {
+async function fetchInstagramMetaUncached(url: string): Promise<UncachedResult> {
   const mediaId = getInstagramMediaId(url);
   if (!mediaId) return { status: 'gone' };
   const embedUrl = `https://www.instagram.com/p/${mediaId}/embed/captioned/`;
@@ -150,10 +171,16 @@ async function fetchInstagramMetaUncached(url: string): Promise<InstagramMetaRes
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       cache: 'no-store',
     });
-    if (!res.ok) return { status: 'transient_error' };
+    if (!res.ok) return { status: 'transient_error', tripBreaker: true };
     html = await readBodyWithCap(res, MAX_HTML_BYTES);
-  } catch {
-    return { status: 'transient_error' };
+  } catch (err) {
+    // Body-cap rejections are a self-defense, not an IG-availability signal.
+    // Surface them as transient_error so the resolver keeps serving cached
+    // thumbnails, but don't count them toward the breaker.
+    if (err instanceof HtmlBodyTooLargeError) {
+      return { status: 'transient_error', tripBreaker: false };
+    }
+    return { status: 'transient_error', tripBreaker: true };
   }
 
   // Primary signal: <img class="EmbeddedMediaImage" alt="Instagram post shared by &#064;<user>" src="...p1080x1080..." />
@@ -197,7 +224,7 @@ async function fetchInstagramMetaUncached(url: string): Promise<InstagramMetaRes
     // geo-block. Treat the login-wall variants as transient so we don't
     // silently drop a real beta link the next time the resolver runs.
     if (looksLikeLoginWall(html)) {
-      return { status: 'transient_error' };
+      return { status: 'transient_error', tripBreaker: true };
     }
     return { status: 'gone' };
   }
@@ -234,10 +261,12 @@ export async function fetchInstagramMeta(url: string): Promise<InstagramMetaResu
   if (existing) return existing;
 
   const promise = fetchInstagramMetaUncached(url)
-    .then((result) => {
-      const ttl = result.status === 'transient_error' ? INSTAGRAM_TRANSIENT_TTL_MS : INSTAGRAM_META_TTL_MS;
+    .then((internal): InstagramMetaResult => {
+      const ttl = internal.status === 'transient_error' ? INSTAGRAM_TRANSIENT_TTL_MS : INSTAGRAM_META_TTL_MS;
+      const result: InstagramMetaResult =
+        internal.status === 'transient_error' ? { status: 'transient_error' } : internal;
       metaCache.set(url, { data: result, expiresAt: Date.now() + ttl });
-      if (result.status === 'transient_error') {
+      if (internal.status === 'transient_error' && internal.tripBreaker) {
         circuit.recordFailure();
       }
       return result;

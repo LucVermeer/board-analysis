@@ -437,7 +437,13 @@ export const boardBetaLinks = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.boardType, table.climbUuid, table.link] }),
-    shortcodeIdx: index('board_beta_links_shortcode_idx').on(table.boardType, table.shortcode),
+    // Partial index: shortcode is null for TikTok and other non-IG platforms,
+    // and the dedup query is keyed on a non-null shortcode (see
+    // findInstagramShortcodeConflict). Excluding null rows keeps the index
+    // smaller and skips entries the dedup query can never match.
+    shortcodeIdx: index('board_beta_links_shortcode_idx')
+      .on(table.boardType, table.shortcode)
+      .where(sql`${table.shortcode} IS NOT NULL`),
     // Note: No FK to board_climbs - beta links may arrive before their corresponding climbs during sync
   }),
 );
