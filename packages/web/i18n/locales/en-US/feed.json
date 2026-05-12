@@ -35,7 +35,8 @@
     "copyAndOpenInstagram": "Copy & open Instagram",
     "instagramCopyFailed": "Couldn't copy the caption. Try again.",
     "instagramCopiedAndOpened": "Caption copied — paste it into Instagram.",
-    "instagramCopiedOnly": "Caption copied to clipboard."
+    "instagramCopiedOnly": "Caption copied to clipboard.",
+    "addSubmit": "Add"
   },
   "commentFeed": {
     "empty": "No comments yet",

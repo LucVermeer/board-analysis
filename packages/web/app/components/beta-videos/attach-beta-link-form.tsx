@@ -153,8 +153,19 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
     if (!instagramCaption || isLaunchingInstagram) return;
     track('Beta Caption Copy Clicked', { boardType, climbUuid, surface });
     setIsLaunchingInstagram(true);
-    const result = await copyAndOpenInstagram(instagramCaption);
-    setIsLaunchingInstagram(false);
+    let result: { copied: boolean; opened: boolean };
+    try {
+      result = await copyAndOpenInstagram(instagramCaption);
+    } catch {
+      // Defensive: copyAndOpenInstagram catches its own errors but a thrown
+      // navigation/clipboard exception from a restricted browser context
+      // would otherwise leave the button stuck in the launching state.
+      track('Beta Caption Copy Failed', { boardType, climbUuid, surface, reason: 'copyFailed' });
+      showMessage(t('betaVideos.instagramCopyFailed'), 'error');
+      return;
+    } finally {
+      setIsLaunchingInstagram(false);
+    }
 
     if (!result.copied) {
       track('Beta Caption Copy Failed', { boardType, climbUuid, surface, reason: 'copyFailed' });

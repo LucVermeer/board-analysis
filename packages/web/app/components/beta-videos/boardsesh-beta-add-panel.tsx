@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import AttachBetaLinkForm from './attach-beta-link-form';
 
@@ -32,6 +33,7 @@ const BoardseshBetaAddPanel: React.FC<BoardseshBetaAddPanelProps> = ({
   onCancel,
   onSuccess,
 }) => {
+  const { t } = useTranslation('feed');
   // Reset add-mode in the parent only when the panel unmounts via an
   // unhandled path (section collapse via lazy: true). When the user
   // explicitly cancels or successfully submits, the parent already flipped
@@ -71,7 +73,7 @@ const BoardseshBetaAddPanel: React.FC<BoardseshBetaAddPanelProps> = ({
         surface="play-view"
         autoFocus
         compact
-        submitLabel="Add"
+        submitLabel={t('betaVideos.addSubmit')}
         showCancel
         onCancel={handleCancel}
         onSuccess={handleSuccess}

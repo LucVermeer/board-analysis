@@ -1,7 +1,7 @@
 'use client';
 
 import { getPlatform, isNativeApp } from '@/app/lib/ble/capacitor-utils';
-import { MOONBOARD_LAYOUTS } from '@/app/lib/moonboard-config';
+import { getLayoutById } from '@/app/lib/moonboard-config';
 
 export type InstagramPostingPlatform = 'ios' | 'android' | 'unsupported';
 
@@ -35,8 +35,7 @@ type BoardCaptionConfig = SimpleBoardCaptionConfig | CustomBoardCaptionConfig;
 
 function findMoonBoardLayoutName(layoutId: number | null | undefined): string | null {
   if (layoutId == null) return null;
-  const match = Object.values(MOONBOARD_LAYOUTS).find((layout) => layout.id === layoutId);
-  return match?.name ?? null;
+  return getLayoutById(layoutId)?.[1]?.name ?? null;
 }
 
 function buildMoonBoardCaption({ climbName, angle, grade, setter, layoutId }: InstagramCaptionInput): string {
@@ -107,8 +106,7 @@ export type CopyAndOpenInstagramResult = {
   opened: boolean;
 };
 
-const IOS_INSTAGRAM_CREATE_URL = 'instagram://camera';
-const ANDROID_INSTAGRAM_OPEN_URL = 'instagram://camera';
+const INSTAGRAM_CAMERA_URL = 'instagram://camera';
 
 const CLIPBOARD_SETTLE_DELAY_MS = 180;
 
@@ -237,14 +235,8 @@ export function buildInstagramCaption(input: InstagramCaptionInput): string {
 }
 
 function getInstagramLaunchUrl(platform: InstagramPostingPlatform): string | null {
-  switch (platform) {
-    case 'ios':
-      return IOS_INSTAGRAM_CREATE_URL;
-    case 'android':
-      return ANDROID_INSTAGRAM_OPEN_URL;
-    default:
-      return null;
-  }
+  if (platform === 'ios' || platform === 'android') return INSTAGRAM_CAMERA_URL;
+  return null;
 }
 
 function attemptInstagramLaunch(platform: InstagramPostingPlatform): Promise<boolean> {
