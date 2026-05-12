@@ -117,10 +117,16 @@
 
   /* Layout */
   --global-header-height: calc(max(8dvh, 48px) + var(--safe-area-inset-top));
-  /* Matches the SSR-rendered bottom-bar wrapper height on board routes:
-     queue-control shell (~85px: session header strip + main row) + tab bar (~60px).
-     JS in persistent-session-wrapper measures the actual height post-hydration. */
-  --bottom-bar-height: calc(145px + var(--safe-area-inset-bottom));
+  /* Reserved height for the fixed bottom bar (queue control + tab bar).
+     Layouts pad pages by this much so content isn't occluded.
+     The default reserves space matching the queue-shell + tab-bar render;
+     JS in persistent-session-wrapper publishes a measured value into
+     --bottom-bar-height-measured. CSS max() picks whichever is larger,
+     so the reserved height never *shrinks* after hydration (the dominant
+     CLS source on mobile p75). */
+  --bottom-bar-height-default: calc(145px + var(--safe-area-inset-bottom));
+  --bottom-bar-height-measured: 0px;
+  --bottom-bar-height: max(var(--bottom-bar-height-default), var(--bottom-bar-height-measured));
 
   /* Tap highlight (Android/mobile browsers) */
   --tap-highlight: transparent;

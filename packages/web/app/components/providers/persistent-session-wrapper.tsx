@@ -154,11 +154,23 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
   const hideTabBar = HIDE_TAB_BAR_PAGES.some((prefix) => pathname.startsWith(prefix)) && !hasActiveQueue;
   const shouldShowQueueShell = isBoardRoutePath(pathname) && !hasActiveQueue && !boardDetails;
 
-  // Measure the bottom bar's visual occlusion and expose it as --bottom-bar-height.
-  // Use viewportHeight - rect.top (not rect.height) so the iOS `bottom: 2dvh` offset
-  // and the BottomNavigation's negative-margin extension are both included.
-  // Prefer visualViewport.height over innerHeight so iOS keyboard / URL-bar collapse
-  // shrinks the published value as expected.
+  // Measure the bottom bar's visual occlusion and publish it into the
+  // sidecar --bottom-bar-height-measured custom property. The visible
+  // --bottom-bar-height is computed in CSS as
+  //   max(--bottom-bar-height-default, --bottom-bar-height-measured)
+  // so the reserved height never shrinks below the SSR default — CSS
+  // handles the never-shrink guarantee. JS only needs to track its own
+  // last-published measurement (read back via the inline-style override,
+  // which IS resolvable via parseFloat because it only ever contains
+  // `${px}px`; reading the composed --bottom-bar-height via
+  // getComputedStyle would return an unresolved calc()/max() string for
+  // unregistered custom properties).
+  //
+  // Use viewportHeight - rect.top (not rect.height) so the iOS
+  // `bottom: 2dvh` offset and the BottomNavigation's negative-margin
+  // extension are both included. Prefer visualViewport.height over
+  // innerHeight so iOS keyboard / URL-bar collapse shrinks the measured
+  // value as expected (CSS max() with the default still floors it).
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   useIsomorphicLayoutEffect(() => {
     const el = wrapperRef.current;
@@ -168,19 +180,15 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
       const viewportH = window.visualViewport?.height ?? window.innerHeight;
       const px = Math.max(0, viewportH - top);
 
-      // Only grow the reserved bottom-padding, never shrink it. Shrinking
-      // after hydration shifts every page's content downward and is the
-      // dominant CLS source on the list page (the CSS default reserves
-      // space for a queue-control bar; most users land without an active
-      // queue, so the measured occlusion is smaller). A 2px tolerance
-      // avoids ResizeObserver jitter (subpixel rounding from iOS URL bar
-      // / safe-area transitions). Shrinking is deferred to a full unmount
-      // (cleanup below removes the var so a re-mount re-applies the
-      // default).
-      const currentRaw = getComputedStyle(document.documentElement).getPropertyValue('--bottom-bar-height').trim();
-      const currentPx = Number.parseFloat(currentRaw) || 0;
-      if (px > currentPx + 2) {
-        document.documentElement.style.setProperty('--bottom-bar-height', `${px}px`);
+      // Track the largest occlusion we've observed and publish it into
+      // --bottom-bar-height-measured. CSS max(--default, --measured)
+      // ensures the reserved space never shrinks below the default — the
+      // dominant CLS source pre-fix. A 2px tolerance avoids ResizeObserver
+      // jitter that doesn't change visible layout.
+      const measuredRaw = document.documentElement.style.getPropertyValue('--bottom-bar-height-measured');
+      const measuredPx = Number.parseFloat(measuredRaw) || 0;
+      if (px > measuredPx + 2) {
+        document.documentElement.style.setProperty('--bottom-bar-height-measured', `${px}px`);
       }
     };
     update();
@@ -192,7 +200,7 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
       ro?.disconnect();
       window.removeEventListener('resize', update);
       window.visualViewport?.removeEventListener('resize', update);
-      document.documentElement.style.removeProperty('--bottom-bar-height');
+      document.documentElement.style.removeProperty('--bottom-bar-height-measured');
     };
   }, []);
 
