@@ -182,7 +182,7 @@ export async function validateAndEnrichBetaLinkInsert(
   // probe so an authenticated caller can't enumerate "is this IG shortcode
   // attached anywhere?" by watching the error variant (cross-climb vs
   // same-climb vs none) without consuming budget. See review of PR #1745.
-  await applyRateLimit(ctx, 30, 'instagram-beta-validation');
+  await applyRateLimit(ctx, 30, 'beta-link-validation');
 
   if (!isInstagramUrl(url)) {
     return { action: 'insert', thumbnail: null, foreignUsername: null };

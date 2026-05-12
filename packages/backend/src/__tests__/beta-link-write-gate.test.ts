@@ -105,7 +105,7 @@ describe('validateAndEnrichBetaLinkInsert (gate)', () => {
       { onSameClimbDup: 'throw' },
     );
     expect(mockApplyRateLimit).toHaveBeenCalledTimes(1);
-    expect(mockApplyRateLimit).toHaveBeenCalledWith(fakeCtx, 30, 'instagram-beta-validation');
+    expect(mockApplyRateLimit).toHaveBeenCalledWith(fakeCtx, 30, 'beta-link-validation');
   });
 
   it('surfaces a rate-limit rejection for non-Instagram URLs (no silent bypass)', async () => {
