@@ -53,7 +53,7 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
   const { showMessage } = useSnackbar();
   const { t } = useTranslation('playlists');
 
-  const defaultTargetGrade = 18;
+  const defaultTargetGrade = 18; // 6b/V4
 
   const [drawerState, setDrawerState] = useState<DrawerState>('select');
   const [selectedType, setSelectedType] = useState<WorkoutType | null>(null);

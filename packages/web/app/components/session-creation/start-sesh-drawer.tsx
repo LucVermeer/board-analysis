@@ -529,18 +529,22 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
         />
       )}
 
-      {generatorOpen && generatorBoardDetails && (
+      {generatorBoardDetails && (
         <PlaylistGeneratorDrawer
           open={generatorOpen}
           onClose={() => setGeneratorOpen(false)}
           boardDetails={generatorBoardDetails}
           defaultAngle={generatorDefaultAngle}
-          onAddClimb={async (climb) => {
+          // Stamp the user-chosen angle onto the queue item's climb so the
+          // session queue uses it verbatim. The search response's climb.angle
+          // typically matches the queried angle today, but trusting that
+          // coupling is fragile — pin it explicitly.
+          onAddClimb={async (climb, _slot, angle) => {
             setGeneratedQueue((prev) => [
               ...prev,
               {
                 uuid: crypto.randomUUID(),
-                climb,
+                climb: { ...climb, angle },
                 suggested: true,
               },
             ]);
