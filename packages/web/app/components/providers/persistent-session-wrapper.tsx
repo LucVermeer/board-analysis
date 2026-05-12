@@ -167,7 +167,21 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
       const top = el.getBoundingClientRect().top;
       const viewportH = window.visualViewport?.height ?? window.innerHeight;
       const px = Math.max(0, viewportH - top);
-      document.documentElement.style.setProperty('--bottom-bar-height', `${px}px`);
+
+      // Only grow the reserved bottom-padding, never shrink it. Shrinking
+      // after hydration shifts every page's content downward and is the
+      // dominant CLS source on the list page (the CSS default reserves
+      // space for a queue-control bar; most users land without an active
+      // queue, so the measured occlusion is smaller). A 2px tolerance
+      // avoids ResizeObserver jitter (subpixel rounding from iOS URL bar
+      // / safe-area transitions). Shrinking is deferred to a full unmount
+      // (cleanup below removes the var so a re-mount re-applies the
+      // default).
+      const currentRaw = getComputedStyle(document.documentElement).getPropertyValue('--bottom-bar-height').trim();
+      const currentPx = Number.parseFloat(currentRaw) || 0;
+      if (px > currentPx + 2) {
+        document.documentElement.style.setProperty('--bottom-bar-height', `${px}px`);
+      }
     };
     update();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;

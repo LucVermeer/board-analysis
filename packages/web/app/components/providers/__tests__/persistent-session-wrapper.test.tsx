@@ -216,9 +216,12 @@ describe('RootBottomBar', () => {
 
 describe('RootBottomBar --bottom-bar-height measurement', () => {
   let resizeCallbacks: ResizeObserverCallback[] = [];
+  let mockedTop = 0;
   const originalResizeObserver = globalThis.ResizeObserver;
+  const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 
   const setWrapperTop = (top: number) => {
+    mockedTop = top;
     const wrapper = screen.getByTestId('bottom-bar-wrapper');
     vi.spyOn(wrapper, 'getBoundingClientRect').mockReturnValue({
       top,
@@ -235,6 +238,7 @@ describe('RootBottomBar --bottom-bar-height measurement', () => {
 
   beforeEach(() => {
     resizeCallbacks = [];
+    mockedTop = 800; // Default: wrapper at viewport bottom → px = 0
     mockPathname = '/';
     mockQueueBridgeBoardInfo = {
       boardDetails: null,
@@ -245,6 +249,23 @@ describe('RootBottomBar --bottom-bar-height measurement', () => {
 
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
     document.documentElement.style.removeProperty('--bottom-bar-height');
+
+    // Stub getBoundingClientRect at the prototype level so the initial
+    // measurement on mount is deterministic (jsdom otherwise returns all
+    // zeros, which would compute px = 800 and lock out grow-only updates).
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      return {
+        top: mockedTop,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 0,
+        x: 0,
+        y: mockedTop,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
 
     class MockResizeObserver {
       constructor(cb: ResizeObserverCallback) {
@@ -259,37 +280,55 @@ describe('RootBottomBar --bottom-bar-height measurement', () => {
 
   afterEach(() => {
     globalThis.ResizeObserver = originalResizeObserver;
+    HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
     document.documentElement.style.removeProperty('--bottom-bar-height');
     vi.restoreAllMocks();
   });
 
-  it('publishes --bottom-bar-height on mount using viewportHeight - rect.top', () => {
+  it('grows --bottom-bar-height when the measured occlusion exceeds the current value', () => {
+    // Seed the CSS default so the layout effect starts from a known baseline.
+    // 145px matches the SSR default in index.css for the no-queue + tab-bar
+    // case; measurements below this should be ignored (grow-only).
+    document.documentElement.style.setProperty('--bottom-bar-height', '145px');
+
     const { rerender } = render(<RootBottomBar boardConfigs={mockBoardConfigs} />);
 
-    // First mount measures whatever jsdom reports for the wrapper rect.
-    // To assert the formula, override and rerender to retrigger the layout effect.
-    setWrapperTop(620);
+    // viewportHeight - rect.top = 800 - 600 = 200px, which exceeds 145px.
+    setWrapperTop(600);
     act(() => {
-      // Trigger the ResizeObserver callback the effect registered on mount.
       resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
     });
-
-    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('180px');
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('200px');
 
     // Sanity: rerender keeps the value stable.
     rerender(<RootBottomBar boardConfigs={mockBoardConfigs} />);
-    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('180px');
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('200px');
   });
 
-  it('updates --bottom-bar-height when the wrapper resizes', () => {
+  it('never shrinks --bottom-bar-height after hydration', () => {
+    // Seed an already-large value (mimicking the CSS default reserving space
+    // for the queue-control bar). The measured occlusion on the no-queue
+    // path is smaller, but we must not shrink — that would shift every
+    // page's padding-bottom and is the dominant CLS source.
+    document.documentElement.style.setProperty('--bottom-bar-height', '200px');
+
     render(<RootBottomBar boardConfigs={mockBoardConfigs} />);
 
+    // 800 - 700 = 100px, smaller than the current 200px — ignored.
     setWrapperTop(700);
     act(() => {
       resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
     });
-    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('100px');
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('200px');
 
+    // 800 - 650 = 150px, still smaller — ignored.
+    setWrapperTop(650);
+    act(() => {
+      resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
+    });
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('200px');
+
+    // 800 - 550 = 250px, exceeds 200px — grow.
     setWrapperTop(550);
     act(() => {
       resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
@@ -297,17 +336,47 @@ describe('RootBottomBar --bottom-bar-height measurement', () => {
     expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('250px');
   });
 
+  it('ignores growth within the 2px jitter tolerance', () => {
+    document.documentElement.style.setProperty('--bottom-bar-height', '200px');
+
+    render(<RootBottomBar boardConfigs={mockBoardConfigs} />);
+
+    // 800 - 599 = 201px — only 1px more than current, within tolerance.
+    setWrapperTop(599);
+    act(() => {
+      resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
+    });
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('200px');
+
+    // 800 - 598 = 202px — exactly at the tolerance ceiling (currentPx + 2);
+    // ignored because the guard requires strictly greater than currentPx + 2.
+    setWrapperTop(598);
+    act(() => {
+      resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
+    });
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('200px');
+
+    // 800 - 597 = 203px — exceeds tolerance, grow.
+    setWrapperTop(597);
+    act(() => {
+      resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
+    });
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('203px');
+  });
+
   it('removes --bottom-bar-height and detaches resize listeners on unmount', () => {
     const removeWindowSpy = vi.spyOn(window, 'removeEventListener');
     const removeViewportSpy = window.visualViewport ? vi.spyOn(window.visualViewport, 'removeEventListener') : null;
 
+    document.documentElement.style.setProperty('--bottom-bar-height', '145px');
+
     const { unmount } = render(<RootBottomBar boardConfigs={mockBoardConfigs} />);
 
-    setWrapperTop(620);
+    setWrapperTop(600);
     act(() => {
       resizeCallbacks.forEach((cb) => cb([] as unknown as ResizeObserverEntry[], {} as ResizeObserver));
     });
-    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('180px');
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height')).toBe('200px');
 
     unmount();
 
