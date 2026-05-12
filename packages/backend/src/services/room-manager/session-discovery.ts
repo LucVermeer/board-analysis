@@ -255,10 +255,12 @@ export async function endStaleInactiveSessions(thresholdMs: number): Promise<num
     }
 
     const cutoff = new Date(Date.now() - thresholdMs);
-    const now = new Date();
+    // endedAt mirrors the existing lastActivity so session duration reflects
+    // when the user actually stopped, not when the sweep ran. lastActivity is
+    // left untouched so the column keeps recording last-evidence going forward.
     const result = await tx
       .update(sessions)
-      .set({ status: 'ended', endedAt: now, lastActivity: now })
+      .set({ status: 'ended', endedAt: sql`${sessions.lastActivity}` })
       .where(and(eq(sessions.status, 'active'), eq(sessions.isPermanent, false), lt(sessions.lastActivity, cutoff)))
       .returning({ id: sessions.id });
     if (result.length > 0) {
