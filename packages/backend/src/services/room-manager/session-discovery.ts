@@ -227,9 +227,14 @@ export async function endSession(
   console.info(`[RoomManager] Session ${sessionId} explicitly ended`);
 }
 
-// Advisory lock slot for the inactivity sweep (issue #1955). Postgres accepts
-// a bigint; this slot just needs to be distinct from any other advisory lock
-// keys we add later.
+// Advisory lock slot for the inactivity sweep (derived from issue #1955).
+// Postgres accepts a bigint; this slot just needs to be distinct from any
+// other advisory lock keys we add later.
+//
+// Reserved range for app-level advisory locks in this package: 19550000 –
+// 19559999 (i.e. ~10k slots seeded from issue #1955). New advisory locks
+// should pick another unused integer in that range and add a comment here
+// describing what they're for, so collisions stay greppable.
 const INACTIVITY_SWEEP_LOCK_KEY = 19551850;
 
 /**
