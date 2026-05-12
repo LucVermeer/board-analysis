@@ -152,6 +152,7 @@
     "summaryRow_other": "{{count}} blocs ({{range}})",
     "options": {
       "warmUp": "Échauffement",
+      "targetAngle": "Angle cible",
       "targetGrade": "Cotation cible",
       "minAscents": "Enchaînements min.",
       "minRating": "Note min.",

@@ -127,6 +127,15 @@
     },
     "errors": {
       "createFailed": "Échec du lancement de la session"
+    },
+    "generateQueue": {
+      "button": "Générer une file d'entraînement",
+      "regenerate": "Régénérer",
+      "clear": "Effacer",
+      "summary_one": "{{count}} voie en file",
+      "summary_other": "{{count}} voies en file",
+      "addedPartial": "{{added}} voies ajoutées. {{failed}} créneaux n'ont pas pu être remplis.",
+      "failed": "Impossible de générer une file. Aucune voie correspondante trouvée."
     }
   },
   "summary": {

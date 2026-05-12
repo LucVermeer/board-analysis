@@ -35,6 +35,8 @@ describe('GeneratorOptionsForm quality filters', () => {
         onChange={onChange}
         onReset={vi.fn()}
         boardDetails={boardDetails}
+        targetAngle={40}
+        onTargetAngleChange={vi.fn()}
       />,
     );
 
@@ -52,6 +54,8 @@ describe('GeneratorOptionsForm quality filters', () => {
         onChange={onChange}
         onReset={vi.fn()}
         boardDetails={boardDetails}
+        targetAngle={40}
+        onTargetAngleChange={vi.fn()}
       />,
     );
 

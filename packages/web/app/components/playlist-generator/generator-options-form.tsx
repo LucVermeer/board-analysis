@@ -12,7 +12,7 @@ import MuiButton from '@mui/material/Button';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { RemoveOutlined, AddOutlined, RefreshOutlined } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { getGradesForBoard } from '@/app/lib/board-data';
+import { ANGLES, getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import type { BoardDetails } from '@/app/lib/types';
@@ -53,6 +53,8 @@ type GeneratorOptionsFormProps = {
   onChange: (options: GeneratorOptions) => void;
   onReset: () => void;
   boardDetails: BoardDetails;
+  targetAngle: number;
+  onTargetAngleChange: (angle: number) => void;
 };
 
 const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
@@ -61,9 +63,12 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   onChange,
   onReset,
   boardDetails,
+  targetAngle,
+  onTargetAngleChange,
 }) => {
   const { t } = useTranslation('playlists');
   const grades = getGradesForBoard(boardDetails.board_name);
+  const angles = ANGLES[boardDetails.board_name] ?? [];
 
   const warmUpOptions = WARM_UP_OPTIONS.map((opt) => ({
     value: opt.value,
@@ -151,6 +156,28 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   // Common options for all workout types
   const renderCommonOptions = () => (
     <>
+      {/* Target Angle */}
+      {angles.length > 0 && (
+        <div className={styles.formRow}>
+          <Typography variant="body2" component="span" className={styles.label}>
+            {t('generator.options.targetAngle')}
+          </Typography>
+          <MuiSelect
+            value={targetAngle}
+            onChange={(e) => onTargetAngleChange(Number(e.target.value))}
+            className={styles.select}
+            size="small"
+            MenuProps={{ sx: { width: 'auto' } }}
+          >
+            {angles.map((angle) => (
+              <MenuItem key={angle} value={angle}>
+                {`${angle}°`}
+              </MenuItem>
+            ))}
+          </MuiSelect>
+        </div>
+      )}
+
       {/* Warm Up */}
       {renderSelect<WarmUpType>(t('generator.options.warmUp'), options.warmUp, warmUpOptions, (v) =>
         updateOption('warmUp', v),

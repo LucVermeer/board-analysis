@@ -127,6 +127,15 @@
     },
     "errors": {
       "createFailed": "Failed to start session"
+    },
+    "generateQueue": {
+      "button": "Generate workout queue",
+      "regenerate": "Regenerate",
+      "clear": "Clear",
+      "summary_one": "{{count}} climb queued",
+      "summary_other": "{{count}} climbs queued",
+      "addedPartial": "Queued {{added}} climbs. {{failed}} slots couldn't be filled.",
+      "failed": "Couldn't generate a queue. No matching climbs found."
     }
   },
   "summary": {

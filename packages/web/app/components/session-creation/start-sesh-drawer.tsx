@@ -8,7 +8,11 @@ import Button from '@mui/material/Button';
 import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
+import ElectricBoltOutlined from '@mui/icons-material/ElectricBoltOutlined';
+import RestartAltOutlined from '@mui/icons-material/RestartAltOutlined';
 import CircularProgress from '@mui/material/CircularProgress';
+import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
 import Collapse from '@mui/material/Collapse';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import drawerCss from '../swipeable-drawer/swipeable-drawer.module.css';
@@ -31,6 +35,9 @@ import {
   tryConstructSlugListUrl,
 } from '@/app/lib/url-utils';
 import { getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
+import { useBoardDetails } from '@/app/components/board-scroll/board-thumbnail';
+import { PlaylistGeneratorDrawer } from '@/app/components/playlist-generator';
+import type { ClimbQueueItem } from '@/app/components/queue-control/types';
 import { isBoardRoutePath } from '@/app/lib/board-route-paths';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { setClimbSessionCookie } from '@/app/lib/climb-session-cookie';
@@ -86,8 +93,18 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const [showBoardDrawer, setShowBoardDrawer] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [boardSelectorExpanded, setBoardSelectorExpanded] = useState(false);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [generatedQueue, setGeneratedQueue] = useState<ClimbQueueItem[]>([]);
   const hasAutoSelectedRef = useRef(false);
   const formSubmitRef = useRef<(() => void) | null>(null);
+
+  const selectedBoardDetails = useBoardDetails(selectedBoard ?? undefined, selectedCustomConfig ?? undefined);
+  const generatorBoardDetails = selectedBoardDetails ?? bridgeBoardDetails ?? localBoardDetails ?? null;
+  const generatorDefaultAngle =
+    selectedBoard?.angle ??
+    selectedCustomConfig?.angle ??
+    bridgeAngle ??
+    (generatorBoardDetails ? getDefaultAngleForBoard(generatorBoardDetails.board_name) : 40);
 
   // Reset auto-selection tracking and expander state when the drawer closes.
   // handleClose covers user-initiated closes, but the parent can also flip
@@ -163,6 +180,8 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedCustomPath(null);
     setSelectedCustomConfig(null);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
+    setGeneratorOpen(false);
     setFormKey((k) => k + 1);
   }, [onClose]);
 
@@ -171,6 +190,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedCustomPath(null);
     setSelectedCustomConfig(null);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
   }, []);
 
   const handleDiscoveryBoardClick = useCallback(
@@ -212,6 +232,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     });
     setSelectedBoard(null);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
   }, []);
 
   const handleCustomSelect = (url: string, config?: StoredBoardConfig) => {
@@ -220,6 +241,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedBoard(null);
     setShowBoardDrawer(false);
     setBoardSelectorExpanded(false);
+    setGeneratedQueue([]);
   };
 
   const handleSubmit = async (formData: SessionCreationFormData) => {
@@ -261,9 +283,15 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
       const effectiveCurrentClimb = localCurrentClimbQueueItem ?? bridgeCurrentClimbQueueItem;
       const boardsMatch = effectiveBaseBoardPath != null && effectiveBaseBoardPath === getBaseBoardPath(boardPath);
 
-      // Transfer existing queue to the new session if on the same board
-      if (boardsMatch && (effectiveQueue.length > 0 || effectiveCurrentClimb)) {
-        setInitialQueueForSession(sessionId, effectiveQueue, effectiveCurrentClimb, formData.name);
+      // Merge any existing same-board queue with the generated queue: existing
+      // first, generated appended. The generated queue is always for the
+      // selected board by construction, so it bypasses the boardsMatch gate.
+      const carriedQueue = boardsMatch ? effectiveQueue : [];
+      const carriedCurrent = boardsMatch ? effectiveCurrentClimb : null;
+      const initialQueue = [...carriedQueue, ...generatedQueue];
+      const initialCurrent = carriedCurrent ?? generatedQueue[0] ?? null;
+      if (initialQueue.length > 0 || initialCurrent) {
+        setInitialQueueForSession(sessionId, initialQueue, initialCurrent, formData.name);
       }
 
       setClimbSessionCookie(sessionId);
@@ -369,6 +397,51 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     </Box>
   );
 
+  const generateEntry =
+    generatedQueue.length > 0 ? (
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+        <Chip
+          color="primary"
+          variant="filled"
+          icon={<ElectricBoltOutlined />}
+          label={t('creation.generateQueue.summary', { count: generatedQueue.length })}
+        />
+        <Button
+          variant="text"
+          size="small"
+          startIcon={<RestartAltOutlined />}
+          onClick={() => {
+            setGeneratedQueue([]);
+            setGeneratorOpen(true);
+          }}
+          disabled={!generatorBoardDetails}
+        >
+          {t('creation.generateQueue.regenerate')}
+        </Button>
+        <Button variant="text" size="small" onClick={() => setGeneratedQueue([])}>
+          {t('creation.generateQueue.clear')}
+        </Button>
+      </Stack>
+    ) : (
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<ElectricBoltOutlined />}
+        onClick={() => setGeneratorOpen(true)}
+        disabled={!generatorBoardDetails}
+        sx={{ alignSelf: 'flex-start' }}
+      >
+        {t('creation.generateQueue.button')}
+      </Button>
+    );
+
+  const formHeader = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {boardSelector}
+      {generateEntry}
+    </Box>
+  );
+
   return (
     <>
       <SwipeableDrawer
@@ -420,7 +493,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
             onSubmit={handleSubmit}
             isSubmitting={isCreating}
             submitLabel={t('creation.submitDefault')}
-            headerContent={boardSelector}
+            headerContent={formHeader}
             isAnonymous={!isLoggedIn}
             renderSubmit={({ onSubmit: formSubmit }) => {
               formSubmitRef.current = formSubmit;
@@ -453,6 +526,32 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
           boardConfigs={boardConfigs}
           placement="top"
           onBoardSelected={handleCustomSelect}
+        />
+      )}
+
+      {generatorOpen && generatorBoardDetails && (
+        <PlaylistGeneratorDrawer
+          open={generatorOpen}
+          onClose={() => setGeneratorOpen(false)}
+          boardDetails={generatorBoardDetails}
+          defaultAngle={generatorDefaultAngle}
+          onAddClimb={async (climb) => {
+            setGeneratedQueue((prev) => [
+              ...prev,
+              {
+                uuid: crypto.randomUUID(),
+                climb,
+                suggested: true,
+              },
+            ]);
+          }}
+          onComplete={({ added, failed }) => {
+            if (added > 0 && failed > 0) {
+              showMessage(t('creation.generateQueue.addedPartial', { added, failed }), 'warning');
+            } else if (added === 0) {
+              showMessage(t('creation.generateQueue.failed'), 'error');
+            }
+          }}
         />
       )}
     </>
