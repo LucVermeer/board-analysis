@@ -21,9 +21,41 @@ vi.mock('../../graphql-queue/graphql-client', () => ({
   subscribe: vi.fn(() => vi.fn()),
 }));
 
-// Mock auth token hook
+// Mock the HTTP GraphQL client used by the auto-finished pre-flight. Default
+// response is seeded in beforeEach so individual tests can override with
+// mockResolvedValue / mockResolvedValueOnce without leaking across cases.
+const { mockHttpRequest } = vi.hoisted(() => ({
+  mockHttpRequest: vi.fn(),
+}));
+
+vi.mock('@/app/lib/graphql/client', () => ({
+  createGraphQLHttpClient: vi.fn(() => ({
+    request: mockHttpRequest,
+  })),
+}));
+
+function buildSessionSummary(overrides?: { sessionId?: string; endedAt?: string | null }) {
+  return {
+    sessionId: 'mocked',
+    endedAt: null,
+    startedAt: null,
+    durationMinutes: 0,
+    totalSends: 0,
+    totalAttempts: 0,
+    gradeDistribution: [],
+    hardestClimb: null,
+    participants: [],
+    goal: null,
+    ...overrides,
+  };
+}
+
+// Mock auth token hook — mutable so tests can simulate the loading window.
+const { mockWsAuth } = vi.hoisted(() => ({
+  mockWsAuth: { token: 'test-token' as string | null, isLoading: false },
+}));
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
-  useWsAuthToken: () => ({ token: 'test-token', isLoading: false }),
+  useWsAuthToken: () => mockWsAuth,
 }));
 
 // Mock party profile
@@ -98,6 +130,12 @@ function createWrapper() {
 // ---------------------------------------------------------------------------
 
 beforeEach(async () => {
+  // Default: pre-flight returns a still-active session, auth is loaded
+  mockHttpRequest.mockReset();
+  mockHttpRequest.mockResolvedValue({ sessionSummary: buildSessionSummary() });
+  mockWsAuth.token = 'test-token';
+  mockWsAuth.isLoading = false;
+
   // Clear preferences DB
   try {
     const prefsDb = await openDB(PREFS_DB_NAME, 1, {
@@ -227,6 +265,170 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
       const stored = await getPreference(ACTIVE_SESSION_KEY);
       expect(stored).toEqual(sessionInfo);
     });
+  });
+
+  it('surfaces the finished-session dialog when the backend has auto-ended the persisted session', async () => {
+    const boardDetails = createTestBoardDetails();
+    const sessionInfo = {
+      sessionId: 'session-stale',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails,
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+
+    const autoFinishedSummary = {
+      sessionId: 'session-stale',
+      endedAt: '2026-05-11T09:00:00.000Z',
+      startedAt: '2026-05-11T07:30:00.000Z',
+      durationMinutes: 90,
+      totalSends: 3,
+      totalAttempts: 7,
+      gradeDistribution: [],
+      hardestClimb: null,
+      participants: [],
+      goal: null,
+    };
+    mockHttpRequest.mockResolvedValueOnce({ sessionSummary: autoFinishedSummary });
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.sessionSummaryAutoFinished).toBe(true);
+    });
+
+    expect(result.current.sessionSummary).toEqual(autoFinishedSummary);
+    expect(result.current.sessionSummaryBoardType).toBe('kilter');
+    expect(result.current.activeSession).toBeNull();
+
+    await waitFor(async () => {
+      const stored = await getPreference(ACTIVE_SESSION_KEY);
+      expect(stored).toBeNull();
+    });
+  });
+
+  it('falls through to normal activation when the auto-finished pre-flight rejects', async () => {
+    const sessionInfo = {
+      sessionId: 'session-network-flake',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+    mockHttpRequest.mockRejectedValueOnce(new Error('network down'));
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.activeSession).toEqual(sessionInfo);
+    });
+
+    expect(result.current.sessionSummaryAutoFinished).toBe(false);
+    expect(result.current.sessionSummary).toBeNull();
+
+    const stored = await getPreference(ACTIVE_SESSION_KEY);
+    expect(stored).toEqual(sessionInfo);
+  });
+
+  it('waits for auth to load before running mount pre-flight', async () => {
+    mockWsAuth.token = null;
+    mockWsAuth.isLoading = true;
+    mockHttpRequest.mockResolvedValue({
+      sessionSummary: buildSessionSummary({ endedAt: '2026-05-04T12:00:00.000Z' }),
+    });
+
+    const sessionInfo = {
+      sessionId: 'session-stale-on-load',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+
+    const { result, rerender } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    // While auth is loading, neither activation nor pre-flight should fire.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(result.current.activeSession).toBeNull();
+    expect(result.current.sessionSummaryAutoFinished).toBe(false);
+    expect(mockHttpRequest).not.toHaveBeenCalled();
+
+    // Auth resolves — pre-flight fires, dialog opens.
+    mockWsAuth.token = 'test-token';
+    mockWsAuth.isLoading = false;
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.sessionSummaryAutoFinished).toBe(true);
+      expect(result.current.activeSession).toBeNull();
+      expect(result.current.sessionSummary?.endedAt).toBe('2026-05-04T12:00:00.000Z');
+    });
+
+    const stored = await getPreference(ACTIVE_SESSION_KEY);
+    expect(stored).toBeNull();
+  });
+
+  it('re-checks staleness on visibilitychange and surfaces the auto-finished dialog', async () => {
+    const sessionInfo = {
+      sessionId: 'session-stale-on-return',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    // First mount: pre-flight says still-active, session is restored.
+    await waitFor(() => {
+      expect(result.current.activeSession).toEqual(sessionInfo);
+    });
+    expect(result.current.sessionSummaryAutoFinished).toBe(false);
+
+    // Backend ends the session while the tab is in the background.
+    mockHttpRequest.mockResolvedValue({
+      sessionSummary: buildSessionSummary({ endedAt: '2026-05-04T12:00:00.000Z' }),
+    });
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeSession).toBeNull();
+      expect(result.current.sessionSummary?.endedAt).toBe('2026-05-04T12:00:00.000Z');
+      expect(result.current.sessionSummaryAutoFinished).toBe(true);
+      expect(result.current.sessionSummaryBoardType).toBe('kilter');
+    });
+
+    // IndexedDB should be cleared too.
+    const stored = await getPreference(ACTIVE_SESSION_KEY);
+    expect(stored).toBeNull();
   });
 
   it('deactivateSession clears from IndexedDB', async () => {

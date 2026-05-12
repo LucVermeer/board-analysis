@@ -16,6 +16,8 @@ type SessionSummaryDialogProps = {
   summary: SessionSummary | null;
   boardType?: string;
   existingWorkoutId?: string | null;
+  /** When true, the session was auto-finished after inactivity. Changes the dialog title. */
+  autoFinished?: boolean;
   onDismiss: () => void;
 };
 
@@ -23,6 +25,7 @@ export default function SessionSummaryDialog({
   summary,
   boardType = '',
   existingWorkoutId,
+  autoFinished = false,
   onDismiss,
 }: SessionSummaryDialogProps) {
   const { t } = useTranslation('session');
@@ -48,9 +51,11 @@ export default function SessionSummaryDialog({
     buttonLabel = t('summary.saveToAppleHealthRetry');
   }
 
+  const dialogTitle = autoFinished ? t('summary.autoFinishedDialogTitle') : t('summary.dialogTitle');
+
   return (
     <Dialog open={summary !== null} onClose={onDismiss} maxWidth="sm" fullWidth>
-      <DialogTitle>{t('summary.dialogTitle')}</DialogTitle>
+      <DialogTitle>{dialogTitle}</DialogTitle>
       <DialogContent>{summary && <SessionSummaryView summary={summary} />}</DialogContent>
       <DialogActions>
         {available && (

@@ -1,5 +1,5 @@
 import { eq, and, desc, sql, count as drizzleCount, isNull, inArray } from 'drizzle-orm';
-import { dbRead as db } from '../../../db/client';
+import { dbRead } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { getGradeLabel } from '@boardsesh/db/queries';
 import { rowsFromResult } from '@boardsesh/db/client';
@@ -38,7 +38,7 @@ export const sessionFeedQueries = {
     let boardTypeFilter: string | null = null;
     let layoutIdFilter: number | null = null;
     if (validatedInput.boardUuid) {
-      const board = await db
+      const board = await dbRead
         .select({
           boardType: dbSchema.userBoards.boardType,
           layoutId: dbSchema.userBoards.layoutId,
@@ -78,7 +78,7 @@ export const sessionFeedQueries = {
           ? sql`LEFT JOIN board_climbs cf ON cf.uuid = t.climb_uuid AND cf.board_type = t.board_type`
           : sql``;
 
-      sessionRows = await db.execute(sql`
+      sessionRows = await dbRead.execute(sql`
         WITH eligible_party_sessions AS (
           SELECT DISTINCT t.session_id
           FROM boardsesh_ticks t
@@ -237,7 +237,7 @@ export const sessionFeedQueries = {
     if (!sessionId) return null;
 
     // Check if it's a party mode session
-    const [partySession] = await db
+    const [partySession] = await dbRead
       .select()
       .from(dbSchema.boardSessions)
       .where(eq(dbSchema.boardSessions.id, sessionId))
@@ -248,7 +248,7 @@ export const sessionFeedQueries = {
     // Check if it's an inferred session
     let inferredSession: typeof dbSchema.inferredSessions.$inferSelect | undefined;
     if (!isParty) {
-      const [result] = await db
+      const [result] = await dbRead
         .select()
         .from(dbSchema.inferredSessions)
         .where(eq(dbSchema.inferredSessions.id, sessionId))
@@ -263,7 +263,7 @@ export const sessionFeedQueries = {
       ? eq(dbSchema.boardseshTicks.sessionId, sessionId)
       : eq(dbSchema.boardseshTicks.inferredSessionId, sessionId);
 
-    const tickRows = await db
+    const tickRows = await dbRead
       .select({
         tick: dbSchema.boardseshTicks,
         climbName: dbSchema.boardClimbs.name,
@@ -306,7 +306,7 @@ export const sessionFeedQueries = {
     const tickUuids = tickRows.map((r) => r.tick.uuid);
     const tickVoteCounts =
       tickUuids.length > 0
-        ? await db
+        ? await dbRead
             .select({
               entityId: dbSchema.voteCounts.entityId,
               upvotes: sql<number>`COALESCE(${dbSchema.voteCounts.upvotes}, 0)`,
@@ -377,7 +377,7 @@ export const sessionFeedQueries = {
         sql`, `,
       );
 
-      const totalAttemptsResult = await db.execute(sql`
+      const totalAttemptsResult = await dbRead.execute(sql`
         WITH combos(user_id, climb_uuid, board_type, angle) AS (
           VALUES ${valuesSql}
         ),
@@ -472,7 +472,7 @@ export const sessionFeedQueries = {
     const hardestGrade = gradesSorted.length > 0 ? gradesSorted[0].effName : null;
 
     // Vote/comment counts
-    const [voteData] = await db
+    const [voteData] = await dbRead
       .select({
         upvotes: sql<number>`COALESCE(upvotes, 0)`,
         downvotes: sql<number>`COALESCE(downvotes, 0)`,
@@ -482,7 +482,7 @@ export const sessionFeedQueries = {
       .where(and(sql`${dbSchema.voteCounts.entityType} = 'session'`, eq(dbSchema.voteCounts.entityId, sessionId)))
       .limit(1);
 
-    const [commentData] = await db
+    const [commentData] = await dbRead
       .select({ count: drizzleCount() })
       .from(dbSchema.comments)
       .where(
@@ -548,7 +548,7 @@ async function fetchParticipants(
 
   const whereClause = tickSessionFilter(sessionId, sessionType);
 
-  const participantRows = await db.execute(sql`
+  const participantRows = await dbRead.execute(sql`
     SELECT
       t.user_id AS "userId",
       COALESCE(up.display_name, u.name) AS "displayName",
@@ -608,7 +608,7 @@ async function fetchParticipantsBatch(
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
 
-  const result = await db.execute(sql`
+  const result = await dbRead.execute(sql`
     SELECT
       COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
       t.user_id AS "userId",
@@ -677,7 +677,7 @@ async function fetchGradeDistributionBatch(
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
 
-  const result = await db.execute(sql`
+  const result = await dbRead.execute(sql`
     SELECT
       COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
       COALESCE(t.difficulty, ROUND(bcs.display_difficulty)::int) AS diff_num,
@@ -737,7 +737,7 @@ async function fetchSessionMetaBatch(
 
   // Batch fetch party sessions
   if (partyIds.length > 0) {
-    const partyRows = await db
+    const partyRows = await dbRead
       .select({
         id: dbSchema.boardSessions.id,
         name: dbSchema.boardSessions.name,
@@ -754,7 +754,7 @@ async function fetchSessionMetaBatch(
 
   // Batch fetch inferred sessions
   if (inferredIds.length > 0) {
-    const inferredRows = await db
+    const inferredRows = await dbRead
       .select({
         id: dbSchema.inferredSessions.id,
         name: dbSchema.inferredSessions.name,
@@ -789,7 +789,7 @@ async function fetchBoardTypesBatch(
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
 
-  const result = await db.execute(sql`
+  const result = await dbRead.execute(sql`
     SELECT
       COALESCE(t.session_id, t.inferred_session_id) AS effective_session_id,
       ARRAY_AGG(DISTINCT t.board_type) AS board_types

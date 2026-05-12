@@ -28,7 +28,11 @@ import {
   findNearbySessions as findNearbySessionsFn,
   getUserSessions as getUserSessionsFn,
   endSession as endSessionFn,
+  endStaleInactiveSessions,
 } from './session-discovery';
+
+const INACTIVITY_THRESHOLD_MS = 60 * 60 * 1000;
+const INACTIVITY_SWEEP_INTERVAL_MS = 60 * 1000;
 
 class RoomManager {
   private clients = new Map<string, ConnectedClient>();
@@ -39,6 +43,7 @@ class RoomManager {
   private readonly SESSION_GRACE_PERIOD_MS = 60_000;
   private pendingJoinPersists = new Map<string, Promise<void>>();
   private writeScheduler = new WriteScheduler();
+  private inactivitySweepInterval: NodeJS.Timeout | null = null;
 
   /**
    * Reset all state (for testing purposes)
@@ -60,6 +65,11 @@ class RoomManager {
     // Clear pending join persist promises
     this.pendingJoinPersists.clear();
 
+    if (this.inactivitySweepInterval) {
+      clearInterval(this.inactivitySweepInterval);
+      this.inactivitySweepInterval = null;
+    }
+
     // Reset the distributed state singleton so initialize() creates a fresh one
     forceResetDistributedState();
   }
@@ -79,6 +89,18 @@ class RoomManager {
     } else {
       console.info('[RoomManager] Redis not available - using Postgres only mode (single instance)');
     }
+
+    if (!this.inactivitySweepInterval) {
+      this.inactivitySweepInterval = setInterval(() => {
+        endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS).catch((err) => {
+          console.error('[RoomManager] Inactivity sweep failed:', err);
+        });
+      }, INACTIVITY_SWEEP_INTERVAL_MS);
+      this.inactivitySweepInterval.unref();
+      console.info(
+        `[RoomManager] Inactivity sweep enabled (threshold ${INACTIVITY_THRESHOLD_MS / 60000}m, interval ${INACTIVITY_SWEEP_INTERVAL_MS / 60000}m)`,
+      );
+    }
   }
 
   /**
@@ -86,6 +108,10 @@ class RoomManager {
    */
   async shutdown(): Promise<void> {
     await this.flushPendingWrites();
+    if (this.inactivitySweepInterval) {
+      clearInterval(this.inactivitySweepInterval);
+      this.inactivitySweepInterval = null;
+    }
     await shutdownDistributedState();
     console.info('[RoomManager] Shutdown complete');
   }
@@ -362,9 +388,9 @@ class RoomManager {
       const batch = activeSessions.slice(i, i + batchSize);
       await Promise.all(
         batch.map((sessionId) =>
-          store.refreshTTL(sessionId).catch((err) =>
-            console.error(`[RoomManager] TTL refresh failed for ${sessionId}:`, err),
-          ),
+          store
+            .refreshTTL(sessionId)
+            .catch((err) => console.error(`[RoomManager] TTL refresh failed for ${sessionId}:`, err)),
         ),
       );
     }

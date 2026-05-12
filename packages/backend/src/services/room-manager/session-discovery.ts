@@ -1,7 +1,7 @@
 import { db } from '../../db/client';
 import { sessions, type Session } from '../../db/schema';
 import { userBoards } from '@boardsesh/db/schema/app';
-import { eq, and, gt, gte, lte, ne, isNull } from 'drizzle-orm';
+import { eq, and, gt, gte, lt, lte, ne, isNull, sql } from 'drizzle-orm';
 import type { RedisSessionStore } from '../redis-session-store';
 import type { DistributedStateManager } from '../distributed-state';
 import type { WriteScheduler } from './write-scheduler';
@@ -225,4 +225,45 @@ export async function endSession(
   sessionsMap.delete(sessionId);
 
   console.info(`[RoomManager] Session ${sessionId} explicitly ended`);
+}
+
+// Advisory lock slot for the inactivity sweep (issue #1955). Postgres accepts
+// a bigint; this slot just needs to be distinct from any other advisory lock
+// keys we add later.
+const INACTIVITY_SWEEP_LOCK_KEY = 19551850;
+
+/**
+ * Mark sessions as ended when they have been inactive for longer than `thresholdMs`.
+ * Permanent sessions are exempt. Skips Redis / WriteScheduler cleanup because these
+ * sessions have no live clients (otherwise lastActivity would have been refreshed).
+ *
+ * Uses a Postgres transaction-scoped advisory lock so in multi-instance deploys
+ * only one instance runs the UPDATE per tick; the others see `locked=false`
+ * and return 0 immediately. The UPDATE itself is idempotent (already-ended
+ * rows don't re-match the WHERE clause), so the lock is a fan-out optimisation
+ * rather than a correctness requirement.
+ *
+ * Returns the number of sessions ended.
+ */
+export async function endStaleInactiveSessions(thresholdMs: number): Promise<number> {
+  return db.transaction(async (tx) => {
+    const lockResult = await tx.execute<{ locked: boolean }>(
+      sql`SELECT pg_try_advisory_xact_lock(${INACTIVITY_SWEEP_LOCK_KEY}) AS locked`,
+    );
+    if (!lockResult[0]?.locked) {
+      return 0;
+    }
+
+    const cutoff = new Date(Date.now() - thresholdMs);
+    const now = new Date();
+    const result = await tx
+      .update(sessions)
+      .set({ status: 'ended', endedAt: now, lastActivity: now })
+      .where(and(eq(sessions.status, 'active'), eq(sessions.isPermanent, false), lt(sessions.lastActivity, cutoff)))
+      .returning({ id: sessions.id });
+    if (result.length > 0) {
+      console.info(`[RoomManager] Auto-ended ${result.length} inactive session(s)`);
+    }
+    return result.length;
+  });
 }

@@ -131,6 +131,7 @@
   },
   "summary": {
     "dialogTitle": "Résumé de la session",
+    "autoFinishedDialogTitle": "Session terminée",
     "sends": "Enchaînements",
     "attempts": "Essais",
     "duration": "Durée",

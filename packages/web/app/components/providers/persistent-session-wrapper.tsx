@@ -92,13 +92,19 @@ function SessionWakeLock() {
  * so session ending works from any page (not just board routes).
  */
 function RootSessionSummaryDialog() {
-  const { sessionSummary, sessionSummaryBoardType, sessionSummaryHealthKitWorkoutId, dismissSessionSummary } =
-    usePersistentSession();
+  const {
+    sessionSummary,
+    sessionSummaryBoardType,
+    sessionSummaryHealthKitWorkoutId,
+    sessionSummaryAutoFinished,
+    dismissSessionSummary,
+  } = usePersistentSession();
   return (
     <SessionSummaryDialog
       summary={sessionSummary}
       boardType={sessionSummaryBoardType ?? ''}
       existingWorkoutId={sessionSummaryHealthKitWorkoutId}
+      autoFinished={sessionSummaryAutoFinished}
       onDismiss={dismissSessionSummary}
     />
   );

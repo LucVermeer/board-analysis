@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { type Client, createGraphQLClient, execute, subscribe } from '../../graphql-queue/graphql-client';
 import {
   INITIAL_RETRY_DELAY_MS,
@@ -23,6 +23,7 @@ import { computeQueueStateHash } from '@/app/utils/hash';
 import { setPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@/app/lib/graphql/operations/sessions';
+import { fetchAutoFinishedSummary } from './use-queue-storage';
 import { upsertSessionUser } from '../event-utils';
 import { TransientJoinError } from '../errors';
 import {
@@ -96,6 +97,7 @@ export type SessionLifecycleState = {
   sessionSummary: SessionSummary | null;
   sessionSummaryBoardType: string | null;
   sessionSummaryHealthKitWorkoutId: string | null;
+  sessionSummaryAutoFinished: boolean;
 };
 
 export type SessionLifecycleActions = {
@@ -108,6 +110,7 @@ export type SessionLifecycleActions = {
     sessionName?: string,
   ) => void;
   endSessionWithSummary: () => void;
+  setAutoFinishedSummary: (summary: SessionSummary, boardType: string | null) => void;
   dismissSessionSummary: () => void;
   setSession: Dispatch<SetStateAction<Session | null>>;
 };
@@ -146,6 +149,7 @@ export function useSessionLifecycle({
   const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
   const [sessionSummaryBoardType, setSessionSummaryBoardType] = useState<string | null>(null);
   const [sessionSummaryHealthKitWorkoutId, setSessionSummaryHealthKitWorkoutId] = useState<string | null>(null);
+  const [sessionSummaryAutoFinished, setSessionSummaryAutoFinished] = useState(false);
 
   // Pending initial queue for new sessions
   const [pendingInitialQueue, setPendingInitialQueue] = useState<PendingInitialQueue | null>(null);
@@ -214,6 +218,14 @@ export function useSessionLifecycle({
     setSessionSummary(null);
     setSessionSummaryBoardType(null);
     setSessionSummaryHealthKitWorkoutId(null);
+    setSessionSummaryAutoFinished(false);
+  }, []);
+
+  const setAutoFinishedSummary = useCallback((summary: SessionSummary, boardType: string | null) => {
+    setSessionSummary(summary);
+    setSessionSummaryBoardType(boardType);
+    setSessionSummaryHealthKitWorkoutId(null);
+    setSessionSummaryAutoFinished(true);
   }, []);
 
   const endSessionWithSummary = useCallback(() => {
@@ -232,6 +244,7 @@ export function useSessionLifecycle({
             setSessionSummary(response.endSession);
             setSessionSummaryBoardType(boardType);
             setSessionSummaryHealthKitWorkoutId(null);
+            setSessionSummaryAutoFinished(false);
           }
         })
         .catch((err) => {
@@ -240,6 +253,55 @@ export function useSessionLifecycle({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, only .current changes
   }, [deactivateSession]);
+
+  // Re-run the auto-finished pre-flight when the tab returns to visible — backend may have swept the session.
+  const visibilityCheckInFlightRef = useRef(false);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    async function checkIfAutoFinished() {
+      if (visibilityCheckInFlightRef.current) return;
+      const active = activeSessionRef.current;
+      if (!active) return;
+      visibilityCheckInFlightRef.current = true;
+      try {
+        const result = await fetchAutoFinishedSummary(active, wsAuthTokenRef.current);
+        if (!result) return;
+        if (activeSessionRef.current?.sessionId !== active.sessionId) return;
+        deactivateSession();
+        setAutoFinishedSummary(result.summary, result.boardType);
+      } finally {
+        visibilityCheckInFlightRef.current = false;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') void checkIfAutoFinished();
+    }
+    function handlePageShow(event: PageTransitionEvent) {
+      if (event.persisted) void checkIfAutoFinished();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
+
+    // BFCache restore: the browser fires `pageshow` with persisted=true after
+    // bindings are restored, but if the user navigated back/forward into this
+    // page before React's effect attached the listener, the event is lost.
+    // Detect via the Performance API and run the check once on mount.
+    if (typeof performance !== 'undefined') {
+      const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      if (navEntry?.type === 'back_forward') {
+        void checkIfAutoFinished();
+      }
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, callbacks are useCallback([])-stable
+  }, [deactivateSession, setAutoFinishedSummary]);
 
   // Connect to session when activeSession changes
   useEffect(() => {
@@ -629,10 +691,12 @@ export function useSessionLifecycle({
     sessionSummary,
     sessionSummaryBoardType,
     sessionSummaryHealthKitWorkoutId,
+    sessionSummaryAutoFinished,
     activateSession,
     deactivateSession,
     setInitialQueueForSession,
     endSessionWithSummary,
+    setAutoFinishedSummary,
     dismissSessionSummary,
     setSession,
   };

@@ -131,6 +131,7 @@
   },
   "summary": {
     "dialogTitle": "Resumen de la sesión",
+    "autoFinishedDialogTitle": "Sesión finalizada",
     "sends": "Encadenes",
     "attempts": "Intentos",
     "duration": "Duración",

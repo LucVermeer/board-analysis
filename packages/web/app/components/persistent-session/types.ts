@@ -85,6 +85,10 @@ export type PersistentSessionActionsType = {
   // Session ending with summary
   endSessionWithSummary: () => void;
   dismissSessionSummary: () => void;
+
+  // Surface a session that the backend already auto-ended due to inactivity.
+  // Invoked from the queue-storage restore path before activation.
+  setAutoFinishedSummary: (summary: SessionSummary, boardType: string | null) => void;
 };
 
 // Frequently-changing state data
@@ -123,6 +127,10 @@ export type PersistentSessionStateType = {
   sessionSummary: SessionSummary | null;
   sessionSummaryBoardType: string | null;
   sessionSummaryHealthKitWorkoutId: string | null;
+  // True when the summary is shown because the session was auto-finished after
+  // inactivity. The dialog title changes ("Session Finished" vs "Session Summary");
+  // HealthKit behaves the same as a manually-ended session.
+  sessionSummaryAutoFinished: boolean;
 };
 
 // Combined type for backward compatibility
