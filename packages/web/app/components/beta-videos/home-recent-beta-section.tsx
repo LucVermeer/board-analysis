@@ -28,7 +28,7 @@ export default function HomeRecentBetaSection({ initialRecentBeta }: HomeRecentB
   const { t } = useTranslation('marketing');
 
   const { data: rows = [] } = useQuery<RecentBetaLinkRow[]>({
-    queryKey: ['recentBetaLinks', null],
+    queryKey: ['recentBetaLinks'],
     queryFn: async () => {
       const client = createGraphQLHttpClient();
       const result = await client.request<RecentBetaResponse>(GET_RECENT_BETA_LINKS, { limit: RECENT_BETA_LIMIT });

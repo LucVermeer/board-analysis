@@ -24,27 +24,34 @@ const {
 
 vi.mock('../db/client', () => ({
   db: {
-    select: (selection?: unknown) => {
-      // `betaLinks` runs `db.select().from(...).where(...)`; `recentBetaLinks`
-      // runs `db.select({ ... }).from(...).leftJoin(...).where(...).orderBy(...).limit(...)`.
-      // Branch on whether a projection is passed so each test mock returns
-      // the right shape.
-      const isProjected = selection !== undefined;
-      if (!isProjected) {
+    select: (selection?: Record<string, unknown>) => {
+      // Route by the shape of the projection so a future query that doesn't
+      // match either known path fails loudly instead of resolving via the
+      // wrong mock.
+      // - `betaLinks` calls `db.select()` with no projection, then
+      //   `.from(...).where(...)`.
+      // - `recentBetaLinks` calls `db.select({ ..., climbName, ... })` then
+      //   `.from(...).leftJoin(...).where(...).orderBy(...).limit(...)`.
+      if (selection === undefined) {
         return {
           from: () => ({
             where: () => Promise.resolve(selectMock()),
           }),
         };
       }
-      const chain = {
-        from: () => chain,
-        leftJoin: () => chain,
-        where: () => chain,
-        orderBy: () => chain,
-        limit: () => Promise.resolve(recentSelectMock()),
-      };
-      return chain;
+      if ('climbName' in selection) {
+        const chain = {
+          from: () => chain,
+          leftJoin: () => chain,
+          where: () => chain,
+          orderBy: () => chain,
+          limit: () => Promise.resolve(recentSelectMock()),
+        };
+        return chain;
+      }
+      throw new Error(
+        `Unhandled db.select() projection in beta-link-queries test mock: ${JSON.stringify(Object.keys(selection))}`,
+      );
     },
     update: () => ({
       set: () => ({
