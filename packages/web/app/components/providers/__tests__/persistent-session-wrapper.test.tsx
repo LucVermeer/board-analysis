@@ -305,6 +305,19 @@ describe('RootBottomBar --bottom-bar-height measurement', () => {
     expect(document.documentElement.style.getPropertyValue('--bottom-bar-height-measured')).toBe('200px');
   });
 
+  it('publishes the first measurement on mount when --bottom-bar-height-measured is unset', () => {
+    // No pre-seed: the inline-style override starts empty, so parseFloat reads
+    // 0. The grow-only guard (px > measured + 2) must still fire on the
+    // initial mount measurement so the first published value reflects the
+    // real occlusion — otherwise the page would render against the CSS
+    // default forever, missing any case where the rendered bar exceeds it.
+    mockedTop = 620; // 800 - 620 = 180px initial occlusion
+
+    render(<RootBottomBar boardConfigs={mockBoardConfigs} />);
+
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-height-measured')).toBe('180px');
+  });
+
   it('never shrinks --bottom-bar-height-measured after hydration', () => {
     // Seed an already-large measured value. The grow-only guard in JS must
     // ignore smaller occlusion readings — CSS max() with --default handles
