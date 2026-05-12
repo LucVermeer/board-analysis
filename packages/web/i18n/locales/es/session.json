@@ -135,6 +135,8 @@
       "clear": "Limpiar",
       "summary_one": "{{count}} bloque en cola",
       "summary_other": "{{count}} bloques en cola",
+      "addedAll_one": "{{count}} bloque en cola para tu sesión",
+      "addedAll_other": "{{count}} bloques en cola para tu sesión",
       "addedPartial": "Añadidos {{added}} bloques. No se pudieron rellenar {{failed}} huecos.",
       "failed": "No se pudo generar la cola. No se encontraron bloques que coincidan."
     }

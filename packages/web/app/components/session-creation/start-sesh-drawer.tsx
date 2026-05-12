@@ -98,6 +98,11 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const [generatedWorkoutType, setGeneratedWorkoutType] = useState<WorkoutType | null>(null);
   const hasAutoSelectedRef = useRef(false);
   const formSubmitRef = useRef<(() => void) | null>(null);
+  // Per-run buffer for in-flight generations. We accumulate here instead of
+  // mutating generatedQueue directly so that dismissing the generator
+  // mid-run preserves the prior queue. Committed to generatedQueue on
+  // onComplete only when at least one climb was added.
+  const runBufferRef = useRef<ClimbQueueItem[]>([]);
 
   const selectedBoardDetails = useBoardDetails(selectedBoard ?? undefined, selectedCustomConfig ?? undefined);
   const generatorBoardDetails = selectedBoardDetails ?? bridgeBoardDetails ?? localBoardDetails ?? null;
@@ -184,6 +189,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setGeneratedQueue([]);
     setGeneratedWorkoutType(null);
     setGeneratorOpen(false);
+    runBufferRef.current = [];
     setFormKey((k) => k + 1);
   }, [onClose]);
 
@@ -194,6 +200,10 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setBoardSelectorExpanded(false);
     setGeneratedQueue([]);
     setGeneratedWorkoutType(null);
+    // Close the generator if it was open against the old board — its
+    // boardDetails prop is about to become stale.
+    setGeneratorOpen(false);
+    runBufferRef.current = [];
   }, []);
 
   const handleDiscoveryBoardClick = useCallback(
@@ -237,6 +247,10 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setBoardSelectorExpanded(false);
     setGeneratedQueue([]);
     setGeneratedWorkoutType(null);
+    // Close the generator if it was open against the old board — its
+    // boardDetails prop is about to become stale.
+    setGeneratorOpen(false);
+    runBufferRef.current = [];
   }, []);
 
   const handleCustomSelect = (url: string, config?: StoredBoardConfig) => {
@@ -247,6 +261,8 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setBoardSelectorExpanded(false);
     setGeneratedQueue([]);
     setGeneratedWorkoutType(null);
+    setGeneratorOpen(false);
+    runBufferRef.current = [];
   };
 
   const handleClearGenerated = useCallback(() => {
@@ -437,11 +453,13 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
         <Button
           size="small"
           variant="text"
-          onClick={() => {
-            setGeneratedQueue([]);
-            setGeneratedWorkoutType(null);
-            setGeneratorOpen(true);
-          }}
+          // Don't wipe the current queue on click. If the user dismisses
+          // the generator mid-flow, the previous queue is still intact.
+          // The generator drawer pushes climbs incrementally via onAddClimb,
+          // which appends — so without clearing, a fresh run would mix old
+          // and new climbs. We clear once on the first append of the new run
+          // (handled in the onAddClimb callback below).
+          onClick={() => setGeneratorOpen(true)}
           disabled={!generatorBoardDetails}
         >
           {t('creation.generateQueue.regenerate')}
@@ -563,7 +581,12 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
       {generatorBoardDetails && (
         <PlaylistGeneratorDrawer
           open={generatorOpen}
-          onClose={() => setGeneratorOpen(false)}
+          onClose={() => {
+            // Drop any in-flight buffer so a future Regenerate doesn't pick
+            // up half a previous run.
+            runBufferRef.current = [];
+            setGeneratorOpen(false);
+          }}
           boardDetails={generatorBoardDetails}
           defaultAngle={generatorDefaultAngle}
           targetType="session"
@@ -571,18 +594,25 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
           // session queue uses it verbatim. The search response's climb.angle
           // typically matches the queried angle today, but trusting that
           // coupling is fragile — pin it explicitly.
+          //
+          // We accumulate into `runBufferRef` rather than `generatedQueue` so
+          // that dismissing the generator mid-run leaves the previous queue
+          // intact. The buffer is committed by `onComplete` below, only when
+          // at least one climb was actually saved.
           onAddClimb={async (climb, _slot, angle) => {
-            setGeneratedQueue((prev) => [
-              ...prev,
-              {
-                uuid: crypto.randomUUID(),
-                climb: { ...climb, angle },
-                suggested: true,
-              },
-            ]);
+            const safeUuid =
+              typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : `gen-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            runBufferRef.current.push({
+              uuid: safeUuid,
+              climb: { ...climb, angle },
+              suggested: true,
+            });
           }}
-          onComplete={({ added, failed, workoutType }) => {
+          onComplete={({ added, failed, total, workoutType }) => {
             if (added > 0) {
+              setGeneratedQueue(runBufferRef.current);
               setGeneratedWorkoutType(workoutType);
               track('Session Queue Generated', {
                 workoutType,
@@ -592,9 +622,12 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
                 failedCount: failed,
               });
             }
-            if (added > 0 && failed > 0) {
+            runBufferRef.current = [];
+            if (failed === 0 && added > 0) {
+              showMessage(t('creation.generateQueue.addedAll', { count: total }), 'success');
+            } else if (added > 0) {
               showMessage(t('creation.generateQueue.addedPartial', { added, failed }), 'warning');
-            } else if (added === 0) {
+            } else {
               showMessage(t('creation.generateQueue.failed'), 'error');
             }
           }}

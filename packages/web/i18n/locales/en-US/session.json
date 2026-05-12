@@ -135,6 +135,8 @@
       "clear": "Clear",
       "summary_one": "{{count}} climb queued",
       "summary_other": "{{count}} climbs queued",
+      "addedAll_one": "{{count}} climb queued for your session",
+      "addedAll_other": "{{count}} climbs queued for your session",
       "addedPartial": "Queued {{added}} climbs. {{failed}} slots couldn't be filled.",
       "failed": "Couldn't generate a queue. No matching climbs found."
     }

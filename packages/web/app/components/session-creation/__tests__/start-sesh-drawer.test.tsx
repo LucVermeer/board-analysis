@@ -183,12 +183,18 @@ vi.mock('@/app/components/board-selector-drawer/board-selector-drawer', () => ({
 // without mounting the real generator (which pulls in React Query / WS auth).
 type GeneratorMockProps = {
   open: boolean;
+  onClose: () => void;
   onAddClimb: (
-    climb: { uuid: string; name: string; angle: number; frames?: string; mirrored?: boolean },
+    climb: Record<string, unknown> & { uuid: string; name: string; angle: number },
     slot: unknown,
     angle: number,
   ) => Promise<void>;
-  onComplete?: (result: { added: number; failed: number; total: number }) => void;
+  onComplete?: (result: {
+    added: number;
+    failed: number;
+    total: number;
+    workoutType: 'volume' | 'pyramid' | 'ladder' | 'gradeFocus';
+  }) => void;
 };
 let lastGeneratorProps: GeneratorMockProps | null = null;
 vi.mock('@/app/components/playlist-generator', () => ({
@@ -620,7 +626,34 @@ describe('StartSeshDrawer', () => {
     );
   }
 
-  async function simulateGeneration(climbs: Array<{ uuid: string; name: string; angle: number }>) {
+  // Shape-complete mock that the real `toClimbQueueItemInput` could
+  // serialize without erroring. Fields beyond what tests assert on are
+  // filled with neutral values.
+  function makeMockClimb(uuid: string, name: string, angle: number) {
+    return {
+      uuid,
+      name,
+      angle,
+      setter_username: 'setter',
+      userId: null,
+      frames: '',
+      mirrored: false,
+      difficulty: '6b/V4',
+      ascensionist_count: 0,
+      quality_average: '3.0',
+      stars: 3,
+      difficulty_error: '0',
+      benchmark_difficulty: null,
+      userAscents: 0,
+      userAttempts: 0,
+    };
+  }
+
+  async function simulateGeneration(
+    climbs: Array<{ uuid: string; name: string; angle: number }>,
+    targetAngle?: number,
+    workoutType: 'volume' | 'pyramid' | 'ladder' | 'gradeFocus' = 'volume',
+  ) {
     // Fire the generator drawer's onAddClimb once per climb, then onComplete.
     // This is what the real generator does after the user picks options and
     // hits Generate — we skip the UI but reach the same state transitions.
@@ -628,14 +661,19 @@ describe('StartSeshDrawer', () => {
     for (const climb of climbs) {
       await act(async () => {
         await lastGeneratorProps!.onAddClimb(
-          { ...climb, frames: '', mirrored: false },
+          makeMockClimb(climb.uuid, climb.name, climb.angle),
           { grade: 18, section: 'main', index: 0 },
-          climb.angle,
+          targetAngle ?? climb.angle,
         );
       });
     }
     await act(async () => {
-      lastGeneratorProps!.onComplete?.({ added: climbs.length, failed: 0, total: climbs.length });
+      lastGeneratorProps!.onComplete?.({
+        added: climbs.length,
+        failed: 0,
+        total: climbs.length,
+        workoutType,
+      });
     });
   }
 
@@ -690,18 +728,16 @@ describe('StartSeshDrawer', () => {
     render(<StartSeshDrawer open onClose={vi.fn()} />);
     fireEvent.click(getGenerateButton()!);
 
-    // Search response had angle=40; user picked angle=50 in the generator.
-    // The queue item must reflect the user's chosen angle.
-    await simulateGeneration([{ uuid: 'climb-a', name: 'A', angle: 40 }]);
-    // Override the simulated climb's angle via the generator callback path:
-    if (!lastGeneratorProps) throw new Error('no generator props');
-    await act(async () => {
-      await lastGeneratorProps!.onAddClimb(
-        { uuid: 'climb-b', name: 'B', angle: 40, frames: '', mirrored: false },
-        { grade: 18, section: 'main', index: 0 },
-        50,
-      );
-    });
+    // Search response returns climbs with climb.angle=40 (the board's default).
+    // User picked angle=50 in the generator — the queue items must reflect
+    // that override, not the search-response angle.
+    await simulateGeneration(
+      [
+        { uuid: 'climb-a', name: 'A', angle: 40 },
+        { uuid: 'climb-b', name: 'B', angle: 40 },
+      ],
+      50,
+    );
 
     await submitSesh();
 
@@ -710,7 +746,7 @@ describe('StartSeshDrawer', () => {
     });
 
     const queue = mockSetInitialQueueForSession.mock.calls[0][1] as Array<{ climb: { uuid: string; angle: number } }>;
-    expect(queue.find((i) => i.climb.uuid === 'climb-a')?.climb.angle).toBe(40);
+    expect(queue.find((i) => i.climb.uuid === 'climb-a')?.climb.angle).toBe(50);
     expect(queue.find((i) => i.climb.uuid === 'climb-b')?.climb.angle).toBe(50);
   });
 
@@ -736,6 +772,37 @@ describe('StartSeshDrawer', () => {
     expect((queue as Array<{ uuid: string }>).map((i) => i.uuid)).toEqual(['q1', expect.any(String)]);
     // Carried current wins over the first generated climb.
     expect(current).toBe(carried);
+  });
+
+  it('preserves the existing generated queue when Regenerate is dismissed before completing', async () => {
+    mockLocalBoardPath = '/b/kilter-original-12x12/40/list';
+    mockLocalBoardDetails = { board_name: 'kilter', layout_id: 1, size_id: 10, set_ids: [1, 2] };
+
+    render(<StartSeshDrawer open onClose={vi.fn()} />);
+
+    // Initial generation lands two climbs.
+    fireEvent.click(getGenerateButton()!);
+    await simulateGeneration([
+      { uuid: 'climb-a', name: 'A', angle: 40 },
+      { uuid: 'climb-b', name: 'B', angle: 40 },
+    ]);
+
+    // Tap Regenerate — opens the generator again — then dismiss it without
+    // running another generation.
+    const regen = screen.getByRole('button', { name: /regenerate/i });
+    fireEvent.click(regen);
+    await act(async () => {
+      lastGeneratorProps!.onClose();
+    });
+
+    await submitSesh();
+    await waitFor(() => {
+      expect(mockSetInitialQueueForSession).toHaveBeenCalled();
+    });
+
+    // The original two climbs must still be the session's initial queue.
+    const queue = mockSetInitialQueueForSession.mock.calls[0][1] as Array<{ climb: { uuid: string } }>;
+    expect(queue.map((i) => i.climb.uuid)).toEqual(['climb-a', 'climb-b']);
   });
 
   it('clears the generated queue when the board selection changes', async () => {

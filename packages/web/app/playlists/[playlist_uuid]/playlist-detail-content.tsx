@@ -670,7 +670,11 @@ export default function PlaylistDetailContent({
             } else {
               showMessage(t('generator.messages.failed'), 'error');
             }
-            handlePlaylistUpdated();
+            // Only refetch if we actually wrote to the playlist; full failures
+            // change nothing on the server side.
+            if (added > 0) {
+              handlePlaylistUpdated();
+            }
           }}
         />
       )}
