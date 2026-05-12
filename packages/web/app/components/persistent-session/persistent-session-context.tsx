@@ -122,12 +122,21 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     refs,
   });
 
+  // Stable wrapper: the queue-storage restore effect lists this in its dep
+  // array, so a fresh inline arrow each render would re-fire the effect and
+  // open a race window between `isAuthLoading` flipping false and
+  // `hasRunPreflightRef` being set.
+  const handleQueueStorageSetActiveSession = useCallback(
+    (val: ActiveSessionInfo) => {
+      lifecycle.activateSession(val);
+    },
+    [lifecycle.activateSession],
+  );
+
   // 3. Queue storage: in-memory local queue state
   const queueStorage = useQueueStorage({
     activeSession: lifecycle.activeSession,
-    setActiveSession: (val) => {
-      if (val) lifecycle.activateSession(val);
-    },
+    setActiveSession: handleQueueStorageSetActiveSession,
     onSessionAutoFinished: lifecycle.setAutoFinishedSummary,
     wsAuthToken,
     isAuthLoading,

@@ -427,6 +427,8 @@ When a session ends via `endSession`:
 
 `RoomManager.initialize()` starts a background interval (`INACTIVITY_SWEEP_INTERVAL_MS`, currently 1 minute) that calls `endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS)` from `session-discovery.ts`. The sweep marks every session where `status='active' AND isPermanent=false AND lastActivity < NOW() - 1 hour` as `status='ended'` and stamps `endedAt`. Permanent sessions are exempt. The sweep does no Redis or `WriteScheduler` cleanup — by definition no clients are connected (otherwise `lastActivity` would have been refreshed via the debounced queue-write path), so there's no hot state to evict.
 
+In multi-instance deploys the sweep wraps its `UPDATE` in a Postgres transaction-scoped advisory lock (`pg_try_advisory_xact_lock`) so only one instance runs the work per tick — losers see `locked=false` and return 0. The lock is a fan-out optimisation, not a correctness requirement (the `UPDATE` predicate is idempotent). Lock-key numbering convention: app-level advisory locks in the backend live in the reserved range `19550000–19559999` (seeded from issue #1955); `INACTIVITY_SWEEP_LOCK_KEY = 19551850` is the only slot in use today. New advisory locks should pick another unused integer in that range and document what they're for next to the constant.
+
 Because the sweep mutates rows asynchronously to any connected clients, no `SessionEnded` broadcast is emitted. Instead, the client surfaces it lazily on the next app open:
 
 1. `useQueueStorage.restoreState` waits for `useWsAuthToken` to resolve, then runs a pre-flight `GET_SESSION_SUMMARY` query against the persisted session.
