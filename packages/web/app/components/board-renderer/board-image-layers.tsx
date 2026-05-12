@@ -95,7 +95,7 @@ const BoardImageLayers = React.memo(function BoardImageLayers({
           height={imgHeight}
           style={imgStyle}
           fetchPriority={fetchPriority}
-          loading={fetchPriority === 'high' ? undefined : 'lazy'}
+          loading={thumbnail && fetchPriority !== 'high' ? 'lazy' : undefined}
           onError={handleOverlayError}
         />
       ) : (
@@ -110,7 +110,7 @@ const BoardImageLayers = React.memo(function BoardImageLayers({
             height={imgHeight}
             style={imgStyle}
             fetchPriority={i === 0 ? fetchPriority : undefined}
-            loading={i === 0 && fetchPriority === 'high' ? undefined : 'lazy'}
+            loading={thumbnail && !(i === 0 && fetchPriority === 'high') ? 'lazy' : undefined}
           />
         ))
       )}
