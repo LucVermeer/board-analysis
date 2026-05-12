@@ -123,6 +123,16 @@ Useful for tiering: V6 is roughly the median ceiling, V8 is the bulge, V10+ is r
 
 Day-of-week peaks Tuesday > Wednesday > Monday; weekend dips. Hour-of-day double peak at 10–13 and 17–20 — gym schedule. **PR sessions: 1,166** (sessions where the user hit their lifetime hardest send).
 
+### 3.7 V-points (a.k.a. "session score")
+
+Sum of V-grade values for sends in a session — the metric a lot of climbers already informally track ("100 V-points day"). With the half-grade rule (§4.1.1) and per-climb dedup, the prod data says:
+
+- Median session V-points: **19**, P75=37, P90=61.5, P95=81.5, P99=125.9.
+- Top solo session ever: **420 V-points**. Zero solo sessions have cleared 500.
+- 848 sessions ever (2.5%) have hit 100 V-points. **Only 69 distinct users ever**.
+
+The headline insight: 100 V-points is a real stretch goal for an individual (top 12% of active tickers have ever done it once), but trivially reachable for a crew. A 5-person session at average solo P90 (≈62 each) is 310 V-points; 10 people at P50 (≈19 each) is 190 V-points; 10 people pushing for 100 each is the explicit "1000 V-points crew session" Platinum tier.
+
 ---
 
 ## 4. Achievement taxonomy
@@ -144,6 +154,64 @@ These fire when an inferred session "closes" — i.e. 4-hour gap elapses since t
 | `session.angle_explorer` | Angle hop             | ≥3 distinct angles in one session                                        | Niche |
 | `session.board_hop`      | Two-board day         | ≥2 board types in one session                                            | Very rare (5 historical) — keep but advertise as legendary |
 | `session.with_a_friend`  | Logged together       | Inferred session overlaps in time/location with another user's session   | Computable when geofence + friendship exists |
+| `session.v_points.{n}`   | V-point session       | Sum of V-grades sent in one session — tiers at 25 / 50 / 100 / 200       | See §4.1.1 — 100 V-points has been hit by 72 users ever |
+| `session.crew_v_points.{n}` | Crew V-points      | Sum of V-grades across **all participants** in one session — 100 / 250 / 500 / 1000 | See §4.1.1 — Gold (1000) requires a real crew |
+
+#### 4.1.1 V-points — calibration & rules
+
+V-points are the climbing equivalent of "stage points" in cycling: each send/flash is worth its V-grade in points. Attempts don't count. The metric is famous in friend groups (one of our users routinely chases "100 V-points in a session") and converts perfectly into a multiplayer goal — gather a crew and the same number becomes reachable for everyone, not just the strongest climber.
+
+**Scoring rule** (defined per row of `board_difficulty_grades`):
+
+- V0 climbs are worth 0. They count toward send count, not V-points (so logging 50 jugs doesn't farm a tier).
+- Plain V-grades (no French "+") are worth their integer: V1=1, V3=3, V6=6, V9=9, V11=11.
+- Half-grades — French grades with a "+" suffix that share their V-integer with the previous grade — are worth +0.5: **V3+=3.5, V4+=4.5, V5+=5.5, V8+=8.5**. These exist on the Aurora boards because Aurora flattens 6a/6a+ both to V3, 6b/6b+ both to V4, 6c/6c+ both to V5, 7b/7b+ both to V8 — but climbers genuinely think of the "+" as harder, and we honour that.
+- French "+" suffixes where the V-integer already bumps (7a→7a+ goes V6→V7, 7c→7c+ goes V9→V10) get no extra increment — the bump is already priced in.
+
+That gives a clean mapping (Kilter, same shape on Tension):
+
+| French | V-display | V-points |
+| ------ | --------- | -------- |
+| 5a/5b  | V1        | 1        |
+| 5c     | V2        | 2        |
+| 6a     | V3        | 3        |
+| 6a+    | V3+       | 3.5      |
+| 6b     | V4        | 4        |
+| 6b+    | V4+       | 4.5      |
+| 6c     | V5        | 5        |
+| 6c+    | V5+       | 5.5      |
+| 7a     | V6        | 6        |
+| 7a+    | V7        | 7        |
+| 7b     | V8        | 8        |
+| 7b+    | V8+       | 8.5      |
+| 7c     | V9        | 9        |
+| 7c+    | V10       | 10       |
+| 8a     | V11       | 11       |
+| 8a+    | V12       | 12       |
+| 8b/+   | V13/V14   | 13/14    |
+
+Calibration from prod (33,326 sessions with ≥1 send, applying half-grades + per-climb dedup):
+
+| Tier (per user, per session) | V-points | Sessions ever | Users ever                |
+| ---------------------------- | -------- | ------------- | ------------------------- |
+| Bronze                       | 25       | 13,461 (40%)  | 274 (48% of active tickers) |
+| Silver                       | 50       | 5,094 (15%)   | 187 (33%)                 |
+| Gold                         | 100      | 848 (2.5%)    | 69 (12%)                  |
+| Platinum                     | 200      | 29 (0.09%)    | 13                        |
+
+Top solo session ever recorded: **420 V-points** (zero solo sessions have ever cleared 500). Distribution: P50=19, P75=37, P90=61.5, P95=81.5, P99=125.9.
+
+Crew V-points (multi-user, summed across everyone in the same session) tier at 100 / 250 / 500 / 1000. Gold (500) is reachable for ~5 strong climbers or a larger mixed crew; Platinum (1000) needs ~10 friends ganging up — explicitly the headline scenario this achievement is designed to enable.
+
+Implementation notes:
+
+- **Per-user evaluator** runs at session close. Reads ticks where `inferred_session_id` matches and `status IN ('send','flash')`, joins to `board_difficulty_grades`, applies the scoring rule above (look up `v_points` from a derived view computed once at startup from `board_difficulty_grades`), sums after per-climb dedup.
+- **Crew evaluator** runs against `board_sessions` (party mode) at close, summing across `boardsesh_ticks` for every distinct `user_id` in that session. For *inferred* multi-user sessions we additionally sum across all users whose ticks are linked to the session via `session_member_overrides`.
+- **Cap per climb = once per session.** Repeating the same climb 5 times in one session counts the V-grade once. This matches climber intuition ("you can't farm V8s by repeating") and keeps the metric resistant to attempt-spam. Implement as `SELECT DISTINCT (user_id, session_id, climb_uuid)` before summing.
+- **Crew dedup.** If two users both sent V8 of the same climb in a crew session, both their points count — different bodies, different sends. Only the per-user dedup applies.
+- **Display.** Show as integer when whole (`100 V-points`), one decimal when fractional (`5.5 V-points` for a single V5+ send). Never round to integer in storage — half-points compound (10× V5+ sessions = 55 V-points exactly, not 50).
+
+UI: V-points become a first-class number on the session summary, alongside Sends/Attempts/Duration. The crew variant only renders when `participant_count > 1`. We also surface the live count in the session detail header during an active party session ("Crew: 247 V-points") so the goal-chasing dynamic works in real time, not just post-hoc.
 
 ### 4.2 Lifetime / cumulative achievements
 
@@ -156,6 +224,7 @@ Resolve whenever the running total crosses a threshold. Computed on each tick sa
 | Sessions logged      | 1 / 10 / 50 / 100 / 250 / 500       | Median 39 → first three tiers reachable in a season.                              |
 | Hours on the wall    | 5 / 25 / 100 / 500                  | Sum of (lastTickAt − firstTickAt) per session. Excludes single-tick sessions.     |
 | Hardest grade        | One award per V-grade unlocked      | "First V3", "First V4" … one row per (user, grade, board_type).                   |
+| Total V-points       | 100 / 1k / 10k / 50k / 100k         | Lifetime sum across all sends. P90 user (~714 distinct climbs at avg V5) ≈ 3,500. |
 
 ### 4.3 Rhythm / streak achievements (week-based)
 
@@ -173,12 +242,14 @@ We deliberately do **not** ship a "7-day streak" achievement because only 5 user
 
 | ID                          | Trigger                                                            |
 | --------------------------- | ------------------------------------------------------------------ |
-| `grade.first.{V}`           | First send at each V-grade (per board_type)                        |
-| `grade.flash.{V}`           | First flash at each V-grade (in-app ticks only, see §2 principle 3) |
-| `grade.repeat.{V}`          | 10 / 50 sends at the same V-grade — "Solid at V6"                  |
+| `grade.first.{V}`           | First send at each V-grade *and each half-grade* (per board_type) — `V5` and `V5+` are separate awards |
+| `grade.flash.{V}`           | First flash at each V-grade and half-grade (in-app ticks only, see §2 principle 3) |
+| `grade.repeat.{V}`          | 10 / 50 sends at the same V-grade or half-grade — "Solid at V6", "Solid at V5+" |
 | `project.long_grind`        | Sent a climb after ≥10 cumulative attempts                         |
 | `project.epic_grind`        | Sent a climb after ≥50 attempts                                    |
 | `project.spite_send`        | Sent a climb 30+ days after first attempt                          |
+
+The `{V}` variant uses the V-display form from §4.1.1 (`V1`, `V2`, …, `V3+`, `V4+`, `V5+`, `V8+`). On the boards we ship today this means up to 22 distinct first-send awards per board_type (Kilter has 39 grade rows but they collapse to V0 through V22, with the four half-grades adding extra awards at V3+/V4+/V5+/V8+). We use the V-display form (not the French grade) because it's what climbers in friend groups actually say out loud.
 
 ### 4.5 Exploration achievements
 
@@ -409,7 +480,14 @@ Success criterion: the 73 users with 1000+ ticks each see a coherent achievement
 
 - Session detail strip + summary dialog section + feed card chips.
 - Add 4 more session evaluators: `pr_session`, `redpoint`, `long_haul`, `angle_explorer`.
+- **`session.v_points`** evaluator + V-points number on session summary, with half-grade scoring rule (§4.1.1).
 - OG image integration.
+
+### Phase 2.5: crew V-points (1 week, only if Phase 2 lands cleanly)
+
+- **`session.crew_v_points`** evaluator (party-mode sessions + inferred sessions with `session_member_overrides`).
+- Live crew V-point counter on the active party-session header — this is the "10 friends gang up for 1000" social loop.
+- Push notification when a crew session crosses each tier in real time.
 
 Success criterion: every active user (213 in last 30d) sees ≥1 achievement on their next session detail page.
 
@@ -503,13 +581,63 @@ export const gradeFirstEvaluator: Evaluator = {
 
     return [{
       achievementId: 'grade.first',
+      // toVDisplay('6c+/V5')  -> 'V5+', toVDisplay('7a/V6') -> 'V6'
+      // (defined in shared-schema/grades — half-grades emit V3+/V4+/V5+/V8+)
+      variant: `${toVDisplay(grade?.name) ?? tick.difficulty}:${tick.boardType}`,
       tier: 1,
-      variant: `${grade?.name ?? tick.difficulty}:${tick.boardType}`,
       earnedAt: tick.climbedAt,
       sourceTickId: tick.id,
       sourceSessionId: tick.inferredSessionId ?? tick.sessionId ?? undefined,
       metricValue: tick.difficulty,
     }];
+  },
+};
+```
+
+### Appendix A.1 — V-points session evaluator (illustrative)
+
+```ts
+// packages/backend/src/achievements/evaluators/session-v-points.ts
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { boardseshTicks, boardDifficultyGrades } from '@boardsesh/db/schema';
+import type { Evaluator } from './types';
+
+const TIERS = [25, 50, 100, 200];
+
+export const sessionVPointsEvaluator: Evaluator = {
+  id: 'session.v_points',
+  triggers: ['session_closed'],
+
+  async evaluate({ user, trigger, db }) {
+    if (trigger.kind !== 'session_closed') return [];
+    const session = trigger.session;
+
+    // Per-climb dedup: each unique (user, session, climb) pair contributes
+    // its v_points exactly once. Half-grades from board_difficulty_grades
+    // are pre-computed into a materialized view `board_grade_points`
+    // (board_type, difficulty, v_display, v_points) at startup.
+    const [{ totalVPoints }] = await db.execute(sql`
+      WITH per_climb AS (
+        SELECT DISTINCT t.climb_uuid, p.v_points
+        FROM boardsesh_ticks t
+        JOIN board_grade_points p
+          ON p.board_type = t.board_type AND p.difficulty = t.difficulty
+        WHERE t.user_id = ${user.id}
+          AND t.inferred_session_id = ${session.id}
+          AND t.status IN ('send','flash')
+      )
+      SELECT COALESCE(SUM(v_points), 0) AS "totalVPoints" FROM per_climb;
+    `);
+
+    const earned: number[] = TIERS.filter((threshold) => totalVPoints >= threshold);
+    return earned.map((threshold, index) => ({
+      achievementId: 'session.v_points',
+      tier: index + 1,
+      variant: String(threshold),
+      earnedAt: new Date(session.lastTickAt),
+      metricValue: Math.round(totalVPoints * 10), // store as ×10 to keep .5s
+      sourceSessionId: session.id,
+    }));
   },
 };
 ```
@@ -551,4 +679,27 @@ SELECT COUNT(DISTINCT t.inferred_session_id)
 FROM boardsesh_ticks t
 JOIN first_attempt fa USING (user_id, climb_uuid)
 WHERE t.status IN ('send','flash') AND t.climbed_at > fa.first_at;
+
+-- V-points per session (with half-grade increments + per-climb dedup)
+WITH dg AS (
+  SELECT board_type, difficulty, boulder_name,
+    CAST(SUBSTRING(boulder_name FROM 'V([0-9]+)') AS INT) AS v_int,
+    SPLIT_PART(boulder_name, '/', 1) ~ '\+$' AS has_plus,
+    LAG(CAST(SUBSTRING(boulder_name FROM 'V([0-9]+)') AS INT))
+      OVER (PARTITION BY board_type ORDER BY difficulty) AS prev_v_int
+  FROM board_difficulty_grades
+), dg_pts AS (
+  SELECT board_type, difficulty,
+    CASE WHEN v_int = 0 THEN 0.0
+         WHEN has_plus AND prev_v_int = v_int THEN v_int + 0.5
+         ELSE v_int::numeric END AS v_points
+  FROM dg
+), tick_v AS (
+  SELECT DISTINCT t.user_id, t.inferred_session_id, t.climb_uuid, p.v_points
+  FROM boardsesh_ticks t
+  JOIN dg_pts p ON p.board_type = t.board_type AND p.difficulty = t.difficulty
+  WHERE t.status IN ('send','flash') AND t.inferred_session_id IS NOT NULL
+)
+SELECT inferred_session_id, SUM(v_points) AS v_points
+FROM tick_v GROUP BY 1 ORDER BY v_points DESC LIMIT 50;
 ```
