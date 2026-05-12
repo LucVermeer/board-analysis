@@ -90,31 +90,52 @@ describe('instagram-posting', () => {
 
   it('builds the Kilter caption when boardType is omitted', () => {
     expect(buildInstagramCaption({ climbName: 'Texas Sun', angle: 35 })).toBe(
-      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips`,
+      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips @boardsesh #boardsesh`,
     );
   });
 
   it('builds the Kilter caption when boardType is kilter', () => {
     expect(buildInstagramCaption({ climbName: 'Texas Sun', angle: 35, boardType: 'kilter' })).toBe(
-      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips`,
+      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips @boardsesh #boardsesh`,
     );
   });
 
   it('builds the caption for Tension', () => {
     expect(buildInstagramCaption({ climbName: 'High Hopes', angle: 40, boardType: 'tension' })).toBe(
-      `"High Hopes" @ 40° on the Tension Board.\n@tensionclimbing #tensionboard`,
+      `"High Hopes" @ 40° on the Tension Board. @tensionclimbing #tensionboard #climbing #bouldering @boardsesh #boardsesh`,
     );
   });
 
-  it('builds the caption for MoonBoard', () => {
-    expect(buildInstagramCaption({ climbName: 'Wheel of Fortune', angle: 40, boardType: 'moonboard' })).toBe(
-      `"Wheel of Fortune" @ 40° on the MoonBoard.\n@moon_climbing #moonboard`,
+  it('builds the caption for Decoy with a Tension-style fallback', () => {
+    expect(buildInstagramCaption({ climbName: 'Sandbag', angle: 30, boardType: 'decoy' })).toBe(
+      `"Sandbag" @ 30° on the Decoy Board. #climbing #bouldering @boardsesh #boardsesh`,
+    );
+  });
+
+  it('builds the full MoonBoard caption with grade, layout, and setter', () => {
+    expect(
+      buildInstagramCaption({
+        climbName: 'Wheel of Fortune',
+        angle: 40,
+        boardType: 'moonboard',
+        grade: 'V7',
+        setter: 'Dana Rader',
+        layoutId: 3,
+      }),
+    ).toBe(
+      `Wheel of Fortune, V7, 40° MoonBoard, MoonBoard 2024 setup, set by Dana Rader. - @moonclimbing #moonboard #moonclimbing #moonboardchallenge #trainhardclimbharder @boardsesh #boardsesh`,
+    );
+  });
+
+  it('builds a degraded MoonBoard caption when grade, setter, and layoutId are missing', () => {
+    expect(buildInstagramCaption({ climbName: 'Mystery Route', angle: 40, boardType: 'moonboard' })).toBe(
+      `Mystery Route, 40° MoonBoard. - @moonclimbing #moonboard #moonclimbing #moonboardchallenge #trainhardclimbharder @boardsesh #boardsesh`,
     );
   });
 
   it('falls back to Kilter caption for an unknown boardType', () => {
     expect(buildInstagramCaption({ climbName: 'Mystery Route', angle: 50, boardType: 'unknownboard' })).toBe(
-      `"Mystery Route" @ 50° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips`,
+      `"Mystery Route" @ 50° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips @boardsesh #boardsesh`,
     );
   });
 

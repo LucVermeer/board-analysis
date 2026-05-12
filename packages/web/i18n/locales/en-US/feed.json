@@ -31,7 +31,11 @@
     "urlLabel": "Beta video URL",
     "urlLabelForClimb": "Beta video URL for {{name}}",
     "defaultHelper": "Paste a public Instagram reel/post or TikTok URL so others can see your beta.",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "copyAndOpenInstagram": "Copy & open Instagram",
+    "instagramCopyFailed": "Couldn't copy the caption. Try again.",
+    "instagramCopiedAndOpened": "Caption copied — paste it into Instagram.",
+    "instagramCopiedOnly": "Caption copied to clipboard."
   },
   "commentFeed": {
     "empty": "No comments yet",

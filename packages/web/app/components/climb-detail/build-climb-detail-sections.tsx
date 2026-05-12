@@ -107,7 +107,11 @@ export function useBuildClimbDetailSections({
             <BoardseshBetaAddPanel
               boardType={boardType}
               climbUuid={climbUuid}
+              climbName={climb.name}
               angle={angle}
+              grade={climb.difficulty}
+              setter={climb.setter_username}
+              layoutId={climb.layoutId}
               onCancel={() => setIsAddingBeta(false)}
               onSuccess={() => setIsAddingBeta(false)}
             />

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
-import AttachBetaLinkForm from './attach-beta-link-form';
+import AttachBetaLinkForm, { type AttachBetaLinkSurface } from './attach-beta-link-form';
 
 type AttachBetaLinkDialogProps = {
   open: boolean;
@@ -14,6 +14,10 @@ type AttachBetaLinkDialogProps = {
   climbUuid: string;
   climbName?: string;
   angle?: number | null;
+  grade?: string | null;
+  setter?: string | null;
+  layoutId?: number | null;
+  surface?: AttachBetaLinkSurface;
 };
 
 const AttachBetaLinkDialog: React.FC<AttachBetaLinkDialogProps> = ({
@@ -23,6 +27,10 @@ const AttachBetaLinkDialog: React.FC<AttachBetaLinkDialogProps> = ({
   climbUuid,
   climbName,
   angle,
+  grade,
+  setter,
+  layoutId,
+  surface = 'logbook',
 }) => {
   const { t } = useTranslation('feed');
   return (
@@ -36,6 +44,10 @@ const AttachBetaLinkDialog: React.FC<AttachBetaLinkDialogProps> = ({
           climbUuid={climbUuid}
           climbName={climbName}
           angle={angle}
+          grade={grade}
+          setter={setter}
+          layoutId={layoutId}
+          surface={surface}
           resetTrigger={open}
           submitLabel={t('betaVideos.shareBeta')}
           helperText={t('betaVideos.dialogHelper')}

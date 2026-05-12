@@ -1,6 +1,7 @@
 'use client';
 
 import { getPlatform, isNativeApp } from '@/app/lib/ble/capacitor-utils';
+import { MOONBOARD_LAYOUTS } from '@/app/lib/moonboard-config';
 
 export type InstagramPostingPlatform = 'ios' | 'android' | 'unsupported';
 
@@ -8,26 +9,96 @@ export type InstagramCaptionInput = {
   climbName: string;
   angle: number;
   boardType?: string;
+  grade?: string | null;
+  setter?: string | null;
+  layoutId?: number | null;
 };
 
-const BOARD_CAPTION_CONFIG: Record<string, { name: string; displayName: string; handle: string; hashtags: string }> = {
+const BOARDSESH_TAG = '@boardsesh #boardsesh';
+
+type SimpleBoardCaptionConfig = {
+  kind: 'simple';
+  name: string;
+  displayName: string;
+  handle?: string;
+  hashtags: string;
+  separator: '\n' | ' ';
+};
+
+type CustomBoardCaptionConfig = {
+  kind: 'custom';
+  displayName: string;
+  format: (input: InstagramCaptionInput) => string;
+};
+
+type BoardCaptionConfig = SimpleBoardCaptionConfig | CustomBoardCaptionConfig;
+
+function findMoonBoardLayoutName(layoutId: number | null | undefined): string | null {
+  if (layoutId == null) return null;
+  const match = Object.values(MOONBOARD_LAYOUTS).find((layout) => layout.id === layoutId);
+  return match?.name ?? null;
+}
+
+function buildMoonBoardCaption({ climbName, angle, grade, setter, layoutId }: InstagramCaptionInput): string {
+  const layoutName = findMoonBoardLayoutName(layoutId);
+  const segments: string[] = [climbName];
+  if (grade) segments.push(grade);
+  segments.push(`${angle}° MoonBoard`);
+  if (layoutName) segments.push(`${layoutName} setup`);
+  let prefix = segments.join(', ');
+  if (setter) prefix += `, set by ${setter}`;
+  return `${prefix}. - @moonclimbing #moonboard #moonclimbing #moonboardchallenge #trainhardclimbharder ${BOARDSESH_TAG}`;
+}
+
+const BOARD_CAPTION_CONFIG: Record<string, BoardCaptionConfig> = {
   kilter: {
+    kind: 'simple',
     name: 'Kilter Board',
     displayName: 'Kilter',
     handle: '@kilterboard',
     hashtags: '#kilterboard #kiltergrips',
+    separator: '\n',
   },
   tension: {
+    kind: 'simple',
     name: 'Tension Board',
     displayName: 'Tension',
     handle: '@tensionclimbing',
-    hashtags: '#tensionboard',
+    hashtags: '#tensionboard #climbing #bouldering',
+    separator: ' ',
+  },
+  decoy: {
+    kind: 'simple',
+    name: 'Decoy Board',
+    displayName: 'Decoy',
+    hashtags: '#climbing #bouldering',
+    separator: ' ',
+  },
+  touchstone: {
+    kind: 'simple',
+    name: 'Touchstone Board',
+    displayName: 'Touchstone',
+    hashtags: '#climbing #bouldering',
+    separator: ' ',
+  },
+  grasshopper: {
+    kind: 'simple',
+    name: 'Grasshopper Board',
+    displayName: 'Grasshopper',
+    hashtags: '#climbing #bouldering',
+    separator: ' ',
+  },
+  soill: {
+    kind: 'simple',
+    name: 'So iLL Board',
+    displayName: 'So iLL',
+    hashtags: '#climbing #bouldering',
+    separator: ' ',
   },
   moonboard: {
-    name: 'MoonBoard',
+    kind: 'custom',
     displayName: 'MoonBoard',
-    handle: '@moon_climbing',
-    hashtags: '#moonboard',
+    format: buildMoonBoardCaption,
   },
 };
 
@@ -150,9 +221,19 @@ export function getBoardDisplayName(boardType: string): string {
   return boardType.charAt(0).toUpperCase() + boardType.slice(1);
 }
 
-export function buildInstagramCaption({ climbName, angle, boardType = 'kilter' }: InstagramCaptionInput): string {
+function formatSimpleCaption(config: SimpleBoardCaptionConfig, input: InstagramCaptionInput): string {
+  const { climbName, angle } = input;
+  const social = config.handle
+    ? `${config.handle} ${config.hashtags} ${BOARDSESH_TAG}`
+    : `${config.hashtags} ${BOARDSESH_TAG}`;
+  return `"${climbName}" @ ${angle}\u00b0 on the ${config.name}.${config.separator}${social}`;
+}
+
+export function buildInstagramCaption(input: InstagramCaptionInput): string {
+  const boardType = input.boardType ?? 'kilter';
   const config = BOARD_CAPTION_CONFIG[boardType] ?? BOARD_CAPTION_CONFIG.kilter;
-  return `"${climbName}" @ ${angle}\u00b0 on the ${config.name}.\n${config.handle} ${config.hashtags}`;
+  if (config.kind === 'custom') return config.format(input);
+  return formatSimpleCaption(config, input);
 }
 
 function getInstagramLaunchUrl(platform: InstagramPostingPlatform): string | null {

@@ -332,6 +332,7 @@ export default function PostToInstagramDialog({ open, onClose, item }: PostToIns
               climbUuid={item.climbUuid}
               climbName={item.climbName}
               angle={item.angle}
+              surface="instagram-dialog"
               resetTrigger={open}
               submitLabel={t('logbook.instagram.addLinkSubmit')}
               helperText={t('logbook.instagram.pasteLinkHelper')}
