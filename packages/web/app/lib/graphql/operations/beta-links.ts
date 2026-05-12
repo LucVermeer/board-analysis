@@ -13,3 +13,21 @@ export const GET_BETA_LINKS = gql`
     }
   }
 `;
+
+export const GET_RECENT_BETA_LINKS = gql`
+  query GetRecentBetaLinks($limit: Int, $boardType: String) {
+    recentBetaLinks(limit: $limit, boardType: $boardType) {
+      climbName
+      boardType
+      betaLink {
+        climbUuid
+        link
+        foreignUsername
+        angle
+        thumbnail
+        isListed
+        createdAt
+      }
+    }
+  }
+`;

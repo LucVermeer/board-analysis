@@ -5,6 +5,7 @@ import { getLocale } from '@/app/lib/i18n/get-locale';
 import I18nProvider from '@/app/components/providers/i18n-provider';
 import { getAllBoardConfigs } from './lib/server-board-configs';
 import { getPopularBoardConfigs } from './lib/server-popular-configs';
+import { getRecentBetaLinks } from './lib/server-recent-beta-links';
 import { buildPopularLcpImageUrl } from './lib/popular-lcp-preload';
 import HomePageContent from './home-page-content';
 
@@ -20,9 +21,10 @@ export async function generateMetadata() {
 }
 
 export default async function Home() {
-  const [boardConfigs, popularConfigs, locale] = await Promise.all([
+  const [boardConfigs, popularConfigs, recentBeta, locale] = await Promise.all([
     getAllBoardConfigs(),
     getPopularBoardConfigs(),
+    getRecentBetaLinks(),
     getLocale(),
   ]);
   const lcpPreloadUrl = buildPopularLcpImageUrl(popularConfigs);
@@ -30,7 +32,11 @@ export default async function Home() {
   return (
     <I18nProvider locale={locale} namespaces={['marketing', 'boards', 'climbs', 'profile', 'feed']}>
       {lcpPreloadUrl && <link rel="preload" as="image" href={lcpPreloadUrl} fetchPriority="high" />}
-      <HomePageContent boardConfigs={boardConfigs} initialPopularConfigs={popularConfigs} />
+      <HomePageContent
+        boardConfigs={boardConfigs}
+        initialPopularConfigs={popularConfigs}
+        initialRecentBeta={recentBeta}
+      />
     </I18nProvider>
   );
 }

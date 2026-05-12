@@ -4,9 +4,9 @@ import { ssrSeedMatchesQueryKey } from '../ssr-query-seed';
 
 describe('ssrSeedMatchesQueryKey', () => {
   it('returns false when no SSR payload is present, even if keys match', () => {
-    expect(
-      ssrSeedMatchesQueryKey(false, { boardUuid: null, refreshKey: 0 }, { boardUuid: null, refreshKey: 0 }),
-    ).toBe(false);
+    expect(ssrSeedMatchesQueryKey(false, { boardUuid: null, refreshKey: 0 }, { boardUuid: null, refreshKey: 0 })).toBe(
+      false,
+    );
   });
 
   it('returns true when the live key tuple matches the snapshot exactly', () => {
@@ -33,8 +33,8 @@ describe('ssrSeedMatchesQueryKey', () => {
 
   it('compares every snapshot key, not just the first', () => {
     // boardUuid matches but refreshKey diverges — must still be rejected.
-    expect(
-      ssrSeedMatchesQueryKey(true, { boardUuid: 'b', refreshKey: 0 }, { boardUuid: 'b', refreshKey: 7 }),
-    ).toBe(false);
+    expect(ssrSeedMatchesQueryKey(true, { boardUuid: 'b', refreshKey: 0 }, { boardUuid: 'b', refreshKey: 7 })).toBe(
+      false,
+    );
   });
 });

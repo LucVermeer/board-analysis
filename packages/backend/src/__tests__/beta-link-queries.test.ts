@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vite-plus/test'
 
 const {
   selectMock,
+  recentSelectMock,
   updateMock,
   fetchInstagramMetaMock,
   fetchTikTokMetaMock,
@@ -11,6 +12,7 @@ const {
   getPublicUrlMock,
 } = vi.hoisted(() => ({
   selectMock: vi.fn(),
+  recentSelectMock: vi.fn(),
   updateMock: vi.fn(),
   fetchInstagramMetaMock: vi.fn(),
   fetchTikTokMetaMock: vi.fn(),
@@ -22,11 +24,28 @@ const {
 
 vi.mock('../db/client', () => ({
   db: {
-    select: () => ({
-      from: () => ({
-        where: () => Promise.resolve(selectMock()),
-      }),
-    }),
+    select: (selection?: unknown) => {
+      // `betaLinks` runs `db.select().from(...).where(...)`; `recentBetaLinks`
+      // runs `db.select({ ... }).from(...).leftJoin(...).where(...).orderBy(...).limit(...)`.
+      // Branch on whether a projection is passed so each test mock returns
+      // the right shape.
+      const isProjected = selection !== undefined;
+      if (!isProjected) {
+        return {
+          from: () => ({
+            where: () => Promise.resolve(selectMock()),
+          }),
+        };
+      }
+      const chain = {
+        from: () => chain,
+        leftJoin: () => chain,
+        where: () => chain,
+        orderBy: () => chain,
+        limit: () => Promise.resolve(recentSelectMock()),
+      };
+      return chain;
+    },
     update: () => ({
       set: () => ({
         where: (...args: unknown[]) => {
@@ -228,5 +247,91 @@ describe('betaLinks resolver', () => {
       'https://p16-common-sign.tiktokcdn.com/x.jpg?x-expires=1',
     );
     expect(fetchInstagramMetaMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('recentBetaLinks resolver', () => {
+  beforeEach(() => {
+    recentSelectMock.mockReset();
+    fetchInstagramMetaMock.mockReset();
+    fetchTikTokMetaMock.mockReset();
+  });
+
+  function joinedRow(overrides: Partial<Row> = {}, climbName: string | null = 'Test Climb') {
+    return {
+      betaLink: row({
+        thumbnail: '/static/beta-link-thumbnails/instagram/ABC.jpg',
+        ...overrides,
+      }),
+      climbName,
+    };
+  }
+
+  it('returns wrapped rows with the joined climb name and source boardType', async () => {
+    recentSelectMock.mockReturnValueOnce([
+      joinedRow({ link: 'https://www.instagram.com/p/A/' }, 'Crimpy Mantle'),
+      joinedRow({ link: 'https://www.instagram.com/p/B/', boardType: 'tension' }, 'Steep Compression'),
+    ]);
+
+    const result = await betaLinkQueries.recentBetaLinks(undefined, { limit: 20 });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      climbName: 'Crimpy Mantle',
+      boardType: 'kilter',
+      betaLink: { link: 'https://www.instagram.com/p/A/' },
+    });
+    expect(result[1]).toMatchObject({ climbName: 'Steep Compression', boardType: 'tension' });
+  });
+
+  it('drops KayaClimb URLs', async () => {
+    recentSelectMock.mockReturnValueOnce([
+      joinedRow({ link: 'https://app.kayaclimb.com/share/post?id=1' }),
+      joinedRow({ link: 'https://www.instagram.com/p/A/' }, 'Project'),
+    ]);
+
+    const result = await betaLinkQueries.recentBetaLinks(undefined, { limit: 20 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.climbName).toBe('Project');
+  });
+
+  it('tolerates a null climbName (beta link arrived before the climb synced)', async () => {
+    recentSelectMock.mockReturnValueOnce([joinedRow({}, null)]);
+
+    const result = await betaLinkQueries.recentBetaLinks(undefined, { limit: 20 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.climbName).toBeNull();
+  });
+
+  it('passes thumbnails through unchanged when they are already on our static prefix', async () => {
+    const ourThumb = '/static/beta-link-thumbnails/instagram/ABC.jpg';
+    recentSelectMock.mockReturnValueOnce([joinedRow({ thumbnail: ourThumb })]);
+
+    const result = await betaLinkQueries.recentBetaLinks(undefined, { limit: 20 });
+
+    expect(result[0]?.betaLink.thumbnail).toBe(ourThumb);
+  });
+
+  it('never enriches via the live IG/TikTok APIs', async () => {
+    recentSelectMock.mockReturnValueOnce([
+      joinedRow({ link: 'https://www.instagram.com/p/A/' }),
+      joinedRow({ link: 'https://www.tiktok.com/@u/video/1' }),
+    ]);
+
+    await betaLinkQueries.recentBetaLinks(undefined, { limit: 20 });
+
+    expect(fetchInstagramMetaMock).not.toHaveBeenCalled();
+    expect(fetchTikTokMetaMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts the boardType filter without throwing', async () => {
+    recentSelectMock.mockReturnValueOnce([joinedRow({ boardType: 'kilter' })]);
+
+    const result = await betaLinkQueries.recentBetaLinks(undefined, { limit: 20, boardType: 'kilter' });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.boardType).toBe('kilter');
   });
 });

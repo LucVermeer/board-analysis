@@ -132,7 +132,12 @@ describe('server-graphql helpers', () => {
       };
       requestMock.mockResolvedValueOnce({ smartPlaylist: payload });
 
-      const result = await serverSmartPlaylist('auth-token', { type: 'FIVE_STARS', userId: 'u1', page: 0, pageSize: 20 });
+      const result = await serverSmartPlaylist('auth-token', {
+        type: 'FIVE_STARS',
+        userId: 'u1',
+        page: 0,
+        pageSize: 20,
+      });
 
       expect(result).toEqual(payload);
     });

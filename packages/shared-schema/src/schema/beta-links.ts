@@ -12,4 +12,14 @@ export const betaLinksTypeDefs = /* GraphQL */ `
     isListed: Boolean
     createdAt: String
   }
+
+  """
+  A recent beta link enriched with the parent climb's display name. Used
+  by the home-page slider where multiple climbs are aggregated together.
+  """
+  type RecentBetaLink {
+    betaLink: BetaLink!
+    climbName: String
+    boardType: String!
+  }
 `;

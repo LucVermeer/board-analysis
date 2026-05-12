@@ -547,5 +547,11 @@ export const queriesTypeDefs = /* GraphQL */ `
     Caches thumbnails to our S3 bucket on first read.
     """
     betaLinks(boardType: String!, climbUuid: String!): [BetaLink!]!
+
+    """
+    Most recent beta videos across all climbs. Returns only rows whose
+    thumbnails are already cached in our S3; no live IG/TikTok enrichment.
+    """
+    recentBetaLinks(limit: Int = 20, boardType: String): [RecentBetaLink!]!
   }
 `;

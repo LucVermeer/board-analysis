@@ -57,6 +57,9 @@
     "feed": {
       "callout": "Tus amigos están escalando.",
       "cta": "Ver el feed"
+    },
+    "recentBeta": {
+      "title": "Beta fresca"
     }
   },
   "about": {

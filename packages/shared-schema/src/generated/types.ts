@@ -2959,6 +2959,11 @@ export type Query = {
   profile?: Maybe<UserProfile>;
   /** Get a public user profile by ID. */
   publicProfile?: Maybe<PublicUserProfile>;
+  /**
+   * Most recent beta videos across all climbs. Returns only rows whose
+   * thumbnails are already cached in our S3; no live IG/TikTok enrichment.
+   */
+  recentBetaLinks: Array<RecentBetaLink>;
   /** Search public boards. */
   searchBoards: UserBoardConnection;
   /**
@@ -3335,6 +3340,12 @@ export type QueryPublicProfileArgs = {
 };
 
 /** Root query type for all read operations. */
+export type QueryRecentBetaLinksArgs = {
+  boardType?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+/** Root query type for all read operations. */
 export type QuerySearchBoardsArgs = {
   input: SearchBoardsInput;
 };
@@ -3556,6 +3567,17 @@ export type QueueState = {
   sequence: Scalars['Int']['output'];
   /** Hash of the current state for consistency checking */
   stateHash: Scalars['String']['output'];
+};
+
+/**
+ * A recent beta link enriched with the parent climb's display name. Used
+ * by the home-page slider where multiple climbs are aggregated together.
+ */
+export type RecentBetaLink = {
+  __typename?: 'RecentBetaLink';
+  betaLink: BetaLink;
+  boardType: Scalars['String']['output'];
+  climbName?: Maybe<Scalars['String']['output']>;
 };
 
 export type RegisterControllerInput = {
@@ -4993,6 +5015,7 @@ export type ResolversTypes = ResolversObject<{
   QueueNavigationItem: ResolverTypeWrapper<QueueNavigationItem>;
   QueueReordered: ResolverTypeWrapper<QueueReordered>;
   QueueState: ResolverTypeWrapper<QueueState>;
+  RecentBetaLink: ResolverTypeWrapper<RecentBetaLink>;
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
@@ -5233,6 +5256,7 @@ export type ResolversParentTypes = ResolversObject<{
   QueueNavigationItem: QueueNavigationItem;
   QueueReordered: QueueReordered;
   QueueState: QueueState;
+  RecentBetaLink: RecentBetaLink;
   RegisterControllerInput: RegisterControllerInput;
   RemoveClimbFromPlaylistInput: RemoveClimbFromPlaylistInput;
   RemoveGymMemberInput: RemoveGymMemberInput;
@@ -7185,6 +7209,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QueryPublicProfileArgs, 'userId'>
   >;
+  recentBetaLinks?: Resolver<
+    Array<ResolversTypes['RecentBetaLink']>,
+    ParentType,
+    ContextType,
+    RequireFields<QueryRecentBetaLinksArgs, 'limit'>
+  >;
   searchBoards?: Resolver<
     ResolversTypes['UserBoardConnection'],
     ParentType,
@@ -7415,6 +7445,16 @@ export type QueueStateResolvers<
   queue?: Resolver<Array<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type RecentBetaLinkResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['RecentBetaLink'] = ResolversParentTypes['RecentBetaLink'],
+> = ResolversObject<{
+  betaLink?: Resolver<ResolversTypes['BetaLink'], ParentType, ContextType>;
+  boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -8104,6 +8144,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   QueueNavigationItem?: QueueNavigationItemResolvers<ContextType>;
   QueueReordered?: QueueReorderedResolvers<ContextType>;
   QueueState?: QueueStateResolvers<ContextType>;
+  RecentBetaLink?: RecentBetaLinkResolvers<ContextType>;
   SaveClimbResult?: SaveClimbResultResolvers<ContextType>;
   SearchPlaylistsResult?: SearchPlaylistsResultResolvers<ContextType>;
   SendDeviceLogsResponse?: SendDeviceLogsResponseResolvers<ContextType>;
