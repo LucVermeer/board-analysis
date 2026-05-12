@@ -3029,6 +3029,13 @@ export type Query = {
    * Includes enriched climb data for display.
    */
   userAscentsFeed: AscentFeedResult;
+  /**
+   * Beta videos contributed by a specific Boardsesh user, ordered
+   * most-recent-first. Matches both videos this user added directly and
+   * videos posted under the Instagram handle linked from their profile.
+   * Returns only rows whose thumbnails are cached in our S3.
+   */
+  userBetaLinks: Array<RecentBetaLink>;
   /** Get a user's percentile ranking based on distinct climbs ascended. */
   userClimbPercentile: UserClimbPercentile;
   /**
@@ -3426,6 +3433,12 @@ export type QueryTrendingFeedArgs = {
 export type QueryUserAscentsFeedArgs = {
   input?: InputMaybe<AscentFeedInput>;
   userId: Scalars['ID']['input'];
+};
+
+/** Root query type for all read operations. */
+export type QueryUserBetaLinksArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  userId: Scalars['String']['input'];
 };
 
 /** Root query type for all read operations. */
@@ -4805,6 +4818,30 @@ export type GetRecentBetaLinksQueryVariables = Exact<{
 export type GetRecentBetaLinksQuery = {
   __typename?: 'Query';
   recentBetaLinks: Array<{
+    __typename?: 'RecentBetaLink';
+    climbName?: string | null;
+    boardType: string;
+    betaLink: {
+      __typename?: 'BetaLink';
+      climbUuid: string;
+      link: string;
+      foreignUsername?: string | null;
+      angle?: number | null;
+      thumbnail?: string | null;
+      isListed?: boolean | null;
+      createdAt?: string | null;
+    };
+  }>;
+};
+
+export type GetUserBetaLinksQueryVariables = Exact<{
+  userId: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+export type GetUserBetaLinksQuery = {
+  __typename?: 'Query';
+  userBetaLinks: Array<{
     __typename?: 'RecentBetaLink';
     climbName?: string | null;
     boardType: string;
@@ -7058,6 +7095,72 @@ export const GetRecentBetaLinksDocument = {
     },
   ],
 } as unknown as DocumentNode<GetRecentBetaLinksQuery, GetRecentBetaLinksQueryVariables>;
+export const GetUserBetaLinksDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetUserBetaLinks' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'userId' } },
+          type: { kind: 'NonNullType', type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'limit' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'userBetaLinks' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'userId' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'userId' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'limit' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'betaLink' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'climbUuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'link' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'foreignUsername' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'thumbnail' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'isListed' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetUserBetaLinksQuery, GetUserBetaLinksQueryVariables>;
 export const ClimbStatsHistoryDocument = {
   kind: 'Document',
   definitions: [

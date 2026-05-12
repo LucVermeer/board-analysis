@@ -434,6 +434,13 @@ export const boardBetaLinks = pgTable(
     // null for TikTok and other platforms. Used as the indexed key for the
     // cross-climb dedup check so we don't have to LIKE-scan every row.
     shortcode: text('shortcode'),
+    // Boardsesh user who attached this link. Populated by attachBetaLink and
+    // by the saveTick beta-link insert path; NULL for legacy rows written
+    // before this column existed and for any future write path that didn't
+    // route through requireAuthenticated. The FK to users(id) is added in
+    // the migration as ON DELETE SET NULL so deleting an account preserves
+    // the community video record but drops the attribution.
+    createdByUserId: text('created_by_user_id'),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.boardType, table.climbUuid, table.link] }),
@@ -444,6 +451,11 @@ export const boardBetaLinks = pgTable(
     shortcodeIdx: index('board_beta_links_shortcode_idx')
       .on(table.boardType, table.shortcode)
       .where(sql`${table.shortcode} IS NOT NULL`),
+    // Powers the profile-page "their beta" slider lookup. Partial index
+    // because the attribution column is NULL for legacy rows.
+    createdByIdx: index('board_beta_links_created_by_idx')
+      .on(table.createdByUserId, table.createdAt)
+      .where(sql`${table.createdByUserId} IS NOT NULL`),
     // Note: No FK to board_climbs - beta links may arrive before their corresponding climbs during sync
   }),
 );

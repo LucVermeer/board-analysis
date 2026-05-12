@@ -50,6 +50,10 @@ vi.mock('../components/profile-nav-card', () => ({
   ),
 }));
 
+vi.mock('../components/profile-beta-section', () => ({
+  default: () => null,
+}));
+
 vi.mock('@/app/components/charts/css-bar-chart', () => ({
   CssBarChart: () => <div data-testid="overview-chart" />,
 }));

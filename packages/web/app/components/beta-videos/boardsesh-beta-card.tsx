@@ -8,7 +8,7 @@ import { isInstagramUrl, isTikTokUrl } from '@/app/lib/beta-video-url';
 import TikTokIcon from './tiktok-icon';
 import styles from './boardsesh-beta.module.css';
 
-type BoardseshBetaCardSource = 'home' | 'drawer';
+type BoardseshBetaCardSource = 'home' | 'drawer' | 'profile';
 
 type BoardseshBetaCardProps = {
   link: BetaLink;

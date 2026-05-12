@@ -23,7 +23,9 @@ import { useProfileData } from './hooks/use-profile-data';
 import { buildWeeklyBars } from './utils/chart-data-builders';
 import UserCard from './components/user-card';
 import ProfileNavCard from './components/profile-nav-card';
+import ProfileBetaSection from './components/profile-beta-section';
 import type { UserProfile, LogbookEntry } from './utils/profile-constants';
+import type { RecentBetaLinkRow } from '@/app/lib/server-recent-beta-links';
 
 type ProfilePageContentProps = {
   userId: string;
@@ -34,6 +36,7 @@ type ProfilePageContentProps = {
   initialLogbook?: LogbookEntry[];
   initialIsOwnProfile?: boolean;
   initialNotFound?: boolean;
+  initialUserBeta?: RecentBetaLinkRow[];
 };
 
 export default function ProfilePageContent({
@@ -45,6 +48,7 @@ export default function ProfilePageContent({
   initialLogbook,
   initialIsOwnProfile,
   initialNotFound,
+  initialUserBeta = [],
 }: ProfilePageContentProps) {
   const { gradeFormat } = useGradeFormat();
   const { t } = useTranslation('profile');
@@ -120,6 +124,9 @@ export default function ProfilePageContent({
             </CardContent>
           </MuiCard>
         )}
+
+        {/* Beta videos contributed by this user */}
+        <ProfileBetaSection userId={userId} initialBeta={initialUserBeta} />
 
         {/* Navigation cards */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>

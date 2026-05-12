@@ -3899,6 +3899,14 @@ type Query {
   thumbnails are already cached in our S3; no live IG/TikTok enrichment.
   """
   recentBetaLinks(limit: Int = 20, boardType: String): [RecentBetaLink!]!
+
+  """
+  Beta videos contributed by a specific Boardsesh user, ordered
+  most-recent-first. Matches both videos this user added directly and
+  videos posted under the Instagram handle linked from their profile.
+  Returns only rows whose thumbnails are cached in our S3.
+  """
+  userBetaLinks(userId: String!, limit: Int = 50): [RecentBetaLink!]!
 }
 
 """
