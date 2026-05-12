@@ -388,9 +388,9 @@ class RoomManager {
       const batch = activeSessions.slice(i, i + batchSize);
       await Promise.all(
         batch.map((sessionId) =>
-          store.refreshTTL(sessionId).catch((err) =>
-            console.error(`[RoomManager] TTL refresh failed for ${sessionId}:`, err),
-          ),
+          store
+            .refreshTTL(sessionId)
+            .catch((err) => console.error(`[RoomManager] TTL refresh failed for ${sessionId}:`, err)),
         ),
       );
     }

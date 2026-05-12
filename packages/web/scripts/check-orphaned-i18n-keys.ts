@@ -235,9 +235,7 @@ function tFunctionParamContext(parameter: ts.ParameterDeclaration): NsContext | 
   return ANY_CTX;
 }
 
-function findEnclosingJsxOpening(
-  node: ts.Node,
-): ts.JsxOpeningElement | ts.JsxSelfClosingElement | undefined {
+function findEnclosingJsxOpening(node: ts.Node): ts.JsxOpeningElement | ts.JsxSelfClosingElement | undefined {
   let cur: ts.Node | undefined = node.parent;
   while (cur) {
     if (ts.isJsxOpeningElement(cur) || ts.isJsxSelfClosingElement(cur)) return cur;
@@ -378,7 +376,7 @@ function analyzeFile(filePath: string, sourceOverride?: string): FileAnalysis {
       const right = resolveArgument(arg.whenFalse, ctx);
       return left && right;
     }
-    if (ts.isPropertyAccessExpression(arg) && /I18nKey$/.test(arg.name.text)) {
+    if (ts.isPropertyAccessExpression(arg) && arg.name.text.endsWith('I18nKey')) {
       // `t(preset.titleI18nKey)` — the `*I18nKey` property visitor records
       // the actual literal at the object definition site. Treat the read
       // as resolved so we don't hard-fail.
@@ -495,7 +493,7 @@ function analyzeFile(filePath: string, sourceOverride?: string): FileAnalysis {
       if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
         propertyName = name.text;
       }
-      if (propertyName && /I18nKey$/.test(propertyName)) {
+      if (propertyName && propertyName.endsWith('I18nKey')) {
         const init = node.initializer;
         if (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init)) {
           resolveStaticKey(init.text, ANY_CTX);

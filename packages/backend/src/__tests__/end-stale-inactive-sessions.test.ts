@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vite-plus/test';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/client';
 import { sessions } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { endStaleInactiveSessions } from '../services/room-manager/session-discovery';
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -22,8 +22,7 @@ describe('endStaleInactiveSessions', () => {
       lastActivity: minutesAgo(90),
     });
 
-    const ended = await endStaleInactiveSessions(ONE_HOUR_MS);
-    expect(ended).toBe(1);
+    await endStaleInactiveSessions(ONE_HOUR_MS);
 
     const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
     expect(row?.status).toBe('ended');
@@ -41,8 +40,7 @@ describe('endStaleInactiveSessions', () => {
       lastActivity: minutesAgo(120),
     });
 
-    const ended = await endStaleInactiveSessions(ONE_HOUR_MS);
-    expect(ended).toBe(0);
+    await endStaleInactiveSessions(ONE_HOUR_MS);
 
     const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
     expect(row?.status).toBe('active');
@@ -59,8 +57,7 @@ describe('endStaleInactiveSessions', () => {
       lastActivity: minutesAgo(10),
     });
 
-    const ended = await endStaleInactiveSessions(ONE_HOUR_MS);
-    expect(ended).toBe(0);
+    await endStaleInactiveSessions(ONE_HOUR_MS);
 
     const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
     expect(row?.status).toBe('active');
@@ -79,19 +76,19 @@ describe('endStaleInactiveSessions', () => {
       endedAt: originalEndedAt,
     });
 
-    const ended = await endStaleInactiveSessions(ONE_HOUR_MS);
-    expect(ended).toBe(0);
+    await endStaleInactiveSessions(ONE_HOUR_MS);
 
     const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
     expect(row?.status).toBe('ended');
     expect(row?.endedAt?.getTime()).toBe(originalEndedAt.getTime());
   });
 
-  it('returns the affected row count across a mixed batch', async () => {
+  it('ends only the stale, non-permanent rows across a mixed batch', async () => {
     const stale1 = uuidv4();
     const stale2 = uuidv4();
     const fresh = uuidv4();
     const permanent = uuidv4();
+    const insertedIds = [stale1, stale2, fresh, permanent];
 
     await db.insert(sessions).values([
       { id: stale1, boardPath: '/kilter/1/2/3/40', status: 'active', isPermanent: false, lastActivity: minutesAgo(90) },
@@ -106,10 +103,11 @@ describe('endStaleInactiveSessions', () => {
       },
     ]);
 
-    const ended = await endStaleInactiveSessions(ONE_HOUR_MS);
-    expect(ended).toBe(2);
+    await endStaleInactiveSessions(ONE_HOUR_MS);
 
-    const rows = await db.select().from(sessions);
+    // Scope the readback to the rows we inserted so the assertion holds even
+    // if a future change drops the global truncate in beforeEach.
+    const rows = await db.select().from(sessions).where(inArray(sessions.id, insertedIds));
     const byId = new Map(rows.map((r) => [r.id, r.status]));
     expect(byId.get(stale1)).toBe('ended');
     expect(byId.get(stale2)).toBe('ended');

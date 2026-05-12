@@ -132,24 +132,15 @@ describe('LogbookEntryCard', () => {
   });
 
   it('shows the Mirrored chip only when showMirrorTag is true and the entry is mirrored', () => {
-    const { rerender } = render(
-      <LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} showMirrorTag={false} />,
-    );
+    const { rerender } = render(<LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} showMirrorTag={false} />);
     expect(screen.queryByText('Mirrored')).toBeNull();
 
-    rerender(
-      <LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} showMirrorTag={true} />,
-    );
+    rerender(<LogbookEntryCard entry={{ ...baseEntry, isMirror: true }} showMirrorTag={true} />);
     expect(screen.getByText('Mirrored')).toBeTruthy();
   });
 
   it('hides the rating when the entry is an attempt', () => {
-    render(
-      <LogbookEntryCard
-        entry={{ ...baseEntry, status: 'attempt', quality: null }}
-        showMirrorTag={false}
-      />,
-    );
+    render(<LogbookEntryCard entry={{ ...baseEntry, status: 'attempt', quality: null }} showMirrorTag={false} />);
     expect(screen.queryByTestId('rating')).toBeNull();
   });
 

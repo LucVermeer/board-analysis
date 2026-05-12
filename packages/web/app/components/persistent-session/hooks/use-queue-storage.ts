@@ -46,7 +46,15 @@ export function useQueueStorage({
   const [localBoardPath, setLocalBoardPath] = useState<string | null>(null);
   const [localBoardDetails, setLocalBoardDetails] = useState<BoardDetails | null>(null);
   const [isLocalQueueLoaded, setIsLocalQueueLoaded] = useState(false);
-  const hasRestoredRef = useRef(false);
+  // Flips true only after we ran the auto-finished pre-flight with a real
+  // token (or determined there was no persisted session at all). The no-token
+  // branch deliberately leaves this false so a later non-null `wsAuthToken`
+  // re-fires the effect and gets its chance at the pre-flight.
+  const hasRunPreflightRef = useRef(false);
+  // Flips true the first time we successfully read the persisted session and
+  // committed it to `activeSession`. Prevents double-activation on the
+  // re-fire after `wsAuthToken` arrives.
+  const hasActivatedRef = useRef(false);
 
   // Ref for activeSession so callbacks have stable identity
   const activeSessionRef = useRef(activeSession);
@@ -59,14 +67,24 @@ export function useQueueStorage({
     }
   }, []);
 
-  // Restore party session once auth has resolved. Waiting for !isAuthLoading
-  // ensures the pre-flight auto-finished check has a real token to send —
-  // otherwise it short-circuits on the `!authToken` guard and the finished
-  // dialog never appears on a cold start.
+  // Restore party session once auth has resolved.
+  //
+  // The pre-flight auto-finished check needs a real bearer token —
+  // `fetchAutoFinishedSummary` short-circuits on `!authToken`. Two valid
+  // post-`isAuthLoading=false` states matter here:
+  //   - authenticated (or sign-in arrived later): wsAuthToken is a string;
+  //     run the pre-flight, surface the summary if the backend ended the
+  //     session, then mark the pre-flight done.
+  //   - anonymous or auth-fetch error: wsAuthToken stays null; restore the
+  //     UI optimistically so the queue isn't blocked, but DO NOT mark the
+  //     pre-flight done — a later non-null wsAuthToken (e.g. user signs in
+  //     after the page loads) re-fires this effect and gets a real chance.
+  //
+  // The diagnostic log on the no-token branch is unconditional so a
+  // silent fall-through (e.g. token fetch repeatedly fails) is visible.
   useEffect(() => {
     if (isAuthLoading) return;
-    if (hasRestoredRef.current) return;
-    hasRestoredRef.current = true;
+    if (hasRunPreflightRef.current) return;
 
     async function restoreState() {
       try {
@@ -74,7 +92,20 @@ export function useQueueStorage({
         if (persisted && persisted.sessionId && persisted.boardPath && persisted.boardDetails) {
           if (DEBUG) console.info('[PersistentSession] Restoring persisted session:', persisted.sessionId);
 
+          if (!wsAuthToken) {
+            console.info(
+              '[PersistentSession] No auth token after auth resolved; restoring optimistically. Will retry the auto-finished pre-flight if a token arrives.',
+            );
+            if (!hasActivatedRef.current) {
+              hasActivatedRef.current = true;
+              setActiveSession(persisted);
+            }
+            setIsLocalQueueLoaded(true);
+            return;
+          }
+
           const autoFinished = await fetchAutoFinishedSummary(persisted, wsAuthToken);
+          hasRunPreflightRef.current = true;
           if (autoFinished) {
             if (DEBUG) console.info('[PersistentSession] Session was auto-finished, showing summary');
             await removePreference(ACTIVE_SESSION_KEY);
@@ -83,7 +114,10 @@ export function useQueueStorage({
             return;
           }
 
-          setActiveSession(persisted);
+          if (!hasActivatedRef.current) {
+            hasActivatedRef.current = true;
+            setActiveSession(persisted);
+          }
           setIsLocalQueueLoaded(true);
           return;
         }
@@ -91,17 +125,13 @@ export function useQueueStorage({
         console.error('[PersistentSession] Failed to restore persisted session:', error);
       }
 
+      // No persisted session, or read failed — nothing the token would change.
+      hasRunPreflightRef.current = true;
       setIsLocalQueueLoaded(true);
     }
 
     void restoreState();
-    // `wsAuthToken` is intentionally not in the deps: restoration is gated by
-    // `isAuthLoading` and runs once (guarded by hasRestoredRef). When this
-    // effect re-runs because isAuthLoading flipped, the new closure captures
-    // the freshly-resolved token. Token rotation after that should not
-    // re-restore.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthLoading, onSessionAutoFinished, setActiveSession]);
+  }, [isAuthLoading, wsAuthToken, onSessionAutoFinished, setActiveSession]);
 
   // Local queue management (in-memory only)
   const setLocalQueueState = useCallback(

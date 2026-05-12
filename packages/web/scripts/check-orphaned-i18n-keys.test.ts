@@ -237,14 +237,10 @@ describe('plural variants', () => {
   });
 
   it('still flags an unused base whose plural variants are also unreferenced', () => {
-    const orphans = namespaceOrphans(
-      { admin: ['unused.thing_one', 'unused.thing_other'] },
-      [analyze(`export const noop = 1;`, fakeTsPath)],
-    );
-    expect(orphans.map((orphan) => orphan.key).sort()).toEqual([
-      'unused.thing_one',
-      'unused.thing_other',
+    const orphans = namespaceOrphans({ admin: ['unused.thing_one', 'unused.thing_other'] }, [
+      analyze(`export const noop = 1;`, fakeTsPath),
     ]);
+    expect(orphans.map((orphan) => orphan.key).sort()).toEqual(['unused.thing_one', 'unused.thing_other']);
   });
 });
 
@@ -257,10 +253,7 @@ describe('// i18n-keep markers', () => {
     `,
       fakeTsPath,
     );
-    const orphans = namespaceOrphans(
-      { common: ['headerCopy.legacyTitle', 'unused'] },
-      [analysis],
-    );
+    const orphans = namespaceOrphans({ common: ['headerCopy.legacyTitle', 'unused'] }, [analysis]);
     expect(orphans.map((orphan) => orphan.key)).toEqual(['unused']);
   });
 
@@ -272,10 +265,7 @@ describe('// i18n-keep markers', () => {
     `,
       fakeTsPath,
     );
-    const orphans = namespaceOrphans(
-      { common: ['headerCopy.legacyTitle'] },
-      [analysis],
-    );
+    const orphans = namespaceOrphans({ common: ['headerCopy.legacyTitle'] }, [analysis]);
     expect(orphans).toEqual([]);
   });
 });

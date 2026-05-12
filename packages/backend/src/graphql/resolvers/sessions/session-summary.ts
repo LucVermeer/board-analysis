@@ -130,10 +130,16 @@ export async function generateSessionSummary(sessionId: string): Promise<Session
   const totalSends = participants.reduce((sum, p) => sum + p.sends, 0);
   const totalAttempts = participants.reduce((sum, p) => sum + p.attempts, 0);
 
-  // Calculate duration
+  // Calculate duration. A null startedAt is unusual — sessions get one on
+  // creation — but it's persisted as nullable so we have to handle it. Log
+  // when we hit this so the auto-finish flow (the first user-visible path
+  // for sessions without a startedAt) doesn't display a blank duration with
+  // no breadcrumb in the logs.
   let durationMinutes: number | null = null;
   if (session.startedAt && session.endedAt) {
     durationMinutes = Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 60000);
+  } else if (session.endedAt && !session.startedAt) {
+    console.warn(`[sessionSummary] Session ${sessionId} has endedAt but no startedAt; durationMinutes will be null.`);
   }
 
   return {

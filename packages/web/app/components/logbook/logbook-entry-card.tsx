@@ -55,11 +55,7 @@ export type LogbookEntryCardProps = {
   user?: LogbookEntryUser;
 };
 
-export const LogbookEntryCard: React.FC<LogbookEntryCardProps> = ({
-  entry,
-  showMirrorTag,
-  user,
-}) => {
+export const LogbookEntryCard: React.FC<LogbookEntryCardProps> = ({ entry, showMirrorTag, user }) => {
   const { t } = useTranslation('profile');
   const ascentStatus = normalizeAscentStatus({
     // normalizeAscentStatus does a runtime check for the three known values

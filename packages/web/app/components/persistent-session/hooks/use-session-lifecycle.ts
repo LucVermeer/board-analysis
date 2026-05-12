@@ -284,6 +284,18 @@ export function useSessionLifecycle({
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pageshow', handlePageShow);
+
+    // BFCache restore: the browser fires `pageshow` with persisted=true after
+    // bindings are restored, but if the user navigated back/forward into this
+    // page before React's effect attached the listener, the event is lost.
+    // Detect via the Performance API and run the check once on mount.
+    if (typeof performance !== 'undefined') {
+      const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      if (navEntry?.type === 'back_forward') {
+        void checkIfAutoFinished();
+      }
+    }
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pageshow', handlePageShow);
