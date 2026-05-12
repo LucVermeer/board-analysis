@@ -127,8 +127,8 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   // open a race window between `isAuthLoading` flipping false and
   // `hasRunPreflightRef` being set.
   const handleQueueStorageSetActiveSession = useCallback(
-    (val: ActiveSessionInfo | null) => {
-      if (val) lifecycle.activateSession(val);
+    (val: ActiveSessionInfo) => {
+      lifecycle.activateSession(val);
     },
     [lifecycle.activateSession],
   );

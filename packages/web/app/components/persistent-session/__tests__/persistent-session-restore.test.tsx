@@ -386,6 +386,49 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     expect(stored).toBeNull();
   });
 
+  it('runs the auto-finished pre-flight exactly once across rapid re-renders after auth resolves', async () => {
+    // Regression guard: previously the inline arrow passed as `setActiveSession`
+    // to `useQueueStorage` was reborn each render. The restore effect listed
+    // that callback in its deps, so rapid re-renders between `isAuthLoading`
+    // flipping false and `hasRunPreflightRef` being set could fire multiple
+    // concurrent `restoreState()` calls (one pre-flight per render).
+    mockWsAuth.token = null;
+    mockWsAuth.isLoading = true;
+    mockHttpRequest.mockResolvedValue({ sessionSummary: buildSessionSummary() });
+
+    const sessionInfo = {
+      sessionId: 'session-race-guard',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+
+    const { result, rerender } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    // Auth resolves; force several synchronous re-renders before the
+    // pre-flight promise resolves to maximise the window in which a fresh
+    // `setActiveSession` reference could re-fire the restore effect.
+    mockWsAuth.token = 'test-token';
+    mockWsAuth.isLoading = false;
+    rerender();
+    rerender();
+    rerender();
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.activeSession).toEqual(sessionInfo);
+    });
+
+    expect(mockHttpRequest).toHaveBeenCalledTimes(1);
+  });
+
   it('re-checks staleness on visibilitychange and surfaces the auto-finished dialog', async () => {
     const sessionInfo = {
       sessionId: 'session-stale-on-return',

@@ -9,7 +9,7 @@ import { type ActiveSessionInfo, ACTIVE_SESSION_KEY, DEBUG } from '../types';
 
 type UseQueueStorageArgs = {
   activeSession: ActiveSessionInfo | null;
-  setActiveSession: (val: ActiveSessionInfo | null) => void;
+  setActiveSession: (val: ActiveSessionInfo) => void;
   /** Called when a restored session was already auto-finished by the backend */
   onSessionAutoFinished: (summary: SessionSummary, boardType: string | null) => void;
   wsAuthToken: string | null;
