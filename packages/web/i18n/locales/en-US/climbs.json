@@ -166,7 +166,10 @@
     },
     "zone": {
       "draw": "Draw zone",
-      "clear": "Clear zone"
+      "clear": "Clear zone",
+      "modeLabel": "Zone type",
+      "allHolds": "All holds inside",
+      "anyHold": "At least 1 hold"
     },
     "holdsAndZone": {
       "description": "Tap holds to filter, or draw a zone to limit results to climbs that fit inside it."

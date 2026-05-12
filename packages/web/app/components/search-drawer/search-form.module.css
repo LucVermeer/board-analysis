@@ -94,8 +94,20 @@
 
 .holdSearchHeaderCompact {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   padding: 4px 0;
+}
+
+.zoneModeToggle {
+  max-width: 100%;
+}
+
+.zoneModeToggle :global(.MuiToggleButton-root) {
+  text-transform: none;
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 /* Scoped MUI overrides for hold search select */

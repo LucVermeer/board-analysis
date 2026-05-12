@@ -72,6 +72,7 @@ export const UISearchParamsProvider: React.FC<{ children: React.ReactNode }> = (
         showOnlyCompleted: uiSearchParams.showOnlyCompleted,
         holdsCount: Object.keys(uiSearchParams.holdsFilter || {}).length,
         setterCount: uiSearchParams.settername.length,
+        zoneMode: uiSearchParams.zoneBox ? uiSearchParams.zoneMode : undefined,
       });
     }
 

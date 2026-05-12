@@ -1,5 +1,13 @@
 import { type SQL, eq, gte, sql, like, notLike, inArray, or, and } from 'drizzle-orm';
-import { boardClimbs, boardClimbStats, boardseshTicks, boardProductSizes, boardClimbHolds } from '../../schema/index';
+import {
+  boardClimbs,
+  boardClimbStats,
+  boardseshTicks,
+  boardProductSizes,
+  boardClimbHolds,
+  boardPlacements,
+  boardHoles,
+} from '../../schema/index';
 import type { BoardRouteParams, ClimbSearchParams } from './types';
 
 // Kilter Homewall constants for tall-climb filtering
@@ -168,23 +176,44 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     )`);
   }
 
-  // Zone filter — keep only climbs whose entire bounding box sits inside
-  // the user-defined zone (in board_holes/board_climbs grid coordinates).
-  // The denormalized edge columns on board_climbs make this a simple range
-  // check; no extra join needed. We defensively re-check the box is valid
-  // even though the GraphQL Zod schema rejects degenerate boxes — direct
-  // db-layer callers (REST proxies, scripts) bypass that guard.
-  const zoneConditions: SQL[] =
-    searchParams.zoneBox &&
-    searchParams.zoneBox.edgeRight > searchParams.zoneBox.edgeLeft &&
-    searchParams.zoneBox.edgeTop > searchParams.zoneBox.edgeBottom
-      ? [
-          sql`${boardClimbs.edgeLeft} >= ${searchParams.zoneBox.edgeLeft}`,
-          sql`${boardClimbs.edgeRight} <= ${searchParams.zoneBox.edgeRight}`,
-          sql`${boardClimbs.edgeBottom} >= ${searchParams.zoneBox.edgeBottom}`,
-          sql`${boardClimbs.edgeTop} <= ${searchParams.zoneBox.edgeTop}`,
-        ]
-      : [];
+  // Zone filter — restrict climbs by the user-defined box in board_holes grid
+  // coordinates. `allHolds` keeps the existing denormalized bounding-box path.
+  // `anyHold` needs to inspect individual climb holds because a climb can
+  // extend outside the zone while still using an expansion hold inside it.
+  // Direct db-layer callers bypass GraphQL validation, so re-check the box.
+  const zoneBox = searchParams.zoneBox;
+  const validZoneBox =
+    zoneBox && zoneBox.edgeRight > zoneBox.edgeLeft && zoneBox.edgeTop > zoneBox.edgeBottom ? zoneBox : null;
+  const zoneMode = searchParams.zoneMode === 'anyHold' ? 'anyHold' : 'allHolds';
+  const zoneConditions: SQL[] = [];
+  if (validZoneBox) {
+    if (zoneMode === 'anyHold') {
+      zoneConditions.push(sql`EXISTS (
+        SELECT 1
+        FROM ${boardClimbHolds} zone_ch
+        JOIN ${boardPlacements} zone_bp
+          ON zone_bp.board_type = zone_ch.board_type
+          AND zone_bp.id = zone_ch.hold_id
+          AND zone_bp.layout_id = ${params.layout_id}
+        JOIN ${boardHoles} zone_bh
+          ON zone_bh.board_type = zone_ch.board_type
+          AND zone_bh.id = zone_bp.hole_id
+        WHERE zone_ch.board_type = ${params.board_name}
+          AND zone_ch.climb_uuid = ${boardClimbs.uuid}
+          AND zone_bh.x >= ${validZoneBox.edgeLeft}
+          AND zone_bh.x <= ${validZoneBox.edgeRight}
+          AND zone_bh.y >= ${validZoneBox.edgeBottom}
+          AND zone_bh.y <= ${validZoneBox.edgeTop}
+      )`);
+    } else {
+      zoneConditions.push(
+        sql`${boardClimbs.edgeLeft} >= ${validZoneBox.edgeLeft}`,
+        sql`${boardClimbs.edgeRight} <= ${validZoneBox.edgeRight}`,
+        sql`${boardClimbs.edgeBottom} >= ${validZoneBox.edgeBottom}`,
+        sql`${boardClimbs.edgeTop} <= ${validZoneBox.edgeTop}`,
+      );
+    }
+  }
 
   // Tall climbs filter condition
   const tallClimbsConditions: SQL[] = [];

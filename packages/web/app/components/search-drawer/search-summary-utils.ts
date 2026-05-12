@@ -18,6 +18,9 @@ export function hasActiveFilters(params: SearchRequestPagination): boolean {
     if (key === 'zoneBox') {
       return value !== null;
     }
+    if (key === 'zoneMode') {
+      return params.zoneBox !== null && value !== DEFAULT_SEARCH_PARAMS.zoneMode;
+    }
     return value !== DEFAULT_SEARCH_PARAMS[key as keyof typeof DEFAULT_SEARCH_PARAMS];
   });
 }
@@ -30,6 +33,9 @@ export function hasActiveNonNameFilters(params: SearchRequestPagination): boolea
     }
     if (key === 'zoneBox') {
       return value !== null;
+    }
+    if (key === 'zoneMode') {
+      return params.zoneBox !== null && value !== DEFAULT_SEARCH_PARAMS.zoneMode;
     }
     return value !== DEFAULT_SEARCH_PARAMS[key as keyof typeof DEFAULT_SEARCH_PARAMS];
   });

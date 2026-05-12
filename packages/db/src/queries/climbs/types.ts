@@ -23,6 +23,8 @@ export type ZoneBox = {
   edgeTop: number;
 };
 
+export type ZoneMatchMode = 'allHolds' | 'anyHold';
+
 /**
  * Search parameters for the climb search query.
  * Shared between web and backend packages.
@@ -57,8 +59,9 @@ export type ClimbSearchParams = {
   showOnlyCompleted?: boolean;
   onlyDrafts?: boolean;
   projectsOnly?: boolean;
-  // Zone filter — restrict to climbs whose bounding box fits inside this box
+  // Zone filter — restrict climbs using a user-drawn bounding box.
   zoneBox?: ZoneBox | null;
+  zoneMode?: ZoneMatchMode | null;
   // Allow dynamic hold keys (e.g., hold_123)
   [key: `hold_${number}`]: unknown;
 };

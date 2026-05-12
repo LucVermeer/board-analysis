@@ -48,6 +48,8 @@ export async function cachedGetHoldHeatmapData(
         onlyClassics: searchParams.onlyClassics,
         onlyTallClimbs: searchParams.onlyTallClimbs,
         holdsFilter: searchParams.holdsFilter,
+        zoneBox: searchParams.zoneBox,
+        zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,
       }),
     ),
   ];

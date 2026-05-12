@@ -102,6 +102,8 @@ export type ZoneBox = {
   edgeTop: number;
 };
 
+export type ZoneMatchMode = 'allHolds' | 'anyHold';
+
 export type SearchRequest = {
   gradeAccuracy: number;
   maxGrade: number;
@@ -123,6 +125,7 @@ export type SearchRequest = {
   onlyDrafts: boolean;
   projectsOnly: boolean;
   zoneBox: ZoneBox | null;
+  zoneMode: ZoneMatchMode;
 };
 
 export type SearchRequestPagination = SearchRequest & {

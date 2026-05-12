@@ -51,6 +51,7 @@ const mockSearchParams: SearchRequestPagination = {
   onlyDrafts: false,
   projectsOnly: false,
   zoneBox: null,
+  zoneMode: 'allHolds',
 };
 
 const initialState: QueueState = {

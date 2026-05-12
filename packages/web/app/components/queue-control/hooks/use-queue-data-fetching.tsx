@@ -101,6 +101,7 @@ export const useQueueDataFetching = ({
       onlyDrafts: searchParams.onlyDrafts || undefined,
       projectsOnly: searchParams.projectsOnly || undefined,
       zoneBox: searchParams.zoneBox || undefined,
+      zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,
     }),
     [searchParams, parsedParams],
   );
@@ -183,6 +184,7 @@ export const useQueueDataFetching = ({
       onlyDrafts: countSearchParams.onlyDrafts || undefined,
       projectsOnly: countSearchParams.projectsOnly || undefined,
       zoneBox: countSearchParams.zoneBox || undefined,
+      zoneMode: countSearchParams.zoneBox ? countSearchParams.zoneMode : undefined,
     }),
     [countSearchParams, parsedParams],
   );

@@ -91,6 +91,7 @@ export const climbQueries = {
       onlyDrafts: input.onlyDrafts,
       projectsOnly: input.projectsOnly,
       zoneBox: input.zoneBox,
+      zoneMode: input.zoneMode,
     };
 
     if (DEBUG) {

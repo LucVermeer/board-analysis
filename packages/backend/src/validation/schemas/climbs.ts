@@ -155,6 +155,7 @@ export const ClimbSearchInputSchema = z.object({
       message: 'zoneBox edges must form a non-empty box (right > left, top > bottom)',
     })
     .optional(),
+  zoneMode: z.enum(['allHolds', 'anyHold']).optional(),
 });
 
 export const SaveClimbInputSchema = z.object({

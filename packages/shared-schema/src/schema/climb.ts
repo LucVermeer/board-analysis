@@ -99,6 +99,16 @@ export const climbTypeDefs = /* GraphQL */ `
   }
 
   """
+  How a drawn zone should match climbs.
+  allHolds keeps the existing behavior: every climb hold must fit inside the box.
+  anyHold matches climbs that use at least one hold inside the box.
+  """
+  enum ZoneMatchMode {
+    allHolds
+    anyHold
+  }
+
+  """
   Input parameters for searching climbs.
   Supports filtering, sorting, and pagination.
   """
@@ -155,8 +165,10 @@ export const climbTypeDefs = /* GraphQL */ `
     onlyDrafts: Boolean
     "Show only unclimbed projects (climbs with 0 ascents)"
     projectsOnly: Boolean
-    "Restrict results to climbs whose bounding box fits inside this zone"
+    "Restrict results using this drawn zone"
     zoneBox: ZoneBoxInput
+    "How the zone should match climb holds. Defaults to allHolds when omitted."
+    zoneMode: ZoneMatchMode
   }
 
   """

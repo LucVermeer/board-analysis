@@ -104,6 +104,7 @@ const mockSearchParams: SearchRequestPagination = {
   onlyDrafts: false,
   projectsOnly: false,
   zoneBox: null,
+  zoneMode: 'allHolds',
 };
 
 const mockParsedParams: ParsedBoardRouteParameters = {
@@ -343,6 +344,36 @@ describe('useQueueDataFetching', () => {
 
       expect(requestInputs.length).toBeGreaterThan(0);
       expect(requestInputs.every((input) => input.minRating === 3)).toBe(true);
+    });
+  });
+
+  it('passes zone mode to GraphQL inputs when a zone is active', async () => {
+    const searchParamsWithAnyHoldZone = {
+      ...mockSearchParams,
+      zoneBox: { edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 },
+      zoneMode: 'anyHold' as const,
+    };
+
+    renderHook(
+      () =>
+        useQueueDataFetching({
+          searchParams: searchParamsWithAnyHoldZone,
+          countSearchParams: searchParamsWithAnyHoldZone,
+          queue: mockQueue,
+          parsedParams: mockParsedParams,
+          hasDoneFirstFetch: false,
+          setHasDoneFirstFetch: mockSetHasDoneFirstFetch,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      const requestInputs = mockGraphQLRequest.mock.calls
+        .map((call) => (call[1] as { input?: { zoneMode?: string } } | undefined)?.input)
+        .filter((input): input is { zoneMode?: string } => input !== undefined);
+
+      expect(requestInputs.length).toBeGreaterThan(0);
+      expect(requestInputs.every((input) => input.zoneMode === 'anyHold')).toBe(true);
     });
   });
 

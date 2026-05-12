@@ -170,6 +170,7 @@ describe('hasUserSpecificFilters', () => {
     onlyDrafts: false,
     projectsOnly: false,
     zoneBox: null,
+    zoneMode: 'allHolds' as const,
     page: 0,
     pageSize: 20,
   };

@@ -16,6 +16,8 @@ export const defaultClimbSearchParameters: SearchRequestPagination = {
   setternameSuggestion: '',
   //@ts-expect-error TODO fix later
   holdsFilter: '',
+  zoneBox: null,
+  zoneMode: 'allHolds',
   mirroredHolds: '',
   pageSize: PAGE_LIMIT,
   page: 0,

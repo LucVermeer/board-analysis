@@ -11,6 +11,8 @@ import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import MuiTooltip from '@mui/material/Tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
+import MuiToggleButton from '@mui/material/ToggleButton';
+import MuiToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 
@@ -21,6 +23,7 @@ import type {
   HoldFilterType,
   HoldsFilter,
   ZoneBox,
+  ZoneMatchMode,
 } from '@/app/lib/types';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { themeTokens } from '@/app/theme/theme-config';
@@ -141,6 +144,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
   }, [uiSearchParams.zoneBox]);
 
   const zoneEnabled = localZone !== null;
+  const zoneMode: ZoneMatchMode = zoneEnabled && uiSearchParams.zoneMode === 'anyHold' ? 'anyHold' : 'allHolds';
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragStateRef = useRef<{
@@ -244,7 +248,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
   // constraint, so every tap goes through.
   const handleHoldClickInsideZone = useCallback(
     (holdId: number, anchor: Element) => {
-      if (localZone) {
+      if (localZone && zoneMode === 'allHolds') {
         const hold = holdsById.get(holdId);
         // Unknown holdId can't be the user's intent under an active zone
         // — BoardRenderer's click targets all map to holds in holdsData,
@@ -253,7 +257,7 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
       }
       picker.handleHoldClick(holdId, anchor);
     },
-    [dims, holdsById, localZone, picker],
+    [dims, holdsById, localZone, picker, zoneMode],
   );
 
   // The backend zone filter requires every hold of a climb to fit inside
@@ -275,17 +279,33 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
 
   const handleEnable = useCallback(() => {
     setLocalZone(defaultZone);
-    updateFilters({ zoneBox: defaultZone, holdsFilter: pruneHoldsToZone(defaultZone) });
-    track('Search Zone Enabled', { boardLayout: boardDetails.layout_name || '' });
+    updateFilters({ zoneBox: defaultZone, zoneMode: 'allHolds', holdsFilter: pruneHoldsToZone(defaultZone) });
+    track('Search Zone Enabled', { boardLayout: boardDetails.layout_name || '', zoneMode: 'allHolds' });
   }, [boardDetails.layout_name, defaultZone, pruneHoldsToZone, updateFilters]);
 
   const handleClear = useCallback(() => {
     setLocalZone(null);
     // No zone constraint = no need to touch holdsFilter; existing filter
     // holds keep working with their hold-only semantics.
-    updateFilters({ zoneBox: null });
+    updateFilters({ zoneBox: null, zoneMode: 'allHolds' });
     track('Search Zone Cleared', { boardLayout: boardDetails.layout_name || '' });
   }, [boardDetails.layout_name, updateFilters]);
+
+  const handleZoneModeChange = useCallback(
+    (_event: React.MouseEvent<HTMLElement>, nextMode: ZoneMatchMode | null) => {
+      if (!nextMode || !localZone) return;
+      if (nextMode === 'allHolds') {
+        updateFilters({ zoneMode: nextMode, holdsFilter: pruneHoldsToZone(localZone) });
+      } else {
+        updateFilters({ zoneMode: nextMode });
+      }
+      track('Search Zone Mode Changed', {
+        boardLayout: boardDetails.layout_name || '',
+        zoneMode: nextMode,
+      });
+    },
+    [boardDetails.layout_name, localZone, pruneHoldsToZone, updateFilters],
+  );
 
   const beginDrag = useCallback(
     (mode: DragMode) => (event: React.PointerEvent<SVGElement>) => {
@@ -325,14 +345,19 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
   const persistDraggedZone = useCallback(
     (finalZone: ZoneBox) => {
       setLocalZone(finalZone);
-      updateFilters({ zoneBox: finalZone, holdsFilter: pruneHoldsToZone(finalZone) });
+      if (zoneMode === 'allHolds') {
+        updateFilters({ zoneBox: finalZone, zoneMode, holdsFilter: pruneHoldsToZone(finalZone) });
+      } else {
+        updateFilters({ zoneBox: finalZone, zoneMode });
+      }
       track('Search Zone Updated', {
         boardLayout: boardDetails.layout_name || '',
+        zoneMode,
         width: finalZone.edgeRight - finalZone.edgeLeft,
         height: finalZone.edgeTop - finalZone.edgeBottom,
       });
     },
-    [boardDetails.layout_name, pruneHoldsToZone, updateFilters],
+    [boardDetails.layout_name, pruneHoldsToZone, updateFilters, zoneMode],
   );
 
   const handlePointerUp = useCallback(
@@ -461,6 +486,23 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
             </IconButton>
           </MuiTooltip>
         </Stack>
+        {zoneEnabled && (
+          <MuiToggleButtonGroup
+            className={styles.zoneModeToggle}
+            value={zoneMode}
+            exclusive
+            size="small"
+            onChange={handleZoneModeChange}
+            aria-label={t('search.zone.modeLabel')}
+          >
+            <MuiToggleButton value="allHolds" aria-label={t('search.zone.allHolds')}>
+              {t('search.zone.allHolds')}
+            </MuiToggleButton>
+            <MuiToggleButton value="anyHold" aria-label={t('search.zone.anyHold')}>
+              {t('search.zone.anyHold')}
+            </MuiToggleButton>
+          </MuiToggleButtonGroup>
+        )}
       </div>
 
       <div className={styles.boardContainer} data-testid="zone-board-container" data-swipe-blocked="">
@@ -513,46 +555,50 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
                 dimmed hold are absorbed here instead of falling through to
                 BoardRenderer underneath — the parent svg keeps pointer-events:
                 none so events do not propagate further. */}
-            <rect
-              data-testid="zone-exclusion-top"
-              x={0}
-              y={0}
-              width={boardWidth}
-              height={rectSvg.y}
-              fill={themeTokens.neutral[900]}
-              fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="all"
-            />
-            <rect
-              data-testid="zone-exclusion-bottom"
-              x={0}
-              y={rectSvg.y + rectSvg.height}
-              width={boardWidth}
-              height={Math.max(0, boardHeight - (rectSvg.y + rectSvg.height))}
-              fill={themeTokens.neutral[900]}
-              fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="all"
-            />
-            <rect
-              data-testid="zone-exclusion-left"
-              x={0}
-              y={rectSvg.y}
-              width={rectSvg.x}
-              height={rectSvg.height}
-              fill={themeTokens.neutral[900]}
-              fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="all"
-            />
-            <rect
-              data-testid="zone-exclusion-right"
-              x={rectSvg.x + rectSvg.width}
-              y={rectSvg.y}
-              width={Math.max(0, boardWidth - (rectSvg.x + rectSvg.width))}
-              height={rectSvg.height}
-              fill={themeTokens.neutral[900]}
-              fillOpacity={ZONE_EXCLUSION_OPACITY}
-              pointerEvents="all"
-            />
+            {zoneMode === 'allHolds' && (
+              <>
+                <rect
+                  data-testid="zone-exclusion-top"
+                  x={0}
+                  y={0}
+                  width={boardWidth}
+                  height={rectSvg.y}
+                  fill={themeTokens.neutral[900]}
+                  fillOpacity={ZONE_EXCLUSION_OPACITY}
+                  pointerEvents="all"
+                />
+                <rect
+                  data-testid="zone-exclusion-bottom"
+                  x={0}
+                  y={rectSvg.y + rectSvg.height}
+                  width={boardWidth}
+                  height={Math.max(0, boardHeight - (rectSvg.y + rectSvg.height))}
+                  fill={themeTokens.neutral[900]}
+                  fillOpacity={ZONE_EXCLUSION_OPACITY}
+                  pointerEvents="all"
+                />
+                <rect
+                  data-testid="zone-exclusion-left"
+                  x={0}
+                  y={rectSvg.y}
+                  width={rectSvg.x}
+                  height={rectSvg.height}
+                  fill={themeTokens.neutral[900]}
+                  fillOpacity={ZONE_EXCLUSION_OPACITY}
+                  pointerEvents="all"
+                />
+                <rect
+                  data-testid="zone-exclusion-right"
+                  x={rectSvg.x + rectSvg.width}
+                  y={rectSvg.y}
+                  width={Math.max(0, boardWidth - (rectSvg.x + rectSvg.width))}
+                  height={rectSvg.height}
+                  fill={themeTokens.neutral[900]}
+                  fillOpacity={ZONE_EXCLUSION_OPACITY}
+                  pointerEvents="all"
+                />
+              </>
+            )}
             <rect
               data-testid="zone-selection-outline"
               x={rectSvg.x}

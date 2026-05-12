@@ -83,6 +83,8 @@ export type ZoneBoxInput = {
   edgeTop: number;
 };
 
+export type ZoneMatchMode = 'allHolds' | 'anyHold';
+
 export type ClimbSearchInput = {
   boardName: string;
   layoutId: number;
@@ -114,8 +116,9 @@ export type ClimbSearchInput = {
   showOnlyCompleted?: boolean;
   onlyDrafts?: boolean;
   projectsOnly?: boolean;
-  // Zone filter — restrict to climbs fully inside the bounding box
+  // Zone filter — restrict climbs based on a user-drawn bounding box.
   zoneBox?: ZoneBoxInput;
+  zoneMode?: ZoneMatchMode;
 };
 
 /**

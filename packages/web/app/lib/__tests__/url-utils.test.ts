@@ -108,6 +108,32 @@ describe('searchParamsToUrlParams', () => {
     expect(result.toString()).toBe('minGrade=2');
   });
 
+  it('should serialize any-hold zone mode only when a zone is set', () => {
+    const result = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: { edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 },
+      zoneMode: 'anyHold',
+    });
+
+    expect(result.get('zoneMode')).toBe('anyHold');
+    expect(result.get('zoneEdgeLeft')).toBe('10');
+  });
+
+  it('should omit default zone mode and mode values without a zone', () => {
+    const defaultModeResult = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: { edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 },
+      zoneMode: 'allHolds',
+    });
+    expect(defaultModeResult.has('zoneMode')).toBe(false);
+
+    const modeWithoutZoneResult = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneMode: 'anyHold',
+    });
+    expect(modeWithoutZoneResult.has('zoneMode')).toBe(false);
+  });
+
   it('should handle page and pageSize correctly', () => {
     const result = searchParamsToUrlParams({
       ...DEFAULT_SEARCH_PARAMS,
@@ -178,6 +204,7 @@ describe('searchParamsToUrlParams', () => {
       settername: undefined,
       setternameSuggestion: undefined,
       holdsFilter: undefined,
+      zoneMode: undefined,
       hideAttempted: undefined,
       hideCompleted: undefined,
       showOnlyAttempted: undefined,
@@ -345,6 +372,11 @@ describe('parsedRouteSearchParamsToSearchParams', () => {
       sortOrder: 'asc' as SearchRequestPagination['sortOrder'],
       onlyClassics: true,
       holdsFilter: { 142: { ANY: 'include' as const } },
+      zoneEdgeLeft: '10',
+      zoneEdgeRight: '80',
+      zoneEdgeBottom: '20',
+      zoneEdgeTop: '120',
+      zoneMode: 'anyHold' as const,
     };
 
     const result = parsedRouteSearchParamsToSearchParams(input);
@@ -355,6 +387,8 @@ describe('parsedRouteSearchParamsToSearchParams', () => {
     expect(result.sortOrder).toBe('asc');
     expect(result.onlyClassics).toBe(true);
     expect(result.holdsFilter).toEqual({ 142: { ANY: 'include' } });
+    expect(result.zoneBox).toEqual({ edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 });
+    expect(result.zoneMode).toBe('anyHold');
   });
 
   it('should handle mixed string and number inputs', () => {
@@ -473,6 +507,39 @@ describe('urlParamsToSearchParams', () => {
     expect(result.maxGrade).toBe(DEFAULT_SEARCH_PARAMS.maxGrade);
     expect(result.name).toBe('test');
     expect(result.sortBy).toBe(DEFAULT_SEARCH_PARAMS.sortBy);
+    expect(result.zoneMode).toBe(DEFAULT_SEARCH_PARAMS.zoneMode);
+  });
+
+  it('should parse any-hold zone mode only with a valid zone', () => {
+    const urlParams = new URLSearchParams({
+      zoneEdgeLeft: '10',
+      zoneEdgeRight: '80',
+      zoneEdgeBottom: '20',
+      zoneEdgeTop: '120',
+      zoneMode: 'anyHold',
+    });
+
+    const result = urlParamsToSearchParams(urlParams);
+
+    expect(result.zoneBox).toEqual({ edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 });
+    expect(result.zoneMode).toBe('anyHold');
+  });
+
+  it('should default invalid or orphaned zone modes to all-holds', () => {
+    const invalidMode = urlParamsToSearchParams(
+      new URLSearchParams({
+        zoneEdgeLeft: '10',
+        zoneEdgeRight: '80',
+        zoneEdgeBottom: '20',
+        zoneEdgeTop: '120',
+        zoneMode: 'nearby',
+      }),
+    );
+    expect(invalidMode.zoneMode).toBe('allHolds');
+
+    const orphanedMode = urlParamsToSearchParams(new URLSearchParams({ zoneMode: 'anyHold' }));
+    expect(orphanedMode.zoneBox).toBeNull();
+    expect(orphanedMode.zoneMode).toBe('allHolds');
   });
 
   it('should handle empty URLSearchParams', () => {

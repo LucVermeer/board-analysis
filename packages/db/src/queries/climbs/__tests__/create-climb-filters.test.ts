@@ -132,6 +132,44 @@ void describe('createClimbFilters: minRating', () => {
   });
 });
 
+void describe('createClimbFilters: zone modes', () => {
+  const zoneBox = { edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 };
+
+  void it('defaults to all-holds containment using board_climbs edge columns', () => {
+    const filters = createClimbFilters(params, { zoneBox });
+
+    assert.equal(filters.zoneConditions.length, 4);
+    const rendered = filters.zoneConditions.map(sqlToString).join(' && ');
+    assert.match(rendered, /edge_left/);
+    assert.match(rendered, /edge_right/);
+    assert.match(rendered, /edge_bottom/);
+    assert.match(rendered, /edge_top/);
+    assert.doesNotMatch(rendered, /board_climb_holds/);
+  });
+
+  void it('uses an individual-hold EXISTS predicate for anyHold mode', () => {
+    const filters = createClimbFilters(params, { zoneBox, zoneMode: 'anyHold' });
+
+    assert.equal(filters.zoneConditions.length, 1);
+    const rendered = sqlToString(filters.zoneConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /board_climb_holds/);
+    assert.match(rendered, /board_placements/);
+    assert.match(rendered, /board_holes/);
+    assert.match(rendered, /zone_bh\.x\s*>?=/);
+    assert.match(rendered, /zone_bh\.y\s*>?=/);
+  });
+
+  void it('ignores zoneMode when the zone box is empty or inverted', () => {
+    const filters = createClimbFilters(params, {
+      zoneBox: { edgeLeft: 80, edgeRight: 10, edgeBottom: 20, edgeTop: 120 },
+      zoneMode: 'anyHold',
+    });
+
+    assert.equal(filters.zoneConditions.length, 0);
+  });
+});
+
 void describe('createClimbFilters: personal progress filters are scoped to the current angle', () => {
   // Locks in the angle-scoping contract — a send at one angle must not leak
   // into hide/show filters at a different angle. Each filter renders a

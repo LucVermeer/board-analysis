@@ -632,8 +632,10 @@ export type ClimbSearchInput = {
   sortBy?: InputMaybe<Scalars['String']['input']>;
   /** Sort direction ('asc' or 'desc') */
   sortOrder?: InputMaybe<Scalars['String']['input']>;
-  /** Restrict results to climbs whose bounding box fits inside this zone */
+  /** Restrict results using this drawn zone */
   zoneBox?: InputMaybe<ZoneBoxInput>;
+  /** How the zone should match climb holds. Defaults to allHolds when omitted. */
+  zoneMode?: InputMaybe<ZoneMatchMode>;
 };
 
 /** Result of a climb search query. */
@@ -4764,6 +4766,13 @@ export type ZoneBoxInput = {
   /** Top edge of the zone (larger y) */
   edgeTop: Scalars['Int']['input'];
 };
+
+/**
+ * How a drawn zone should match climbs.
+ * allHolds keeps the existing behavior: every climb hold must fit inside the box.
+ * anyHold matches climbs that use at least one hold inside the box.
+ */
+export type ZoneMatchMode = 'allHolds' | 'anyHold';
 
 export type GetDeleteAccountInfoQueryVariables = Exact<{ [key: string]: never }>;
 

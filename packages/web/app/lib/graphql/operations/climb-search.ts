@@ -143,6 +143,7 @@ export type ClimbSearchInputVariables = {
       edgeBottom: number;
       edgeTop: number;
     };
+    zoneMode?: 'allHolds' | 'anyHold';
   };
 };
 

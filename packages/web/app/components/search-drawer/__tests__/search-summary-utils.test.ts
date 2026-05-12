@@ -44,6 +44,10 @@ describe('hasActiveNonNameFilters', () => {
     ).toBe(true);
   });
 
+  it('returns false for a zone mode without an active zone', () => {
+    expect(hasActiveNonNameFilters(makeParams({ zoneMode: 'anyHold' }))).toBe(false);
+  });
+
   it('returns false when holdsFilter is empty object', () => {
     expect(hasActiveNonNameFilters(makeParams({ holdsFilter: {} }))).toBe(false);
   });

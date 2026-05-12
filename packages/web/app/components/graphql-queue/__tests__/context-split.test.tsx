@@ -140,6 +140,7 @@ function makeSearchParams(overrides: Partial<SearchRequestPagination> = {}): Sea
     onlyDrafts: false,
     projectsOnly: false,
     zoneBox: null,
+    zoneMode: 'allHolds',
     page: 0,
     pageSize: 20,
     ...overrides,

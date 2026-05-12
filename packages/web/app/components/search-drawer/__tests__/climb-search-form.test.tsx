@@ -144,6 +144,12 @@ const filterAllThreeHolds: HoldsFilter = {
   103: { FOOT: 'exclude' },
 };
 
+type ZoneUpdateCall = {
+  zoneBox: ZoneBox;
+  zoneMode?: 'allHolds' | 'anyHold';
+  holdsFilter?: HoldsFilter;
+};
+
 // Reset every module-level mock between tests. Older suites only zeroed
 // the call mocks they directly asserted on, which set a trap for any new
 // test reading a stale captured callback or call count.
@@ -166,11 +172,10 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
     const drawButton = screen.getByRole('button', { name: 'Draw zone' });
     fireEvent.click(drawButton);
 
-    const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(lastCall).toBeDefined();
     expect(lastCall?.zoneBox).toEqual({ edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 });
+    expect(lastCall?.zoneMode).toBe('allHolds');
     // Hold 101 (inside the default zone) is preserved; the two outer holds
     // are dropped, since the backend zone filter would never return a climb
     // that uses them anyway.
@@ -192,7 +197,7 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
     const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
     // Only zoneBox is cleared; holdsFilter not touched (no zone constraint
     // means hold filters apply on their own).
-    expect(lastCall).toEqual({ zoneBox: null });
+    expect(lastCall).toEqual({ zoneBox: null, zoneMode: 'allHolds' });
   });
 
   it('drops every hold when none of them fit inside the new zone', () => {
@@ -209,9 +214,7 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Draw zone' }));
 
-    const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(lastCall?.holdsFilter).toEqual({});
   });
 
@@ -227,6 +230,8 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
     // Hydrated state: zone is enabled (Clear button visible, Draw not).
     expect(screen.getByRole('button', { name: 'Clear zone' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Draw zone' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'All holds inside' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'At least 1 hold' })).toBeTruthy();
     // Include chip reflects the persisted holdsFilter.
     expect(screen.getByText('1 included')).toBeTruthy();
   });
@@ -266,14 +271,61 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
     expect(outline.getAttribute('pointer-events')).toBe('none');
   });
 
+  it('renders any-hold zones without dimming or blocking the rest of the board', () => {
+    const persistedZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      zoneBox: persistedZone,
+      zoneMode: 'anyHold',
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    expect(screen.queryByTestId('zone-exclusion-top')).toBeNull();
+    expect(screen.queryByTestId('zone-exclusion-bottom')).toBeNull();
+    expect(screen.queryByTestId('zone-exclusion-left')).toBeNull();
+    expect(screen.queryByTestId('zone-exclusion-right')).toBeNull();
+    expect(screen.getByTestId('zone-selection-outline')).toBeTruthy();
+  });
+
+  it('switching to any-hold mode keeps existing hold filters outside the zone', () => {
+    const persistedZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      holdsFilter: filterAllThreeHolds,
+      zoneBox: persistedZone,
+      zoneMode: 'allHolds',
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'At least 1 hold' }));
+
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ zoneMode: 'anyHold' });
+  });
+
+  it('switching back to all-holds mode prunes hold filters outside the zone', () => {
+    const persistedZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      holdsFilter: filterAllThreeHolds,
+      zoneBox: persistedZone,
+      zoneMode: 'anyHold',
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'All holds inside' }));
+
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({
+      zoneMode: 'allHolds',
+      holdsFilter: { 101: { STARTING: 'include' } },
+    });
+  });
+
   it('drawing a zone twice (e.g. user clears and redraws) prunes again from current holdsFilter', () => {
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, holdsFilter: filterAllThreeHolds };
     const { rerender } = render(<ClimbSearchForm boardDetails={boardDetails} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Draw zone' }));
-    const firstDraw = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const firstDraw = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(firstDraw?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
 
     // Simulate the URL flushing: provider state now reflects the pruned
@@ -296,11 +348,10 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
 
     // Second draw still produces a single atomic update. Hold 101 is inside
     // the default zone so it stays.
-    const secondDraw = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const secondDraw = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(secondDraw?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
     expect(secondDraw?.zoneBox).toEqual({ edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 });
+    expect(secondDraw?.zoneMode).toBe('allHolds');
   });
 
   it('uses the most recent in-flight holdsFilter when the zone changes mid-debounce', () => {
@@ -327,11 +378,10 @@ describe('ClimbSearchForm — zone changes prune out-of-zone holds', () => {
     // from the stale uiSearchParams.holdsFilter (still empty), the call
     // would emit holdsFilter: {} and silently drop the just-added hold.
     fireEvent.click(screen.getByRole('button', { name: 'Draw zone' }));
-    const drawCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const drawCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(drawCall?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
     expect(drawCall?.zoneBox).toEqual({ edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 });
+    expect(drawCall?.zoneMode).toBe('allHolds');
   });
 });
 
@@ -464,13 +514,12 @@ describe('ClimbSearchForm — drag handles', () => {
     fireEvent.pointerMove(seHandle, { clientX: 525, clientY: 600, pointerId: 1 });
     fireEvent.pointerUp(seHandle, { clientX: 525, clientY: 600, pointerId: 1 });
 
-    const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(dragCall).toBeDefined();
     // SE corner moved -45 in x, +45 in y. clampZoneBox keeps min size and
     // rounds to integer grid coords.
     expect(dragCall?.zoneBox).toEqual({ edgeLeft: 29, edgeRight: 70, edgeBottom: 76, edgeTop: 125 });
+    expect(dragCall?.zoneMode).toBe('allHolds');
     // Hold 101 at grid (60, 80) is inside the new box; the other two are
     // dropped. Critical check: a regression that removed pruneHoldsToZone
     // from endDrag (while keeping it in handleEnable) would fail here.
@@ -492,12 +541,32 @@ describe('ClimbSearchForm — drag handles', () => {
     fireEvent.pointerMove(seHandle, { clientX: 525, clientY: 600, pointerId: 1 });
     fireEvent.pointerCancel(seHandle, { clientX: 0, clientY: 1170, pointerId: 1 });
 
-    const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(dragCall).toBeDefined();
     expect(dragCall?.zoneBox).toEqual({ edgeLeft: 29, edgeRight: 70, edgeBottom: 76, edgeTop: 125 });
+    expect(dragCall?.zoneMode).toBe('allHolds');
     expect(dragCall?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
+  });
+
+  it('dragging in any-hold mode preserves hold filters outside the new box', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = {
+      ...DEFAULT_SEARCH_PARAMS,
+      holdsFilter: filterAllThreeHolds,
+      zoneBox: startZone,
+      zoneMode: 'anyHold',
+    };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    const seHandle = screen.getByTestId('zone-handle-se');
+    fireEvent.pointerDown(seHandle, { clientX: 862.5, clientY: 937.5, pointerId: 1 });
+    fireEvent.pointerMove(seHandle, { clientX: 525, clientY: 600, pointerId: 1 });
+    fireEvent.pointerUp(seHandle, { clientX: 525, clientY: 600, pointerId: 1 });
+
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({
+      zoneBox: { edgeLeft: 29, edgeRight: 70, edgeBottom: 76, edgeTop: 125 },
+      zoneMode: 'anyHold',
+    });
   });
 
   it('dragging the move handle translates the zone and prunes holds outside the new box', () => {
@@ -518,13 +587,12 @@ describe('ClimbSearchForm — drag handles', () => {
     fireEvent.pointerMove(moveTarget, { clientX: 615, clientY: 510, pointerId: 1 });
     fireEvent.pointerUp(moveTarget, { clientX: 615, clientY: 510, pointerId: 1 });
 
-    const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as
-      | { zoneBox: ZoneBox; holdsFilter: HoldsFilter }
-      | undefined;
+    const dragCall = mockUpdateFilters.mock.calls.at(-1)?.[0] as ZoneUpdateCall | undefined;
     expect(dragCall).toBeDefined();
     // Move-mode translates both edges on each axis by the same delta — width
     // (86) and height (94) are preserved, unlike the SE-corner case.
     expect(dragCall?.zoneBox).toEqual({ edgeLeft: 39, edgeRight: 125, edgeBottom: 41, edgeTop: 135 });
+    expect(dragCall?.zoneMode).toBe('allHolds');
     // Hold 101 at grid (60, 80) is still inside; the two outer holds are pruned.
     expect(dragCall?.holdsFilter).toEqual({ 101: { STARTING: 'include' } });
   });
@@ -569,6 +637,19 @@ describe('ClimbSearchForm — in-zone hold tap guard', () => {
     capturedBoardRendererOnHoldClick!(outsideTopRightHold.id, fakeAnchor);
 
     expect(pickerHandleHoldClickMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes outside-zone taps through in any-hold mode', () => {
+    const startZone: ZoneBox = { edgeLeft: 29, edgeRight: 115, edgeBottom: 31, edgeTop: 125 };
+    mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, zoneBox: startZone, zoneMode: 'anyHold' };
+    render(<ClimbSearchForm boardDetails={boardDetails} />);
+
+    expect(capturedBoardRendererOnHoldClick).not.toBeNull();
+    const fakeAnchor = document.createElement('div');
+    capturedBoardRendererOnHoldClick!(outsideTopRightHold.id, fakeAnchor);
+
+    expect(pickerHandleHoldClickMock).toHaveBeenCalledTimes(1);
+    expect(pickerHandleHoldClickMock).toHaveBeenCalledWith(outsideTopRightHold.id, fakeAnchor);
   });
 });
 
