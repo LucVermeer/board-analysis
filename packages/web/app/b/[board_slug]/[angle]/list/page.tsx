@@ -8,7 +8,7 @@ import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-l
 import { cachedSearchClimbs } from '@/app/lib/db/queries/climbs/search-climbs';
 import { hasUserSpecificFilters } from '@/app/lib/list-page-cache';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
-import { MAX_PAGE_SIZE } from '@/app/components/board-page/constants';
+import { resolveSsrInitialPageSize } from '@/app/components/board-page/constants';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth/auth-options';
 import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
@@ -65,8 +65,10 @@ export default async function BoardSlugListPage(props: BoardSlugListPageProps) {
   const parsedParams = boardToRouteParams(board, Number(params.angle));
   const searchParamsObject: SearchRequestPagination = parsedRouteSearchParamsToSearchParams(searchParams);
 
-  const requestedPageSize = (Number(searchParamsObject.page) + 1) * Number(searchParamsObject.pageSize);
-  searchParamsObject.pageSize = Math.min(requestedPageSize, MAX_PAGE_SIZE);
+  searchParamsObject.pageSize = resolveSsrInitialPageSize(
+    Number(searchParamsObject.page),
+    Number(searchParamsObject.pageSize),
+  );
   searchParamsObject.page = 0;
 
   const hasProgressFilters = hasUserSpecificFilters(searchParamsObject);
@@ -118,7 +120,12 @@ export default async function BoardSlugListPage(props: BoardSlugListPageProps) {
   return (
     <>
       {preloadUrl && <link rel="preload" as="image" href={preloadUrl} fetchPriority="high" />}
-      <BoardPageClimbsList {...parsedParams} boardDetails={boardDetails} initialClimbs={searchResponse.climbs} />
+      <BoardPageClimbsList
+        {...parsedParams}
+        boardDetails={boardDetails}
+        initialClimbs={searchResponse.climbs}
+        initialHasMore={searchResponse.hasMore}
+      />
     </>
   );
 }

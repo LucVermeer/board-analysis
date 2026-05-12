@@ -10,11 +10,13 @@ import AngleSelector from './angle-selector';
 type BoardPageClimbsListProps = ParsedBoardRouteParameters & {
   boardDetails: BoardDetails;
   initialClimbs: Climb[];
+  initialHasMore?: boolean;
 };
 
 const BoardPageClimbsList = ({
   boardDetails,
   initialClimbs,
+  initialHasMore = false,
   board_name,
   layout_id: _layout_id,
   size_id: _size_id,
@@ -70,7 +72,7 @@ const BoardPageClimbsList = ({
       climbs={climbs}
       selectedClimbUuid={currentClimb?.uuid}
       isFetching={isFetchingClimbs}
-      hasMore={hasMoreResults}
+      hasMore={!hasDoneFirstFetch ? initialHasMore : hasMoreResults}
       onClimbSelect={setCurrentClimb}
       addToQueue={addToQueue}
       onLoadMore={fetchMoreClimbs}
