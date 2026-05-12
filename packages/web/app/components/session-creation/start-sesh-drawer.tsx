@@ -89,10 +89,14 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const hasAutoSelectedRef = useRef(false);
   const formSubmitRef = useRef<(() => void) | null>(null);
 
-  // Reset auto-selection tracking when drawer closes
+  // Reset auto-selection tracking and expander state when the drawer closes.
+  // handleClose covers user-initiated closes, but the parent can also flip
+  // `open` to false directly (navigation, external dismiss) — in that case
+  // we still need to drop the expanded state so the next open isn't stale.
   useEffect(() => {
     if (!open) {
       hasAutoSelectedRef.current = false;
+      setBoardSelectorExpanded(false);
     }
   }, [open]);
 
@@ -310,7 +314,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
 
   const boardSelector = (
     <Box>
-      <Typography sx={{ fontSize: 16, fontWeight: 600, color: 'var(--neutral-900)', mb: 1.5 }}>
+      <Typography sx={{ fontSize: 16, fontWeight: 600, color: 'text.primary', mb: 1.5 }}>
         {t('creation.boardsNearYou')}
       </Typography>
       <Collapse in={showCollapsed} mountOnEnter unmountOnExit>
