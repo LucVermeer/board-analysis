@@ -133,7 +133,20 @@ Sum of V-grade values for sends in a session — the metric a lot of climbers al
 
 The headline insight: 100 V-points is a real stretch goal for an individual (top 12% of active tickers have ever done it once), but trivially reachable for a crew. A 5-person session at average solo P90 (≈62 each) is 310 V-points; 10 people at P50 (≈19 each) is 190 V-points; 10 people pushing for 100 each is the explicit "1000 V-points crew session" Platinum tier.
 
-### 3.8 Beta videos and the supply gap
+### 3.8 Mirror climbing
+
+`boardsesh_ticks.is_mirror` flags ticks done with the climb mirrored left↔right. The data tells a sharp story:
+
+- **6,934 mirror ticks** out of 253k total (~2.7%); 6,152 of those are sends/flashes.
+- **Mirror is essentially a Tension Board feature**: 6,084 of 6,152 mirror sends are on Tension, 61 on Decoy, 7 on Grasshopper, **0 on Kilter, 0 on MoonBoard**. Tension is symmetric and the mirror function is core to how it's used; on Kilter the feature exists but climbers don't reach for it.
+- **40 users have ever mirrored** (7% of active tickers). 539 have never mirrored. Among the 40 who do, it's serious: top user has 3,591 mirror sends, 7 users have 100+.
+- **3,883 climbs have been sent both normally and mirrored** by 37 distinct users — the "ambidextrous" cohort. Per-user counts: 37 with ≥1 both-ways send, 22 with ≥10, 8 with ≥50, 3 with ≥200 (top is 1,984).
+- **720 sessions** mix mirror and normal sends (≥3 of each); **75 sessions are pure mirror** — niche flex, advertise as legendary.
+- Hardest mirror grade per user: 20 users have mirror-sent V6+, 9 V8+, 6 V9+, **2 V10+**.
+
+The audience is small, devoted, and overlapping with the Tension power-user base. Mirror achievements should *celebrate* that minority rather than try to convert the majority — frame them as "Tension Mirror" badges, with the implicit message that this is a real training discipline.
+
+### 3.9 Beta videos and the supply gap
 
 `board_beta_links` carries the catalog of community beta videos. The recently-added `created_by_user_id` column attributes each new submission to a climber.
 
@@ -317,7 +330,32 @@ Implementation notes:
 - **No backfill** for any beta achievement — the column is empty before today, so backfill would award nothing. Run the evaluators forward-only.
 - **Quality gate.** A future open question (§9) — do we wait for view counts or upvotes before awarding `beta.contributor.500`? For v1, no — the social cost of spamming junk videos to a friend graph is enough deterrent. Revisit if it becomes a problem.
 
-### 4.8 Hidden / easter-egg achievements
+### 4.8 Mirror climbing achievements
+
+Driven by `boardsesh_ticks.is_mirror`. See §3.8 for the data — almost all activity is on Tension Board, by ~40 dedicated users. Tiers are calibrated tight because the population is small; "mirror your first climb" is meaningful here in a way "send your first climb" isn't.
+
+| ID                           | Trigger                                                                  | Reachability today                              |
+| ---------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| `mirror.first_send`          | First send/flash with `is_mirror=true`                                   | 40 users have already done this                 |
+| `mirror.contributor.{n}`     | 5 / 25 / 100 / 500 mirror sends total                                    | T1≈24, T2≈15, T3≈7, T4=1 user today             |
+| `mirror.both_ways.first`     | First climb sent both normal AND mirrored                                | 37 users today                                  |
+| `mirror.both_ways.{n}`       | 10 / 50 / 200 climbs sent both ways                                      | 22 / 8 / 3 users today (top 1,984)              |
+| `mirror.hard.{V}`            | Mirror send at V6 / V8 / V10                                             | 20 / 9 / 2 users today                          |
+| `mirror.symmetric_grade`     | Sent your lifetime hardest grade both normally and mirrored              | Rare flex — true two-sided strength             |
+| `session.mirror_balanced`    | Session with ≥3 mirror sends AND ≥3 normal sends — "trained both sides"  | 720 historical sessions                         |
+| `session.full_mirror`        | Session where 100% of sends are mirrored (≥3 sends)                      | 75 historical — keep but advertise as legendary |
+
+Implementation notes:
+
+- **Trigger:** lifetime mirror evaluators run on `tick_saved` when the saved tick has `is_mirror=true` and `status IN ('send','flash')`. Session-scope evaluators run on `session_closed`.
+- **Both-ways evaluator:** for the just-saved mirror send, check `EXISTS` for a non-mirror send by the same (user, board_type, climb_uuid). The `boardsesh_ticks_climb_idx` and `boardsesh_ticks_user_climbed_at_idx` cover this in <5ms.
+- **Symmetric grade evaluator:** lazily recomputes the user's PR grade on each tick save. If the new tick is at-or-above their current PR and is mirrored (and a non-mirror send at that grade exists), or vice versa, fire.
+- **Cross-board variant:** `mirror.both_ways` and `mirror.hard` use `:tension`, `:decoy`, `:grasshopper`, etc. as variant suffixes (mirror is empty on Kilter/MoonBoard today, so we don't list those tiers but they're cheap to support if the data ever shifts).
+- **No backfill suppression discount.** Unlike most lifetime evaluators, the mirror cohort is small enough that backfilling silently is the right move — the 40 users get their tiers awarded with `granted_at=now`, `earned_at=historical`, no feed/notification side effects (per §6.4). On the next mirror send post-enrollment, normal celebration kicks in.
+
+Copy notes (per CLAUDE.md voice): keep the language plain. "Sent it both ways" reads better than "Symmetry Master." For the full-mirror session, "Mirror only" beats "MIRROR MODE!"
+
+### 4.9 Hidden / easter-egg achievements
 
 Small, opt-out, never-loud. A few examples:
 
@@ -339,7 +377,7 @@ Display these without the criteria spelled out; they show up in the user's colle
 -- Tiers live in a single row using a JSONB array for thresholds.
 CREATE TABLE achievement_definitions (
   id              TEXT PRIMARY KEY,            -- e.g. 'session.send_count'
-  family          TEXT NOT NULL,               -- 'session' | 'lifetime' | 'rhythm' | 'grade' | 'explore' | 'social' | 'beta' | 'hidden'
+  family          TEXT NOT NULL,               -- 'session' | 'lifetime' | 'rhythm' | 'grade' | 'explore' | 'social' | 'beta' | 'mirror' | 'hidden'
   scope           TEXT NOT NULL,               -- 'session' | 'lifetime' | 'periodic'
   display_name    TEXT NOT NULL,               -- i18n key, not raw text
   description_key TEXT NOT NULL,
@@ -540,11 +578,13 @@ Success criterion: every active user (213 in last 30d) sees ≥1 achievement on 
 - Social evaluators (`first_follow`, `session_added`, `crew_session`).
 - Notifications + feed_items writes (post-enrollment only).
 
-### Phase 4: exploration + hidden + polish (1 week)
+### Phase 4: exploration + mirror + hidden + polish (1 week)
 
-- Remaining evaluators (`explore.*`, `hidden.*`, `project.*`).
+- Remaining evaluators (`explore.*`, `mirror.*`, `session.mirror_balanced`, `session.full_mirror`, `hidden.*`, `project.*`).
 - Year-in-review generator.
 - Profile achievements row.
+
+The mirror evaluators are cheap to add (small cohort, narrow query surface) and bundle naturally with exploration. They'll drop ~20 instant awards on the existing power-user cohort during silent backfill, then run live for the rest.
 
 ### Phase 4.5: beta contributor track (1 week)
 
@@ -769,4 +809,20 @@ SELECT created_by_user_id, COUNT(*) AS posts,
 FROM board_beta_links
 WHERE created_by_user_id IS NOT NULL
 GROUP BY 1 ORDER BY posts DESC;
+
+-- Mirror cohort sizing + tier reachability
+SELECT board_type,
+  COUNT(*) FILTER (WHERE is_mirror=true AND status IN ('send','flash')) AS mirror_sends,
+  COUNT(DISTINCT user_id) FILTER (WHERE is_mirror=true) AS users_who_mirror
+FROM boardsesh_ticks GROUP BY 1 ORDER BY 2 DESC;
+
+-- Per-user 'sent both ways' counts (calibrates mirror.both_ways tiers)
+WITH per_climb AS (
+  SELECT user_id, climb_uuid, board_type,
+    BOOL_OR(is_mirror=true AND status IN ('send','flash')) AS m,
+    BOOL_OR(COALESCE(is_mirror,false)=false AND status IN ('send','flash')) AS n
+  FROM boardsesh_ticks GROUP BY 1,2,3
+)
+SELECT user_id, COUNT(*) FILTER (WHERE m AND n) AS both_ways
+FROM per_climb GROUP BY 1 ORDER BY 2 DESC;
 ```
