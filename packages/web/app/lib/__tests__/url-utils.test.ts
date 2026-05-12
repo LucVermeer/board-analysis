@@ -391,6 +391,20 @@ describe('parsedRouteSearchParamsToSearchParams', () => {
     expect(result.zoneMode).toBe('anyHold');
   });
 
+  it('should default SSR zone mode when the route record omits it', () => {
+    const input = {
+      zoneEdgeLeft: '10',
+      zoneEdgeRight: '80',
+      zoneEdgeBottom: '20',
+      zoneEdgeTop: '120',
+    } as unknown as SearchRequestPagination;
+
+    const result = parsedRouteSearchParamsToSearchParams(input);
+
+    expect(result.zoneBox).toEqual({ edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 });
+    expect(result.zoneMode).toBe(DEFAULT_SEARCH_PARAMS.zoneMode);
+  });
+
   it('should handle mixed string and number inputs', () => {
     const input = {
       ...DEFAULT_SEARCH_PARAMS,

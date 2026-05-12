@@ -153,9 +153,10 @@ void describe('createClimbFilters: zone modes', () => {
     assert.equal(filters.zoneConditions.length, 1);
     const rendered = sqlToString(filters.zoneConditions[0]);
     assert.match(rendered, /EXISTS/);
-    assert.match(rendered, /board_climb_holds/);
-    assert.match(rendered, /board_placements/);
-    assert.match(rendered, /board_holes/);
+    assert.match(rendered, /FROM\s+zone_ch/);
+    assert.match(rendered, /JOIN\s+zone_bp/);
+    assert.match(rendered, /JOIN\s+.*zone_bh/);
+    assert.match(rendered, /zone_bp\.set_id IN \(1, 20\)/);
     assert.match(rendered, /zone_bh\.x\s*>?=/);
     assert.match(rendered, /zone_bh\.y\s*>?=/);
   });

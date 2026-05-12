@@ -439,10 +439,13 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
     }
     return { includeCount: included, excludeCount: excluded };
   }, [holdsFilter]);
+  const holdSearchHeaderClassName = zoneEnabled
+    ? `${styles.holdSearchHeaderCompact} ${styles.holdSearchHeaderCompactZoneActive}`
+    : styles.holdSearchHeaderCompact;
 
   return (
     <div className={styles.holdSearchForm}>
-      <div className={styles.holdSearchHeaderCompact}>
+      <div className={holdSearchHeaderClassName}>
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
           <MuiTypography variant="body2" component="span" color="text.secondary">
             {t('search.holdsAndZone.description')}

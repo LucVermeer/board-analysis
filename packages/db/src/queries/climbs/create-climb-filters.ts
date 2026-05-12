@@ -188,6 +188,13 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
   const zoneConditions: SQL[] = [];
   if (validZoneBox) {
     if (zoneMode === 'anyHold') {
+      const zonePlacementSetCondition =
+        params.board_name === 'moonboard' || params.set_ids.length === 0
+          ? sql``
+          : sql`AND zone_bp.set_id IN (${sql.join(
+              params.set_ids.map((setId) => sql`${setId}`),
+              sql`, `,
+            )})`;
       zoneConditions.push(sql`EXISTS (
         SELECT 1
         FROM ${boardClimbHolds} zone_ch
@@ -200,6 +207,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
           AND zone_bh.id = zone_bp.hole_id
         WHERE zone_ch.board_type = ${params.board_name}
           AND zone_ch.climb_uuid = ${boardClimbs.uuid}
+          ${zonePlacementSetCondition}
           AND zone_bh.x >= ${validZoneBox.edgeLeft}
           AND zone_bh.x <= ${validZoneBox.edgeRight}
           AND zone_bh.y >= ${validZoneBox.edgeBottom}

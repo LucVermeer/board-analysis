@@ -1,5 +1,5 @@
 import type { HoldRenderData } from '../components/board-renderer/types';
-import type { BoardName as SharedBoardName } from '@boardsesh/shared-schema';
+import type { BoardName as SharedBoardName, ZoneMatchMode as SharedZoneMatchMode } from '@boardsesh/shared-schema';
 import type { SetIdList } from './board-data';
 
 export type Climb = {
@@ -102,7 +102,7 @@ export type ZoneBox = {
   edgeTop: number;
 };
 
-export type ZoneMatchMode = 'allHolds' | 'anyHold';
+export type ZoneMatchMode = SharedZoneMatchMode;
 
 export type SearchRequest = {
   gradeAccuracy: number;

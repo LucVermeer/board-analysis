@@ -1,4 +1,4 @@
-import type { BoardName } from '@boardsesh/shared-schema';
+import type { BoardName, ZoneMatchMode } from '@boardsesh/shared-schema';
 
 /**
  * Route parameters identifying a specific board configuration.
@@ -22,8 +22,6 @@ export type ZoneBox = {
   edgeBottom: number;
   edgeTop: number;
 };
-
-export type ZoneMatchMode = 'allHolds' | 'anyHold';
 
 /**
  * Search parameters for the climb search query.
@@ -49,8 +47,8 @@ export type ClimbSearchParams = {
   onlyTallClimbs?: boolean;
   // Hold filters: per-hold partial map of {STATE: 'include' | 'exclude'} entries.
   // Walked at SQL build time by `createClimbFilters`. Shape is intentionally
-  // loose (Record<string, unknown>) here so this package doesn't depend on the
-  // shared-schema types — the validator gates input shape upstream.
+  // loose (Record<string, unknown>) here so this package doesn't depend on
+  // web-only hold-filter types — the validator gates input shape upstream.
   holdsFilter?: Record<string, unknown>;
   // Personal progress filters
   hideAttempted?: boolean;
