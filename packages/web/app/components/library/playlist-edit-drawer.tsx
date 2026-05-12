@@ -162,7 +162,7 @@ export default function PlaylistEditDrawer({ open, playlist, onClose, onSuccess 
       styles={{
         wrapper: { height: 'auto' },
         body: {
-          paddingBottom: themeTokens.spacing[6],
+          paddingBottom: `${themeTokens.spacing[6]}px`,
         },
       }}
       extra={
