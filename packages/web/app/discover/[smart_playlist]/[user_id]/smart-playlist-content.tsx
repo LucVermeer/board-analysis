@@ -23,6 +23,7 @@ import { type SmartPlaylistSlug, smartPlaylistByType } from '@/app/lib/smart-pla
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard } from '@/app/lib/find-matching-board';
+import { ssrSeedMatchesQueryKey } from '@/app/lib/graphql/ssr-query-seed';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { LoadingSpinner } from '@/app/components/ui/loading-spinner';
@@ -98,14 +99,18 @@ export default function SmartPlaylistContent({
     // also avoids re-applying stale SSR data if the user switches away from
     // and back to the default view much later.
     initialData:
-      initialSmartPlaylist && (selectedBoard?.uuid ?? null) === ssrSmartKeyRef.current.boardUuid
+      initialSmartPlaylist &&
+      ssrSeedMatchesQueryKey(true, ssrSmartKeyRef.current, { boardUuid: selectedBoard?.uuid ?? null })
         ? {
             pages: [initialSmartPlaylist],
             pageParams: [0],
           }
         : undefined,
-    initialDataUpdatedAt:
-      (selectedBoard?.uuid ?? null) === ssrSmartKeyRef.current.boardUuid ? ssrInitialUpdatedAtRef.current : 0,
+    initialDataUpdatedAt: ssrSeedMatchesQueryKey(!!initialSmartPlaylist, ssrSmartKeyRef.current, {
+      boardUuid: selectedBoard?.uuid ?? null,
+    })
+      ? ssrInitialUpdatedAtRef.current
+      : 0,
   });
 
   const allClimbs: Climb[] = useMemo(

@@ -18,17 +18,18 @@ export default async function PlaylistDetailPage({ params }: { params: Promise<{
 
   const authToken = await getServerAuthToken();
   const locale = await getLocale();
-  // Fire all three in parallel rather than waiting for `serverPlaylist` to
-  // resolve before starting `serverPlaylistClimbs`. The climbs call is wasted
-  // on a 404, but that's the rare case — on the hot path we save one
-  // backend round-trip.
-  const [initialMyBoards, initialPlaylist, initialClimbsResult] = await Promise.all([
+  // Fetch boards + playlist in parallel, then gate the climbs request on a
+  // successful playlist lookup. Speculatively firing climbs alongside the
+  // playlist would shave one round-trip on the hot path but double the
+  // backend load on 404s — not worth it for a non-existent playlist.
+  const [initialMyBoards, initialPlaylist] = await Promise.all([
     authToken ? serverMyBoards(authToken) : null,
     serverPlaylist(authToken, playlist_uuid),
-    serverPlaylistClimbs(authToken, { playlistId: playlist_uuid, page: 0, pageSize: 20 }),
   ]);
 
-  const initialClimbs = initialPlaylist ? initialClimbsResult : null;
+  const initialClimbs = initialPlaylist
+    ? await serverPlaylistClimbs(authToken, { playlistId: playlist_uuid, page: 0, pageSize: 20 })
+    : null;
 
   return (
     <I18nProvider

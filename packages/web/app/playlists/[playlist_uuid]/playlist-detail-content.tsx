@@ -69,6 +69,7 @@ import CommentSection from '@/app/components/social/comment-section';
 import MultiboardClimbList from '@/app/components/climb-list/multiboard-climb-list';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard, type BoardConfig } from '@/app/lib/find-matching-board';
+import { ssrSeedMatchesQueryKey } from '@/app/lib/graphql/ssr-query-seed';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import styles from '@/app/components/library/playlist-view.module.css';
 
@@ -240,10 +241,10 @@ export default function PlaylistDetailContent({
   // the tuple the SSR climbs page was fetched for. Without this guard, every
   // new key (board switch, listRefreshKey bump after edits, …) would adopt
   // the same SSR page as fresh data and skip the actual fetch.
-  const ssrClimbsApplicable =
-    !!initialClimbs &&
-    (selectedBoard?.uuid ?? null) === ssrClimbsKeyRef.current.boardUuid &&
-    listRefreshKey === ssrClimbsKeyRef.current.refreshKey;
+  const ssrClimbsApplicable = ssrSeedMatchesQueryKey(!!initialClimbs, ssrClimbsKeyRef.current, {
+    boardUuid: selectedBoard?.uuid ?? null,
+    refreshKey: listRefreshKey,
+  });
 
   const {
     data: climbsData,
@@ -287,12 +288,13 @@ export default function PlaylistDetailContent({
       return allPages.length;
     },
     staleTime: 5 * 60 * 1000,
-    initialData: ssrClimbsApplicable
-      ? {
-          pages: [initialClimbs],
-          pageParams: [0],
-        }
-      : undefined,
+    initialData:
+      ssrClimbsApplicable && initialClimbs
+        ? {
+            pages: [initialClimbs],
+            pageParams: [0],
+          }
+        : undefined,
     // Without this, react-query treats initialData as epoch-stale and fires
     // an immediate refetch, defeating the SSR optimisation. Only meaningful
     // when initialData itself is being supplied.
