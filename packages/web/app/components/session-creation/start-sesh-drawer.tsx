@@ -53,7 +53,15 @@ type StartSeshDrawerProps = {
 export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardConfigs }: StartSeshDrawerProps) {
   const { t } = useTranslation('session');
   const { status } = useSession();
-  const { paperRef, dragHandlers } = useDrawerDragResize({ open, onClose });
+  // Keep the drawer at full height — pin both heights so the close handler
+  // doesn't reset the inline style back to 60% (the hook's default), which
+  // would override the `height="100%"` prop on the next open.
+  const { paperRef, dragHandlers } = useDrawerDragResize({
+    open,
+    onClose,
+    initialHeight: '100%',
+    expandedHeight: '100%',
+  });
   const router = useLocaleRouter();
   const { showMessage } = useSnackbar();
   const { createSession, isCreating } = useCreateSession();
@@ -88,70 +96,60 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     }
   }, [open]);
 
-  // Auto-select the current board when the drawer opens
+  // Auto-select the current board when the drawer opens.
+  //
+  // Named-board routes (/b/{slug}) auto-select the named UserBoard so the
+  // session is attributed to that specific board. Generic routes
+  // (/{board}/{layout}/{size}/{sets}/{angle}/...) auto-select a *custom*
+  // config built from the route's resolved details — we deliberately do NOT
+  // match a UserBoard with the same numeric identity, because the same
+  // layout/size/set combo can map to many different physical boards and
+  // attributing a generic-URL session to a named board would silently log
+  // climbs against the wrong board.
   useEffect(() => {
-    if (!open || boards.length === 0 || hasAutoSelectedRef.current) return;
+    if (!open || hasAutoSelectedRef.current) return;
 
-    let match: (typeof boards)[number] | undefined;
-
-    // Strategy 1: Match by slug from /b/{slug} routes
-    if (localBoardPath) {
-      const basePath = getBaseBoardPath(localBoardPath);
-      match = boards.find((b) => `/b/${b.slug}` === basePath);
+    // Prefer the current pathname over the persistent session's last route —
+    // the user's intent is whatever they're looking at now.
+    const effectivePathname = pathname && isBoardRoutePath(pathname) ? pathname : localBoardPath;
+    if (!effectivePathname) {
+      hasAutoSelectedRef.current = true;
+      return;
     }
 
-    // Strategy 2: Match by numeric board identity. Prefer the current route's
-    // resolved board details (from QueueBridgeInjector) over the persistent
-    // session's last-known board — the bridge is populated immediately on a
-    // board route, while localBoardDetails only syncs on navigation away.
-    const currentBoardDetails = bridgeBoardDetails ?? localBoardDetails;
-    if (!match && currentBoardDetails) {
-      const sortedSetIds = [...currentBoardDetails.set_ids].sort((a, b) => a - b).join(',');
-      match = boards.find(
-        (b) =>
-          b.boardType === currentBoardDetails.board_name &&
-          b.layoutId === currentBoardDetails.layout_id &&
-          b.sizeId === currentBoardDetails.size_id &&
-          b.setIds
-            .split(',')
-            .map(Number)
-            .sort((a, b) => a - b)
-            .join(',') === sortedSetIds,
-      );
+    // Named-board route → select the matching UserBoard by slug.
+    if (effectivePathname.startsWith('/b/')) {
+      if (boards.length === 0) return; // wait for boards to load
+      const basePath = getBaseBoardPath(effectivePathname);
+      const namedMatch = boards.find((b) => `/b/${b.slug}` === basePath);
+      hasAutoSelectedRef.current = true;
+      if (namedMatch) setSelectedBoard(namedMatch);
+      return;
     }
 
-    // Strategy 3: Match by slug from current pathname
-    if (!match && pathname?.startsWith('/b/')) {
-      const segments = pathname.split('/').filter(Boolean);
-      if (segments.length >= 2) {
-        const slug = segments[1];
-        match = boards.find((b) => b.slug === slug);
-      }
-    }
+    // Generic board route → build a custom config from the route's resolved
+    // board details (bridge for the current route, fall back to the session).
+    const effectiveBoardDetails = bridgeBoardDetails ?? localBoardDetails;
+    if (!effectiveBoardDetails) return; // wait for details to resolve
 
-    // Strategy 4: Fallback for generic routes when no resolved board details
-    // are available — reconstruct each board's canonical URL and compare bases.
-    if (!match && pathname && isBoardRoutePath(pathname) && !pathname.startsWith('/b/')) {
-      const currentBasePath = getBaseBoardPath(pathname);
-      match = boards.find((b) => {
-        if (!b.layoutName || !b.sizeName || !b.setNames || b.setNames.length === 0) return false;
-        const boardUrl = constructClimbListWithSlugs(
-          b.boardType,
-          b.layoutName,
-          b.sizeName,
-          b.sizeDescription ?? undefined,
-          b.setNames,
-          0,
-        );
-        return getBaseBoardPath(boardUrl) === currentBasePath;
-      });
-    }
+    const angle = bridgeAngle ?? getDefaultAngleForBoard(effectiveBoardDetails.board_name);
+    const displayName =
+      effectiveBoardDetails.layout_name && effectiveBoardDetails.size_name
+        ? [effectiveBoardDetails.layout_name, effectiveBoardDetails.size_name].filter(Boolean).join(' · ')
+        : `${effectiveBoardDetails.board_name.charAt(0).toUpperCase()}${effectiveBoardDetails.board_name.slice(1)}`;
 
+    setSelectedCustomPath(effectivePathname);
+    setSelectedCustomConfig({
+      name: displayName,
+      board: effectiveBoardDetails.board_name,
+      layoutId: effectiveBoardDetails.layout_id,
+      sizeId: effectiveBoardDetails.size_id,
+      setIds: [...effectiveBoardDetails.set_ids],
+      angle,
+      createdAt: new Date().toISOString(),
+    });
     hasAutoSelectedRef.current = true;
-    if (match) {
-      setSelectedBoard(match);
-    }
-  }, [open, boards, localBoardPath, localBoardDetails, bridgeBoardDetails, pathname]);
+  }, [open, boards, localBoardPath, localBoardDetails, bridgeBoardDetails, bridgeAngle, pathname]);
 
   const isLoggedIn = status === 'authenticated';
 
