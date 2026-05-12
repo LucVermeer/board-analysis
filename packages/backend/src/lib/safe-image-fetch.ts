@@ -10,8 +10,10 @@ const HOST_ALLOWLISTS: Record<ImageHostKind, RegExp> = {
   // path both currently come back from these hostnames.
   instagram: /^[a-z0-9-]+\.(fbcdn\.net|cdninstagram\.com)$/i,
   // TikTok oEmbed thumbnails. Hosts like p16-common-sign.tiktokcdn.com,
-  // p16-sign.tiktokcdn.com, p16.tiktokcdn-us.com all show up in practice.
-  tiktok: /^[a-z0-9-]+\.(tiktokcdn\.com|tiktokcdn-us\.com)$/i,
+  // p16-sign.tiktokcdn.com, p16.tiktokcdn-us.com, p16-sign.tiktokcdn-eu.com
+  // all show up in practice — the EU CDN serves thumbnails for posts viewed
+  // from European IPs, and the dev proxy already treats it as valid.
+  tiktok: /^[a-z0-9-]+\.(tiktokcdn\.com|tiktokcdn-us\.com|tiktokcdn-eu\.com)$/i,
 };
 
 export type ImageHostKind = 'instagram' | 'tiktok';
@@ -77,7 +79,7 @@ export function isPrivateIp(addr: string): boolean {
 // resolving the IP here and then making fetch connect to that exact IP
 // (with the original Host header), which Node's fetch doesn't expose
 // cleanly. Combined with the host allowlist (only fbcdn.net /
-// cdninstagram.com / tiktokcdn.com — domains controlled by Meta /
+// cdninstagram.com / tiktokcdn.com / tiktokcdn-eu.com — domains controlled by Meta /
 // ByteDance, not attackers) the residual risk is low; we accept it as
 // a known trade-off rather than reach for a custom socket dialer.
 export async function assertAllowedImageHost(rawUrl: string, kind: ImageHostKind): Promise<void> {

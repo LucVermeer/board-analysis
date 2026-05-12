@@ -77,12 +77,21 @@ export async function findInstagramShortcodeConflict(
       and(eq(dbSchema.boardBetaLinks.boardType, boardType), eq(dbSchema.boardBetaLinks.shortcode, incomingShortcode)),
     );
 
+  // Scan every match before deciding. If the same shortcode is attached to
+  // *both* the selected climb and a different climb (from a prior race or
+  // data drift), the saveTick path's `onSameClimbDup: 'skip'` would
+  // otherwise silently no-op when a same-climb row happens to come back
+  // first — letting a known cross-climb dup pass through. Cross-climb
+  // conflicts must always win.
+  let sawSameClimb = false;
   for (const entry of existingLinks) {
     if (entry.climbUuid === selectedClimbUuid) {
-      return { kind: 'same-climb' };
+      sawSameClimb = true;
+      continue;
     }
     return { kind: 'cross-climb', climbName: entry.climbName ?? 'another climb' };
   }
+  if (sawSameClimb) return { kind: 'same-climb' };
   return { kind: 'none' };
 }
 
@@ -144,13 +153,14 @@ export type ValidateAndEnrichOptions = {
 };
 
 // Single gated entrypoint for write-time beta-link validation. Steps:
-//   1. Non-Instagram URLs (TikTok, etc.) bypass the deep checks and return
+//   1. Apply the per-user rate limit on beta-link writes — 30/min, well above
+//      legitimate use, well below what would let a caller spam writes or
+//      probe IG shortcode existence at scale via the dedup query below.
+//      The limit gates the DB probe, the outbound IG fetch, AND non-IG
+//      (TikTok et al.) write paths so every beta-link attach burns budget.
+//   2. Non-Instagram URLs (TikTok, etc.) bypass the deep checks and return
 //      `action: 'insert'` with null enrichment — the read-time `betaLinks`
 //      resolver will enrich them lazily.
-//   2. Apply the per-user rate limit on beta-link writes — 30/min, well above
-//      legitimate use, well below what would let a caller probe IG shortcode
-//      existence at scale via the dedup query below. The limit gates the DB
-//      probe as well as the outbound IG fetch.
 //   3. Run the cross-climb dedup check. Cross-climb dup -> friendly error
 //      via InstagramBetaValidationError. Same-climb dup -> branch on the
 //      caller's `onSameClimbDup`.
@@ -167,15 +177,16 @@ export async function validateAndEnrichBetaLinkInsert(
   url: string,
   options: ValidateAndEnrichOptions,
 ): Promise<BetaLinkInsertPlan> {
+  // Rate limit BEFORE branching on platform so TikTok / future non-IG
+  // platforms get the same write-budget as IG. Also runs before the dedup
+  // probe so an authenticated caller can't enumerate "is this IG shortcode
+  // attached anywhere?" by watching the error variant (cross-climb vs
+  // same-climb vs none) without consuming budget. See review of PR #1745.
+  await applyRateLimit(ctx, 30, 'beta-link-validation');
+
   if (!isInstagramUrl(url)) {
     return { action: 'insert', thumbnail: null, foreignUsername: null };
   }
-
-  // Rate limit before the dedup probe so an authenticated caller can't
-  // enumerate "is this IG shortcode attached anywhere?" by watching the
-  // error variant (cross-climb vs same-climb vs none) without consuming
-  // budget. See review of PR #1745.
-  await applyRateLimit(ctx, 30, 'instagram-beta-validation');
 
   const conflict = await findInstagramShortcodeConflict(boardType, climbUuid, url);
   if (conflict.kind === 'cross-climb') {

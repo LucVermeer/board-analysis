@@ -273,6 +273,42 @@ describe('fetchInstagramMeta', () => {
     expect(result).toEqual({ status: 'transient_error' });
   });
 
+  it('does not trip the circuit breaker on body-cap rejections', async () => {
+    // An oversized body is a local memory-pressure defense, not an
+    // IG-availability signal. Tripping the breaker on body-cap hits would
+    // stop legitimate fetches for the whole cooldown window after a single
+    // bad response. Feed 11 distinct URLs that each blow past the cap and
+    // verify that fetch is still called on the 11th (i.e. the breaker
+    // hasn't opened).
+    const chunk = new Uint8Array(64 * 1024).fill(0x61);
+    const buildStream = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (let i = 0; i < 32; i++) controller.enqueue(chunk); // 2 MB total
+          controller.close();
+        },
+      });
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        body: buildStream(),
+        text: () => Promise.resolve(''),
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    for (let i = 0; i < 11; i++) {
+      const result = await fetchInstagramMeta(`https://www.instagram.com/p/BODYCAP${i}/`);
+      expect(result).toEqual({ status: 'transient_error' });
+    }
+    // All 11 attempts actually called fetch — the breaker stayed closed.
+    expect(fetchMock).toHaveBeenCalledTimes(11);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
   it('drops a username that does not match Instagram username rules', async () => {
     // Username field is captured from the embed HTML and persisted to
     // boardBetaLinks.foreign_username. An anomalous response that returns a

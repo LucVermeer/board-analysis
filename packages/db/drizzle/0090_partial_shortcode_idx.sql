@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "board_beta_links_shortcode_idx";--> statement-breakpoint
+CREATE INDEX "board_beta_links_shortcode_idx" ON "board_beta_links" USING btree ("board_type","shortcode") WHERE "board_beta_links"."shortcode" IS NOT NULL;

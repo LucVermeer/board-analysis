@@ -99,6 +99,12 @@ describe('assertAllowedImageHost', () => {
     await expect(
       assertAllowedImageHost('https://p16-sign.tiktokcdn-us.com/photo.jpg', 'tiktok'),
     ).resolves.toBeUndefined();
+    // EU CDN — thumbnails served to European clients land on tiktokcdn-eu.com.
+    // The dev proxy already treats this suffix as valid; the S3-cache path
+    // must too, otherwise EU-region TikTok thumbnails silently fail to cache.
+    await expect(
+      assertAllowedImageHost('https://p16-sign.tiktokcdn-eu.com/photo.jpg', 'tiktok'),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects non-https URLs', async () => {

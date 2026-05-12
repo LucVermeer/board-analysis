@@ -96,7 +96,7 @@ describe('validateAndEnrichBetaLinkInsert (gate)', () => {
     expect(mockDbSelect).not.toHaveBeenCalled();
   });
 
-  it('does not invoke the rate limiter for non-Instagram URLs', async () => {
+  it('rate-limits non-Instagram URLs too so TikTok attachments share the per-user write budget', async () => {
     await validateAndEnrichBetaLinkInsert(
       fakeCtx,
       'kilter',
@@ -104,7 +104,23 @@ describe('validateAndEnrichBetaLinkInsert (gate)', () => {
       'https://www.tiktok.com/@user/video/12345',
       { onSameClimbDup: 'throw' },
     );
-    expect(mockApplyRateLimit).not.toHaveBeenCalled();
+    expect(mockApplyRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockApplyRateLimit).toHaveBeenCalledWith(fakeCtx, 30, 'beta-link-validation');
+  });
+
+  it('surfaces a rate-limit rejection for non-Instagram URLs (no silent bypass)', async () => {
+    mockApplyRateLimit.mockImplementationOnce(async () => {
+      throw new Error('rate limited');
+    });
+    await expect(
+      validateAndEnrichBetaLinkInsert(
+        fakeCtx,
+        'kilter',
+        '00000000-0000-0000-0000-000000000000',
+        'https://www.tiktok.com/@user/video/12345',
+        { onSameClimbDup: 'throw' },
+      ),
+    ).rejects.toThrow('rate limited');
   });
 
   // Locks in that the rate limit fires before the dedup DB probe for IG
@@ -233,6 +249,25 @@ describe('findInstagramShortcodeConflict', () => {
       'https://www.instagram.com/reel/ABC123xyz/',
     );
     expect(result).toEqual({ kind: 'cross-climb', climbName: 'another climb' });
+  });
+
+  it('returns cross-climb when both same-climb and other-climb rows exist (order-independent)', async () => {
+    // Same shortcode attached to the selected climb *and* a different climb
+    // (prior race / data drift). The query has no ordering, so a same-climb
+    // row can come back first. We must still surface the cross-climb conflict
+    // — otherwise saveTick (`onSameClimbDup: 'skip'`) would silently skip
+    // when a real cross-climb dup is the whole reason this check exists.
+    const { findInstagramShortcodeConflict } = await import('../graphql/resolvers/ticks/mutations');
+    stubDbReturning([
+      { climbName: 'Same Climb', climbUuid: 'climb-1' },
+      { climbName: 'Other Climb', climbUuid: 'climb-other' },
+    ]);
+    const result = await findInstagramShortcodeConflict(
+      'kilter',
+      'climb-1',
+      'https://www.instagram.com/reel/ABC123xyz/',
+    );
+    expect(result).toEqual({ kind: 'cross-climb', climbName: 'Other Climb' });
   });
 
   it('returns none when no rows match', async () => {
