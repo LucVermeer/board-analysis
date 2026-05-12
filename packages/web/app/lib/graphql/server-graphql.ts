@@ -2,8 +2,21 @@ import 'server-only';
 import { type RequestDocument, type Variables, GraphQLClient } from 'graphql-request';
 import { getGraphQLHttpUrl } from './client';
 import type { GroupedNotificationConnection, UserBoard } from '@boardsesh/shared-schema';
-import type { GetMyBoardsQueryResponse } from '@/app/lib/graphql/operations/boards';
-import type { Playlist, GetAllUserPlaylistsQueryResponse } from '@/app/lib/graphql/operations/playlists';
+import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@/app/lib/graphql/operations/boards';
+import {
+  GET_ALL_USER_PLAYLISTS,
+  GET_PLAYLIST,
+  GET_PLAYLIST_CLIMBS,
+  GET_SMART_PLAYLIST,
+  type Playlist,
+  type GetAllUserPlaylistsQueryResponse,
+  type GetPlaylistQueryResponse,
+  type GetPlaylistClimbsQueryResponse,
+  type GetPlaylistClimbsInput,
+  type GetSmartPlaylistInput,
+  type GetSmartPlaylistQueryResponse,
+} from '@/app/lib/graphql/operations/playlists';
+import { GET_GROUPED_NOTIFICATIONS } from '@/app/lib/graphql/operations/notifications';
 
 /**
  * Execute a GraphQL query with an auth token (non-cached, per-user data).
@@ -32,8 +45,6 @@ export async function executeAuthenticatedGraphQL<T = unknown, V extends Variabl
  * NOT cached — personalized data is per-user.
  */
 export async function serverMyBoards(authToken: string): Promise<UserBoard[] | null> {
-  const { GET_MY_BOARDS } = await import('@/app/lib/graphql/operations/boards');
-
   try {
     const response = await executeAuthenticatedGraphQL<GetMyBoardsQueryResponse>(
       GET_MY_BOARDS,
@@ -41,7 +52,8 @@ export async function serverMyBoards(authToken: string): Promise<UserBoard[] | n
       authToken,
     );
     return response.myBoards.boards;
-  } catch {
+  } catch (error) {
+    console.error('serverMyBoards failed:', error);
     return null;
   }
 }
@@ -62,13 +74,13 @@ export async function serverUserPlaylists(
   authToken: string,
   input: { boardType?: string; layoutId?: number; page?: number; pageSize?: number } = {},
 ): Promise<ServerUserPlaylistsResult | null> {
-  const { GET_ALL_USER_PLAYLISTS } = await import('@/app/lib/graphql/operations/playlists');
   type Response = GetAllUserPlaylistsQueryResponse;
 
   try {
     const response = await executeAuthenticatedGraphQL<Response>(GET_ALL_USER_PLAYLISTS, { input }, authToken);
     return response.allUserPlaylists;
-  } catch {
+  } catch (error) {
+    console.error('serverUserPlaylists failed:', error);
     return null;
   }
 }
@@ -81,11 +93,74 @@ export async function serverGroupedNotifications(
   authToken: string,
   limit: number = 20,
   offset: number = 0,
-): Promise<GroupedNotificationConnection> {
-  const { GET_GROUPED_NOTIFICATIONS } = await import('@/app/lib/graphql/operations/notifications');
+): Promise<GroupedNotificationConnection | null> {
   type Response = { groupedNotifications: GroupedNotificationConnection };
 
-  const data = await executeAuthenticatedGraphQL<Response>(GET_GROUPED_NOTIFICATIONS, { limit, offset }, authToken);
+  try {
+    const data = await executeAuthenticatedGraphQL<Response>(GET_GROUPED_NOTIFICATIONS, { limit, offset }, authToken);
+    return data.groupedNotifications;
+  } catch (error) {
+    console.error('serverGroupedNotifications failed:', error);
+    return null;
+  }
+}
 
-  return data.groupedNotifications;
+/**
+ * Server-side fetch of a single playlist.
+ */
+export async function serverPlaylist(authToken: string | undefined, playlistId: string): Promise<Playlist | null> {
+  try {
+    const response = await executeAuthenticatedGraphQL<GetPlaylistQueryResponse>(
+      GET_PLAYLIST,
+      { playlistId },
+      authToken,
+    );
+    return response.playlist;
+  } catch (error) {
+    console.error('serverPlaylist failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Server-side fetch of the first page of a smart (generated) playlist.
+ * The resolver doesn't require auth (rate-limited only), but we forward
+ * the caller's token when present so any per-user fields stay consistent
+ * with what the client would see on hydration.
+ */
+export async function serverSmartPlaylist(
+  authToken: string | undefined,
+  input: GetSmartPlaylistInput,
+): Promise<GetSmartPlaylistQueryResponse['smartPlaylist'] | null> {
+  try {
+    const response = await executeAuthenticatedGraphQL<GetSmartPlaylistQueryResponse>(
+      GET_SMART_PLAYLIST,
+      { input },
+      authToken,
+    );
+    return response.smartPlaylist;
+  } catch (error) {
+    console.error('serverSmartPlaylist failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Server-side fetch of the first page of playlist climbs.
+ */
+export async function serverPlaylistClimbs(
+  authToken: string | undefined,
+  input: GetPlaylistClimbsInput,
+): Promise<GetPlaylistClimbsQueryResponse['playlistClimbs'] | null> {
+  try {
+    const response = await executeAuthenticatedGraphQL<GetPlaylistClimbsQueryResponse>(
+      GET_PLAYLIST_CLIMBS,
+      { input },
+      authToken,
+    );
+    return response.playlistClimbs;
+  } catch (error) {
+    console.error('serverPlaylistClimbs failed:', error);
+    return null;
+  }
 }

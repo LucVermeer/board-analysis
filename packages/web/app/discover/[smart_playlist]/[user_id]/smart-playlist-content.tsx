@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import MuiButton from '@mui/material/Button';
@@ -15,6 +15,7 @@ import {
   type GetSmartPlaylistQueryResponse,
   type GetSmartPlaylistQueryVariables,
   type SmartPlaylistMeta,
+  type SmartPlaylistResult,
   type SmartPlaylistType,
   GET_SMART_PLAYLIST,
 } from '@/app/lib/graphql/operations/playlists';
@@ -22,6 +23,7 @@ import { type SmartPlaylistSlug, smartPlaylistByType } from '@/app/lib/smart-pla
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard } from '@/app/lib/find-matching-board';
+import { ssrSeedMatchesQueryKey } from '@/app/lib/graphql/ssr-query-seed';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { LoadingSpinner } from '@/app/components/ui/loading-spinner';
@@ -37,9 +39,17 @@ type Props = {
   smartPlaylistSlug: SmartPlaylistSlug;
   userId: string;
   initialMyBoards?: UserBoard[] | null;
+  /** SSR-fetched first page so the hero + climbs paint without a spinner. */
+  initialSmartPlaylist?: SmartPlaylistResult | null;
 };
 
-export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistSlug, userId, initialMyBoards }: Props) {
+export default function SmartPlaylistContent({
+  smartPlaylistType,
+  smartPlaylistSlug,
+  userId,
+  initialMyBoards,
+  initialSmartPlaylist,
+}: Props) {
   const { t } = useTranslation('playlists');
   const { showMessage } = useSnackbar();
   const { token, isLoading: tokenLoading } = useWsAuthToken();
@@ -47,6 +57,19 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
 
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(() => findMatchingBoard(initialMyBoards));
   const { boards: myBoards, isLoading: boardsLoading } = useMyBoards(true, 50, initialMyBoards);
+  // Mark SSR data fresh so react-query honours staleTime instead of triggering
+  // an immediate refetch (initialDataUpdatedAt defaults to 0 = epoch).
+  const ssrInitialUpdatedAtRef = useRef(initialSmartPlaylist ? Date.now() : 0);
+  // Snapshot the key the SSR payload was fetched for. Without this gate, the
+  // same initialData would be reused for every board-chip switch (and any
+  // future key changes) instead of triggering a real fetch.
+  const ssrSmartKeyRef = useRef({ boardUuid: selectedBoard?.uuid ?? null });
+  // Single source of truth for "is the SSR payload still applicable to the
+  // live query key?" — used to gate both `initialData` and
+  // `initialDataUpdatedAt` so they can never disagree.
+  const ssrSmartApplicable = ssrSeedMatchesQueryKey(!!initialSmartPlaylist, ssrSmartKeyRef.current, {
+    boardUuid: selectedBoard?.uuid ?? null,
+  });
 
   const {
     data: pagedData,
@@ -77,6 +100,18 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length : undefined),
     staleTime: 5 * 60 * 1000,
+    // Only seed when the current query key still matches the tuple the SSR
+    // payload was fetched for. Beyond the obvious first-render case this
+    // also avoids re-applying stale SSR data if the user switches away from
+    // and back to the default view much later.
+    initialData:
+      ssrSmartApplicable && initialSmartPlaylist
+        ? {
+            pages: [initialSmartPlaylist],
+            pageParams: [0],
+          }
+        : undefined,
+    initialDataUpdatedAt: ssrSmartApplicable ? ssrInitialUpdatedAtRef.current : 0,
   });
 
   const allClimbs: Climb[] = useMemo(
@@ -84,7 +119,7 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
     [pagedData],
   );
 
-  const meta: SmartPlaylistMeta | undefined = pagedData?.pages[0]?.meta;
+  const meta: SmartPlaylistMeta | undefined = pagedData?.pages[0]?.meta ?? initialSmartPlaylist?.meta;
 
   const boardTypes = useMemo(() => {
     const types = new Set<string>();
@@ -113,7 +148,9 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
     });
   }, [smartPlaylistSlug, smartPlaylistType, userId, t, meta, preset.titleI18nKey, showMessage]);
 
-  if (tokenLoading || isLoading) {
+  // With SSR data we have meta + first page; skip the full-page spinner.
+  // Only gate on tokenLoading when we don't have SSR-seeded content yet.
+  if ((tokenLoading || isLoading) && !meta) {
     return (
       <div className={styles.loadingContainer}>
         <LoadingSpinner size={48} />
@@ -121,6 +158,14 @@ export default function SmartPlaylistContent({ smartPlaylistType, smartPlaylistS
     );
   }
 
+  // Note: when SSR-seeded `initialData` is in play, react-query keeps the
+  // overall query state as `success` even if a background refetch errors —
+  // `isError` only flips when there's no `data` to fall back to. That means
+  // a transient network blip after hydration leaves the SSR-rendered hero +
+  // climbs on screen instead of replacing them with the error UI. This is
+  // intentional resilience: same trade-off as `fetchPlaylist`'s catch block
+  // in PlaylistDetailContent. The error UI here only fires on a true cold
+  // failure (no SSR, no cache, refetch errored).
   if (isError || !meta) {
     return (
       <div className={styles.errorContainer}>
