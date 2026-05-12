@@ -9,6 +9,7 @@ import {
   getDevProxyThumbnailUrl,
   isOurS3Url,
   isS3Configured,
+  STATIC_THUMBNAIL_PREFIX,
 } from '../../../lib/beta-link-thumbnails';
 
 type BetaLinkResult = {
@@ -27,11 +28,6 @@ type RecentBetaLinkResult = {
   boardType: string;
 };
 
-// Mirrors STATIC_THUMBNAIL_PREFIX in ../../../lib/beta-link-thumbnails. Keep
-// the two in sync — the recentBetaLinks query uses a SQL LIKE filter to
-// pre-trim to rows that already have a cached S3 thumbnail, so the prefix
-// must match what isOurS3Url's static-prefix branch accepts.
-const STATIC_THUMBNAIL_PREFIX = '/static/beta-link-thumbnails/';
 const RECENT_BETA_LINKS_MAX_LIMIT = 50;
 const RECENT_BETA_LINKS_DEFAULT_LIMIT = 20;
 
