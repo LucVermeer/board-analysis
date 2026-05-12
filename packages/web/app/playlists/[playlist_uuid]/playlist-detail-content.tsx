@@ -648,6 +648,7 @@ export default function PlaylistDetailContent({
           onClose={() => setGeneratorOpen(false)}
           boardDetails={generatorBoardDetails}
           defaultAngle={generatorAngle}
+          targetType="playlist"
           onAddClimb={async (climb, _slot, angle) => {
             await executeGraphQL<AddClimbToPlaylistMutationResponse, AddClimbToPlaylistMutationVariables>(
               ADD_CLIMB_TO_PLAYLIST,

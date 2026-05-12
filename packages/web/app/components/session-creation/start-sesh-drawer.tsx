@@ -8,10 +8,10 @@ import Button from '@mui/material/Button';
 import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
-import ElectricBoltOutlined from '@mui/icons-material/ElectricBoltOutlined';
-import RestartAltOutlined from '@mui/icons-material/RestartAltOutlined';
+import AutoFixHighOutlined from '@mui/icons-material/AutoFixHighOutlined';
+import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import CircularProgress from '@mui/material/CircularProgress';
-import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Collapse from '@mui/material/Collapse';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
@@ -36,7 +36,7 @@ import {
 } from '@/app/lib/url-utils';
 import { getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
 import { useBoardDetails } from '@/app/components/board-scroll/board-thumbnail';
-import { PlaylistGeneratorDrawer } from '@/app/components/playlist-generator';
+import { PlaylistGeneratorDrawer, type WorkoutType } from '@/app/components/playlist-generator';
 import type { ClimbQueueItem } from '@/app/components/queue-control/types';
 import { isBoardRoutePath } from '@/app/lib/board-route-paths';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
@@ -95,6 +95,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
   const [boardSelectorExpanded, setBoardSelectorExpanded] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [generatedQueue, setGeneratedQueue] = useState<ClimbQueueItem[]>([]);
+  const [generatedWorkoutType, setGeneratedWorkoutType] = useState<WorkoutType | null>(null);
   const hasAutoSelectedRef = useRef(false);
   const formSubmitRef = useRef<(() => void) | null>(null);
 
@@ -181,6 +182,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedCustomConfig(null);
     setBoardSelectorExpanded(false);
     setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
     setGeneratorOpen(false);
     setFormKey((k) => k + 1);
   }, [onClose]);
@@ -191,6 +193,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedCustomConfig(null);
     setBoardSelectorExpanded(false);
     setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
   }, []);
 
   const handleDiscoveryBoardClick = useCallback(
@@ -233,6 +236,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setSelectedBoard(null);
     setBoardSelectorExpanded(false);
     setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
   }, []);
 
   const handleCustomSelect = (url: string, config?: StoredBoardConfig) => {
@@ -242,7 +246,19 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
     setShowBoardDrawer(false);
     setBoardSelectorExpanded(false);
     setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
   };
+
+  const handleClearGenerated = useCallback(() => {
+    if (generatedQueue.length === 0) return;
+    track('Session Queue Generated Cleared', {
+      workoutType: generatedWorkoutType,
+      savedCount: generatedQueue.length,
+      boardName: generatorBoardDetails?.board_name ?? '',
+    });
+    setGeneratedQueue([]);
+    setGeneratedWorkoutType(null);
+  }, [generatedQueue.length, generatedWorkoutType, generatorBoardDetails]);
 
   const handleSubmit = async (formData: SessionCreationFormData) => {
     let boardPath: string | undefined;
@@ -325,6 +341,8 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
         boardName: effectiveBoardDetails?.board_name ?? '',
         hasGoal: !!formData.goal,
         isDiscoverable: !!formData.discoverable,
+        generatedQueueCount: generatedQueue.length,
+        generatedWorkoutType: generatedWorkoutType ?? undefined,
       });
 
       handleClose();
@@ -399,39 +417,52 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
 
   const generateEntry =
     generatedQueue.length > 0 ? (
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-        <Chip
-          color="primary"
-          variant="filled"
-          icon={<ElectricBoltOutlined />}
-          label={t('creation.generateQueue.summary', { count: generatedQueue.length })}
-        />
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{
+          p: 1.25,
+          borderRadius: 1,
+          border: `1px solid ${themeTokens.colors.primary}`,
+          bgcolor: themeTokens.semantic.selectedLight,
+        }}
+      >
+        <AutoFixHighOutlined fontSize="small" sx={{ color: 'primary.main' }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {t('creation.generateQueue.summary', { count: generatedQueue.length })}
+          </Typography>
+        </Box>
         <Button
-          variant="text"
           size="small"
-          startIcon={<RestartAltOutlined />}
+          variant="text"
           onClick={() => {
             setGeneratedQueue([]);
+            setGeneratedWorkoutType(null);
             setGeneratorOpen(true);
           }}
           disabled={!generatorBoardDetails}
         >
           {t('creation.generateQueue.regenerate')}
         </Button>
-        <Button variant="text" size="small" onClick={() => setGeneratedQueue([])}>
-          {t('creation.generateQueue.clear')}
-        </Button>
+        <IconButton
+          size="small"
+          onClick={handleClearGenerated}
+          aria-label={t('creation.generateQueue.clear')}
+        >
+          <CloseOutlined fontSize="small" />
+        </IconButton>
       </Stack>
     ) : (
       <Button
         variant="outlined"
-        size="small"
-        startIcon={<ElectricBoltOutlined />}
+        fullWidth
+        startIcon={<AutoFixHighOutlined />}
         onClick={() => setGeneratorOpen(true)}
         disabled={!generatorBoardDetails}
-        sx={{ alignSelf: 'flex-start' }}
       >
-        {t('creation.generateQueue.button')}
+        {generatorBoardDetails ? t('creation.generateQueue.button') : t('creation.generateQueue.buttonHint')}
       </Button>
     );
 
@@ -535,6 +566,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
           onClose={() => setGeneratorOpen(false)}
           boardDetails={generatorBoardDetails}
           defaultAngle={generatorDefaultAngle}
+          targetType="session"
           // Stamp the user-chosen angle onto the queue item's climb so the
           // session queue uses it verbatim. The search response's climb.angle
           // typically matches the queried angle today, but trusting that
@@ -549,7 +581,17 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
               },
             ]);
           }}
-          onComplete={({ added, failed }) => {
+          onComplete={({ added, failed, workoutType }) => {
+            if (added > 0) {
+              setGeneratedWorkoutType(workoutType);
+              track('Session Queue Generated', {
+                workoutType,
+                boardName: generatorBoardDetails.board_name,
+                angle: generatorDefaultAngle,
+                savedCount: added,
+                failedCount: failed,
+              });
+            }
             if (added > 0 && failed > 0) {
               showMessage(t('creation.generateQueue.addedPartial', { added, failed }), 'warning');
             } else if (added === 0) {

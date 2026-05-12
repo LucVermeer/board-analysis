@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
@@ -17,6 +17,7 @@ import {
 } from '@/app/lib/graphql/operations/climb-search';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
+import { track } from '@/app/lib/analytics';
 import { type WorkoutType, type GeneratorOptions, type PlannedClimbSlot, WORKOUT_TYPES } from './types';
 import WorkoutTypeSelector from './workout-type-selector';
 import GeneratorOptionsForm, { getDefaultOptions } from './generator-options-form';
@@ -28,7 +29,13 @@ export type GeneratorCompletionResult = {
   added: number;
   failed: number;
   total: number;
+  /** Workout type the user picked. Useful for downstream analytics. */
+  workoutType: WorkoutType;
 };
+
+/** Tag attached to every analytics event so we can split funnels by where
+ *  the generated climbs end up (a playlist mutation vs the session queue). */
+export type GeneratorTargetType = 'playlist' | 'session';
 
 type PlaylistGeneratorDrawerProps = {
   open: boolean;
@@ -37,6 +44,7 @@ type PlaylistGeneratorDrawerProps = {
   defaultAngle: number;
   onAddClimb: (climb: Climb, slot: PlannedClimbSlot, angle: number) => Promise<void>;
   onComplete?: (result: GeneratorCompletionResult) => void;
+  targetType: GeneratorTargetType;
 };
 
 type DrawerState = 'select' | 'configure' | 'generating';
@@ -48,6 +56,7 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
   defaultAngle,
   onAddClimb,
   onComplete,
+  targetType,
 }) => {
   const { token, isAuthenticated } = useWsAuthToken();
   const { showMessage } = useSnackbar();
@@ -62,6 +71,11 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
+  // Tracks whether the user actually generated something during this open
+  // session. Lets us distinguish "closed mid-configure" (cancellation) from
+  // "closed after generation completed" (success path, no extra event).
+  const completedSuccessfullyRef = useRef(false);
+
   useEffect(() => {
     if (open) {
       setDrawerState('select');
@@ -70,8 +84,14 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
       setTargetAngle(defaultAngle);
       setGenerating(false);
       setProgress({ current: 0, total: 0 });
+      completedSuccessfullyRef.current = false;
+      track('Workout Generator Opened', {
+        targetType,
+        boardName: boardDetails.board_name,
+        angle: defaultAngle,
+      });
     }
-  }, [open, defaultAngle]);
+  }, [open, defaultAngle, targetType, boardDetails.board_name]);
 
   const plannedSlots = useMemo(() => {
     if (!options) return [];
@@ -83,17 +103,42 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
       setSelectedType(type);
       setOptions(getDefaultOptions(type, defaultTargetGrade));
       setDrawerState('configure');
+      track('Workout Type Selected', {
+        targetType,
+        workoutType: type,
+        boardName: boardDetails.board_name,
+      });
     },
-    [defaultTargetGrade],
+    [defaultTargetGrade, targetType, boardDetails.board_name],
   );
 
   const handleBack = useCallback(() => {
     if (drawerState === 'configure') {
+      track('Workout Generator Back Clicked', {
+        targetType,
+        workoutType: selectedType,
+        boardName: boardDetails.board_name,
+      });
       setDrawerState('select');
       setSelectedType(null);
       setOptions(null);
     }
-  }, [drawerState]);
+  }, [drawerState, targetType, selectedType, boardDetails.board_name]);
+
+  // Wrap onClose so dismissals mid-configure (no run completed) fire a
+  // cancellation event. Generating phase already blocks dismissal via the
+  // `onClose={generating ? undefined : ...}` guard below.
+  const handleClose = useCallback(() => {
+    if (drawerState === 'configure' && !generating && !completedSuccessfullyRef.current) {
+      track('Workout Generator Cancelled', {
+        targetType,
+        workoutType: selectedType,
+        stage: 'configure',
+        boardName: boardDetails.board_name,
+      });
+    }
+    onClose();
+  }, [drawerState, generating, targetType, selectedType, boardDetails.board_name, onClose]);
 
   const handleReset = useCallback(() => {
     if (selectedType) {
@@ -145,10 +190,46 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
   );
 
   const handleGenerate = useCallback(async () => {
-    if (!options || plannedSlots.length === 0) {
+    if (!options || plannedSlots.length === 0 || !selectedType) {
       showMessage(t('generator.messages.noClimbs'), 'error');
       return;
     }
+
+    // Snapshot the option set as flat scalars so the analytics events stay
+    // queryable without unpacking nested JSON downstream.
+    const optionsSnapshot: Record<string, string | number | boolean | null> = {
+      workoutType: selectedType,
+      targetGrade: options.targetGrade,
+      targetAngle,
+      warmUp: options.warmUp,
+      minAscents: options.minAscents,
+      minRating: options.minRating,
+      climbBias: options.climbBias,
+      onlyTallClimbs: !!options.onlyTallClimbs,
+    };
+    switch (options.type) {
+      case 'volume':
+        optionsSnapshot.mainSetClimbs = options.mainSetClimbs;
+        optionsSnapshot.mainSetVariability = options.mainSetVariability;
+        break;
+      case 'pyramid':
+      case 'ladder':
+        optionsSnapshot.numberOfSteps = options.numberOfSteps;
+        optionsSnapshot.climbsPerStep = options.climbsPerStep;
+        break;
+      case 'gradeFocus':
+        optionsSnapshot.numberOfClimbs = options.numberOfClimbs;
+        break;
+    }
+
+    track('Workout Generator Generate Clicked', {
+      targetType,
+      boardName: boardDetails.board_name,
+      plannedCount: plannedSlots.length,
+      ...optionsSnapshot,
+    });
+
+    const startedAt = performance.now();
 
     setGenerating(true);
     setDrawerState('generating');
@@ -200,9 +281,35 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
     setGenerating(false);
 
     const added = plannedSlots.length - failedSlots.length;
-    onComplete?.({ added, failed: failedSlots.length, total: plannedSlots.length });
+    completedSuccessfullyRef.current = added > 0;
+    const durationMs = Math.round(performance.now() - startedAt);
+
+    track('Workout Generated', {
+      targetType,
+      boardName: boardDetails.board_name,
+      plannedCount: plannedSlots.length,
+      savedCount: added,
+      failedCount: failedSlots.length,
+      durationMs,
+      ...optionsSnapshot,
+    });
+
+    onComplete?.({ added, failed: failedSlots.length, total: plannedSlots.length, workoutType: selectedType });
     onClose();
-  }, [options, plannedSlots, targetAngle, onAddClimb, onComplete, onClose, showMessage, searchClimbsForGrade, t]);
+  }, [
+    options,
+    plannedSlots,
+    selectedType,
+    targetAngle,
+    targetType,
+    boardDetails.board_name,
+    onAddClimb,
+    onComplete,
+    onClose,
+    showMessage,
+    searchClimbsForGrade,
+    t,
+  ]);
 
   const workoutTypeInfo = selectedType ? WORKOUT_TYPES.find((wt) => wt.type === selectedType) : null;
 
@@ -308,7 +415,7 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
         </div>
       }
       open={open}
-      onClose={generating ? undefined : onClose}
+      onClose={generating ? undefined : handleClose}
       placement="bottom"
       showCloseButton={!generating}
       disableBackdropClick={generating}

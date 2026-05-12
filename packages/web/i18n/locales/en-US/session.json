@@ -130,6 +130,7 @@
     },
     "generateQueue": {
       "button": "Generate workout queue",
+      "buttonHint": "Pick a board first",
       "regenerate": "Regenerate",
       "clear": "Clear",
       "summary_one": "{{count}} climb queued",

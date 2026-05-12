@@ -130,6 +130,7 @@
     },
     "generateQueue": {
       "button": "Générer une file d'entraînement",
+      "buttonHint": "Choisis d'abord un board",
       "regenerate": "Régénérer",
       "clear": "Effacer",
       "summary_one": "{{count}} voie en file",

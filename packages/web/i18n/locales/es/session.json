@@ -130,6 +130,7 @@
     },
     "generateQueue": {
       "button": "Generar cola de entrenamiento",
+      "buttonHint": "Elige un board primero",
       "regenerate": "Regenerar",
       "clear": "Limpiar",
       "summary_one": "{{count}} bloque en cola",

@@ -613,7 +613,11 @@ describe('StartSeshDrawer', () => {
   // --- Workout generator entry point ---
 
   function getGenerateButton() {
-    return screen.queryByRole('button', { name: /generate workout queue/i });
+    // Label switches to a hint when the button is disabled (no board picked yet).
+    return (
+      screen.queryByRole('button', { name: /generate workout queue/i }) ??
+      screen.queryByRole('button', { name: /pick a board first/i })
+    );
   }
 
   async function simulateGeneration(climbs: Array<{ uuid: string; name: string; angle: number }>) {
