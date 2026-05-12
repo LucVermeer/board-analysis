@@ -1,8 +1,18 @@
 # Achievements System Plan
 
-**Status:** Draft proposal — 2026-05-12
+**Status:** Draft proposal — 2026-05-12 (rev. 2)
 **Owner:** TBD
 **Source data:** Read-only analysis of prod Postgres (snapshot 2026-05-12)
+
+---
+
+## 0. Changelog from user feedback
+
+Three pieces of feedback from the first draft drove these changes:
+
+- *"While the same climb should only count once, mirrored climbs should count separately from their original — the same hold pattern feels very different on the other side."* → Per-climb dedup is now keyed on `(climb_uuid, is_mirror)`, not just `climb_uuid`. Sending a V8 normally and the same V8 mirrored gives full V-points credit for both. Same change applies to `grade.repeat` (mirror counts as a separate send) but **not** to `grade.first` — the grade is the grade, you only "first V8" once. See §4.1.1 and §4.4.
+- *"Would be fun to see my stats across angles"* / *"Performance and grade distribution are quite different at some angles, would be great to see/track."* → Added a per-angle stats surface (§7.7) and a small set of angle achievements (§4.5.1) calibrated against prod (avg max grade on Kilter ranges from V3 at 0° to V7 at 40-50° back down to V5 at 70°).
+- *"Excited that you're thinking about it from a climber-who-wants-to-improve POV, rather than board-seller."* → Reinforced in §2 principle 1; no scope change beyond the explicit wording.
 
 ---
 
@@ -29,7 +39,7 @@ Concretely, achievements should:
 
 These exist because the prod data analysis (§3) showed each of them mattering:
 
-1. **Calibrate to the median user, not the power user.** P50 user has 84 lifetime ticks and 39 lifetime sessions. The first achievement tier must unlock fast — within a session or two — or 70% of users will never see one fire.
+1. **Calibrate to the median user, not the power user.** P50 user has 84 lifetime ticks and 39 lifetime sessions. The first achievement tier must unlock fast — within a session or two — or 70% of users will never see one fire. **The frame is climber-improvement, not board-marketing**: every achievement should answer "what does this tell a climber about how they're progressing?" — not "which feature of the product do we want them to use more?" If we can't articulate the climber-improvement story for an achievement in one sentence, cut it.
 2. **Streaks are weeks, not days.** Only **22 users have ever had a 5-day climbing streak**, and 5 users a 7-day streak. Climbers rest. Use *sessions per calendar week* (a much more reachable signal: 252 users have logged 3+ sessions in a single week).
 3. **Aurora-imported flash counts are unreliable.** 70% of all ticks have status=`flash`, vs 16% `send`, 14% `attempt`. This is because Aurora's data import treats default ascents as flashes. **Scope flash-based achievements to ticks that originated in Boardsesh** (or to the most recent N days where users are actively logging the difference) — otherwise we hand "Flash Master" badges to anyone with a synced history.
 4. **Reward grinding, not just sending.** 7,074 sessions contain a send of a climb the user previously attempted in a different session — that "I came back and got it" moment is core to bouldering and almost no app honors it.
@@ -125,11 +135,11 @@ Day-of-week peaks Tuesday > Wednesday > Monday; weekend dips. Hour-of-day double
 
 ### 3.7 V-points (a.k.a. "session score")
 
-Sum of V-grade values for sends in a session — the metric a lot of climbers already informally track ("100 V-points day"). With the half-grade rule (§4.1.1) and per-climb dedup, the prod data says:
+Sum of V-grade values for sends in a session — the metric a lot of climbers already informally track ("100 V-points day"). With the half-grade rule (§4.1.1) and per-(climb, orientation) dedup, the prod data says:
 
-- Median session V-points: **19**, P75=37, P90=61.5, P95=81.5, P99=125.9.
+- Median session V-points: **19**, P75=37, P90=61.5, P99=126.
 - Top solo session ever: **420 V-points**. Zero solo sessions have cleared 500.
-- 848 sessions ever (2.5%) have hit 100 V-points. **Only 69 distinct users ever**.
+- 854 sessions ever (2.5%) have hit 100 V-points. **Only 69 distinct users ever**.
 
 The headline insight: 100 V-points is a real stretch goal for an individual (top 12% of active tickers have ever done it once), but trivially reachable for a crew. A 5-person session at average solo P90 (≈62 each) is 310 V-points; 10 people at P50 (≈19 each) is 190 V-points; 10 people pushing for 100 each is the explicit "1000 V-points crew session" Platinum tier.
 
@@ -213,16 +223,16 @@ That gives a clean mapping (Kilter, same shape on Tension):
 | 8a+    | V12       | 12       |
 | 8b/+   | V13/V14   | 13/14    |
 
-Calibration from prod (33,326 sessions with ≥1 send, applying half-grades + per-climb dedup):
+Calibration from prod (33,534 sessions with ≥1 send, applying half-grades + per-(climb, orientation) dedup):
 
 | Tier (per user, per session) | V-points | Sessions ever | Users ever                |
 | ---------------------------- | -------- | ------------- | ------------------------- |
-| Bronze                       | 25       | 13,461 (40%)  | 274 (48% of active tickers) |
-| Silver                       | 50       | 5,094 (15%)   | 187 (33%)                 |
-| Gold                         | 100      | 848 (2.5%)    | 69 (12%)                  |
-| Platinum                     | 200      | 29 (0.09%)    | 13                        |
+| Bronze                       | 25       | 13,556 (40%)  | 274 (48% of active tickers) |
+| Silver                       | 50       | 5,117 (15%)   | 187 (33%)                 |
+| Gold                         | 100      | 854 (2.5%)    | 69 (12%)                  |
+| Platinum                     | 200      | 30 (0.09%)    | 13                        |
 
-Top solo session ever recorded: **420 V-points** (zero solo sessions have ever cleared 500). Distribution: P50=19, P75=37, P90=61.5, P95=81.5, P99=125.9.
+Top solo session ever recorded: **420 V-points** (zero solo sessions have ever cleared 500). Distribution: P50=19, P90=61.5, P99=126. The mirror-as-separate rule shifts the totals very slightly (mirror is rare even among the cohort that does it), but the principle is right.
 
 Crew V-points (multi-user, summed across everyone in the same session) tier at 100 / 250 / 500 / 1000. Gold (500) is reachable for ~5 strong climbers or a larger mixed crew; Platinum (1000) needs ~10 friends ganging up — explicitly the headline scenario this achievement is designed to enable.
 
@@ -230,7 +240,7 @@ Implementation notes:
 
 - **Per-user evaluator** runs at session close. Reads ticks where `inferred_session_id` matches and `status IN ('send','flash')`, joins to `board_difficulty_grades`, applies the scoring rule above (look up `v_points` from a derived view computed once at startup from `board_difficulty_grades`), sums after per-climb dedup.
 - **Crew evaluator** runs against `board_sessions` (party mode) at close, summing across `boardsesh_ticks` for every distinct `user_id` in that session. For *inferred* multi-user sessions we additionally sum across all users whose ticks are linked to the session via `session_member_overrides`.
-- **Cap per climb = once per session.** Repeating the same climb 5 times in one session counts the V-grade once. This matches climber intuition ("you can't farm V8s by repeating") and keeps the metric resistant to attempt-spam. Implement as `SELECT DISTINCT (user_id, session_id, climb_uuid)` before summing.
+- **Cap per climb-orientation = once per session.** Repeating the same climb 5 times in one session counts the V-grade once. **But normal and mirror count as separate climbs** — sending V8 normally then sending the same V8 mirrored credits 16 V-points (or 8.5+8.5 for V8+), not 8. Per direct user feedback: "even though it's the same hold pattern, climbs can feel very different on one side compared to the other." Implement as `SELECT DISTINCT (user_id, session_id, climb_uuid, COALESCE(is_mirror, false))` before summing.
 - **Crew dedup.** If two users both sent V8 of the same climb in a crew session, both their points count — different bodies, different sends. Only the per-user dedup applies.
 - **Display.** Show as integer when whole (`100 V-points`), one decimal when fractional (`5.5 V-points` for a single V5+ send). Never round to integer in storage — half-points compound (10× V5+ sessions = 55 V-points exactly, not 50).
 
@@ -274,6 +284,8 @@ We deliberately do **not** ship a "7-day streak" achievement because only 5 user
 
 The `{V}` variant uses the V-display form from §4.1.1 (`V1`, `V2`, …, `V3+`, `V4+`, `V5+`, `V8+`). On the boards we ship today this means up to 22 distinct first-send awards per board_type (Kilter has 39 grade rows but they collapse to V0 through V22, with the four half-grades adding extra awards at V3+/V4+/V5+/V8+). We use the V-display form (not the French grade) because it's what climbers in friend groups actually say out loud.
 
+**Mirror rule** (per user feedback): `grade.first.{V}` fires once per grade — sending V8 normally and V8 mirrored is one "first V8". The grade is the grade. But `grade.repeat.{V}` counts mirror as a separate send: a normal V6 + mirror V6 of the same climb counts 2/10 toward Solid-at-V6, because they're different physical efforts. Same dedup unit as V-points: `(user_id, climb_uuid, COALESCE(is_mirror, false))`.
+
 ### 4.5 Exploration achievements
 
 | ID                          | Trigger                                                            |
@@ -284,6 +296,26 @@ The `{V}` variant uses the V-display form from §4.1.1 (`V1`, `V2`, …, `V3+`, 
 | `explore.boards_3`          | Logged on 3 board types                                            |
 | `explore.layouts_3`         | Logged on 3 distinct layout/size combos                            |
 | `explore.benchmark_set`     | Sent the full benchmark set at a given grade                       |
+
+#### 4.5.1 Angle-stratified achievements (per user feedback)
+
+Two users specifically asked for angle stats — *"performance and grade distribution are quite different at some angles, would be great to see/track."* The prod data confirms it: average max grade on Kilter is V3 at 0° (slab), climbs to **V7 at 40-50°**, then drops back to V5 at 70°. There's a real story per user that the current `you/progress` page doesn't tell.
+
+The headline deliverable is the **per-angle stats surface** (§7.7), not the achievements — but a small set of achievements anchors the surface and gives users something to chase per angle.
+
+| ID                            | Trigger                                                              | Reachability today |
+| ----------------------------- | -------------------------------------------------------------------- | ------------------ |
+| `angle.specialist.{angle}`    | 50 sends at one angle — your "home" angle (variant = `40`, `50`, etc.) | 40° has 475 users; specialist tier is plausibly hundreds |
+| `angle.steep_specialist`      | 25 / 100 sends at angle ≥50° (steep)                                 | 134 / 65 users today |
+| `angle.slab_specialist`       | 25 / 100 sends at angle ≤25° (slab)                                  | 85 / 33 users today |
+| `angle.versatile_v6`          | Sent V6+ at 3 / 5 / 7 distinct angles                                | 185 / 121 / 61 users today |
+| `angle.full_spectrum`         | Sent at every angle the layout/size has set                          | Niche, layout-aware — Bronze of "send it everywhere" |
+| `angle.balanced_pyramid`      | Sent at least 5 climbs at each of 3+ different angles, ≥V3 each      | Rewards real cross-training, not just one-and-done |
+| `grade.angle_pr.{angle}.{V}`  | New PR at a *specific* angle (e.g. "V7 at 50°" was harder than your previous best at 50°) | Generated lazily — many users have already done this once per angle |
+
+`grade.angle_pr` is the most novel one: it acknowledges that hitting V7 at 30° is a different milestone from hitting V7 at 50°, and rewards both. We compute it the same way as `grade.first.{V}` but partitioned by angle. This is the achievement form of the angle-stats surface — every PR per angle gets its moment.
+
+Variant naming: `angle.specialist.40`, `angle.versatile_v6` (no variant — uses `tier` for 3/5/7), `grade.angle_pr.40.V7` etc.
 
 ### 4.6 Social achievements
 
@@ -539,6 +571,25 @@ Add a new tab `/you/achievements` next to logbook + sessions. Default view: grou
 
 Show top 6 highest-tier achievements as a row near the top, with a "See all" link to the user's `/achievements`. Respects the existing public/private visibility model.
 
+### 7.7 Per-angle stats surface (`/you/angles`)
+
+A direct response to user feedback — *"would be great to see my stats across angles."* Lives next to `/you/achievements` as a sibling tab, also accessible from a "Stats by angle" link on the user's profile.
+
+Layout (sketch — final design lives in Figma):
+
+- Top: a small bar showing the user's send count per angle (5° increments), sorted by angle. Tap an angle bar = filter the rest of the page to that angle.
+- Per-angle card grid (one card per angle the user has sent at): max grade (PR), average grade, send count, flash count, hardest project. Tap = a drill-down with the actual climbs.
+- A second view toggle: **"Compared to you"** — for each angle, shows your distribution overlaid on the gym/global distribution at that angle (e.g. "you tend to send harder at 50° than your overall PR suggests"). This is the climber-improvement frame the feedback specifically called out.
+- Surfaces achievements from §4.5.1 inline — a "V7 PR at 50°" badge sits on the 50° card the moment it fires.
+
+This page is the *real* deliverable from the angle feedback. The achievements are the gamified hook into it.
+
+Implementation notes:
+
+- All data comes from the existing `boardsesh_ticks` indexes — `boardsesh_ticks_user_climbed_at_idx` covers the per-angle per-user query cheaply. No new tables needed.
+- Comparison data ("you vs gym at 50°") needs a small materialized view (`per_angle_grade_distribution`, refreshed nightly) or inline aggregation. Start with global comparison (every Boardsesh user); add gym-specific if/when the gym membership table fills out (currently 0 rows in `gym_members`).
+- Server-rendered. The data is small enough (~22 angles × ~22 grades = 484 cells max).
+
 ---
 
 ## 8. Phased rollout
@@ -701,13 +752,16 @@ export const sessionVPointsEvaluator: Evaluator = {
     if (trigger.kind !== 'session_closed') return [];
     const session = trigger.session;
 
-    // Per-climb dedup: each unique (user, session, climb) pair contributes
-    // its v_points exactly once. Half-grades from board_difficulty_grades
-    // are pre-computed into a materialized view `board_grade_points`
-    // (board_type, difficulty, v_display, v_points) at startup.
+    // Per-(climb, orientation) dedup: each unique (user, session, climb,
+    // is_mirror) tuple contributes its v_points exactly once. Mirrored and
+    // non-mirrored sends of the same hold pattern count separately — direct
+    // user feedback: "the same climb feels very different on the other side."
+    // Half-grades from board_difficulty_grades are pre-computed into a
+    // materialized view `board_grade_points` (board_type, difficulty,
+    // v_display, v_points) at startup.
     const [{ totalVPoints }] = await db.execute(sql`
       WITH per_climb AS (
-        SELECT DISTINCT t.climb_uuid, p.v_points
+        SELECT DISTINCT t.climb_uuid, COALESCE(t.is_mirror, false) AS mirrored, p.v_points
         FROM boardsesh_ticks t
         JOIN board_grade_points p
           ON p.board_type = t.board_type AND p.difficulty = t.difficulty
@@ -815,6 +869,21 @@ SELECT board_type,
   COUNT(*) FILTER (WHERE is_mirror=true AND status IN ('send','flash')) AS mirror_sends,
   COUNT(DISTINCT user_id) FILTER (WHERE is_mirror=true) AS users_who_mirror
 FROM boardsesh_ticks GROUP BY 1 ORDER BY 2 DESC;
+
+-- Per-angle grade distribution (powers the §7.7 angle stats surface)
+SELECT user_id, angle, board_type,
+  COUNT(*) FILTER (WHERE status IN ('send','flash')) AS sends,
+  MAX(difficulty) FILTER (WHERE status IN ('send','flash')) AS max_d,
+  AVG(difficulty) FILTER (WHERE status IN ('send','flash')) AS avg_d
+FROM boardsesh_ticks GROUP BY 1,2,3;
+
+-- Angle versatility (calibrates angle.versatile_v6 tiers)
+WITH user_angle_v6 AS (
+  SELECT DISTINCT user_id, angle FROM boardsesh_ticks
+  WHERE status IN ('send','flash') AND difficulty >= 22
+)
+SELECT user_id, COUNT(*) AS angles_at_v6_plus
+FROM user_angle_v6 GROUP BY 1 ORDER BY 2 DESC;
 
 -- Per-user 'sent both ways' counts (calibrates mirror.both_ways tiers)
 WITH per_climb AS (
