@@ -204,6 +204,7 @@ export const GraphQLQueueProvider = ({
     isPersistentSessionActive,
     pendingCurrentClimbUpdates: state.pendingCurrentClimbUpdates,
     dispatch,
+    onStalePendingUpdates: persistentSession.triggerResync,
   });
 
   // --- Current user info ---

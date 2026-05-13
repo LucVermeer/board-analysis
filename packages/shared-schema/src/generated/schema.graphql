@@ -253,19 +253,29 @@ type EventsReplayResponse {
 }
 
 """
+Current realtime connection state for a session participant.
+"""
+enum SessionConnectionState {
+  CONNECTED
+  RECONNECTING
+}
+
+"""
 A user participating in a climbing session.
 """
 type SessionUser {
-  "Unique user identifier"
+  "Stable participant identifier within this session"
   id: ID!
   "Display name"
   username: String!
-  "Whether this user is the session leader (controls the queue)"
+  "Whether this user is the session leader (presentation/backward compatibility only)"
   isLeader: Boolean!
   "URL to user's avatar image"
   avatarUrl: String
   "Stable database user UUID (null for unauthenticated connections)"
   userId: ID
+  "Realtime connection state for this participant"
+  connectionState: SessionConnectionState!
 }
 
 """
@@ -282,7 +292,7 @@ type Session {
   users: [SessionUser!]!
   "Current queue state"
   queueState: QueueState!
-  "Whether the current client is the session leader"
+  "Whether the current client is the session leader (presentation/backward compatibility only)"
   isLeader: Boolean!
   "Unique identifier for this client's connection"
   clientId: ID!
@@ -3914,6 +3924,7 @@ type Mutation {
     boardPath: String!
     username: String
     avatarUrl: String
+    participantId: ID
     initialQueue: [ClimbQueueItemInput!]
     initialCurrentClimb: ClimbQueueItemInput
     sessionName: String
@@ -3930,7 +3941,7 @@ type Mutation {
   leaveSession: Boolean!
 
   """
-  End a session (leader only).
+  End a session (active participant only).
   """
   endSession(sessionId: ID!): SessionSummary
 
@@ -4432,7 +4443,7 @@ type Subscription {
 """
 Union of possible session events.
 """
-union SessionEvent = UserJoined | UserLeft | LeaderChanged | SessionEnded | SessionStatsUpdated
+union SessionEvent = UserJoined | UserLeft | UserPresenceChanged | LeaderChanged | SessionEnded | SessionStatsUpdated
 
 """
 Event when a user joins the session.
@@ -4451,11 +4462,21 @@ type UserLeft {
 }
 
 """
+Event when a participant's realtime presence state changes.
+"""
+type UserPresenceChanged {
+  "The participant whose presence changed"
+  user: SessionUser!
+}
+
+"""
 Event when session leadership changes.
 """
 type LeaderChanged {
-  "ID of the new leader"
+  "Stable participant ID of the new leader"
   leaderId: ID!
+  "Connection ID of the new leader, for current-client leadership checks"
+  leaderConnectionId: ID
 }
 
 """
@@ -4520,6 +4541,8 @@ Event when an item is added to the queue.
 type QueueItemAdded {
   "Sequence number of this event"
   sequence: Int!
+  "Queue state hash after this event is applied"
+  stateHash: String!
   "The added item"
   item: ClimbQueueItem!
   "Position where item was inserted (null = end)"
@@ -4532,6 +4555,8 @@ Event when an item is removed from the queue.
 type QueueItemRemoved {
   "Sequence number of this event"
   sequence: Int!
+  "Queue state hash after this event is applied"
+  stateHash: String!
   "UUID of the removed item"
   uuid: ID!
 }
@@ -4542,6 +4567,8 @@ Event when queue order changes.
 type QueueReordered {
   "Sequence number of this event"
   sequence: Int!
+  "Queue state hash after this event is applied"
+  stateHash: String!
   "UUID of the moved item"
   uuid: ID!
   "Previous position"
@@ -4556,6 +4583,8 @@ Event when the current climb changes.
 type CurrentClimbChanged {
   "Sequence number of this event"
   sequence: Int!
+  "Queue state hash after this event is applied"
+  stateHash: String!
   "New current climb (null to clear)"
   item: ClimbQueueItem
   "ID of the client that made this change"
@@ -4570,6 +4599,10 @@ Event when the current climb's mirror state changes.
 type ClimbMirrored {
   "Sequence number of this event"
   sequence: Int!
+  "Queue state hash after this event is applied"
+  stateHash: String!
+  "UUID of the mirrored queue item, when a current climb exists"
+  uuid: ID
   "New mirror state"
   mirrored: Boolean!
 }

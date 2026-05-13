@@ -144,8 +144,8 @@ sequenceDiagram
     WS->>C: ConnectionAck
 
     C->>WS: Execute joinSession mutation
-    Note over C,WS: With optional initialQueue & initialCurrentClimb
-    WS->>RM: joinSession(connectionId, sessionId, boardPath, initialQueue?)
+    Note over C,WS: With stable participantId and optional initialQueue/current climb
+    WS->>RM: joinSession(connectionId, sessionId, boardPath, participantId, initialQueue?)
 
     alt Session exists in memory
         RM->>RM: Add client to session
@@ -192,7 +192,8 @@ sequenceDiagram
 2. **Authentication**: Optional auth token passed in `connectionParams`
 3. **Eager Subscription**: Queue subscription starts BEFORE fetching state to prevent race conditions
 4. **Session Restoration**: Sessions can be restored from Redis (warm cache) or PostgreSQL (dormant durable state)
-5. **Initial Queue Seeding**: When creating a new session, clients can provide `initialQueue` and `initialCurrentClimb` to seed the session with an existing local queue (e.g., when starting party mode with climbs already queued)
+5. **Stable Participant Identity**: Anonymous clients persist a `participantId` in `ACTIVE_SESSION_KEY`; authenticated clients use their `userId`. Reconnects therefore update the same participant instead of creating a new user row for every socket.
+6. **Initial Queue Seeding**: When creating a new session, clients can provide `initialQueue` and `initialCurrentClimb` to seed the session with an existing local queue (e.g., when starting party mode with climbs already queued)
 
 ### Initial Queue Seeding
 
@@ -206,6 +207,7 @@ mutation JoinSession(
   $boardPath: String!
   $username: String
   $avatarUrl: String
+  $participantId: ID                       # Optional: stable anonymous participant identity
   $initialQueue: [ClimbQueueItemInput!]    # Optional: existing queue items
   $initialCurrentClimb: ClimbQueueItemInput # Optional: current climb
   $sessionName: String                      # Optional: display name for the session
@@ -215,6 +217,7 @@ mutation JoinSession(
     boardPath: $boardPath
     username: $username
     avatarUrl: $avatarUrl
+    participantId: $participantId
     initialQueue: $initialQueue
     initialCurrentClimb: $initialCurrentClimb
     sessionName: $sessionName
@@ -226,6 +229,7 @@ mutation JoinSession(
 
 - `initialQueue`, `initialCurrentClimb`, and `sessionName` are **only applied when creating a new session**
 - If joining an existing session (active, warm, or dormant), these values are ignored and the existing session state is used
+- `participantId` is optional for backward compatibility, but current clients always send it for anonymous sessions so reconnects preserve identity
 - The queue is persisted immediately to Postgres (not debounced) to ensure durability for new sessions
 - All users who join after the initial seed will receive the seeded queue state
 
@@ -358,7 +362,8 @@ The main Traefik instance routes `*.preview.boardsesh.com` and `*.ws.preview.boa
     │  - Redis cache hot                           │
     │  - In-memory session state                   │
     └──────┬───────────────────────┬───────────────┘
-           │ Last user leaves      │ Leader calls endSession
+           │ Last participant      │ Participant calls endSession
+           │ leaves/expires        │
            ▼                       ▼
     ┌──────────────────────────┐   ┌──────────────────────────────┐
     │   GRACE PERIOD (60s)     │   │     ENDED (explicit)         │
@@ -397,7 +402,9 @@ The main Traefik instance routes `*.preview.boardsesh.com` and `*.ws.preview.boa
     └────────────────────┘
 ```
 
-**Grace Period:** When the last user disconnects from this backend instance, the session enters a 60-second grace period where in-memory state is preserved. If a client reconnects within this window (common during network flaps or page refreshes), the session is instantly available without the expensive lock + Redis/Postgres restoration cycle. The grace period duration is controlled by `SESSION_GRACE_PERIOD_MS` in `RoomManager`.
+**Grace Period:** When the last socket on a backend instance drops unexpectedly, the instance enters a 60-second grace period where in-memory state and pending queue writes are preserved. The participant is marked `RECONNECTING`, not removed. If a client reconnects within this window (common during network flaps or page refreshes), the same `participantId` is marked `CONNECTED` and the session is instantly available without the expensive lock + Redis/Postgres restoration cycle. The grace period duration is controlled by `SESSION_GRACE_PERIOD_MS` in `RoomManager`.
+
+Explicit UI actions still leave or end sessions immediately: `leaveSession` removes the participant and emits `UserLeft`; `endSession` is restricted to the session creator or current leader. Passive WebSocket disconnects emit `UserPresenceChanged` first and only emit `UserLeft` if the reconnect timer expires.
 
 If the grace period expires, the session is evicted from memory but remains restorable from Redis until the 4-hour TTL expires. After Redis TTL expiry, the session is still not ended; the next join restores it from Postgres as long as the durable row has not been explicitly marked `ended`.
 
@@ -457,6 +464,8 @@ Sessions can be linked to multiple boards within the same gym via the `sessionBo
 
 ### Leader Election
 
+Leader state is retained for compatibility and UI flags, and it is an authorization boundary for ending sessions over WebSocket: `endSession` requires the caller to be the session creator or the current leader. HTTP callers must be the authenticated session creator.
+
 Leader election uses Redis-backed atomic operations for consistency across instances:
 
 **Single Instance Mode:**
@@ -481,15 +490,15 @@ sequenceDiagram
 
     Note over U1,PS: User 1 is current leader
 
-    U1->>RM: disconnect()
-    RM->>DS: leaveSession(connectionId, sessionId)
+    U1->>RM: passive disconnect()
+    RM->>DS: removeConnection(connectionId, electNewLeader=true)
     DS->>R: Execute ELECT_NEW_LEADER Lua script
     R->>R: Find earliest connected member
     R->>R: SET leader key atomically
-    R-->>DS: newLeaderId = U2
-    DS-->>RM: {newLeaderId: U2}
+    R-->>DS: newLeaderId = U2 connection ID
+    DS-->>RM: {newLeaderId, newLeaderParticipantId}
     RM->>PS: publishSessionEvent(LeaderChanged)
-    PS->>U2: LeaderChanged{leaderId: U2}
+    PS->>U2: LeaderChanged{leaderId: U2 participant ID, leaderConnectionId: U2 connection ID}
 
     Note over U2: User 2 is now leader (on Instance 2)
 ```
@@ -507,13 +516,14 @@ sequenceDiagram
 
 `sessionUpdates(sessionId)` emits membership/lifecycle events and live stats updates.
 
-| Event                 | When emitted                                | Key fields                                                                                                                                                        |
-| --------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UserJoined`          | A client joins the session                  | `user`                                                                                                                                                            |
-| `UserLeft`            | A client disconnects/leaves                 | `userId`                                                                                                                                                          |
-| `LeaderChanged`       | Leader election selects a new leader        | `leaderId`                                                                                                                                                        |
-| `SessionEnded`        | Session is ended explicitly or by cleanup   | `reason`, `newPath`                                                                                                                                               |
-| `SessionStatsUpdated` | A tick is saved for an active party session | `totalSends`, `totalFlashes`, `totalAttempts`, `tickCount`, `participants`, `gradeDistribution`, `boardTypes`, `hardestGrade`, `durationMinutes`, `goal`, `ticks` |
+| Event                 | When emitted                                                                                           | Key fields                                                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UserJoined`          | A new participant joins the session                                                                    | `user` with `connectionState`                                                                                                                                     |
+| `UserPresenceChanged` | A known participant reconnects or drops                                                                | `user` with `connectionState` (`CONNECTED` or `RECONNECTING`)                                                                                                     |
+| `UserLeft`            | A participant explicitly leaves or expires                                                             | `userId`                                                                                                                                                          |
+| `LeaderChanged`       | Leader election selects a new leader after explicit leave, passive disconnect, or stale-member cleanup | `leaderId` is the stable `SessionUser.id`; `leaderConnectionId` is present for current-client connection checks                                                   |
+| `SessionEnded`        | Session is ended explicitly                                                                            | `reason`, `newPath`                                                                                                                                               |
+| `SessionStatsUpdated` | A tick is saved for an active party session                                                            | `totalSends`, `totalFlashes`, `totalAttempts`, `tickCount`, `participants`, `gradeDistribution`, `boardTypes`, `hardestGrade`, `durationMinutes`, `goal`, `ticks` |
 
 `SessionStatsUpdated` payloads include full `ticks` rows so clients can update charts and climbs/attempt lists without issuing an extra session detail refetch. On the client, `useEventProcessor` patches the `SESSION_DETAIL_QUERY_KEY(sessionId)` React Query cache entry directly with the new stats and ticks — there is no separate `liveSessionStats` merge layer, so any component subscribed via `useSessionDetail` re-renders from the updated cache automatically.
 
@@ -527,27 +537,29 @@ sequenceDiagram
 
 ### Event Types
 
-| Event                 | Description             | Fields                                          |
-| --------------------- | ----------------------- | ----------------------------------------------- |
-| `FullSync`            | Complete state snapshot | `sequence`, `state` (queue + currentClimb)      |
-| `QueueItemAdded`      | Item added to queue     | `sequence`, `item`, `position`                  |
-| `QueueItemRemoved`    | Item removed from queue | `sequence`, `uuid`                              |
-| `QueueReordered`      | Item moved in queue     | `sequence`, `uuid`, `oldIndex`, `newIndex`      |
-| `CurrentClimbChanged` | Active climb changed    | `sequence`, `item`, `clientId`, `correlationId` |
-| `ClimbMirrored`       | Mirror state toggled    | `sequence`, `mirrored`                          |
+| Event                 | Description             | Fields                                                       |
+| --------------------- | ----------------------- | ------------------------------------------------------------ |
+| `FullSync`            | Complete state snapshot | `sequence`, `state` (queue + currentClimb + `stateHash`)     |
+| `QueueItemAdded`      | Item added to queue     | `sequence`, `stateHash`, `item`, `position`                  |
+| `QueueItemRemoved`    | Item removed from queue | `sequence`, `stateHash`, `uuid`                              |
+| `QueueReordered`      | Item moved in queue     | `sequence`, `stateHash`, `uuid`, `oldIndex`, `newIndex`      |
+| `CurrentClimbChanged` | Active climb changed    | `sequence`, `stateHash`, `item`, `clientId`, `correlationId` |
+| `ClimbMirrored`       | Mirror state toggled    | `sequence`, `stateHash`, `uuid`, `mirrored`                  |
+
+Every delta event carries the post-event `stateHash`. Clients must store that hash after accepting the matching `sequence`; the periodic hash watchdog compares the local queue hash against this last accepted server hash. Updating the hash only on `FullSync` is incorrect and can create a resync loop after ordinary delta traffic.
 
 ### Queue Mutations
 
-| Mutation                   | Event emitted                            | Notes                                                                                                                                                                                                                                                                                                                           |
-| -------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `addQueueItem`             | `QueueItemAdded`                         | Appends to queue or inserts at `position`. Idempotent on `item.uuid` — duplicate adds are collapsed server-side during offline reconciliation.                                                                                                                                                                                  |
-| `removeQueueItem`          | `QueueItemRemoved`                       | Removes by queue-item uuid.                                                                                                                                                                                                                                                                                                     |
-| `reorderQueue`             | `QueueReordered`                         | Moves a queue item to a new index.                                                                                                                                                                                                                                                                                              |
-| `setCurrentClimbQueueItem` | `CurrentClimbChanged`                    | Activates an existing queue item by uuid.                                                                                                                                                                                                                                                                                       |
-| `setCurrentClimb`          | `CurrentClimbChanged` + `QueueItemAdded` | Adds the climb to the queue (if not already present) and activates it.                                                                                                                                                                                                                                                          |
-| `replaceQueueItem`         | `FullSync`                               | Replaces the climb inside an existing queue slot in place, preserving position and the queue-item uuid. Used by the create-climb form to push saves of the currently-authored climb to peers without reshuffling the queue. Emits `FullSync` rather than a narrow delta because replace is infrequent and simpler to reconcile. |
-| `mirrorCurrentClimb`       | `ClimbMirrored`                          | Flips the mirror flag on the current climb.                                                                                                                                                                                                                                                                                     |
-| `setQueue`                 | `FullSync`                               | Bulk replaces queue + current climb. Used for offline → online reconciliation.                                                                                                                                                                                                                                                  |
+| Mutation                   | Event emitted                       | Notes                                                                                                                                                                                                                                                                                                                           |
+| -------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `addQueueItem`             | `QueueItemAdded`                    | Appends to queue or inserts at `position`. Idempotent on `item.uuid` — duplicate adds are collapsed server-side during offline reconciliation.                                                                                                                                                                                  |
+| `removeQueueItem`          | `QueueItemRemoved`                  | Removes by queue-item uuid and clears current climb if it removed the active item.                                                                                                                                                                                                                                              |
+| `reorderQueue`             | `QueueReordered`                    | Moves a queue item to a new index.                                                                                                                                                                                                                                                                                              |
+| `setCurrentClimbQueueItem` | `CurrentClimbChanged`               | Activates an existing queue item by uuid.                                                                                                                                                                                                                                                                                       |
+| `setCurrentClimb`          | `CurrentClimbChanged` or `FullSync` | Emits `CurrentClimbChanged` when only the active climb changes. Emits `FullSync` when `shouldAddToQueue` adds a new queue item and activates it in the same mutation, because one sequence now represents both queue membership and current-climb state.                                                                        |
+| `replaceQueueItem`         | `FullSync`                          | Replaces the climb inside an existing queue slot in place, preserving position and the queue-item uuid. Used by the create-climb form to push saves of the currently-authored climb to peers without reshuffling the queue. Emits `FullSync` rather than a narrow delta because replace is infrequent and simpler to reconcile. |
+| `mirrorCurrentClimb`       | `ClimbMirrored`                     | Flips the mirror flag on the current climb and the matching queue item.                                                                                                                                                                                                                                                         |
+| `setQueue`                 | `FullSync`                          | Bulk replaces queue + current climb. Used for offline → online reconciliation.                                                                                                                                                                                                                                                  |
 
 ### Tick Mode and Queue Bar Freeze
 
@@ -713,6 +725,10 @@ boardsesh:session:{sessionId}:events
 └── Oldest event (max 100 events, 5 min TTL)
 ```
 
+On reconnect, the web client calls `eventsReplay(sessionId, sinceSequence)` when the sequence gap is between 1 and 100 events. Replay is accepted only when the returned events cover every sequence from `sinceSequence + 1` through `currentSequence`, except that a `FullSync` event covers all earlier missing sequence numbers up to its own sequence. Empty or partial replay responses fall back to a fresh `FullSync`.
+
+The `EVENTS_REPLAY` query uses the same GraphQL aliases as `queueUpdates` (`addedItem: item`, `currentItem: item`) so the event processor can apply live and replayed events through the same code path.
+
 ---
 
 ## Failure States and Recovery
@@ -750,9 +766,10 @@ sequenceDiagram
 
 - Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
 - Up to 10 retry attempts
-- On reconnection: re-join session and sync state
-- Delta sync attempted if gap ≤ 100 events
-- Falls back to full sync if gap too large
+- On reconnection: re-join session with the same `participantId` and sync state
+- Delta sync attempted if gap ≤ 100 events and the replay buffer has contiguous coverage
+- Falls back to full sync if the gap is too large, replay is incomplete, or the local hash disagrees despite no sequence gap
+- Queue and session subscription `error`/`complete` callbacks schedule a reconnect/resubscribe pass, so a completed subscription does not leave the client silently joined but deaf to future events
 - Client-side supervisor detects stale connections and triggers reconnect (see [Client-Side Connection Supervisor](#client-side-connection-supervisor))
 
 **Offline queue support:**
@@ -1029,7 +1046,7 @@ graphql-ws Client(s)
 A 1-second interval (`HEALTH_CHECK_INTERVAL_MS`) monitors each registered client:
 
 1. If `document.visibilityState !== 'visible'`, skip (avoid terminating background tabs).
-2. If `Date.now() - lastActivity > STALE_GRACE_MS` (10s, or 2x the server keep-alive interval), mark the client as `reconnecting` and call `client.terminate()` to force a fresh connection.
+2. If `Date.now() - lastActivity > STALE_GRACE_MS` (25s), mark the client as `reconnecting` and call `client.terminate()` to force a fresh connection.
 
 This catches silent connection deaths that are common on iOS Safari when the app is backgrounded and the OS kills the socket without a close frame.
 
@@ -1114,10 +1131,10 @@ When Redis is unavailable, RoomManager falls back to **Postgres-only mode**:
 
 Session participation is tracked in two layers:
 
-| Layer                     | Table / Key                      | Granularity            | Lifetime           |
-| ------------------------- | -------------------------------- | ---------------------- | ------------------ |
-| **Real-time** (Redis)     | `boardsesh:session:{id}:members` | Per connection ID      | Ephemeral (4h TTL) |
-| **Historical** (Postgres) | `board_session_participants`     | Per authenticated user | Permanent          |
+| Layer                     | Table / Key                           | Granularity               | Lifetime           |
+| ------------------------- | ------------------------------------- | ------------------------- | ------------------ |
+| **Real-time** (Redis)     | `boardsesh:session:{id}:participants` | Per stable participant ID | Ephemeral (4h TTL) |
+| **Historical** (Postgres) | `board_session_participants`          | Per authenticated user    | Permanent          |
 
 **`board_session_participants`** records one row per (session_id, user_id) with a `joined_at` timestamp. It is upserted (`ON CONFLICT DO NOTHING`) when an authenticated user joins a session. Rows are never deleted on disconnect — they serve as a permanent historical record of who participated.
 
@@ -1141,6 +1158,9 @@ boardsesh:lock:session:restore:{id} # String - distributed lock (10s TTL)
 ```
 boardsesh:conn:{connectionId}       # Hash - connection data (1h TTL, refreshed on activity)
 boardsesh:session:{id}:members      # Set - connection IDs in session (4h TTL)
+boardsesh:session:{id}:participants # Set - stable participant IDs in session (4h TTL)
+boardsesh:participant:{id}:{pid}    # Hash - participant presence data and connectionState
+boardsesh:participant:{id}:{pid}:connections # Set - live connection IDs for one participant
 boardsesh:session:{id}:leader       # String - leader connection ID (4h TTL)
 boardsesh:instance:{id}:conns       # Set - connections owned by instance (2h TTL, refreshed on heartbeat)
 boardsesh:instance:{id}:heartbeat   # String - instance heartbeat timestamp (60s TTL, refreshed every 30s)

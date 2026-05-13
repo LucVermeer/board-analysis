@@ -3,7 +3,7 @@ import { db } from '../../db/client';
 import { sessions, type Session } from '../../db/schema';
 import type { RedisSessionStore } from '../redis-session-store';
 import type { DistributedStateManager } from '../distributed-state';
-import type { ConnectedClient } from './types';
+import type { ConnectedClient, LocalSessionParticipant } from './types';
 import { restoreSessionWithLock } from './session-restoration';
 import type { WriteScheduler } from './write-scheduler';
 
@@ -22,6 +22,7 @@ export async function registerClient(
   clients.set(connectionId, {
     connectionId,
     sessionId: null,
+    participantId: null,
     userId: userId || null,
     username: defaultUsername,
     isLeader: false,
@@ -52,6 +53,7 @@ export async function joinSession(
   boardPath: string,
   clients: Map<string, ConnectedClient>,
   sessionsMap: Map<string, Set<string>>,
+  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
   redisStore: RedisSessionStore | null,
   distributedState: DistributedStateManager | null,
   writeScheduler: WriteScheduler,
@@ -73,12 +75,13 @@ export async function joinSession(
     currentClimbQueueItem: ClimbQueueItem | null,
     expectedVersion?: number,
   ) => Promise<number>,
-  leaveSessionFn: (connectionId: string) => Promise<{ sessionId: string; newLeaderId?: string } | null>,
+  leaveSessionFn: (connectionId: string) => Promise<SessionLeaveResult | null>,
   username?: string,
   avatarUrl?: string,
   initialQueue?: ClimbQueueItem[],
   initialCurrentClimb?: ClimbQueueItem | null,
   sessionName?: string,
+  participantId?: string | null,
 ): Promise<{
   clientId: string;
   users: SessionUser[];
@@ -88,11 +91,15 @@ export async function joinSession(
   stateHash: string;
   isLeader: boolean;
   sessionName: string | null;
+  participantId: string;
+  participantWasKnown: boolean;
+  participantWasReconnecting: boolean;
 }> {
   const client = clients.get(connectionId);
   if (!client) {
     throw new Error('Client not registered');
   }
+  const resolvedParticipantId = client.userId || participantId || connectionId;
 
   // Leave current session if in one
   if (client.sessionId) {
@@ -101,6 +108,7 @@ export async function joinSession(
 
   // Update client info
   client.sessionId = sessionId;
+  client.participantId = resolvedParticipantId;
   if (username) {
     client.username = username;
   }
@@ -146,7 +154,13 @@ export async function joinSession(
   let isLeader: boolean;
 
   if (distributedState) {
-    const result = await distributedState.joinSession(connectionId, sessionId, client.username, client.avatarUrl);
+    const result = await distributedState.joinSession(
+      connectionId,
+      sessionId,
+      client.username,
+      client.avatarUrl,
+      resolvedParticipantId,
+    );
     isLeader = result.isLeader;
   } else {
     isLeader = sessionClientIds.size === 0;
@@ -154,6 +168,13 @@ export async function joinSession(
 
   client.isLeader = isLeader;
   sessionClientIds.add(connectionId);
+  const participantStatus = upsertLocalParticipant(
+    sessionId,
+    resolvedParticipantId,
+    client,
+    isLeader,
+    sessionParticipants,
+  );
 
   // Ensure new sessions exist in Postgres before any queue state persists.
   // Existing sessions stay Redis-only for join/leave activity.
@@ -204,6 +225,9 @@ export async function joinSession(
     stateHash: queueState.stateHash,
     isLeader,
     sessionName: resolvedSessionName,
+    participantId: resolvedParticipantId,
+    participantWasKnown: participantStatus.wasKnown,
+    participantWasReconnecting: participantStatus.wasReconnecting,
   };
 }
 
@@ -214,19 +238,21 @@ export async function leaveSession(
   connectionId: string,
   clients: Map<string, ConnectedClient>,
   sessionsMap: Map<string, Set<string>>,
+  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
   redisStore: RedisSessionStore | null,
   distributedState: DistributedStateManager | null,
   writeScheduler: WriteScheduler,
   sessionGraceTimers: Map<string, NodeJS.Timeout>,
   pendingJoinPersists: Map<string, Promise<void>>,
   SESSION_GRACE_PERIOD_MS: number,
-): Promise<{ sessionId: string; newLeaderId?: string } | null> {
+): Promise<SessionLeaveResult | null> {
   const client = clients.get(connectionId);
   if (!client || !client.sessionId) {
     return null;
   }
 
   const sessionId = client.sessionId;
+  const participantId = client.participantId || connectionId;
   const wasLeader = client.isLeader;
 
   const sessionClientIds = sessionsMap.get(sessionId);
@@ -253,22 +279,37 @@ export async function leaveSession(
 
   // Reset client state
   client.sessionId = null;
+  client.participantId = null;
   client.isLeader = false;
 
   // Elect new leader. This also atomically removes our connection from
   // distributed state, so the post-leave membership re-check below sees
   // an accurate global view.
+  const participants = sessionParticipants.get(sessionId);
+  const participant = participants?.get(participantId);
+  if (participant) {
+    if (participant.reconnectTimer) {
+      clearTimeout(participant.reconnectTimer);
+    }
+    participants?.delete(participantId);
+    if (participants?.size === 0) {
+      sessionParticipants.delete(sessionId);
+    }
+  }
   let newLeaderId: string | undefined;
+  let newLeaderParticipantId: string | undefined;
 
   if (distributedState) {
     const result = await distributedState.leaveSession(connectionId, sessionId);
     if (result.newLeaderId) {
       newLeaderId = result.newLeaderId;
+      newLeaderParticipantId = await resolveLeaderParticipantId(newLeaderId, clients, distributedState);
       const localNewLeader = clients.get(newLeaderId);
       if (localNewLeader) {
         localNewLeader.isLeader = true;
       }
     }
+    await distributedState.removeParticipant(sessionId, participantId);
   } else if (wasLeader && sessionClientIds && sessionClientIds.size > 0) {
     const clientsArray = Array.from(sessionClientIds)
       .map((id) => clients.get(id))
@@ -279,6 +320,16 @@ export async function leaveSession(
       const newLeader = clientsArray[0];
       newLeader.isLeader = true;
       newLeaderId = newLeader.connectionId;
+      newLeaderParticipantId = newLeader.participantId || newLeader.connectionId;
+    }
+  }
+
+  if (newLeaderId) {
+    const newLeader = clients.get(newLeaderId);
+    newLeaderParticipantId = newLeaderParticipantId || newLeader?.participantId || newLeaderId;
+    const newLeaderParticipant = participants?.get(newLeaderParticipantId);
+    if (newLeaderParticipant) {
+      newLeaderParticipant.isLeader = true;
     }
   }
 
@@ -292,14 +343,9 @@ export async function leaveSession(
   // membership) collapses both branches of that race into "the last
   // instance to leave wins and runs the cleanup".
   //
-  // INVARIANT: `member.id` returned by `getSessionMembers` is the connection
-  // ID, set in `services/distributed-state/session-ops.ts:181`:
-  //   `id: connection.connectionId`
-  // The empty-check below relies on that — if the field ever switches to a
-  // user UUID, the leaving connection would no longer be subtracted by
-  // `distributedState.leaveSession` from the same membership view, and the
-  // emptiness signal would diverge from reality. The tests in
-  // `__tests__/leave-session-multi-instance.test.ts` pin this contract.
+  // INVARIANT: `getSessionMembers` returns active stable participants. The
+  // explicit leave path removes the leaving participant before this check, so
+  // a non-empty result means another participant is still active globally.
   if (wentLocallyEmpty) {
     let globallyEmpty = true;
     if (distributedState) {
@@ -332,7 +378,233 @@ export async function leaveSession(
     }
   }
 
-  return { sessionId, newLeaderId };
+  return { sessionId, participantId, newLeaderId, newLeaderParticipantId };
+}
+
+/**
+ * Handle an unintentional WebSocket disconnect without treating the participant
+ * as having explicitly left the session.
+ */
+export async function disconnectClient(
+  connectionId: string,
+  clients: Map<string, ConnectedClient>,
+  sessionsMap: Map<string, Set<string>>,
+  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
+  redisStore: RedisSessionStore | null,
+  distributedState: DistributedStateManager | null,
+  writeScheduler: WriteScheduler,
+  sessionGraceTimers: Map<string, NodeJS.Timeout>,
+  pendingJoinPersists: Map<string, Promise<void>>,
+  SESSION_GRACE_PERIOD_MS: number,
+  onParticipantExpired?: (sessionId: string, participantId: string) => void,
+): Promise<SessionDisconnectResult | null> {
+  const client = clients.get(connectionId);
+  if (!client) {
+    return null;
+  }
+
+  const sessionId = client.sessionId;
+  const participantId = client.participantId || connectionId;
+  const wasLeader = client.isLeader;
+
+  if (!sessionId) {
+    clients.delete(connectionId);
+    if (distributedState) {
+      await distributedState.removeConnection(connectionId, false).catch(() => {});
+    }
+    return null;
+  }
+
+  const sessionClientIds = sessionsMap.get(sessionId);
+  const wentLocallyEmpty = sessionClientIds
+    ? (sessionClientIds.delete(connectionId), sessionClientIds.size === 0)
+    : false;
+
+  if (wentLocallyEmpty) {
+    const existingGraceTimer = sessionGraceTimers.get(sessionId);
+    if (existingGraceTimer) clearTimeout(existingGraceTimer);
+
+    const timer = setTimeout(() => {
+      const currentClients = sessionsMap.get(sessionId);
+      if (currentClients && currentClients.size === 0) {
+        sessionsMap.delete(sessionId);
+        writeScheduler.cancelPendingWrites(sessionId);
+        console.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
+      }
+      sessionGraceTimers.delete(sessionId);
+    }, SESSION_GRACE_PERIOD_MS);
+    sessionGraceTimers.set(sessionId, timer);
+  }
+
+  let remainingConnections = 0;
+  let newLeaderId: string | undefined;
+  let newLeaderParticipantId: string | undefined;
+  if (distributedState) {
+    const result = await distributedState.removeConnection(connectionId, true);
+    remainingConnections = result.remainingParticipantConnections ?? 0;
+    newLeaderId = result.newLeaderId || undefined;
+    if (newLeaderId) {
+      newLeaderParticipantId = await resolveLeaderParticipantId(newLeaderId, clients, distributedState);
+    }
+  }
+
+  if (wentLocallyEmpty) {
+    let globallyNoLiveConnections = true;
+    if (distributedState) {
+      try {
+        globallyNoLiveConnections = (await distributedState.getSessionMemberCount(sessionId)) === 0;
+      } catch (error) {
+        // If Redis cannot answer, keep the legacy conservative behaviour:
+        // mark inactive rather than leave hot session state indefinitely.
+        console.error(
+          `[RoomManager] Failed to query distributed member count for ${sessionId} during disconnectClient:`,
+          error,
+        );
+      }
+    }
+
+    if (globallyNoLiveConnections && redisStore) {
+      await redisStore.markInactive(sessionId);
+      console.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+    }
+
+    const pending = pendingJoinPersists.get(sessionId);
+    if (pending) {
+      await pending;
+    }
+  }
+
+  const participants = getOrCreateParticipantMap(sessionId, sessionParticipants);
+  let participant = participants.get(participantId);
+  if (!participant) {
+    participant = {
+      id: participantId,
+      username: client.username,
+      userId: client.userId,
+      avatarUrl: client.avatarUrl,
+      isLeader: false,
+      connectionState: 'CONNECTED',
+      connectionIds: new Set(),
+    };
+    participants.set(participantId, participant);
+  }
+
+  participant.connectionIds.delete(connectionId);
+  if (!distributedState) {
+    remainingConnections = participant.connectionIds.size;
+    if (wasLeader && sessionClientIds && sessionClientIds.size > 0) {
+      const clientsArray = Array.from(sessionClientIds)
+        .map((id) => clients.get(id))
+        .filter((c): c is ConnectedClient => c !== undefined)
+        .sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime());
+
+      const newLeader = clientsArray[0];
+      if (newLeader) {
+        newLeader.isLeader = true;
+        newLeaderId = newLeader.connectionId;
+        newLeaderParticipantId = newLeader.participantId || newLeader.connectionId;
+      }
+    }
+  }
+
+  client.sessionId = null;
+  client.participantId = null;
+  client.isLeader = false;
+  clients.delete(connectionId);
+
+  if (wasLeader) {
+    participant.isLeader = false;
+  }
+  if (newLeaderId) {
+    const newLeader = clients.get(newLeaderId);
+    newLeaderParticipantId = newLeaderParticipantId || newLeader?.participantId || newLeaderId;
+    const newLeaderParticipant = participants.get(newLeaderParticipantId);
+    if (newLeaderParticipant) {
+      newLeaderParticipant.isLeader = true;
+    }
+  }
+
+  if (remainingConnections > 0) {
+    return { sessionId, participantId, newLeaderId, newLeaderParticipantId };
+  }
+
+  participant.connectionState = 'RECONNECTING';
+  const presenceUser =
+    (distributedState
+      ? await distributedState.markParticipantPresence(sessionId, participantId, 'RECONNECTING')
+      : localParticipantToSessionUser(participant)) || localParticipantToSessionUser(participant);
+
+  if (participant.reconnectTimer) {
+    clearTimeout(participant.reconnectTimer);
+  }
+  participant.reconnectTimer = setTimeout(() => {
+    void (async () => {
+      if (distributedState) {
+        const users = await distributedState.getSessionMembers(sessionId).catch(() => []);
+        const currentUser = users.find((user) => user.id === participantId);
+        if (currentUser?.connectionState === 'CONNECTED') {
+          return;
+        }
+        await distributedState.removeParticipant(sessionId, participantId).catch((err) => {
+          console.error(`[RoomManager] Failed to expire participant ${participantId.slice(0, 8)}:`, err);
+        });
+      }
+
+      const currentParticipants = sessionParticipants.get(sessionId);
+      const currentParticipant = currentParticipants?.get(participantId);
+      if (currentParticipant && currentParticipant.connectionIds.size === 0) {
+        currentParticipants?.delete(participantId);
+        if (currentParticipants?.size === 0) {
+          sessionParticipants.delete(sessionId);
+        }
+        onParticipantExpired?.(sessionId, participantId);
+      }
+    })();
+  }, SESSION_GRACE_PERIOD_MS);
+
+  return { sessionId, participantId, presenceUser, newLeaderId, newLeaderParticipantId };
+}
+
+export type SessionLeaveResult = {
+  sessionId: string;
+  participantId?: string;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
+};
+
+export type SessionDisconnectResult = {
+  sessionId: string;
+  participantId: string;
+  presenceUser?: SessionUser;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
+};
+
+async function resolveLeaderParticipantId(
+  leaderConnectionId: string,
+  clients: Map<string, ConnectedClient>,
+  distributedState: DistributedStateManager | null,
+): Promise<string> {
+  const localLeader = clients.get(leaderConnectionId);
+  if (localLeader?.participantId) {
+    return localLeader.participantId;
+  }
+
+  if (distributedState) {
+    try {
+      const distributedLeader = await distributedState.getConnection(leaderConnectionId);
+      if (distributedLeader?.participantId) {
+        return distributedLeader.participantId;
+      }
+    } catch (error) {
+      console.error(
+        `[RoomManager] Failed to resolve leader participant for ${leaderConnectionId.slice(0, 8)}:`,
+        error,
+      );
+    }
+  }
+
+  return leaderConnectionId;
 }
 
 /**
@@ -374,6 +646,64 @@ export async function removeClient(
   clients.delete(connectionId);
 
   return { distributedStateCleanedUp };
+}
+
+function upsertLocalParticipant(
+  sessionId: string,
+  participantId: string,
+  client: ConnectedClient,
+  isLeader: boolean,
+  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
+): { wasKnown: boolean; wasReconnecting: boolean } {
+  let participants = sessionParticipants.get(sessionId);
+  if (!participants) {
+    participants = new Map();
+    sessionParticipants.set(sessionId, participants);
+  }
+
+  const existing = participants.get(participantId);
+  const wasKnown = !!existing;
+  const wasReconnecting = existing?.connectionState === 'RECONNECTING';
+
+  if (existing?.reconnectTimer) {
+    clearTimeout(existing.reconnectTimer);
+    existing.reconnectTimer = undefined;
+  }
+
+  participants.set(participantId, {
+    id: participantId,
+    username: client.username,
+    userId: client.userId,
+    avatarUrl: client.avatarUrl,
+    isLeader: existing?.isLeader || isLeader,
+    connectionState: 'CONNECTED',
+    connectionIds: new Set([...(existing?.connectionIds ?? []), client.connectionId]),
+  });
+
+  return { wasKnown, wasReconnecting };
+}
+
+function getOrCreateParticipantMap(
+  sessionId: string,
+  sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>,
+): Map<string, LocalSessionParticipant> {
+  let participants = sessionParticipants.get(sessionId);
+  if (!participants) {
+    participants = new Map();
+    sessionParticipants.set(sessionId, participants);
+  }
+  return participants;
+}
+
+function localParticipantToSessionUser(participant: LocalSessionParticipant): SessionUser {
+  return {
+    id: participant.id,
+    username: participant.username,
+    isLeader: participant.isLeader,
+    avatarUrl: participant.avatarUrl,
+    userId: participant.userId,
+    connectionState: participant.connectionState,
+  };
 }
 
 /**

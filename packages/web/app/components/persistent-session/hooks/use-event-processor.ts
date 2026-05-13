@@ -30,6 +30,7 @@ export type EventProcessorActions = {
   handleSessionEvent: (event: SessionEvent) => void;
   setQueueState: Dispatch<SetStateAction<LocalClimbQueueItem[]>>;
   setCurrentClimbQueueItem: Dispatch<SetStateAction<LocalClimbQueueItem | null>>;
+  setLastReceivedStateHash: Dispatch<SetStateAction<string | null>>;
   notifyQueueSubscribers: (event: SubscriptionQueueEvent) => void;
   notifySessionSubscribers: (event: SessionEvent) => void;
 };
@@ -128,34 +129,55 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
         case 'QueueItemAdded':
           if (event.addedItem == null) {
             console.error('[PersistentSession] Received QueueItemAdded with null/undefined item, skipping');
-            updateLastReceivedSequence(event.sequence);
             break;
           }
           setQueueState((prev) => {
-            return insertQueueItemIdempotent(prev, event.addedItem as LocalClimbQueueItem, event.position);
+            return insertQueueItemIdempotent(prev, event.addedItem as LocalClimbQueueItem, event.position ?? undefined);
           });
-          updateLastReceivedSequence(event.sequence);
           break;
         case 'QueueItemRemoved':
           setQueueState((prev) => prev.filter((item) => item.uuid !== event.uuid));
-          updateLastReceivedSequence(event.sequence);
+          setCurrentClimbQueueItem((prev) => (prev?.uuid === event.uuid ? null : prev));
           break;
         case 'QueueReordered':
           setQueueState((prev) => {
+            const sourceIndex = prev.findIndex((item) => item.uuid === event.uuid);
+            const oldIndex = sourceIndex >= 0 ? sourceIndex : event.oldIndex;
+            if (oldIndex < 0 || oldIndex >= prev.length) {
+              console.warn(
+                `[PersistentSession] Received QueueReordered for missing item ${event.uuid}; waiting for hash watchdog resync`,
+              );
+              return prev;
+            }
             const newQueue = [...prev];
-            const [item] = newQueue.splice(event.oldIndex, 1);
-            newQueue.splice(event.newIndex, 0, item);
+            const [item] = newQueue.splice(oldIndex, 1);
+            const newIndex = Math.max(0, Math.min(event.newIndex, newQueue.length));
+            newQueue.splice(newIndex, 0, item);
             return newQueue;
           });
-          updateLastReceivedSequence(event.sequence);
           break;
         case 'CurrentClimbChanged':
           setCurrentClimbQueueItem(event.currentItem as LocalClimbQueueItem | null);
-          updateLastReceivedSequence(event.sequence);
           break;
         case 'ClimbMirrored':
+          if (event.uuid) {
+            setQueueState((prev) =>
+              prev.map((item) =>
+                item.uuid === event.uuid
+                  ? {
+                      ...item,
+                      climb: {
+                        ...item.climb,
+                        mirrored: event.mirrored,
+                      },
+                    }
+                  : item,
+              ),
+            );
+          }
           setCurrentClimbQueueItem((prev) => {
             if (!prev) return prev;
+            if (event.uuid && prev.uuid !== event.uuid) return prev;
             return {
               ...prev,
               climb: {
@@ -164,8 +186,12 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
               },
             };
           });
-          updateLastReceivedSequence(event.sequence);
           break;
+      }
+
+      if (event.__typename !== 'FullSync') {
+        updateLastReceivedSequence(event.sequence);
+        setLastReceivedStateHash(event.stateHash);
       }
 
       // Notify external subscribers
@@ -222,6 +248,7 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
     handleSessionEvent,
     setQueueState,
     setCurrentClimbQueueItem,
+    setLastReceivedStateHash,
     notifyQueueSubscribers,
     notifySessionSubscribers,
   };

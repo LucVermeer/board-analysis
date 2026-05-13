@@ -172,31 +172,24 @@ export function setupWebSocketServer(httpServer: HttpServer): {
 
           // Handle session cleanup
           if (latestContext?.sessionId) {
-            const result = await roomManager.leaveSession(context.connectionId);
+            const result = await roomManager.disconnectClient(context.connectionId);
 
-            if (result) {
-              // Notify session about user leaving. The `userId` field name
-              // in the GraphQL schema is a misnomer — it's the connection
-              // ID, matching the `id` field that UserJoined emits via
-              // `user.id = result.clientId` in joinSession (which is the
-              // connection ID). Clients filter their participant list by
-              // `u.id !== event.userId`, so the two events must agree.
+            if (result?.presenceUser) {
               pubsub.publishSessionEvent(result.sessionId, {
-                __typename: 'UserLeft',
-                userId: context.connectionId,
+                __typename: 'UserPresenceChanged',
+                user: result.presenceUser,
               });
-
-              // Notify about new leader if changed
-              if (result.newLeaderId) {
-                pubsub.publishSessionEvent(result.sessionId, {
-                  __typename: 'LeaderChanged',
-                  leaderId: result.newLeaderId,
-                });
-              }
             }
+            if (result?.newLeaderId) {
+              pubsub.publishSessionEvent(result.sessionId, {
+                __typename: 'LeaderChanged',
+                leaderId: result.newLeaderParticipantId || result.newLeaderId,
+                leaderConnectionId: result.newLeaderId,
+              });
+            }
+          } else {
+            await roomManager.removeClient(context.connectionId);
           }
-
-          await roomManager.removeClient(context.connectionId);
           removeContext(context.connectionId);
         }
       },

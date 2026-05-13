@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { sessionMutations } from '../graphql/resolvers/sessions/mutations';
+import { roomManager } from '../services/room-manager';
 import { updateContext } from '../graphql/context';
 import { pubsub } from '../pubsub/index';
 
@@ -28,9 +29,13 @@ vi.mock('../services/room-manager', () => ({
       sequence: 0,
       stateHash: 'hash',
       sessionName: null,
+      participantId: 'stable-participant-123',
+      participantWasKnown: false,
+      participantWasReconnecting: false,
     }),
     leaveSession: vi.fn().mockResolvedValue({
       sessionId: 'session-aaaa-bbbb-cccc-dddd',
+      participantId: 'stable-participant-123',
       newLeaderId: undefined,
     }),
     createDiscoverableSession: vi.fn().mockResolvedValue({}),
@@ -82,7 +87,7 @@ describe('joinSession does not clobber ctx.userId', () => {
     vi.clearAllMocks();
   });
 
-  it('passes only { sessionId } to updateContext, preserving the authenticated user UUID', async () => {
+  it('passes sessionId and participantId to updateContext without clobbering the authenticated user UUID', async () => {
     const realUserId = '8a68ddc8-8da0-47e2-a968-1029b6fb4bb3';
     const ctx = makeWsAuthenticatedCtx(realUserId);
 
@@ -98,7 +103,10 @@ describe('joinSession does not clobber ctx.userId', () => {
     expect(updateContext).toHaveBeenCalledOnce();
     const [calledConnectionId, calledUpdates] = vi.mocked(updateContext).mock.calls[0];
     expect(calledConnectionId).toBe('ws-conn-abc-123');
-    expect(calledUpdates).toEqual({ sessionId: 'session-aaaa-bbbb-cccc-dddd' });
+    expect(calledUpdates).toEqual({
+      sessionId: 'session-aaaa-bbbb-cccc-dddd',
+      participantId: 'stable-participant-123',
+    });
     expect(calledUpdates).not.toHaveProperty('userId');
   });
 });
@@ -108,7 +116,7 @@ describe('createSession does not clobber ctx.userId', () => {
     vi.clearAllMocks();
   });
 
-  it('passes only { sessionId } to updateContext on the WebSocket path', async () => {
+  it('passes sessionId and participantId to updateContext on the WebSocket path', async () => {
     const realUserId = '8a68ddc8-8da0-47e2-a968-1029b6fb4bb3';
     const ctx = makeWsAuthenticatedCtx(realUserId);
 
@@ -128,34 +136,41 @@ describe('createSession does not clobber ctx.userId', () => {
 
     expect(updateContext).toHaveBeenCalledOnce();
     const [, calledUpdates] = vi.mocked(updateContext).mock.calls[0];
-    expect(calledUpdates).toEqual({ sessionId: 'test-session-uuid' });
+    expect(calledUpdates).toEqual({
+      sessionId: 'test-session-uuid',
+      participantId: 'stable-participant-123',
+    });
     expect(calledUpdates).not.toHaveProperty('userId');
   });
 });
 
-describe('leaveSession publishes UserLeft with the connection ID', () => {
+describe('leaveSession publishes UserLeft with the stable participant ID', () => {
   // Background: the disconnect handler in websocket/setup.ts and the
   // explicit `leaveSession` mutation both emit a `UserLeft` event so
   // peers can drop the departing user from their participant list. The
-  // GraphQL schema names the payload field `userId` but the *contract*
-  // with the client is that it carries the connection ID — clients
-  // populate their participant list from `UserJoined.user.id`, which is
-  // `result.clientId` (the connection ID), and filter by
-  // `u.id !== event.userId`. The two events must agree.
+  // GraphQL schema names the payload field `userId` but the current contract
+  // with the client is that it carries the stable participant ID. Clients
+  // populate their participant list from `UserJoined.user.id` and filter by
+  // `u.id !== event.userId`, so joined and left events must agree.
   //
   // Earlier commits in this PR stopped clobbering `ctx.userId` with the
   // connection ID. The leaveSession mutation was previously guarded by
   // `if (userId)` and only fired because of that clobber, so it would
   // have silently stopped emitting UserLeft for unauthenticated clients
   // (and for authenticated clients would have emitted the real user
-  // UUID — wrong shape, fails the client filter). This test pins the
-  // correct behaviour.
+  // UUID when the participant ID differs from the user ID. These tests pin the
+  // current behaviour.
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('emits UserLeft with userId === ctx.connectionId for authenticated clients', async () => {
+  it('emits UserLeft with the returned participantId for authenticated clients', async () => {
     const realUserId = '8a68ddc8-8da0-47e2-a968-1029b6fb4bb3';
+    vi.mocked(roomManager.leaveSession).mockResolvedValueOnce({
+      sessionId: 'session-aaaa-bbbb-cccc-dddd',
+      participantId: realUserId,
+      newLeaderId: undefined,
+    });
     const ctx: ConnectionContext = {
       connectionId: 'ws-conn-abc-123',
       sessionId: 'session-aaaa-bbbb-cccc-dddd',
@@ -174,23 +189,24 @@ describe('leaveSession publishes UserLeft with the connection ID', () => {
     );
     expect(userLeftCall).toBeDefined();
     expect(userLeftCall![0]).toBe('session-aaaa-bbbb-cccc-dddd');
-    expect(userLeftCall![1].userId).toBe('ws-conn-abc-123');
-    // It must NOT be the auth user UUID — clients filter participants
-    // by connection ID and would fail to remove the user otherwise.
-    expect(userLeftCall![1].userId).not.toBe(realUserId);
+    expect(userLeftCall![1].userId).toBe(realUserId);
+    expect(userLeftCall![1].userId).not.toBe('ws-conn-abc-123');
 
-    // updateContext must clear ONLY sessionId; userId must be preserved
-    // for downstream resolvers on this same connection (queries, social
-    // actions, etc.). An earlier version of this resolver wrote
-    // `{ sessionId: undefined, userId: undefined }`, which looked like
-    // it was deliberately wiping the auth UUID.
+    // updateContext must clear ONLY session/participant state; userId must be
+    // preserved for downstream resolvers on this same connection (queries,
+    // social actions, etc.).
     expect(updateContext).toHaveBeenCalledOnce();
     const [, calledUpdates] = vi.mocked(updateContext).mock.calls[0];
-    expect(calledUpdates).toEqual({ sessionId: undefined });
+    expect(calledUpdates).toEqual({ sessionId: undefined, participantId: undefined });
     expect(calledUpdates).not.toHaveProperty('userId');
   });
 
   it('emits UserLeft for unauthenticated clients (which previously had no userId on ctx)', async () => {
+    vi.mocked(roomManager.leaveSession).mockResolvedValueOnce({
+      sessionId: 'session-zzzz',
+      participantId: 'anon-stable-participant',
+      newLeaderId: undefined,
+    });
     const ctx: ConnectionContext = {
       connectionId: 'ws-conn-anon-456',
       sessionId: 'session-zzzz',
@@ -208,6 +224,6 @@ describe('leaveSession publishes UserLeft with the connection ID', () => {
         (call[1] as { __typename?: string }).__typename === 'UserLeft',
     );
     expect(userLeftCall).toBeDefined();
-    expect(userLeftCall![1].userId).toBe('ws-conn-anon-456');
+    expect(userLeftCall![1].userId).toBe('anon-stable-participant');
   });
 });

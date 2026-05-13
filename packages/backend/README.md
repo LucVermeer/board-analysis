@@ -153,27 +153,14 @@ The `backendUrl` is configured via the `NEXT_PUBLIC_WS_URL` environment variable
 
 ## API
 
-The backend uses WebSocket with JSON messages. See `src/types/messages.ts` for the full protocol definition.
+The backend exposes GraphQL over HTTP and WebSocket at `/graphql`. Party mode uses the `graphql-ws` protocol so session mutations and subscriptions share one connection context.
 
-### Client -> Backend Messages
+Primary WebSocket operations:
 
-- `join-session`: Join a session room
-- `leave-session`: Leave current session
-- `update-username`: Update display name
-- `add-queue-item`: Add climb to queue
-- `remove-queue-item`: Remove climb from queue
-- `update-queue`: Full queue replacement
-- `update-current-climb`: Set current climb
-- `mirror-current-climb`: Toggle climb mirroring
-- `heartbeat`: Keep-alive ping
+- `joinSession(sessionId, boardPath, participantId, ...)`: joins or restores a party session. `participantId` is a stable anonymous participant ID; authenticated clients use their user ID.
+- `leaveSession`: explicit UI leave. Passive WebSocket disconnects do not call this path.
+- `endSession`: explicit finish. WebSocket callers must be the session creator or current leader; HTTP callers must be the authenticated session creator.
+- Queue mutations: `addQueueItem`, `removeQueueItem`, `setQueue`, `setCurrentClimb`, `mirrorCurrentClimb`.
+- Subscriptions: `queueUpdates(sessionId)` and `sessionUpdates(sessionId)`.
 
-### Backend -> Client Messages
-
-- `session-joined`: Confirmation with session state
-- `user-joined`: New user notification
-- `user-left`: User left notification
-- `leader-changed`: Leader change notification
-- `heartbeat-response`: Heartbeat response
-- `error`: Error message
-
-Queue operation messages are relayed to all session members.
+Passive disconnects mark participants `RECONNECTING`, elect a new leader immediately when needed, and keep the session recoverable during the reconnect grace period. See [docs/websocket-implementation.md](../../docs/websocket-implementation.md) for the current protocol and failure-recovery details.
