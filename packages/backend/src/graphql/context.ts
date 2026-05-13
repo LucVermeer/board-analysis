@@ -64,20 +64,17 @@ export function updateContext(connectionId: string, updates: Partial<Omit<Connec
 
   if (DEBUG) {
     console.info(
-      `[Context] updateContext: ${connectionId} -> sessionId=${updates.sessionId}, participantId=${updates.participantId}, userId=${updates.userId}`,
+      `[Context] updateContext: ${connectionId} -> sessionId=${updates.sessionId}, userId=${updates.userId}`,
     );
   }
 
-  if (Object.prototype.hasOwnProperty.call(updates, 'sessionId')) {
+  if (updates.sessionId !== undefined) {
     context.sessionId = updates.sessionId;
   }
-  if (Object.prototype.hasOwnProperty.call(updates, 'participantId')) {
-    context.participantId = updates.participantId;
-  }
-  if (Object.prototype.hasOwnProperty.call(updates, 'userId')) {
+  if (updates.userId !== undefined) {
     context.userId = updates.userId;
   }
-  if (Object.prototype.hasOwnProperty.call(updates, 'isAuthenticated')) {
+  if (updates.isAuthenticated !== undefined) {
     context.isAuthenticated = updates.isAuthenticated;
   }
 }

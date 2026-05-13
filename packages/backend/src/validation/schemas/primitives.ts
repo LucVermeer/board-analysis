@@ -21,12 +21,6 @@ export const SessionIdSchema = z
   .max(100, 'Session ID too long')
   .regex(/^[a-zA-Z0-9-]+$/, 'Session ID must be alphanumeric with hyphens only');
 
-export const ParticipantIdSchema = z
-  .string()
-  .min(1, 'Participant ID cannot be empty')
-  .max(128, 'Participant ID too long')
-  .regex(/^[a-zA-Z0-9_-]+$/, 'Participant ID must be alphanumeric with hyphens or underscores only');
-
 /**
  * GPS coordinate validation schemas
  */

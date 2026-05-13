@@ -107,7 +107,7 @@ export const LEAVE_SESSION_SCRIPT = `
   local wasLeader = (currentLeader == connectionId)
 
   -- Update connection state
-  redis.call('HMSET', connKey, 'sessionId', '', 'participantId', '', 'isLeader', 'false')
+  redis.call('HMSET', connKey, 'sessionId', '', 'isLeader', 'false')
 
   -- Remove from session members
   redis.call('SREM', sessionMembersKey, connectionId)
@@ -227,16 +227,6 @@ export const REFRESH_TTL_SCRIPT = `
   if sessionId and sessionId ~= '' then
     local sessionMembersKey = 'boardsesh:session:' .. sessionId .. ':members'
     redis.call('EXPIRE', sessionMembersKey, sessionTTL)
-
-    local participantId = redis.call('HGET', connKey, 'participantId')
-    if participantId and participantId ~= '' then
-      local sessionParticipantsKey = 'boardsesh:session:' .. sessionId .. ':participants'
-      local participantKey = 'boardsesh:participant:' .. sessionId .. ':' .. participantId
-      local participantConnectionsKey = 'boardsesh:participant:' .. sessionId .. ':' .. participantId .. ':connections'
-      redis.call('EXPIRE', sessionParticipantsKey, sessionTTL)
-      redis.call('EXPIRE', participantKey, sessionTTL)
-      redis.call('EXPIRE', participantConnectionsKey, sessionTTL)
-    end
   end
 
   return 1

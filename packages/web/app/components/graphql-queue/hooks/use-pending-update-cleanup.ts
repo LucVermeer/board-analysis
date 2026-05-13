@@ -5,7 +5,6 @@ type UsePendingUpdateCleanupParams = {
   isPersistentSessionActive: boolean;
   pendingCurrentClimbUpdates: string[];
   dispatch: Dispatch<QueueAction>;
-  onStalePendingUpdates?: () => void;
 };
 
 /**
@@ -19,7 +18,6 @@ export function usePendingUpdateCleanup({
   isPersistentSessionActive,
   pendingCurrentClimbUpdates,
   dispatch,
-  onStalePendingUpdates,
 }: UsePendingUpdateCleanupParams) {
   const pendingTimestampsRef = useRef(new Map<string, number>());
 
@@ -57,7 +55,6 @@ export function usePendingUpdateCleanup({
 
       if (staleIds.length > 0) {
         console.warn('[QueueContext] Cleaning up orphaned pending updates:', staleIds);
-        onStalePendingUpdates?.();
         dispatch({
           type: 'CLEANUP_PENDING_UPDATES_BATCH',
           payload: { correlationIds: staleIds },
@@ -69,5 +66,5 @@ export function usePendingUpdateCleanup({
     return () => {
       clearInterval(cleanupTimer);
     };
-  }, [isPersistentSessionActive, pendingCurrentClimbUpdates, dispatch, onStalePendingUpdates]);
+  }, [isPersistentSessionActive, pendingCurrentClimbUpdates, dispatch]);
 }

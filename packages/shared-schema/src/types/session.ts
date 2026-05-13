@@ -1,7 +1,5 @@
 // Session types
 
-export type SessionConnectionState = 'CONNECTED' | 'RECONNECTING';
-
 export type SessionUser = {
   id: string;
   username: string;
@@ -9,7 +7,6 @@ export type SessionUser = {
   avatarUrl?: string;
   /** Stable database user UUID (null for unauthenticated connections) */
   userId?: string | null;
-  connectionState: SessionConnectionState;
 };
 
 export type SessionGradeCount = {

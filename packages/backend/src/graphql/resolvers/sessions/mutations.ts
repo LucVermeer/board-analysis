@@ -3,10 +3,9 @@ import type { ConnectionContext, SessionEvent, ClimbQueueItem } from '@boardsesh
 import { roomManager } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
 import { updateContext } from '../../context';
-import { requireAuthenticated, requireSessionMember, applyRateLimit, validateInput } from '../shared/helpers';
+import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
 import {
   SessionIdSchema,
-  ParticipantIdSchema,
   BoardPathSchema,
   UsernameSchema,
   AvatarUrlSchema,
@@ -60,7 +59,6 @@ export const sessionMutations = {
       boardPath,
       username,
       avatarUrl,
-      participantId,
       initialQueue,
       initialCurrentClimb,
       sessionName,
@@ -69,7 +67,6 @@ export const sessionMutations = {
       boardPath: string;
       username?: string;
       avatarUrl?: string;
-      participantId?: string;
       initialQueue?: ClimbQueueItem[];
       initialCurrentClimb?: ClimbQueueItem;
       sessionName?: string;
@@ -88,7 +85,6 @@ export const sessionMutations = {
     validateInput(BoardPathSchema, boardPath, 'boardPath');
     if (username) validateInput(UsernameSchema, username, 'username');
     if (avatarUrl) validateInput(AvatarUrlSchema, avatarUrl, 'avatarUrl');
-    if (participantId) validateInput(ParticipantIdSchema, participantId, 'participantId');
     if (sessionName) validateInput(SessionNameSchema, sessionName, 'sessionName');
     if (initialQueue) validateInput(QueueArraySchema, initialQueue, 'initialQueue');
     if (initialCurrentClimb) validateInput(ClimbQueueItemSchema, initialCurrentClimb, 'initialCurrentClimb');
@@ -102,7 +98,6 @@ export const sessionMutations = {
       initialQueue,
       initialCurrentClimb || null,
       sessionName || undefined,
-      participantId || undefined,
     );
     if (DEBUG)
       console.info(
@@ -117,7 +112,7 @@ export const sessionMutations = {
     // clobber the real UUID for every downstream resolver on this connection
     // (ESP32 auto-authorize, tick inserts, climb ownership, etc.).
     if (DEBUG) console.info(`[joinSession] Before updateContext - ctx.sessionId: ${ctx.sessionId}`);
-    updateContext(ctx.connectionId, { sessionId, participantId: result.participantId });
+    updateContext(ctx.connectionId, { sessionId });
     if (DEBUG) console.info(`[joinSession] After updateContext - ctx.sessionId: ${ctx.sessionId}`);
 
     // Auto-authorize user's ESP32 controllers for this session (if authenticated)
@@ -131,19 +126,17 @@ export const sessionMutations = {
       });
     }
 
-    // Notify session about new or reconnected participant
-    const sessionUser = result.users.find((user) => user.id === result.participantId) ?? {
-      id: result.participantId,
-      username: username || `User-${result.participantId.substring(0, 6)}`,
-      isLeader: result.isLeader,
-      avatarUrl: avatarUrl,
-      userId: ctx.isAuthenticated ? ctx.userId : null,
-      connectionState: 'CONNECTED' as const,
+    // Notify session about new user
+    const userJoinedEvent: SessionEvent = {
+      __typename: 'UserJoined',
+      user: {
+        id: result.clientId,
+        username: username || `User-${result.clientId.substring(0, 6)}`,
+        isLeader: result.isLeader,
+        avatarUrl: avatarUrl,
+      },
     };
-    const sessionEvent: SessionEvent = result.participantWasReconnecting
-      ? { __typename: 'UserPresenceChanged', user: sessionUser }
-      : { __typename: 'UserJoined', user: sessionUser };
-    pubsub.publishSessionEvent(sessionId, sessionEvent);
+    pubsub.publishSessionEvent(sessionId, userJoinedEvent);
 
     // Fetch session data for new fields
     const sessionData = await roomManager.getSessionById(sessionId);
@@ -253,7 +246,7 @@ export const sessionMutations = {
       if (DEBUG)
         console.info(`[createSession] Joined session - clientId: ${result.clientId}, isLeader: ${result.isLeader}`);
 
-      updateContext(ctx.connectionId, { sessionId, participantId: result.participantId });
+      updateContext(ctx.connectionId, { sessionId });
 
       // Adopt recent solo ticks now that the session row exists in board_sessions
       // (boardsesh_ticks.session_id is a FK to board_sessions.id)
@@ -317,31 +310,31 @@ export const sessionMutations = {
     if (!ctx.sessionId) return false;
 
     const sessionId = ctx.sessionId;
-    const participantId = ctx.participantId;
     const result = await roomManager.leaveSession(ctx.connectionId);
 
     if (result) {
-      // Notify session about the stable participant leaving. The schema field
-      // is named `userId` for historical reasons, but current clients compare
-      // it with `SessionUser.id`, which is the stable participant ID.
+      // Notify session about user leaving. UserLeft.userId is the
+      // connection ID (matching UserJoined.user.id = result.clientId).
+      // See websocket/setup.ts onDisconnect for the same pattern.
       pubsub.publishSessionEvent(sessionId, {
         __typename: 'UserLeft',
-        userId: result.participantId || participantId || ctx.connectionId,
+        userId: ctx.connectionId,
       });
 
       // Notify about new leader if changed
       if (result.newLeaderId) {
         pubsub.publishSessionEvent(sessionId, {
           __typename: 'LeaderChanged',
-          leaderId: result.newLeaderParticipantId || result.newLeaderId,
-          leaderConnectionId: result.newLeaderId,
+          leaderId: result.newLeaderId,
         });
       }
 
-      // Only clear session/participant state. Auth set userId to the real
-      // UUID at connection time and downstream resolvers on this same
-      // WebSocket still need it.
-      updateContext(ctx.connectionId, { sessionId: undefined, participantId: undefined });
+      // Only clear sessionId — leave userId alone. Auth set it to the
+      // real user UUID at connection time and downstream resolvers on
+      // this same WebSocket (queries from other tabs, social actions,
+      // etc.) still need it. Mirrors the joinSession / createSession fix
+      // earlier in this file.
+      updateContext(ctx.connectionId, { sessionId: undefined });
     }
 
     return true;
@@ -349,34 +342,26 @@ export const sessionMutations = {
 
   /**
    * End a session explicitly.
-   * Validates the caller is the creator or current leader.
+   * Validates the caller is the session creator or leader.
    * Returns a session summary with stats, or null if no ticks.
    */
   endSession: async (_: unknown, { sessionId }: { sessionId: string }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx, 5);
+    requireAuthenticated(ctx);
     validateInput(SessionIdSchema, sessionId, 'sessionId');
 
+    // Verify caller is session creator or leader
     const sessionData = await roomManager.getSessionById(sessionId);
     if (!sessionData) {
       throw new Error('Session not found');
     }
 
-    if (ctx.connectionId.startsWith('http-')) {
-      requireAuthenticated(ctx);
-      if (!sessionData.createdByUserId || sessionData.createdByUserId !== ctx.userId) {
-        throw new Error('Only the session creator can end this session over HTTP');
-      }
-    } else {
-      await requireSessionMember(ctx, sessionId);
-      const sessionUsers = await roomManager.getSessionUsers(sessionId);
-      const actorId = ctx.participantId || ctx.userId || ctx.connectionId;
-      const actor = sessionUsers.find(
-        (user) => user.id === actorId || (ctx.userId ? user.userId === ctx.userId : false),
-      );
-      const isCreator = !!ctx.userId && sessionData.createdByUserId === ctx.userId;
-      if (!isCreator && !actor?.isLeader) {
-        throw new Error('Only the session creator or current leader can end this session');
-      }
+    const isCreator = sessionData.createdByUserId === ctx.userId;
+    const client = roomManager.getClient(ctx.connectionId);
+    const isLeader = client?.isLeader ?? false;
+
+    if (!isCreator && !isLeader) {
+      throw new Error('Only the session creator or leader can end a session');
     }
 
     // End the session via room manager
@@ -385,7 +370,7 @@ export const sessionMutations = {
     // Publish SessionEnded event so all connected clients are notified
     const sessionEndedEvent: SessionEvent = {
       __typename: 'SessionEnded',
-      reason: 'Session ended by participant',
+      reason: 'Session ended by leader',
     };
     pubsub.publishSessionEvent(sessionId, sessionEndedEvent);
 
@@ -416,12 +401,10 @@ export const sessionMutations = {
         pubsub.publishSessionEvent(ctx.sessionId, {
           __typename: 'UserJoined',
           user: {
-            id: client.participantId || client.connectionId,
+            id: client.connectionId,
             username,
             isLeader: client.isLeader,
             avatarUrl: client.avatarUrl,
-            userId: client.userId,
-            connectionState: 'CONNECTED',
           },
         });
       }

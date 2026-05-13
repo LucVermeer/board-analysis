@@ -5,22 +5,11 @@ export type DistributedConnection = {
   connectionId: string;
   instanceId: string;
   sessionId: string | null;
-  participantId: string | null;
   userId: string | null;
   username: string;
   avatarUrl: string | null;
   isLeader: boolean;
   connectedAt: number; // Unix timestamp ms
-};
-
-export type DistributedParticipant = {
-  participantId: string;
-  sessionId: string;
-  userId: string | null;
-  username: string;
-  avatarUrl: string | null;
-  connectionState: 'CONNECTED' | 'RECONNECTING';
-  lastSeenAt: number;
 };
 
 /**
@@ -31,13 +20,6 @@ export const KEYS = {
   connection: (connectionId: string) => `boardsesh:conn:${connectionId}`,
   // Set: sessionId -> set of connectionIds
   sessionMembers: (sessionId: string) => `boardsesh:session:${sessionId}:members`,
-  // Set: sessionId -> set of stable participantIds
-  sessionParticipants: (sessionId: string) => `boardsesh:session:${sessionId}:participants`,
-  // Hash: sessionId + participantId -> participant presence data
-  participant: (sessionId: string, participantId: string) => `boardsesh:participant:${sessionId}:${participantId}`,
-  // Set: sessionId + participantId -> live connectionIds for that participant
-  participantConnections: (sessionId: string, participantId: string) =>
-    `boardsesh:participant:${sessionId}:${participantId}:connections`,
   // String: sessionId -> connectionId of leader
   sessionLeader: (sessionId: string) => `boardsesh:session:${sessionId}:leader`,
   // Set: instanceId -> set of connectionIds owned by this instance
@@ -79,12 +61,6 @@ export function validateSessionId(sessionId: string): void {
   }
 }
 
-export function validateParticipantId(participantId: string): void {
-  if (!participantId || participantId.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(participantId)) {
-    throw new Error(`Invalid participantId format: ${participantId.slice(0, 20)}`);
-  }
-}
-
 /**
  * Convert connection object to Redis hash fields.
  */
@@ -93,7 +69,6 @@ export function connectionToHash(conn: DistributedConnection): Record<string, st
     connectionId: conn.connectionId,
     instanceId: conn.instanceId,
     sessionId: conn.sessionId || '',
-    participantId: conn.participantId || '',
     userId: conn.userId || '',
     username: conn.username,
     avatarUrl: conn.avatarUrl || '',
@@ -111,7 +86,6 @@ export function hashToConnection(hash: Record<string, string>): DistributedConne
   // Empty string in Redis means "not set" - convert to null for consistency
   // This matches the pattern: null -> '' (storage) -> null (retrieval)
   const sessionId = hash.sessionId && hash.sessionId !== '' ? hash.sessionId : null;
-  const participantId = hash.participantId && hash.participantId !== '' ? hash.participantId : null;
   const userId = hash.userId && hash.userId !== '' ? hash.userId : null;
   const avatarUrl = hash.avatarUrl && hash.avatarUrl !== '' ? hash.avatarUrl : null;
 
@@ -128,7 +102,6 @@ export function hashToConnection(hash: Record<string, string>): DistributedConne
     connectionId: hash.connectionId,
     instanceId: hash.instanceId,
     sessionId,
-    participantId,
     userId,
     username: hash.username,
     avatarUrl,

@@ -26,7 +26,6 @@ export async function registerConnection(
     connectionId,
     instanceId,
     sessionId: null,
-    participantId: null,
     userId: userId || null,
     username,
     avatarUrl: avatarUrl || null,
@@ -72,29 +71,16 @@ export async function removeConnection(
   instanceId: string,
   connectionId: string,
   electNewLeader: boolean = true,
-): Promise<{
-  sessionId: string | null;
-  participantId: string | null;
-  wasLeader: boolean;
-  newLeaderId: string | null;
-  remainingParticipantConnections: number | null;
-}> {
+): Promise<{ sessionId: string | null; wasLeader: boolean; newLeaderId: string | null }> {
   validateConnectionId(connectionId);
 
   // Get current connection state
   const connection = await getConnection(redis, connectionId);
   if (!connection) {
-    return {
-      sessionId: null,
-      participantId: null,
-      wasLeader: false,
-      newLeaderId: null,
-      remainingParticipantConnections: null,
-    };
+    return { sessionId: null, wasLeader: false, newLeaderId: null };
   }
 
   const sessionId = connection.sessionId;
-  const participantId = connection.participantId;
   const wasLeader = connection.isLeader;
 
   const multi = redis.multi();
@@ -109,18 +95,10 @@ export async function removeConnection(
   if (sessionId) {
     multi.srem(KEYS.sessionMembers(sessionId), connectionId);
   }
-  if (sessionId && participantId) {
-    multi.srem(KEYS.participantConnections(sessionId, participantId), connectionId);
-  }
 
   await multi.exec();
 
   console.info(`[DistributedState] Removed connection: ${connectionId.slice(0, 8)}`);
-
-  let remainingParticipantConnections: number | null = null;
-  if (sessionId && participantId) {
-    remainingParticipantConnections = await countLiveParticipantConnections(redis, sessionId, participantId);
-  }
 
   // Automatically elect new leader if was leader and requested
   let newLeaderId: string | null = null;
@@ -128,40 +106,7 @@ export async function removeConnection(
     newLeaderId = await electLeaderAfterRemoval(redis, sessionId, connectionId);
   }
 
-  return { sessionId, participantId, wasLeader, newLeaderId, remainingParticipantConnections };
-}
-
-async function countLiveParticipantConnections(redis: Redis, sessionId: string, participantId: string): Promise<number> {
-  const key = KEYS.participantConnections(sessionId, participantId);
-  const connectionIds = await redis.smembers(key);
-  if (connectionIds.length === 0) {
-    return 0;
-  }
-
-  const pipeline = redis.pipeline();
-  for (const id of connectionIds) {
-    pipeline.exists(KEYS.connection(id));
-  }
-  const results = await pipeline.exec();
-
-  let live = 0;
-  const staleIds: string[] = [];
-  if (results) {
-    for (let i = 0; i < results.length; i++) {
-      const [err, exists] = results[i] as [Error | null, number];
-      if (!err && exists === 1) {
-        live++;
-      } else if (!err) {
-        staleIds.push(connectionIds[i]);
-      }
-    }
-  }
-
-  if (staleIds.length > 0) {
-    await redis.srem(key, ...staleIds).catch(() => {});
-  }
-
-  return live;
+  return { sessionId, wasLeader, newLeaderId };
 }
 
 /**

@@ -281,7 +281,7 @@ describe('useEventProcessor - SessionStatsUpdated → React Query cache', () => 
     act(() => {
       result.current.handleSessionEvent({
         __typename: 'UserJoined',
-        user: { id: 'user-1', username: 'test', isLeader: false, connectionState: 'CONNECTED' },
+        user: { id: 'user-1', username: 'test', isLeader: false },
       });
     });
 
