@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
+import InstagramIcon from '@mui/icons-material/Instagram';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { track } from '@/app/lib/analytics';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
@@ -22,6 +23,7 @@ import {
   BETA_VIDEO_URL_VALIDATION_MESSAGE,
 } from '@/app/lib/beta-video-url';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
+import { buildInstagramCaption, copyAndOpenInstagram } from '@/app/lib/instagram-posting';
 
 // graphql-request throws ClientError-shaped errors with a `response.errors[]`
 // array. We trust those messages because they come from our own resolvers
@@ -41,11 +43,17 @@ export function extractGraphQLErrorMessage(error: unknown): string | null {
   return typeof message === 'string' && message.length > 0 ? message : null;
 }
 
+export type AttachBetaLinkSurface = 'play-view' | 'logbook' | 'instagram-dialog' | 'unknown';
+
 type AttachBetaLinkFormProps = {
   boardType: string;
   climbUuid: string;
   climbName?: string;
   angle?: number | null;
+  grade?: string | null;
+  setter?: string | null;
+  layoutId?: number | null;
+  surface?: AttachBetaLinkSurface;
   resetTrigger?: unknown;
   submitLabel?: string;
   helperText?: string;
@@ -61,6 +69,10 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
   climbUuid,
   climbName,
   angle,
+  grade,
+  setter,
+  layoutId,
+  surface = 'unknown',
   resetTrigger,
   submitLabel,
   helperText,
@@ -73,9 +85,22 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
   const { t } = useTranslation('feed');
   const resolvedSubmitLabel = submitLabel ?? t('betaVideos.shareBeta');
   const [url, setUrl] = useState('');
+  const [isLaunchingInstagram, setIsLaunchingInstagram] = useState(false);
   const { token } = useWsAuthToken();
   const queryClient = useQueryClient();
   const { showMessage } = useSnackbar();
+
+  const instagramCaption = useMemo(() => {
+    if (!climbName || angle == null) return '';
+    return buildInstagramCaption({
+      climbName,
+      angle,
+      boardType,
+      grade,
+      setter,
+      layoutId,
+    });
+  }, [climbName, angle, boardType, grade, setter, layoutId]);
 
   useEffect(() => {
     setUrl('');
@@ -124,6 +149,41 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
 
   const canSubmit = !!trimmed && !validationError && !mutation.isPending;
 
+  const handleCopyAndOpenInstagram = async () => {
+    if (!instagramCaption || isLaunchingInstagram) return;
+    track('Beta Caption Copy Clicked', { boardType, climbUuid, surface });
+    setIsLaunchingInstagram(true);
+    let result: { copied: boolean; opened: boolean };
+    try {
+      result = await copyAndOpenInstagram(instagramCaption);
+    } catch {
+      // Defensive: copyAndOpenInstagram catches its own errors but a thrown
+      // navigation/clipboard exception from a restricted browser context
+      // would otherwise leave the button stuck in the launching state.
+      track('Beta Caption Copy Failed', { boardType, climbUuid, surface, reason: 'copyFailed' });
+      showMessage(t('betaVideos.instagramCopyFailed'), 'error');
+      return;
+    } finally {
+      setIsLaunchingInstagram(false);
+    }
+
+    if (!result.copied) {
+      track('Beta Caption Copy Failed', { boardType, climbUuid, surface, reason: 'copyFailed' });
+      showMessage(t('betaVideos.instagramCopyFailed'), 'error');
+      return;
+    }
+
+    track('Beta Caption Copied', { boardType, climbUuid, surface, opened: result.opened });
+
+    if (!result.opened) {
+      // Copy succeeded — let the user paste manually wherever they want.
+      showMessage(t('betaVideos.instagramCopiedOnly'), 'success');
+      return;
+    }
+
+    showMessage(t('betaVideos.instagramCopiedAndOpened'), 'success');
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: compact ? 1.25 : 1.5 }}>
       <TextField
@@ -143,7 +203,18 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
         }}
       />
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+        {instagramCaption && (
+          <Button
+            variant="outlined"
+            onClick={handleCopyAndOpenInstagram}
+            disabled={isLaunchingInstagram || mutation.isPending}
+            startIcon={isLaunchingInstagram ? <CircularProgress size={16} /> : <InstagramIcon />}
+            sx={{ mr: 'auto' }}
+          >
+            {t('betaVideos.copyAndOpenInstagram')}
+          </Button>
+        )}
         {showCancel && onCancel && (
           <Button onClick={onCancel} disabled={mutation.isPending}>
             {t('betaVideos.cancel')}

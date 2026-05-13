@@ -90,31 +90,57 @@ describe('instagram-posting', () => {
 
   it('builds the Kilter caption when boardType is omitted', () => {
     expect(buildInstagramCaption({ climbName: 'Texas Sun', angle: 35 })).toBe(
-      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips`,
+      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips @boardsesh #boardsesh`,
     );
   });
 
   it('builds the Kilter caption when boardType is kilter', () => {
     expect(buildInstagramCaption({ climbName: 'Texas Sun', angle: 35, boardType: 'kilter' })).toBe(
-      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips`,
+      `"Texas Sun" @ 35° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips @boardsesh #boardsesh`,
     );
   });
 
   it('builds the caption for Tension', () => {
     expect(buildInstagramCaption({ climbName: 'High Hopes', angle: 40, boardType: 'tension' })).toBe(
-      `"High Hopes" @ 40° on the Tension Board.\n@tensionclimbing #tensionboard`,
+      `"High Hopes" @ 40° on the Tension Board. @tensionclimbing #tensionboard #climbing #bouldering @boardsesh #boardsesh`,
     );
   });
 
-  it('builds the caption for MoonBoard', () => {
-    expect(buildInstagramCaption({ climbName: 'Wheel of Fortune', angle: 40, boardType: 'moonboard' })).toBe(
-      `"Wheel of Fortune" @ 40° on the MoonBoard.\n@moon_climbing #moonboard`,
+  it.each([
+    ['decoy', 'Decoy Board'],
+    ['touchstone', 'Touchstone Board'],
+    ['grasshopper', 'Grasshopper Board'],
+    ['soill', 'So iLL Board'],
+  ])('builds a Tension-style caption for the %s board', (boardType, boardName) => {
+    expect(buildInstagramCaption({ climbName: 'Sandbag', angle: 30, boardType })).toBe(
+      `"Sandbag" @ 30° on the ${boardName}. #climbing #bouldering @boardsesh #boardsesh`,
+    );
+  });
+
+  it('builds the full MoonBoard caption with grade, layout, and setter', () => {
+    expect(
+      buildInstagramCaption({
+        climbName: 'Wheel of Fortune',
+        angle: 40,
+        boardType: 'moonboard',
+        grade: 'V7',
+        setter: 'Dana Rader',
+        layoutId: 3,
+      }),
+    ).toBe(
+      `Wheel of Fortune, V7, 40° MoonBoard, MoonBoard 2024 setup, set by Dana Rader. - @moonclimbing #moonboard #moonclimbing #moonboardchallenge #trainhardclimbharder @boardsesh #boardsesh`,
+    );
+  });
+
+  it('builds a degraded MoonBoard caption when grade, setter, and layoutId are missing', () => {
+    expect(buildInstagramCaption({ climbName: 'Mystery Route', angle: 40, boardType: 'moonboard' })).toBe(
+      `Mystery Route, 40° MoonBoard. - @moonclimbing #moonboard #moonclimbing #moonboardchallenge #trainhardclimbharder @boardsesh #boardsesh`,
     );
   });
 
   it('falls back to Kilter caption for an unknown boardType', () => {
     expect(buildInstagramCaption({ climbName: 'Mystery Route', angle: 50, boardType: 'unknownboard' })).toBe(
-      `"Mystery Route" @ 50° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips`,
+      `"Mystery Route" @ 50° on the Kilter Board.\n@kilterboard #kilterboard #kiltergrips @boardsesh #boardsesh`,
     );
   });
 
@@ -172,5 +198,24 @@ describe('instagram-posting', () => {
     expect(global.document.execCommand).toHaveBeenCalledWith('copy'); // eslint-disable-line @typescript-eslint/unbound-method -- vi.fn() mock, no `this` concern
     expect(result).toEqual({ copied: true, opened: true });
     expect(global.window.location.href).toBe('instagram://camera');
+  });
+
+  it('reports copied: false and does not launch Instagram when both copy paths fail', async () => {
+    Object.defineProperty(global, 'navigator', {
+      configurable: true,
+      value: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+        clipboard: {
+          writeText: vi.fn(() => Promise.reject(new Error('clipboard blocked'))),
+        },
+      },
+    });
+    global.document.execCommand = vi.fn(() => false);
+    global.window.location.href = '';
+
+    const result = await copyAndOpenInstagram('whatever caption');
+
+    expect(result).toEqual({ copied: false, opened: false });
+    expect(global.window.location.href).toBe('');
   });
 });

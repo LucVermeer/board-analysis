@@ -922,6 +922,9 @@ const LogbookFeedItem: React.FC<LogbookFeedItemProps> = React.memo(
                     climbUuid: item.climbUuid,
                     climbName: item.climbName,
                     angle: item.angle,
+                    grade: item.difficultyName,
+                    setter: item.setterUsername,
+                    layoutId: item.layoutId,
                   }
                 : null
             }
@@ -935,6 +938,10 @@ const LogbookFeedItem: React.FC<LogbookFeedItemProps> = React.memo(
             climbUuid={item.climbUuid}
             climbName={item.climbName}
             angle={item.angle}
+            grade={item.difficultyName}
+            setter={item.setterUsername}
+            layoutId={item.layoutId}
+            surface="logbook"
           />
         )}
       </>

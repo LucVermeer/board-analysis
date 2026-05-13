@@ -53,8 +53,11 @@ export function InstagramAction({
       climbUuid: climb.uuid,
       climbName: climb.name,
       angle,
+      grade: climb.difficulty,
+      setter: climb.setter_username,
+      layoutId: climb.layoutId,
     }),
-    [boardDetails.board_name, climb.uuid, climb.name, angle],
+    [boardDetails.board_name, climb.uuid, climb.name, angle, climb.difficulty, climb.setter_username, climb.layoutId],
   );
 
   const extraContent = (

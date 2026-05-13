@@ -29,6 +29,9 @@ export type InstagramPostingTarget = {
   climbUuid: string;
   climbName: string;
   angle: number;
+  grade?: string | null;
+  setter?: string | null;
+  layoutId?: number | null;
 };
 
 type PostToInstagramDialogProps = {
@@ -77,6 +80,9 @@ export default function PostToInstagramDialog({ open, onClose, item }: PostToIns
       climbName: item.climbName,
       angle: item.angle,
       boardType: item.boardType,
+      grade: item.grade,
+      setter: item.setter,
+      layoutId: item.layoutId,
     });
   }, [item]);
 
@@ -332,6 +338,10 @@ export default function PostToInstagramDialog({ open, onClose, item }: PostToIns
               climbUuid={item.climbUuid}
               climbName={item.climbName}
               angle={item.angle}
+              grade={item.grade}
+              setter={item.setter}
+              layoutId={item.layoutId}
+              surface="instagram-dialog"
               resetTrigger={open}
               submitLabel={t('logbook.instagram.addLinkSubmit')}
               helperText={t('logbook.instagram.pasteLinkHelper')}
