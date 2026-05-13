@@ -1,8 +1,16 @@
-import { useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import type { SubscriptionQueueEvent, SessionEvent } from '@boardsesh/shared-schema';
 import { computeQueueStateHash } from '@/app/utils/hash';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import { type Session, type SharedRefs, CORRUPTION_RESYNC_COOLDOWN_MS, DEBUG } from '../types';
+
+// When the 60s hash watchdog triggers resync for the *same* server hash this
+// many times in a row, the underlying drift isn't getting fixed — the client
+// and server agree on the hash but the client's local computation keeps
+// disagreeing with itself. Surface it to Sentry so we have something to
+// investigate instead of an invisible per-minute resync loop.
+const RESYNC_LOOP_THRESHOLD = 3;
 
 type UseSessionSubscriptionsArgs = {
   session: Session | null;
@@ -88,6 +96,21 @@ export function useSessionSubscriptions({
   ]);
 
   // Periodic state hash verification (every 60 seconds)
+  const lastResyncHashRef = useRef<string | null>(null);
+  const consecutiveResyncCountRef = useRef(0);
+  const sentryReportedHashRef = useRef<string | null>(null);
+
+  // Reset the resync-loop trackers whenever the active session changes.
+  // Otherwise a hash that triggered N resyncs in session A would carry
+  // forward into session B and either over-count or suppress the Sentry
+  // breadcrumb that should fire fresh per session.
+  const sessionIdForReset = session?.id ?? null;
+  useEffect(() => {
+    lastResyncHashRef.current = null;
+    consecutiveResyncCountRef.current = 0;
+    sentryReportedHashRef.current = null;
+  }, [sessionIdForReset]);
+
   useEffect(() => {
     if (!session || !lastReceivedStateHash || queue.length === 0) {
       return;
@@ -102,10 +125,45 @@ export function useSessionSubscriptions({
           `Local: ${localHash}, Server: ${lastReceivedStateHash}`,
           'Triggering automatic resync...',
         );
+
+        if (lastResyncHashRef.current === lastReceivedStateHash) {
+          consecutiveResyncCountRef.current += 1;
+        } else {
+          lastResyncHashRef.current = lastReceivedStateHash;
+          consecutiveResyncCountRef.current = 1;
+          sentryReportedHashRef.current = null;
+        }
+
+        if (
+          consecutiveResyncCountRef.current >= RESYNC_LOOP_THRESHOLD &&
+          sentryReportedHashRef.current !== lastReceivedStateHash
+        ) {
+          sentryReportedHashRef.current = lastReceivedStateHash;
+          console.error(
+            `[PersistentSession] Resync loop detected: ${consecutiveResyncCountRef.current} consecutive resyncs for server hash ${lastReceivedStateHash} (local hash ${localHash}). Filing Sentry breadcrumb.`,
+          );
+          Sentry.captureMessage('Resync loop: client keeps disagreeing with server hash', {
+            level: 'warning',
+            tags: { feature: 'party-session', issue: 'hash-resync-loop' },
+            extra: {
+              sessionId: session.id,
+              serverHash: lastReceivedStateHash,
+              localHash,
+              consecutiveResyncs: consecutiveResyncCountRef.current,
+              queueLength: queue.length,
+              currentClimbUuid: currentClimbQueueItem?.uuid ?? null,
+            },
+          });
+        }
+
         if (triggerResyncRef.current) {
           triggerResyncRef.current();
         }
       } else {
+        // Hash matches — reset the loop counter so future drift starts fresh.
+        consecutiveResyncCountRef.current = 0;
+        lastResyncHashRef.current = null;
+        sentryReportedHashRef.current = null;
         if (DEBUG) console.info('[PersistentSession] State hash verification passed');
       }
     }, 60000);

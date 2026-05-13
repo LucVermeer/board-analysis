@@ -19,31 +19,51 @@ export async function updateQueueState(
   redisStore: RedisSessionStore | null,
   writeScheduler: WriteScheduler,
   distributedState: DistributedStateManager | null,
-): Promise<{ version: number; sequence: number; stateHash: string }> {
-  // Get current version and sequence from Redis if available, otherwise from Postgres
+): Promise<{ version: number; sequence: number; stateHash: string; previousStateHash: string | null }> {
+  // Get current version, sequence, and prior state hash from Redis if
+  // available, otherwise from Postgres. The prior hash is returned so
+  // callers (currently setQueue) can detect no-op resyncs without a
+  // second round-trip.
+  //
+  // We coerce empty-string hashes to null. Legacy session rows in Redis
+  // or Postgres can have `stateHash = ''` (the hash field was added
+  // mid-development and older rows never recorded one). `computeQueueStateHash`
+  // always returns a non-empty 8-character hex string, so an empty stored
+  // hash means "we don't know the previous state" — semantically the
+  // same as null. Callers compare with `=== stateHash`, which would
+  // silently never match for legacy sessions even when the resync *was*
+  // a no-op, suppressing the diagnostic. Normalising here makes
+  // null-vs-empty a non-issue at the consumer.
+  const normalizeHash = (h: string | undefined | null): string | null => (h ? h : null);
+
   let currentVersion = expectedVersion;
   let currentSequence = 0;
+  let previousStateHash: string | null = null;
 
   if (currentVersion === undefined) {
     if (redisStore) {
       const redisSession = await redisStore.getSession(sessionId);
       currentVersion = redisSession?.version ?? 0;
       currentSequence = redisSession?.sequence ?? 0;
+      previousStateHash = normalizeHash(redisSession?.stateHash);
     }
     if (currentVersion === undefined || currentVersion === 0) {
       const pgState = await getQueueState(sessionId, redisStore);
       currentVersion = pgState.version;
       currentSequence = pgState.sequence;
+      previousStateHash ??= normalizeHash(pgState.stateHash);
     }
   } else {
-    // If version is provided, get sequence from Redis or Postgres
+    // If version is provided, get sequence and prior hash from Redis or Postgres
     if (redisStore) {
       const redisSession = await redisStore.getSession(sessionId);
       currentSequence = redisSession?.sequence ?? 0;
+      previousStateHash = normalizeHash(redisSession?.stateHash);
     }
     if (currentSequence === 0) {
       const pgState = await getQueueState(sessionId, redisStore);
       currentSequence = pgState.sequence;
+      previousStateHash ??= normalizeHash(pgState.stateHash);
     }
   }
 
@@ -72,7 +92,7 @@ export async function updateQueueState(
     );
   }
 
-  return { version: newVersion, sequence: newSequence, stateHash };
+  return { version: newVersion, sequence: newSequence, stateHash, previousStateHash };
 }
 
 /**

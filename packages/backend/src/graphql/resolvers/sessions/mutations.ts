@@ -104,9 +104,15 @@ export const sessionMutations = {
         `[joinSession] roomManager.joinSession completed - clientId: ${result.clientId}, isLeader: ${result.isLeader}`,
       );
 
-    // Update context with session info
+    // Update context with session info. Do NOT touch userId here — auth
+    // middleware set it to the real authenticated user UUID when the WS
+    // connected. `result.clientId` is the connection ID (see
+    // services/room-manager/client-lifecycle.ts:199 which returns
+    // `clientId: connectionId`), and writing it to `ctx.userId` would
+    // clobber the real UUID for every downstream resolver on this connection
+    // (ESP32 auto-authorize, tick inserts, climb ownership, etc.).
     if (DEBUG) console.info(`[joinSession] Before updateContext - ctx.sessionId: ${ctx.sessionId}`);
-    updateContext(ctx.connectionId, { sessionId, userId: result.clientId });
+    updateContext(ctx.connectionId, { sessionId });
     if (DEBUG) console.info(`[joinSession] After updateContext - ctx.sessionId: ${ctx.sessionId}`);
 
     // Auto-authorize user's ESP32 controllers for this session (if authenticated)
@@ -240,7 +246,7 @@ export const sessionMutations = {
       if (DEBUG)
         console.info(`[createSession] Joined session - clientId: ${result.clientId}, isLeader: ${result.isLeader}`);
 
-      updateContext(ctx.connectionId, { sessionId, userId: result.clientId });
+      updateContext(ctx.connectionId, { sessionId });
 
       // Adopt recent solo ticks now that the session row exists in board_sessions
       // (boardsesh_ticks.session_id is a FK to board_sessions.id)
@@ -304,17 +310,16 @@ export const sessionMutations = {
     if (!ctx.sessionId) return false;
 
     const sessionId = ctx.sessionId;
-    const userId = ctx.userId;
     const result = await roomManager.leaveSession(ctx.connectionId);
 
     if (result) {
-      // Notify session about user leaving
-      if (userId) {
-        pubsub.publishSessionEvent(sessionId, {
-          __typename: 'UserLeft',
-          userId,
-        });
-      }
+      // Notify session about user leaving. UserLeft.userId is the
+      // connection ID (matching UserJoined.user.id = result.clientId).
+      // See websocket/setup.ts onDisconnect for the same pattern.
+      pubsub.publishSessionEvent(sessionId, {
+        __typename: 'UserLeft',
+        userId: ctx.connectionId,
+      });
 
       // Notify about new leader if changed
       if (result.newLeaderId) {
@@ -324,7 +329,12 @@ export const sessionMutations = {
         });
       }
 
-      updateContext(ctx.connectionId, { sessionId: undefined, userId: undefined });
+      // Only clear sessionId — leave userId alone. Auth set it to the
+      // real user UUID at connection time and downstream resolvers on
+      // this same WebSocket (queries from other tabs, social actions,
+      // etc.) still need it. Mirrors the joinSession / createSession fix
+      // earlier in this file.
+      updateContext(ctx.connectionId, { sessionId: undefined });
     }
 
     return true;

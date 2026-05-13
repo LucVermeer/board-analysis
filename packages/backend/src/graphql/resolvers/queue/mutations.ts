@@ -372,7 +372,26 @@ export const queueMutations = {
       validateInput(ClimbQueueItemSchema, currentClimbQueueItem, 'currentClimbQueueItem');
     }
 
-    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, currentClimbQueueItem || null);
+    // updateQueueState returns `previousStateHash` from the same Redis
+    // read it already does internally, so this no-op check costs nothing
+    // extra. The client's 60s state-hash watchdog (see
+    // packages/web/app/components/persistent-session/hooks/use-session-subscriptions.ts)
+    // triggers setQueue when it thinks local and server state have
+    // diverged. If the resulting hash matches what the server already
+    // had, the client was wrong about the drift — usually a bug in the
+    // local hash computation or event processor — and the loop will fire
+    // again next minute. The warn surfaces those loops.
+    const { sequence, stateHash, previousStateHash } = await roomManager.updateQueueState(
+      sessionId,
+      queue,
+      currentClimbQueueItem || null,
+    );
+
+    if (previousStateHash !== null && previousStateHash === stateHash) {
+      console.warn(
+        `[setQueue] No-op resync for session ${sessionId} (hash=${stateHash}, queueSize=${queue.length}). Client state already matched server — investigate hash-drift on the publisher.`,
+      );
+    }
 
     const state: QueueState = {
       sequence,

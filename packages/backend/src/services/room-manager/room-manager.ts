@@ -276,7 +276,7 @@ class RoomManager {
     queue: ClimbQueueItem[],
     currentClimbQueueItem: ClimbQueueItem | null,
     expectedVersion?: number,
-  ): Promise<{ version: number; sequence: number; stateHash: string }> {
+  ): Promise<{ version: number; sequence: number; stateHash: string; previousStateHash: string | null }> {
     return updateQueueStateFn(
       sessionId,
       queue,

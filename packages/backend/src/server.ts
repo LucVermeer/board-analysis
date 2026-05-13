@@ -33,10 +33,65 @@ export type ServerResources = {
   shutdownServices: () => Promise<void>;
 };
 
+// Idempotency guard: re-running `startServer()` (which tests do) must not
+// stack the console wrapper — otherwise each call prepends another copy
+// of the instance tag and we get `[i:abc] [i:abc] message`.
+let instanceLogTagInstalled = false;
+
+/**
+ * Prefix every console line with the pubsub instance ID so multi-instance
+ * logs can be untangled. Without this, debugging cross-instance pub/sub
+ * requires triangulating via connection-registration logs to figure out
+ * which instance emitted any given line — see
+ * gist.github.com/marcodejongh/90a125720ad48bf0355ec176f9ebc0df for an
+ * example session where this cost hours of analysis time.
+ *
+ * TRADE-OFFS:
+ * - This patches the GLOBAL `console.*`, so any third-party library that
+ *   logs to console also picks up the prefix. That's fine today: we
+ *   don't use a structured logger (Pino/Winston) anywhere — every log
+ *   is raw `console.*` and is consumed by Railway as plain text. If we
+ *   move to a structured logger later, swap this for a logger wrapper
+ *   and remove the patch.
+ * - When the first arg is non-string (e.g. `console.error(err)`), we
+ *   pass the tag as a separate leading arg so util.format / inspect()
+ *   on the trailing arg is preserved. Output stays one line per call.
+ * - When Redis is not configured the instance ID is null and we skip
+ *   the patch entirely (local-only dev mode — no need to disambiguate).
+ * - Module-level `instanceLogTagInstalled` flag prevents double-wrapping
+ *   if `startServer()` is invoked more than once (e.g. in tests).
+ */
+function installInstanceLogTag(): void {
+  if (instanceLogTagInstalled) return;
+
+  const instanceId = pubsub.getInstanceId();
+  if (!instanceId) return;
+
+  const instanceTag = `[i:${instanceId.slice(0, 8)}] `;
+  const trimmedTag = instanceTag.trim();
+
+  for (const method of ['info', 'warn', 'error', 'log'] as const) {
+    const original = console[method].bind(console);
+    console[method] = (...args: unknown[]) => {
+      if (args.length === 0) {
+        original(trimmedTag);
+      } else if (typeof args[0] === 'string') {
+        original(`${instanceTag}${args[0]}`, ...args.slice(1));
+      } else {
+        original(trimmedTag, ...args);
+      }
+    };
+  }
+
+  instanceLogTagInstalled = true;
+}
+
 export async function startServer(): Promise<ServerResources> {
   // Initialize PubSub (connects to Redis if configured)
   // This must happen before we start accepting connections
   await pubsub.initialize();
+
+  installInstanceLogTag();
 
   // Initialize RoomManager with Redis for session persistence
   if (redisClientManager.isRedisConfigured() && redisClientManager.isRedisConnected()) {
