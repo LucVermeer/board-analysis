@@ -100,7 +100,7 @@ function sanitizeFilters(filters: Partial<SearchRequestPagination>): {
       changed = true;
     }
   }
-  const rawZoneMode = (cleaned as { zoneMode?: unknown }).zoneMode;
+  const rawZoneMode = cleaned.zoneMode;
   if (rawZoneMode !== undefined && rawZoneMode !== 'allHolds' && rawZoneMode !== 'anyHold') {
     cleaned.zoneMode = DEFAULT_SEARCH_PARAMS.zoneMode;
     changed = true;

@@ -59,7 +59,13 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
 
   // Pre-translate labels that the summary helpers can't access on their own
   // (they live in a `.ts` module without React/i18next context).
-  const summaryLabels = { zone: t('search.panels.zone') };
+  const summaryLabels = {
+    zone: t('search.panels.zone'),
+    zoneModes: {
+      allHolds: t('search.zone.allHolds'),
+      anyHold: t('search.zone.anyHold'),
+    },
+  };
 
   // Compute filter summary for the bridge
   const summary = getSearchPillSummary(uiSearchParams, summaryLabels);

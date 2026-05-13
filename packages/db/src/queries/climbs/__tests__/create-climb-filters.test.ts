@@ -196,6 +196,7 @@ void describe('createClimbFilters: wide climbs', () => {
     assert.match(rendered, /wide_bh\.y </);
     assert.match(rendered, /wide_bh\.x <=/);
     assert.match(rendered, /wide_bh\.x >=/);
+    assert.doesNotMatch(rendered, /compatible_size_ids/);
   });
 
   void it('does not apply wide climbs filtering outside supported Kilter Homewall sizes', () => {

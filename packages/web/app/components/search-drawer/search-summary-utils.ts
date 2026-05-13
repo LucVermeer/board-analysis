@@ -125,8 +125,24 @@ export function getHoldsPanelSummary(params: SearchRequestPagination): string[] 
   return [`${holdsCount} hold${holdsCount !== 1 ? 's' : ''}`];
 }
 
-export function getZonePanelSummary(params: SearchRequestPagination, label: string): string[] {
-  return params.zoneBox ? [label] : [];
+export type ZoneSummaryModeLabels = {
+  allHolds: string;
+  anyHold: string;
+};
+
+const DEFAULT_ZONE_SUMMARY_MODE_LABELS: ZoneSummaryModeLabels = {
+  allHolds: 'All holds inside',
+  anyHold: 'At least 1 hold',
+};
+
+export function getZonePanelSummary(
+  params: SearchRequestPagination,
+  label: string,
+  modeLabels: ZoneSummaryModeLabels = DEFAULT_ZONE_SUMMARY_MODE_LABELS,
+): string[] {
+  if (!params.zoneBox) return [];
+  const modeLabel = params.zoneMode === 'anyHold' ? modeLabels.anyHold : modeLabels.allHolds;
+  return [`${label}: ${modeLabel}`];
 }
 
 /**
@@ -135,6 +151,7 @@ export function getZonePanelSummary(params: SearchRequestPagination, label: stri
  */
 export type SearchPillLabels = {
   zone: string;
+  zoneModes: ZoneSummaryModeLabels;
 };
 
 /**
@@ -148,7 +165,7 @@ export function getSearchPillSummary(params: SearchRequestPagination, labels: Se
     ...getStatusPanelSummary(params),
     ...getUserPanelSummary(params),
     ...getHoldsPanelSummary(params),
-    ...getZonePanelSummary(params, labels.zone),
+    ...getZonePanelSummary(params, labels.zone, labels.zoneModes),
   ];
 
   if (allParts.length === 0) return DEFAULT_CLIMB_SEARCH_SUMMARY;
@@ -172,7 +189,7 @@ export function getSearchPillFullSummary(params: SearchRequestPagination, labels
     ...getStatusPanelSummary(params),
     ...getUserPanelSummary(params),
     ...getHoldsPanelSummary(params),
-    ...getZonePanelSummary(params, labels.zone),
+    ...getZonePanelSummary(params, labels.zone, labels.zoneModes),
   ];
 
   if (allParts.length === 0) return DEFAULT_CLIMB_SEARCH_SUMMARY;

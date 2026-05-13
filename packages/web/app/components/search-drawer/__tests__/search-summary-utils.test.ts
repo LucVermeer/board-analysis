@@ -5,6 +5,7 @@ import {
   getStatusPanelSummary,
   getQualityPanelSummary,
   getSearchPillSummary,
+  getZonePanelSummary,
 } from '../search-summary-utils';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { SearchRequestPagination } from '@/app/lib/types';
@@ -12,6 +13,14 @@ import type { SearchRequestPagination } from '@/app/lib/types';
 function makeParams(overrides: Partial<SearchRequestPagination> = {}): SearchRequestPagination {
   return { ...DEFAULT_SEARCH_PARAMS, ...overrides } as SearchRequestPagination;
 }
+
+const summaryLabels = {
+  zone: 'Zone',
+  zoneModes: {
+    allHolds: 'All holds inside',
+    anyHold: 'At least 1 hold',
+  },
+};
 
 describe('hasActiveNonNameFilters', () => {
   it('returns false when all params match defaults', () => {
@@ -144,18 +153,38 @@ describe('getQualityPanelSummary vs Status (no duplication)', () => {
   });
 
   it('pill summary for minAscents=3 shows "Established" only, no duplicate', () => {
-    const pill = getSearchPillSummary(makeParams({ minAscents: 3 }), { zone: 'Zone' });
+    const pill = getSearchPillSummary(makeParams({ minAscents: 3 }), summaryLabels);
     expect(pill).toContain('Established');
     expect(pill).not.toContain('3+ ascents');
   });
 
   it('pill summary for projects shows "Projects"', () => {
-    const pill = getSearchPillSummary(makeParams({ projectsOnly: true }), { zone: 'Zone' });
+    const pill = getSearchPillSummary(makeParams({ projectsOnly: true }), summaryLabels);
     expect(pill).toContain('Projects');
   });
 
   it('pill summary for drafts shows "Drafts"', () => {
-    const pill = getSearchPillSummary(makeParams({ onlyDrafts: true }), { zone: 'Zone' });
+    const pill = getSearchPillSummary(makeParams({ onlyDrafts: true }), summaryLabels);
     expect(pill).toContain('Drafts');
+  });
+});
+
+describe('getZonePanelSummary', () => {
+  const zoneBox = { edgeLeft: 1, edgeRight: 2, edgeBottom: 3, edgeTop: 4 };
+
+  it('returns empty when no zone is active', () => {
+    expect(getZonePanelSummary(makeParams(), summaryLabels.zone, summaryLabels.zoneModes)).toEqual([]);
+  });
+
+  it('includes the all-holds mode when a zone is active', () => {
+    expect(
+      getZonePanelSummary(makeParams({ zoneBox, zoneMode: 'allHolds' }), summaryLabels.zone, summaryLabels.zoneModes),
+    ).toEqual(['Zone: All holds inside']);
+  });
+
+  it('includes the any-hold mode when a zone is active', () => {
+    expect(
+      getZonePanelSummary(makeParams({ zoneBox, zoneMode: 'anyHold' }), summaryLabels.zone, summaryLabels.zoneModes),
+    ).toEqual(['Zone: At least 1 hold']);
   });
 });

@@ -174,7 +174,7 @@
       "anyHold": "At least 1 hold"
     },
     "holdsAndZone": {
-      "description": "Tap holds to filter, or draw a zone to limit results to climbs that fit inside it."
+      "description": "Tap holds to filter, or draw a zone to focus results on part of the board."
     },
     "sortToggle": "Sort"
   },

@@ -22,7 +22,13 @@ const RecentSearchPills: React.FC = () => {
   const [searches, setSearches] = useState<RecentSearch[]>([]);
   const [hasLoadedInitialSearches, setHasLoadedInitialSearches] = useState(false);
   const { uiSearchParams, updateFilters } = useUISearchParams();
-  const summaryLabels = { zone: t('search.panels.zone') };
+  const summaryLabels = {
+    zone: t('search.panels.zone'),
+    zoneModes: {
+      allHolds: t('search.zone.allHolds'),
+      anyHold: t('search.zone.anyHold'),
+    },
+  };
 
   const currentFilterKey = getFilterKey(uiSearchParams);
 

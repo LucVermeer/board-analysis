@@ -256,6 +256,8 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
             params.set_ids.map((setId) => sql`${setId}`),
             sql`, `,
           )})`;
+    // This requires at least one hold in the 10x10 side expansion over 7x10.
+    // On 10x12 boards, other holds may still use the lower 10x12-only rows.
     wideClimbsConditions.push(sql`EXISTS (
       SELECT 1
       FROM ${boardClimbHolds} wide_ch

@@ -219,6 +219,11 @@ export const boardPlacements = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.boardType, table.id] }),
+    layoutLookupIdx: index('board_placements_board_type_layout_id_id_idx').on(
+      table.boardType,
+      table.layoutId,
+      table.id,
+    ),
     layoutFk: foreignKey({
       columns: [table.boardType, table.layoutId],
       foreignColumns: [boardLayouts.boardType, boardLayouts.id],
