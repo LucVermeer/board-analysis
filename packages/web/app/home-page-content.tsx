@@ -469,6 +469,10 @@ export default function HomePageContent({
           initialPopularConfigs={initialPopularConfigs}
         />
 
+        {/* Recent beta videos from across the community — sits high in the page
+            so the community signal isn't buried under the onboarding stack */}
+        <HomeRecentBetaSection initialRecentBeta={initialRecentBeta} />
+
         {/* Onboarding Cards */}
         <Box
           sx={{
@@ -544,9 +548,6 @@ export default function HomePageContent({
             onClick={() => window.open('https://discord.gg/YXA8GsXfQK', '_blank', 'noopener,noreferrer')}
           />
         </Box>
-
-        {/* Recent beta videos from across the community */}
-        <HomeRecentBetaSection initialRecentBeta={initialRecentBeta} />
 
         {/* Authenticated users: nudge to feed */}
         {isAuthenticated && (
