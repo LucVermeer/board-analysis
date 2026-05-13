@@ -1,9 +1,9 @@
 /// <reference types="node" />
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
-import { homedir } from 'node:os';
+import { freemem, homedir, tmpdir, totalmem } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join, dirname, resolve } from 'node:path';
@@ -25,6 +25,46 @@ const HEALTH_CHECK_MAX_ATTEMPTS = HEALTH_CHECK_TIMEOUT_MS / HEALTH_CHECK_INTERVA
 
 const TAILSCALE_STATUS_TIMEOUT_MS = 1500;
 const TAILSCALE_CERT_TIMEOUT_MS = 60_000;
+
+// OOM guard configuration. The dev host has crashed twice from running too many
+// `vp run dev` sessions in parallel — each spawns a `next dev --turbopack`
+// server that holds 3–5 GB of RSS, so a few forgotten worktrees can exhaust
+// 32 GB and trip the kernel OOM-killer (see 2026-05-10 and 2026-05-12 crashes).
+// These knobs let the user override the guard without editing the script.
+const DEV_SESSION_LOCK_PREFIX = 'boardsesh-dev-';
+const DEV_SESSION_LOCK_SUFFIX = '.lock.json';
+
+// Per-session memory envelope. Empirically a real session peaks at ~5 GB for
+// next-server + ~0.5 GB for the backend/tsx watcher + esbuild workers; 8 GB
+// is a conservative cap that covers compile spikes. The 2026-05-12 crash
+// happened with only 2 concurrent sessions on a 32 GB host, so we don't want
+// to be aggressive here.
+const DEFAULT_SESSION_BUDGET_MB = 8 * 1024;
+// Reserved for OS + browser + IDE + AI agents (Claude Code, codex, etc.).
+// On a dev box with lots of agents running concurrently this can easily be
+// 4–8 GB; pick the middle.
+const DEFAULT_RESERVED_HOST_MB = 6 * 1024;
+// Pre-flight: refuse-with-override when MemAvailable is below this. Half of
+// a per-session budget — if we don't have at least this much we definitely
+// can't fit another session without immediate paging.
+const DEFAULT_MIN_FREE_MEM_MB = DEFAULT_SESSION_BUDGET_MB / 2;
+
+// Per-child V8 heap cap. Turbopack is mostly Rust so this only caps the
+// orchestrator + tsx loaders + Node-side Next bits, but it still prevents
+// runaway JS-side leaks from gobbling several GB before the kernel notices.
+const CHILD_NODE_HEAP_CAP_MB = 2048;
+
+type DevSessionLock = {
+  pid: number;
+  rootDir: string;
+  startedAt: number;
+  backendPort: number | null;
+  webPort: number | null;
+};
+
+type ActiveDevSession = DevSessionLock & {
+  lockFile: string;
+};
 /**
  * Certs older than this are regenerated on startup. Tailscale serves valid
  * Let's Encrypt certs (90-day lifetime) and caches them in its own state, so
@@ -46,6 +86,14 @@ type DevDbEnv = Record<string, string>;
 
 type CliOptions = {
   qaNotesFilePath: string | null;
+  killOldest: boolean;
+};
+
+type SessionTombstone = {
+  killedAt: number;
+  killedByPid: number;
+  killedByRootDir: string;
+  reason: string;
 };
 
 type DevBuildMetadata = {
@@ -63,10 +111,16 @@ let backendHealthy = false;
 
 function parseCliOptions(args: string[]): CliOptions {
   let qaNotesFilePath: string | null = null;
+  let killOldest = false;
 
   for (let argumentIndex = 0; argumentIndex < args.length; argumentIndex++) {
     const argument = args[argumentIndex];
     if (argument === '--') continue;
+
+    if (argument === '--kill-oldest') {
+      killOldest = true;
+      continue;
+    }
 
     if (argument === '--qa-notes-file' || argument === '--qa-plan-file') {
       const nextArgument = args[argumentIndex + 1];
@@ -96,7 +150,7 @@ function parseCliOptions(args: string[]): CliOptions {
     console.warn(`[dev] Ignoring unrecognized argument: ${argument}`);
   }
 
-  return { qaNotesFilePath };
+  return { qaNotesFilePath, killOldest };
 }
 
 function runGitCommand(args: string[]): string | null {
@@ -443,6 +497,7 @@ function startBackend(port: number, tls: TlsBundle | null, devDbEnv: DevDbEnv): 
       ...devDbEnv,
       ...process.env,
       PORT: String(port),
+      NODE_OPTIONS: composeNodeOptions(process.env.NODE_OPTIONS),
       ...(tls ? { DEV_HTTPS_CERT_FILE: tls.certFile, DEV_HTTPS_KEY_FILE: tls.keyFile } : {}),
     },
   });
@@ -483,6 +538,7 @@ function startWeb(
       ...process.env,
       PORT: String(port),
       BACKEND_PORT: String(backendPort),
+      NODE_OPTIONS: composeNodeOptions(process.env.NODE_OPTIONS),
       ...(devBuildMetadata.branchName ? { BOARDSESH_DEV_BRANCH_NAME: devBuildMetadata.branchName } : {}),
       ...(devBuildMetadata.qaNotes ? { BOARDSESH_DEV_QA_NOTES: devBuildMetadata.qaNotes } : {}),
       ...(devBuildMetadata.qaNotesFilePath ? { BOARDSESH_DEV_QA_NOTES_FILE: devBuildMetadata.qaNotesFilePath } : {}),
@@ -513,9 +569,458 @@ function startWeb(
 }
 
 /**
+ * Resolve the directory we drop dev-session lockfiles into. Prefer
+ * $XDG_RUNTIME_DIR on Linux — it's per-user (mode 0700) and cleared on
+ * reboot, so we don't need to worry about cross-user collisions or stale-
+ * after-reboot entries. On macOS there's no XDG_RUNTIME_DIR; `os.tmpdir()`
+ * returns `$TMPDIR` (a per-user `/var/folders/...` path on macOS) which has
+ * the same per-user-isolation property. Linux without systemd falls back to
+ * `os.tmpdir()` too (typically `/tmp`).
+ */
+function resolveSessionLockDir(): string {
+  const runtimeDir = process.env.XDG_RUNTIME_DIR;
+  if (runtimeDir && existsSync(runtimeDir)) return runtimeDir;
+  return tmpdir();
+}
+
+function getSessionLockPath(lockDir: string, pid: number): string {
+  return join(lockDir, `${DEV_SESSION_LOCK_PREFIX}${pid}${DEV_SESSION_LOCK_SUFFIX}`);
+}
+
+/**
+ * Tombstone path for a given dying session. The killer writes here BEFORE
+ * sending SIGTERM; the killed orchestrator's shutdown handler reads it and
+ * prints a banner so the agent owning that terminal knows what happened.
+ */
+function getSessionTombstonePath(lockDir: string, pid: number): string {
+  return join(lockDir, `${DEV_SESSION_LOCK_PREFIX}${pid}.killed.json`);
+}
+
+/**
+ * Read and remove our own tombstone if it exists. Called from `shutdown` so
+ * the banner fires regardless of how we got the signal (SIGTERM from the
+ * killer, SIGINT from the user, exit hook).
+ */
+function printOwnTombstoneIfPresent(lockDir: string): void {
+  const tombstonePath = getSessionTombstonePath(lockDir, process.pid);
+  let body: SessionTombstone;
+  try {
+    body = JSON.parse(readFileSync(tombstonePath, 'utf8')) as SessionTombstone;
+  } catch {
+    return;
+  }
+  try {
+    unlinkSync(tombstonePath);
+  } catch {
+    // best-effort
+  }
+
+  const banner = '─'.repeat(72);
+  const killedAtIso = body.killedAt ? new Date(body.killedAt).toISOString() : 'unknown';
+  console.warn('');
+  console.warn(banner);
+  console.warn('[dev] ⚠ THIS DEV SESSION WAS EVICTED BY ANOTHER `vp run dev`');
+  console.warn(`[dev]   Reason: ${body.reason || 'oldest-session-evicted'}`);
+  console.warn(`[dev]   Killed by pid ${body.killedByPid} in: ${body.killedByRootDir}`);
+  console.warn(`[dev]   At: ${killedAtIso}`);
+  console.warn('[dev]');
+  console.warn('[dev]   Your session was the oldest active `vp run dev` and was assumed');
+  console.warn('[dev]   to be idle. The OOM guard evicts the oldest to keep the host');
+  console.warn('[dev]   from running out of memory (each `next dev --turbopack` holds');
+  console.warn('[dev]   3–5 GB of RAM). If you still need this worktree running,');
+  console.warn('[dev]   re-run `vp run dev` here — but the other session will likely');
+  console.warn('[dev]   evict yours back if both are needed concurrently.');
+  console.warn(banner);
+  console.warn('');
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // ESRCH = no such process; EPERM = process exists but we can't signal it
+    // (still alive, just owned by another uid — treat as live).
+    return getErrorCode(error) === 'EPERM';
+  }
+}
+
+/**
+ * Scan the lock directory for live dev-session entries. Stale lockfiles
+ * (process gone, malformed JSON) are pruned in the same pass — there's no
+ * point asking the user about them.
+ */
+function listActiveDevSessions(lockDir: string): ActiveDevSession[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(lockDir);
+  } catch {
+    return [];
+  }
+
+  const sessions: ActiveDevSession[] = [];
+  for (const entry of entries) {
+    if (!entry.startsWith(DEV_SESSION_LOCK_PREFIX) || !entry.endsWith(DEV_SESSION_LOCK_SUFFIX)) continue;
+    const lockFile = join(lockDir, entry);
+    let parsed: DevSessionLock;
+    try {
+      parsed = JSON.parse(readFileSync(lockFile, 'utf8')) as DevSessionLock;
+    } catch {
+      try {
+        unlinkSync(lockFile);
+      } catch {
+        // best-effort cleanup; ignore
+      }
+      continue;
+    }
+    if (!parsed || typeof parsed.pid !== 'number' || !isProcessAlive(parsed.pid)) {
+      try {
+        unlinkSync(lockFile);
+      } catch {
+        // best-effort cleanup; ignore
+      }
+      continue;
+    }
+    sessions.push({ ...parsed, lockFile });
+  }
+  return sessions;
+}
+
+function formatRelativeMinutes(timestampMs: number): string {
+  const minutes = Math.max(0, Math.round((Date.now() - timestampMs) / 60_000));
+  if (minutes < 1) return 'just now';
+  if (minutes === 1) return '1 min ago';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder === 0 ? `${hours}h ago` : `${hours}h ${remainder}m ago`;
+}
+
+function printActiveSessions(sessions: ActiveDevSession[]): void {
+  for (const session of sessions) {
+    const ports = [
+      session.backendPort != null ? `backend:${session.backendPort}` : null,
+      session.webPort != null ? `web:${session.webPort}` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    console.warn(
+      `[dev]   pid ${session.pid}  ${session.rootDir}` +
+        (ports ? `  (${ports})` : '') +
+        `  — started ${formatRelativeMinutes(session.startedAt)}`,
+    );
+  }
+}
+
+function readMemAvailableMbLinux(): number | null {
+  try {
+    const meminfo = readFileSync('/proc/meminfo', 'utf8');
+    const match = meminfo.match(/^MemAvailable:\s+(\d+)\s+kB$/m);
+    if (!match) return null;
+    return Math.floor(parseInt(match[1], 10) / 1024);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * macOS equivalent of Linux's MemAvailable: sum of pages that can be made
+ * free without triggering swap or paging. `vm_stat` is part of the base
+ * system; no Homebrew required. Page size is reported in vm_stat's header
+ * (typically 4 KB on Intel, 16 KB on Apple Silicon).
+ */
+function readMemAvailableMbDarwin(): number | null {
+  try {
+    const vmStatOutput = execFileSync('vm_stat', [], {
+      encoding: 'utf8',
+      timeout: 2000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const pageSizeMatch = vmStatOutput.match(/page size of (\d+) bytes/);
+    const pageSizeBytes = pageSizeMatch ? parseInt(pageSizeMatch[1], 10) : 4096;
+    const readPages = (label: string): number => {
+      const labelMatch = vmStatOutput.match(new RegExp(`^${label}:\\s+(\\d+)`, 'm'));
+      return labelMatch ? parseInt(labelMatch[1], 10) : 0;
+    };
+    // Free + inactive (clean pages reclaimable instantly) + speculative
+    // (prefetched, drop-on-demand) + purgeable (apps marked them as such).
+    // We deliberately exclude active and wired, which are not safe to reclaim.
+    const reclaimablePages =
+      readPages('Pages free') +
+      readPages('Pages inactive') +
+      readPages('Pages speculative') +
+      readPages('Pages purgeable');
+    if (reclaimablePages === 0) return null;
+    return Math.floor((reclaimablePages * pageSizeBytes) / 1024 / 1024);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Return the host's available memory in MiB, using the most accurate source
+ * for the current platform. Falls back to `os.freemem()` if the platform-
+ * specific path fails — that's coarser (excludes reclaimable caches) but
+ * it's better than refusing to read and silently disabling the pre-flight.
+ */
+function readMemAvailableMb(): number | null {
+  if (process.platform === 'linux') {
+    const linuxValue = readMemAvailableMbLinux();
+    if (linuxValue !== null) return linuxValue;
+  } else if (process.platform === 'darwin') {
+    const darwinValue = readMemAvailableMbDarwin();
+    if (darwinValue !== null) return darwinValue;
+  }
+  // Cross-platform fallback. Imperfect (Linux underreports because buffers/
+  // caches don't count; macOS underreports because inactive doesn't count)
+  // but always non-null.
+  return Math.floor(freemem() / 1024 / 1024);
+}
+
+function getTotalMemMb(): number {
+  return Math.floor(totalmem() / 1024 / 1024);
+}
+
+/**
+ * Auto-derive the concurrent-session cap from total RAM. Formula:
+ *
+ *   max(1, floor((totalMb - reservedMb) / perSessionMb))
+ *
+ * Examples (defaults: per-session 8 GiB, reserved 6 GiB):
+ *
+ *   16 GiB MBP  → max( 1, floor((16 − 6) / 8) )  = 1
+ *   32 GiB host → max( 1, floor((32 − 6) / 8) )  = 3
+ *   64 GiB host → max( 1, floor((64 − 6) / 8) )  = 7
+ *
+ * Override the numerator with BOARDSESH_DEV_SESSION_BUDGET_MB and the
+ * subtrahend with BOARDSESH_DEV_RESERVED_HOST_MB. To override the result
+ * directly, set BOARDSESH_MAX_DEV_SESSIONS=N — that takes precedence.
+ */
+function computeAutoMaxSessions(): { maxSessions: number; totalMb: number; perSessionMb: number; reservedMb: number } {
+  const totalMb = getTotalMemMb();
+  const perSessionMb = Math.max(
+    1024,
+    parseInt(process.env.BOARDSESH_DEV_SESSION_BUDGET_MB ?? String(DEFAULT_SESSION_BUDGET_MB), 10) ||
+      DEFAULT_SESSION_BUDGET_MB,
+  );
+  const reservedMb = Math.max(
+    0,
+    parseInt(process.env.BOARDSESH_DEV_RESERVED_HOST_MB ?? String(DEFAULT_RESERVED_HOST_MB), 10) ||
+      DEFAULT_RESERVED_HOST_MB,
+  );
+  const usableMb = Math.max(0, totalMb - reservedMb);
+  const maxSessions = Math.max(1, Math.floor(usableMb / perSessionMb));
+  return { maxSessions, totalMb, perSessionMb, reservedMb };
+}
+
+const KILL_WAIT_TIMEOUT_MS = 5000;
+const KILL_WAIT_POLL_MS = 200;
+
+/**
+ * Evict the oldest active session to make room. The killed orchestrator reads
+ * the tombstone we leave behind and prints a banner so its terminal explains
+ * what happened — important when an AI agent owns that terminal and would
+ * otherwise see only a bare "[dev] Terminated by signal SIGTERM".
+ */
+async function evictOldestSession(active: ActiveDevSession[], lockDir: string): Promise<void> {
+  if (active.length === 0) return;
+  const oldest = [...active].sort((sessionA, sessionB) => sessionA.startedAt - sessionB.startedAt)[0];
+
+  console.warn(
+    `[dev] OOM guard: evicting oldest session pid ${oldest.pid} ` +
+      `(${oldest.rootDir}, started ${formatRelativeMinutes(oldest.startedAt)}) — --kill-oldest was set.`,
+  );
+
+  // Write tombstone BEFORE SIGTERM so the killed session's shutdown handler
+  // can pick it up and print the explanatory banner before exiting.
+  const tombstonePath = getSessionTombstonePath(lockDir, oldest.pid);
+  const tombstoneBody: SessionTombstone = {
+    killedAt: Date.now(),
+    killedByPid: process.pid,
+    killedByRootDir: ROOT_DIR,
+    reason: 'oldest-session-evicted',
+  };
+  try {
+    writeFileSync(tombstonePath, JSON.stringify(tombstoneBody), { encoding: 'utf8' });
+  } catch (error) {
+    console.warn('[dev] OOM guard: could not write tombstone file — continuing without banner.', error);
+  }
+
+  try {
+    process.kill(oldest.pid, 'SIGTERM');
+  } catch (error) {
+    console.warn(`[dev] OOM guard: SIGTERM to pid ${oldest.pid} failed — assuming already gone.`, error);
+  }
+
+  // The killed orchestrator's shutdown handler waits 1s for its children
+  // before SIGKILL'ing them. Give it KILL_WAIT_TIMEOUT_MS total before we
+  // escalate ourselves.
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < KILL_WAIT_TIMEOUT_MS) {
+    if (!isProcessAlive(oldest.pid)) break;
+    await delay(KILL_WAIT_POLL_MS);
+  }
+
+  if (isProcessAlive(oldest.pid)) {
+    console.warn(`[dev] OOM guard: pid ${oldest.pid} did not exit after SIGTERM; sending SIGKILL.`);
+    try {
+      process.kill(oldest.pid, 'SIGKILL');
+    } catch {
+      // already gone
+    }
+    await delay(500);
+  }
+
+  // The killed orchestrator removes its own lockfile on exit, but if we had
+  // to SIGKILL or the exit hook didn't run, clean up here.
+  try {
+    unlinkSync(oldest.lockFile);
+  } catch {
+    // already gone
+  }
+  // Same for the tombstone — normally read+removed by the killed process,
+  // but if SIGKILL'd, the file would linger and confuse a future pid reuse.
+  try {
+    unlinkSync(tombstonePath);
+  } catch {
+    // already gone
+  }
+
+  console.info(`[dev] OOM guard: pid ${oldest.pid} terminated, proceeding.`);
+}
+
+/**
+ * Block startup if another dev session is already running (or too many are),
+ * unless the user explicitly opts in. The OOM crashes that motivated this
+ * guard always followed a "I forgot another worktree was running" pattern —
+ * the lockfile makes that visible BEFORE we spawn another 4 GB Next server.
+ *
+ * Honors:
+ *  - BOARDSESH_DEV_SKIP_OOM_GUARD=1   → skip every check
+ *  - BOARDSESH_MAX_DEV_SESSIONS=<n>   → allow N concurrent sessions
+ *  - --kill-oldest                    → evict the oldest active session
+ */
+async function runOomGuard(lockDir: string, killOldest: boolean): Promise<void> {
+  if (process.env.BOARDSESH_DEV_SKIP_OOM_GUARD === '1') {
+    console.info('[dev] OOM guard: skipped (BOARDSESH_DEV_SKIP_OOM_GUARD=1)');
+    return;
+  }
+
+  const explicitMaxRaw = process.env.BOARDSESH_MAX_DEV_SESSIONS;
+  const auto = computeAutoMaxSessions();
+  let maxSessions: number;
+  let limitSource: string;
+  if (explicitMaxRaw !== undefined && explicitMaxRaw !== '') {
+    maxSessions = Math.max(1, parseInt(explicitMaxRaw, 10) || auto.maxSessions);
+    limitSource = `BOARDSESH_MAX_DEV_SESSIONS=${explicitMaxRaw}`;
+  } else {
+    maxSessions = auto.maxSessions;
+    limitSource =
+      `auto from ${Math.round((auto.totalMb / 1024) * 10) / 10} GiB total RAM ` +
+      `(per-session ${auto.perSessionMb} MiB, reserved ${auto.reservedMb} MiB)`;
+  }
+
+  const active = listActiveDevSessions(lockDir);
+  if (active.length >= maxSessions) {
+    console.warn(
+      `[dev] ⚠ ${active.length} dev session${active.length === 1 ? '' : 's'} already running ` +
+        `(limit ${maxSessions}; ${limitSource}):`,
+    );
+    printActiveSessions(active);
+
+    if (killOldest) {
+      await evictOldestSession(active, lockDir);
+    } else {
+      const proceed = await promptYesNo(
+        `[dev] Start another anyway? Each next dev --turbopack uses 3–5 GB of RAM. [y/N] `,
+        false,
+      );
+      if (proceed === null) {
+        console.error('[dev] ✗ Refusing to start a parallel session in non-interactive shell.');
+        console.error('[dev]   To proceed, choose one of:');
+        console.error('[dev]     - re-run with --kill-oldest (evicts the oldest active session)');
+        console.error(`[dev]     - re-run with BOARDSESH_MAX_DEV_SESSIONS=${active.length + 1}`);
+        console.error('[dev]     - re-run with BOARDSESH_DEV_SKIP_OOM_GUARD=1');
+        console.error('[dev]     - stop the running session(s) manually (see scripts/dev-sessions.sh)');
+        process.exit(1);
+      }
+      if (proceed === false) {
+        console.info('[dev] Exiting without starting a second dev server.');
+        process.exit(0);
+      }
+    }
+  }
+
+  const minFreeMb = Math.max(
+    0,
+    parseInt(process.env.BOARDSESH_MIN_FREE_MEM_MB ?? String(DEFAULT_MIN_FREE_MEM_MB), 10) || DEFAULT_MIN_FREE_MEM_MB,
+  );
+  const availableMb = readMemAvailableMb();
+  if (availableMb !== null && availableMb < minFreeMb) {
+    console.warn(
+      `[dev] ⚠ Only ${availableMb} MiB of MemAvailable; threshold is ${minFreeMb} MiB ` +
+        `(override with BOARDSESH_MIN_FREE_MEM_MB=N or BOARDSESH_DEV_SKIP_OOM_GUARD=1).`,
+    );
+    const proceed = await promptYesNo('[dev] Start anyway? A Next dev server can easily exceed this. [y/N] ', false);
+    if (proceed === null) {
+      console.error('[dev] ✗ Refusing to start under low memory in non-interactive shell.');
+      process.exit(1);
+    }
+    if (proceed === false) {
+      console.info('[dev] Exiting; free some memory and try again.');
+      process.exit(0);
+    }
+  }
+}
+
+function writeOwnSessionLock(lockDir: string, lock: DevSessionLock): string {
+  const lockFile = getSessionLockPath(lockDir, lock.pid);
+  try {
+    mkdirSync(lockDir, { recursive: true });
+    writeFileSync(lockFile, JSON.stringify(lock), { encoding: 'utf8' });
+  } catch (error) {
+    console.warn('[dev] OOM guard: could not write session lockfile — continuing without one.', error);
+    return '';
+  }
+  return lockFile;
+}
+
+function releaseOwnSessionLock(lockFile: string | null): void {
+  if (!lockFile) return;
+  try {
+    unlinkSync(lockFile);
+  } catch {
+    // best-effort cleanup; ignore
+  }
+}
+
+let ownSessionLockFile: string | null = null;
+
+/**
+ * Append our V8 heap cap to whatever NODE_OPTIONS the user already has, only
+ * if they haven't already set --max-old-space-size themselves. Turbopack does
+ * most heavy lifting in Rust, so this primarily catches JS-side leaks in tsx
+ * watchers and Next.js server components — not Turbopack itself. The cgroup
+ * wrapper in scripts/dev-with-cgroup.sh is the real hard cap.
+ */
+function composeNodeOptions(existing: string | undefined): string {
+  const existingTrimmed = (existing ?? '').trim();
+  if (/(^|\s)--max-old-space-size(=|\s)/.test(existingTrimmed)) {
+    return existingTrimmed;
+  }
+  const ours = `--max-old-space-size=${CHILD_NODE_HEAP_CAP_MB}`;
+  return existingTrimmed ? `${existingTrimmed} ${ours}` : ours;
+}
+
+/**
  * Cleanup handler for graceful shutdown
  */
 async function shutdown() {
+  // Surface the eviction banner FIRST so it lands at the top of whatever the
+  // owning agent sees. Cheap if no tombstone exists — just a missing-file
+  // read that returns immediately.
+  printOwnTombstoneIfPresent(resolveSessionLockDir());
+
   console.info('\n[dev] Shutting down...');
 
   if (processes.backend.process) {
@@ -540,6 +1045,9 @@ async function shutdown() {
     processes.web.process.kill('SIGKILL');
   }
 
+  releaseOwnSessionLock(ownSessionLockFile);
+  ownSessionLockFile = null;
+
   process.exit(0);
 }
 
@@ -549,6 +1057,12 @@ async function shutdown() {
 async function main(): Promise<void> {
   const cliOptions = parseCliOptions(process.argv.slice(2));
   const devBuildMetadata = resolveDevBuildMetadata(cliOptions);
+
+  // Run the OOM guard BEFORE Tailscale (which is slow) so the user sees the
+  // "another session is running" message immediately and can Ctrl-C without
+  // waiting on cert provisioning.
+  const sessionLockDir = resolveSessionLockDir();
+  await runOomGuard(sessionLockDir, cliOptions.killOldest);
 
   // Try to provision a Tailscale HTTPS cert so real phones (which require a
   // secure context for DeviceMotion, Web Bluetooth, clipboard, etc.) can
@@ -597,6 +1111,25 @@ async function main(): Promise<void> {
   }
   console.info();
 
+  ownSessionLockFile = writeOwnSessionLock(sessionLockDir, {
+    pid: process.pid,
+    rootDir: ROOT_DIR,
+    startedAt: Date.now(),
+    backendPort,
+    webPort,
+  });
+
+  // Release the lockfile on hard exits too — `shutdown` covers SIGINT/SIGTERM,
+  // but a crash inside the orchestrator process would otherwise leave a stale
+  // file until the next session prunes it.
+  process.on('exit', () => releaseOwnSessionLock(ownSessionLockFile));
+
+  // Install signal handlers BEFORE spawning anything — if another session
+  // evicts us mid-startup via `--kill-oldest`, the shutdown handler still
+  // needs to fire to read the tombstone and print the eviction banner.
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
   processes.backend.process = startBackend(backendPort, tls, devDbEnv);
 
   console.info(`[dev] Waiting for backend to be healthy...`);
@@ -608,9 +1141,6 @@ async function main(): Promise<void> {
   console.info(`[dev] ✓ Backend is healthy`);
 
   processes.web.process = startWeb(webPort, backendPort, tls, devDbEnv, devBuildMetadata);
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
 }
 
 main().catch((error) => {
