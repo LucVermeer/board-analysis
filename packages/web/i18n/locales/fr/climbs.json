@@ -134,6 +134,26 @@
       "tallClimbsOnly": "Hauts",
       "wideClimbsOnly": "Larges"
     },
+    "summary": {
+      "default": "Quel bloc cherchez-vous ?",
+      "gradeFallback": "Cotation {{gradeId}}",
+      "upToGrade": "Jusqu'à {{grade}}",
+      "setterCount_one": "{{count}} ouvreur",
+      "setterCount_other": "{{count}} ouvreurs",
+      "ascents_one": "{{count}}+ enchaînement",
+      "ascents_other": "{{count}}+ enchaînements",
+      "rating": "{{rating}}+ note",
+      "classics": "Classiques",
+      "gradeAccuracy": "Précision de la cotation",
+      "drafts": "Brouillons",
+      "attempted": "essayés",
+      "completed": "enchaînés",
+      "hide": "Masquer {{filters}}",
+      "only": "Seulement {{filters}}",
+      "holds_one": "{{count}} prise",
+      "holds_other": "{{count}} prises",
+      "more": "+{{count}} de plus"
+    },
     "status": {
       "any": "Tous",
       "established": "Établis",

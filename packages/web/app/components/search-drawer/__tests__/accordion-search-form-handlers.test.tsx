@@ -44,6 +44,14 @@ vi.mock('../climb-search-form', () => ({
 }));
 
 vi.mock('../search-summary-utils', () => ({
+  createSearchSummaryLabels: () => ({
+    quality: {},
+    status: {},
+    user: {},
+    holds: {},
+    zone: 'Zone',
+    zoneModes: {},
+  }),
   getQualityPanelSummary: () => [],
   getStatusPanelSummary: () => [],
   getUserPanelSummary: () => [],
@@ -164,6 +172,26 @@ describe('AccordionSearchForm — quality filter controls', () => {
 
     expect(screen.getByText('Tall Climbs Only')).toBeDefined();
     expect(screen.getByText('Wide Climbs Only')).toBeDefined();
+  });
+
+  it('uses the size id, not size name text, for tall-climbs availability', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 26, size_name: 'Large' })}
+      />,
+    );
+
+    expect(screen.getByText('Tall Climbs Only')).toBeDefined();
+  });
+
+  it('does not show tall climbs for non-tall size ids with misleading names', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 22, size_name: '10x12' })}
+      />,
+    );
+
+    expect(screen.queryByText('Tall Climbs Only')).toBeNull();
   });
 
   it('does not show wide climbs filter for boards without 10x10 side expansions', () => {

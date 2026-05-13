@@ -2,6 +2,7 @@ import { type SQL, eq, gte, sql, like, notLike, inArray, or, and } from 'drizzle
 import {
   getHolePlacements,
   getProductSize,
+  isKilterHomewallTallSizeId,
   isKilterHomewallWideSizeId,
 } from '@boardsesh/board-constants/product-sizes';
 import {
@@ -58,6 +59,10 @@ let kilterHomewallWideHoldIdsBySet: ReadonlyMap<number, readonly number[]> | nul
 function getKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
   kilterHomewallWideHoldIdsBySet ??= buildKilterHomewallWideHoldIdsBySet();
   return kilterHomewallWideHoldIdsBySet;
+}
+
+export function resetKilterHomewallWideHoldIdsForTests(): void {
+  kilterHomewallWideHoldIdsBySet = null;
 }
 
 export function getKilterHomewallWideHoldIdsForSets(setIds: readonly number[]): number[] {
@@ -280,16 +285,27 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
   // Tall climbs filter condition
   const tallClimbsConditions: SQL[] = [];
 
-  if (searchParams.onlyTallClimbs && params.board_name === 'kilter' && params.layout_id === KILTER_HOMEWALL_LAYOUT_ID) {
-    tallClimbsConditions.push(
-      sql`${boardClimbs.edgeBottom} < (
+  if (searchParams.onlyTallClimbs) {
+    const isTallClimbSupportedBoard =
+      params.board_name === 'kilter' &&
+      params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
+      isKilterHomewallTallSizeId(params.size_id);
+    if (!isTallClimbSupportedBoard) {
+      // A stale/crafted URL asked for a board-scoped filter the current board
+      // cannot satisfy. Keep the request restrictive instead of silently
+      // returning unfiltered climbs.
+      tallClimbsConditions.push(sql`false`);
+    } else {
+      tallClimbsConditions.push(
+        sql`${boardClimbs.edgeBottom} < (
         SELECT MAX(ps.edge_bottom)
         FROM ${boardProductSizes} ps
         WHERE ps.board_type = ${params.board_name}
         AND ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
         AND ps.id != ${params.size_id}
       )`,
-    );
+      );
+    }
   }
 
   const wideClimbsConditions: SQL[] = [];
@@ -300,6 +316,9 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
       params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
       isKilterHomewallWideSizeId(params.size_id);
     if (!isWideClimbSupportedBoard) {
+      // A stale/crafted URL asked for a board-scoped filter the current board
+      // cannot satisfy. Keep the request restrictive instead of silently
+      // returning unfiltered climbs.
       wideClimbsConditions.push(sql`false`);
     } else {
       const wideHoldIds = getKilterHomewallWideHoldIdsForSets(params.set_ids);

@@ -1,7 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SQL } from 'drizzle-orm';
-import { createClimbFilters, getKilterHomewallWideHoldIdsForSets } from '../create-climb-filters';
+import {
+  createClimbFilters,
+  getKilterHomewallWideHoldIdsForSets,
+  resetKilterHomewallWideHoldIdsForTests,
+} from '../create-climb-filters';
 import type { BoardRouteParams, ClimbSearchParams } from '../types';
 
 const params: BoardRouteParams = {
@@ -161,6 +165,19 @@ void describe('createClimbFilters: zone modes', () => {
     assert.match(rendered, /zone_bh\.y\s*>?=/);
   });
 
+  void it('uses anyHold zones on MoonBoard without set membership predicates', () => {
+    const filters = createClimbFilters(
+      { board_name: 'moonboard', layout_id: 1, size_id: 1, set_ids: [], angle: 40 },
+      { zoneBox, zoneMode: 'anyHold' },
+    );
+
+    assert.equal(filters.zoneConditions.length, 1);
+    const rendered = sqlToString(filters.zoneConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /JOIN\s+zone_bp/);
+    assert.doesNotMatch(rendered, /zone_bp\.set_id IN/);
+  });
+
   void it('ignores zoneMode when the zone box is empty or inverted', () => {
     const filters = createClimbFilters(params, {
       zoneBox: { edgeLeft: 80, edgeRight: 10, edgeBottom: 20, edgeTop: 120 },
@@ -192,16 +209,18 @@ void describe('createClimbFilters: tall climbs', () => {
     assert.match(rendered, /product_id/);
   });
 
-  void it('does not apply tall climbs filtering outside Kilter Homewall', () => {
-    assert.equal(
-      createClimbFilters({ ...homewallTallParams, layout_id: 1 }, { onlyTallClimbs: true }).tallClimbsConditions.length,
-      0,
-    );
-    assert.equal(
-      createClimbFilters({ ...homewallTallParams, board_name: 'tension' }, { onlyTallClimbs: true })
-        .tallClimbsConditions.length,
-      0,
-    );
+  void it('returns no results for tall climbs requests on unsupported boards or sizes', () => {
+    const unsupportedCases = [
+      { ...homewallTallParams, size_id: 21 },
+      { ...homewallTallParams, layout_id: 1 },
+      { ...homewallTallParams, board_name: 'tension' as const },
+    ];
+
+    for (const unsupportedParams of unsupportedCases) {
+      const filters = createClimbFilters(unsupportedParams, { onlyTallClimbs: true });
+      assert.equal(filters.tallClimbsConditions.length, 1);
+      assert.equal(sqlToString(filters.tallClimbsConditions[0]), 'false');
+    }
   });
 });
 
@@ -239,6 +258,14 @@ void describe('createClimbFilters: wide climbs', () => {
     assert.doesNotMatch(rendered, /wide_ps/);
     assert.doesNotMatch(rendered, /small_ps/);
     assert.doesNotMatch(rendered, /compatible_size_ids/);
+  });
+
+  void it('can reset cached wide hold metadata for test isolation', () => {
+    const beforeReset = getKilterHomewallWideHoldIdsForSets([26, 27]);
+    resetKilterHomewallWideHoldIdsForTests();
+    const afterReset = getKilterHomewallWideHoldIdsForSets([26, 27]);
+
+    assert.deepEqual(afterReset, beforeReset);
   });
 
   void it('narrows the wide hold list to selected route sets', () => {

@@ -52,4 +52,13 @@ describe('buildClimbSearchParamsJson', () => {
     expect(params.zoneBox).toBeNull();
     expect(params).not.toHaveProperty('zoneMode');
   });
+
+  it('includes onlyWideClimbs in the cache params', () => {
+    const params = JSON.parse(buildClimbSearchParamsJson(makeSearchParams({ onlyWideClimbs: true }))) as Record<
+      string,
+      unknown
+    >;
+
+    expect(params.onlyWideClimbs).toBe(true);
+  });
 });

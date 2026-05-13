@@ -15,15 +15,40 @@ function makeParams(overrides: Partial<SearchRequestPagination> = {}): SearchReq
 }
 
 const summaryLabels = {
+  empty: 'What do you want to climb?',
+  climb: {
+    gradeFallback: (gradeId: number) => `Grade ${gradeId}`,
+    upToGrade: (gradeName: string) => `Up to ${gradeName}`,
+    setterCount: (count: number) => `${count} setters`,
+  },
   quality: {
+    ascents: (count: number) => `${count}+ ascents`,
+    rating: (rating: number) => `${rating}+ rating`,
+    classics: 'Classics',
+    gradeAccuracy: 'Grade accuracy',
     tallClimbsOnly: 'Tall',
     wideClimbsOnly: 'Wide',
+  },
+  status: {
+    drafts: 'Drafts',
+    projects: 'Projects',
+    established: 'Established',
+  },
+  user: {
+    attempted: 'attempted',
+    completed: 'completed',
+    hide: (filters: string) => `Hide ${filters}`,
+    only: (filters: string) => `Only ${filters}`,
+  },
+  holds: {
+    count: (count: number) => `${count} hold${count !== 1 ? 's' : ''}`,
   },
   zone: 'Zone',
   zoneModes: {
     allHolds: 'All holds inside',
     anyHold: 'At least 1 hold',
   },
+  more: (count: number) => `+${count} more`,
 };
 
 describe('hasActiveNonNameFilters', () => {
@@ -112,28 +137,30 @@ describe('hasActiveFilters', () => {
 
 describe('getStatusPanelSummary', () => {
   it('returns empty for defaults', () => {
-    expect(getStatusPanelSummary(makeParams())).toEqual([]);
+    expect(getStatusPanelSummary(makeParams(), summaryLabels.status)).toEqual([]);
   });
 
   it('returns ["Drafts"] when onlyDrafts is true (takes precedence over minAscents)', () => {
-    expect(getStatusPanelSummary(makeParams({ onlyDrafts: true, minAscents: 5 }))).toEqual(['Drafts']);
+    expect(getStatusPanelSummary(makeParams({ onlyDrafts: true, minAscents: 5 }), summaryLabels.status)).toEqual([
+      'Drafts',
+    ]);
   });
 
   it('returns ["Projects"] when projectsOnly is true', () => {
-    expect(getStatusPanelSummary(makeParams({ projectsOnly: true }))).toEqual(['Projects']);
+    expect(getStatusPanelSummary(makeParams({ projectsOnly: true }), summaryLabels.status)).toEqual(['Projects']);
   });
 
   it('returns ["Established"] when minAscents is exactly 2', () => {
-    expect(getStatusPanelSummary(makeParams({ minAscents: 2 }))).toEqual(['Established']);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 2 }), summaryLabels.status)).toEqual(['Established']);
   });
 
   it('returns ["Established"] when minAscents is >= 2 (e.g. 3, 10)', () => {
-    expect(getStatusPanelSummary(makeParams({ minAscents: 3 }))).toEqual(['Established']);
-    expect(getStatusPanelSummary(makeParams({ minAscents: 10 }))).toEqual(['Established']);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 3 }), summaryLabels.status)).toEqual(['Established']);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 10 }), summaryLabels.status)).toEqual(['Established']);
   });
 
   it('returns empty when minAscents is 1 (below the established threshold)', () => {
-    expect(getStatusPanelSummary(makeParams({ minAscents: 1 }))).toEqual([]);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 1 }), summaryLabels.status)).toEqual([]);
   });
 });
 

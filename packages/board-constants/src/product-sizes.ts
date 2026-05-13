@@ -24,9 +24,14 @@ export const PRODUCT_SIZES: Record<BoardName, Record<number, ProductSizeData>> =
 
 export { LAYOUTS, SETS, IMAGE_FILENAMES, HOLE_PLACEMENTS };
 
+// 25/26 are 10x12 Full Ride/Mainline.
+const KILTER_HOMEWALL_TALL_SIZE_ID_SET: ReadonlySet<number> = new Set([25, 26]);
+
 // 21/22 are 10x10 Full Ride/Mainline, 25/26 are 10x12 Full Ride/Mainline,
 // and 29 is the 10x10 Auxiliary LED Kit.
 const KILTER_HOMEWALL_WIDE_SIZE_ID_SET: ReadonlySet<number> = new Set([21, 22, 25, 26, 29]);
+
+export const isKilterHomewallTallSizeId = (sizeId: number): boolean => KILTER_HOMEWALL_TALL_SIZE_ID_SET.has(sizeId);
 
 export const isKilterHomewallWideSizeId = (sizeId: number): boolean => KILTER_HOMEWALL_WIDE_SIZE_ID_SET.has(sizeId);
 

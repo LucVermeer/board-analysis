@@ -134,6 +134,26 @@
       "tallClimbsOnly": "Tall",
       "wideClimbsOnly": "Wide"
     },
+    "summary": {
+      "default": "What do you want to climb?",
+      "gradeFallback": "Grade {{gradeId}}",
+      "upToGrade": "Up to {{grade}}",
+      "setterCount_one": "{{count}} setter",
+      "setterCount_other": "{{count}} setters",
+      "ascents_one": "{{count}}+ ascent",
+      "ascents_other": "{{count}}+ ascents",
+      "rating": "{{rating}}+ rating",
+      "classics": "Classics",
+      "gradeAccuracy": "Grade accuracy",
+      "drafts": "Drafts",
+      "attempted": "attempted",
+      "completed": "completed",
+      "hide": "Hide {{filters}}",
+      "only": "Only {{filters}}",
+      "holds_one": "{{count}} hold",
+      "holds_other": "{{count}} holds",
+      "more": "+{{count}} more"
+    },
     "status": {
       "any": "Any",
       "established": "Established",
