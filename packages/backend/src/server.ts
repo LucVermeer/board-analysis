@@ -38,6 +38,28 @@ export async function startServer(): Promise<ServerResources> {
   // This must happen before we start accepting connections
   await pubsub.initialize();
 
+  // Prefix every console line with the pubsub instance ID so multi-instance
+  // logs can be untangled. Without this, debugging cross-instance pub/sub
+  // requires triangulating via connection-registration logs to figure out
+  // which instance emitted any given line — see
+  // gist.github.com/marcodejongh/90a125720ad48bf0355ec176f9ebc0df for an
+  // example session where this cost hours of analysis time. When Redis is
+  // not configured the instance ID is omitted and the patch is a no-op.
+  const instanceId = pubsub.getInstanceId();
+  const instanceTag = instanceId ? `[i:${instanceId.slice(0, 8)}] ` : '';
+  if (instanceTag) {
+    for (const method of ['info', 'warn', 'error', 'log'] as const) {
+      const original = console[method].bind(console);
+      console[method] = (...args: unknown[]) => {
+        if (args.length > 0 && typeof args[0] === 'string') {
+          original(`${instanceTag}${args[0]}`, ...args.slice(1));
+        } else {
+          original(instanceTag.trim(), ...args);
+        }
+      };
+    }
+  }
+
   // Initialize RoomManager with Redis for session persistence
   if (redisClientManager.isRedisConfigured() && redisClientManager.isRedisConnected()) {
     const { publisher, streamConsumer } = redisClientManager.getClients();

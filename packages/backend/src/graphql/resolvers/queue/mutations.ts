@@ -372,7 +372,23 @@ export const queueMutations = {
       validateInput(ClimbQueueItemSchema, currentClimbQueueItem, 'currentClimbQueueItem');
     }
 
+    // Capture the previous state hash so we can flag no-op resyncs. The
+    // client's 60s state-hash watchdog (see
+    // packages/web/app/components/persistent-session/hooks/use-session-subscriptions.ts)
+    // triggers setQueue when it thinks local and server state have diverged.
+    // If the resulting hash matches what the server already had, the client
+    // was wrong about the drift — usually a bug in the local hash
+    // computation or event processor — and the loop will fire again next
+    // minute. This warn surfaces those loops.
+    const previousHash = (await roomManager.getQueueState(sessionId)).stateHash;
+
     const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, currentClimbQueueItem || null);
+
+    if (previousHash === stateHash) {
+      console.warn(
+        `[setQueue] No-op resync for session ${sessionId} (hash=${stateHash}, queueSize=${queue.length}). Client state already matched server — investigate hash-drift on the publisher.`,
+      );
+    }
 
     const state: QueueState = {
       sequence,

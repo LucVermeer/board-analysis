@@ -104,9 +104,15 @@ export const sessionMutations = {
         `[joinSession] roomManager.joinSession completed - clientId: ${result.clientId}, isLeader: ${result.isLeader}`,
       );
 
-    // Update context with session info
+    // Update context with session info. Do NOT touch userId here — auth
+    // middleware set it to the real authenticated user UUID when the WS
+    // connected. `result.clientId` is the connection ID (see
+    // services/room-manager/client-lifecycle.ts:199 which returns
+    // `clientId: connectionId`), and writing it to `ctx.userId` would
+    // clobber the real UUID for every downstream resolver on this connection
+    // (ESP32 auto-authorize, tick inserts, climb ownership, etc.).
     if (DEBUG) console.info(`[joinSession] Before updateContext - ctx.sessionId: ${ctx.sessionId}`);
-    updateContext(ctx.connectionId, { sessionId, userId: result.clientId });
+    updateContext(ctx.connectionId, { sessionId });
     if (DEBUG) console.info(`[joinSession] After updateContext - ctx.sessionId: ${ctx.sessionId}`);
 
     // Auto-authorize user's ESP32 controllers for this session (if authenticated)
@@ -240,7 +246,7 @@ export const sessionMutations = {
       if (DEBUG)
         console.info(`[createSession] Joined session - clientId: ${result.clientId}, isLeader: ${result.isLeader}`);
 
-      updateContext(ctx.connectionId, { sessionId, userId: result.clientId });
+      updateContext(ctx.connectionId, { sessionId });
 
       // Adopt recent solo ticks now that the session row exists in board_sessions
       // (boardsesh_ticks.session_id is a FK to board_sessions.id)

@@ -87,6 +87,15 @@ class PubSub {
     return this.redisRequired;
   }
 
+  /**
+   * Get the unique ID assigned to this backend instance, or null when
+   * running in local-only mode. Used to tag logs and correlate cross-instance
+   * events.
+   */
+  getInstanceId(): string | null {
+    return this.redisAdapter?.getInstanceId() ?? null;
+  }
+
   private setupRedisMessageHandlers(): void {
     if (!this.redisAdapter) return;
 

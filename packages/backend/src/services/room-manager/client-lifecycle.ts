@@ -247,14 +247,39 @@ export async function leaveSession(
       }, SESSION_GRACE_PERIOD_MS);
       sessionGraceTimers.set(sessionId, timer);
 
-      writeScheduler.cancelPendingWrites(sessionId);
-
-      if (redisStore) {
-        await redisStore.markInactive(sessionId);
-        if (!distributedState) {
-          await redisStore.saveUsers(sessionId, []);
+      // Cancelling pending Postgres writes and marking the session inactive is
+      // only safe when no OTHER backend instance still has members for this
+      // session. The local sessionsMap is per-instance — being empty here only
+      // means this instance has no active clients, not that the session is
+      // globally idle. We check distributed state (filtering out this leaving
+      // connection, which is still listed until distributedState.leaveSession
+      // runs below) and skip the inactive-marking when others are still
+      // connected.
+      let otherInstanceHasMembers = false;
+      if (distributedState) {
+        try {
+          const members = await distributedState.getSessionMembers(sessionId);
+          otherInstanceHasMembers = members.some((member) => member.id !== connectionId);
+        } catch (error) {
+          // If the distributed check fails, default to the legacy behaviour
+          // (mark inactive) rather than risk a leaked session.
+          console.error(
+            `[RoomManager] Failed to query distributed members for ${sessionId} during leaveSession:`,
+            error,
+          );
         }
-        console.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+      }
+
+      if (!otherInstanceHasMembers) {
+        writeScheduler.cancelPendingWrites(sessionId);
+
+        if (redisStore) {
+          await redisStore.markInactive(sessionId);
+          if (!distributedState) {
+            await redisStore.saveUsers(sessionId, []);
+          }
+          console.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+        }
       }
 
       // Await pending session insert for brand-new sessions.
