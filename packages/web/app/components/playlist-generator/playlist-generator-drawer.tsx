@@ -125,15 +125,16 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
     }
   }, [drawerState, targetType, selectedType, boardDetails.board_name]);
 
-  // Wrap onClose so dismissals mid-configure (no run completed) fire a
-  // cancellation event. Generating phase already blocks dismissal via the
-  // `onClose={generating ? undefined : ...}` guard below.
+  // Wrap onClose so dismissals before a successful run fire a cancellation
+  // event. Generating phase already blocks dismissal via the
+  // `onClose={generating ? undefined : ...}` guard below — but both the
+  // workout-type-select screen and the configure screen are dismissable.
   const handleClose = useCallback(() => {
-    if (drawerState === 'configure' && !generating && !completedSuccessfullyRef.current) {
+    if (!generating && !completedSuccessfullyRef.current) {
       track('Workout Generator Cancelled', {
         targetType,
         workoutType: selectedType,
-        stage: 'configure',
+        stage: drawerState,
         boardName: boardDetails.board_name,
       });
     }

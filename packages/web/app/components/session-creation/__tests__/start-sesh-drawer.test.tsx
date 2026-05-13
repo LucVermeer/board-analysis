@@ -675,6 +675,12 @@ describe('StartSeshDrawer', () => {
         workoutType,
       });
     });
+    // The real generator drawer calls onClose() immediately after onComplete.
+    // Mirror that here so the simulation matches production's call sequence
+    // (and exercises the consumer's onClose handler).
+    await act(async () => {
+      lastGeneratorProps!.onClose();
+    });
   }
 
   it('disables the generate button until a board is selected', () => {
