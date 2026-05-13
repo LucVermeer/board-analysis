@@ -70,7 +70,51 @@ skipped_no_pr=0
 skipped_open_pr=0
 skipped_dirty=0
 skipped_unmerged_commits=0
+skipped_too_fresh=0
 skipped_main=0
+
+# Branches with no PR but no extra content vs main need to be at least this old
+# (HEAD commit timestamp) before we'll remove them. 7 days = 604800 seconds.
+NO_PR_MIN_AGE_SECONDS=$((7 * 24 * 60 * 60))
+
+# Resolve the upstream main reference (origin/main, or origin/master as fallback).
+# Used to check whether a branch with no PR has any content not already in main.
+git_root fetch --quiet origin main 2>/dev/null || git_root fetch --quiet origin master 2>/dev/null || true
+UPSTREAM_MAIN=""
+if git_root rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
+  UPSTREAM_MAIN="origin/main"
+elif git_root rev-parse --verify --quiet refs/remotes/origin/master >/dev/null; then
+  UPSTREAM_MAIN="origin/master"
+fi
+
+# Returns 0 (true) if the working tree at $1 is clean.
+worktree_clean() {
+  local dirty
+  dirty=$(git -C "$1" status --porcelain 2>/dev/null) || return 1
+  [ -z "$dirty" ]
+}
+
+# Returns 0 if HEAD at $1 has no content beyond UPSTREAM_MAIN — either it's an
+# ancestor of main, or the trees are identical (squash/rebase scenario).
+content_matches_main() {
+  local path="$1"
+  [ -z "$UPSTREAM_MAIN" ] && return 1
+  local local_oid
+  local_oid=$(git -C "$path" rev-parse HEAD 2>/dev/null) || return 1
+  if git_root merge-base --is-ancestor "$local_oid" "$UPSTREAM_MAIN" 2>/dev/null; then
+    return 0
+  fi
+  git -C "$path" diff --quiet "$UPSTREAM_MAIN" HEAD 2>/dev/null
+}
+
+# Echoes the age in seconds of HEAD at $1 (commit timestamp vs. now).
+head_age_seconds() {
+  local path="$1"
+  local commit_ts now_ts
+  commit_ts=$(git -C "$path" log -1 --format=%ct HEAD 2>/dev/null) || return 1
+  now_ts=$(date +%s)
+  echo $((now_ts - commit_ts))
+}
 
 # Parse `git worktree list --porcelain` into (path, branch) pairs.
 current_path=""
@@ -82,10 +126,10 @@ flush_entry() {
 
   [ -z "$path" ] && return
 
-  # Skip the bare repo and the main branch worktree.
-  if [ -z "$branch" ]; then
+  # The bare repo has no working tree — nothing to inspect, just skip.
+  if [ "$(basename "$path")" = ".bare" ]; then
     skipped_no_branch=$((skipped_no_branch + 1))
-    printf "%s» skip%s %s %s(detached or bare)%s\n" "$C_DIM" "$C_RESET" "$path" "$C_DIM" "$C_RESET"
+    printf "%s» skip%s %s %s(bare repo)%s\n" "$C_DIM" "$C_RESET" "$path" "$C_DIM" "$C_RESET"
     return
   fi
   # Never touch the "main" worktree — it's the canonical starting point for new work.
@@ -104,6 +148,39 @@ flush_entry() {
     return
   fi
 
+  # Detached HEAD: no branch to query, no PR to look up. Eligible only if the
+  # tree matches main, the working dir is clean, and the HEAD commit is at
+  # least NO_PR_MIN_AGE_SECONDS old.
+  if [ -z "$branch" ]; then
+    if ! worktree_clean "$path"; then
+      skipped_dirty=$((skipped_dirty + 1))
+      printf "%s» keep%s %s %s(detached; uncommitted changes)%s\n" \
+        "$C_YELLOW" "$C_RESET" "$path" "$C_YELLOW" "$C_RESET"
+      return
+    fi
+    if ! content_matches_main "$path"; then
+      skipped_no_branch=$((skipped_no_branch + 1))
+      printf "%s» keep%s %s %s(detached; has content not in %s)%s\n" \
+        "$C_YELLOW" "$C_RESET" "$path" "$C_YELLOW" "$UPSTREAM_MAIN" "$C_RESET"
+      return
+    fi
+    local age
+    age=$(head_age_seconds "$path") || age=0
+    if [ "$age" -lt "$NO_PR_MIN_AGE_SECONDS" ]; then
+      skipped_too_fresh=$((skipped_too_fresh + 1))
+      printf "%s» keep%s %s %s(detached; tree matches %s but HEAD is %s old)%s\n" \
+        "$C_YELLOW" "$C_RESET" "$path" "$C_YELLOW" "$UPSTREAM_MAIN" \
+        "$((age / 86400))d" "$C_RESET"
+      return
+    fi
+    TO_REMOVE_PATHS+=("$path")
+    TO_REMOVE_BRANCHES+=("")
+    printf "%s✓ remove%s %s %s(detached; tree matches %s, HEAD %s old)%s\n" \
+      "$C_GREEN" "$C_RESET" "$path" "$C_DIM" "$UPSTREAM_MAIN" \
+      "$((age / 86400))d" "$C_RESET"
+    return
+  fi
+
   # Look up PR(s) for this branch. Take MERGED if any; OPEN otherwise.
   local pr_json
   pr_json=$(gh pr list --head "$branch" --state all \
@@ -114,9 +191,54 @@ flush_entry() {
   open_pr=$(echo "$pr_json" | jq -r '[.[] | select(.state == "OPEN")] | first // empty')
 
   if [ -z "$merged_pr" ] && [ -z "$open_pr" ]; then
-    skipped_no_pr=$((skipped_no_pr + 1))
-    printf "%s» skip%s %s [%s] %s(no PR found)%s\n" \
-      "$C_DIM" "$C_RESET" "$path" "$branch" "$C_DIM" "$C_RESET"
+    # No PR found by branch name. Fall back to checking whether the branch has
+    # any content not already in origin/main — branches often get renamed
+    # locally (e.g. `pr-1487` tracking `claude/test-create-climb-form-Dry5Q`)
+    # so the head-name lookup misses real merges. The content check catches
+    # both squash/rebase merges and renamed-but-merged cases. We additionally
+    # require the HEAD commit to be at least NO_PR_MIN_AGE_SECONDS old, since
+    # without a PR signal the only confirmation that work is "done" is age.
+    if [ -z "$UPSTREAM_MAIN" ]; then
+      skipped_no_pr=$((skipped_no_pr + 1))
+      printf "%s» skip%s %s [%s] %s(no PR found, no upstream main to compare)%s\n" \
+        "$C_DIM" "$C_RESET" "$path" "$branch" "$C_DIM" "$C_RESET"
+      return
+    fi
+
+    if ! worktree_clean "$path"; then
+      skipped_dirty=$((skipped_dirty + 1))
+      local dirty file_count
+      dirty=$(git -C "$path" status --porcelain 2>/dev/null)
+      file_count=$(echo "$dirty" | wc -l | tr -d ' ')
+      printf "%s» keep%s %s [%s] %s(no PR; %s uncommitted file(s))%s\n" \
+        "$C_YELLOW" "$C_RESET" "$path" "$branch" "$C_YELLOW" "$file_count" "$C_RESET"
+      return
+    fi
+
+    if ! content_matches_main "$path"; then
+      local ahead_count
+      ahead_count=$(git -C "$path" rev-list --count "${UPSTREAM_MAIN}..HEAD" 2>/dev/null || echo "?")
+      skipped_no_pr=$((skipped_no_pr + 1))
+      printf "%s» keep%s %s [%s] %s(no PR; has content not in %s, %s commit(s) ahead)%s\n" \
+        "$C_YELLOW" "$C_RESET" "$path" "$branch" "$C_YELLOW" "$UPSTREAM_MAIN" "$ahead_count" "$C_RESET"
+      return
+    fi
+
+    local age
+    age=$(head_age_seconds "$path") || age=0
+    if [ "$age" -lt "$NO_PR_MIN_AGE_SECONDS" ]; then
+      skipped_too_fresh=$((skipped_too_fresh + 1))
+      printf "%s» keep%s %s [%s] %s(no PR; tree matches %s but HEAD is %s old)%s\n" \
+        "$C_YELLOW" "$C_RESET" "$path" "$branch" "$C_YELLOW" "$UPSTREAM_MAIN" \
+        "$((age / 86400))d" "$C_RESET"
+      return
+    fi
+
+    TO_REMOVE_PATHS+=("$path")
+    TO_REMOVE_BRANCHES+=("$branch")
+    printf "%s✓ remove%s %s [%s] %s(no PR; tree matches %s, HEAD %s old)%s\n" \
+      "$C_GREEN" "$C_RESET" "$path" "$branch" "$C_DIM" "$UPSTREAM_MAIN" \
+      "$((age / 86400))d" "$C_RESET"
     return
   fi
 
@@ -205,6 +327,7 @@ printf "Skipped — open PR:    %d\n" "$skipped_open_pr"
 printf "Skipped — no PR:      %d\n" "$skipped_no_pr"
 printf "Skipped — dirty:      %s%d%s\n" "$C_YELLOW" "$skipped_dirty" "$C_RESET"
 printf "Skipped — extra commits: %s%d%s\n" "$C_YELLOW" "$skipped_unmerged_commits" "$C_RESET"
+printf "Skipped — too fresh:  %s%d%s\n" "$C_YELLOW" "$skipped_too_fresh" "$C_RESET"
 printf "Skipped — main:       %d\n" "$skipped_main"
 printf "Skipped — detached:   %d\n" "$skipped_no_branch"
 echo "─────────────────────────────────────"
@@ -231,10 +354,12 @@ for i in "${!TO_REMOVE_PATHS[@]}"; do
 
   if git_root worktree remove "$path"; then
     printf "  %s✓%s removed worktree %s\n" "$C_GREEN" "$C_RESET" "$path"
-    if git_root branch -D "$branch" >/dev/null 2>&1; then
-      printf "  %s✓%s deleted branch %s\n" "$C_GREEN" "$C_RESET" "$branch"
-    else
-      printf "  %s!%s could not delete branch %s (may have unmerged commits)\n" "$C_YELLOW" "$C_RESET" "$branch"
+    if [ -n "$branch" ]; then
+      if git_root branch -D "$branch" >/dev/null 2>&1; then
+        printf "  %s✓%s deleted branch %s\n" "$C_GREEN" "$C_RESET" "$branch"
+      else
+        printf "  %s!%s could not delete branch %s (may have unmerged commits)\n" "$C_YELLOW" "$C_RESET" "$branch"
+      fi
     fi
     removed=$((removed + 1))
   else
