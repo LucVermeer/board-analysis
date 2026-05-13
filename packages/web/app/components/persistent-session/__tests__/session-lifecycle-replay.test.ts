@@ -118,4 +118,32 @@ describe('session lifecycle replay helpers', () => {
 
     expect(hasContiguousReplayCoverage(events, 5, 8)).toBe(true);
   });
+
+  it('handles reverse-order FullSync + same-sequence delta from the backend', () => {
+    // Verifies the explicit tie-breaker: even when the backend returns the
+    // delta before its co-sequenced FullSync, the sort prioritises FullSync
+    // so the contiguity check still passes.
+    const events: SubscriptionQueueEvent[] = [
+      {
+        __typename: 'CurrentClimbChanged',
+        sequence: 8,
+        stateHash: 'hash-8',
+        currentItem: queueItem,
+        clientId: 'controller-1',
+        correlationId: null,
+      },
+      {
+        __typename: 'FullSync',
+        sequence: 8,
+        state: {
+          sequence: 8,
+          stateHash: 'hash-8',
+          queue: [queueItem],
+          currentClimbQueueItem: queueItem,
+        },
+      },
+    ];
+
+    expect(hasContiguousReplayCoverage(events, 5, 8)).toBe(true);
+  });
 });

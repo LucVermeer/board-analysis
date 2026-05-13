@@ -99,7 +99,18 @@ export async function joinSession(
   if (!client) {
     throw new Error('Client not registered');
   }
-  const resolvedParticipantId = client.userId || participantId || connectionId;
+  // SECURITY: Never trust a client-supplied participantId. SessionUser.id is
+  // broadcast to every peer in the session, so accepting an arbitrary
+  // participantId here lets any member impersonate any other participant
+  // (including the leader, since leadership checks key off participant
+  // identity). For authenticated users we bind to their verified userId. For
+  // anonymous users we use the connectionId; reconnection across WebSocket
+  // drops then appears as a fresh participant (UserLeft + UserJoined) — that's
+  // the correct trade-off because anonymous reconnects have no proof of
+  // identity. The `participantId` parameter is accepted for API stability but
+  // intentionally ignored.
+  void participantId;
+  const resolvedParticipantId = client.userId || connectionId;
 
   // Leave current session if in one
   if (client.sessionId) {
@@ -343,6 +354,13 @@ export async function leaveSession(
   // membership) collapses both branches of that race into "the last
   // instance to leave wins and runs the cleanup".
   //
+  // It's still possible for two instances to both observe `globallyEmpty`
+  // when they leave simultaneously and both run `markInactive` /
+  // `cancelPendingWrites`. Both operations are idempotent:
+  // `markInactive` is `SREM` on the active set, `cancelPendingWrites` is
+  // a no-op when there are no pending writes for this session. Last writer
+  // wins; double-calls are safe.
+  //
   // INVARIANT: `getSessionMembers` returns active stable participants. The
   // explicit leave path removes the leaving participant before this check, so
   // a non-empty result means another participant is still active globally.
@@ -529,6 +547,12 @@ export async function disconnectClient(
   }
 
   participant.connectionState = 'RECONNECTING';
+  // markParticipantPresence returns null when the Redis participant hash has
+  // already expired (TTL elapsed before the disconnect cleanup ran). Fall
+  // back to the local participant snapshot so peers always see a
+  // UserPresenceChanged event during the grace window — without this
+  // fallback the only signal they'd get is the eventual UserLeft, with no
+  // RECONNECTING state in between.
   const presenceUser =
     (distributedState
       ? await distributedState.markParticipantPresence(sessionId, participantId, 'RECONNECTING')
@@ -540,7 +564,21 @@ export async function disconnectClient(
   participant.reconnectTimer = setTimeout(() => {
     void (async () => {
       if (distributedState) {
-        const users = await distributedState.getSessionMembers(sessionId).catch(() => []);
+        // Do NOT swallow Redis errors here. A failed getSessionMembers
+        // previously returned [], the participant looked absent, and we
+        // expelled them — the exact opposite of what the grace period is
+        // for. On infra failure, keep the participant alive and let the
+        // next reconnect run the grace logic again.
+        let users;
+        try {
+          users = await distributedState.getSessionMembers(sessionId);
+        } catch (err) {
+          console.error(
+            `[RoomManager] Grace timer failed to query session ${sessionId.slice(0, 8)} members; keeping participant ${participantId.slice(0, 8)} alive:`,
+            err,
+          );
+          return;
+        }
         const currentUser = users.find((user) => user.id === participantId);
         if (currentUser?.connectionState === 'CONNECTED') {
           return;

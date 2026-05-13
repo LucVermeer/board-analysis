@@ -116,6 +116,11 @@ export type SessionEvent =
 
 export type ConnectionContext = {
   connectionId: string;
+  // Transport that produced this context. Resolvers branch on this for
+  // HTTP-vs-WebSocket behaviour; avoid grepping `connectionId.startsWith(...)`
+  // which is fragile to id-format changes. Optional for test contexts that
+  // don't care which transport they emulate; production paths always set it.
+  transport?: 'http' | 'ws';
   sessionId?: string;
   participantId?: string;
   userId?: string;

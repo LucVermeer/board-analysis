@@ -15,6 +15,7 @@ import {
   ELECT_NEW_LEADER_SCRIPT,
   REFRESH_TTL_SCRIPT,
   PRUNE_STALE_SESSION_MEMBERS_SCRIPT,
+  REMOVE_PARTICIPANT_CONNECTION_SCRIPT,
 } from './lua-scripts';
 
 /**
@@ -467,18 +468,20 @@ async function removeParticipantConnection(
   participantId: string,
   connectionId: string,
 ): Promise<void> {
-  await redis.srem(KEYS.participantConnections(sessionId, participantId), connectionId);
-  const remainingIds = await redis.smembers(KEYS.participantConnections(sessionId, participantId));
-  if (remainingIds.length > 0) {
-    return;
-  }
-
-  await redis
-    .multi()
-    .srem(KEYS.sessionParticipants(sessionId), participantId)
-    .del(KEYS.participant(sessionId, participantId))
-    .del(KEYS.participantConnections(sessionId, participantId))
-    .exec();
+  // Atomic SREM-then-conditional-cleanup. The previous srem -> smembers ->
+  // multi().exec() sequence had a window where a concurrent re-join could add
+  // a new connection to the set after our smembers read 0, then the multi
+  // would wipe out that fresh participant. The Lua script collapses the read
+  // and delete into a single atomic operation.
+  await redis.eval(
+    REMOVE_PARTICIPANT_CONNECTION_SCRIPT,
+    3,
+    KEYS.participantConnections(sessionId, participantId),
+    KEYS.sessionParticipants(sessionId),
+    KEYS.participant(sessionId, participantId),
+    connectionId,
+    participantId,
+  );
 }
 
 export async function removeParticipant(redis: Redis, sessionId: string, participantId: string): Promise<void> {

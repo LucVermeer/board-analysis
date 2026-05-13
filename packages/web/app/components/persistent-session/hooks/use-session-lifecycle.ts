@@ -90,7 +90,20 @@ export function hasContiguousReplayCoverage(
   }
 
   let expectedSequence = sinceSequence + 1;
-  const sortedEvents = [...events].sort((a, b) => a.sequence - b.sequence);
+  // FullSync and CurrentClimbChanged can share a sequence number when a
+  // controller-issued climb change races with a snapshot. Process FullSync
+  // first within a tie so the snapshot establishes the new expected sequence
+  // before the same-sequence delta is checked — otherwise the delta would
+  // fail the `event.sequence !== expectedSequence` invariant and we'd
+  // wrongly report a gap. We can't rely on sort stability for this — even
+  // with ECMAScript 2019's stable sort, the assertion still depends on the
+  // caller's insertion order, which is not contractual.
+  const sortedEvents = [...events].sort((a, b) => {
+    if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+    if (a.__typename === 'FullSync' && b.__typename !== 'FullSync') return -1;
+    if (b.__typename === 'FullSync' && a.__typename !== 'FullSync') return 1;
+    return 0;
+  });
 
   for (const event of sortedEvents) {
     if (event.sequence < expectedSequence) {

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { roomManager } from '../services/room-manager';
 import { db } from '../db/client';
 import { sessions, sessionQueues, boardSessionParticipants } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { ClimbQueueItem } from '@boardsesh/shared-schema';
 import { createMockRedis, type MockRedis } from './helpers/mock-redis';
 
@@ -29,9 +29,18 @@ const createTestClimb = (): ClimbQueueItem => ({
   suggested: false,
 });
 
-// Helper function to register a client before joining
-const registerAndJoinSession = async (clientId: string, sessionId: string, boardPath: string, username?: string) => {
-  await roomManager.registerClient(clientId);
+// Helper function to register a client before joining.
+// Pass `userId` to simulate an authenticated user — that's the only path that
+// produces a stable participantId across reconnects (anonymous reconnects
+// intentionally yield a fresh participantId, per the join-side security fix).
+const registerAndJoinSession = async (
+  clientId: string,
+  sessionId: string,
+  boardPath: string,
+  username?: string,
+  userId?: string,
+) => {
+  await roomManager.registerClient(clientId, username, userId);
   return roomManager.joinSession(clientId, sessionId, boardPath, username);
 };
 
@@ -175,11 +184,38 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
   });
 
   describe('Reconnect Lifecycle', () => {
+    // Stable participantId across reconnects only works for authenticated
+    // users (the P1 fix removed trust in client-supplied participantId). The
+    // tests below pass userIds that are written to board_sessions.created_by_user_id;
+    // those values need to exist in the users table (FK constraint).
+    const RECONNECT_TEST_USERS = ['user-A', 'leader-participant-id', 'member-participant-id'];
+
+    beforeEach(async () => {
+      for (const userId of RECONNECT_TEST_USERS) {
+        await db.execute(sql`
+          INSERT INTO users (id, email, name, created_at, updated_at)
+          VALUES (${userId}, ${userId + '@reconnect.test'}, ${userId}, now(), now())
+          ON CONFLICT (id) DO NOTHING
+        `);
+      }
+    });
+
+    afterEach(async () => {
+      // Sessions FK-cascade onto board_sessions; clean up users we inserted.
+      for (const userId of RECONNECT_TEST_USERS) {
+        await db.execute(sql`DELETE FROM board_sessions WHERE created_by_user_id = ${userId}`);
+        await db.execute(sql`DELETE FROM users WHERE id = ${userId}`);
+      }
+    });
+
     it('marks a passively disconnected participant as reconnecting and restores them on reconnect', async () => {
       const sessionId = uuidv4();
       const boardPath = '/kilter/1/2/3/40';
 
-      const joined = await registerAndJoinSession('client-1', sessionId, boardPath, 'User1');
+      // Authenticated user: stable participantId == userId across reconnects.
+      // Anonymous users intentionally don't share continuity here; that's the
+      // P1 security fix on the join side.
+      const joined = await registerAndJoinSession('client-1', sessionId, boardPath, 'User1', 'user-A');
 
       const disconnectResult = await roomManager.disconnectClient('client-1');
       expect(disconnectResult?.presenceUser).toEqual(
@@ -198,18 +234,10 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
         }),
       );
 
-      await roomManager.registerClient('client-1b');
-      const rejoined = await roomManager.joinSession(
-        'client-1b',
-        sessionId,
-        boardPath,
-        'User1',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        joined.participantId,
-      );
+      // Reconnect: a NEW connection authenticated as the same userId resolves
+      // to the same participantId server-side.
+      await roomManager.registerClient('client-1b', 'User1', 'user-A');
+      const rejoined = await roomManager.joinSession('client-1b', sessionId, boardPath, 'User1');
 
       expect(rejoined.participantWasReconnecting).toBe(true);
       expect(rejoined.participantId).toBe(joined.participantId);
@@ -264,30 +292,12 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       const sessionId = uuidv4();
       const boardPath = '/kilter/1/2/3/40';
 
-      await roomManager.registerClient('leader-conn', 'Leader');
-      const leader = await roomManager.joinSession(
-        'leader-conn',
-        sessionId,
-        boardPath,
-        'Leader',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'leader-participant-id',
-      );
-      await roomManager.registerClient('member-conn', 'Member');
-      const member = await roomManager.joinSession(
-        'member-conn',
-        sessionId,
-        boardPath,
-        'Member',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'member-participant-id',
-      );
+      // Authenticated users: participantId is bound to userId server-side.
+      // Client-supplied participantId is ignored (P1 security fix).
+      await roomManager.registerClient('leader-conn', 'Leader', 'leader-participant-id');
+      const leader = await roomManager.joinSession('leader-conn', sessionId, boardPath, 'Leader');
+      await roomManager.registerClient('member-conn', 'Member', 'member-participant-id');
+      const member = await roomManager.joinSession('member-conn', sessionId, boardPath, 'Member');
 
       expect(leader.participantId).toBe('leader-participant-id');
       expect(member.participantId).toBe('member-participant-id');
@@ -302,30 +312,10 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       const sessionId = uuidv4();
       const boardPath = '/kilter/1/2/3/40';
 
-      await roomManager.registerClient('leader-conn', 'Leader');
-      await roomManager.joinSession(
-        'leader-conn',
-        sessionId,
-        boardPath,
-        'Leader',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'leader-participant-id',
-      );
-      await roomManager.registerClient('member-conn', 'Member');
-      await roomManager.joinSession(
-        'member-conn',
-        sessionId,
-        boardPath,
-        'Member',
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'member-participant-id',
-      );
+      await roomManager.registerClient('leader-conn', 'Leader', 'leader-participant-id');
+      await roomManager.joinSession('leader-conn', sessionId, boardPath, 'Leader');
+      await roomManager.registerClient('member-conn', 'Member', 'member-participant-id');
+      await roomManager.joinSession('member-conn', sessionId, boardPath, 'Member');
 
       const leaveResult = await roomManager.leaveSession('leader-conn');
 

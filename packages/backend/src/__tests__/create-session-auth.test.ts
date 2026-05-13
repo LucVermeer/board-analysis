@@ -62,6 +62,7 @@ vi.mock('./session-summary', () => ({
 function makeAuthenticatedCtx(userId = 'user-1'): ConnectionContext {
   return {
     connectionId: `http-${userId}`,
+    transport: 'http',
     sessionId: undefined,
     userId,
     isAuthenticated: true,
@@ -71,6 +72,7 @@ function makeAuthenticatedCtx(userId = 'user-1'): ConnectionContext {
 function makeAnonymousCtx(clientIp?: string): ConnectionContext {
   return {
     connectionId: `http-anonymous-${Math.random()}`,
+    transport: 'http',
     sessionId: undefined,
     userId: undefined,
     isAuthenticated: false,

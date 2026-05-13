@@ -25,6 +25,7 @@ export function createContext(
   const id = connectionId || uuidv4();
   const context: ConnectionContext = {
     connectionId: id,
+    transport: 'ws',
     sessionId: undefined,
     userId: userId,
     isAuthenticated: isAuthenticated || false,

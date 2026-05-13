@@ -243,6 +243,39 @@ export const REFRESH_TTL_SCRIPT = `
 `;
 
 /**
+ * Lua script for atomic participant-connection removal.
+ * SREM the connection from the participant's connection set, then either return
+ * the remaining count (if > 0) or atomically clean up the participant record
+ * and remove from session participants. Closing the read-then-delete race in
+ * the prior multi() implementation: a concurrent re-join that re-adds to the
+ * connection set between our SREM and DEL would otherwise be wiped out.
+ * KEYS[1] = participantConnections set key
+ * KEYS[2] = sessionParticipants set key
+ * KEYS[3] = participant hash key
+ * ARGV[1] = connectionId being removed
+ * ARGV[2] = participantId being removed
+ * Returns: remaining connection count after removal (0 means participant cleaned up)
+ */
+export const REMOVE_PARTICIPANT_CONNECTION_SCRIPT = `
+  local participantConnectionsKey = KEYS[1]
+  local sessionParticipantsKey = KEYS[2]
+  local participantKey = KEYS[3]
+  local connectionId = ARGV[1]
+  local participantId = ARGV[2]
+
+  redis.call('SREM', participantConnectionsKey, connectionId)
+  local remaining = redis.call('SCARD', participantConnectionsKey)
+  if remaining > 0 then
+    return remaining
+  end
+
+  redis.call('SREM', sessionParticipantsKey, participantId)
+  redis.call('DEL', participantKey)
+  redis.call('DEL', participantConnectionsKey)
+  return 0
+`;
+
+/**
  * Lua script to prune stale members from a session.
  * For each member in the session set, checks if the connection hash still exists.
  * Removes stale entries, re-elects leader if needed, and cleans up empty sessions.

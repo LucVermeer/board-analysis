@@ -234,7 +234,7 @@ export const sessionMutations = {
 
     // For HTTP requests (stateless), skip joining the session in-memory.
     // The creator will join via WebSocket when they navigate to the board page.
-    const isHttpRequest = ctx.connectionId.startsWith('http-');
+    const isHttpRequest = ctx.transport === 'http';
 
     if (!isHttpRequest) {
       // WebSocket path: join the session as the creator.
@@ -361,7 +361,7 @@ export const sessionMutations = {
       throw new Error('Session not found');
     }
 
-    if (ctx.connectionId.startsWith('http-')) {
+    if (ctx.transport === 'http') {
       requireAuthenticated(ctx);
       if (!sessionData.createdByUserId || sessionData.createdByUserId !== ctx.userId) {
         throw new Error('Only the session creator can end this session over HTTP');
@@ -369,12 +369,20 @@ export const sessionMutations = {
     } else {
       await requireSessionMember(ctx, sessionId);
       const sessionUsers = await roomManager.getSessionUsers(sessionId);
+      // Prefer authenticated identity for actor lookup. ctx.connectionId is a
+      // last-ditch fallback only — it will never match SessionUser.id since
+      // those are participantIds — so when actor ends up undefined here, log
+      // the inputs we tried so the misleading "Only the session creator or
+      // current leader" error has a paper trail to debug.
       const actorId = ctx.participantId || ctx.userId || ctx.connectionId;
       const actor = sessionUsers.find(
         (user) => user.id === actorId || (ctx.userId ? user.userId === ctx.userId : false),
       );
       const isCreator = !!ctx.userId && sessionData.createdByUserId === ctx.userId;
       if (!isCreator && !actor?.isLeader) {
+        console.warn(
+          `[endSession] actor lookup failed for session ${sessionId.slice(0, 8)}: connectionId=${ctx.connectionId.slice(0, 8)}, participantId=${ctx.participantId?.slice(0, 8) ?? 'none'}, userId=${ctx.userId?.slice(0, 8) ?? 'none'}, isAuthenticated=${ctx.isAuthenticated}, members=${sessionUsers.length}`,
+        );
         throw new Error('Only the session creator or current leader can end this session');
       }
     }
