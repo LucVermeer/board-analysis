@@ -100,6 +100,17 @@ export function useSessionSubscriptions({
   const consecutiveResyncCountRef = useRef(0);
   const sentryReportedHashRef = useRef<string | null>(null);
 
+  // Reset the resync-loop trackers whenever the active session changes.
+  // Otherwise a hash that triggered N resyncs in session A would carry
+  // forward into session B and either over-count or suppress the Sentry
+  // breadcrumb that should fire fresh per session.
+  const sessionIdForReset = session?.id ?? null;
+  useEffect(() => {
+    lastResyncHashRef.current = null;
+    consecutiveResyncCountRef.current = 0;
+    sentryReportedHashRef.current = null;
+  }, [sessionIdForReset]);
+
   useEffect(() => {
     if (!session || !lastReceivedStateHash || queue.length === 0) {
       return;

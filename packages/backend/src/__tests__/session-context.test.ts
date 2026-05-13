@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { sessionMutations } from '../graphql/resolvers/sessions/mutations';
 import { updateContext } from '../graphql/context';
+import { pubsub } from '../pubsub/index';
 
 vi.mock('../services/room-manager', () => ({
   roomManager: {
@@ -27,6 +28,10 @@ vi.mock('../services/room-manager', () => ({
       sequence: 0,
       stateHash: 'hash',
       sessionName: null,
+    }),
+    leaveSession: vi.fn().mockResolvedValue({
+      sessionId: 'session-aaaa-bbbb-cccc-dddd',
+      newLeaderId: undefined,
     }),
     createDiscoverableSession: vi.fn().mockResolvedValue({}),
     getSessionById: vi.fn().mockResolvedValue(null),
@@ -125,5 +130,74 @@ describe('createSession does not clobber ctx.userId', () => {
     const [, calledUpdates] = vi.mocked(updateContext).mock.calls[0];
     expect(calledUpdates).toEqual({ sessionId: 'test-session-uuid' });
     expect(calledUpdates).not.toHaveProperty('userId');
+  });
+});
+
+describe('leaveSession publishes UserLeft with the connection ID', () => {
+  // Background: the disconnect handler in websocket/setup.ts and the
+  // explicit `leaveSession` mutation both emit a `UserLeft` event so
+  // peers can drop the departing user from their participant list. The
+  // GraphQL schema names the payload field `userId` but the *contract*
+  // with the client is that it carries the connection ID — clients
+  // populate their participant list from `UserJoined.user.id`, which is
+  // `result.clientId` (the connection ID), and filter by
+  // `u.id !== event.userId`. The two events must agree.
+  //
+  // Earlier commits in this PR stopped clobbering `ctx.userId` with the
+  // connection ID. The leaveSession mutation was previously guarded by
+  // `if (userId)` and only fired because of that clobber, so it would
+  // have silently stopped emitting UserLeft for unauthenticated clients
+  // (and for authenticated clients would have emitted the real user
+  // UUID — wrong shape, fails the client filter). This test pins the
+  // correct behaviour.
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('emits UserLeft with userId === ctx.connectionId for authenticated clients', async () => {
+    const realUserId = '8a68ddc8-8da0-47e2-a968-1029b6fb4bb3';
+    const ctx: ConnectionContext = {
+      connectionId: 'ws-conn-abc-123',
+      sessionId: 'session-aaaa-bbbb-cccc-dddd',
+      userId: realUserId,
+      isAuthenticated: true,
+    };
+
+    await sessionMutations.leaveSession(undefined, undefined, ctx);
+
+    const calls = vi.mocked(pubsub.publishSessionEvent).mock.calls;
+    const userLeftCall = calls.find(
+      (call): call is [string, { __typename: 'UserLeft'; userId: string }] =>
+        typeof call[1] === 'object' &&
+        call[1] !== null &&
+        (call[1] as { __typename?: string }).__typename === 'UserLeft',
+    );
+    expect(userLeftCall).toBeDefined();
+    expect(userLeftCall![0]).toBe('session-aaaa-bbbb-cccc-dddd');
+    expect(userLeftCall![1].userId).toBe('ws-conn-abc-123');
+    // It must NOT be the auth user UUID — clients filter participants
+    // by connection ID and would fail to remove the user otherwise.
+    expect(userLeftCall![1].userId).not.toBe(realUserId);
+  });
+
+  it('emits UserLeft for unauthenticated clients (which previously had no userId on ctx)', async () => {
+    const ctx: ConnectionContext = {
+      connectionId: 'ws-conn-anon-456',
+      sessionId: 'session-zzzz',
+      userId: undefined,
+      isAuthenticated: false,
+    };
+
+    await sessionMutations.leaveSession(undefined, undefined, ctx);
+
+    const calls = vi.mocked(pubsub.publishSessionEvent).mock.calls;
+    const userLeftCall = calls.find(
+      (call): call is [string, { __typename: 'UserLeft'; userId: string }] =>
+        typeof call[1] === 'object' &&
+        call[1] !== null &&
+        (call[1] as { __typename?: string }).__typename === 'UserLeft',
+    );
+    expect(userLeftCall).toBeDefined();
+    expect(userLeftCall![1].userId).toBe('ws-conn-anon-456');
   });
 });

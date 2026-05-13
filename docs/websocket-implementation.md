@@ -397,9 +397,11 @@ The main Traefik instance routes `*.preview.boardsesh.com` and `*.ws.preview.boa
     └────────────────────┘
 ```
 
-**Grace Period:** When the last user disconnects, the session enters a 60-second grace period where in-memory state is preserved. If a client reconnects within this window (common during network flaps or page refreshes), the session is instantly available without the expensive lock + Redis/Postgres restoration cycle. The grace period duration is controlled by `SESSION_GRACE_PERIOD_MS` in `RoomManager`.
+**Grace Period:** When the last user disconnects from this backend instance, the session enters a 60-second grace period where in-memory state is preserved. If a client reconnects within this window (common during network flaps or page refreshes), the session is instantly available without the expensive lock + Redis/Postgres restoration cycle. The grace period duration is controlled by `SESSION_GRACE_PERIOD_MS` in `RoomManager`.
 
 If the grace period expires, the session is evicted from memory but remains restorable from Redis until the 4-hour TTL expires. After Redis TTL expiry, the session is still not ended; the next join restores it from Postgres as long as the durable row has not been explicitly marked `ended`.
+
+**Multi-instance grace handling:** Because each instance tracks its own local clients, "the last user disconnected" is a per-instance event — another instance may still host active members. Before tearing down session state (cancelling pending Postgres writes, marking the session inactive in Redis), `leaveSession` in `room-manager/client-lifecycle.ts` queries `distributedState.getSessionMembers(sessionId)` and filters out the leaving connection. The dangerous side-effects (`writeScheduler.cancelPendingWrites`, `redisStore.markInactive`) only fire when no other instance has members. The local grace timer (memory cleanup for this instance's `sessionsMap`) still runs regardless. The filter relies on the invariant that `SessionUser.id` returned by `getSessionMembers` is the connection ID (see `distributed-state/session-ops.ts:181`); the regression test `leave-session-multi-instance.test.ts` pins this.
 
 ### Session Properties
 
@@ -514,6 +516,10 @@ sequenceDiagram
 | `SessionStatsUpdated` | A tick is saved for an active party session | `totalSends`, `totalFlashes`, `totalAttempts`, `tickCount`, `participants`, `gradeDistribution`, `boardTypes`, `hardestGrade`, `durationMinutes`, `goal`, `ticks` |
 
 `SessionStatsUpdated` payloads include full `ticks` rows so clients can update charts and climbs/attempt lists without issuing an extra session detail refetch. On the client, `useEventProcessor` patches the `SESSION_DETAIL_QUERY_KEY(sessionId)` React Query cache entry directly with the new stats and ticks — there is no separate `liveSessionStats` merge layer, so any component subscribed via `useSessionDetail` re-renders from the updated cache automatically.
+
+**UserJoined / UserLeft identifier contract:** The `user.id` field in `UserJoined` and the `userId` field in `UserLeft` both carry the **WebSocket connection ID**, not the stable database user UUID. The schema-field name `userId` predates the distinction and is a misnomer — renaming it is a breaking change for clients and out of scope. The web client populates its participant list from `UserJoined.user.id` and filters on disconnect with `u.id !== event.userId` (`use-session-lifecycle.ts:562`), so the two events must agree on shape. If you need the stable user UUID downstream (auth checks, tick attribution), use `ctx.userId` on the backend — which auth middleware sets and resolvers must not overwrite — or include `SessionUser.userId` in the payload explicitly (it is a separate field).
+
+**`ctx.userId` lifecycle:** Auth middleware sets `ctx.userId` once at connection time to the stable database user UUID (or `undefined` for unauthenticated clients). Session-related resolvers (`joinSession`, `createSession`) must not overwrite this field — they only update `ctx.sessionId`. An earlier bug clobbered `ctx.userId` with the connection ID inside `joinSession`, breaking every downstream resolver that read `ctx.userId` (ESP32 auto-authorize, climb / tick mutations, controller queries). The regression test `session-context.test.ts` pins the correct behaviour.
 
 ---
 
