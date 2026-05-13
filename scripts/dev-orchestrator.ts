@@ -3,7 +3,7 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createConnection, createServer } from 'node:net';
-import { homedir } from 'node:os';
+import { freemem, homedir, tmpdir, totalmem } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join, dirname, resolve } from 'node:path';
@@ -33,8 +33,22 @@ const TAILSCALE_CERT_TIMEOUT_MS = 60_000;
 // These knobs let the user override the guard without editing the script.
 const DEV_SESSION_LOCK_PREFIX = 'boardsesh-dev-';
 const DEV_SESSION_LOCK_SUFFIX = '.lock.json';
-const DEFAULT_MAX_DEV_SESSIONS = 1;
-const DEFAULT_MIN_FREE_MEM_MB = 4096;
+
+// Per-session memory envelope. Empirically a real session peaks at ~5 GB for
+// next-server + ~0.5 GB for the backend/tsx watcher + esbuild workers; 8 GB
+// is a conservative cap that covers compile spikes. The 2026-05-12 crash
+// happened with only 2 concurrent sessions on a 32 GB host, so we don't want
+// to be aggressive here.
+const DEFAULT_SESSION_BUDGET_MB = 8 * 1024;
+// Reserved for OS + browser + IDE + AI agents (Claude Code, codex, etc.).
+// On a dev box with lots of agents running concurrently this can easily be
+// 4–8 GB; pick the middle.
+const DEFAULT_RESERVED_HOST_MB = 6 * 1024;
+// Pre-flight: refuse-with-override when MemAvailable is below this. Half of
+// a per-session budget — if we don't have at least this much we definitely
+// can't fit another session without immediate paging.
+const DEFAULT_MIN_FREE_MEM_MB = DEFAULT_SESSION_BUDGET_MB / 2;
+
 // Per-child V8 heap cap. Turbopack is mostly Rust so this only caps the
 // orchestrator + tsx loaders + Node-side Next bits, but it still prevents
 // runaway JS-side leaks from gobbling several GB before the kernel notices.
@@ -556,14 +570,17 @@ function startWeb(
 
 /**
  * Resolve the directory we drop dev-session lockfiles into. Prefer
- * $XDG_RUNTIME_DIR — it's per-user (mode 0700) and cleared on reboot, so we
- * don't need to worry about cross-user collisions or stale-after-reboot
- * entries. Fall back to /tmp for environments without systemd-user.
+ * $XDG_RUNTIME_DIR on Linux — it's per-user (mode 0700) and cleared on
+ * reboot, so we don't need to worry about cross-user collisions or stale-
+ * after-reboot entries. On macOS there's no XDG_RUNTIME_DIR; `os.tmpdir()`
+ * returns `$TMPDIR` (a per-user `/var/folders/...` path on macOS) which has
+ * the same per-user-isolation property. Linux without systemd falls back to
+ * `os.tmpdir()` too (typically `/tmp`).
  */
 function resolveSessionLockDir(): string {
   const runtimeDir = process.env.XDG_RUNTIME_DIR;
   if (runtimeDir && existsSync(runtimeDir)) return runtimeDir;
-  return '/tmp';
+  return tmpdir();
 }
 
 function getSessionLockPath(lockDir: string, pid: number): string {
@@ -695,7 +712,7 @@ function printActiveSessions(sessions: ActiveDevSession[]): void {
   }
 }
 
-function readMemAvailableMb(): number | null {
+function readMemAvailableMbLinux(): number | null {
   try {
     const meminfo = readFileSync('/proc/meminfo', 'utf8');
     const match = meminfo.match(/^MemAvailable:\s+(\d+)\s+kB$/m);
@@ -704,6 +721,96 @@ function readMemAvailableMb(): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * macOS equivalent of Linux's MemAvailable: sum of pages that can be made
+ * free without triggering swap or paging. `vm_stat` is part of the base
+ * system; no Homebrew required. Page size is reported in vm_stat's header
+ * (typically 4 KB on Intel, 16 KB on Apple Silicon).
+ */
+function readMemAvailableMbDarwin(): number | null {
+  try {
+    const vmStatOutput = execFileSync('vm_stat', [], {
+      encoding: 'utf8',
+      timeout: 2000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const pageSizeMatch = vmStatOutput.match(/page size of (\d+) bytes/);
+    const pageSizeBytes = pageSizeMatch ? parseInt(pageSizeMatch[1], 10) : 4096;
+    const readPages = (label: string): number => {
+      const labelMatch = vmStatOutput.match(new RegExp(`^${label}:\\s+(\\d+)`, 'm'));
+      return labelMatch ? parseInt(labelMatch[1], 10) : 0;
+    };
+    // Free + inactive (clean pages reclaimable instantly) + speculative
+    // (prefetched, drop-on-demand) + purgeable (apps marked them as such).
+    // We deliberately exclude active and wired, which are not safe to reclaim.
+    const reclaimablePages =
+      readPages('Pages free') +
+      readPages('Pages inactive') +
+      readPages('Pages speculative') +
+      readPages('Pages purgeable');
+    if (reclaimablePages === 0) return null;
+    return Math.floor((reclaimablePages * pageSizeBytes) / 1024 / 1024);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Return the host's available memory in MiB, using the most accurate source
+ * for the current platform. Falls back to `os.freemem()` if the platform-
+ * specific path fails — that's coarser (excludes reclaimable caches) but
+ * it's better than refusing to read and silently disabling the pre-flight.
+ */
+function readMemAvailableMb(): number | null {
+  if (process.platform === 'linux') {
+    const linuxValue = readMemAvailableMbLinux();
+    if (linuxValue !== null) return linuxValue;
+  } else if (process.platform === 'darwin') {
+    const darwinValue = readMemAvailableMbDarwin();
+    if (darwinValue !== null) return darwinValue;
+  }
+  // Cross-platform fallback. Imperfect (Linux underreports because buffers/
+  // caches don't count; macOS underreports because inactive doesn't count)
+  // but always non-null.
+  return Math.floor(freemem() / 1024 / 1024);
+}
+
+function getTotalMemMb(): number {
+  return Math.floor(totalmem() / 1024 / 1024);
+}
+
+/**
+ * Auto-derive the concurrent-session cap from total RAM. Formula:
+ *
+ *   max(1, floor((totalMb - reservedMb) / perSessionMb))
+ *
+ * Examples (defaults: per-session 8 GiB, reserved 6 GiB):
+ *
+ *   16 GiB MBP  → max( 1, floor((16 − 6) / 8) )  = 1
+ *   32 GiB host → max( 1, floor((32 − 6) / 8) )  = 3
+ *   64 GiB host → max( 1, floor((64 − 6) / 8) )  = 7
+ *
+ * Override the numerator with BOARDSESH_DEV_SESSION_BUDGET_MB and the
+ * subtrahend with BOARDSESH_DEV_RESERVED_HOST_MB. To override the result
+ * directly, set BOARDSESH_MAX_DEV_SESSIONS=N — that takes precedence.
+ */
+function computeAutoMaxSessions(): { maxSessions: number; totalMb: number; perSessionMb: number; reservedMb: number } {
+  const totalMb = getTotalMemMb();
+  const perSessionMb = Math.max(
+    1024,
+    parseInt(process.env.BOARDSESH_DEV_SESSION_BUDGET_MB ?? String(DEFAULT_SESSION_BUDGET_MB), 10) ||
+      DEFAULT_SESSION_BUDGET_MB,
+  );
+  const reservedMb = Math.max(
+    0,
+    parseInt(process.env.BOARDSESH_DEV_RESERVED_HOST_MB ?? String(DEFAULT_RESERVED_HOST_MB), 10) ||
+      DEFAULT_RESERVED_HOST_MB,
+  );
+  const usableMb = Math.max(0, totalMb - reservedMb);
+  const maxSessions = Math.max(1, Math.floor(usableMb / perSessionMb));
+  return { maxSessions, totalMb, perSessionMb, reservedMb };
 }
 
 const KILL_WAIT_TIMEOUT_MS = 5000;
@@ -799,16 +906,25 @@ async function runOomGuard(lockDir: string, killOldest: boolean): Promise<void> 
     return;
   }
 
-  const maxSessions = Math.max(
-    1,
-    parseInt(process.env.BOARDSESH_MAX_DEV_SESSIONS ?? String(DEFAULT_MAX_DEV_SESSIONS), 10) ||
-      DEFAULT_MAX_DEV_SESSIONS,
-  );
+  const explicitMaxRaw = process.env.BOARDSESH_MAX_DEV_SESSIONS;
+  const auto = computeAutoMaxSessions();
+  let maxSessions: number;
+  let limitSource: string;
+  if (explicitMaxRaw !== undefined && explicitMaxRaw !== '') {
+    maxSessions = Math.max(1, parseInt(explicitMaxRaw, 10) || auto.maxSessions);
+    limitSource = `BOARDSESH_MAX_DEV_SESSIONS=${explicitMaxRaw}`;
+  } else {
+    maxSessions = auto.maxSessions;
+    limitSource =
+      `auto from ${Math.round((auto.totalMb / 1024) * 10) / 10} GiB total RAM ` +
+      `(per-session ${auto.perSessionMb} MiB, reserved ${auto.reservedMb} MiB)`;
+  }
+
   const active = listActiveDevSessions(lockDir);
   if (active.length >= maxSessions) {
     console.warn(
       `[dev] ⚠ ${active.length} dev session${active.length === 1 ? '' : 's'} already running ` +
-        `(limit is ${maxSessions}; override with BOARDSESH_MAX_DEV_SESSIONS=N):`,
+        `(limit ${maxSessions}; ${limitSource}):`,
     );
     printActiveSessions(active);
 
