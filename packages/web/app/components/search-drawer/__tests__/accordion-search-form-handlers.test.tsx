@@ -129,7 +129,7 @@ describe('AccordionSearchForm — quality filter controls', () => {
   it('shows wide climbs filter for 10x10 Kilter Homewall and updates filters', () => {
     render(
       <AccordionSearchForm
-        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_name: '10x10' })}
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 21, size_name: '10x10' })}
       />,
     );
 
@@ -158,7 +158,7 @@ describe('AccordionSearchForm — quality filter controls', () => {
   it('shows tall and wide climbs filters for 10x12 Kilter Homewall', () => {
     render(
       <AccordionSearchForm
-        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_name: '10x12' })}
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 25, size_name: '10x12' })}
       />,
     );
 

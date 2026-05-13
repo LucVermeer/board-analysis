@@ -1,5 +1,9 @@
 import { type SQL, eq, gte, sql, like, notLike, inArray, or, and } from 'drizzle-orm';
-import { getHolePlacements, getProductSize } from '@boardsesh/board-constants/product-sizes';
+import {
+  getHolePlacements,
+  getProductSize,
+  isKilterHomewallWideSizeId,
+} from '@boardsesh/board-constants/product-sizes';
 import {
   boardClimbs,
   boardClimbStats,
@@ -17,9 +21,6 @@ const KILTER_HOMEWALL_PRODUCT_ID = 7;
 const KILTER_HOMEWALL_SMALL_SIZE_ID = 17;
 const KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID = 21;
 const KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS = [26, 27, 28, 29] as const;
-// 21/22 are 10x10 Full Ride/Mainline, 25/26 are 10x12 Full Ride/Mainline,
-// and 29 is the 10x10 Auxiliary LED Kit.
-const KILTER_HOMEWALL_WIDE_SIZE_IDS = new Set([21, 22, 25, 26, 29]);
 
 function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
   const smallSize = getProductSize('kilter', KILTER_HOMEWALL_SMALL_SIZE_ID);
@@ -52,12 +53,18 @@ function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly num
   return wideHoldIdsBySet;
 }
 
-const KILTER_HOMEWALL_WIDE_HOLD_IDS_BY_SET = buildKilterHomewallWideHoldIdsBySet();
+let kilterHomewallWideHoldIdsBySet: ReadonlyMap<number, readonly number[]> | null = null;
+
+function getKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
+  kilterHomewallWideHoldIdsBySet ??= buildKilterHomewallWideHoldIdsBySet();
+  return kilterHomewallWideHoldIdsBySet;
+}
 
 export function getKilterHomewallWideHoldIdsForSets(setIds: readonly number[]): number[] {
   const selectedSetIds = new Set(setIds);
+  const wideHoldIdsBySet = getKilterHomewallWideHoldIdsBySet();
   return [...selectedSetIds]
-    .flatMap((setId) => KILTER_HOMEWALL_WIDE_HOLD_IDS_BY_SET.get(setId) ?? [])
+    .flatMap((setId) => wideHoldIdsBySet.get(setId) ?? [])
     .sort((leftHoldId, rightHoldId) => leftHoldId - rightHoldId);
 }
 
@@ -291,7 +298,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     const isWideClimbSupportedBoard =
       params.board_name === 'kilter' &&
       params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
-      KILTER_HOMEWALL_WIDE_SIZE_IDS.has(params.size_id);
+      isKilterHomewallWideSizeId(params.size_id);
     if (!isWideClimbSupportedBoard) {
       wideClimbsConditions.push(sql`false`);
     } else {

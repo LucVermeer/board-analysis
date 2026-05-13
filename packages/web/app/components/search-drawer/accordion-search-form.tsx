@@ -38,9 +38,7 @@ import CollapsibleSection, {
 import { useTranslation } from 'react-i18next';
 import styles from './accordion-search-form.module.css';
 
-import { KILTER_HOMEWALL_LAYOUT_ID } from '@/app/lib/board-constants';
-
-const KILTER_HOMEWALL_WIDE_SIZE_IDS = new Set([21, 22, 25, 26, 29]);
+import { KILTER_HOMEWALL_LAYOUT_ID, isKilterHomewallWideSizeId } from '@/app/lib/board-constants';
 
 type AccordionSearchFormProps = {
   boardDetails: BoardDetails;
@@ -58,11 +56,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
   const normalizedSizeName = boardDetails.size_name?.toLowerCase().replace(/\s+/g, '') ?? '';
   const showTallClimbsFilter = isKilterHomewall && normalizedSizeName === '10x12';
-  const showWideClimbsFilter =
-    isKilterHomewall &&
-    (KILTER_HOMEWALL_WIDE_SIZE_IDS.has(boardDetails.size_id) ||
-      normalizedSizeName === '10x10' ||
-      normalizedSizeName === '10x12');
+  const showWideClimbsFilter = isKilterHomewall && isKilterHomewallWideSizeId(boardDetails.size_id);
   const minRatingPickerValue = getMinRatingPickerValue(uiSearchParams.minRating);
 
   let statusValue: 'any' | 'drafts' | 'established' | 'projects' = 'any';
