@@ -6,6 +6,7 @@ import { applyCorsHeaders } from './cors';
 import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
 import { navigateToQueueItem } from '../services/queue-navigation';
+import { logger } from '../utils/logger';
 
 interface WidgetNavigateBody {
   sessionId: string;
@@ -213,7 +214,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
   try {
     authResult = await authenticateWidget(authHeaderValue, sessionId);
   } catch (error) {
-    console.error('[WidgetNavigate] Auth lookup failed:', error);
+    logger.error('[WidgetNavigate] Auth lookup failed:', error);
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: 'Auth error' }));
     return;
@@ -295,7 +296,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       res.end(JSON.stringify({ success: false, error: 'Target index out of bounds' }));
     }
   } catch (error) {
-    console.error('[WidgetNavigate] Error:', error);
+    logger.error('[WidgetNavigate] Error:', error);
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({

@@ -7,6 +7,7 @@ import type { DistributedStateManager } from '../distributed-state';
 import type { WriteScheduler } from './write-scheduler';
 import { haversineDistance, getBoundingBox, DEFAULT_SEARCH_RADIUS_METERS } from '../../utils/geo';
 import type { DiscoverableSession } from './types';
+import { logger } from '../../utils/logger';
 
 /**
  * Get a session by its ID from the database.
@@ -224,7 +225,7 @@ export async function endSession(
   // Remove from memory
   sessionsMap.delete(sessionId);
 
-  console.info(`[RoomManager] Session ${sessionId} explicitly ended`);
+  logger.info(`[RoomManager] Session ${sessionId} explicitly ended`);
 }
 
 // Advisory lock slot for the inactivity sweep (derived from issue #1955).
@@ -272,7 +273,7 @@ export async function endStaleInactiveSessions(thresholdMs: number): Promise<str
       .where(and(eq(sessions.status, 'active'), eq(sessions.isPermanent, false), lt(sessions.lastActivity, cutoff)))
       .returning({ id: sessions.id });
     if (result.length > 0) {
-      console.info(`[RoomManager] Auto-ended ${result.length} inactive session(s)`);
+      logger.info(`[RoomManager] Auto-ended ${result.length} inactive session(s)`);
     }
     return result.map((row) => row.id);
   });

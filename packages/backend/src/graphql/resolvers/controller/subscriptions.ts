@@ -8,6 +8,7 @@ import type {
   ControllerQueueSync,
   ClimbQueueItem,
 } from '@boardsesh/shared-schema';
+import { logger } from '../../../utils/logger';
 import { db } from '../../../db/client';
 import { esp32Controllers } from '@boardsesh/db/schema/app';
 import { eq } from 'drizzle-orm';
@@ -86,7 +87,7 @@ function climbToLedCommands(
     });
   }
 
-  console.info(`[Controller] Converted ${Object.keys(litUpHoldsMap).length} holds to ${commands.length} LED commands`);
+  logger.info(`[Controller] Converted ${Object.keys(litUpHoldsMap).length} holds to ${commands.length} LED commands`);
   return commands;
 }
 
@@ -126,7 +127,7 @@ export const controllerSubscriptions = {
       // This is used by the ESP32 display to look up the board image config
       const boardPath = `${controller.boardName}/${controller.layoutId}/${controller.sizeId}/${controller.setIds}`;
 
-      console.info(
+      logger.info(
         `[Controller] Controller ${controller.id} subscribed to session ${sessionId} (boardPath: ${boardPath})`,
       );
 
@@ -205,7 +206,7 @@ export const controllerSubscriptions = {
                 const queueSync = buildControllerQueueSync(queueState.queue, queueState.currentClimbQueueItem?.uuid);
                 push(queueSync);
               } catch (error) {
-                console.error(`[Controller] Error building queue sync:`, error);
+                logger.error(`[Controller] Error building queue sync:`, error);
               }
             });
             return;
@@ -235,7 +236,7 @@ export const controllerSubscriptions = {
                   push(ledUpdate);
                 }
               } catch (error) {
-                console.error(`[Controller] Error building LED update:`, error);
+                logger.error(`[Controller] Error building LED update:`, error);
               }
             });
           }
@@ -271,7 +272,7 @@ export const controllerSubscriptions = {
           db.update(esp32Controllers)
             .set({ lastSeenAt: new Date() })
             .where(eq(esp32Controllers.id, controller.id))
-            .catch((err) => console.error('[Controller] lastSeenAt update failed:', err));
+            .catch((err) => logger.error('[Controller] lastSeenAt update failed:', err));
         }
 
         yield { controllerEvents: event };

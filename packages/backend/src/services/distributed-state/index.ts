@@ -1,5 +1,6 @@
 import type Redis from 'ioredis';
 import { DistributedStateManager } from './distributed-state';
+import { logger } from '../../utils/logger';
 
 export { DistributedStateManager } from './distributed-state';
 export type { DistributedConnection } from './constants';
@@ -17,7 +18,7 @@ let distributedStateManager: DistributedStateManager | null = null;
 export function initializeDistributedState(redis: Redis, instanceId?: string): DistributedStateManager {
   if (distributedStateManager) {
     if (!(distributedStateManager as DistributedStateManager & { _hasWarnedReInit?: boolean })._hasWarnedReInit) {
-      console.warn('[DistributedState] Already initialized, returning existing instance');
+      logger.warn('[DistributedState] Already initialized, returning existing instance');
       (distributedStateManager as DistributedStateManager & { _hasWarnedReInit?: boolean })._hasWarnedReInit = true;
     }
     return distributedStateManager;
@@ -75,7 +76,7 @@ export async function resetDistributedState(): Promise<void> {
 export function forceResetDistributedState(): void {
   if (distributedStateManager) {
     if (!distributedStateManager.isStopped()) {
-      console.warn(
+      logger.warn(
         '[DistributedState] Force resetting without prior stop() - ' +
           'clearing heartbeat interval but Redis state may be orphaned',
       );

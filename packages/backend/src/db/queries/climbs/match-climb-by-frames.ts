@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../../client';
 import { UNIFIED_TABLES, type BoardName } from '../util/table-select';
+import { logger } from '../../../utils/logger';
 
 type MatchedClimb = {
   uuid: string;
@@ -59,7 +60,7 @@ export async function matchClimbByFrames(
       name: result[0].name || '',
     };
   } catch (error) {
-    console.error('[matchClimbByFrames] Error:', error);
+    logger.error('[matchClimbByFrames] Error:', error);
     throw error;
   }
 }

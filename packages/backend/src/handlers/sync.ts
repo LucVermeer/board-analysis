@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import * as Sentry from '@sentry/node';
 import { SyncRunner } from '@boardsesh/aurora-sync/runner';
 import { applyCorsHeaders } from './cors';
+import { logger } from '../utils/logger';
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -29,12 +30,12 @@ export async function handleSyncCron(req: IncomingMessage, res: ServerResponse):
     return;
   }
 
-  console.info('[Sync] Starting sync cron job (1 user)...');
+  logger.info('[Sync] Starting sync cron job (1 user)...');
 
   const runner = new SyncRunner({
-    onLog: (msg: string) => console.info(`[Sync] ${msg}`),
+    onLog: (msg: string) => logger.info(`[Sync] ${msg}`),
     onError: (error: Error, context: { userId?: string; board?: string }) => {
-      console.error(`[Sync] Error for ${context.userId}/${context.board}:`, error.message);
+      logger.error(`[Sync] Error for ${context.userId}/${context.board}:`, error.message);
       Sentry.captureException(error, {
         tags: { source: 'aurora-sync', board: context.board },
         extra: { userId: context.userId },
@@ -59,9 +60,9 @@ export async function handleSyncCron(req: IncomingMessage, res: ServerResponse):
       }),
     );
 
-    console.info(`[Sync] Completed: ${result.successful}/${result.total} user synced`);
+    logger.info(`[Sync] Completed: ${result.successful}/${result.total} user synced`);
   } catch (error) {
-    console.error('[Sync] Cron job failed:', error);
+    logger.error('[Sync] Cron job failed:', error);
     Sentry.captureException(error, { tags: { source: 'sync-cron' } });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(

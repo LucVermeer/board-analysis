@@ -11,6 +11,7 @@ import {
   resolveClimbCreatedSubscriptionRecipients,
 } from './recipient-resolution';
 import { isNoMatchClimb } from '../graphql/resolvers/shared/helpers';
+import { logger } from '../utils/logger';
 
 export const eventBroker = new EventBroker();
 
@@ -317,7 +318,7 @@ async function createInlineNotification(event: SocialEvent): Promise<void> {
       },
     });
   } catch (error) {
-    console.error('[Events] Inline notification failed:', error);
+    logger.error('[Events] Inline notification failed:', error);
   }
 }
 

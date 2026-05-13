@@ -1,5 +1,6 @@
 import { getPublicUrl, isS3Configured, uploadToS3 } from '../storage/s3';
 import { assertAllowedImageHost, type ImageHostKind } from './safe-image-fetch';
+import { logger } from '../utils/logger';
 
 export { isS3Configured };
 
@@ -110,7 +111,7 @@ async function cacheRemoteThumbnail(key: string, sourceUrl: string, kind: ImageH
   try {
     await assertAllowedImageHost(sourceUrl, kind);
   } catch (err) {
-    console.warn('[BetaLinks] rejected thumbnail source URL:', (err as Error).message);
+    logger.warn('[BetaLinks] rejected thumbnail source URL:', (err as Error).message);
     return null;
   }
 
@@ -123,18 +124,18 @@ async function cacheRemoteThumbnail(key: string, sourceUrl: string, kind: ImageH
     if (!res.ok) return null;
     const contentType = res.headers.get('content-type') || 'image/jpeg';
     if (!contentType.startsWith('image/')) {
-      console.warn(`[BetaLinks] rejected thumbnail with content-type ${contentType}`);
+      logger.warn(`[BetaLinks] rejected thumbnail with content-type ${contentType}`);
       return null;
     }
     const buffer = await readBodyWithCap(res, MAX_THUMBNAIL_BYTES);
     if (!buffer) {
-      console.warn(`[BetaLinks] thumbnail body exceeded ${MAX_THUMBNAIL_BYTES} bytes; aborted`);
+      logger.warn(`[BetaLinks] thumbnail body exceeded ${MAX_THUMBNAIL_BYTES} bytes; aborted`);
       return null;
     }
     await uploadToS3(buffer, key, contentType);
     return getStaticThumbnailUrl(key);
   } catch (err) {
-    console.error('[BetaLinks] cacheRemoteThumbnail failed:', err);
+    logger.error('[BetaLinks] cacheRemoteThumbnail failed:', err);
     return null;
   }
 }

@@ -7,6 +7,7 @@ import type {
 } from '@boardsesh/shared-schema';
 import type Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
+import { logger } from '../utils/logger';
 
 // Channel naming convention
 const QUEUE_CHANNEL_PREFIX = 'boardsesh:queue:';
@@ -69,7 +70,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
         return;
       }
 
-      console.info(
+      logger.info(
         `[Redis] Received cross-instance message from ${parsed.instanceId.slice(0, 8)} on channel: ${channel}`,
       );
 
@@ -100,7 +101,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
         }
       }
     } catch (error) {
-      console.error('[Redis] Failed to parse message:', error);
+      logger.error('[Redis] Failed to parse message:', error);
     }
   });
 
@@ -112,7 +113,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
         event,
         timestamp: Date.now(),
       };
-      console.info(`[Redis] Publishing queue event to channel: ${sessionId} (type: ${event.__typename})`);
+      logger.info(`[Redis] Publishing queue event to channel: ${sessionId} (type: ${event.__typename})`);
       await publisher.publish(channel, JSON.stringify(message));
     },
 
@@ -123,7 +124,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
         event,
         timestamp: Date.now(),
       };
-      console.info(`[Redis] Publishing session event to channel: ${sessionId} (type: ${event.__typename})`);
+      logger.info(`[Redis] Publishing session event to channel: ${sessionId} (type: ${event.__typename})`);
       await publisher.publish(channel, JSON.stringify(message));
     },
 
@@ -164,7 +165,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       }
       await subscriber.subscribe(channel);
       subscribedQueueChannels.add(channel);
-      console.info(`[Redis] Subscribed to queue channel: ${sessionId}`);
+      logger.info(`[Redis] Subscribed to queue channel: ${sessionId}`);
     },
 
     async subscribeSessionChannel(sessionId: string): Promise<void> {
@@ -174,7 +175,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       }
       await subscriber.subscribe(channel);
       subscribedSessionChannels.add(channel);
-      console.info(`[Redis] Subscribed to session channel: ${sessionId}`);
+      logger.info(`[Redis] Subscribed to session channel: ${sessionId}`);
     },
 
     async unsubscribeQueueChannel(sessionId: string): Promise<void> {
@@ -184,7 +185,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       }
       await subscriber.unsubscribe(channel);
       subscribedQueueChannels.delete(channel);
-      console.info(`[Redis] Unsubscribed from queue channel: ${sessionId}`);
+      logger.info(`[Redis] Unsubscribed from queue channel: ${sessionId}`);
     },
 
     async unsubscribeSessionChannel(sessionId: string): Promise<void> {
@@ -194,7 +195,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       }
       await subscriber.unsubscribe(channel);
       subscribedSessionChannels.delete(channel);
-      console.info(`[Redis] Unsubscribed from session channel: ${sessionId}`);
+      logger.info(`[Redis] Unsubscribed from session channel: ${sessionId}`);
     },
 
     async subscribeNotificationChannel(userId: string): Promise<void> {
@@ -222,7 +223,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       }
       await subscriber.subscribe(channel);
       subscribedNewClimbChannels.add(channel);
-      console.info(`[Redis] Subscribed to new climb channel: ${channelKey}`);
+      logger.info(`[Redis] Subscribed to new climb channel: ${channelKey}`);
     },
 
     async unsubscribeNotificationChannel(userId: string): Promise<void> {
@@ -250,7 +251,7 @@ export function createRedisPubSubAdapter(publisher: Redis, subscriber: Redis): R
       }
       await subscriber.unsubscribe(channel);
       subscribedNewClimbChannels.delete(channel);
-      console.info(`[Redis] Unsubscribed from new climb channel: ${channelKey}`);
+      logger.info(`[Redis] Unsubscribed from new climb channel: ${channelKey}`);
     },
 
     onQueueMessage(callback: (sessionId: string, event: QueueEvent) => void): void {

@@ -8,6 +8,7 @@ import {
   shutdownDistributedState,
   forceResetDistributedState,
 } from '../distributed-state';
+import { logger } from '../../utils/logger';
 import type { ConnectedClient, DiscoverableSession, LocalSessionParticipant, QueueState } from './types';
 import { WriteScheduler } from './write-scheduler';
 import {
@@ -97,13 +98,13 @@ class RoomManager {
   async initialize(redis?: Redis): Promise<void> {
     if (redis) {
       this.redisStore = new RedisSessionStore(redis);
-      console.info('[RoomManager] Redis session storage enabled');
+      logger.info('[RoomManager] Redis session storage enabled');
 
       this.distributedState = initializeDistributedState(redis);
       this.distributedState.start();
-      console.info('[RoomManager] Distributed state enabled for multi-instance support');
+      logger.info('[RoomManager] Distributed state enabled for multi-instance support');
     } else {
-      console.info('[RoomManager] Redis not available - using Postgres only mode (single instance)');
+      logger.info('[RoomManager] Redis not available - using Postgres only mode (single instance)');
     }
 
     if (!this.inactivitySweepInterval) {
@@ -122,16 +123,16 @@ class RoomManager {
               };
               pubsub.publishSessionEvent(sessionId, event);
               endLiveActivity(sessionId).catch((err) => {
-                console.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
+                logger.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
               });
             }
           })
           .catch((err) => {
-            console.error('[RoomManager] Inactivity sweep failed:', err);
+            logger.error('[RoomManager] Inactivity sweep failed:', err);
           });
       }, INACTIVITY_SWEEP_INTERVAL_MS);
       this.inactivitySweepInterval.unref();
-      console.info(
+      logger.info(
         `[RoomManager] Inactivity sweep enabled (threshold ${INACTIVITY_THRESHOLD_MS / 60000}m, interval ${INACTIVITY_SWEEP_INTERVAL_MS / 60000}m)`,
       );
     }
@@ -147,7 +148,7 @@ class RoomManager {
       this.inactivitySweepInterval = null;
     }
     await shutdownDistributedState();
-    console.info('[RoomManager] Shutdown complete');
+    logger.info('[RoomManager] Shutdown complete');
   }
 
   /**
@@ -477,7 +478,7 @@ class RoomManager {
     const activeSessions = Array.from(this.sessions.keys());
     if (activeSessions.length === 0) return;
 
-    console.info(`[RoomManager] Refreshing TTL for ${activeSessions.length} active sessions`);
+    logger.info(`[RoomManager] Refreshing TTL for ${activeSessions.length} active sessions`);
 
     const batchSize = 50;
     for (let i = 0; i < activeSessions.length; i += batchSize) {
@@ -486,7 +487,7 @@ class RoomManager {
         batch.map((sessionId) =>
           store
             .refreshTTL(sessionId)
-            .catch((err) => console.error(`[RoomManager] TTL refresh failed for ${sessionId}:`, err)),
+            .catch((err) => logger.error(`[RoomManager] TTL refresh failed for ${sessionId}:`, err)),
         ),
       );
     }

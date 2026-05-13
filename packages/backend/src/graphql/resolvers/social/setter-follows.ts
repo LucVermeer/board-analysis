@@ -15,6 +15,7 @@ import {
 } from '../../../validation/schemas';
 import { publishSocialEvent } from '../../../events/index';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../db/queries/util/table-select';
+import { logger } from '../../../utils/logger';
 
 /** Default angle fallback when no angle specified or no stats exist. 40 is the most common training angle. */
 const DEFAULT_ANGLE = 40;
@@ -820,7 +821,7 @@ export const setterFollowMutations = {
         entityId: setterUsername,
         timestamp: Date.now(),
         metadata: { followedSetterUsername: setterUsername },
-      }).catch((err) => console.error('[SetterFollows] Failed to publish social event:', err));
+      }).catch((err) => logger.error('[SetterFollows] Failed to publish social event:', err));
     }
 
     return true;

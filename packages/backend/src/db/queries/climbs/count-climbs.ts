@@ -2,6 +2,7 @@ import { sql, and } from 'drizzle-orm';
 import { db } from '../../client';
 import { boardClimbs, boardClimbStats } from '@boardsesh/db/schema';
 import { createClimbFilters, type BoardRouteParams, type ClimbSearchParams } from '@boardsesh/db/queries';
+import { logger } from '../../../utils/logger';
 
 /**
  * Counts the total number of climbs matching the search criteria.
@@ -41,7 +42,7 @@ export const countClimbs = async (
 
     return Number(result[0]?.count ?? 0);
   } catch (error) {
-    console.error('Error in countClimbs:', error);
+    logger.error('Error in countClimbs:', error);
     throw error;
   }
 };

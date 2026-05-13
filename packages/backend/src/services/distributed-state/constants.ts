@@ -1,3 +1,4 @@
+import { logger } from '../../utils/logger';
 /**
  * Connection data stored in Redis for cross-instance visibility.
  */
@@ -126,7 +127,7 @@ export function hashToConnection(hash: Record<string, string>): DistributedConne
   // Parse connectedAt with warning for invalid values
   let connectedAt = parseInt(hash.connectedAt, 10);
   if (isNaN(connectedAt)) {
-    console.warn(
+    logger.warn(
       `[DistributedState] Invalid connectedAt value "${hash.connectedAt}" for connection ${hash.connectionId?.slice(0, 8)}, using current time`,
     );
     connectedAt = Date.now();

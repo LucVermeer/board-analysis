@@ -7,6 +7,7 @@ import type {
 } from '@boardsesh/shared-schema';
 import { redisClientManager } from '../redis/client';
 import { createRedisPubSubAdapter, type RedisPubSubAdapter } from './redis-adapter';
+import { logger } from '../utils/logger';
 
 type QueueSubscriber = (event: QueueEvent) => void;
 type SessionSubscriber = (event: SessionEvent) => void;
@@ -69,9 +70,9 @@ class PubSub {
       this.redisAdapter = createRedisPubSubAdapter(publisher, subscriber);
       this.setupRedisMessageHandlers();
 
-      console.info(`[PubSub] Redis mode enabled (instance: ${this.redisAdapter.getInstanceId()})`);
+      logger.info(`[PubSub] Redis mode enabled (instance: ${this.redisAdapter.getInstanceId()})`);
     } else {
-      console.info('[PubSub] Local-only mode (single instance - no REDIS_URL configured)');
+      logger.info('[PubSub] Local-only mode (single instance - no REDIS_URL configured)');
     }
 
     this.initialized = true;
@@ -168,7 +169,7 @@ class PubSub {
       try {
         await this.redisAdapter.subscribeQueueChannel(sessionId);
       } catch (error) {
-        console.error(`[PubSub] Failed to subscribe to Redis queue channel: ${String(error)}`);
+        logger.error(`[PubSub] Failed to subscribe to Redis queue channel: ${String(error)}`);
         // Remove the subscriber since Redis subscription failed
         this.queueSubscribers.get(sessionId)?.delete(callback);
         if (this.queueSubscribers.get(sessionId)?.size === 0) {
@@ -189,7 +190,7 @@ class PubSub {
 
         if (this.redisAdapter) {
           this.redisAdapter.unsubscribeQueueChannel(sessionId).catch((error) => {
-            console.error(`[PubSub] Failed to unsubscribe from Redis queue channel: ${String(error)}`);
+            logger.error(`[PubSub] Failed to unsubscribe from Redis queue channel: ${String(error)}`);
           });
         }
       }
@@ -218,7 +219,7 @@ class PubSub {
       try {
         await this.redisAdapter.subscribeSessionChannel(sessionId);
       } catch (error) {
-        console.error(`[PubSub] Failed to subscribe to Redis session channel: ${String(error)}`);
+        logger.error(`[PubSub] Failed to subscribe to Redis session channel: ${String(error)}`);
         // Remove the subscriber since Redis subscription failed
         this.sessionSubscribers.get(sessionId)?.delete(callback);
         if (this.sessionSubscribers.get(sessionId)?.size === 0) {
@@ -239,7 +240,7 @@ class PubSub {
 
         if (this.redisAdapter) {
           this.redisAdapter.unsubscribeSessionChannel(sessionId).catch((error) => {
-            console.error(`[PubSub] Failed to unsubscribe from Redis session channel: ${String(error)}`);
+            logger.error(`[PubSub] Failed to unsubscribe from Redis session channel: ${String(error)}`);
           });
         }
       }
@@ -268,7 +269,7 @@ class PubSub {
       // Set TTL (5 minutes)
       await publisher.expire(bufferKey, EVENT_BUFFER_TTL);
     } catch (error) {
-      console.error('[PubSub] Failed to store event in buffer:', error);
+      logger.error('[PubSub] Failed to store event in buffer:', error);
       // Don't throw - event buffering is optional (will fallback to full sync)
     }
   }
@@ -299,7 +300,7 @@ class PubSub {
             events.push(event);
           }
         } catch (parseError) {
-          console.error('[PubSub] Failed to parse buffered event:', parseError);
+          logger.error('[PubSub] Failed to parse buffered event:', parseError);
         }
       }
 
@@ -308,7 +309,7 @@ class PubSub {
 
       return events;
     } catch (error) {
-      console.error('[PubSub] Failed to retrieve events from buffer:', error);
+      logger.error('[PubSub] Failed to retrieve events from buffer:', error);
       throw error;
     }
   }
@@ -329,14 +330,14 @@ class PubSub {
     // Store event in buffer for delta sync (Phase 2)
     // Fire and forget - don't block on buffer storage
     this.storeEventInBuffer(sessionId, event).catch((error) => {
-      console.error(`[PubSub] Failed to buffer event for session ${sessionId}:`, error);
+      logger.error(`[PubSub] Failed to buffer event for session ${sessionId}:`, error);
       // Non-fatal: clients will fall back to full sync if delta sync fails
     });
 
     // Also publish to Redis if available
     if (this.redisAdapter) {
       this.redisAdapter.publishQueueEvent(sessionId, event).catch((error) => {
-        console.error('[PubSub] Redis queue publish failed:', error);
+        logger.error('[PubSub] Redis queue publish failed:', error);
         // Log but don't throw - local dispatch already succeeded
         // Health check will report Redis as unhealthy if connection is lost
       });
@@ -347,7 +348,7 @@ class PubSub {
       try {
         this.queueEventHook(sessionId, event);
       } catch (error) {
-        console.error('[PubSub] Queue event hook error:', error);
+        logger.error('[PubSub] Queue event hook error:', error);
       }
     }
   }
@@ -367,7 +368,7 @@ class PubSub {
     // Also publish to Redis if available
     if (this.redisAdapter) {
       this.redisAdapter.publishSessionEvent(sessionId, event).catch((error) => {
-        console.error('[PubSub] Redis session publish failed:', error);
+        logger.error('[PubSub] Redis session publish failed:', error);
         // Log but don't throw - local dispatch already succeeded
         // Health check will report Redis as unhealthy if connection is lost
       });
@@ -381,7 +382,7 @@ class PubSub {
         try {
           callback(event);
         } catch (error) {
-          console.error('Error in queue subscriber:', error);
+          logger.error('Error in queue subscriber:', error);
         }
       }
     }
@@ -394,7 +395,7 @@ class PubSub {
         try {
           callback(event);
         } catch (error) {
-          console.error('Error in session subscriber:', error);
+          logger.error('Error in session subscriber:', error);
         }
       }
     }
@@ -418,7 +419,7 @@ class PubSub {
       try {
         await this.redisAdapter.subscribeNotificationChannel(userId);
       } catch (error) {
-        console.error(`[PubSub] Failed to subscribe to Redis notification channel: ${String(error)}`);
+        logger.error(`[PubSub] Failed to subscribe to Redis notification channel: ${String(error)}`);
         this.notificationSubscribers.get(userId)?.delete(callback);
         if (this.notificationSubscribers.get(userId)?.size === 0) {
           this.notificationSubscribers.delete(userId);
@@ -435,7 +436,7 @@ class PubSub {
         this.notificationSubscribers.delete(userId);
         if (this.redisAdapter) {
           this.redisAdapter.unsubscribeNotificationChannel(userId).catch((error) => {
-            console.error(`[PubSub] Failed to unsubscribe from Redis notification channel: ${String(error)}`);
+            logger.error(`[PubSub] Failed to unsubscribe from Redis notification channel: ${String(error)}`);
           });
         }
       }
@@ -451,7 +452,7 @@ class PubSub {
 
     if (this.redisAdapter) {
       this.redisAdapter.publishNotificationEvent(userId, event).catch((error) => {
-        console.error('[PubSub] Redis notification publish failed:', error);
+        logger.error('[PubSub] Redis notification publish failed:', error);
       });
     }
   }
@@ -463,7 +464,7 @@ class PubSub {
         try {
           callback(event);
         } catch (error) {
-          console.error('Error in notification subscriber:', error);
+          logger.error('Error in notification subscriber:', error);
         }
       }
     }
@@ -488,7 +489,7 @@ class PubSub {
       try {
         await this.redisAdapter.subscribeCommentChannel(entityKey);
       } catch (error) {
-        console.error(`[PubSub] Failed to subscribe to Redis comment channel: ${String(error)}`);
+        logger.error(`[PubSub] Failed to subscribe to Redis comment channel: ${String(error)}`);
         this.commentSubscribers.get(entityKey)?.delete(callback);
         if (this.commentSubscribers.get(entityKey)?.size === 0) {
           this.commentSubscribers.delete(entityKey);
@@ -505,7 +506,7 @@ class PubSub {
         this.commentSubscribers.delete(entityKey);
         if (this.redisAdapter) {
           this.redisAdapter.unsubscribeCommentChannel(entityKey).catch((error) => {
-            console.error(`[PubSub] Failed to unsubscribe from Redis comment channel: ${String(error)}`);
+            logger.error(`[PubSub] Failed to unsubscribe from Redis comment channel: ${String(error)}`);
           });
         }
       }
@@ -521,7 +522,7 @@ class PubSub {
 
     if (this.redisAdapter) {
       this.redisAdapter.publishCommentEvent(entityKey, event).catch((error) => {
-        console.error('[PubSub] Redis comment publish failed:', error);
+        logger.error('[PubSub] Redis comment publish failed:', error);
       });
     }
   }
@@ -533,7 +534,7 @@ class PubSub {
         try {
           callback(event);
         } catch (error) {
-          console.error('Error in comment subscriber:', error);
+          logger.error('Error in comment subscriber:', error);
         }
       }
     }
@@ -557,7 +558,7 @@ class PubSub {
       try {
         await this.redisAdapter.subscribeNewClimbChannel(channelKey);
       } catch (error) {
-        console.error(`[PubSub] Failed to subscribe to Redis new climb channel: ${String(error)}`);
+        logger.error(`[PubSub] Failed to subscribe to Redis new climb channel: ${String(error)}`);
         this.newClimbSubscribers.get(channelKey)?.delete(callback);
         if (this.newClimbSubscribers.get(channelKey)?.size === 0) {
           this.newClimbSubscribers.delete(channelKey);
@@ -574,7 +575,7 @@ class PubSub {
         this.newClimbSubscribers.delete(channelKey);
         if (this.redisAdapter) {
           this.redisAdapter.unsubscribeNewClimbChannel(channelKey).catch((error) => {
-            console.error(`[PubSub] Failed to unsubscribe from Redis new climb channel: ${String(error)}`);
+            logger.error(`[PubSub] Failed to unsubscribe from Redis new climb channel: ${String(error)}`);
           });
         }
       }
@@ -589,7 +590,7 @@ class PubSub {
 
     if (this.redisAdapter) {
       this.redisAdapter.publishNewClimbEvent(channelKey, event).catch((error) => {
-        console.error('[PubSub] Redis new climb publish failed:', error);
+        logger.error('[PubSub] Redis new climb publish failed:', error);
       });
     }
   }
@@ -601,7 +602,7 @@ class PubSub {
         try {
           callback(event);
         } catch (error) {
-          console.error('Error in new climb subscriber:', error);
+          logger.error('Error in new climb subscriber:', error);
         }
       }
     }

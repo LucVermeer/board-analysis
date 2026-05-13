@@ -5,6 +5,7 @@ import { mkdir, writeFile, unlink, access } from 'fs/promises';
 import { applyCorsHeaders } from './cors';
 import { validateNextAuthToken } from '../middleware/auth';
 import { isS3Configured, uploadToS3, deleteUserAvatarsFromS3 } from '../storage/s3';
+import { logger } from '../utils/logger';
 
 // Avatar upload configuration
 const AVATARS_DIR = './avatars';
@@ -111,7 +112,7 @@ export async function handleAvatarUpload(req: IncomingMessage, res: ServerRespon
 
   // In production, S3 must be configured for avatar uploads
   if (isProduction && !useS3) {
-    console.error('Avatar upload attempted in production without S3 configured');
+    logger.error('Avatar upload attempted in production without S3 configured');
     res.writeHead(501, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
@@ -126,7 +127,7 @@ export async function handleAvatarUpload(req: IncomingMessage, res: ServerRespon
     try {
       await ensureAvatarsDir();
     } catch (error) {
-      console.error('Failed to create avatars directory:', error);
+      logger.error('Failed to create avatars directory:', error);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Server configuration error' }));
       return;
@@ -254,7 +255,7 @@ export async function handleAvatarUpload(req: IncomingMessage, res: ServerRespon
           avatarUrl = `/static/avatars/${userId}.${ext}`;
         }
       } catch (saveErr) {
-        console.error('Failed to save avatar:', saveErr);
+        logger.error('Failed to save avatar:', saveErr);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Failed to save avatar' }));
         resolve();
@@ -267,7 +268,7 @@ export async function handleAvatarUpload(req: IncomingMessage, res: ServerRespon
     });
 
     busboy.on('error', (err: Error) => {
-      console.error('Busboy error:', err);
+      logger.error('Busboy error:', err);
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
       resolve();
