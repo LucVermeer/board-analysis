@@ -251,10 +251,22 @@ export async function leaveSession(
       // only safe when no OTHER backend instance still has members for this
       // session. The local sessionsMap is per-instance — being empty here only
       // means this instance has no active clients, not that the session is
-      // globally idle. We check distributed state (filtering out this leaving
-      // connection, which is still listed until distributedState.leaveSession
-      // runs below) and skip the inactive-marking when others are still
-      // connected.
+      // globally idle.
+      //
+      // INVARIANT: `member.id` returned by `getSessionMembers` is the
+      // CONNECTION ID, not the stable user UUID. This is set in
+      // `services/distributed-state/session-ops.ts:181`:
+      //   `id: connection.connectionId`
+      // The filter below relies on that — if the field ever switches to
+      // user UUID, this race-protection regresses silently (we'd filter
+      // by the wrong identifier and the leaving connection would never
+      // be subtracted). The two tests in
+      // `__tests__/leave-session-multi-instance.test.ts` pin this
+      // contract; update them in lockstep if the invariant changes.
+      //
+      // We query before `distributedState.leaveSession` runs below, so
+      // this connection is still listed in distributed state and must
+      // be filtered out.
       let otherInstanceHasMembers = false;
       if (distributedState) {
         try {

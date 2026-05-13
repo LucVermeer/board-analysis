@@ -140,6 +140,36 @@ describe('leaveSession multi-instance markInactive race', () => {
     clearTimeout(sessionGraceTimers.get(SESSION_ID)!);
   });
 
+  it('still calls markInactive when getSessionMembers returns an empty array (session already evicted)', async () => {
+    // This documents the desired fallback when distributed state has
+    // already pruned the leaving connection (e.g. TTL expired between
+    // `leaveSession`'s callsite and the membership query). The race
+    // result is that `members` is empty, which we treat the same as
+    // "no other members" — mark inactive, cancel pending writes.
+    const distributedState: MockedDistState = {
+      leaveSession: vi.fn().mockResolvedValue({ newLeaderId: null }),
+      getSessionMembers: vi.fn().mockResolvedValue([]),
+    };
+
+    await leaveSession(
+      LOCAL_CONN,
+      clients,
+      sessionsMap,
+      redisStore as unknown as RedisSessionStore,
+      distributedState as unknown as DistributedStateManager,
+      writeScheduler as unknown as WriteScheduler,
+      sessionGraceTimers,
+      pendingJoinPersists,
+      GRACE_PERIOD_MS,
+    );
+
+    expect(distributedState.getSessionMembers).toHaveBeenCalledWith(SESSION_ID);
+    expect(redisStore.markInactive).toHaveBeenCalledWith(SESSION_ID);
+    expect(writeScheduler.cancelPendingWrites).toHaveBeenCalledWith(SESSION_ID);
+
+    clearTimeout(sessionGraceTimers.get(SESSION_ID)!);
+  });
+
   it('falls back to markInactive when distributedState is unavailable (single-instance dev mode)', async () => {
     const result = await leaveSession(
       LOCAL_CONN,

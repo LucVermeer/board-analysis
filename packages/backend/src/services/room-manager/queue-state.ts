@@ -19,31 +19,39 @@ export async function updateQueueState(
   redisStore: RedisSessionStore | null,
   writeScheduler: WriteScheduler,
   distributedState: DistributedStateManager | null,
-): Promise<{ version: number; sequence: number; stateHash: string }> {
-  // Get current version and sequence from Redis if available, otherwise from Postgres
+): Promise<{ version: number; sequence: number; stateHash: string; previousStateHash: string | null }> {
+  // Get current version, sequence, and prior state hash from Redis if
+  // available, otherwise from Postgres. The prior hash is returned so
+  // callers (currently setQueue) can detect no-op resyncs without a
+  // second round-trip.
   let currentVersion = expectedVersion;
   let currentSequence = 0;
+  let previousStateHash: string | null = null;
 
   if (currentVersion === undefined) {
     if (redisStore) {
       const redisSession = await redisStore.getSession(sessionId);
       currentVersion = redisSession?.version ?? 0;
       currentSequence = redisSession?.sequence ?? 0;
+      previousStateHash = redisSession?.stateHash ?? null;
     }
     if (currentVersion === undefined || currentVersion === 0) {
       const pgState = await getQueueState(sessionId, redisStore);
       currentVersion = pgState.version;
       currentSequence = pgState.sequence;
+      previousStateHash ??= pgState.stateHash;
     }
   } else {
-    // If version is provided, get sequence from Redis or Postgres
+    // If version is provided, get sequence and prior hash from Redis or Postgres
     if (redisStore) {
       const redisSession = await redisStore.getSession(sessionId);
       currentSequence = redisSession?.sequence ?? 0;
+      previousStateHash = redisSession?.stateHash ?? null;
     }
     if (currentSequence === 0) {
       const pgState = await getQueueState(sessionId, redisStore);
       currentSequence = pgState.sequence;
+      previousStateHash ??= pgState.stateHash;
     }
   }
 
@@ -72,7 +80,7 @@ export async function updateQueueState(
     );
   }
 
-  return { version: newVersion, sequence: newSequence, stateHash };
+  return { version: newVersion, sequence: newSequence, stateHash, previousStateHash };
 }
 
 /**

@@ -43,18 +43,33 @@ export async function startServer(): Promise<ServerResources> {
   // requires triangulating via connection-registration logs to figure out
   // which instance emitted any given line — see
   // gist.github.com/marcodejongh/90a125720ad48bf0355ec176f9ebc0df for an
-  // example session where this cost hours of analysis time. When Redis is
-  // not configured the instance ID is omitted and the patch is a no-op.
+  // example session where this cost hours of analysis time.
+  //
+  // TRADE-OFFS:
+  // - This patches the GLOBAL `console.*`, so any third-party library that
+  //   logs to console also picks up the prefix. That's fine today: we
+  //   don't use a structured logger (Pino/Winston) anywhere — every log
+  //   is raw `console.*` and is consumed by Railway as plain text. If we
+  //   move to a structured logger later, swap this for a logger wrapper
+  //   and remove the patch.
+  // - When the first arg is non-string (e.g. `console.error(err)`), we
+  //   pass the tag as a separate leading arg so util.format / inspect()
+  //   on the trailing arg is preserved. Output stays one line per call.
+  // - When Redis is not configured the instance ID is null and we skip
+  //   the patch entirely (local-only dev mode — no need to disambiguate).
   const instanceId = pubsub.getInstanceId();
   const instanceTag = instanceId ? `[i:${instanceId.slice(0, 8)}] ` : '';
   if (instanceTag) {
+    const trimmedTag = instanceTag.trim();
     for (const method of ['info', 'warn', 'error', 'log'] as const) {
       const original = console[method].bind(console);
       console[method] = (...args: unknown[]) => {
-        if (args.length > 0 && typeof args[0] === 'string') {
+        if (args.length === 0) {
+          original(trimmedTag);
+        } else if (typeof args[0] === 'string') {
           original(`${instanceTag}${args[0]}`, ...args.slice(1));
         } else {
-          original(instanceTag.trim(), ...args);
+          original(trimmedTag, ...args);
         }
       };
     }
