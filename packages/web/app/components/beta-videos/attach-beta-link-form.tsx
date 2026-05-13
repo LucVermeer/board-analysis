@@ -187,12 +187,14 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
     showMessage(t('betaVideos.instagramCopiedAndOpened'), 'success');
   };
 
+  const urlFieldLabel = climbName ? t('betaVideos.urlLabelForClimb', { name: climbName }) : t('betaVideos.urlLabel');
   const urlField = (
     <TextField
       autoFocus={autoFocus}
       fullWidth
       placeholder={t('betaVideos.urlPlaceholder')}
-      label={climbName ? t('betaVideos.urlLabelForClimb', { name: climbName }) : t('betaVideos.urlLabel')}
+      label={showStepsGuide ? undefined : urlFieldLabel}
+      aria-label={showStepsGuide ? urlFieldLabel : undefined}
       value={url}
       onChange={(e) => setUrl(e.target.value)}
       error={!!validationError}
@@ -286,7 +288,7 @@ const StepRow: React.FC<StepRowProps> = ({ index, title, optionalLabel, children
         </Box>
       )}
     </Typography>
-    {children && <Box sx={{ pl: 2.5 }}>{children}</Box>}
+    {children}
   </Box>
 );
 
