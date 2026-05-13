@@ -113,6 +113,8 @@
       "minRatingOption_other": "{{count}} étoiles et plus",
       "tallClimbsOnly": "Blocs hauts uniquement",
       "tallClimbsTooltip": "Afficher uniquement les blocs qui utilisent les prises des 8 rangées du bas (disponible sur les boards 10x12 uniquement)",
+      "wideClimbsOnly": "Blocs larges uniquement",
+      "wideClimbsTooltip": "Afficher uniquement les blocs qui utilisent les colonnes latérales supplémentaires (disponible sur les boards 10x10 et 10x12)",
       "gradeAccuracy": "Précision de la cotation",
       "somewhatAccurate": "Plutôt précise (<0.2)",
       "veryAccurate": "Très précise (<0.1)",
@@ -125,6 +127,10 @@
       "zone": "Zone",
       "holdsAndZone": "Prises et zone",
       "anyDefault": "Toutes"
+    },
+    "quality": {
+      "tallClimbsOnly": "Hauts",
+      "wideClimbsOnly": "Larges"
     },
     "status": {
       "any": "Tous",
@@ -166,7 +172,10 @@
     },
     "zone": {
       "draw": "Dessiner la zone",
-      "clear": "Effacer la zone"
+      "clear": "Effacer la zone",
+      "modeLabel": "Type de zone",
+      "allHolds": "Toutes les prises dedans",
+      "anyHold": "Au moins 1 prise"
     },
     "holdsAndZone": {
       "description": "Touchez des prises pour filtrer, ou dessinez une zone pour limiter les résultats aux voies qui s'y inscrivent."
