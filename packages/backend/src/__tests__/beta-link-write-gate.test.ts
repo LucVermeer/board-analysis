@@ -28,9 +28,26 @@ vi.mock('../graphql/resolvers/sessions/debounced-stats-publisher', () => ({
   publishDebouncedSessionStats: vi.fn(),
 }));
 
-vi.mock('../lib/beta-link-thumbnails', () => ({
-  cacheInstagramThumbnail: vi.fn(),
-  isS3Configured: vi.fn(() => false),
+vi.mock('../lib/beta-link-thumbnails', async () => {
+  // Spread the real module so transitive imports (e.g. `cacheTikTokThumbnail`
+  // pulled in by the resolver via the invalidateRecentBetaLinksCache import
+  // path) keep working; override only the surface the gate cares about.
+  const actual = await vi.importActual<typeof import('../lib/beta-link-thumbnails')>('../lib/beta-link-thumbnails');
+  return {
+    ...actual,
+    cacheInstagramThumbnail: vi.fn(),
+    isS3Configured: vi.fn(() => false),
+  };
+});
+
+// mutations.ts imports invalidateRecentBetaLinksCache, which pulls in the
+// real redisClientManager. Stub it to a "disconnected" state so the gate
+// test doesn't touch Redis.
+vi.mock('../redis/client', () => ({
+  redisClientManager: {
+    isRedisConnected: () => false,
+    getClients: () => ({ publisher: { get: vi.fn(), set: vi.fn(), del: vi.fn() } }),
+  },
 }));
 
 // Stub the rate limiter; the gate test only cares about the early-return path

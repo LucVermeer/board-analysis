@@ -18,6 +18,7 @@ import { handleUserDataExport, handleUserDataExportDownload } from './handlers/u
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
 import { warmPopularConfigsCache } from './graphql/resolvers/social/boards';
+import { warmRecentBetaLinksCache } from './graphql/resolvers/beta-videos/queries';
 
 /**
  * Start the Boardsesh Backend server
@@ -270,6 +271,13 @@ export async function startServer(): Promise<ServerResources> {
     // Uses a Redis lock so only one node across the cluster runs the query.
     warmPopularConfigsCache().catch((err) => {
       console.error('[Server] Popular configs cache warm-up failed:', err);
+    });
+
+    // Warm the recent-beta-links cache the same way. The underlying CTE was
+    // slow enough in production to starve the DB pool — caching it in Redis
+    // moves the cost off the request path.
+    warmRecentBetaLinksCache().catch((err) => {
+      console.error('[Server] Recent beta links cache warm-up failed:', err);
     });
   });
 

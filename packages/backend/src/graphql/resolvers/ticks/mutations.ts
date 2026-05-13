@@ -19,6 +19,7 @@ import {
   type InstagramPageMetadata,
 } from '../../../utils/instagram-beta-validation';
 import { cacheInstagramThumbnail, isS3Configured } from '../../../lib/beta-link-thumbnails';
+import { invalidateRecentBetaLinksCache } from '../beta-videos/queries';
 
 // Beta links are only attached on successful ascents (flash / send), never
 // on `attempt`. Returns the URL to attach, or null if the tick shouldn't
@@ -380,6 +381,14 @@ export const tickMutations = {
       return [createdTick];
     });
 
+    // Bust the home-strip cache so newly-attached beta links surface on the
+    // next read. Skip when the tick path didn't insert (no video URL, or
+    // same-climb dup that was silently skipped) so we don't churn the cache
+    // for the common "just logging an attempt" case.
+    if (attachedVideoUrl && betaPlan.action === 'insert') {
+      await invalidateRecentBetaLinksCache();
+    }
+
     const result = {
       uuid: tick.uuid,
       userId: tick.userId,
@@ -482,6 +491,11 @@ export const tickMutations = {
         extensions: { code: 'BETA_LINK_INSERT_FAILED' },
       });
     }
+
+    // Bust the home-strip cache so this new link surfaces on the next read
+    // instead of waiting for the 24h TTL. Best-effort: never blocks the
+    // mutation result.
+    await invalidateRecentBetaLinksCache();
 
     return true;
   },

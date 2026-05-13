@@ -31,8 +31,10 @@ export const getPopularBoardConfigs = React.cache(async (): Promise<PopularBoard
       input: { limit: 12, offset: 0 },
     });
     return result.popularBoardConfigs.configs;
-  } catch {
-    // Backend unreachable or timed out — client-side hook will retry
+  } catch (err) {
+    // Backend unreachable or timed out — client-side hook will retry.
+    // Log the failure so a future regression names itself in Vercel logs.
+    console.error('[home-page-ssr] popularBoardConfigs fetch failed:', err instanceof Error ? err.message : err);
     return [];
   } finally {
     clearTimeout(timer);
