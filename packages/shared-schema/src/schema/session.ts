@@ -1,18 +1,28 @@
 export const sessionTypeDefs = /* GraphQL */ `
   """
+  Current realtime connection state for a session participant.
+  """
+  enum SessionConnectionState {
+    CONNECTED
+    RECONNECTING
+  }
+
+  """
   A user participating in a climbing session.
   """
   type SessionUser {
-    "Unique user identifier"
+    "Stable participant identifier within this session"
     id: ID!
     "Display name"
     username: String!
-    "Whether this user is the session leader (controls the queue)"
+    "Whether this user is the session leader (presentation/backward compatibility only)"
     isLeader: Boolean!
     "URL to user's avatar image"
     avatarUrl: String
     "Stable database user UUID (null for unauthenticated connections)"
     userId: ID
+    "Realtime connection state for this participant"
+    connectionState: SessionConnectionState!
   }
 
   """
@@ -29,7 +39,7 @@ export const sessionTypeDefs = /* GraphQL */ `
     users: [SessionUser!]!
     "Current queue state"
     queueState: QueueState!
-    "Whether the current client is the session leader"
+    "Whether the current client is the session leader (presentation/backward compatibility only)"
     isLeader: Boolean!
     "Unique identifier for this client's connection"
     clientId: ID!

@@ -8,7 +8,7 @@ import {
   shutdownDistributedState,
   forceResetDistributedState,
 } from '../distributed-state';
-import type { ConnectedClient, DiscoverableSession, QueueState } from './types';
+import type { ConnectedClient, DiscoverableSession, LocalSessionParticipant, QueueState } from './types';
 import { WriteScheduler } from './write-scheduler';
 import {
   updateQueueState as updateQueueStateFn,
@@ -20,8 +20,12 @@ import {
   registerClient as registerClientFn,
   joinSession as joinSessionFn,
   leaveSession as leaveSessionFn,
+  disconnectClient as disconnectClientFn,
   removeClient as removeClientFn,
+  type SessionDisconnectResult,
+  type SessionLeaveResult,
 } from './client-lifecycle';
+import { pubsub } from '../../pubsub/index';
 import {
   getSessionById as getSessionByIdFn,
   createDiscoverableSession as createDiscoverableSessionFn,
@@ -37,6 +41,7 @@ const INACTIVITY_SWEEP_INTERVAL_MS = 60 * 1000;
 class RoomManager {
   private clients = new Map<string, ConnectedClient>();
   private sessions = new Map<string, Set<string>>();
+  private sessionParticipants = new Map<string, Map<string, LocalSessionParticipant>>();
   private redisStore: RedisSessionStore | null = null;
   private distributedState: DistributedStateManager | null = null;
   private sessionGraceTimers = new Map<string, NodeJS.Timeout>();
@@ -49,8 +54,17 @@ class RoomManager {
    * Reset all state (for testing purposes)
    */
   reset(): void {
+    for (const participants of this.sessionParticipants.values()) {
+      for (const participant of participants.values()) {
+        if (participant.reconnectTimer) {
+          clearTimeout(participant.reconnectTimer);
+        }
+      }
+    }
+
     this.clients.clear();
     this.sessions.clear();
+    this.sessionParticipants.clear();
     this.redisStore = null;
     this.distributedState = null;
 
@@ -144,6 +158,7 @@ class RoomManager {
     initialQueue?: ClimbQueueItem[],
     initialCurrentClimb?: ClimbQueueItem | null,
     sessionName?: string,
+    participantId?: string | null,
   ): Promise<{
     clientId: string;
     users: SessionUser[];
@@ -153,6 +168,9 @@ class RoomManager {
     stateHash: string;
     isLeader: boolean;
     sessionName: string | null;
+    participantId: string;
+    participantWasKnown: boolean;
+    participantWasReconnecting: boolean;
   }> {
     return joinSessionFn(
       connectionId,
@@ -160,6 +178,7 @@ class RoomManager {
       boardPath,
       this.clients,
       this.sessions,
+      this.sessionParticipants,
       this.redisStore,
       this.distributedState,
       this.writeScheduler,
@@ -176,20 +195,43 @@ class RoomManager {
       initialQueue,
       initialCurrentClimb,
       sessionName,
+      participantId,
     );
   }
 
-  async leaveSession(connectionId: string): Promise<{ sessionId: string; newLeaderId?: string } | null> {
+  async leaveSession(connectionId: string): Promise<SessionLeaveResult | null> {
     return leaveSessionFn(
       connectionId,
       this.clients,
       this.sessions,
+      this.sessionParticipants,
       this.redisStore,
       this.distributedState,
       this.writeScheduler,
       this.sessionGraceTimers,
       this.pendingJoinPersists,
       this.SESSION_GRACE_PERIOD_MS,
+    );
+  }
+
+  async disconnectClient(connectionId: string): Promise<SessionDisconnectResult | null> {
+    return disconnectClientFn(
+      connectionId,
+      this.clients,
+      this.sessions,
+      this.sessionParticipants,
+      this.redisStore,
+      this.distributedState,
+      this.writeScheduler,
+      this.sessionGraceTimers,
+      this.pendingJoinPersists,
+      this.SESSION_GRACE_PERIOD_MS,
+      (sessionId, participantId) => {
+        pubsub.publishSessionEvent(sessionId, {
+          __typename: 'UserLeft',
+          userId: participantId,
+        });
+      },
     );
   }
 
@@ -211,19 +253,31 @@ class RoomManager {
    * Get session users from local instance only.
    */
   getSessionUsersLocal(sessionId: string): SessionUser[] {
+    const participants = this.sessionParticipants.get(sessionId);
+    if (participants && participants.size > 0) {
+      return Array.from(participants.values()).map((participant) => ({
+        id: participant.id,
+        username: participant.username,
+        isLeader: participant.isLeader,
+        avatarUrl: participant.avatarUrl,
+        userId: participant.userId,
+        connectionState: participant.connectionState,
+      }));
+    }
+
     const sessionClientIds = this.sessions.get(sessionId);
     if (!sessionClientIds) return [];
-
     const users: SessionUser[] = [];
     for (const clientId of sessionClientIds) {
       const client = this.clients.get(clientId);
       if (client) {
         users.push({
-          id: client.connectionId,
+          id: client.participantId || client.connectionId,
           username: client.username,
           isLeader: client.isLeader,
           avatarUrl: client.avatarUrl,
           userId: client.userId,
+          connectionState: 'CONNECTED',
         });
       }
     }

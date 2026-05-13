@@ -13,11 +13,23 @@ export class VersionConflictError extends Error {
 export type ConnectedClient = {
   connectionId: string;
   sessionId: string | null;
+  participantId: string | null;
   userId: string | null;
   username: string;
   avatarUrl?: string;
   isLeader: boolean;
   connectedAt: Date;
+};
+
+export type LocalSessionParticipant = {
+  id: string;
+  username: string;
+  userId: string | null;
+  avatarUrl?: string;
+  isLeader: boolean;
+  connectionState: 'CONNECTED' | 'RECONNECTING';
+  connectionIds: Set<string>;
+  reconnectTimer?: NodeJS.Timeout;
 };
 
 export type DiscoverableSession = {

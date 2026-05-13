@@ -32,6 +32,7 @@ export type Session = {
 // Active session info stored at root level
 export type ActiveSessionInfo = {
   sessionId: string;
+  participantId?: string;
   sessionName?: string;
   boardPath: string;
   boardDetails: BoardDetails;
@@ -55,7 +56,7 @@ export type PersistentSessionActionsType = {
 
   // Session lifecycle
   activateSession: (info: ActiveSessionInfo) => void;
-  deactivateSession: () => void;
+  deactivateSession: (options?: { notifyServer?: boolean }) => void;
   setInitialQueueForSession: (
     sessionId: string,
     queue: LocalClimbQueueItem[],
