@@ -183,7 +183,8 @@ export function setupWebSocketServer(httpServer: HttpServer): {
             if (result?.newLeaderId) {
               pubsub.publishSessionEvent(result.sessionId, {
                 __typename: 'LeaderChanged',
-                leaderId: result.newLeaderId,
+                leaderId: result.newLeaderParticipantId || result.newLeaderId,
+                leaderConnectionId: result.newLeaderId,
               });
             }
           } else {

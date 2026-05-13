@@ -75,9 +75,7 @@ export async function joinSession(
     currentClimbQueueItem: ClimbQueueItem | null,
     expectedVersion?: number,
   ) => Promise<number>,
-  leaveSessionFn: (
-    connectionId: string,
-  ) => Promise<{ sessionId: string; participantId?: string; newLeaderId?: string } | null>,
+  leaveSessionFn: (connectionId: string) => Promise<SessionLeaveResult | null>,
   username?: string,
   avatarUrl?: string,
   initialQueue?: ClimbQueueItem[],
@@ -247,7 +245,7 @@ export async function leaveSession(
   sessionGraceTimers: Map<string, NodeJS.Timeout>,
   pendingJoinPersists: Map<string, Promise<void>>,
   SESSION_GRACE_PERIOD_MS: number,
-): Promise<{ sessionId: string; participantId?: string; newLeaderId?: string } | null> {
+): Promise<SessionLeaveResult | null> {
   const client = clients.get(connectionId);
   if (!client || !client.sessionId) {
     return null;
@@ -297,11 +295,13 @@ export async function leaveSession(
     }
   }
   let newLeaderId: string | undefined;
+  let newLeaderParticipantId: string | undefined;
 
   if (distributedState) {
     const result = await distributedState.leaveSession(connectionId, sessionId);
     if (result.newLeaderId) {
       newLeaderId = result.newLeaderId;
+      newLeaderParticipantId = await resolveLeaderParticipantId(newLeaderId, clients, distributedState);
       const localNewLeader = clients.get(newLeaderId);
       if (localNewLeader) {
         localNewLeader.isLeader = true;
@@ -318,12 +318,13 @@ export async function leaveSession(
       const newLeader = clientsArray[0];
       newLeader.isLeader = true;
       newLeaderId = newLeader.connectionId;
+      newLeaderParticipantId = newLeader.participantId || newLeader.connectionId;
     }
   }
 
   if (newLeaderId) {
     const newLeader = clients.get(newLeaderId);
-    const newLeaderParticipantId = newLeader?.participantId || newLeaderId;
+    newLeaderParticipantId = newLeaderParticipantId || newLeader?.participantId || newLeaderId;
     const newLeaderParticipant = participants?.get(newLeaderParticipantId);
     if (newLeaderParticipant) {
       newLeaderParticipant.isLeader = true;
@@ -375,7 +376,7 @@ export async function leaveSession(
     }
   }
 
-  return { sessionId, participantId, newLeaderId };
+  return { sessionId, participantId, newLeaderId, newLeaderParticipantId };
 }
 
 /**
@@ -394,7 +395,7 @@ export async function disconnectClient(
   pendingJoinPersists: Map<string, Promise<void>>,
   SESSION_GRACE_PERIOD_MS: number,
   onParticipantExpired?: (sessionId: string, participantId: string) => void,
-): Promise<{ sessionId: string; participantId: string; presenceUser?: SessionUser; newLeaderId?: string } | null> {
+): Promise<SessionDisconnectResult | null> {
   const client = clients.get(connectionId);
   if (!client) {
     return null;
@@ -435,10 +436,14 @@ export async function disconnectClient(
 
   let remainingConnections = 0;
   let newLeaderId: string | undefined;
+  let newLeaderParticipantId: string | undefined;
   if (distributedState) {
     const result = await distributedState.removeConnection(connectionId, true);
     remainingConnections = result.remainingParticipantConnections ?? 0;
     newLeaderId = result.newLeaderId || undefined;
+    if (newLeaderId) {
+      newLeaderParticipantId = await resolveLeaderParticipantId(newLeaderId, clients, distributedState);
+    }
   }
 
   if (wentLocallyEmpty) {
@@ -495,6 +500,7 @@ export async function disconnectClient(
       if (newLeader) {
         newLeader.isLeader = true;
         newLeaderId = newLeader.connectionId;
+        newLeaderParticipantId = newLeader.participantId || newLeader.connectionId;
       }
     }
   }
@@ -509,7 +515,7 @@ export async function disconnectClient(
   }
   if (newLeaderId) {
     const newLeader = clients.get(newLeaderId);
-    const newLeaderParticipantId = newLeader?.participantId || newLeaderId;
+    newLeaderParticipantId = newLeaderParticipantId || newLeader?.participantId || newLeaderId;
     const newLeaderParticipant = participants.get(newLeaderParticipantId);
     if (newLeaderParticipant) {
       newLeaderParticipant.isLeader = true;
@@ -517,7 +523,7 @@ export async function disconnectClient(
   }
 
   if (remainingConnections > 0) {
-    return { sessionId, participantId, newLeaderId };
+    return { sessionId, participantId, newLeaderId, newLeaderParticipantId };
   }
 
   participant.connectionState = 'RECONNECTING';
@@ -554,7 +560,49 @@ export async function disconnectClient(
     })();
   }, SESSION_GRACE_PERIOD_MS);
 
-  return { sessionId, participantId, presenceUser, newLeaderId };
+  return { sessionId, participantId, presenceUser, newLeaderId, newLeaderParticipantId };
+}
+
+export type SessionLeaveResult = {
+  sessionId: string;
+  participantId?: string;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
+};
+
+export type SessionDisconnectResult = {
+  sessionId: string;
+  participantId: string;
+  presenceUser?: SessionUser;
+  newLeaderId?: string;
+  newLeaderParticipantId?: string;
+};
+
+async function resolveLeaderParticipantId(
+  leaderConnectionId: string,
+  clients: Map<string, ConnectedClient>,
+  distributedState: DistributedStateManager | null,
+): Promise<string> {
+  const localLeader = clients.get(leaderConnectionId);
+  if (localLeader?.participantId) {
+    return localLeader.participantId;
+  }
+
+  if (distributedState) {
+    try {
+      const distributedLeader = await distributedState.getConnection(leaderConnectionId);
+      if (distributedLeader?.participantId) {
+        return distributedLeader.participantId;
+      }
+    } catch (error) {
+      console.error(
+        `[RoomManager] Failed to resolve leader participant for ${leaderConnectionId.slice(0, 8)}:`,
+        error,
+      );
+    }
+  }
+
+  return leaderConnectionId;
 }
 
 /**

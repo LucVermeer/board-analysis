@@ -234,6 +234,7 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       const disconnectResult = await roomManager.disconnectClient('leader-client');
 
       expect(disconnectResult?.newLeaderId).toBe('member-client');
+      expect(disconnectResult?.newLeaderParticipantId).toBe(member.participantId);
       expect(disconnectResult?.presenceUser).toEqual(
         expect.objectContaining({
           id: leader.participantId,
@@ -257,6 +258,79 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
           connectionState: 'RECONNECTING',
         }),
       );
+    });
+
+    it('returns stable participant leader IDs separately from connection IDs on passive disconnect', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      await roomManager.registerClient('leader-conn', 'Leader');
+      const leader = await roomManager.joinSession(
+        'leader-conn',
+        sessionId,
+        boardPath,
+        'Leader',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'leader-participant-id',
+      );
+      await roomManager.registerClient('member-conn', 'Member');
+      const member = await roomManager.joinSession(
+        'member-conn',
+        sessionId,
+        boardPath,
+        'Member',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'member-participant-id',
+      );
+
+      expect(leader.participantId).toBe('leader-participant-id');
+      expect(member.participantId).toBe('member-participant-id');
+
+      const disconnectResult = await roomManager.disconnectClient('leader-conn');
+
+      expect(disconnectResult?.newLeaderId).toBe('member-conn');
+      expect(disconnectResult?.newLeaderParticipantId).toBe('member-participant-id');
+    });
+
+    it('returns stable participant leader IDs when a leader explicitly leaves', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      await roomManager.registerClient('leader-conn', 'Leader');
+      await roomManager.joinSession(
+        'leader-conn',
+        sessionId,
+        boardPath,
+        'Leader',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'leader-participant-id',
+      );
+      await roomManager.registerClient('member-conn', 'Member');
+      await roomManager.joinSession(
+        'member-conn',
+        sessionId,
+        boardPath,
+        'Member',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'member-participant-id',
+      );
+
+      const leaveResult = await roomManager.leaveSession('leader-conn');
+
+      expect(leaveResult?.newLeaderId).toBe('member-conn');
+      expect(leaveResult?.newLeaderParticipantId).toBe('member-participant-id');
     });
   });
 

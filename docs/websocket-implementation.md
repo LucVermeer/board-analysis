@@ -495,10 +495,10 @@ sequenceDiagram
     DS->>R: Execute ELECT_NEW_LEADER Lua script
     R->>R: Find earliest connected member
     R->>R: SET leader key atomically
-    R-->>DS: newLeaderId = U2
-    DS-->>RM: {newLeaderId: U2}
+    R-->>DS: newLeaderId = U2 connection ID
+    DS-->>RM: {newLeaderId, newLeaderParticipantId}
     RM->>PS: publishSessionEvent(LeaderChanged)
-    PS->>U2: LeaderChanged{leaderId: U2}
+    PS->>U2: LeaderChanged{leaderId: U2 participant ID, leaderConnectionId: U2 connection ID}
 
     Note over U2: User 2 is now leader (on Instance 2)
 ```
@@ -521,7 +521,7 @@ sequenceDiagram
 | `UserJoined`          | A new participant joins the session         | `user` with `connectionState`                                                                                                                                     |
 | `UserPresenceChanged` | A known participant reconnects or drops     | `user` with `connectionState` (`CONNECTED` or `RECONNECTING`)                                                                                                     |
 | `UserLeft`            | A participant explicitly leaves or expires  | `userId`                                                                                                                                                          |
-| `LeaderChanged`       | Leader election selects a new leader after explicit leave, passive disconnect, or stale-member cleanup | `leaderId`                                                                                                                                                        |
+| `LeaderChanged`       | Leader election selects a new leader after explicit leave, passive disconnect, or stale-member cleanup | `leaderId` is the stable `SessionUser.id`; `leaderConnectionId` is present for current-client connection checks                                                    |
 | `SessionEnded`        | Session is ended explicitly                 | `reason`, `newPath`                                                                                                                                               |
 | `SessionStatsUpdated` | A tick is saved for an active party session | `totalSends`, `totalFlashes`, `totalAttempts`, `tickCount`, `participants`, `gradeDistribution`, `boardTypes`, `hardestGrade`, `durationMinutes`, `goal`, `ticks` |
 

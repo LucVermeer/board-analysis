@@ -555,15 +555,17 @@ export function useSessionLifecycle({
                         return { ...prev, users: upsertSessionUser(prev.users, event.user) };
                       case 'UserLeft':
                         return { ...prev, users: prev.users.filter((u) => u.id !== event.userId) };
-                      case 'LeaderChanged':
+                      case 'LeaderChanged': {
+                        const leaderConnectionId = event.leaderConnectionId || event.leaderId;
                         return {
                           ...prev,
-                          isLeader: event.leaderId === prev.clientId,
+                          isLeader: leaderConnectionId === prev.clientId,
                           users: prev.users.map((u) => ({
                             ...u,
                             isLeader: u.id === event.leaderId,
                           })),
                         };
+                      }
                       case 'SessionEnded':
                         if (DEBUG) console.info('[PersistentSession] Session ended:', event.reason);
                         removePreference(ACTIVE_SESSION_KEY).catch(() => {});

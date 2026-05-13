@@ -32,8 +32,10 @@ export const eventsTypeDefs = /* GraphQL */ `
   Event when session leadership changes.
   """
   type LeaderChanged {
-    "ID of the new leader"
+    "Stable participant ID of the new leader"
     leaderId: ID!
+    "Connection ID of the new leader, for current-client leadership checks"
+    leaderConnectionId: ID
   }
 
   """

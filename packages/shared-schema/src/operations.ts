@@ -235,6 +235,7 @@ export const SESSION_UPDATES = `
       }
       ... on LeaderChanged {
         leaderId
+        leaderConnectionId
       }
       ... on SessionEnded {
         reason

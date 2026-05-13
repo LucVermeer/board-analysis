@@ -1665,7 +1665,9 @@ export type LayoutStats = {
 /** Event when session leadership changes. */
 export type LeaderChanged = {
   __typename?: 'LeaderChanged';
-  /** ID of the new leader */
+  /** Connection ID of the new leader, for current-client leadership checks */
+  leaderConnectionId?: Maybe<Scalars['ID']['output']>;
+  /** Stable participant ID of the new leader */
   leaderId: Scalars['ID']['output'];
 };
 

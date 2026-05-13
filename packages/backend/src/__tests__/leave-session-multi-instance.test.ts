@@ -36,7 +36,8 @@ const GRACE_PERIOD_MS = 60_000;
 
 type MockedRedisStore = Pick<RedisSessionStore, 'markInactive' | 'saveUsers'>;
 type MockedWriteScheduler = Pick<WriteScheduler, 'cancelPendingWrites'>;
-type MockedDistState = Pick<DistributedStateManager, 'leaveSession' | 'getSessionMembers' | 'removeParticipant'>;
+type MockedDistState = Pick<DistributedStateManager, 'leaveSession' | 'getSessionMembers' | 'removeParticipant'> &
+  Partial<Pick<DistributedStateManager, 'getConnection'>>;
 
 function makeRedisStore(): MockedRedisStore {
   return {
@@ -112,6 +113,17 @@ describe('leaveSession multi-instance markInactive race', () => {
     // connection is still in the membership set.
     const distributedState: MockedDistState = {
       leaveSession: vi.fn().mockResolvedValue({ newLeaderId: REMOTE_CONN }),
+      getConnection: vi.fn().mockResolvedValue({
+        connectionId: REMOTE_CONN,
+        instanceId: 'remote-instance',
+        sessionId: SESSION_ID,
+        participantId: 'remote-participant',
+        userId: null,
+        username: 'b',
+        avatarUrl: null,
+        isLeader: true,
+        connectedAt: Date.now(),
+      }),
       getSessionMembers: vi.fn().mockResolvedValue([{ id: REMOTE_CONN, username: 'b', isLeader: true }]),
       removeParticipant: vi.fn().mockResolvedValue(undefined),
     };
@@ -131,6 +143,7 @@ describe('leaveSession multi-instance markInactive race', () => {
 
     expect(result?.sessionId).toBe(SESSION_ID);
     expect(result?.newLeaderId).toBe(REMOTE_CONN);
+    expect(result?.newLeaderParticipantId).toBe('remote-participant');
 
     // The dangerous side-effects must be skipped because another instance
     // still has members.

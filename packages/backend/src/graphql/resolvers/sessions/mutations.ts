@@ -333,7 +333,8 @@ export const sessionMutations = {
       if (result.newLeaderId) {
         pubsub.publishSessionEvent(sessionId, {
           __typename: 'LeaderChanged',
-          leaderId: result.newLeaderId,
+          leaderId: result.newLeaderParticipantId || result.newLeaderId,
+          leaderConnectionId: result.newLeaderId,
         });
       }
 
@@ -348,7 +349,7 @@ export const sessionMutations = {
 
   /**
    * End a session explicitly.
-   * Validates the caller is an active participant.
+   * Validates the caller is the creator or current leader.
    * Returns a session summary with stats, or null if no ticks.
    */
   endSession: async (_: unknown, { sessionId }: { sessionId: string }, ctx: ConnectionContext) => {

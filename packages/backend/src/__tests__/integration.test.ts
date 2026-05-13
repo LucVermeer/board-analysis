@@ -50,7 +50,7 @@ type SessionEvent =
   | { __typename: 'UserJoined'; user: { id: string; username: string } }
   | { __typename: 'UserPresenceChanged'; user: { id: string; username?: string; connectionState: string } }
   | { __typename: 'UserLeft'; userId: string }
-  | { __typename: 'LeaderChanged'; leaderId: string }
+  | { __typename: 'LeaderChanged'; leaderId: string; leaderConnectionId?: string | null }
   | { __typename: 'SessionEnded'; reason: string };
 
 // Test fixtures
@@ -601,7 +601,7 @@ describe('Daemon Integration Tests', () => {
       // Client 2 subscribes to session updates
       const eventPromise = waitForEvent<QueueEvent | SessionEvent>(
         client2,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on LeaderChanged { leaderId } ... on UserPresenceChanged { user { id connectionState } } } }`,
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on LeaderChanged { leaderId leaderConnectionId } ... on UserPresenceChanged { user { id connectionState } } } }`,
         (e) => e.__typename === 'LeaderChanged',
       );
 
@@ -615,6 +615,7 @@ describe('Daemon Integration Tests', () => {
 
       expectTypename(event, 'LeaderChanged');
       expect(event.leaderId).toBe(result2.joinSession.clientId);
+      expect(event.leaderConnectionId).toBe(result2.joinSession.clientId);
     });
 
     it('should maintain leader when non-leader disconnects', async () => {
@@ -636,7 +637,7 @@ describe('Daemon Integration Tests', () => {
       // Client 1 subscribes to session updates to detect passive presence changes
       const eventPromise = waitForEvent<QueueEvent | SessionEvent>(
         client1,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId } } }`,
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId leaderConnectionId } } }`,
         (e) => e.__typename === 'UserPresenceChanged',
       );
 
@@ -735,7 +736,7 @@ describe('Daemon Integration Tests', () => {
       // Client 2 subscribes to session updates
       const eventPromise = collectEvents<SessionEvent>(
         client2,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId } } }`,
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId leaderConnectionId } } }`,
         2, // UserPresenceChanged + LeaderChanged
       );
 
@@ -759,6 +760,7 @@ describe('Daemon Integration Tests', () => {
       expect(userPresenceEvent.user.id).toBe(result1.joinSession.clientId);
       expect(userPresenceEvent.user.connectionState).toBe('RECONNECTING');
       expect(leaderChangedEvent.leaderId).toBe(result2.joinSession.clientId);
+      expect(leaderChangedEvent.leaderConnectionId).toBe(result2.joinSession.clientId);
     });
   });
 

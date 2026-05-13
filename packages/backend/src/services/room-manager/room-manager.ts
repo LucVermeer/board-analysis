@@ -22,6 +22,8 @@ import {
   leaveSession as leaveSessionFn,
   disconnectClient as disconnectClientFn,
   removeClient as removeClientFn,
+  type SessionDisconnectResult,
+  type SessionLeaveResult,
 } from './client-lifecycle';
 import { pubsub } from '../../pubsub/index';
 import {
@@ -197,9 +199,7 @@ class RoomManager {
     );
   }
 
-  async leaveSession(
-    connectionId: string,
-  ): Promise<{ sessionId: string; participantId?: string; newLeaderId?: string } | null> {
+  async leaveSession(connectionId: string): Promise<SessionLeaveResult | null> {
     return leaveSessionFn(
       connectionId,
       this.clients,
@@ -214,9 +214,7 @@ class RoomManager {
     );
   }
 
-  async disconnectClient(
-    connectionId: string,
-  ): Promise<{ sessionId: string; participantId: string; presenceUser?: SessionUser; newLeaderId?: string } | null> {
+  async disconnectClient(connectionId: string): Promise<SessionDisconnectResult | null> {
     return disconnectClientFn(
       connectionId,
       this.clients,
