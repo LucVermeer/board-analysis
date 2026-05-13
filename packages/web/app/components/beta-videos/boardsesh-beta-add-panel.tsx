@@ -17,11 +17,6 @@ type BoardseshBetaAddPanelProps = {
   onSuccess: () => void;
 };
 
-/**
- * Inline panel shown inside the Beta section when the user is adding a video.
- * Currently wraps the URL form; this is the single seam for adding richer
- * add-flow UI later (preview, screenshot upload, timestamp picker, etc.).
- */
 const BoardseshBetaAddPanel: React.FC<BoardseshBetaAddPanelProps> = ({
   boardType,
   climbUuid,
@@ -34,22 +29,33 @@ const BoardseshBetaAddPanel: React.FC<BoardseshBetaAddPanelProps> = ({
   onSuccess,
 }) => {
   const { t } = useTranslation('feed');
+
   // Reset add-mode in the parent only when the panel unmounts via an
-  // unhandled path (section collapse via lazy: true). When the user
-  // explicitly cancels or successfully submits, the parent already flipped
-  // isAddingBeta, so we set committedRef to suppress the cleanup and avoid
-  // a redundant setState + re-render.
+  // unhandled path (section collapse via lazy: true). Explicit
+  // cancel/success paths flip committedRef first to suppress this.
+  // The setTimeout defer is what makes this strict-mode-safe: in React 18
+  // dev, the mount → cleanup → remount double-invoke fires the cleanup
+  // between the two mounts; the next setup clears the pending timer so
+  // the spurious cancel never lands.
   const onCancelRef = useRef(onCancel);
   const committedRef = useRef(false);
+  const pendingCancelRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     onCancelRef.current = onCancel;
   });
-  useEffect(
-    () => () => {
-      if (!committedRef.current) onCancelRef.current();
-    },
-    [],
-  );
+  useEffect(() => {
+    if (pendingCancelRef.current !== null) {
+      clearTimeout(pendingCancelRef.current);
+      pendingCancelRef.current = null;
+    }
+    return () => {
+      if (committedRef.current) return;
+      pendingCancelRef.current = setTimeout(() => {
+        pendingCancelRef.current = null;
+        onCancelRef.current();
+      }, 0);
+    };
+  }, []);
 
   const handleCancel = () => {
     committedRef.current = true;
@@ -73,6 +79,7 @@ const BoardseshBetaAddPanel: React.FC<BoardseshBetaAddPanelProps> = ({
         surface="play-view"
         autoFocus
         compact
+        showStepsGuide
         submitLabel={t('betaVideos.addSubmit')}
         showCancel
         onCancel={handleCancel}

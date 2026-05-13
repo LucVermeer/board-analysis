@@ -31,7 +31,13 @@
     "urlLabel": "URL del vídeo de beta",
     "urlLabelForClimb": "URL del vídeo de beta para {{name}}",
     "defaultHelper": "Pega una URL pública de Instagram (reel/post) o TikTok para que otros vean tu beta.",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "steps": {
+      "optional": "Opcional",
+      "step1Title": "Abre Instagram y copia tu descripción",
+      "step2Title": "Desde tu publicación, copia el enlace para compartir",
+      "step3Title": "Pega el enlace abajo"
+    }
   },
   "commentFeed": {
     "empty": "Sin comentarios todavía",
