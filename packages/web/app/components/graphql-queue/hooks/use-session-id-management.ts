@@ -141,7 +141,7 @@ export function useSessionIdManagement({
 
   const endSession = useCallback(() => {
     const endingSessionId = activeSessionId;
-    persistentSession.deactivateSession();
+    persistentSession.deactivateSession({ notifyServer: false });
     clearClimbSessionCookie();
     setActiveSessionId(null);
 

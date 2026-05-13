@@ -32,7 +32,7 @@ type MirrorCurrentClimbResult = {
 
 type SessionQueryResult = {
   queueState: { queue: Array<{ uuid: string }>; currentClimbQueueItem: { uuid: string } | null };
-  users: Array<{ id: string }>;
+  users: Array<{ id: string; connectionState?: string }>;
 };
 
 type QueueEvent =
@@ -48,6 +48,7 @@ type QueueEvent =
 
 type SessionEvent =
   | { __typename: 'UserJoined'; user: { id: string; username: string } }
+  | { __typename: 'UserPresenceChanged'; user: { id: string; username?: string; connectionState: string } }
   | { __typename: 'UserLeft'; userId: string }
   | { __typename: 'LeaderChanged'; leaderId: string }
   | { __typename: 'SessionEnded'; reason: string };
@@ -600,7 +601,7 @@ describe('Daemon Integration Tests', () => {
       // Client 2 subscribes to session updates
       const eventPromise = waitForEvent<QueueEvent | SessionEvent>(
         client2,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on LeaderChanged { leaderId } ... on UserLeft { userId } } }`,
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on LeaderChanged { leaderId } ... on UserPresenceChanged { user { id connectionState } } } }`,
         (e) => e.__typename === 'LeaderChanged',
       );
 
@@ -632,11 +633,11 @@ describe('Daemon Integration Tests', () => {
         query: `mutation { joinSession(sessionId: "${sessionId}", boardPath: "${TEST_BOARD_PATH}", username: "Follower") { isLeader } }`,
       });
 
-      // Client 1 subscribes to session updates to detect UserLeft
+      // Client 1 subscribes to session updates to detect passive presence changes
       const eventPromise = waitForEvent<QueueEvent | SessionEvent>(
         client1,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserLeft { userId } ... on LeaderChanged { leaderId } } }`,
-        (e) => e.__typename === 'UserLeft',
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId } } }`,
+        (e) => e.__typename === 'UserPresenceChanged',
       );
 
       // Client 2 disconnects
@@ -646,8 +647,9 @@ describe('Daemon Integration Tests', () => {
 
       const event = await eventPromise;
 
-      // Should only get UserLeft, not LeaderChanged (leader is still client1)
-      expect(event.__typename).toBe('UserLeft');
+      // Should only get UserPresenceChanged, not LeaderChanged (leader is still client1)
+      expectTypename(event, 'UserPresenceChanged');
+      expect(event.user.connectionState).toBe('RECONNECTING');
     });
   });
 
@@ -681,7 +683,7 @@ describe('Daemon Integration Tests', () => {
       expect(event.user.username).toBe('Second');
     });
 
-    it('should emit UserLeft when client disconnects', async () => {
+    it('should emit UserPresenceChanged when client passively disconnects', async () => {
       const sessionId = createTestSessionId();
       const client1 = createTestClient();
       const client2 = createTestClient();
@@ -697,8 +699,8 @@ describe('Daemon Integration Tests', () => {
       // Client 1 subscribes to session updates
       const eventPromise = waitForEvent<QueueEvent | SessionEvent>(
         client1,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserLeft { userId } } }`,
-        (e) => e.__typename === 'UserLeft',
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } } }`,
+        (e) => e.__typename === 'UserPresenceChanged',
       );
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -710,8 +712,9 @@ describe('Daemon Integration Tests', () => {
 
       const event = await eventPromise;
 
-      expectTypename(event, 'UserLeft');
-      expect(event.userId).toBe(result2.joinSession.clientId);
+      expectTypename(event, 'UserPresenceChanged');
+      expect(event.user.id).toBe(result2.joinSession.clientId);
+      expect(event.user.connectionState).toBe('RECONNECTING');
     });
 
     it('should emit LeaderChanged when leader leaves', async () => {
@@ -732,8 +735,8 @@ describe('Daemon Integration Tests', () => {
       // Client 2 subscribes to session updates
       const eventPromise = collectEvents<SessionEvent>(
         client2,
-        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserLeft { userId } ... on LeaderChanged { leaderId } } }`,
-        2, // UserLeft + LeaderChanged
+        `subscription { sessionUpdates(sessionId: "${sessionId}") { __typename ... on UserPresenceChanged { user { id connectionState } } ... on LeaderChanged { leaderId } } }`,
+        2, // UserPresenceChanged + LeaderChanged
       );
 
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -745,21 +748,22 @@ describe('Daemon Integration Tests', () => {
 
       const events = await eventPromise;
 
-      // Should get both UserLeft and LeaderChanged
-      const userLeftEvent = events.find((e) => e.__typename === 'UserLeft');
+      // Should get both UserPresenceChanged and LeaderChanged
+      const userPresenceEvent = events.find((e) => e.__typename === 'UserPresenceChanged');
       const leaderChangedEvent = events.find((e) => e.__typename === 'LeaderChanged');
 
-      expect(userLeftEvent).toBeDefined();
+      expect(userPresenceEvent).toBeDefined();
       expect(leaderChangedEvent).toBeDefined();
-      expectTypename(userLeftEvent!, 'UserLeft');
+      expectTypename(userPresenceEvent!, 'UserPresenceChanged');
       expectTypename(leaderChangedEvent!, 'LeaderChanged');
-      expect(userLeftEvent.userId).toBe(result1.joinSession.clientId);
+      expect(userPresenceEvent.user.id).toBe(result1.joinSession.clientId);
+      expect(userPresenceEvent.user.connectionState).toBe('RECONNECTING');
       expect(leaderChangedEvent.leaderId).toBe(result2.joinSession.clientId);
     });
   });
 
   describe('Disconnect Handling', () => {
-    it('should cleanup session when all clients disconnect', async () => {
+    it('should preserve recoverable session state when all clients passively disconnect', async () => {
       const sessionId = createTestSessionId();
       const client1 = createTestClient();
 
@@ -780,16 +784,16 @@ describe('Daemon Integration Tests', () => {
       // Wait for cleanup
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      // New client joins same session - should get empty state (session was cleaned up)
+      // New client joins same session during the reconnect grace window.
       const client2 = createTestClient();
       const result = await execute<{ joinSession: JoinSessionResult }>(client2, {
         query: `mutation { joinSession(sessionId: "${sessionId}", boardPath: "${TEST_BOARD_PATH}") { isLeader users { id } queueState { queue { uuid } } } }`,
       });
 
-      // New client should be leader (first in fresh session)
+      // New client should be leader, and the queue should remain recoverable.
       expect(result.joinSession.isLeader).toBe(true);
-      // Should be only user
-      expect(result.joinSession.users).toHaveLength(1);
+      expect(result.joinSession.queueState.queue).toHaveLength(1);
+      expect(result.joinSession.users).toHaveLength(2);
     });
 
     it('should continue session when one of multiple clients disconnects', async () => {
@@ -820,12 +824,12 @@ describe('Daemon Integration Tests', () => {
 
       // Client 2 should still see the queue item (query session state)
       const result = await execute<{ session: SessionQueryResult }>(client2, {
-        query: `query { session(sessionId: "${sessionId}") { queueState { queue { uuid } } users { id } } }`,
+        query: `query { session(sessionId: "${sessionId}") { queueState { queue { uuid } } users { id connectionState } } }`,
       });
 
       expect(result.session.queueState.queue).toHaveLength(1);
       expect(result.session.queueState.queue[0].uuid).toBe(getTestClimbUuid('persist-test'));
-      expect(result.session.users).toHaveLength(1); // Only client2 remains
+      expect(result.session.users).toHaveLength(2); // client1 is reconnecting, client2 is connected
     });
   });
 

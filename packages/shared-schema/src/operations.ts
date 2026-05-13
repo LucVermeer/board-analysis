@@ -39,8 +39,8 @@ const QUEUE_ITEM_FIELDS = `
 
 // Mutations
 export const JOIN_SESSION = `
-  mutation JoinSession($sessionId: ID!, $boardPath: String!, $username: String, $avatarUrl: String, $initialQueue: [ClimbQueueItemInput!], $initialCurrentClimb: ClimbQueueItemInput, $sessionName: String) {
-    joinSession(sessionId: $sessionId, boardPath: $boardPath, username: $username, avatarUrl: $avatarUrl, initialQueue: $initialQueue, initialCurrentClimb: $initialCurrentClimb, sessionName: $sessionName) {
+  mutation JoinSession($sessionId: ID!, $boardPath: String!, $username: String, $avatarUrl: String, $participantId: ID, $initialQueue: [ClimbQueueItemInput!], $initialCurrentClimb: ClimbQueueItemInput, $sessionName: String) {
+    joinSession(sessionId: $sessionId, boardPath: $boardPath, username: $username, avatarUrl: $avatarUrl, participantId: $participantId, initialQueue: $initialQueue, initialCurrentClimb: $initialCurrentClimb, sessionName: $sessionName) {
       id
       name
       boardPath
@@ -58,6 +58,7 @@ export const JOIN_SESSION = `
         isLeader
         avatarUrl
         userId
+        connectionState
       }
       queueState {
         sequence
@@ -188,6 +189,7 @@ export const CREATE_SESSION = `
         isLeader
         avatarUrl
         userId
+        connectionState
       }
       queueState {
         sequence
@@ -215,10 +217,21 @@ export const SESSION_UPDATES = `
           isLeader
           avatarUrl
           userId
+          connectionState
         }
       }
       ... on UserLeft {
         userId
+      }
+      ... on UserPresenceChanged {
+        user {
+          id
+          username
+          isLeader
+          avatarUrl
+          userId
+          connectionState
+        }
       }
       ... on LeaderChanged {
         leaderId

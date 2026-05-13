@@ -70,6 +70,7 @@ export type SubscriptionQueueEvent =
 export type SessionEvent =
   | { __typename: 'UserJoined'; user: SessionUser }
   | { __typename: 'UserLeft'; userId: string }
+  | { __typename: 'UserPresenceChanged'; user: SessionUser }
   | { __typename: 'LeaderChanged'; leaderId: string }
   | { __typename: 'SessionEnded'; reason: string; newPath?: string }
   | {
@@ -91,6 +92,7 @@ export type SessionEvent =
 export type ConnectionContext = {
   connectionId: string;
   sessionId?: string;
+  participantId?: string;
   userId?: string;
   isAuthenticated?: boolean;
   // Client IP for rate limiting anonymous HTTP requests

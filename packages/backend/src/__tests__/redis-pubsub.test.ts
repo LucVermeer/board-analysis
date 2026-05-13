@@ -121,6 +121,7 @@ describe('Redis PubSub Adapter', () => {
           username: 'TestUser',
           isLeader: true,
           avatarUrl: undefined,
+          connectionState: 'CONNECTED',
         },
       };
 

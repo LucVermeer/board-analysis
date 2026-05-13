@@ -2,7 +2,7 @@ export const eventsTypeDefs = /* GraphQL */ `
   """
   Union of possible session events.
   """
-  union SessionEvent = UserJoined | UserLeft | LeaderChanged | SessionEnded | SessionStatsUpdated
+  union SessionEvent = UserJoined | UserLeft | UserPresenceChanged | LeaderChanged | SessionEnded | SessionStatsUpdated
 
   """
   Event when a user joins the session.
@@ -18,6 +18,14 @@ export const eventsTypeDefs = /* GraphQL */ `
   type UserLeft {
     "ID of the user who left"
     userId: ID!
+  }
+
+  """
+  Event when a participant's realtime presence state changes.
+  """
+  type UserPresenceChanged {
+    "The participant whose presence changed"
+    user: SessionUser!
   }
 
   """

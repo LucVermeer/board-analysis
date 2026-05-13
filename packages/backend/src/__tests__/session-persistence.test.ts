@@ -48,6 +48,7 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
   });
 
   afterEach(() => {
+    roomManager.reset();
     vi.clearAllTimers();
   });
 
@@ -170,6 +171,92 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       expect(results).toHaveLength(3);
       const users = await roomManager.getSessionUsers(sessionId);
       expect(users).toHaveLength(3);
+    });
+  });
+
+  describe('Reconnect Lifecycle', () => {
+    it('marks a passively disconnected participant as reconnecting and restores them on reconnect', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      const joined = await registerAndJoinSession('client-1', sessionId, boardPath, 'User1');
+
+      const disconnectResult = await roomManager.disconnectClient('client-1');
+      expect(disconnectResult?.presenceUser).toEqual(
+        expect.objectContaining({
+          id: joined.participantId,
+          username: 'User1',
+          connectionState: 'RECONNECTING',
+        }),
+      );
+
+      const reconnectingUsers = await roomManager.getSessionUsers(sessionId);
+      expect(reconnectingUsers).toContainEqual(
+        expect.objectContaining({
+          id: joined.participantId,
+          connectionState: 'RECONNECTING',
+        }),
+      );
+
+      await roomManager.registerClient('client-1b');
+      const rejoined = await roomManager.joinSession(
+        'client-1b',
+        sessionId,
+        boardPath,
+        'User1',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        joined.participantId,
+      );
+
+      expect(rejoined.participantWasReconnecting).toBe(true);
+      expect(rejoined.participantId).toBe(joined.participantId);
+      expect(rejoined.users).toContainEqual(
+        expect.objectContaining({
+          id: joined.participantId,
+          connectionState: 'CONNECTED',
+        }),
+      );
+    });
+
+    it('elects a new leader on passive leader disconnect while the old leader is reconnecting', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      const leader = await registerAndJoinSession('leader-client', sessionId, boardPath, 'Leader');
+      const member = await registerAndJoinSession('member-client', sessionId, boardPath, 'Member');
+
+      expect(leader.isLeader).toBe(true);
+      expect(member.isLeader).toBe(false);
+
+      const disconnectResult = await roomManager.disconnectClient('leader-client');
+
+      expect(disconnectResult?.newLeaderId).toBe('member-client');
+      expect(disconnectResult?.presenceUser).toEqual(
+        expect.objectContaining({
+          id: leader.participantId,
+          isLeader: false,
+          connectionState: 'RECONNECTING',
+        }),
+      );
+
+      const users = await roomManager.getSessionUsers(sessionId);
+      expect(users).toContainEqual(
+        expect.objectContaining({
+          id: member.participantId,
+          isLeader: true,
+          connectionState: 'CONNECTED',
+        }),
+      );
+      expect(users).toContainEqual(
+        expect.objectContaining({
+          id: leader.participantId,
+          isLeader: false,
+          connectionState: 'RECONNECTING',
+        }),
+      );
     });
   });
 
