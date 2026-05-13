@@ -140,11 +140,12 @@ export function useSessionSubscriptions({
         ) {
           sentryReportedHashRef.current = lastReceivedStateHash;
           console.error(
-            `[PersistentSession] Resync loop detected: ${consecutiveResyncCountRef.current} consecutive resyncs for server hash ${lastReceivedStateHash} (local hash ${localHash}). Filing Sentry breadcrumb.`,
+            `[PersistentSession] Resync loop detected: ${consecutiveResyncCountRef.current} consecutive resyncs for server hash ${lastReceivedStateHash} (local hash ${localHash}). Capturing Sentry message.`,
           );
           Sentry.captureMessage('Resync loop: client keeps disagreeing with server hash', {
             level: 'warning',
             tags: { feature: 'party-session', issue: 'hash-resync-loop' },
+            fingerprint: ['party-session', 'hash-resync-loop'],
             extra: {
               sessionId: session.id,
               serverHash: lastReceivedStateHash,
