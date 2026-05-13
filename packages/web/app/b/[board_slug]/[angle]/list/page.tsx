@@ -84,6 +84,7 @@ export default async function BoardSlugListPage(props: BoardSlugListPageProps) {
     (searchParamsObject.sortBy || 'ascents') === 'ascents' &&
     (searchParamsObject.sortOrder || 'desc') === 'desc' &&
     !searchParamsObject.onlyTallClimbs &&
+    !searchParamsObject.onlyWideClimbs &&
     (!searchParamsObject.holdsFilter || Object.keys(searchParamsObject.holdsFilter).length === 0) &&
     !hasProgressFilters;
 

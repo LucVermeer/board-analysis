@@ -83,6 +83,7 @@ export const climbQueries = {
       name: input.name,
       settername: input.setter && input.setter.length > 0 ? input.setter : undefined,
       onlyTallClimbs: input.onlyTallClimbs,
+      onlyWideClimbs: input.onlyWideClimbs,
       holdsFilter: input.holdsFilter,
       hideAttempted: input.hideAttempted,
       hideCompleted: input.hideCompleted,
@@ -91,6 +92,7 @@ export const climbQueries = {
       onlyDrafts: input.onlyDrafts,
       projectsOnly: input.projectsOnly,
       zoneBox: input.zoneBox,
+      zoneMode: input.zoneMode,
     };
 
     if (DEBUG) {

@@ -35,7 +35,7 @@ import {
 } from './types';
 import styles from './generator-options-form.module.css';
 
-import { KILTER_HOMEWALL_LAYOUT_ID } from '@/app/lib/board-constants';
+import { KILTER_HOMEWALL_LAYOUT_ID, isKilterHomewallTallSizeId } from '@/app/lib/board-constants';
 
 const qualityBucketRowSx: SxProps<Theme> = {
   alignItems: 'stretch',
@@ -82,8 +82,7 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   // Check if we should show the tall climbs filter
   // Only show for Kilter Homewall on the largest size (10x12)
   const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
-  const isLargestSize = boardDetails.size_name?.toLowerCase().includes('12');
-  const showTallClimbsFilter = isKilterHomewall && isLargestSize;
+  const showTallClimbsFilter = isKilterHomewall && isKilterHomewallTallSizeId(boardDetails.size_id);
 
   // Helper to update options
   const updateOption = <K extends keyof GeneratorOptions>(key: K, value: GeneratorOptions[K]) => {

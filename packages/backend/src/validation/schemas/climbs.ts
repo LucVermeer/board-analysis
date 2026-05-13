@@ -117,6 +117,7 @@ export const ClimbSearchInputSchema = z.object({
   setterId: z.number().int().optional(),
   onlyBenchmarks: z.boolean().optional(),
   onlyTallClimbs: z.boolean().optional(),
+  onlyWideClimbs: z.boolean().optional(),
   // Per-hold map of type→mode filters. Each hold can carry filters for
   // multiple types (e.g. STARTING:include + FOOT:exclude). ANY means "hold
   // present in any state" (the wildcard, was the legacy `ANY`/`NOT` value).
@@ -155,6 +156,7 @@ export const ClimbSearchInputSchema = z.object({
       message: 'zoneBox edges must form a non-empty box (right > left, top > bottom)',
     })
     .optional(),
+  zoneMode: z.enum(['allHolds', 'anyHold']).optional(),
 });
 
 export const SaveClimbInputSchema = z.object({

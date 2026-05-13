@@ -41,6 +41,7 @@ const mockSearchParams: SearchRequestPagination = {
   name: '',
   onlyClassics: false,
   onlyTallClimbs: false,
+  onlyWideClimbs: false,
   settername: [],
   setternameSuggestion: '',
   holdsFilter: {},
@@ -51,6 +52,7 @@ const mockSearchParams: SearchRequestPagination = {
   onlyDrafts: false,
   projectsOnly: false,
   zoneBox: null,
+  zoneMode: 'allHolds',
 };
 
 const initialState: QueueState = {
@@ -294,6 +296,7 @@ describe('queueReducer', () => {
         name: '',
         onlyClassics: false,
         onlyTallClimbs: false,
+        onlyWideClimbs: false,
         settername: [],
         setternameSuggestion: '',
         holdsFilter: {},
@@ -304,6 +307,7 @@ describe('queueReducer', () => {
         onlyDrafts: false,
         projectsOnly: false,
         zoneBox: null,
+        zoneMode: 'allHolds',
       };
 
       const action: QueueAction = {

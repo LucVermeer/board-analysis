@@ -12,12 +12,15 @@ import type {
   HoldFilterEntry,
   HoldFilterType,
   HoldFilterMode,
+  ZoneMatchMode,
 } from '@/app/lib/types';
 import { BOARD_NAME_PREFIX_REGEX } from '@/app/lib/board-constants';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { MOONBOARD_LAYOUTS } from '@/app/lib/moonboard-config';
 import { normalizeMinAscentsFilter, normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
 import { PAGE_LIMIT } from '../components/board-page/constants';
+
+export const DEFAULT_ZONE_MODE: ZoneMatchMode = 'allHolds';
 
 // ---------- Shared URL query param helpers ----------
 
@@ -89,6 +92,7 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const name = safeInput.name ?? DEFAULT_SEARCH_PARAMS.name;
   const onlyClassics = safeInput.onlyClassics ?? DEFAULT_SEARCH_PARAMS.onlyClassics;
   const onlyTallClimbs = safeInput.onlyTallClimbs ?? DEFAULT_SEARCH_PARAMS.onlyTallClimbs;
+  const onlyWideClimbs = safeInput.onlyWideClimbs ?? DEFAULT_SEARCH_PARAMS.onlyWideClimbs;
   const settername = safeInput.settername ?? DEFAULT_SEARCH_PARAMS.settername;
   const setternameSuggestion = safeInput.setternameSuggestion ?? DEFAULT_SEARCH_PARAMS.setternameSuggestion;
   const holdsFilter = safeInput.holdsFilter ?? DEFAULT_SEARCH_PARAMS.holdsFilter;
@@ -99,6 +103,7 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const onlyDrafts = safeInput.onlyDrafts ?? DEFAULT_SEARCH_PARAMS.onlyDrafts;
   const projectsOnly = safeInput.projectsOnly ?? DEFAULT_SEARCH_PARAMS.projectsOnly;
   const zoneBox = safeInput.zoneBox ?? DEFAULT_SEARCH_PARAMS.zoneBox;
+  const zoneMode = safeInput.zoneMode === 'anyHold' ? 'anyHold' : DEFAULT_SEARCH_PARAMS.zoneMode;
   const page = safeInput.page ?? DEFAULT_SEARCH_PARAMS.page;
   const pageSize = safeInput.pageSize ?? DEFAULT_SEARCH_PARAMS.pageSize;
 
@@ -135,6 +140,9 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   }
   if (onlyTallClimbs !== DEFAULT_SEARCH_PARAMS.onlyTallClimbs) {
     params.onlyTallClimbs = onlyTallClimbs.toString();
+  }
+  if (onlyWideClimbs !== DEFAULT_SEARCH_PARAMS.onlyWideClimbs) {
+    params.onlyWideClimbs = onlyWideClimbs.toString();
   }
   if (settername && settername.length > 0) {
     params.settername = settername.join(',');
@@ -177,6 +185,9 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
     params.zoneEdgeRight = zoneBox.edgeRight.toString();
     params.zoneEdgeBottom = zoneBox.edgeBottom.toString();
     params.zoneEdgeTop = zoneBox.edgeTop.toString();
+    if (zoneMode !== DEFAULT_SEARCH_PARAMS.zoneMode) {
+      params.zoneMode = zoneMode;
+    }
   }
 
   // Add holds filter entries only if they exist.
@@ -206,6 +217,7 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   name: '',
   onlyClassics: false,
   onlyTallClimbs: false,
+  onlyWideClimbs: false,
   settername: [],
   setternameSuggestion: '',
   holdsFilter: {},
@@ -216,6 +228,7 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   onlyDrafts: false,
   projectsOnly: false,
   zoneBox: null,
+  zoneMode: DEFAULT_ZONE_MODE,
   page: 0,
   pageSize: PAGE_LIMIT,
 };
@@ -272,8 +285,11 @@ function parseHoldsFilterFromUrl(urlParams: URLSearchParams): HoldsFilter {
   return result;
 }
 
+const parseZoneMode = (raw: string | undefined | null): ZoneMatchMode => (raw === 'anyHold' ? 'anyHold' : 'allHolds');
+
 export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchRequestPagination => {
   const holdsFilter = parseHoldsFilterFromUrl(urlParams);
+  const zoneBox = parseZoneBoxFromQuery(urlParams);
 
   return {
     ...DEFAULT_SEARCH_PARAMS,
@@ -292,6 +308,7 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     name: urlParams.get('name') ?? DEFAULT_SEARCH_PARAMS.name,
     onlyClassics: urlParams.get('onlyClassics') === 'true',
     onlyTallClimbs: urlParams.get('onlyTallClimbs') === 'true',
+    onlyWideClimbs: urlParams.get('onlyWideClimbs') === 'true',
     settername:
       urlParams
         .get('settername')
@@ -305,7 +322,8 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     showOnlyCompleted: urlParams.get('showOnlyCompleted') === 'true',
     onlyDrafts: urlParams.get('onlyDrafts') === 'true',
     projectsOnly: urlParams.get('projectsOnly') === 'true',
-    zoneBox: parseZoneBoxFromQuery(urlParams),
+    zoneBox,
+    zoneMode: zoneBox ? parseZoneMode(urlParams.get('zoneMode')) : DEFAULT_SEARCH_PARAMS.zoneMode,
     page: Number(urlParams.get('page') ?? DEFAULT_SEARCH_PARAMS.page),
     pageSize: Number(urlParams.get('pageSize') ?? DEFAULT_SEARCH_PARAMS.pageSize),
   };
@@ -343,6 +361,8 @@ export const parsedRouteSearchParamsToSearchParams = (urlParams: SearchRequestPa
     }
   }
 
+  const zoneBox = parseZoneBoxFromRouteRecord(urlParams as unknown as Record<string, unknown>);
+
   return {
     ...DEFAULT_SEARCH_PARAMS,
     ...urlParams,
@@ -356,12 +376,16 @@ export const parsedRouteSearchParamsToSearchParams = (urlParams: SearchRequestPa
     pageSize: Number(urlParams.pageSize ?? DEFAULT_SEARCH_PARAMS.pageSize),
     // Next.js route search params come as strings, so coerce to boolean
     onlyTallClimbs: String(urlParams.onlyTallClimbs) === 'true',
+    onlyWideClimbs: String(urlParams.onlyWideClimbs) === 'true',
     // The zone filter is serialised as four separate query params; the typed
     // SearchRequestPagination shape doesn't capture that, so read off the raw
     // route record. Without this, SSR list pages hit the GraphQL search with
     // no zone filter and the first paint shows unfiltered results until the
     // client takes over.
-    zoneBox: parseZoneBoxFromRouteRecord(urlParams as unknown as Record<string, unknown>),
+    zoneBox,
+    zoneMode: zoneBox
+      ? parseZoneMode(readQueryString(urlParams as unknown as Record<string, unknown>, 'zoneMode'))
+      : DEFAULT_SEARCH_PARAMS.zoneMode,
   };
 };
 

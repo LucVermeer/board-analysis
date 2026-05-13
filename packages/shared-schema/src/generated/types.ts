@@ -613,6 +613,8 @@ export type ClimbSearchInput = {
   onlyDrafts?: InputMaybe<Scalars['Boolean']['input']>;
   /** Only show tall/steep climbs */
   onlyTallClimbs?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Only show Kilter Homewall climbs that use the 10x10 side expansion */
+  onlyWideClimbs?: InputMaybe<Scalars['Boolean']['input']>;
   /** Page number for pagination (1-indexed) */
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Number of results per page */
@@ -635,8 +637,10 @@ export type ClimbSearchInput = {
   sortBy?: InputMaybe<Scalars['String']['input']>;
   /** Sort direction ('asc' or 'desc') */
   sortOrder?: InputMaybe<Scalars['String']['input']>;
-  /** Restrict results to climbs whose bounding box fits inside this zone */
+  /** Restrict results using this drawn zone */
   zoneBox?: InputMaybe<ZoneBoxInput>;
+  /** How the zone should match climb holds. Defaults to allHolds when omitted. */
+  zoneMode?: InputMaybe<ZoneMatchMode>;
 };
 
 /** Result of a climb search query. */
@@ -4768,6 +4772,13 @@ export type ZoneBoxInput = {
   edgeTop: Scalars['Int']['input'];
 };
 
+/**
+ * How a drawn zone should match climbs.
+ * allHolds keeps the existing behavior: every climb hold must fit inside the box.
+ * anyHold matches climbs that use at least one hold inside the box.
+ */
+export type ZoneMatchMode = 'allHolds' | 'anyHold';
+
 export type WithIndex<TObject> = TObject & Record<string, any>;
 export type ResolversObject<TObject> = WithIndex<TObject>;
 
@@ -5096,6 +5107,7 @@ export type ResolversTypes = ResolversObject<{
   VoteOnProposalInput: VoteOnProposalInput;
   VoteSummary: ResolverTypeWrapper<VoteSummary>;
   ZoneBoxInput: ZoneBoxInput;
+  ZoneMatchMode: ZoneMatchMode;
 }>;
 
 /** Mapping between all available schema types and the resolvers parents */

@@ -5,6 +5,7 @@ import {
   getStatusPanelSummary,
   getQualityPanelSummary,
   getSearchPillSummary,
+  getZonePanelSummary,
 } from '../search-summary-utils';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { SearchRequestPagination } from '@/app/lib/types';
@@ -12,6 +13,43 @@ import type { SearchRequestPagination } from '@/app/lib/types';
 function makeParams(overrides: Partial<SearchRequestPagination> = {}): SearchRequestPagination {
   return { ...DEFAULT_SEARCH_PARAMS, ...overrides } as SearchRequestPagination;
 }
+
+const summaryLabels = {
+  empty: 'What do you want to climb?',
+  climb: {
+    gradeFallback: (gradeId: number) => `Grade ${gradeId}`,
+    upToGrade: (gradeName: string) => `Up to ${gradeName}`,
+    setterCount: (count: number) => `${count} setters`,
+  },
+  quality: {
+    ascents: (count: number) => `${count}+ ascents`,
+    rating: (rating: number) => `${rating}+ rating`,
+    classics: 'Classics',
+    gradeAccuracy: 'Grade accuracy',
+    tallClimbsOnly: 'Tall',
+    wideClimbsOnly: 'Wide',
+  },
+  status: {
+    drafts: 'Drafts',
+    projects: 'Projects',
+    established: 'Established',
+  },
+  user: {
+    attempted: 'attempted',
+    completed: 'completed',
+    hide: (filters: string) => `Hide ${filters}`,
+    only: (filters: string) => `Only ${filters}`,
+  },
+  holds: {
+    count: (count: number) => `${count} hold${count !== 1 ? 's' : ''}`,
+  },
+  zone: 'Zone',
+  zoneModes: {
+    allHolds: 'All holds inside',
+    anyHold: 'At least 1 hold',
+  },
+  more: (count: number) => `+${count} more`,
+};
 
 describe('hasActiveNonNameFilters', () => {
   it('returns false when all params match defaults', () => {
@@ -42,6 +80,10 @@ describe('hasActiveNonNameFilters', () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it('returns false for a zone mode without an active zone', () => {
+    expect(hasActiveNonNameFilters(makeParams({ zoneMode: 'anyHold' }))).toBe(false);
   });
 
   it('returns false when holdsFilter is empty object', () => {
@@ -95,63 +137,93 @@ describe('hasActiveFilters', () => {
 
 describe('getStatusPanelSummary', () => {
   it('returns empty for defaults', () => {
-    expect(getStatusPanelSummary(makeParams())).toEqual([]);
+    expect(getStatusPanelSummary(makeParams(), summaryLabels.status)).toEqual([]);
   });
 
   it('returns ["Drafts"] when onlyDrafts is true (takes precedence over minAscents)', () => {
-    expect(getStatusPanelSummary(makeParams({ onlyDrafts: true, minAscents: 5 }))).toEqual(['Drafts']);
+    expect(getStatusPanelSummary(makeParams({ onlyDrafts: true, minAscents: 5 }), summaryLabels.status)).toEqual([
+      'Drafts',
+    ]);
   });
 
   it('returns ["Projects"] when projectsOnly is true', () => {
-    expect(getStatusPanelSummary(makeParams({ projectsOnly: true }))).toEqual(['Projects']);
+    expect(getStatusPanelSummary(makeParams({ projectsOnly: true }), summaryLabels.status)).toEqual(['Projects']);
   });
 
   it('returns ["Established"] when minAscents is exactly 2', () => {
-    expect(getStatusPanelSummary(makeParams({ minAscents: 2 }))).toEqual(['Established']);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 2 }), summaryLabels.status)).toEqual(['Established']);
   });
 
   it('returns ["Established"] when minAscents is >= 2 (e.g. 3, 10)', () => {
-    expect(getStatusPanelSummary(makeParams({ minAscents: 3 }))).toEqual(['Established']);
-    expect(getStatusPanelSummary(makeParams({ minAscents: 10 }))).toEqual(['Established']);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 3 }), summaryLabels.status)).toEqual(['Established']);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 10 }), summaryLabels.status)).toEqual(['Established']);
   });
 
   it('returns empty when minAscents is 1 (below the established threshold)', () => {
-    expect(getStatusPanelSummary(makeParams({ minAscents: 1 }))).toEqual([]);
+    expect(getStatusPanelSummary(makeParams({ minAscents: 1 }), summaryLabels.status)).toEqual([]);
   });
 });
 
 describe('getQualityPanelSummary vs Status (no duplication)', () => {
   it('includes "1+ ascents" when minAscents is 1 (below Established)', () => {
-    expect(getQualityPanelSummary(makeParams({ minAscents: 1 }))).toContain('1+ ascents');
+    expect(getQualityPanelSummary(makeParams({ minAscents: 1 }), summaryLabels.quality)).toContain('1+ ascents');
   });
 
   it('rounds legacy decimal minRating summaries up to whole stars', () => {
-    expect(getQualityPanelSummary(makeParams({ minRating: 2.5 }))).toContain('3+ rating');
+    expect(getQualityPanelSummary(makeParams({ minRating: 2.5 }), summaryLabels.quality)).toContain('3+ rating');
+  });
+
+  it('uses the translated wide climbs summary label', () => {
+    expect(getQualityPanelSummary(makeParams({ onlyWideClimbs: true }), summaryLabels.quality)).toContain('Wide');
+  });
+
+  it('uses the translated tall climbs summary label', () => {
+    expect(getQualityPanelSummary(makeParams({ onlyTallClimbs: true }), summaryLabels.quality)).toContain('Tall');
   });
 
   it('does not include "N+ ascents" when minAscents is 2 (Established handles it)', () => {
-    const parts = getQualityPanelSummary(makeParams({ minAscents: 2 }));
+    const parts = getQualityPanelSummary(makeParams({ minAscents: 2 }), summaryLabels.quality);
     expect(parts.find((p) => p.includes('ascents'))).toBeUndefined();
   });
 
   it('does not include "N+ ascents" when minAscents is 3 (Established handles it)', () => {
-    const parts = getQualityPanelSummary(makeParams({ minAscents: 3 }));
+    const parts = getQualityPanelSummary(makeParams({ minAscents: 3 }), summaryLabels.quality);
     expect(parts.find((p) => p.includes('ascents'))).toBeUndefined();
   });
 
   it('pill summary for minAscents=3 shows "Established" only, no duplicate', () => {
-    const pill = getSearchPillSummary(makeParams({ minAscents: 3 }), { zone: 'Zone' });
+    const pill = getSearchPillSummary(makeParams({ minAscents: 3 }), summaryLabels);
     expect(pill).toContain('Established');
     expect(pill).not.toContain('3+ ascents');
   });
 
   it('pill summary for projects shows "Projects"', () => {
-    const pill = getSearchPillSummary(makeParams({ projectsOnly: true }), { zone: 'Zone' });
+    const pill = getSearchPillSummary(makeParams({ projectsOnly: true }), summaryLabels);
     expect(pill).toContain('Projects');
   });
 
   it('pill summary for drafts shows "Drafts"', () => {
-    const pill = getSearchPillSummary(makeParams({ onlyDrafts: true }), { zone: 'Zone' });
+    const pill = getSearchPillSummary(makeParams({ onlyDrafts: true }), summaryLabels);
     expect(pill).toContain('Drafts');
+  });
+});
+
+describe('getZonePanelSummary', () => {
+  const zoneBox = { edgeLeft: 1, edgeRight: 2, edgeBottom: 3, edgeTop: 4 };
+
+  it('returns empty when no zone is active', () => {
+    expect(getZonePanelSummary(makeParams(), summaryLabels.zone, summaryLabels.zoneModes)).toEqual([]);
+  });
+
+  it('includes the all-holds mode when a zone is active', () => {
+    expect(
+      getZonePanelSummary(makeParams({ zoneBox, zoneMode: 'allHolds' }), summaryLabels.zone, summaryLabels.zoneModes),
+    ).toEqual(['Zone: All holds inside']);
+  });
+
+  it('includes the any-hold mode when a zone is active', () => {
+    expect(
+      getZonePanelSummary(makeParams({ zoneBox, zoneMode: 'anyHold' }), summaryLabels.zone, summaryLabels.zoneModes),
+    ).toEqual(['Zone: At least 1 hold']);
   });
 });

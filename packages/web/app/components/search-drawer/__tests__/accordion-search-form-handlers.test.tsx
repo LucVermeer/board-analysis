@@ -44,6 +44,29 @@ vi.mock('../climb-search-form', () => ({
 }));
 
 vi.mock('../search-summary-utils', () => ({
+  createSearchSummaryLabels: () => ({
+    quality: {
+      tallClimbsOnly: 'Tall',
+      wideClimbsOnly: 'Wide',
+    },
+    status: {
+      drafts: 'Drafts',
+      projects: 'Projects',
+      established: 'Established',
+    },
+    user: {
+      attempted: 'attempted',
+      completed: 'completed',
+    },
+    holds: {
+      count: (count: number) => `${count} holds`,
+    },
+    zone: 'Zone',
+    zoneModes: {
+      allHolds: 'All holds inside',
+      anyHold: 'At least 1 hold',
+    },
+  }),
   getQualityPanelSummary: () => [],
   getStatusPanelSummary: () => [],
   getUserPanelSummary: () => [],
@@ -60,6 +83,12 @@ const boardDetails = {
   set_ids: [],
   size_name: '12 x 12',
 } as unknown as BoardDetails;
+
+const makeBoardDetails = (overrides: Partial<BoardDetails>): BoardDetails =>
+  ({
+    ...boardDetails,
+    ...overrides,
+  }) as BoardDetails;
 
 describe('AccordionSearchForm — quality filter controls', () => {
   beforeEach(() => {
@@ -118,5 +147,80 @@ describe('AccordionSearchForm — quality filter controls', () => {
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minRating: 2.5 };
     render(<AccordionSearchForm boardDetails={boardDetails} />);
     expect(screen.getByRole('option', { name: '3 stars and up' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('shows wide climbs filter for 10x10 Kilter Homewall and updates filters', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 21, size_name: '10x10' })}
+      />,
+    );
+
+    expect(screen.queryByText('Tall Climbs Only')).toBeNull();
+    expect(screen.getByText('Wide Climbs Only')).toBeDefined();
+    fireEvent.click(screen.getByRole('switch', { name: 'Show only climbs that use the 10x10 side expansion holds' }));
+
+    expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ onlyWideClimbs: true });
+  });
+
+  it('shows wide climbs filter for the 10x10 Auxiliary LED Kit size', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({
+          board_name: 'kilter',
+          layout_id: 8,
+          size_id: 29,
+          size_name: 'Auxiliary LED Kit',
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Wide Climbs Only')).toBeDefined();
+  });
+
+  it('shows tall and wide climbs filters for 10x12 Kilter Homewall', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 25, size_name: '10x12' })}
+      />,
+    );
+
+    expect(screen.getByText('Tall Climbs Only')).toBeDefined();
+    expect(screen.getByText('Wide Climbs Only')).toBeDefined();
+  });
+
+  it('uses the size id, not size name text, for tall-climbs availability', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 26, size_name: 'Large' })}
+      />,
+    );
+
+    expect(screen.getByText('Tall Climbs Only')).toBeDefined();
+  });
+
+  it('does not show tall climbs for non-tall size ids with misleading names', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 22, size_name: '10x12' })}
+      />,
+    );
+
+    expect(screen.queryByText('Tall Climbs Only')).toBeNull();
+  });
+
+  it('does not show wide climbs filter for boards without 10x10 side expansions', () => {
+    const unsupportedBoards = [
+      makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_name: '7x10' }),
+      makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_name: '8x12' }),
+      makeBoardDetails({ board_name: 'kilter', layout_id: 1, size_name: '10x12' }),
+      makeBoardDetails({ board_name: 'tension', layout_id: 8, size_name: '10x12' }),
+    ];
+
+    for (const unsupportedBoard of unsupportedBoards) {
+      const { unmount } = render(<AccordionSearchForm boardDetails={unsupportedBoard} />);
+      expect(screen.queryByText('Wide Climbs Only')).toBeNull();
+      unmount();
+    }
   });
 });

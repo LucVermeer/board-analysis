@@ -1,7 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SQL } from 'drizzle-orm';
-import { createClimbFilters } from '../create-climb-filters';
+import {
+  createClimbFilters,
+  getKilterHomewallWideHoldIdsForSets,
+  resetKilterHomewallWideHoldIdsForTests,
+} from '../create-climb-filters';
 import type { BoardRouteParams, ClimbSearchParams } from '../types';
 
 const params: BoardRouteParams = {
@@ -129,6 +133,212 @@ void describe('createClimbFilters: minRating', () => {
   void it('does not append a rating filter when minRating is undefined', () => {
     const filters = createClimbFilters(params, {});
     assert.equal(filters.climbStatsConditions.length, 0);
+  });
+});
+
+void describe('createClimbFilters: zone modes', () => {
+  const zoneBox = { edgeLeft: 10, edgeRight: 80, edgeBottom: 20, edgeTop: 120 };
+
+  void it('defaults to all-holds containment using board_climbs edge columns', () => {
+    const filters = createClimbFilters(params, { zoneBox });
+
+    assert.equal(filters.zoneConditions.length, 4);
+    const rendered = filters.zoneConditions.map(sqlToString).join(' && ');
+    assert.match(rendered, /edge_left/);
+    assert.match(rendered, /edge_right/);
+    assert.match(rendered, /edge_bottom/);
+    assert.match(rendered, /edge_top/);
+    assert.doesNotMatch(rendered, /board_climb_holds/);
+  });
+
+  void it('uses an individual-hold EXISTS predicate for anyHold mode', () => {
+    const filters = createClimbFilters(params, { zoneBox, zoneMode: 'anyHold' });
+
+    assert.equal(filters.zoneConditions.length, 1);
+    const rendered = sqlToString(filters.zoneConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /FROM\s+zone_ch/);
+    assert.match(rendered, /JOIN\s+zone_bp/);
+    assert.match(rendered, /JOIN\s+.*zone_bh/);
+    assert.match(rendered, /zone_bp\.set_id IN \(1, 20\)/);
+    assert.match(rendered, /zone_bh\.x\s*>?=/);
+    assert.match(rendered, /zone_bh\.y\s*>?=/);
+  });
+
+  void it('uses anyHold zones on MoonBoard without set membership predicates', () => {
+    const filters = createClimbFilters(
+      { board_name: 'moonboard', layout_id: 1, size_id: 1, set_ids: [], angle: 40 },
+      { zoneBox, zoneMode: 'anyHold' },
+    );
+
+    assert.equal(filters.zoneConditions.length, 1);
+    const rendered = sqlToString(filters.zoneConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /JOIN\s+zone_bp/);
+    assert.doesNotMatch(rendered, /zone_bp\.set_id IN/);
+  });
+
+  void it('omits the set membership predicate for anyHold when non-MoonBoard set_ids are empty', () => {
+    const filters = createClimbFilters({ ...params, set_ids: [] }, { zoneBox, zoneMode: 'anyHold' });
+
+    assert.equal(filters.zoneConditions.length, 1);
+    const rendered = sqlToString(filters.zoneConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /JOIN\s+zone_bp/);
+    assert.doesNotMatch(rendered, /zone_bp\.set_id IN/);
+  });
+
+  void it('ignores zoneMode when the zone box is empty or inverted', () => {
+    const filters = createClimbFilters(params, {
+      zoneBox: { edgeLeft: 80, edgeRight: 10, edgeBottom: 20, edgeTop: 120 },
+      zoneMode: 'anyHold',
+    });
+
+    assert.equal(filters.zoneConditions.length, 0);
+  });
+});
+
+void describe('createClimbFilters: tall climbs', () => {
+  const homewallTallParams: BoardRouteParams = {
+    board_name: 'kilter',
+    layout_id: 8,
+    size_id: 25,
+    set_ids: [26, 27, 28, 29],
+    angle: 40,
+  };
+
+  void it('uses the climb bottom edge to find Kilter Homewall tall climbs', () => {
+    const filters = createClimbFilters(homewallTallParams, { onlyTallClimbs: true });
+
+    assert.equal(filters.tallClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.tallClimbsConditions[0]);
+    assert.match(rendered, /edge_bottom/);
+    assert.match(rendered, /SELECT MAX\(ps\.edge_bottom\)/);
+    assert.match(rendered, /FROM/);
+    assert.match(rendered, /MAX/);
+    assert.match(rendered, /product_id/);
+  });
+
+  void it('returns no results for tall climbs requests on unsupported boards or sizes', () => {
+    const unsupportedCases = [
+      { ...homewallTallParams, size_id: 21 },
+      { ...homewallTallParams, layout_id: 1 },
+      { ...homewallTallParams, board_name: 'tension' as const },
+    ];
+
+    for (const unsupportedParams of unsupportedCases) {
+      const filters = createClimbFilters(unsupportedParams, { onlyTallClimbs: true });
+      assert.equal(filters.tallClimbsConditions.length, 1);
+      assert.equal(sqlToString(filters.tallClimbsConditions[0]), 'false');
+    }
+  });
+});
+
+void describe('createClimbFilters: wide climbs', () => {
+  const homewallWideParams: BoardRouteParams = {
+    board_name: 'kilter',
+    layout_id: 8,
+    size_id: 25,
+    set_ids: [26, 27, 28, 29],
+    angle: 40,
+  };
+
+  void it('does not add a wide climbs predicate when the filter is off', () => {
+    const filters = createClimbFilters(homewallWideParams, {});
+
+    assert.equal(filters.wideClimbsConditions.length, 0);
+  });
+
+  void it('uses an individual-hold EXISTS predicate for 10x10 side expansion holds', () => {
+    const filters = createClimbFilters(homewallWideParams, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.wideClimbsConditions[0]);
+    const wideHoldIds = getKilterHomewallWideHoldIdsForSets(homewallWideParams.set_ids);
+
+    assert.equal(wideHoldIds.length, 86);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /FROM\s+wide_ch/);
+    assert.match(rendered, /wide_ch\.hold_id IN/);
+    assert.match(rendered, new RegExp(String(wideHoldIds[0])));
+    assert.match(rendered, new RegExp(String(wideHoldIds[wideHoldIds.length - 1])));
+    assert.doesNotMatch(rendered, /JOIN\s+wide_bp/);
+    assert.doesNotMatch(rendered, /JOIN\s+.*wide_bh/);
+    assert.doesNotMatch(rendered, /board_product_sizes/);
+    assert.doesNotMatch(rendered, /wide_ps/);
+    assert.doesNotMatch(rendered, /small_ps/);
+    assert.doesNotMatch(rendered, /compatible_size_ids/);
+  });
+
+  void it('can reset cached wide hold metadata for test isolation', () => {
+    const beforeReset = getKilterHomewallWideHoldIdsForSets([26, 27]);
+    resetKilterHomewallWideHoldIdsForTests();
+    const afterReset = getKilterHomewallWideHoldIdsForSets([26, 27]);
+
+    assert.deepEqual(afterReset, beforeReset);
+  });
+
+  void it('narrows the wide hold list to selected route sets', () => {
+    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [26] }, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.wideClimbsConditions[0]);
+    const mainlineWideHoldIds = getKilterHomewallWideHoldIdsForSets([26]);
+    const auxiliaryWideHoldIds = getKilterHomewallWideHoldIdsForSets([27]);
+
+    assert.equal(mainlineWideHoldIds.length, 30);
+    assert.equal(auxiliaryWideHoldIds.length, 56);
+    assert.match(rendered, new RegExp(String(mainlineWideHoldIds[0])));
+    assert.match(rendered, new RegExp(String(mainlineWideHoldIds[mainlineWideHoldIds.length - 1])));
+    assert.doesNotMatch(rendered, new RegExp(String(auxiliaryWideHoldIds[0])));
+  });
+
+  void it('keeps wide filtering active when selected sets mix expansion and non-expansion sets', () => {
+    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [26, 28] }, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.wideClimbsConditions[0]);
+    const mixedWideHoldIds = getKilterHomewallWideHoldIdsForSets([26, 28]);
+
+    assert.equal(mixedWideHoldIds.length, 30);
+    assert.notEqual(rendered, 'false');
+    assert.match(rendered, /wide_ch\.hold_id IN/);
+    assert.match(rendered, new RegExp(String(mixedWideHoldIds[0])));
+  });
+
+  void it('uses a false condition when selected sets contain no side expansion holds', () => {
+    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [28, 29] }, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    assert.equal(sqlToString(filters.wideClimbsConditions[0]), 'false');
+  });
+
+  void it('returns no results for wide climbs requests on unsupported boards or sizes', () => {
+    const unsupportedCases = [
+      { ...homewallWideParams, size_id: 17 },
+      { ...homewallWideParams, layout_id: 1 },
+      { ...homewallWideParams, board_name: 'tension' as const },
+    ];
+
+    for (const unsupportedParams of unsupportedCases) {
+      const filters = createClimbFilters(unsupportedParams, { onlyWideClimbs: true });
+      assert.equal(filters.wideClimbsConditions.length, 1);
+      assert.equal(sqlToString(filters.wideClimbsConditions[0]), 'false');
+    }
+  });
+
+  void it('applies wide climbs filtering to the 10x10 Auxiliary LED Kit size', () => {
+    const filters = createClimbFilters({ ...homewallWideParams, size_id: 29, set_ids: [27] }, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    assert.match(sqlToString(filters.wideClimbsConditions[0]), /EXISTS/);
+  });
+
+  void it('can combine tall and wide filters on 10x12 Kilter Homewall', () => {
+    const filters = createClimbFilters(homewallWideParams, { onlyTallClimbs: true, onlyWideClimbs: true });
+
+    assert.equal(filters.tallClimbsConditions.length, 1);
+    assert.equal(filters.wideClimbsConditions.length, 1);
   });
 });
 
