@@ -160,10 +160,10 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
           setCurrentClimbQueueItem(event.currentItem as LocalClimbQueueItem | null);
           break;
         case 'ClimbMirrored':
-          if (event.uuid) {
+          if (event.mirroredUuid) {
             setQueueState((prev) =>
               prev.map((item) =>
-                item.uuid === event.uuid
+                item.uuid === event.mirroredUuid
                   ? {
                       ...item,
                       climb: {
@@ -177,7 +177,7 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
           }
           setCurrentClimbQueueItem((prev) => {
             if (!prev) return prev;
-            if (event.uuid && prev.uuid !== event.uuid) return prev;
+            if (event.mirroredUuid && prev.uuid !== event.mirroredUuid) return prev;
             return {
               ...prev,
               climb: {

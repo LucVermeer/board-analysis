@@ -131,7 +131,11 @@ export async function removeConnection(
   return { sessionId, participantId, wasLeader, newLeaderId, remainingParticipantConnections };
 }
 
-async function countLiveParticipantConnections(redis: Redis, sessionId: string, participantId: string): Promise<number> {
+async function countLiveParticipantConnections(
+  redis: Redis,
+  sessionId: string,
+  participantId: string,
+): Promise<number> {
   const key = KEYS.participantConnections(sessionId, participantId);
   const connectionIds = await redis.smembers(key);
   if (connectionIds.length === 0) {

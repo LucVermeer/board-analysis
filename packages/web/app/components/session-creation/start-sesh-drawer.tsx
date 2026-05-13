@@ -464,11 +464,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
         >
           {t('creation.generateQueue.regenerate')}
         </Button>
-        <IconButton
-          size="small"
-          onClick={handleClearGenerated}
-          aria-label={t('creation.generateQueue.clear')}
-        >
+        <IconButton size="small" onClick={handleClearGenerated} aria-label={t('creation.generateQueue.clear')}>
           <CloseOutlined fontSize="small" />
         </IconButton>
       </Stack>

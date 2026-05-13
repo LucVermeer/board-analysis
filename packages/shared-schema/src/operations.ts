@@ -344,7 +344,7 @@ export const EVENTS_REPLAY = `
         ... on ClimbMirrored {
           sequence
           stateHash
-          uuid
+          mirroredUuid: uuid
           mirrored
         }
       }
@@ -401,7 +401,7 @@ export const QUEUE_UPDATES = `
       ... on ClimbMirrored {
         sequence
         stateHash
-        uuid
+        mirroredUuid: uuid
         mirrored
       }
     }

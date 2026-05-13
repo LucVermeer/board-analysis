@@ -55,6 +55,24 @@ describe('session lifecycle replay helpers', () => {
     });
   });
 
+  it('maps unaliased ClimbMirrored replay events to subscription shape', () => {
+    const event: QueueEvent = {
+      __typename: 'ClimbMirrored',
+      sequence: 7,
+      stateHash: 'hash-7',
+      uuid: 'queue-item-1',
+      mirrored: true,
+    };
+
+    expect(transformToSubscriptionEvent(event)).toEqual({
+      __typename: 'ClimbMirrored',
+      sequence: 7,
+      stateHash: 'hash-7',
+      mirroredUuid: 'queue-item-1',
+      mirrored: true,
+    });
+  });
+
   it('rejects replay coverage with a missing sequence', () => {
     const events: SubscriptionQueueEvent[] = [
       {

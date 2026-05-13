@@ -597,10 +597,7 @@ async function resolveLeaderParticipantId(
         return distributedLeader.participantId;
       }
     } catch (error) {
-      console.error(
-        `[RoomManager] Failed to resolve leader participant for ${leaderConnectionId.slice(0, 8)}:`,
-        error,
-      );
+      console.error(`[RoomManager] Failed to resolve leader participant for ${leaderConnectionId.slice(0, 8)}:`, error);
     }
   }
 

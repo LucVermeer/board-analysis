@@ -63,6 +63,18 @@ export function transformToSubscriptionEvent(event: QueueEvent | SubscriptionQue
         correlationId: event.correlationId,
       };
     }
+    case 'ClimbMirrored': {
+      // Wire shape exposes `uuid`; aliased subscription shape uses `mirroredUuid`. Read both.
+      const climbMirroredCandidate = event as { uuid?: string | null; mirroredUuid?: string | null };
+      const mirroredUuid = climbMirroredCandidate.mirroredUuid ?? climbMirroredCandidate.uuid ?? null;
+      return {
+        __typename: 'ClimbMirrored',
+        sequence: event.sequence,
+        stateHash: event.stateHash,
+        mirroredUuid,
+        mirrored: event.mirrored,
+      };
+    }
     default:
       return event as SubscriptionQueueEvent;
   }
@@ -393,6 +405,7 @@ export function useSessionLifecycle({
     let retryConnectTimeout: ReturnType<typeof setTimeout> | null = null;
     let subscriptionRestartTimeout: ReturnType<typeof setTimeout> | null = null;
     let transientRetryCount = 0;
+    let subscriptionRetryCount = 0;
     let isCleaningUp = false;
 
     async function joinSession(clientToUse: Client): Promise<Session | null> {
@@ -549,13 +562,31 @@ export function useSessionLifecycle({
       if (connectionGenerationRef.current !== connectionGeneration) return;
       if (subscriptionRestartTimeout) return;
 
-      if (DEBUG) console.info(`[PersistentSession] Scheduling subscription recovery: ${reason}`);
+      subscriptionRetryCount++;
+      if (subscriptionRetryCount > MAX_TRANSIENT_RETRIES) {
+        console.warn(`[PersistentSession] Exhausted ${MAX_TRANSIENT_RETRIES} subscription retries, clearing session`);
+        subscriptionRetryCount = 0;
+        removePreference(ACTIVE_SESSION_KEY).catch(() => {});
+        if (mountedRef.current) {
+          setActiveSession(null);
+        }
+        return;
+      }
+
+      const delay = Math.min(
+        INITIAL_RETRY_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, subscriptionRetryCount - 1),
+        MAX_RETRY_DELAY_MS,
+      );
+      if (DEBUG)
+        console.info(
+          `[PersistentSession] Scheduling subscription recovery (${subscriptionRetryCount}/${MAX_TRANSIENT_RETRIES}) in ${delay}ms: ${reason}`,
+        );
       subscriptionRestartTimeout = setTimeout(() => {
         subscriptionRestartTimeout = null;
         if (isCleaningUp || !mountedRef.current) return;
         if (connectionGenerationRef.current !== connectionGeneration) return;
         void handleReconnect();
-      }, INITIAL_RETRY_DELAY_MS);
+      }, delay);
     }
 
     function startSubscriptions(clientToUse: Client) {
@@ -569,6 +600,7 @@ export function useSessionLifecycle({
           {
             next: (data) => {
               if (data.queueUpdates) {
+                subscriptionRetryCount = 0;
                 handleQueueEvent(data.queueUpdates);
               }
             },
@@ -596,6 +628,7 @@ export function useSessionLifecycle({
           {
             next: (data) => {
               if (data.sessionUpdates) {
+                subscriptionRetryCount = 0;
                 // Handle UserJoined/UserLeft/LeaderChanged/SessionEnded in session state
                 const event = data.sessionUpdates;
                 if (event.__typename !== 'SessionStatsUpdated') {
@@ -692,6 +725,7 @@ export function useSessionLifecycle({
         if (DEBUG) console.info('[PersistentSession] Joined session, clientId:', sessionData.clientId);
 
         transientRetryCount = 0;
+        subscriptionRetryCount = 0;
         setSession(sessionData);
         setHasConnected(true);
         setIsConnecting(false);

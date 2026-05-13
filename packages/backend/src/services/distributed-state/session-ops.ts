@@ -266,7 +266,11 @@ export async function getSessionMembers(redis: Redis, sessionId: string): Promis
   return users;
 }
 
-async function getSessionParticipants(redis: Redis, sessionId: string, participantIds: string[]): Promise<SessionUser[]> {
+async function getSessionParticipants(
+  redis: Redis,
+  sessionId: string,
+  participantIds: string[],
+): Promise<SessionUser[]> {
   const pipeline = redis.pipeline();
   for (const participantId of participantIds) {
     pipeline.hgetall(KEYS.participant(sessionId, participantId));

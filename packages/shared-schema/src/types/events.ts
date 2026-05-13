@@ -84,7 +84,13 @@ export type SubscriptionQueueEvent =
       clientId: string | null;
       correlationId: string | null;
     }
-  | { __typename: 'ClimbMirrored'; sequence: number; stateHash: string; uuid?: string | null; mirrored: boolean };
+  | {
+      __typename: 'ClimbMirrored';
+      sequence: number;
+      stateHash: string;
+      mirroredUuid?: string | null;
+      mirrored: boolean;
+    };
 
 export type SessionEvent =
   | { __typename: 'UserJoined'; user: SessionUser }

@@ -223,7 +223,7 @@ describe('useEventProcessor - offline FullSync merge', () => {
         __typename: 'ClimbMirrored',
         sequence: 6,
         stateHash: 'hash-2',
-        uuid: item.uuid,
+        mirroredUuid: item.uuid,
         mirrored: true,
       });
     });
