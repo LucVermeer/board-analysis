@@ -285,6 +285,8 @@ function parseHoldsFilterFromUrl(urlParams: URLSearchParams): HoldsFilter {
   return result;
 }
 
+const parseZoneMode = (raw: string | undefined | null): ZoneMatchMode => (raw === 'anyHold' ? 'anyHold' : 'allHolds');
+
 export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchRequestPagination => {
   const holdsFilter = parseHoldsFilterFromUrl(urlParams);
   const zoneBox = parseZoneBoxFromQuery(urlParams);
@@ -326,8 +328,6 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     pageSize: Number(urlParams.get('pageSize') ?? DEFAULT_SEARCH_PARAMS.pageSize),
   };
 };
-
-const parseZoneMode = (raw: string | undefined | null): ZoneMatchMode => (raw === 'anyHold' ? 'anyHold' : 'allHolds');
 
 const parseZoneBoxFromQuery = (urlParams: URLSearchParams) => {
   const edgeLeft = parseQueryParamInt(urlParams, 'zoneEdgeLeft');

@@ -110,6 +110,8 @@
       "any": "Cualquiera",
       "tallClimbsOnly": "Solo bloques altos",
       "tallClimbsTooltip": "Muestra solo bloques que usan presas en las 8 filas inferiores (solo disponible en tablas 10x12)",
+      "wideClimbsOnly": "Solo bloques anchos",
+      "wideClimbsTooltip": "Muestra solo bloques que usan las presas laterales extra del 10x10",
       "gradeAccuracy": "Precisión del grado",
       "somewhatAccurate": "Algo precisa (<0.2)",
       "veryAccurate": "Muy precisa (<0.1)",
@@ -122,6 +124,10 @@
       "zone": "Zona",
       "holdsAndZone": "Presas y zona",
       "anyDefault": "Cualquiera"
+    },
+    "quality": {
+      "tallClimbsOnly": "Altos",
+      "wideClimbsOnly": "Anchos"
     },
     "status": {
       "any": "Cualquiera",
@@ -163,10 +169,13 @@
     },
     "zone": {
       "draw": "Dibujar zona",
-      "clear": "Borrar zona"
+      "clear": "Borrar zona",
+      "modeLabel": "Tipo de zona",
+      "allHolds": "Todas las presas dentro",
+      "anyHold": "Al menos 1 presa"
     },
     "holdsAndZone": {
-      "description": "Toca presas para filtrar, o dibuja una zona para limitar los resultados a bloques que entren en ella."
+      "description": "Toca presas para filtrar, o dibuja una zona para centrar los resultados en una parte de la tabla."
     },
     "sortToggle": "Ordenar"
   },
