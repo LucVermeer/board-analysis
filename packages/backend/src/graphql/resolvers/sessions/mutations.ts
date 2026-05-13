@@ -329,7 +329,12 @@ export const sessionMutations = {
         });
       }
 
-      updateContext(ctx.connectionId, { sessionId: undefined, userId: undefined });
+      // Only clear sessionId — leave userId alone. Auth set it to the
+      // real user UUID at connection time and downstream resolvers on
+      // this same WebSocket (queries from other tabs, social actions,
+      // etc.) still need it. Mirrors the joinSession / createSession fix
+      // earlier in this file.
+      updateContext(ctx.connectionId, { sessionId: undefined });
     }
 
     return true;

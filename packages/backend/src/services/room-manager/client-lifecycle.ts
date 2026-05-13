@@ -230,83 +230,32 @@ export async function leaveSession(
   const wasLeader = client.isLeader;
 
   const sessionClientIds = sessionsMap.get(sessionId);
-  if (sessionClientIds) {
-    sessionClientIds.delete(connectionId);
+  const wentLocallyEmpty = sessionClientIds
+    ? (sessionClientIds.delete(connectionId), sessionClientIds.size === 0)
+    : false;
 
-    if (sessionClientIds.size === 0) {
-      const existingGraceTimer = sessionGraceTimers.get(sessionId);
-      if (existingGraceTimer) clearTimeout(existingGraceTimer);
+  if (wentLocallyEmpty) {
+    const existingGraceTimer = sessionGraceTimers.get(sessionId);
+    if (existingGraceTimer) clearTimeout(existingGraceTimer);
 
-      const timer = setTimeout(() => {
-        const currentClients = sessionsMap.get(sessionId);
-        if (currentClients && currentClients.size === 0) {
-          sessionsMap.delete(sessionId);
-          console.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
-        }
-        sessionGraceTimers.delete(sessionId);
-      }, SESSION_GRACE_PERIOD_MS);
-      sessionGraceTimers.set(sessionId, timer);
-
-      // Cancelling pending Postgres writes and marking the session inactive is
-      // only safe when no OTHER backend instance still has members for this
-      // session. The local sessionsMap is per-instance — being empty here only
-      // means this instance has no active clients, not that the session is
-      // globally idle.
-      //
-      // INVARIANT: `member.id` returned by `getSessionMembers` is the
-      // CONNECTION ID, not the stable user UUID. This is set in
-      // `services/distributed-state/session-ops.ts:181`:
-      //   `id: connection.connectionId`
-      // The filter below relies on that — if the field ever switches to
-      // user UUID, this race-protection regresses silently (we'd filter
-      // by the wrong identifier and the leaving connection would never
-      // be subtracted). The two tests in
-      // `__tests__/leave-session-multi-instance.test.ts` pin this
-      // contract; update them in lockstep if the invariant changes.
-      //
-      // We query before `distributedState.leaveSession` runs below, so
-      // this connection is still listed in distributed state and must
-      // be filtered out.
-      let otherInstanceHasMembers = false;
-      if (distributedState) {
-        try {
-          const members = await distributedState.getSessionMembers(sessionId);
-          otherInstanceHasMembers = members.some((member) => member.id !== connectionId);
-        } catch (error) {
-          // If the distributed check fails, default to the legacy behaviour
-          // (mark inactive) rather than risk a leaked session.
-          console.error(
-            `[RoomManager] Failed to query distributed members for ${sessionId} during leaveSession:`,
-            error,
-          );
-        }
+    const timer = setTimeout(() => {
+      const currentClients = sessionsMap.get(sessionId);
+      if (currentClients && currentClients.size === 0) {
+        sessionsMap.delete(sessionId);
+        console.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
       }
-
-      if (!otherInstanceHasMembers) {
-        writeScheduler.cancelPendingWrites(sessionId);
-
-        if (redisStore) {
-          await redisStore.markInactive(sessionId);
-          if (!distributedState) {
-            await redisStore.saveUsers(sessionId, []);
-          }
-          console.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
-        }
-      }
-
-      // Await pending session insert for brand-new sessions.
-      const pending = pendingJoinPersists.get(sessionId);
-      if (pending) {
-        await pending;
-      }
-    }
+      sessionGraceTimers.delete(sessionId);
+    }, SESSION_GRACE_PERIOD_MS);
+    sessionGraceTimers.set(sessionId, timer);
   }
 
   // Reset client state
   client.sessionId = null;
   client.isLeader = false;
 
-  // Elect new leader
+  // Elect new leader. This also atomically removes our connection from
+  // distributed state, so the post-leave membership re-check below sees
+  // an accurate global view.
   let newLeaderId: string | undefined;
 
   if (distributedState) {
@@ -328,6 +277,56 @@ export async function leaveSession(
       const newLeader = clientsArray[0];
       newLeader.isLeader = true;
       newLeaderId = newLeader.connectionId;
+    }
+  }
+
+  // Decide whether to mark the session globally inactive and cancel pending
+  // Postgres writes. The check must run AFTER `distributedState.leaveSession`
+  // — querying members beforehand opens a TOCTOU race where two instances
+  // concurrently see each other in the membership snapshot, both decide to
+  // skip the inactive path, then both leave the session globally empty
+  // without anyone calling `markInactive` or `cancelPendingWrites`. Running
+  // the check after our own leave (and against the post-leave Redis set
+  // membership) collapses both branches of that race into "the last
+  // instance to leave wins and runs the cleanup".
+  //
+  // INVARIANT: `member.id` returned by `getSessionMembers` is the connection
+  // ID, set in `services/distributed-state/session-ops.ts:181`:
+  //   `id: connection.connectionId`
+  // The empty-check below relies on that — if the field ever switches to a
+  // user UUID, the leaving connection would no longer be subtracted by
+  // `distributedState.leaveSession` from the same membership view, and the
+  // emptiness signal would diverge from reality. The tests in
+  // `__tests__/leave-session-multi-instance.test.ts` pin this contract.
+  if (wentLocallyEmpty) {
+    let globallyEmpty = true;
+    if (distributedState) {
+      try {
+        const members = await distributedState.getSessionMembers(sessionId);
+        globallyEmpty = members.length === 0;
+      } catch (error) {
+        // If the distributed check fails, default to the legacy behaviour
+        // (mark inactive) rather than risk a leaked session.
+        console.error(`[RoomManager] Failed to query distributed members for ${sessionId} during leaveSession:`, error);
+      }
+    }
+
+    if (globallyEmpty) {
+      writeScheduler.cancelPendingWrites(sessionId);
+
+      if (redisStore) {
+        await redisStore.markInactive(sessionId);
+        if (!distributedState) {
+          await redisStore.saveUsers(sessionId, []);
+        }
+        console.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+      }
+    }
+
+    // Await pending session insert for brand-new sessions.
+    const pending = pendingJoinPersists.get(sessionId);
+    if (pending) {
+      await pending;
     }
   }
 

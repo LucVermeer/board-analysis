@@ -1,19 +1,29 @@
 /**
- * Regression test for the multi-instance markInactive race in
+ * Regression tests for the multi-instance `markInactive` cleanup in
  * `leaveSession`.
  *
- * Before this fix: when the local sessionsMap entry for a session emptied,
- * the instance unconditionally called `redisStore.markInactive(sessionId)`,
+ * Before any of these fixes: when the local sessionsMap entry for a
+ * session emptied, the instance unconditionally called
+ * `redisStore.markInactive(sessionId)`,
  * `writeScheduler.cancelPendingWrites(sessionId)`, and logged
- * "Session ... marked inactive - grace period started (60s)" — even though
- * other backend instances might still have active members. The cancelled
- * pending Postgres writes are the dangerous side-effect: a queue mutation
- * made just before the local instance emptied could be lost from durable
- * storage.
+ * "Session ... marked inactive - grace period started (60s)" — even
+ * though other backend instances might still have active members. The
+ * cancelled pending Postgres writes are the dangerous side-effect: a
+ * queue mutation made just before the local instance emptied could be
+ * lost from durable storage.
  *
- * After this fix: the side-effects are skipped when distributed state
- * still lists members on other instances. The local grace timer still runs
- * (it only manages this instance's memory).
+ * After the fix in this PR:
+ * - We only mark inactive when the session is globally empty.
+ * - The global-emptiness check runs AFTER `distributedState.leaveSession`
+ *   so the two-instance concurrent-leave race can't leak — when both
+ *   instances see [other] in a pre-leave snapshot, both leave, then both
+ *   re-check post-leave and both see [] → both call markInactive
+ *   idempotently. (`SREM` on the `boardsesh:session:active` set is a
+ *   no-op the second time.) The single-instance-with-friend-on-other-
+ *   instance case still works because the friend hasn't left yet, so
+ *   the post-leave query returns `[friend]` not `[]`.
+ * - The local grace timer still runs unconditionally (per-instance
+ *   memory cleanup is independent of global session state).
  */
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { leaveSession } from '../services/room-manager/client-lifecycle';
@@ -78,12 +88,11 @@ describe('leaveSession multi-instance markInactive race', () => {
   });
 
   it('skips markInactive and keeps pending writes when other instances still have members', async () => {
+    // Post-leave query: we already left, but the other instance's
+    // connection is still in the membership set.
     const distributedState: MockedDistState = {
       leaveSession: vi.fn().mockResolvedValue({ newLeaderId: REMOTE_CONN }),
-      getSessionMembers: vi.fn().mockResolvedValue([
-        { id: LOCAL_CONN, username: 'a', isLeader: false },
-        { id: REMOTE_CONN, username: 'b', isLeader: true },
-      ]),
+      getSessionMembers: vi.fn().mockResolvedValue([{ id: REMOTE_CONN, username: 'b', isLeader: true }]),
     };
 
     const result = await leaveSession(
@@ -112,12 +121,11 @@ describe('leaveSession multi-instance markInactive race', () => {
   });
 
   it('still calls markInactive and cancels pending writes when no other instances have members', async () => {
+    // Post-leave query returns empty because we were the only member
+    // globally.
     const distributedState: MockedDistState = {
       leaveSession: vi.fn().mockResolvedValue({ newLeaderId: null }),
-      getSessionMembers: vi.fn().mockResolvedValue([
-        // Only the leaving connection remains; nothing else globally.
-        { id: LOCAL_CONN, username: 'a', isLeader: true },
-      ]),
+      getSessionMembers: vi.fn().mockResolvedValue([]),
     };
 
     const result = await leaveSession(
@@ -140,15 +148,23 @@ describe('leaveSession multi-instance markInactive race', () => {
     clearTimeout(sessionGraceTimers.get(SESSION_ID)!);
   });
 
-  it('still calls markInactive when getSessionMembers returns an empty array (session already evicted)', async () => {
-    // This documents the desired fallback when distributed state has
-    // already pruned the leaving connection (e.g. TTL expired between
-    // `leaveSession`'s callsite and the membership query). The race
-    // result is that `members` is empty, which we treat the same as
-    // "no other members" — mark inactive, cancel pending writes.
+  it('queries getSessionMembers AFTER distributedState.leaveSession so the post-leave view collapses the concurrent-leave race', async () => {
+    // Two-instance concurrent-leave race: both instances see [other] in
+    // a *pre*-leave snapshot, both decide to skip markInactive, both
+    // distributedState.leaveSession runs, then both re-check post-leave
+    // and see []. With the call order baked in here, the cleanup fires
+    // idempotently — `SREM boardsesh:session:active` is a no-op the
+    // second time, so both instances calling markInactive is fine.
+    const callOrder: string[] = [];
     const distributedState: MockedDistState = {
-      leaveSession: vi.fn().mockResolvedValue({ newLeaderId: null }),
-      getSessionMembers: vi.fn().mockResolvedValue([]),
+      leaveSession: vi.fn().mockImplementation(async () => {
+        callOrder.push('leaveSession');
+        return { newLeaderId: null };
+      }),
+      getSessionMembers: vi.fn().mockImplementation(async () => {
+        callOrder.push('getSessionMembers');
+        return [];
+      }),
     };
 
     await leaveSession(
@@ -163,9 +179,8 @@ describe('leaveSession multi-instance markInactive race', () => {
       GRACE_PERIOD_MS,
     );
 
-    expect(distributedState.getSessionMembers).toHaveBeenCalledWith(SESSION_ID);
+    expect(callOrder).toEqual(['leaveSession', 'getSessionMembers']);
     expect(redisStore.markInactive).toHaveBeenCalledWith(SESSION_ID);
-    expect(writeScheduler.cancelPendingWrites).toHaveBeenCalledWith(SESSION_ID);
 
     clearTimeout(sessionGraceTimers.get(SESSION_ID)!);
   });

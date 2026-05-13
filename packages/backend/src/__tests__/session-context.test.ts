@@ -178,6 +178,16 @@ describe('leaveSession publishes UserLeft with the connection ID', () => {
     // It must NOT be the auth user UUID — clients filter participants
     // by connection ID and would fail to remove the user otherwise.
     expect(userLeftCall![1].userId).not.toBe(realUserId);
+
+    // updateContext must clear ONLY sessionId; userId must be preserved
+    // for downstream resolvers on this same connection (queries, social
+    // actions, etc.). An earlier version of this resolver wrote
+    // `{ sessionId: undefined, userId: undefined }`, which looked like
+    // it was deliberately wiping the auth UUID.
+    expect(updateContext).toHaveBeenCalledOnce();
+    const [, calledUpdates] = vi.mocked(updateContext).mock.calls[0];
+    expect(calledUpdates).toEqual({ sessionId: undefined });
+    expect(calledUpdates).not.toHaveProperty('userId');
   });
 
   it('emits UserLeft for unauthenticated clients (which previously had no userId on ctx)', async () => {
