@@ -110,17 +110,12 @@ export const createMockRedis = (): MockRedis => {
       const set = sets.get(key);
       return set ? set.size : 0;
     }),
-    hset: vi.fn(async (key: string, ...fieldsAndValues: string[]) => {
+    hset: vi.fn(async (key: string, field: string, value: string) => {
       if (!hashes.has(key)) hashes.set(key, {});
       const hash = hashes.get(key)!;
-      let newCount = 0;
-      for (let i = 0; i < fieldsAndValues.length; i += 2) {
-        const field = fieldsAndValues[i];
-        const value = fieldsAndValues[i + 1] ?? '';
-        if (!(field in hash)) newCount++;
-        hash[field] = value;
-      }
-      return newCount;
+      const isNew = !(field in hash);
+      hash[field] = value;
+      return isNew ? 1 : 0;
     }),
     setex: vi.fn(async (key: string, _seconds: number, value: string) => {
       store.set(key, value);
@@ -133,10 +128,6 @@ export const createMockRedis = (): MockRedis => {
       const chainable = {
         hmset: (key: string, obj: Record<string, string>) => {
           commands.push(() => mockRedis.hmset(key, obj));
-          return chainable;
-        },
-        hset: (key: string, ...fieldsAndValues: string[]) => {
-          commands.push(() => mockRedis.hset(key, ...fieldsAndValues));
           return chainable;
         },
         expire: (_key: string, _seconds: number) => {
@@ -187,17 +178,6 @@ export const createMockRedis = (): MockRedis => {
           commands.push(async () => {
             return hashes.get(key) || {};
           });
-          return chainable;
-        },
-        smembers: (key: string) => {
-          commands.push(async () => {
-            const set = sets.get(key);
-            return set ? Array.from(set) : [];
-          });
-          return chainable;
-        },
-        srem: (key: string, ...members: string[]) => {
-          commands.push(() => mockRedis.srem(key, ...members));
           return chainable;
         },
         exists: (key: string) => {

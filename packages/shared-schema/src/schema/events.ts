@@ -2,7 +2,7 @@ export const eventsTypeDefs = /* GraphQL */ `
   """
   Union of possible session events.
   """
-  union SessionEvent = UserJoined | UserLeft | UserPresenceChanged | LeaderChanged | SessionEnded | SessionStatsUpdated
+  union SessionEvent = UserJoined | UserLeft | LeaderChanged | SessionEnded | SessionStatsUpdated
 
   """
   Event when a user joins the session.
@@ -21,21 +21,11 @@ export const eventsTypeDefs = /* GraphQL */ `
   }
 
   """
-  Event when a participant's realtime presence state changes.
-  """
-  type UserPresenceChanged {
-    "The participant whose presence changed"
-    user: SessionUser!
-  }
-
-  """
   Event when session leadership changes.
   """
   type LeaderChanged {
-    "Stable participant ID of the new leader"
+    "ID of the new leader"
     leaderId: ID!
-    "Connection ID of the new leader, for current-client leadership checks"
-    leaderConnectionId: ID
   }
 
   """
@@ -100,8 +90,6 @@ export const eventsTypeDefs = /* GraphQL */ `
   type QueueItemAdded {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
-    stateHash: String!
     "The added item"
     item: ClimbQueueItem!
     "Position where item was inserted (null = end)"
@@ -114,8 +102,6 @@ export const eventsTypeDefs = /* GraphQL */ `
   type QueueItemRemoved {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
-    stateHash: String!
     "UUID of the removed item"
     uuid: ID!
   }
@@ -126,8 +112,6 @@ export const eventsTypeDefs = /* GraphQL */ `
   type QueueReordered {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
-    stateHash: String!
     "UUID of the moved item"
     uuid: ID!
     "Previous position"
@@ -142,8 +126,6 @@ export const eventsTypeDefs = /* GraphQL */ `
   type CurrentClimbChanged {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
-    stateHash: String!
     "New current climb (null to clear)"
     item: ClimbQueueItem
     "ID of the client that made this change"
@@ -158,10 +140,6 @@ export const eventsTypeDefs = /* GraphQL */ `
   type ClimbMirrored {
     "Sequence number of this event"
     sequence: Int!
-    "Queue state hash after this event is applied"
-    stateHash: String!
-    "UUID of the mirrored queue item, when a current climb exists"
-    uuid: ID
     "New mirror state"
     mirrored: Boolean!
   }

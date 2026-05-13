@@ -118,7 +118,6 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     isAuthLoading,
     handleQueueEvent: eventProcessor.handleQueueEvent,
     handleSessionEvent: eventProcessor.handleSessionEvent,
-    setLastReceivedStateHash: eventProcessor.setLastReceivedStateHash,
     setSession: noopSetSession, // Session is managed internally by lifecycle
     refs,
   });

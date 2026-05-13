@@ -273,25 +273,6 @@ describe.skipIf(!redisAvailable)('DistributedStateManager', () => {
       const members = await manager.getSessionMembers('non-existent-session');
       expect(members).toEqual([]);
     });
-
-    it('should preserve leader status when marking participant presence', async () => {
-      await manager.registerConnection('leader-presence-conn', 'LeaderPresence');
-      await manager.joinSession('leader-presence-conn', 'presence-session');
-
-      const presenceUser = await manager.markParticipantPresence(
-        'presence-session',
-        'leader-presence-conn',
-        'RECONNECTING',
-      );
-
-      expect(presenceUser).toEqual(
-        expect.objectContaining({
-          id: 'leader-presence-conn',
-          isLeader: true,
-          connectionState: 'RECONNECTING',
-        }),
-      );
-    });
   });
 
   describe('Connection Validation', () => {

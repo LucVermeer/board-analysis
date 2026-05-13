@@ -182,18 +182,15 @@ const unsubscribe = client.subscribe(
         queueUpdates(sessionId: $sessionId) {
           ... on QueueItemAdded {
             sequence
-            stateHash
-            addedItem: item { uuid climb { name difficulty } }
+            item { uuid climb { name difficulty } }
           }
           ... on QueueItemRemoved {
             sequence
-            stateHash
             uuid
           }
           ... on CurrentClimbChanged {
             sequence
-            stateHash
-            currentItem: item { climb { name } }
+            item { climb { name } }
           }
         }
       }
@@ -261,20 +258,8 @@ const { eventsReplay } = await client.query({
   query: \`
     query EventsReplay($sessionId: ID!, $sinceSequence: Int!) {
       eventsReplay(sessionId: $sessionId, sinceSequence: $sinceSequence) {
+        events { ... }
         currentSequence
-        events {
-          __typename
-          ... on QueueItemAdded {
-            sequence
-            stateHash
-            addedItem: item { uuid climb { name difficulty } }
-          }
-          ... on CurrentClimbChanged {
-            sequence
-            stateHash
-            currentItem: item { uuid climb { name difficulty } }
-          }
-        }
       }
     }
   \`,
