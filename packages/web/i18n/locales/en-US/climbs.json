@@ -124,6 +124,8 @@
     "panels": {
       "quality": "Quality",
       "status": "Ascent Status",
+      "progress": "Progress",
+      "allClimbs": "All climbs",
       "zone": "Zone",
       "holdsAndZone": "Holds & Zone",
       "anyDefault": "Any"

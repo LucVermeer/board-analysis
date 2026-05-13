@@ -297,6 +297,8 @@ const ClimbSearchForm: React.FC<ClimbSearchFormProps> = ({ boardDetails }) => {
       if (nextMode === 'allHolds') {
         updateFilters({ zoneMode: nextMode, holdsFilter: pruneHoldsToZone(localZone) });
       } else {
+        // In any-hold mode, out-of-zone hold filters still refine results
+        // because only one climb hold must intersect the zone.
         updateFilters({ zoneMode: nextMode });
       }
       track('Search Zone Mode Changed', {

@@ -24,9 +24,11 @@ const KILTER_HOMEWALL_WIDE_SIZE_IDS = new Set([21, 22, 25, 26, 29]);
 function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
   const smallSize = getProductSize('kilter', KILTER_HOMEWALL_SMALL_SIZE_ID);
   const wideSize = getProductSize('kilter', KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID);
-  if (!smallSize || !wideSize) return new Map();
+  if (!smallSize || !wideSize) {
+    throw new Error('Kilter Homewall size metadata is missing for the wide climb filter');
+  }
 
-  return new Map(
+  const wideHoldIdsBySet = new Map(
     KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS.map((setId) => [
       setId,
       getHolePlacements('kilter', KILTER_HOMEWALL_LAYOUT_ID, setId)
@@ -42,6 +44,12 @@ function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly num
         .map(([holdId]) => holdId),
     ]),
   );
+  const wideHoldCount = [...wideHoldIdsBySet.values()].reduce((total, holdIds) => total + holdIds.length, 0);
+  if (wideHoldCount === 0) {
+    throw new Error('Kilter Homewall wide climb filter did not find any side-expansion holds');
+  }
+
+  return wideHoldIdsBySet;
 }
 
 const KILTER_HOMEWALL_WIDE_HOLD_IDS_BY_SET = buildKilterHomewallWideHoldIdsBySet();
@@ -279,29 +287,32 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
 
   const wideClimbsConditions: SQL[] = [];
 
-  if (
-    searchParams.onlyWideClimbs &&
-    params.board_name === 'kilter' &&
-    params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
-    KILTER_HOMEWALL_WIDE_SIZE_IDS.has(params.size_id)
-  ) {
-    const wideHoldIds = getKilterHomewallWideHoldIdsForSets(params.set_ids);
-    if (wideHoldIds.length === 0) {
+  if (searchParams.onlyWideClimbs) {
+    const isWideClimbSupportedBoard =
+      params.board_name === 'kilter' &&
+      params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
+      KILTER_HOMEWALL_WIDE_SIZE_IDS.has(params.size_id);
+    if (!isWideClimbSupportedBoard) {
       wideClimbsConditions.push(sql`false`);
     } else {
-      const wideHoldIdLiterals = sql.join(
-        wideHoldIds.map((holdId) => sql`${holdId}`),
-        sql`, `,
-      );
-      // This requires at least one hold in the 10x10 side expansion over 7x10.
-      // On 10x12 boards, other holds may still use the lower 10x12-only rows.
-      wideClimbsConditions.push(sql`EXISTS (
+      const wideHoldIds = getKilterHomewallWideHoldIdsForSets(params.set_ids);
+      if (wideHoldIds.length === 0) {
+        wideClimbsConditions.push(sql`false`);
+      } else {
+        const wideHoldIdLiterals = sql.join(
+          wideHoldIds.map((holdId) => sql`${holdId}`),
+          sql`, `,
+        );
+        // This requires at least one hold in the 10x10 side expansion over 7x10.
+        // On 10x12 boards, other holds may still use the lower 10x12-only rows.
+        wideClimbsConditions.push(sql`EXISTS (
         SELECT 1
         FROM ${boardClimbHolds} wide_ch
         WHERE wide_ch.board_type = ${params.board_name}
           AND wide_ch.climb_uuid = ${boardClimbs.uuid}
           AND wide_ch.hold_id IN (${wideHoldIdLiterals})
       )`);
+      }
     }
   }
 

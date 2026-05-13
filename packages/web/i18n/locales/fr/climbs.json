@@ -124,6 +124,8 @@
     "panels": {
       "quality": "Qualité",
       "status": "Statut d'enchaînement",
+      "progress": "Progression",
+      "allClimbs": "Tous les blocs",
       "zone": "Zone",
       "holdsAndZone": "Prises et zone",
       "anyDefault": "Toutes"

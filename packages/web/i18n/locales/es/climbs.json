@@ -121,6 +121,8 @@
     "panels": {
       "quality": "Calidad",
       "status": "Estado de encadene",
+      "progress": "Progreso",
+      "allClimbs": "Todos los bloques",
       "zone": "Zona",
       "holdsAndZone": "Presas y zona",
       "anyDefault": "Cualquiera"

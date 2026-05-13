@@ -40,6 +40,8 @@ import styles from './accordion-search-form.module.css';
 
 import { KILTER_HOMEWALL_LAYOUT_ID } from '@/app/lib/board-constants';
 
+const KILTER_HOMEWALL_WIDE_SIZE_IDS = new Set([21, 22, 25, 26, 29]);
+
 type AccordionSearchFormProps = {
   boardDetails: BoardDetails;
   defaultActiveKey?: string[];
@@ -56,7 +58,11 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
   const normalizedSizeName = boardDetails.size_name?.toLowerCase().replace(/\s+/g, '') ?? '';
   const showTallClimbsFilter = isKilterHomewall && normalizedSizeName === '10x12';
-  const showWideClimbsFilter = isKilterHomewall && (normalizedSizeName === '10x10' || normalizedSizeName === '10x12');
+  const showWideClimbsFilter =
+    isKilterHomewall &&
+    (KILTER_HOMEWALL_WIDE_SIZE_IDS.has(boardDetails.size_id) ||
+      normalizedSizeName === '10x10' ||
+      normalizedSizeName === '10x12');
   const minRatingPickerValue = getMinRatingPickerValue(uiSearchParams.minRating);
 
   let statusValue: 'any' | 'drafts' | 'established' | 'projects' = 'any';
@@ -402,9 +408,9 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     },
     {
       key: 'user',
-      label: 'Progress',
-      title: 'Progress',
-      defaultSummary: 'All climbs',
+      label: t('search.panels.progress'),
+      title: t('search.panels.progress'),
+      defaultSummary: t('search.panels.allClimbs'),
       getSummary: () => getUserPanelSummary(uiSearchParams),
       content: (
         <div className={styles.panelContent}>

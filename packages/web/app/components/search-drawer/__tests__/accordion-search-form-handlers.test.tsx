@@ -140,6 +140,21 @@ describe('AccordionSearchForm — quality filter controls', () => {
     expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ onlyWideClimbs: true });
   });
 
+  it('shows wide climbs filter for the 10x10 Auxiliary LED Kit size', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({
+          board_name: 'kilter',
+          layout_id: 8,
+          size_id: 29,
+          size_name: 'Auxiliary LED Kit',
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Wide Climbs Only')).toBeDefined();
+  });
+
   it('shows tall and wide climbs filters for 10x12 Kilter Homewall', () => {
     render(
       <AccordionSearchForm
