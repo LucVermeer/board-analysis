@@ -214,6 +214,14 @@ void describe('createClimbFilters: wide climbs', () => {
       0,
     );
   });
+
+  void it('applies wide climbs filtering to the 10x10 Auxiliary LED Kit size', () => {
+    assert.equal(
+      createClimbFilters({ ...homewallWideParams, size_id: 29, set_ids: [27] }, { onlyWideClimbs: true })
+        .wideClimbsConditions.length,
+      1,
+    );
+  });
 });
 
 void describe('createClimbFilters: personal progress filters are scoped to the current angle', () => {

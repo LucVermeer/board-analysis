@@ -15,6 +15,9 @@ function makeParams(overrides: Partial<SearchRequestPagination> = {}): SearchReq
 }
 
 const summaryLabels = {
+  quality: {
+    wideClimbsOnly: 'Wide',
+  },
   zone: 'Zone',
   zoneModes: {
     allHolds: 'All holds inside',
@@ -135,20 +138,24 @@ describe('getStatusPanelSummary', () => {
 
 describe('getQualityPanelSummary vs Status (no duplication)', () => {
   it('includes "1+ ascents" when minAscents is 1 (below Established)', () => {
-    expect(getQualityPanelSummary(makeParams({ minAscents: 1 }))).toContain('1+ ascents');
+    expect(getQualityPanelSummary(makeParams({ minAscents: 1 }), summaryLabels.quality)).toContain('1+ ascents');
   });
 
   it('rounds legacy decimal minRating summaries up to whole stars', () => {
-    expect(getQualityPanelSummary(makeParams({ minRating: 2.5 }))).toContain('3+ rating');
+    expect(getQualityPanelSummary(makeParams({ minRating: 2.5 }), summaryLabels.quality)).toContain('3+ rating');
+  });
+
+  it('uses the translated wide climbs summary label', () => {
+    expect(getQualityPanelSummary(makeParams({ onlyWideClimbs: true }), summaryLabels.quality)).toContain('Wide');
   });
 
   it('does not include "N+ ascents" when minAscents is 2 (Established handles it)', () => {
-    const parts = getQualityPanelSummary(makeParams({ minAscents: 2 }));
+    const parts = getQualityPanelSummary(makeParams({ minAscents: 2 }), summaryLabels.quality);
     expect(parts.find((p) => p.includes('ascents'))).toBeUndefined();
   });
 
   it('does not include "N+ ascents" when minAscents is 3 (Established handles it)', () => {
-    const parts = getQualityPanelSummary(makeParams({ minAscents: 3 }));
+    const parts = getQualityPanelSummary(makeParams({ minAscents: 3 }), summaryLabels.quality);
     expect(parts.find((p) => p.includes('ascents'))).toBeUndefined();
   });
 

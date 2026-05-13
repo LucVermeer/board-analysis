@@ -66,6 +66,8 @@ async function _executeClimbSearch(
       showOnlyCompleted: searchParams.showOnlyCompleted || undefined,
       onlyDrafts: searchParams.onlyDrafts || undefined,
       projectsOnly: searchParams.projectsOnly || undefined,
+      zoneBox: searchParams.zoneBox || undefined,
+      zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,
     },
     userId,
   );
@@ -113,6 +115,35 @@ function _getCachedFn(boardName: BoardName, revalidate: number): CachedClimbSear
   return fn;
 }
 
+export function buildClimbSearchParamsJson(searchParams: SearchRequestPagination): string {
+  return JSON.stringify(
+    sortObjectKeys({
+      page: searchParams.page,
+      pageSize: searchParams.pageSize,
+      gradeAccuracy: searchParams.gradeAccuracy,
+      minGrade: searchParams.minGrade,
+      maxGrade: searchParams.maxGrade,
+      minAscents: searchParams.minAscents,
+      minRating: searchParams.minRating,
+      sortBy: searchParams.sortBy,
+      sortOrder: searchParams.sortOrder,
+      name: searchParams.name,
+      settername: searchParams.settername,
+      onlyTallClimbs: searchParams.onlyTallClimbs,
+      onlyWideClimbs: searchParams.onlyWideClimbs,
+      holdsFilter: searchParams.holdsFilter,
+      zoneBox: searchParams.zoneBox,
+      zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,
+      hideAttempted: searchParams.hideAttempted,
+      hideCompleted: searchParams.hideCompleted,
+      showOnlyAttempted: searchParams.showOnlyAttempted,
+      showOnlyCompleted: searchParams.showOnlyCompleted,
+      onlyDrafts: searchParams.onlyDrafts,
+      projectsOnly: searchParams.projectsOnly,
+    }),
+  );
+}
+
 /**
  * Search for climbs directly from the database (no GraphQL round-trip).
  * Used by SSR page components for faster initial page loads.
@@ -134,30 +165,7 @@ export async function cachedSearchClimbs(
   const cacheable = (options?.cacheable ?? !userId) && params.board_name !== 'moonboard';
 
   const setIdsStr = [...params.set_ids].sort((a, b) => a - b).join(',');
-  const searchParamsJson = JSON.stringify(
-    sortObjectKeys({
-      page: searchParams.page,
-      pageSize: searchParams.pageSize,
-      gradeAccuracy: searchParams.gradeAccuracy,
-      minGrade: searchParams.minGrade,
-      maxGrade: searchParams.maxGrade,
-      minAscents: searchParams.minAscents,
-      minRating: searchParams.minRating,
-      sortBy: searchParams.sortBy,
-      sortOrder: searchParams.sortOrder,
-      name: searchParams.name,
-      settername: searchParams.settername,
-      onlyTallClimbs: searchParams.onlyTallClimbs,
-      onlyWideClimbs: searchParams.onlyWideClimbs,
-      holdsFilter: searchParams.holdsFilter,
-      hideAttempted: searchParams.hideAttempted,
-      hideCompleted: searchParams.hideCompleted,
-      showOnlyAttempted: searchParams.showOnlyAttempted,
-      showOnlyCompleted: searchParams.showOnlyCompleted,
-      onlyDrafts: searchParams.onlyDrafts,
-      projectsOnly: searchParams.projectsOnly,
-    }),
-  );
+  const searchParamsJson = buildClimbSearchParamsJson(searchParams);
 
   if (!cacheable) {
     return _executeClimbSearch(

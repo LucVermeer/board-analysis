@@ -23,6 +23,9 @@ const RecentSearchPills: React.FC = () => {
   const [hasLoadedInitialSearches, setHasLoadedInitialSearches] = useState(false);
   const { uiSearchParams, updateFilters } = useUISearchParams();
   const summaryLabels = {
+    quality: {
+      wideClimbsOnly: t('search.quality.wideClimbsOnly'),
+    },
     zone: t('search.panels.zone'),
     zoneModes: {
       allHolds: t('search.zone.allHolds'),

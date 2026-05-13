@@ -63,7 +63,11 @@ export function getClimbPanelSummary(params: SearchRequestPagination): string[] 
   return parts;
 }
 
-export function getQualityPanelSummary(params: SearchRequestPagination): string[] {
+export type QualitySummaryLabels = {
+  wideClimbsOnly: string;
+};
+
+export function getQualityPanelSummary(params: SearchRequestPagination, labels: QualitySummaryLabels): string[] {
   const parts: string[] = [];
 
   // minAscents >= 2 is reflected by the Ascent Status "Established" chip; avoid dup.
@@ -85,7 +89,7 @@ export function getQualityPanelSummary(params: SearchRequestPagination): string[
     parts.push('Tall');
   }
   if (params.onlyWideClimbs) {
-    parts.push('Wide');
+    parts.push(labels.wideClimbsOnly);
   }
 
   return parts;
@@ -130,15 +134,10 @@ export type ZoneSummaryModeLabels = {
   anyHold: string;
 };
 
-const DEFAULT_ZONE_SUMMARY_MODE_LABELS: ZoneSummaryModeLabels = {
-  allHolds: 'All holds inside',
-  anyHold: 'At least 1 hold',
-};
-
 export function getZonePanelSummary(
   params: SearchRequestPagination,
   label: string,
-  modeLabels: ZoneSummaryModeLabels = DEFAULT_ZONE_SUMMARY_MODE_LABELS,
+  modeLabels: ZoneSummaryModeLabels,
 ): string[] {
   if (!params.zoneBox) return [];
   const modeLabel = params.zoneMode === 'anyHold' ? modeLabels.anyHold : modeLabels.allHolds;
@@ -150,6 +149,7 @@ export function getZonePanelSummary(
  * Pass these in from the React layer where i18n is available.
  */
 export type SearchPillLabels = {
+  quality: QualitySummaryLabels;
   zone: string;
   zoneModes: ZoneSummaryModeLabels;
 };
@@ -161,7 +161,7 @@ export type SearchPillLabels = {
 export function getSearchPillSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
   const allParts = [
     ...getClimbPanelSummary(params),
-    ...getQualityPanelSummary(params),
+    ...getQualityPanelSummary(params, labels.quality),
     ...getStatusPanelSummary(params),
     ...getUserPanelSummary(params),
     ...getHoldsPanelSummary(params),
@@ -185,7 +185,7 @@ export function getSearchPillSummary(params: SearchRequestPagination, labels: Se
 export function getSearchPillFullSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
   const allParts = [
     ...getClimbPanelSummary(params),
-    ...getQualityPanelSummary(params),
+    ...getQualityPanelSummary(params, labels.quality),
     ...getStatusPanelSummary(params),
     ...getUserPanelSummary(params),
     ...getHoldsPanelSummary(params),

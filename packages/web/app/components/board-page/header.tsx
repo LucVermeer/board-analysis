@@ -60,6 +60,9 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
   // Pre-translate labels that the summary helpers can't access on their own
   // (they live in a `.ts` module without React/i18next context).
   const summaryLabels = {
+    quality: {
+      wideClimbsOnly: t('search.quality.wideClimbsOnly'),
+    },
     zone: t('search.panels.zone'),
     zoneModes: {
       allHolds: t('search.zone.allHolds'),

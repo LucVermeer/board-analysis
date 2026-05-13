@@ -15,6 +15,8 @@ const KILTER_HOMEWALL_LAYOUT_ID = 8;
 const KILTER_HOMEWALL_PRODUCT_ID = 7;
 const KILTER_HOMEWALL_SMALL_SIZE_NAME = '7x10';
 const KILTER_HOMEWALL_WIDE_SIZE_NAME = '10x10';
+// 21/22 are 10x10 Full Ride/Mainline, 25/26 are 10x12 Full Ride/Mainline,
+// and 29 is the 10x10 Auxiliary LED Kit.
 const KILTER_HOMEWALL_WIDE_SIZE_IDS = new Set([21, 22, 25, 26, 29]);
 
 /**
@@ -258,6 +260,8 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
           )})`;
     // This requires at least one hold in the 10x10 side expansion over 7x10.
     // On 10x12 boards, other holds may still use the lower 10x12-only rows.
+    // Product-size edges are exclusive throughout board rendering and size compatibility,
+    // so keep the same strict bounds here.
     wideClimbsConditions.push(sql`EXISTS (
       SELECT 1
       FROM ${boardClimbHolds} wide_ch
