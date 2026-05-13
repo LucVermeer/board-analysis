@@ -310,17 +310,16 @@ export const sessionMutations = {
     if (!ctx.sessionId) return false;
 
     const sessionId = ctx.sessionId;
-    const userId = ctx.userId;
     const result = await roomManager.leaveSession(ctx.connectionId);
 
     if (result) {
-      // Notify session about user leaving
-      if (userId) {
-        pubsub.publishSessionEvent(sessionId, {
-          __typename: 'UserLeft',
-          userId,
-        });
-      }
+      // Notify session about user leaving. UserLeft.userId is the
+      // connection ID (matching UserJoined.user.id = result.clientId).
+      // See websocket/setup.ts onDisconnect for the same pattern.
+      pubsub.publishSessionEvent(sessionId, {
+        __typename: 'UserLeft',
+        userId: ctx.connectionId,
+      });
 
       // Notify about new leader if changed
       if (result.newLeaderId) {

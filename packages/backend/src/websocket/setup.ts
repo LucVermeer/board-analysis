@@ -175,13 +175,16 @@ export function setupWebSocketServer(httpServer: HttpServer): {
             const result = await roomManager.leaveSession(context.connectionId);
 
             if (result) {
-              // Notify session about user leaving
-              if (latestContext.userId) {
-                pubsub.publishSessionEvent(result.sessionId, {
-                  __typename: 'UserLeft',
-                  userId: latestContext.userId,
-                });
-              }
+              // Notify session about user leaving. The `userId` field name
+              // in the GraphQL schema is a misnomer — it's the connection
+              // ID, matching the `id` field that UserJoined emits via
+              // `user.id = result.clientId` in joinSession (which is the
+              // connection ID). Clients filter their participant list by
+              // `u.id !== event.userId`, so the two events must agree.
+              pubsub.publishSessionEvent(result.sessionId, {
+                __typename: 'UserLeft',
+                userId: context.connectionId,
+              });
 
               // Notify about new leader if changed
               if (result.newLeaderId) {
