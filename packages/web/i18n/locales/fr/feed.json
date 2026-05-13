@@ -31,7 +31,18 @@
     "urlLabel": "URL de la vidéo beta",
     "urlLabelForClimb": "URL de la vidéo beta pour {{name}}",
     "defaultHelper": "Collez l'URL d'un reel/post Instagram public ou d'une vidéo TikTok pour partager votre beta.",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "copyAndOpenInstagram": "Copier & ouvrir Instagram",
+    "instagramCopyFailed": "Impossible de copier la légende. Réessayez.",
+    "instagramCopiedAndOpened": "Légende copiée — collez-la dans Instagram.",
+    "instagramCopiedOnly": "Légende copiée dans le presse-papiers.",
+    "addSubmit": "Ajouter",
+    "steps": {
+      "optional": "Optionnel",
+      "step1Title": "Ouvrez Instagram et copiez votre légende",
+      "step2Title": "Depuis votre publication, copiez le lien de partage",
+      "step3Title": "Collez le lien ci-dessous"
+    }
   },
   "commentFeed": {
     "empty": "Aucun commentaire pour l'instant",

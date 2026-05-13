@@ -283,7 +283,7 @@ const StepRow: React.FC<StepRowProps> = ({ index, title, optionalLabel, children
       </Box>
       {title}
       {optionalLabel && (
-        <Box component="span" sx={{ color: 'text.secondary', ml: 1, fontSize: '0.85em' }}>
+        <Box component="span" sx={{ color: 'text.secondary', ml: 1, typography: 'caption' }}>
           ({optionalLabel})
         </Box>
       )}
