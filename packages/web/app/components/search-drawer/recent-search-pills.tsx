@@ -24,6 +24,7 @@ const RecentSearchPills: React.FC = () => {
   const { uiSearchParams, updateFilters } = useUISearchParams();
   const summaryLabels = {
     quality: {
+      tallClimbsOnly: t('search.quality.tallClimbsOnly'),
       wideClimbsOnly: t('search.quality.wideClimbsOnly'),
     },
     zone: t('search.panels.zone'),

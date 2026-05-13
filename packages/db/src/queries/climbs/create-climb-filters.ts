@@ -1,4 +1,5 @@
 import { type SQL, eq, gte, sql, like, notLike, inArray, or, and } from 'drizzle-orm';
+import { getHolePlacements, getProductSize } from '@boardsesh/board-constants/product-sizes';
 import {
   boardClimbs,
   boardClimbStats,
@@ -13,11 +14,44 @@ import type { BoardRouteParams, ClimbSearchParams } from './types';
 // Kilter Homewall constants for expansion-aware filtering
 const KILTER_HOMEWALL_LAYOUT_ID = 8;
 const KILTER_HOMEWALL_PRODUCT_ID = 7;
-const KILTER_HOMEWALL_SMALL_SIZE_NAME = '7x10';
-const KILTER_HOMEWALL_WIDE_SIZE_NAME = '10x10';
+const KILTER_HOMEWALL_SMALL_SIZE_ID = 17;
+const KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID = 21;
+const KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS = [26, 27, 28, 29] as const;
 // 21/22 are 10x10 Full Ride/Mainline, 25/26 are 10x12 Full Ride/Mainline,
 // and 29 is the 10x10 Auxiliary LED Kit.
 const KILTER_HOMEWALL_WIDE_SIZE_IDS = new Set([21, 22, 25, 26, 29]);
+
+function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
+  const smallSize = getProductSize('kilter', KILTER_HOMEWALL_SMALL_SIZE_ID);
+  const wideSize = getProductSize('kilter', KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID);
+  if (!smallSize || !wideSize) return new Map();
+
+  return new Map(
+    KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS.map((setId) => [
+      setId,
+      getHolePlacements('kilter', KILTER_HOMEWALL_LAYOUT_ID, setId)
+        .filter(([, , xCoordinate, yCoordinate]) => {
+          const isInsideWideSize =
+            xCoordinate > wideSize.edgeLeft &&
+            xCoordinate < wideSize.edgeRight &&
+            yCoordinate > wideSize.edgeBottom &&
+            yCoordinate < wideSize.edgeTop;
+          const isOutsideSmallWidth = xCoordinate <= smallSize.edgeLeft || xCoordinate >= smallSize.edgeRight;
+          return isInsideWideSize && isOutsideSmallWidth;
+        })
+        .map(([holdId]) => holdId),
+    ]),
+  );
+}
+
+const KILTER_HOMEWALL_WIDE_HOLD_IDS_BY_SET = buildKilterHomewallWideHoldIdsBySet();
+
+export function getKilterHomewallWideHoldIdsForSets(setIds: readonly number[]): number[] {
+  const selectedSetIds = new Set(setIds);
+  return [...selectedSetIds]
+    .flatMap((setId) => KILTER_HOMEWALL_WIDE_HOLD_IDS_BY_SET.get(setId) ?? [])
+    .sort((leftHoldId, rightHoldId) => leftHoldId - rightHoldId);
+}
 
 /**
  * Creates a shared filtering object for climb search and heatmap queries.
@@ -251,75 +285,24 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
     KILTER_HOMEWALL_WIDE_SIZE_IDS.has(params.size_id)
   ) {
-    const widePlacementSetCondition =
-      params.set_ids.length === 0
-        ? sql``
-        : sql`AND wide_bp.set_id IN (${sql.join(
-            params.set_ids.map((setId) => sql`${setId}`),
-            sql`, `,
-          )})`;
-    // This requires at least one hold in the 10x10 side expansion over 7x10.
-    // On 10x12 boards, other holds may still use the lower 10x12-only rows.
-    // Product-size edges are exclusive throughout board rendering and size compatibility,
-    // so keep the same strict bounds here.
-    wideClimbsConditions.push(sql`EXISTS (
-      SELECT 1
-      FROM ${boardClimbHolds} wide_ch
-      JOIN ${boardPlacements} wide_bp
-        ON wide_bp.board_type = wide_ch.board_type
-        AND wide_bp.id = wide_ch.hold_id
-        AND wide_bp.layout_id = ${params.layout_id}
-      JOIN ${boardHoles} wide_bh
-        ON wide_bh.board_type = wide_ch.board_type
-        AND wide_bh.id = wide_bp.hole_id
+    const wideHoldIds = getKilterHomewallWideHoldIdsForSets(params.set_ids);
+    if (wideHoldIds.length === 0) {
+      wideClimbsConditions.push(sql`false`);
+    } else {
+      const wideHoldIdLiterals = sql.join(
+        wideHoldIds.map((holdId) => sql`${holdId}`),
+        sql`, `,
+      );
+      // This requires at least one hold in the 10x10 side expansion over 7x10.
+      // On 10x12 boards, other holds may still use the lower 10x12-only rows.
+      wideClimbsConditions.push(sql`EXISTS (
+        SELECT 1
+        FROM ${boardClimbHolds} wide_ch
         WHERE wide_ch.board_type = ${params.board_name}
           AND wide_ch.climb_uuid = ${boardClimbs.uuid}
-          ${widePlacementSetCondition}
-        AND wide_bh.x > (
-          SELECT MIN(wide_ps.edge_left)
-          FROM ${boardProductSizes} wide_ps
-          WHERE wide_ps.board_type = ${params.board_name}
-            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
-            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
-        )
-        AND wide_bh.x < (
-          SELECT MAX(wide_ps.edge_right)
-          FROM ${boardProductSizes} wide_ps
-          WHERE wide_ps.board_type = ${params.board_name}
-            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
-            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
-        )
-        AND wide_bh.y > (
-          SELECT MIN(wide_ps.edge_bottom)
-          FROM ${boardProductSizes} wide_ps
-          WHERE wide_ps.board_type = ${params.board_name}
-            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
-            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
-        )
-        AND wide_bh.y < (
-          SELECT MAX(wide_ps.edge_top)
-          FROM ${boardProductSizes} wide_ps
-          WHERE wide_ps.board_type = ${params.board_name}
-            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
-            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
-        )
-        AND (
-          wide_bh.x <= (
-            SELECT MIN(small_ps.edge_left)
-            FROM ${boardProductSizes} small_ps
-            WHERE small_ps.board_type = ${params.board_name}
-              AND small_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
-              AND small_ps.name = ${KILTER_HOMEWALL_SMALL_SIZE_NAME}
-          )
-          OR wide_bh.x >= (
-            SELECT MAX(small_ps.edge_right)
-            FROM ${boardProductSizes} small_ps
-            WHERE small_ps.board_type = ${params.board_name}
-              AND small_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
-              AND small_ps.name = ${KILTER_HOMEWALL_SMALL_SIZE_NAME}
-          )
-        )
-    )`);
+          AND wide_ch.hold_id IN (${wideHoldIdLiterals})
+      )`);
+    }
   }
 
   // Set membership filter: exclude climbs that use holds from sets the user doesn't own.

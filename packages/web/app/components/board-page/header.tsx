@@ -61,6 +61,7 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
   // (they live in a `.ts` module without React/i18next context).
   const summaryLabels = {
     quality: {
+      tallClimbsOnly: t('search.quality.tallClimbsOnly'),
       wideClimbsOnly: t('search.quality.wideClimbsOnly'),
     },
     zone: t('search.panels.zone'),

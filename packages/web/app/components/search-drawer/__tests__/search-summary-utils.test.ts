@@ -16,6 +16,7 @@ function makeParams(overrides: Partial<SearchRequestPagination> = {}): SearchReq
 
 const summaryLabels = {
   quality: {
+    tallClimbsOnly: 'Tall',
     wideClimbsOnly: 'Wide',
   },
   zone: 'Zone',
@@ -147,6 +148,10 @@ describe('getQualityPanelSummary vs Status (no duplication)', () => {
 
   it('uses the translated wide climbs summary label', () => {
     expect(getQualityPanelSummary(makeParams({ onlyWideClimbs: true }), summaryLabels.quality)).toContain('Wide');
+  });
+
+  it('uses the translated tall climbs summary label', () => {
+    expect(getQualityPanelSummary(makeParams({ onlyTallClimbs: true }), summaryLabels.quality)).toContain('Tall');
   });
 
   it('does not include "N+ ascents" when minAscents is 2 (Established handles it)', () => {

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SQL } from 'drizzle-orm';
-import { createClimbFilters } from '../create-climb-filters';
+import { createClimbFilters, getKilterHomewallWideHoldIdsForSets } from '../create-climb-filters';
 import type { BoardRouteParams, ClimbSearchParams } from '../types';
 
 const params: BoardRouteParams = {
@@ -171,6 +171,40 @@ void describe('createClimbFilters: zone modes', () => {
   });
 });
 
+void describe('createClimbFilters: tall climbs', () => {
+  const homewallTallParams: BoardRouteParams = {
+    board_name: 'kilter',
+    layout_id: 8,
+    size_id: 25,
+    set_ids: [26, 27, 28, 29],
+    angle: 40,
+  };
+
+  void it('uses the climb bottom edge to find Kilter Homewall tall climbs', () => {
+    const filters = createClimbFilters(homewallTallParams, { onlyTallClimbs: true });
+
+    assert.equal(filters.tallClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.tallClimbsConditions[0]);
+    assert.match(rendered, /edge_bottom/);
+    assert.match(rendered, /SELECT MAX\(ps\.edge_bottom\)/);
+    assert.match(rendered, /FROM/);
+    assert.match(rendered, /MAX/);
+    assert.match(rendered, /product_id/);
+  });
+
+  void it('does not apply tall climbs filtering outside Kilter Homewall', () => {
+    assert.equal(
+      createClimbFilters({ ...homewallTallParams, layout_id: 1 }, { onlyTallClimbs: true }).tallClimbsConditions.length,
+      0,
+    );
+    assert.equal(
+      createClimbFilters({ ...homewallTallParams, board_name: 'tension' }, { onlyTallClimbs: true })
+        .tallClimbsConditions.length,
+      0,
+    );
+  });
+});
+
 void describe('createClimbFilters: wide climbs', () => {
   const homewallWideParams: BoardRouteParams = {
     board_name: 'kilter',
@@ -185,18 +219,42 @@ void describe('createClimbFilters: wide climbs', () => {
 
     assert.equal(filters.wideClimbsConditions.length, 1);
     const rendered = sqlToString(filters.wideClimbsConditions[0]);
+    const wideHoldIds = getKilterHomewallWideHoldIdsForSets(homewallWideParams.set_ids);
+
+    assert.equal(wideHoldIds.length, 86);
     assert.match(rendered, /EXISTS/);
     assert.match(rendered, /FROM\s+wide_ch/);
-    assert.match(rendered, /JOIN\s+wide_bp/);
-    assert.match(rendered, /JOIN\s+.*wide_bh/);
-    assert.match(rendered, /wide_bp\.set_id IN \(26, 27, 28, 29\)/);
-    assert.match(rendered, /wide_ps\.name = 10x10/);
-    assert.match(rendered, /small_ps\.name = 7x10/);
-    assert.match(rendered, /wide_bh\.y >/);
-    assert.match(rendered, /wide_bh\.y </);
-    assert.match(rendered, /wide_bh\.x <=/);
-    assert.match(rendered, /wide_bh\.x >=/);
+    assert.match(rendered, /wide_ch\.hold_id IN/);
+    assert.match(rendered, new RegExp(String(wideHoldIds[0])));
+    assert.match(rendered, new RegExp(String(wideHoldIds[wideHoldIds.length - 1])));
+    assert.doesNotMatch(rendered, /JOIN\s+wide_bp/);
+    assert.doesNotMatch(rendered, /JOIN\s+.*wide_bh/);
+    assert.doesNotMatch(rendered, /board_product_sizes/);
+    assert.doesNotMatch(rendered, /wide_ps/);
+    assert.doesNotMatch(rendered, /small_ps/);
     assert.doesNotMatch(rendered, /compatible_size_ids/);
+  });
+
+  void it('narrows the wide hold list to selected route sets', () => {
+    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [26] }, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.wideClimbsConditions[0]);
+    const mainlineWideHoldIds = getKilterHomewallWideHoldIdsForSets([26]);
+    const auxiliaryWideHoldIds = getKilterHomewallWideHoldIdsForSets([27]);
+
+    assert.equal(mainlineWideHoldIds.length, 30);
+    assert.equal(auxiliaryWideHoldIds.length, 56);
+    assert.match(rendered, new RegExp(String(mainlineWideHoldIds[0])));
+    assert.match(rendered, new RegExp(String(mainlineWideHoldIds[mainlineWideHoldIds.length - 1])));
+    assert.doesNotMatch(rendered, new RegExp(String(auxiliaryWideHoldIds[0])));
+  });
+
+  void it('uses a false condition when selected sets contain no side expansion holds', () => {
+    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [28, 29] }, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    assert.equal(sqlToString(filters.wideClimbsConditions[0]), 'false');
   });
 
   void it('does not apply wide climbs filtering outside supported Kilter Homewall sizes', () => {

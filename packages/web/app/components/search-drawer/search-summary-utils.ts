@@ -64,6 +64,7 @@ export function getClimbPanelSummary(params: SearchRequestPagination): string[] 
 }
 
 export type QualitySummaryLabels = {
+  tallClimbsOnly: string;
   wideClimbsOnly: string;
 };
 
@@ -86,7 +87,7 @@ export function getQualityPanelSummary(params: SearchRequestPagination, labels: 
     parts.push('Grade accuracy');
   }
   if (params.onlyTallClimbs) {
-    parts.push('Tall');
+    parts.push(labels.tallClimbsOnly);
   }
   if (params.onlyWideClimbs) {
     parts.push(labels.wideClimbsOnly);

@@ -218,6 +218,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       defaultSummary: t('search.panels.anyDefault'),
       getSummary: () =>
         getQualityPanelSummary(uiSearchParams, {
+          tallClimbsOnly: t('search.quality.tallClimbsOnly'),
           wideClimbsOnly: t('search.quality.wideClimbsOnly'),
         }),
       content: (

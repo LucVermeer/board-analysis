@@ -129,6 +129,7 @@
       "anyDefault": "Any"
     },
     "quality": {
+      "tallClimbsOnly": "Tall",
       "wideClimbsOnly": "Wide"
     },
     "status": {
