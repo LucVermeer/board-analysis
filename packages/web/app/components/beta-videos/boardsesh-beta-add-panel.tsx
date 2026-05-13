@@ -73,6 +73,7 @@ const BoardseshBetaAddPanel: React.FC<BoardseshBetaAddPanelProps> = ({
         surface="play-view"
         autoFocus
         compact
+        showStepsGuide
         submitLabel={t('betaVideos.addSubmit')}
         showCancel
         onCancel={handleCancel}

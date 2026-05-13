@@ -6,6 +6,7 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import InstagramIcon from '@mui/icons-material/Instagram';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { track } from '@/app/lib/analytics';
@@ -62,6 +63,7 @@ type AttachBetaLinkFormProps = {
   showCancel?: boolean;
   autoFocus?: boolean;
   compact?: boolean;
+  showStepsGuide?: boolean;
 };
 
 const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
@@ -81,6 +83,7 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
   showCancel = false,
   autoFocus = false,
   compact = false,
+  showStepsGuide = false,
 }) => {
   const { t } = useTranslation('feed');
   const resolvedSubmitLabel = submitLabel ?? t('betaVideos.shareBeta');
@@ -184,53 +187,107 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
     showMessage(t('betaVideos.instagramCopiedAndOpened'), 'success');
   };
 
+  const urlField = (
+    <TextField
+      autoFocus={autoFocus}
+      fullWidth
+      placeholder={t('betaVideos.urlPlaceholder')}
+      label={climbName ? t('betaVideos.urlLabelForClimb', { name: climbName }) : t('betaVideos.urlLabel')}
+      value={url}
+      onChange={(e) => setUrl(e.target.value)}
+      error={!!validationError}
+      helperText={validationError ?? helperText ?? t('betaVideos.defaultHelper')}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && canSubmit) {
+          e.preventDefault();
+          mutation.mutate();
+        }
+      }}
+    />
+  );
+
+  const instagramButton = instagramCaption ? (
+    <Button
+      variant="outlined"
+      onClick={handleCopyAndOpenInstagram}
+      disabled={isLaunchingInstagram || mutation.isPending}
+      startIcon={isLaunchingInstagram ? <CircularProgress size={16} /> : <InstagramIcon />}
+      sx={showStepsGuide ? { alignSelf: 'flex-start' } : { mr: 'auto' }}
+    >
+      {t('betaVideos.copyAndOpenInstagram')}
+    </Button>
+  ) : null;
+
+  const cancelButton =
+    showCancel && onCancel ? (
+      <Button onClick={onCancel} disabled={mutation.isPending}>
+        {t('betaVideos.cancel')}
+      </Button>
+    ) : null;
+
+  const submitButton = (
+    <Button
+      variant="contained"
+      onClick={() => mutation.mutate()}
+      disabled={!canSubmit}
+      startIcon={mutation.isPending ? <CircularProgress size={16} /> : undefined}
+    >
+      {resolvedSubmitLabel}
+    </Button>
+  );
+
+  if (showStepsGuide) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+        <StepRow index={1} title={t('betaVideos.steps.step1Title')} optionalLabel={t('betaVideos.steps.optional')}>
+          {instagramButton}
+        </StepRow>
+        <StepRow index={2} title={t('betaVideos.steps.step2Title')} optionalLabel={t('betaVideos.steps.optional')} />
+        <StepRow index={3} title={t('betaVideos.steps.step3Title')}>
+          {urlField}
+        </StepRow>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+          {cancelButton}
+          {submitButton}
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: compact ? 1.25 : 1.5 }}>
-      <TextField
-        autoFocus={autoFocus}
-        fullWidth
-        placeholder={t('betaVideos.urlPlaceholder')}
-        label={climbName ? t('betaVideos.urlLabelForClimb', { name: climbName }) : t('betaVideos.urlLabel')}
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        error={!!validationError}
-        helperText={validationError ?? helperText ?? t('betaVideos.defaultHelper')}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && canSubmit) {
-            e.preventDefault();
-            mutation.mutate();
-          }
-        }}
-      />
-
+      {urlField}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
-        {instagramCaption && (
-          <Button
-            variant="outlined"
-            onClick={handleCopyAndOpenInstagram}
-            disabled={isLaunchingInstagram || mutation.isPending}
-            startIcon={isLaunchingInstagram ? <CircularProgress size={16} /> : <InstagramIcon />}
-            sx={{ mr: 'auto' }}
-          >
-            {t('betaVideos.copyAndOpenInstagram')}
-          </Button>
-        )}
-        {showCancel && onCancel && (
-          <Button onClick={onCancel} disabled={mutation.isPending}>
-            {t('betaVideos.cancel')}
-          </Button>
-        )}
-        <Button
-          variant="contained"
-          onClick={() => mutation.mutate()}
-          disabled={!canSubmit}
-          startIcon={mutation.isPending ? <CircularProgress size={16} /> : undefined}
-        >
-          {resolvedSubmitLabel}
-        </Button>
+        {instagramButton}
+        {cancelButton}
+        {submitButton}
       </Box>
     </Box>
   );
 };
+
+type StepRowProps = {
+  index: number;
+  title: string;
+  optionalLabel?: string;
+  children?: React.ReactNode;
+};
+
+const StepRow: React.FC<StepRowProps> = ({ index, title, optionalLabel, children }) => (
+  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+    <Typography variant="body1" sx={{ lineHeight: 1.5 }}>
+      <Box component="span" sx={{ color: 'text.primary', fontWeight: 700, mr: 1 }}>
+        {index}.
+      </Box>
+      {title}
+      {optionalLabel && (
+        <Box component="span" sx={{ color: 'text.secondary', ml: 1, fontSize: '0.85em' }}>
+          ({optionalLabel})
+        </Box>
+      )}
+    </Typography>
+    {children && <Box sx={{ pl: 2.5 }}>{children}</Box>}
+  </Box>
+);
 
 export default AttachBetaLinkForm;
