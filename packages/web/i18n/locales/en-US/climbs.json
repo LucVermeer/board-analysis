@@ -113,6 +113,8 @@
       "minRatingOption_other": "{{count}} stars and up",
       "tallClimbsOnly": "Tall Climbs Only",
       "tallClimbsTooltip": "Show only climbs that use holds in the bottom 8 rows (only available on 10x12 boards)",
+      "wideClimbsOnly": "Wide Climbs Only",
+      "wideClimbsTooltip": "Show only climbs that use the 10x10 side expansion holds",
       "gradeAccuracy": "Grade Accuracy",
       "somewhatAccurate": "Somewhat Accurate (<0.2)",
       "veryAccurate": "Very Accurate (<0.1)",
@@ -122,9 +124,35 @@
     "panels": {
       "quality": "Quality",
       "status": "Ascent Status",
+      "progress": "Progress",
+      "allClimbs": "All climbs",
       "zone": "Zone",
       "holdsAndZone": "Holds & Zone",
       "anyDefault": "Any"
+    },
+    "quality": {
+      "tallClimbsOnly": "Tall",
+      "wideClimbsOnly": "Wide"
+    },
+    "summary": {
+      "default": "What do you want to climb?",
+      "gradeFallback": "Grade {{gradeId}}",
+      "upToGrade": "Up to {{grade}}",
+      "setterCount_one": "{{count}} setter",
+      "setterCount_other": "{{count}} setters",
+      "ascents_one": "{{count}}+ ascent",
+      "ascents_other": "{{count}}+ ascents",
+      "rating": "{{rating}}+ rating",
+      "classics": "Classics",
+      "gradeAccuracy": "Grade accuracy",
+      "drafts": "Drafts",
+      "attempted": "attempted",
+      "completed": "completed",
+      "hide": "Hide {{filters}}",
+      "only": "Only {{filters}}",
+      "holds_one": "{{count}} hold",
+      "holds_other": "{{count}} holds",
+      "more": "+{{count}} more"
     },
     "status": {
       "any": "Any",
@@ -166,10 +194,13 @@
     },
     "zone": {
       "draw": "Draw zone",
-      "clear": "Clear zone"
+      "clear": "Clear zone",
+      "modeLabel": "Zone type",
+      "allHolds": "All holds inside",
+      "anyHold": "At least 1 hold"
     },
     "holdsAndZone": {
-      "description": "Tap holds to filter, or draw a zone to limit results to climbs that fit inside it."
+      "description": "Tap holds to filter, or draw a zone to focus results on part of the board."
     },
     "sortToggle": "Sort"
   },

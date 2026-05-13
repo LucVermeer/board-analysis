@@ -113,6 +113,8 @@
       "minRatingOption_other": "{{count}} étoiles et plus",
       "tallClimbsOnly": "Blocs hauts uniquement",
       "tallClimbsTooltip": "Afficher uniquement les blocs qui utilisent les prises des 8 rangées du bas (disponible sur les boards 10x12 uniquement)",
+      "wideClimbsOnly": "Blocs larges uniquement",
+      "wideClimbsTooltip": "Afficher uniquement les blocs qui utilisent les colonnes latérales supplémentaires (disponible sur les boards 10x10 et 10x12)",
       "gradeAccuracy": "Précision de la cotation",
       "somewhatAccurate": "Plutôt précise (<0.2)",
       "veryAccurate": "Très précise (<0.1)",
@@ -122,9 +124,35 @@
     "panels": {
       "quality": "Qualité",
       "status": "Statut d'enchaînement",
+      "progress": "Progression",
+      "allClimbs": "Tous les blocs",
       "zone": "Zone",
       "holdsAndZone": "Prises et zone",
       "anyDefault": "Toutes"
+    },
+    "quality": {
+      "tallClimbsOnly": "Hauts",
+      "wideClimbsOnly": "Larges"
+    },
+    "summary": {
+      "default": "Quel bloc cherchez-vous ?",
+      "gradeFallback": "Cotation {{gradeId}}",
+      "upToGrade": "Jusqu'à {{grade}}",
+      "setterCount_one": "{{count}} ouvreur",
+      "setterCount_other": "{{count}} ouvreurs",
+      "ascents_one": "{{count}}+ enchaînement",
+      "ascents_other": "{{count}}+ enchaînements",
+      "rating": "{{rating}}+ note",
+      "classics": "Classiques",
+      "gradeAccuracy": "Précision de la cotation",
+      "drafts": "Brouillons",
+      "attempted": "essayés",
+      "completed": "enchaînés",
+      "hide": "Masquer {{filters}}",
+      "only": "Seulement {{filters}}",
+      "holds_one": "{{count}} prise",
+      "holds_other": "{{count}} prises",
+      "more": "+{{count}} de plus"
     },
     "status": {
       "any": "Tous",
@@ -166,7 +194,10 @@
     },
     "zone": {
       "draw": "Dessiner la zone",
-      "clear": "Effacer la zone"
+      "clear": "Effacer la zone",
+      "modeLabel": "Type de zone",
+      "allHolds": "Toutes les prises dedans",
+      "anyHold": "Au moins 1 prise"
     },
     "holdsAndZone": {
       "description": "Touchez des prises pour filtrer, ou dessinez une zone pour limiter les résultats aux voies qui s'y inscrivent."

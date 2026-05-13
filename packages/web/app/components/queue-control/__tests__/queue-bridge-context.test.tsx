@@ -103,6 +103,7 @@ vi.mock('@/app/lib/url-utils', () => ({
     name: '',
     onlyClassics: false,
     onlyTallClimbs: false,
+    onlyWideClimbs: false,
   },
 }));
 
@@ -247,6 +248,7 @@ function createFakeQueueContext(overrides?: Partial<GraphQLQueueContextType>): G
       name: '',
       onlyClassics: false,
       onlyTallClimbs: false,
+      onlyWideClimbs: false,
     },
     climbSearchResults: null,
     suggestedClimbs: [],

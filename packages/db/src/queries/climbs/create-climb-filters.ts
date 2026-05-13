@@ -1,10 +1,91 @@
 import { type SQL, eq, gte, sql, like, notLike, inArray, or, and } from 'drizzle-orm';
-import { boardClimbs, boardClimbStats, boardseshTicks, boardProductSizes, boardClimbHolds } from '../../schema/index';
+import {
+  getHolePlacements,
+  getProductSize,
+  isKilterHomewallTallSizeId,
+  isKilterHomewallWideSizeId,
+  type HoldTuple,
+  type ProductSizeData,
+} from '@boardsesh/board-constants/product-sizes';
+import {
+  boardClimbs,
+  boardClimbStats,
+  boardseshTicks,
+  boardProductSizes,
+  boardClimbHolds,
+  boardPlacements,
+  boardHoles,
+} from '../../schema/index';
 import type { BoardRouteParams, ClimbSearchParams } from './types';
 
-// Kilter Homewall constants for tall-climb filtering
+// Kilter Homewall constants for expansion-aware filtering
 const KILTER_HOMEWALL_LAYOUT_ID = 8;
 const KILTER_HOMEWALL_PRODUCT_ID = 7;
+const KILTER_HOMEWALL_SMALL_SIZE_ID = 17;
+const KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID = 21;
+const KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS = [26, 27, 28, 29] as const;
+
+function isKilterHomewallWideSideExpansionHold(
+  holdPlacement: HoldTuple,
+  smallSize: ProductSizeData,
+  wideSize: ProductSizeData,
+): boolean {
+  const [, , xCoordinate, yCoordinate] = holdPlacement;
+  // Product-size edges are outer board bounds. A hold exactly on the 7x10 edge
+  // is outside that size, while a hold exactly on the 10x10 outer edge is not
+  // inside the 10x10 renderable area. Match getBoardDetails' strict bounds.
+  const isInsideWideSize =
+    xCoordinate > wideSize.edgeLeft &&
+    xCoordinate < wideSize.edgeRight &&
+    yCoordinate > wideSize.edgeBottom &&
+    yCoordinate < wideSize.edgeTop;
+  const isOutsideSmallWidth = xCoordinate <= smallSize.edgeLeft || xCoordinate >= smallSize.edgeRight;
+  return isInsideWideSize && isOutsideSmallWidth;
+}
+
+function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
+  const smallSize = getProductSize('kilter', KILTER_HOMEWALL_SMALL_SIZE_ID);
+  const wideSize = getProductSize('kilter', KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID);
+  if (!smallSize || !wideSize) {
+    throw new Error('Kilter Homewall size metadata is missing for the wide climb filter');
+  }
+
+  const wideHoldIdsBySet = new Map(
+    KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS.map((setId) => [
+      setId,
+      getHolePlacements('kilter', KILTER_HOMEWALL_LAYOUT_ID, setId)
+        .filter((holdPlacement) => isKilterHomewallWideSideExpansionHold(holdPlacement, smallSize, wideSize))
+        .map(([holdId]) => holdId),
+    ]),
+  );
+  const wideHoldCount = [...wideHoldIdsBySet.values()].reduce((total, holdIds) => total + holdIds.length, 0);
+  if (wideHoldCount === 0) {
+    throw new Error('Kilter Homewall wide climb filter did not find any side-expansion holds');
+  }
+
+  return wideHoldIdsBySet;
+}
+
+// Board constants are generated static data in the deployed bundle, so this
+// production cache is intentionally never invalidated.
+let kilterHomewallWideHoldIdsBySet: ReadonlyMap<number, readonly number[]> | null = null;
+
+function getKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
+  kilterHomewallWideHoldIdsBySet ??= buildKilterHomewallWideHoldIdsBySet();
+  return kilterHomewallWideHoldIdsBySet;
+}
+
+export function resetKilterHomewallWideHoldIdsForTests(): void {
+  kilterHomewallWideHoldIdsBySet = null;
+}
+
+export function getKilterHomewallWideHoldIdsForSets(setIds: readonly number[]): number[] {
+  const selectedSetIds = new Set(setIds);
+  const wideHoldIdsBySet = getKilterHomewallWideHoldIdsBySet();
+  return [...selectedSetIds]
+    .flatMap((setId) => wideHoldIdsBySet.get(setId) ?? [])
+    .sort((leftHoldId, rightHoldId) => leftHoldId - rightHoldId);
+}
 
 /**
  * Creates a shared filtering object for climb search and heatmap queries.
@@ -168,37 +249,111 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     )`);
   }
 
-  // Zone filter — keep only climbs whose entire bounding box sits inside
-  // the user-defined zone (in board_holes/board_climbs grid coordinates).
-  // The denormalized edge columns on board_climbs make this a simple range
-  // check; no extra join needed. We defensively re-check the box is valid
-  // even though the GraphQL Zod schema rejects degenerate boxes — direct
-  // db-layer callers (REST proxies, scripts) bypass that guard.
-  const zoneConditions: SQL[] =
-    searchParams.zoneBox &&
-    searchParams.zoneBox.edgeRight > searchParams.zoneBox.edgeLeft &&
-    searchParams.zoneBox.edgeTop > searchParams.zoneBox.edgeBottom
-      ? [
-          sql`${boardClimbs.edgeLeft} >= ${searchParams.zoneBox.edgeLeft}`,
-          sql`${boardClimbs.edgeRight} <= ${searchParams.zoneBox.edgeRight}`,
-          sql`${boardClimbs.edgeBottom} >= ${searchParams.zoneBox.edgeBottom}`,
-          sql`${boardClimbs.edgeTop} <= ${searchParams.zoneBox.edgeTop}`,
-        ]
-      : [];
+  // Zone filter — restrict climbs by the user-defined box in board_holes grid
+  // coordinates. `allHolds` keeps the existing denormalized bounding-box path.
+  // `anyHold` needs to inspect individual climb holds because a climb can
+  // extend outside the zone while still using an expansion hold inside it.
+  // Direct db-layer callers bypass GraphQL validation, so re-check the box.
+  const zoneBox = searchParams.zoneBox;
+  const validZoneBox =
+    zoneBox && zoneBox.edgeRight > zoneBox.edgeLeft && zoneBox.edgeTop > zoneBox.edgeBottom ? zoneBox : null;
+  const zoneMode = searchParams.zoneMode === 'anyHold' ? 'anyHold' : 'allHolds';
+  const zoneConditions: SQL[] = [];
+  if (validZoneBox) {
+    if (zoneMode === 'anyHold') {
+      const zonePlacementSetCondition =
+        params.board_name === 'moonboard' || params.set_ids.length === 0
+          ? sql``
+          : sql`AND zone_bp.set_id IN (${sql.join(
+              params.set_ids.map((setId) => sql`${setId}`),
+              sql`, `,
+            )})`;
+      zoneConditions.push(sql`EXISTS (
+        SELECT 1
+        FROM ${boardClimbHolds} zone_ch
+        JOIN ${boardPlacements} zone_bp
+          ON zone_bp.board_type = zone_ch.board_type
+          AND zone_bp.id = zone_ch.hold_id
+          AND zone_bp.layout_id = ${params.layout_id}
+        JOIN ${boardHoles} zone_bh
+          ON zone_bh.board_type = zone_ch.board_type
+          AND zone_bh.id = zone_bp.hole_id
+        WHERE zone_ch.board_type = ${params.board_name}
+          AND zone_ch.climb_uuid = ${boardClimbs.uuid}
+          ${zonePlacementSetCondition}
+          AND zone_bh.x >= ${validZoneBox.edgeLeft}
+          AND zone_bh.x <= ${validZoneBox.edgeRight}
+          AND zone_bh.y >= ${validZoneBox.edgeBottom}
+          AND zone_bh.y <= ${validZoneBox.edgeTop}
+      )`);
+    } else {
+      zoneConditions.push(
+        sql`${boardClimbs.edgeLeft} >= ${validZoneBox.edgeLeft}`,
+        sql`${boardClimbs.edgeRight} <= ${validZoneBox.edgeRight}`,
+        sql`${boardClimbs.edgeBottom} >= ${validZoneBox.edgeBottom}`,
+        sql`${boardClimbs.edgeTop} <= ${validZoneBox.edgeTop}`,
+      );
+    }
+  }
 
   // Tall climbs filter condition
   const tallClimbsConditions: SQL[] = [];
 
-  if (searchParams.onlyTallClimbs && params.board_name === 'kilter' && params.layout_id === KILTER_HOMEWALL_LAYOUT_ID) {
-    tallClimbsConditions.push(
-      sql`${boardClimbs.edgeBottom} < (
+  if (searchParams.onlyTallClimbs) {
+    const isTallClimbSupportedBoard =
+      params.board_name === 'kilter' &&
+      params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
+      isKilterHomewallTallSizeId(params.size_id);
+    if (!isTallClimbSupportedBoard) {
+      // A stale/crafted URL asked for a board-scoped filter the current board
+      // cannot satisfy. Keep the request restrictive instead of silently
+      // returning unfiltered climbs.
+      tallClimbsConditions.push(sql`false`);
+    } else {
+      tallClimbsConditions.push(
+        sql`${boardClimbs.edgeBottom} < (
         SELECT MAX(ps.edge_bottom)
         FROM ${boardProductSizes} ps
         WHERE ps.board_type = ${params.board_name}
         AND ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
         AND ps.id != ${params.size_id}
       )`,
-    );
+      );
+    }
+  }
+
+  const wideClimbsConditions: SQL[] = [];
+
+  if (searchParams.onlyWideClimbs) {
+    const isWideClimbSupportedBoard =
+      params.board_name === 'kilter' &&
+      params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
+      isKilterHomewallWideSizeId(params.size_id);
+    if (!isWideClimbSupportedBoard) {
+      // A stale/crafted URL asked for a board-scoped filter the current board
+      // cannot satisfy. Keep the request restrictive instead of silently
+      // returning unfiltered climbs.
+      wideClimbsConditions.push(sql`false`);
+    } else {
+      const wideHoldIds = getKilterHomewallWideHoldIdsForSets(params.set_ids);
+      if (wideHoldIds.length === 0) {
+        wideClimbsConditions.push(sql`false`);
+      } else {
+        const wideHoldIdLiterals = sql.join(
+          wideHoldIds.map((holdId) => sql`${holdId}`),
+          sql`, `,
+        );
+        // This requires at least one hold in the 10x10 side expansion over 7x10.
+        // On 10x12 boards, other holds may still use the lower 10x12-only rows.
+        wideClimbsConditions.push(sql`EXISTS (
+        SELECT 1
+        FROM ${boardClimbHolds} wide_ch
+        WHERE wide_ch.board_type = ${params.board_name}
+          AND wide_ch.climb_uuid = ${boardClimbs.uuid}
+          AND wide_ch.hold_id IN (${wideHoldIdLiterals})
+      )`);
+      }
+    }
   }
 
   // Set membership filter: exclude climbs that use holds from sets the user doesn't own.
@@ -337,6 +492,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
       ...holdConditions,
       ...holdStateConditions,
       ...tallClimbsConditions,
+      ...wideClimbsConditions,
       ...zoneConditions,
       ...setIdsConditions,
       ...personalProgressConditions,
@@ -368,6 +524,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     holdConditions,
     holdStateConditions,
     tallClimbsConditions,
+    wideClimbsConditions,
     zoneConditions,
     setIdsConditions,
     sizeConditions,

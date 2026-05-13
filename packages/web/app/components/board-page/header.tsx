@@ -23,6 +23,7 @@ import {
   hasActiveFilters,
   hasActiveNonNameFilters as computeNonNameFilters,
   getSearchPillSummary,
+  createSearchSummaryLabels,
 } from '../search-drawer/search-summary-utils';
 import { addRecentSearch } from '../search-drawer/recent-searches-storage';
 import AddOutlined from '@mui/icons-material/AddOutlined';
@@ -57,9 +58,7 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
   // Stable callback for the bridge injector
   const openDrawer = useCallback(() => setSearchDropdownOpen(true), []);
 
-  // Pre-translate labels that the summary helpers can't access on their own
-  // (they live in a `.ts` module without React/i18next context).
-  const summaryLabels = { zone: t('search.panels.zone') };
+  const summaryLabels = createSearchSummaryLabels(t);
 
   // Compute filter summary for the bridge
   const summary = getSearchPillSummary(uiSearchParams, summaryLabels);

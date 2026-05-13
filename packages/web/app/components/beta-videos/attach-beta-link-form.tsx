@@ -194,7 +194,7 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
       fullWidth
       placeholder={t('betaVideos.urlPlaceholder')}
       label={showStepsGuide ? undefined : urlFieldLabel}
-      aria-label={showStepsGuide ? urlFieldLabel : undefined}
+      inputProps={showStepsGuide ? { 'aria-label': urlFieldLabel } : undefined}
       value={url}
       onChange={(e) => setUrl(e.target.value)}
       error={!!validationError}

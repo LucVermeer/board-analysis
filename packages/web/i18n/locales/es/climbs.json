@@ -110,6 +110,8 @@
       "any": "Cualquiera",
       "tallClimbsOnly": "Solo bloques altos",
       "tallClimbsTooltip": "Muestra solo bloques que usan presas en las 8 filas inferiores (solo disponible en tablas 10x12)",
+      "wideClimbsOnly": "Solo bloques anchos",
+      "wideClimbsTooltip": "Muestra solo bloques que usan las presas laterales extra del 10x10",
       "gradeAccuracy": "Precisión del grado",
       "somewhatAccurate": "Algo precisa (<0.2)",
       "veryAccurate": "Muy precisa (<0.1)",
@@ -119,9 +121,35 @@
     "panels": {
       "quality": "Calidad",
       "status": "Estado de encadene",
+      "progress": "Progreso",
+      "allClimbs": "Todos los bloques",
       "zone": "Zona",
       "holdsAndZone": "Presas y zona",
       "anyDefault": "Cualquiera"
+    },
+    "quality": {
+      "tallClimbsOnly": "Altos",
+      "wideClimbsOnly": "Anchos"
+    },
+    "summary": {
+      "default": "¿Qué quieres escalar?",
+      "gradeFallback": "Grado {{gradeId}}",
+      "upToGrade": "Hasta {{grade}}",
+      "setterCount_one": "{{count}} aperturista",
+      "setterCount_other": "{{count}} aperturistas",
+      "ascents_one": "{{count}}+ encadene",
+      "ascents_other": "{{count}}+ encadenes",
+      "rating": "{{rating}}+ valoración",
+      "classics": "Clásicos",
+      "gradeAccuracy": "Precisión del grado",
+      "drafts": "Borradores",
+      "attempted": "intentados",
+      "completed": "encadenados",
+      "hide": "Ocultar {{filters}}",
+      "only": "Solo {{filters}}",
+      "holds_one": "{{count}} presa",
+      "holds_other": "{{count}} presas",
+      "more": "+{{count}} más"
     },
     "status": {
       "any": "Cualquiera",
@@ -163,10 +191,13 @@
     },
     "zone": {
       "draw": "Dibujar zona",
-      "clear": "Borrar zona"
+      "clear": "Borrar zona",
+      "modeLabel": "Tipo de zona",
+      "allHolds": "Todas las presas dentro",
+      "anyHold": "Al menos 1 presa"
     },
     "holdsAndZone": {
-      "description": "Toca presas para filtrar, o dibuja una zona para limitar los resultados a bloques que entren en ella."
+      "description": "Toca presas para filtrar, o dibuja una zona para centrar los resultados en una parte de la tabla."
     },
     "sortToggle": "Ordenar"
   },

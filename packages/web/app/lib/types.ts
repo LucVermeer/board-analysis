@@ -1,5 +1,5 @@
 import type { HoldRenderData } from '../components/board-renderer/types';
-import type { BoardName as SharedBoardName } from '@boardsesh/shared-schema';
+import type { BoardName as SharedBoardName, ZoneMatchMode as SharedZoneMatchMode } from '@boardsesh/shared-schema';
 import type { SetIdList } from './board-data';
 
 export type Climb = {
@@ -102,6 +102,8 @@ export type ZoneBox = {
   edgeTop: number;
 };
 
+export type ZoneMatchMode = SharedZoneMatchMode;
+
 export type SearchRequest = {
   gradeAccuracy: number;
   maxGrade: number;
@@ -113,6 +115,7 @@ export type SearchRequest = {
   name: string;
   onlyClassics: boolean;
   onlyTallClimbs: boolean;
+  onlyWideClimbs: boolean;
   settername: string[];
   setternameSuggestion: string;
   holdsFilter: HoldsFilter;
@@ -123,6 +126,7 @@ export type SearchRequest = {
   onlyDrafts: boolean;
   projectsOnly: boolean;
   zoneBox: ZoneBox | null;
+  zoneMode: ZoneMatchMode;
 };
 
 export type SearchRequestPagination = SearchRequest & {

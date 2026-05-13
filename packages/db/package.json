@@ -64,6 +64,7 @@
     "db:seed-locations": "tsx scripts/seed-board-locations.ts"
   },
   "dependencies": {
+    "@boardsesh/board-constants": "*",
     "@boardsesh/shared-schema": "*",
     "@hangtime/climbing-boards": "^1.0.6",
     "drizzle-orm": "^0.45.1",

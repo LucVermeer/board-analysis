@@ -12,6 +12,22 @@ export type ActiveBoardLock = {
   reason: BoardLockReason | null;
 };
 
+function hasSameBoardConfig(firstBoard: BoardDetails, secondBoard: BoardDetails): boolean {
+  if (
+    firstBoard.board_name !== secondBoard.board_name ||
+    firstBoard.layout_id !== secondBoard.layout_id ||
+    firstBoard.size_id !== secondBoard.size_id
+  ) {
+    return false;
+  }
+
+  const firstSetIds = [...firstBoard.set_ids].sort((leftSetId, rightSetId) => leftSetId - rightSetId);
+  const secondSetIds = [...secondBoard.set_ids].sort((leftSetId, rightSetId) => leftSetId - rightSetId);
+  return (
+    firstSetIds.length === secondSetIds.length && firstSetIds.every((setId, index) => setId === secondSetIds[index])
+  );
+}
+
 /**
  * Reports whether the user's active board is anchored to something that
  * would make an accidental board switch destructive — an active party
@@ -28,7 +44,9 @@ export function useActiveBoardLock(): ActiveBoardLock {
   const { boardDetails: bridgeBoardDetails } = useQueueBridgeBoardInfo();
 
   if (activeSession) {
-    return { lockedBoard: activeSession.boardDetails, reason: 'session' };
+    if (!bridgeBoardDetails || hasSameBoardConfig(activeSession.boardDetails, bridgeBoardDetails)) {
+      return { lockedBoard: activeSession.boardDetails, reason: 'session' };
+    }
   }
 
   if (isBluetoothConnected && bridgeBoardDetails) {

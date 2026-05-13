@@ -160,6 +160,7 @@ describe('hasUserSpecificFilters', () => {
     name: '',
     onlyClassics: false,
     onlyTallClimbs: false,
+    onlyWideClimbs: false,
     settername: [] as string[],
     setternameSuggestion: '',
     holdsFilter: {},
@@ -170,6 +171,7 @@ describe('hasUserSpecificFilters', () => {
     onlyDrafts: false,
     projectsOnly: false,
     zoneBox: null,
+    zoneMode: 'allHolds' as const,
     page: 0,
     pageSize: 20,
   };

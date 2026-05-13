@@ -66,18 +66,24 @@ describe('AttachBetaLinkForm — showStepsGuide', () => {
     expect(optionalBadges).toHaveLength(2);
   });
 
-  it('hides the floating URL label when steps are shown (kept as aria-label)', () => {
+  it('hides the floating URL label when steps are shown but keeps the input accessibly named', () => {
     renderForm({ showStepsGuide: true });
 
+    // The floating <label> text should not appear (label prop is unset).
     expect(screen.queryByText('betaVideos.urlLabelForClimb')).toBeNull();
-    expect(screen.getByLabelText('betaVideos.urlLabelForClimb')).toBeTruthy();
+    // The accessible name must still be on the <input> itself (via
+    // inputProps), not just the FormControl root — otherwise screen
+    // readers announce an unlabeled textbox.
+    const input = screen.getByRole('textbox', { name: 'betaVideos.urlLabelForClimb' });
+    expect(input.tagName).toBe('INPUT');
   });
 
   it('keeps the floating URL label in the flat (default) layout', () => {
     renderForm();
 
     expect(screen.queryByText('betaVideos.steps.step1Title')).toBeNull();
-    expect(screen.getByLabelText('betaVideos.urlLabelForClimb')).toBeTruthy();
+    const input = screen.getByRole('textbox', { name: 'betaVideos.urlLabelForClimb' });
+    expect(input.tagName).toBe('INPUT');
   });
 
   it('renders the Copy & open Instagram button when climbName and angle are present', () => {

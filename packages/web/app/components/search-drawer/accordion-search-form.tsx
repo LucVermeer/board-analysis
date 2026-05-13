@@ -31,6 +31,7 @@ import {
   getUserPanelSummary,
   getHoldsPanelSummary,
   getZonePanelSummary,
+  createSearchSummaryLabels,
 } from './search-summary-utils';
 import CollapsibleSection, {
   type CollapsibleSectionConfig,
@@ -38,7 +39,11 @@ import CollapsibleSection, {
 import { useTranslation } from 'react-i18next';
 import styles from './accordion-search-form.module.css';
 
-import { KILTER_HOMEWALL_LAYOUT_ID } from '@/app/lib/board-constants';
+import {
+  KILTER_HOMEWALL_LAYOUT_ID,
+  isKilterHomewallTallSizeId,
+  isKilterHomewallWideSizeId,
+} from '@/app/lib/board-constants';
 
 type AccordionSearchFormProps = {
   boardDetails: BoardDetails;
@@ -52,10 +57,11 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const grades = getGradesForBoard(boardDetails.board_name);
   const { openAuthModal } = useAuthModal();
   const [showSort, setShowSort] = useState(false);
+  const summaryLabels = createSearchSummaryLabels(t);
 
   const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
-  const isLargestSize = boardDetails.size_name?.toLowerCase().includes('12');
-  const showTallClimbsFilter = isKilterHomewall && isLargestSize;
+  const showTallClimbsFilter = isKilterHomewall && isKilterHomewallTallSizeId(boardDetails.size_id);
+  const showWideClimbsFilter = isKilterHomewall && isKilterHomewallWideSizeId(boardDetails.size_id);
   const minRatingPickerValue = getMinRatingPickerValue(uiSearchParams.minRating);
 
   let statusValue: 'any' | 'drafts' | 'established' | 'projects' = 'any';
@@ -114,27 +120,50 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         </div>
       </div>
 
-      {showTallClimbsFilter && (
+      {(showTallClimbsFilter || showWideClimbsFilter) && (
         <div className={styles.switchGroup}>
-          <FormControlLabel
-            className={styles.switchRow}
-            labelPlacement="start"
-            control={
-              <MuiSwitch
-                size="small"
-                color="primary"
-                checked={uiSearchParams.onlyTallClimbs}
-                onChange={(_, checked) => updateFilters({ onlyTallClimbs: checked })}
-              />
-            }
-            label={
-              <MuiTooltip title={t('search.fields.tallClimbsTooltip')}>
-                <MuiTypography variant="body2" component="span">
-                  {t('search.fields.tallClimbsOnly')}
-                </MuiTypography>
-              </MuiTooltip>
-            }
-          />
+          {showTallClimbsFilter && (
+            <FormControlLabel
+              className={styles.switchRow}
+              labelPlacement="start"
+              control={
+                <MuiSwitch
+                  size="small"
+                  color="primary"
+                  checked={uiSearchParams.onlyTallClimbs}
+                  onChange={(_, checked) => updateFilters({ onlyTallClimbs: checked })}
+                />
+              }
+              label={
+                <MuiTooltip title={t('search.fields.tallClimbsTooltip')}>
+                  <MuiTypography variant="body2" component="span">
+                    {t('search.fields.tallClimbsOnly')}
+                  </MuiTypography>
+                </MuiTooltip>
+              }
+            />
+          )}
+          {showWideClimbsFilter && (
+            <FormControlLabel
+              className={styles.switchRow}
+              labelPlacement="start"
+              control={
+                <MuiSwitch
+                  size="small"
+                  color="primary"
+                  checked={uiSearchParams.onlyWideClimbs}
+                  onChange={(_, checked) => updateFilters({ onlyWideClimbs: checked })}
+                />
+              }
+              label={
+                <MuiTooltip title={t('search.fields.wideClimbsTooltip')}>
+                  <MuiTypography variant="body2" component="span">
+                    {t('search.fields.wideClimbsOnly')}
+                  </MuiTypography>
+                </MuiTooltip>
+              }
+            />
+          )}
         </div>
       )}
 
@@ -192,7 +221,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       label: t('search.panels.quality'),
       title: t('search.panels.quality'),
       defaultSummary: t('search.panels.anyDefault'),
-      getSummary: () => getQualityPanelSummary(uiSearchParams),
+      getSummary: () => getQualityPanelSummary(uiSearchParams, summaryLabels.quality),
       content: (
         <div className={styles.panelContent}>
           <div className={styles.inputGroup}>
@@ -263,7 +292,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       label: t('search.panels.status'),
       title: t('search.panels.status'),
       defaultSummary: t('search.panels.anyDefault'),
-      getSummary: () => getStatusPanelSummary(uiSearchParams),
+      getSummary: () => getStatusPanelSummary(uiSearchParams, summaryLabels.status),
       content: (
         <div className={styles.panelContent}>
           <RadioGroup
@@ -374,10 +403,10 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     },
     {
       key: 'user',
-      label: 'Progress',
-      title: 'Progress',
-      defaultSummary: 'All climbs',
-      getSummary: () => getUserPanelSummary(uiSearchParams),
+      label: t('search.panels.progress'),
+      title: t('search.panels.progress'),
+      defaultSummary: t('search.panels.allClimbs'),
+      getSummary: () => getUserPanelSummary(uiSearchParams, summaryLabels.user),
       content: (
         <div className={styles.panelContent}>
           {!isAuthenticated ? (
@@ -485,8 +514,8 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       title: t('search.panels.holdsAndZone'),
       defaultSummary: t('search.panels.anyDefault'),
       getSummary: () => [
-        ...getHoldsPanelSummary(uiSearchParams),
-        ...getZonePanelSummary(uiSearchParams, t('search.panels.zone')),
+        ...getHoldsPanelSummary(uiSearchParams, summaryLabels.holds),
+        ...getZonePanelSummary(uiSearchParams, summaryLabels.zone, summaryLabels.zoneModes),
       ],
       lazy: true,
       content: (

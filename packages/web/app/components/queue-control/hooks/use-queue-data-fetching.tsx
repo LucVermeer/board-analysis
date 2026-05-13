@@ -90,6 +90,7 @@ export const useQueueDataFetching = ({
       name: searchParams.name || undefined,
       setter: searchParams.settername && searchParams.settername.length > 0 ? searchParams.settername : undefined,
       onlyTallClimbs: searchParams.onlyTallClimbs || undefined,
+      onlyWideClimbs: searchParams.onlyWideClimbs || undefined,
       holdsFilter:
         searchParams.holdsFilter && Object.keys(searchParams.holdsFilter).length > 0
           ? searchParams.holdsFilter
@@ -101,6 +102,7 @@ export const useQueueDataFetching = ({
       onlyDrafts: searchParams.onlyDrafts || undefined,
       projectsOnly: searchParams.projectsOnly || undefined,
       zoneBox: searchParams.zoneBox || undefined,
+      zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,
     }),
     [searchParams, parsedParams],
   );
@@ -172,6 +174,7 @@ export const useQueueDataFetching = ({
           ? countSearchParams.settername
           : undefined,
       onlyTallClimbs: countSearchParams.onlyTallClimbs || undefined,
+      onlyWideClimbs: countSearchParams.onlyWideClimbs || undefined,
       holdsFilter:
         countSearchParams.holdsFilter && Object.keys(countSearchParams.holdsFilter).length > 0
           ? countSearchParams.holdsFilter
@@ -183,6 +186,7 @@ export const useQueueDataFetching = ({
       onlyDrafts: countSearchParams.onlyDrafts || undefined,
       projectsOnly: countSearchParams.projectsOnly || undefined,
       zoneBox: countSearchParams.zoneBox || undefined,
+      zoneMode: countSearchParams.zoneBox ? countSearchParams.zoneMode : undefined,
     }),
     [countSearchParams, parsedParams],
   );

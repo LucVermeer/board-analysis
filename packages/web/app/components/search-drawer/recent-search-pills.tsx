@@ -11,7 +11,7 @@ import {
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import type { SearchRequestPagination } from '@/app/lib/types';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
-import { getSearchPillFullSummary } from './search-summary-utils';
+import { createSearchSummaryLabels, getSearchPillFullSummary } from './search-summary-utils';
 import { useTranslation } from 'react-i18next';
 import styles from './recent-search-pills.module.css';
 
@@ -22,7 +22,7 @@ const RecentSearchPills: React.FC = () => {
   const [searches, setSearches] = useState<RecentSearch[]>([]);
   const [hasLoadedInitialSearches, setHasLoadedInitialSearches] = useState(false);
   const { uiSearchParams, updateFilters } = useUISearchParams();
-  const summaryLabels = { zone: t('search.panels.zone') };
+  const summaryLabels = createSearchSummaryLabels(t);
 
   const currentFilterKey = getFilterKey(uiSearchParams);
 
