@@ -105,6 +105,10 @@ function sanitizeFilters(filters: Partial<SearchRequestPagination>): {
     cleaned.zoneMode = DEFAULT_SEARCH_PARAMS.zoneMode;
     changed = true;
   }
+  if (cleaned.zoneBox && cleaned.zoneMode === undefined) {
+    cleaned.zoneMode = DEFAULT_SEARCH_PARAMS.zoneMode;
+    changed = true;
+  }
   if (!cleaned.zoneBox && cleaned.zoneMode && cleaned.zoneMode !== DEFAULT_SEARCH_PARAMS.zoneMode) {
     cleaned.zoneMode = DEFAULT_SEARCH_PARAMS.zoneMode;
     changed = true;

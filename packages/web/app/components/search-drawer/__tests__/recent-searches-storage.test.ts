@@ -144,6 +144,28 @@ describe('recent-searches-storage', () => {
       expect(results[0].filters.minAscents).toBe(0);
       expect(results[0].filters.minGrade).toBe(7);
     });
+
+    it('should default legacy zone searches to all-holds mode', async () => {
+      const legacyZoneEntry: RecentSearch = {
+        id: 'legacy-zone',
+        label: 'Legacy zone search',
+        filters: {
+          zoneBox: { edgeLeft: 1, edgeRight: 2, edgeBottom: 3, edgeTop: 4 },
+        },
+        timestamp: Date.now(),
+      };
+      const db = await openDB(DB_NAME, 1);
+      await db.put(STORE_NAME, [legacyZoneEntry], 'recent');
+      db.close();
+
+      const results = await getRecentSearches();
+      expect(results[0].filters.zoneMode).toBe('allHolds');
+
+      const db2 = await openDB(DB_NAME, 1);
+      const stored = (await db2.get(STORE_NAME, 'recent')) as RecentSearch[];
+      db2.close();
+      expect(stored[0].filters.zoneMode).toBe('allHolds');
+    });
   });
 
   describe('localStorage migration', () => {
