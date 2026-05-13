@@ -86,10 +86,15 @@ describe('AttachBetaLinkForm — showStepsGuide', () => {
     expect(screen.getByRole('button', { name: 'betaVideos.copyAndOpenInstagram' })).toBeTruthy();
   });
 
-  it('omits the Instagram button when angle is missing (caption cannot be built)', () => {
+  it('omits the Instagram button when angle is missing, but keeps all three steps numbered', () => {
     renderForm({ showStepsGuide: true, angle: null });
 
     expect(screen.getByText('betaVideos.steps.step1Title')).toBeTruthy();
+    expect(screen.getByText('betaVideos.steps.step2Title')).toBeTruthy();
+    expect(screen.getByText('betaVideos.steps.step3Title')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'betaVideos.copyAndOpenInstagram' })).toBeNull();
+    expect(screen.getByText('1.')).toBeTruthy();
+    expect(screen.getByText('2.')).toBeTruthy();
+    expect(screen.getByText('3.')).toBeTruthy();
   });
 });

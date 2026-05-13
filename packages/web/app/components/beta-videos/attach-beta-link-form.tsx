@@ -240,7 +240,7 @@ const AttachBetaLinkForm: React.FC<AttachBetaLinkFormProps> = ({
 
   if (showStepsGuide) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: compact ? 1.5 : 1.75 }}>
         <StepRow index={1} title={t('betaVideos.steps.step1Title')} optionalLabel={t('betaVideos.steps.optional')}>
           {instagramButton}
         </StepRow>
