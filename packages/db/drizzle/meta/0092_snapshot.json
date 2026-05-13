@@ -1336,8 +1336,8 @@
         }
       },
       "indexes": {
-        "board_placements_board_type_id_layout_set_hole_idx": {
-          "name": "board_placements_board_type_id_layout_set_hole_idx",
+        "board_placements_board_type_layout_id_set_hole_idx": {
+          "name": "board_placements_board_type_layout_id_set_hole_idx",
           "columns": [
             {
               "expression": "board_type",
@@ -1346,13 +1346,13 @@
               "nulls": "last"
             },
             {
-              "expression": "id",
+              "expression": "layout_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "layout_id",
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -45,12 +45,27 @@ vi.mock('../climb-search-form', () => ({
 
 vi.mock('../search-summary-utils', () => ({
   createSearchSummaryLabels: () => ({
-    quality: {},
-    status: {},
-    user: {},
-    holds: {},
+    quality: {
+      tallClimbsOnly: 'Tall',
+      wideClimbsOnly: 'Wide',
+    },
+    status: {
+      drafts: 'Drafts',
+      projects: 'Projects',
+      established: 'Established',
+    },
+    user: {
+      attempted: 'attempted',
+      completed: 'completed',
+    },
+    holds: {
+      count: (count: number) => `${count} holds`,
+    },
     zone: 'Zone',
-    zoneModes: {},
+    zoneModes: {
+      allHolds: 'All holds inside',
+      anyHold: 'At least 1 hold',
+    },
   }),
   getQualityPanelSummary: () => [],
   getStatusPanelSummary: () => [],

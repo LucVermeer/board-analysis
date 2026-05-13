@@ -178,6 +178,16 @@ void describe('createClimbFilters: zone modes', () => {
     assert.doesNotMatch(rendered, /zone_bp\.set_id IN/);
   });
 
+  void it('omits the set membership predicate for anyHold when non-MoonBoard set_ids are empty', () => {
+    const filters = createClimbFilters({ ...params, set_ids: [] }, { zoneBox, zoneMode: 'anyHold' });
+
+    assert.equal(filters.zoneConditions.length, 1);
+    const rendered = sqlToString(filters.zoneConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /JOIN\s+zone_bp/);
+    assert.doesNotMatch(rendered, /zone_bp\.set_id IN/);
+  });
+
   void it('ignores zoneMode when the zone box is empty or inverted', () => {
     const filters = createClimbFilters(params, {
       zoneBox: { edgeLeft: 80, edgeRight: 10, edgeBottom: 20, edgeTop: 120 },
@@ -281,6 +291,19 @@ void describe('createClimbFilters: wide climbs', () => {
     assert.match(rendered, new RegExp(String(mainlineWideHoldIds[0])));
     assert.match(rendered, new RegExp(String(mainlineWideHoldIds[mainlineWideHoldIds.length - 1])));
     assert.doesNotMatch(rendered, new RegExp(String(auxiliaryWideHoldIds[0])));
+  });
+
+  void it('keeps wide filtering active when selected sets mix expansion and non-expansion sets', () => {
+    const filters = createClimbFilters({ ...homewallWideParams, set_ids: [26, 28] }, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.wideClimbsConditions[0]);
+    const mixedWideHoldIds = getKilterHomewallWideHoldIdsForSets([26, 28]);
+
+    assert.equal(mixedWideHoldIds.length, 30);
+    assert.notEqual(rendered, 'false');
+    assert.match(rendered, /wide_ch\.hold_id IN/);
+    assert.match(rendered, new RegExp(String(mixedWideHoldIds[0])));
   });
 
   void it('uses a false condition when selected sets contain no side expansion holds', () => {

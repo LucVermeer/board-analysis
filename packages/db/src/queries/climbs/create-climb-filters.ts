@@ -4,6 +4,8 @@ import {
   getProductSize,
   isKilterHomewallTallSizeId,
   isKilterHomewallWideSizeId,
+  type HoldTuple,
+  type ProductSizeData,
 } from '@boardsesh/board-constants/product-sizes';
 import {
   boardClimbs,
@@ -23,6 +25,24 @@ const KILTER_HOMEWALL_SMALL_SIZE_ID = 17;
 const KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID = 21;
 const KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS = [26, 27, 28, 29] as const;
 
+function isKilterHomewallWideSideExpansionHold(
+  holdPlacement: HoldTuple,
+  smallSize: ProductSizeData,
+  wideSize: ProductSizeData,
+): boolean {
+  const [, , xCoordinate, yCoordinate] = holdPlacement;
+  // Product-size edges are outer board bounds. A hold exactly on the 7x10 edge
+  // is outside that size, while a hold exactly on the 10x10 outer edge is not
+  // inside the 10x10 renderable area. Match getBoardDetails' strict bounds.
+  const isInsideWideSize =
+    xCoordinate > wideSize.edgeLeft &&
+    xCoordinate < wideSize.edgeRight &&
+    yCoordinate > wideSize.edgeBottom &&
+    yCoordinate < wideSize.edgeTop;
+  const isOutsideSmallWidth = xCoordinate <= smallSize.edgeLeft || xCoordinate >= smallSize.edgeRight;
+  return isInsideWideSize && isOutsideSmallWidth;
+}
+
 function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {
   const smallSize = getProductSize('kilter', KILTER_HOMEWALL_SMALL_SIZE_ID);
   const wideSize = getProductSize('kilter', KILTER_HOMEWALL_WIDE_REFERENCE_SIZE_ID);
@@ -34,15 +54,7 @@ function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly num
     KILTER_HOMEWALL_WIDE_EXPANSION_SET_IDS.map((setId) => [
       setId,
       getHolePlacements('kilter', KILTER_HOMEWALL_LAYOUT_ID, setId)
-        .filter(([, , xCoordinate, yCoordinate]) => {
-          const isInsideWideSize =
-            xCoordinate > wideSize.edgeLeft &&
-            xCoordinate < wideSize.edgeRight &&
-            yCoordinate > wideSize.edgeBottom &&
-            yCoordinate < wideSize.edgeTop;
-          const isOutsideSmallWidth = xCoordinate <= smallSize.edgeLeft || xCoordinate >= smallSize.edgeRight;
-          return isInsideWideSize && isOutsideSmallWidth;
-        })
+        .filter((holdPlacement) => isKilterHomewallWideSideExpansionHold(holdPlacement, smallSize, wideSize))
         .map(([holdId]) => holdId),
     ]),
   );
@@ -54,6 +66,8 @@ function buildKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly num
   return wideHoldIdsBySet;
 }
 
+// Board constants are generated static data in the deployed bundle, so this
+// production cache is intentionally never invalidated.
 let kilterHomewallWideHoldIdsBySet: ReadonlyMap<number, readonly number[]> | null = null;
 
 function getKilterHomewallWideHoldIdsBySet(): ReadonlyMap<number, readonly number[]> {

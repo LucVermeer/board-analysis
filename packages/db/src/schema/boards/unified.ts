@@ -219,10 +219,10 @@ export const boardPlacements = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.boardType, table.id] }),
-    climbHoldLookupIdx: index('board_placements_board_type_id_layout_set_hole_idx').on(
+    climbHoldLookupIdx: index('board_placements_board_type_layout_id_set_hole_idx').on(
       table.boardType,
-      table.id,
       table.layoutId,
+      table.id,
       table.setId,
       table.holeId,
     ),
