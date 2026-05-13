@@ -47,6 +47,7 @@ export const queueMutations = {
     let originalQueueLength = 0;
     let itemWasAdded = false;
     let resultSequence = 0;
+    let resultStateHash = '';
 
     // Retry loop for optimistic locking
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -80,6 +81,7 @@ export const queueMutations = {
         const result = await roomManager.updateQueueOnly(sessionId, queue, currentState.version);
         itemWasAdded = true;
         resultSequence = result.sequence;
+        resultStateHash = result.stateHash;
         break; // Success, exit retry loop
       } catch (error) {
         if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
@@ -101,6 +103,7 @@ export const queueMutations = {
       pubsub.publishQueueEvent(sessionId, {
         __typename: 'QueueItemAdded',
         sequence: resultSequence,
+        stateHash: resultStateHash,
         item: item,
         position: actualPosition,
       });
@@ -133,11 +136,12 @@ export const queueMutations = {
       currentClimb = null;
     }
 
-    const { sequence } = await roomManager.updateQueueState(sessionId, queue, currentClimb);
+    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, currentClimb);
 
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'QueueItemRemoved',
       sequence,
+      stateHash,
       uuid,
     });
 
@@ -171,6 +175,7 @@ export const queueMutations = {
     }
 
     let resultSequence = currentState.sequence;
+    let resultStateHash = currentState.stateHash;
 
     if (oldIndex >= 0 && oldIndex < queue.length && newIndex >= 0 && newIndex < queue.length) {
       const [movedItem] = queue.splice(oldIndex, 1);
@@ -178,11 +183,13 @@ export const queueMutations = {
       // Use updateQueueOnly to avoid overwriting currentClimbQueueItem
       const result = await roomManager.updateQueueOnly(sessionId, queue);
       resultSequence = result.sequence;
+      resultStateHash = result.stateHash;
     }
 
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'QueueReordered',
       sequence: resultSequence,
+      stateHash: resultStateHash,
       uuid,
       oldIndex,
       newIndex,
@@ -238,18 +245,26 @@ export const queueMutations = {
 
     // Retry loop for optimistic locking
     let sequence = 0;
+    let stateHash = '';
+    let addedToQueue = false;
+    let updatedQueue: ClimbQueueItem[] = [];
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       const currentState = await roomManager.getQueueState(sessionId);
       let queue = currentState.queue;
+      let addedInThisAttempt = false;
 
       // Optionally add to queue if not already present
       if (shouldAddToQueue && item && !queue.some((i) => i.uuid === item.uuid)) {
         queue = [...queue, item];
+        addedInThisAttempt = true;
       }
 
       try {
         const result = await roomManager.updateQueueState(sessionId, queue, item, currentState.version);
         sequence = result.sequence;
+        stateHash = result.stateHash;
+        updatedQueue = queue;
+        addedToQueue = addedInThisAttempt;
         break; // Success, exit retry loop
       } catch (error) {
         if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
@@ -261,13 +276,27 @@ export const queueMutations = {
       }
     }
 
-    pubsub.publishQueueEvent(sessionId, {
-      __typename: 'CurrentClimbChanged',
-      sequence,
-      item: item,
-      clientId: ctx.connectionId || null,
-      correlationId: correlationId || null,
-    });
+    if (addedToQueue) {
+      pubsub.publishQueueEvent(sessionId, {
+        __typename: 'FullSync',
+        sequence,
+        state: {
+          sequence,
+          stateHash,
+          queue: updatedQueue,
+          currentClimbQueueItem: item,
+        },
+      });
+    } else {
+      pubsub.publishQueueEvent(sessionId, {
+        __typename: 'CurrentClimbChanged',
+        sequence,
+        stateHash,
+        item: item,
+        clientId: ctx.connectionId || null,
+        correlationId: correlationId || null,
+      });
+    }
 
     logMutationMetrics('setCurrentClimb', performance.now() - startTime, sessionId, {
       shouldAddToQueue: !!shouldAddToQueue,
@@ -287,6 +316,8 @@ export const queueMutations = {
     const currentState = await roomManager.getQueueState(sessionId);
     let currentClimb = currentState.currentClimbQueueItem;
     let sequence = currentState.sequence;
+    let stateHash = currentState.stateHash;
+    const mirroredUuid = currentClimb?.uuid ?? null;
 
     if (currentClimb) {
       // Update the mirrored state
@@ -302,11 +333,14 @@ export const queueMutations = {
 
       const result = await roomManager.updateQueueState(sessionId, queue, currentClimb);
       sequence = result.sequence;
+      stateHash = result.stateHash;
     }
 
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'ClimbMirrored',
       sequence,
+      stateHash,
+      uuid: mirroredUuid,
       mirrored,
     });
 

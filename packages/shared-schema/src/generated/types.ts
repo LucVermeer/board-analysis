@@ -540,6 +540,10 @@ export type ClimbMirrored = {
   mirrored: Scalars['Boolean']['output'];
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
+  /** UUID of the mirrored queue item, when a current climb exists */
+  uuid?: Maybe<Scalars['ID']['output']>;
 };
 
 /** Playlist membership for a single climb in a batch query. */
@@ -963,6 +967,8 @@ export type CurrentClimbChanged = {
   item?: Maybe<ClimbQueueItem>;
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
 };
 
 /** Information needed before account deletion. */
@@ -3495,6 +3501,8 @@ export type QueueItemAdded = {
   position?: Maybe<Scalars['Int']['output']>;
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
 };
 
 /** Event when an item is removed from the queue. */
@@ -3502,6 +3510,8 @@ export type QueueItemRemoved = {
   __typename?: 'QueueItemRemoved';
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
   /** UUID of the removed item */
   uuid: Scalars['ID']['output'];
 };
@@ -3552,6 +3562,8 @@ export type QueueReordered = {
   oldIndex: Scalars['Int']['output'];
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
   /** UUID of the moved item */
   uuid: Scalars['ID']['output'];
 };
@@ -5614,6 +5626,8 @@ export type ClimbMirroredResolvers<
 > = ResolversObject<{
   mirrored?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  uuid?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -5829,6 +5843,7 @@ export type CurrentClimbChangedResolvers<
   correlationId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   item?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7408,6 +7423,7 @@ export type QueueItemAddedResolvers<
   item?: Resolver<ResolversTypes['ClimbQueueItem'], ParentType, ContextType>;
   position?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7416,6 +7432,7 @@ export type QueueItemRemovedResolvers<
   ParentType extends ResolversParentTypes['QueueItemRemoved'] = ResolversParentTypes['QueueItemRemoved'],
 > = ResolversObject<{
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
@@ -7458,6 +7475,7 @@ export type QueueReorderedResolvers<
   newIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   oldIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;

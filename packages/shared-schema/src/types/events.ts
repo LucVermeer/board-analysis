@@ -18,21 +18,31 @@ import type { ClimbQueueItem, QueueState } from './queue';
 import type { SessionUser } from './session';
 import type { SessionFeedParticipant, SessionGradeDistributionItem, SessionDetailTick } from './activity-feed';
 
-// Response for delta sync event replay (Phase 2)
-// Uses QueueEvent since this is a query returning buffered events with standard field names
+// Response for delta sync event replay (Phase 2). Backend resolvers publish
+// QueueEvent objects, while GraphQL clients receive aliased subscription-shaped
+// payloads from the EVENTS_REPLAY operation.
 export type EventsReplayResponse = {
-  events: QueueEvent[];
+  events: ReplayQueueEvent[];
   currentSequence: number;
 };
+
+export type ReplayQueueEvent = QueueEvent | SubscriptionQueueEvent;
 
 // Server-side event type - uses actual GraphQL field names
 export type QueueEvent =
   | { __typename: 'FullSync'; sequence: number; state: QueueState }
-  | { __typename: 'QueueItemAdded'; sequence: number; item: ClimbQueueItem; position?: number }
-  | { __typename: 'QueueItemRemoved'; sequence: number; uuid: string }
+  | {
+      __typename: 'QueueItemAdded';
+      sequence: number;
+      stateHash: string;
+      item: ClimbQueueItem;
+      position?: number | null;
+    }
+  | { __typename: 'QueueItemRemoved'; sequence: number; stateHash: string; uuid: string }
   | {
       __typename: 'QueueReordered';
       sequence: number;
+      stateHash: string;
       uuid: string;
       oldIndex: number;
       newIndex: number;
@@ -40,20 +50,28 @@ export type QueueEvent =
   | {
       __typename: 'CurrentClimbChanged';
       sequence: number;
+      stateHash: string;
       item: ClimbQueueItem | null;
       clientId: string | null;
       correlationId: string | null;
     }
-  | { __typename: 'ClimbMirrored'; sequence: number; mirrored: boolean };
+  | { __typename: 'ClimbMirrored'; sequence: number; stateHash: string; uuid?: string | null; mirrored: boolean };
 
 // Client-side subscription event type - uses aliased field names to avoid GraphQL union conflicts
 export type SubscriptionQueueEvent =
   | { __typename: 'FullSync'; sequence: number; state: QueueState }
-  | { __typename: 'QueueItemAdded'; sequence: number; addedItem: ClimbQueueItem; position?: number }
-  | { __typename: 'QueueItemRemoved'; sequence: number; uuid: string }
+  | {
+      __typename: 'QueueItemAdded';
+      sequence: number;
+      stateHash: string;
+      addedItem: ClimbQueueItem;
+      position?: number | null;
+    }
+  | { __typename: 'QueueItemRemoved'; sequence: number; stateHash: string; uuid: string }
   | {
       __typename: 'QueueReordered';
       sequence: number;
+      stateHash: string;
       uuid: string;
       oldIndex: number;
       newIndex: number;
@@ -61,11 +79,12 @@ export type SubscriptionQueueEvent =
   | {
       __typename: 'CurrentClimbChanged';
       sequence: number;
+      stateHash: string;
       currentItem: ClimbQueueItem | null;
       clientId: string | null;
       correlationId: string | null;
     }
-  | { __typename: 'ClimbMirrored'; sequence: number; mirrored: boolean };
+  | { __typename: 'ClimbMirrored'; sequence: number; stateHash: string; uuid?: string | null; mirrored: boolean };
 
 export type SessionEvent =
   | { __typename: 'UserJoined'; user: SessionUser }

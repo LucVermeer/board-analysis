@@ -40,32 +40,71 @@ import {
 /**
  * Transform QueueEvent (from eventsReplay) to SubscriptionQueueEvent format.
  */
-function transformToSubscriptionEvent(event: QueueEvent): SubscriptionQueueEvent {
+export function transformToSubscriptionEvent(event: QueueEvent | SubscriptionQueueEvent): SubscriptionQueueEvent {
   switch (event.__typename) {
-    case 'QueueItemAdded':
+    case 'QueueItemAdded': {
+      const addedItem = 'addedItem' in event ? event.addedItem : event.item;
       return {
         __typename: 'QueueItemAdded',
         sequence: event.sequence,
-        addedItem: event.item,
+        stateHash: event.stateHash,
+        addedItem,
         position: event.position,
       };
-    case 'CurrentClimbChanged':
+    }
+    case 'CurrentClimbChanged': {
+      const currentItem = 'currentItem' in event ? event.currentItem : event.item;
       return {
         __typename: 'CurrentClimbChanged',
         sequence: event.sequence,
-        currentItem: event.item,
+        stateHash: event.stateHash,
+        currentItem,
         clientId: event.clientId,
         correlationId: event.correlationId,
       };
+    }
     default:
       return event as SubscriptionQueueEvent;
   }
+}
+
+export function hasContiguousReplayCoverage(
+  events: SubscriptionQueueEvent[],
+  sinceSequence: number,
+  currentSequence: number,
+): boolean {
+  if (currentSequence <= sinceSequence) {
+    return true;
+  }
+
+  let expectedSequence = sinceSequence + 1;
+  const sortedEvents = [...events].sort((a, b) => a.sequence - b.sequence);
+
+  for (const event of sortedEvents) {
+    if (event.sequence < expectedSequence) {
+      continue;
+    }
+
+    if (event.__typename === 'FullSync') {
+      expectedSequence = event.sequence + 1;
+      continue;
+    }
+
+    if (event.sequence !== expectedSequence) {
+      return false;
+    }
+
+    expectedSequence++;
+  }
+
+  return expectedSequence > currentSequence;
 }
 
 type UseSessionLifecycleArgs = {
   isAuthLoading: boolean;
   handleQueueEvent: (event: SubscriptionQueueEvent) => void;
   handleSessionEvent: (event: SessionEvent) => void;
+  setLastReceivedStateHash: Dispatch<SetStateAction<string | null>>;
   setSession: Dispatch<SetStateAction<Session | null>>;
   refs: Pick<
     SharedRefs,
@@ -126,6 +165,7 @@ export function useSessionLifecycle({
   isAuthLoading,
   handleQueueEvent,
   handleSessionEvent,
+  setLastReceivedStateHash,
   setSession: setSessionExternal,
   refs,
 }: UseSessionLifecycleArgs): SessionLifecycleState & SessionLifecycleActions {
@@ -442,10 +482,22 @@ export function useSessionLifecycle({
               throw new Error('eventsReplay payload missing');
             }
 
-            if (replay.events.length > 0) {
-              if (DEBUG) console.info(`[PersistentSession] Replaying ${replay.events.length} events`);
-              replay.events.forEach((event) => {
-                handleQueueEvent(transformToSubscriptionEvent(event));
+            const replayEvents = replay.events.map(transformToSubscriptionEvent);
+            if (replay.currentSequence < currentSeq) {
+              throw new Error(
+                `eventsReplay currentSequence ${replay.currentSequence} is behind joined sequence ${currentSeq}`,
+              );
+            }
+            if (!hasContiguousReplayCoverage(replayEvents, lastSeq, replay.currentSequence)) {
+              throw new Error(
+                `eventsReplay returned non-contiguous coverage from ${lastSeq} to ${replay.currentSequence}`,
+              );
+            }
+
+            if (replayEvents.length > 0) {
+              if (DEBUG) console.info(`[PersistentSession] Replaying ${replayEvents.length} events`);
+              replayEvents.forEach((event) => {
+                handleQueueEvent(event);
               });
               if (DEBUG) console.info('[PersistentSession] Delta sync completed successfully');
             } else {
@@ -467,6 +519,7 @@ export function useSessionLifecycle({
             if (DEBUG) console.info('[PersistentSession] Hash mismatch on reconnect despite gap=0, applying full sync');
             applyFullSync(sessionData);
           } else {
+            setLastReceivedStateHash(sessionData.queueState.stateHash);
             if (DEBUG) console.info('[PersistentSession] No missed events, already in sync');
           }
         }
@@ -750,7 +803,7 @@ export function useSessionLifecycle({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable, only .current changes; intentional dep list
-  }, [activeSession, isAuthLoading, handleQueueEvent, handleSessionEvent, setSession]);
+  }, [activeSession, isAuthLoading, handleQueueEvent, handleSessionEvent, setLastReceivedStateHash, setSession]);
 
   return {
     activeSession,

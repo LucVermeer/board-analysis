@@ -314,6 +314,7 @@ export const EVENTS_REPLAY = `
         }
         ... on QueueItemAdded {
           sequence
+          stateHash
           addedItem: item {
             ${QUEUE_ITEM_FIELDS}
           }
@@ -321,16 +322,19 @@ export const EVENTS_REPLAY = `
         }
         ... on QueueItemRemoved {
           sequence
+          stateHash
           uuid
         }
         ... on QueueReordered {
           sequence
+          stateHash
           uuid
           oldIndex
           newIndex
         }
         ... on CurrentClimbChanged {
           sequence
+          stateHash
           currentItem: item {
             ${QUEUE_ITEM_FIELDS}
           }
@@ -339,6 +343,8 @@ export const EVENTS_REPLAY = `
         }
         ... on ClimbMirrored {
           sequence
+          stateHash
+          uuid
           mirrored
         }
       }
@@ -365,6 +371,7 @@ export const QUEUE_UPDATES = `
       }
       ... on QueueItemAdded {
         sequence
+        stateHash
         addedItem: item {
           ${QUEUE_ITEM_FIELDS}
         }
@@ -372,16 +379,19 @@ export const QUEUE_UPDATES = `
       }
       ... on QueueItemRemoved {
         sequence
+        stateHash
         uuid
       }
       ... on QueueReordered {
         sequence
+        stateHash
         uuid
         oldIndex
         newIndex
       }
       ... on CurrentClimbChanged {
         sequence
+        stateHash
         currentItem: item {
           ${QUEUE_ITEM_FIELDS}
         }
@@ -390,6 +400,8 @@ export const QUEUE_UPDATES = `
       }
       ... on ClimbMirrored {
         sequence
+        stateHash
+        uuid
         mirrored
       }
     }
