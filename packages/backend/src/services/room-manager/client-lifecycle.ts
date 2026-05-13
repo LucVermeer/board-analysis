@@ -230,9 +230,11 @@ export async function leaveSession(
   const wasLeader = client.isLeader;
 
   const sessionClientIds = sessionsMap.get(sessionId);
-  const wentLocallyEmpty = sessionClientIds
-    ? (sessionClientIds.delete(connectionId), sessionClientIds.size === 0)
-    : false;
+  let wentLocallyEmpty = false;
+  if (sessionClientIds) {
+    sessionClientIds.delete(connectionId);
+    wentLocallyEmpty = sessionClientIds.size === 0;
+  }
 
   if (wentLocallyEmpty) {
     const existingGraceTimer = sessionGraceTimers.get(sessionId);

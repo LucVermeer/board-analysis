@@ -70,7 +70,7 @@ function installInstanceLogTag(): void {
   const instanceTag = `[i:${instanceId.slice(0, 8)}] `;
   const trimmedTag = instanceTag.trim();
 
-  for (const method of ['info', 'warn', 'error', 'log'] as const) {
+  for (const method of ['debug', 'info', 'warn', 'error', 'log'] as const) {
     const original = console[method].bind(console);
     console[method] = (...args: unknown[]) => {
       if (args.length === 0) {
