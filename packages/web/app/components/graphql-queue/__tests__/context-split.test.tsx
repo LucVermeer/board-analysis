@@ -130,6 +130,7 @@ function makeSearchParams(overrides: Partial<SearchRequestPagination> = {}): Sea
     name: '',
     onlyClassics: false,
     onlyTallClimbs: false,
+    onlyWideClimbs: false,
     settername: [],
     setternameSuggestion: '',
     holdsFilter: {},

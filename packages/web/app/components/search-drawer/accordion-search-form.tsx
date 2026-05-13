@@ -54,8 +54,9 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const [showSort, setShowSort] = useState(false);
 
   const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
-  const isLargestSize = boardDetails.size_name?.toLowerCase().includes('12');
-  const showTallClimbsFilter = isKilterHomewall && isLargestSize;
+  const normalizedSizeName = boardDetails.size_name?.toLowerCase().replace(/\s+/g, '') ?? '';
+  const showTallClimbsFilter = isKilterHomewall && normalizedSizeName === '10x12';
+  const showWideClimbsFilter = isKilterHomewall && (normalizedSizeName === '10x10' || normalizedSizeName === '10x12');
   const minRatingPickerValue = getMinRatingPickerValue(uiSearchParams.minRating);
 
   let statusValue: 'any' | 'drafts' | 'established' | 'projects' = 'any';
@@ -114,27 +115,50 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         </div>
       </div>
 
-      {showTallClimbsFilter && (
+      {(showTallClimbsFilter || showWideClimbsFilter) && (
         <div className={styles.switchGroup}>
-          <FormControlLabel
-            className={styles.switchRow}
-            labelPlacement="start"
-            control={
-              <MuiSwitch
-                size="small"
-                color="primary"
-                checked={uiSearchParams.onlyTallClimbs}
-                onChange={(_, checked) => updateFilters({ onlyTallClimbs: checked })}
-              />
-            }
-            label={
-              <MuiTooltip title={t('search.fields.tallClimbsTooltip')}>
-                <MuiTypography variant="body2" component="span">
-                  {t('search.fields.tallClimbsOnly')}
-                </MuiTypography>
-              </MuiTooltip>
-            }
-          />
+          {showTallClimbsFilter && (
+            <FormControlLabel
+              className={styles.switchRow}
+              labelPlacement="start"
+              control={
+                <MuiSwitch
+                  size="small"
+                  color="primary"
+                  checked={uiSearchParams.onlyTallClimbs}
+                  onChange={(_, checked) => updateFilters({ onlyTallClimbs: checked })}
+                />
+              }
+              label={
+                <MuiTooltip title={t('search.fields.tallClimbsTooltip')}>
+                  <MuiTypography variant="body2" component="span">
+                    {t('search.fields.tallClimbsOnly')}
+                  </MuiTypography>
+                </MuiTooltip>
+              }
+            />
+          )}
+          {showWideClimbsFilter && (
+            <FormControlLabel
+              className={styles.switchRow}
+              labelPlacement="start"
+              control={
+                <MuiSwitch
+                  size="small"
+                  color="primary"
+                  checked={uiSearchParams.onlyWideClimbs}
+                  onChange={(_, checked) => updateFilters({ onlyWideClimbs: checked })}
+                />
+              }
+              label={
+                <MuiTooltip title={t('search.fields.wideClimbsTooltip')}>
+                  <MuiTypography variant="body2" component="span">
+                    {t('search.fields.wideClimbsOnly')}
+                  </MuiTypography>
+                </MuiTooltip>
+              }
+            />
+          )}
         </div>
       )}
 

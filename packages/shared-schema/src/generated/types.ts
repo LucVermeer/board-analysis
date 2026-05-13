@@ -613,6 +613,8 @@ export type ClimbSearchInput = {
   onlyDrafts?: InputMaybe<Scalars['Boolean']['input']>;
   /** Only show tall/steep climbs */
   onlyTallClimbs?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Only show Kilter Homewall climbs that use the 10x10 side expansion */
+  onlyWideClimbs?: InputMaybe<Scalars['Boolean']['input']>;
   /** Page number for pagination (1-indexed) */
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Number of results per page */

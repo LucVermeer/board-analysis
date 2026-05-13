@@ -40,8 +40,10 @@ export default async function DynamicResultsPage(props: {
       const searchString = new URLSearchParams(
         Object.entries(searchParams).reduce(
           (acc, [key, value]) => {
-            if (value !== undefined) {
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
               acc[key] = String(value);
+            } else if (Array.isArray(value)) {
+              acc[key] = value.join(',');
             }
             return acc;
           },
@@ -76,6 +78,7 @@ export default async function DynamicResultsPage(props: {
     (searchParamsObject.sortBy || 'ascents') === 'ascents' &&
     (searchParamsObject.sortOrder || 'desc') === 'desc' &&
     !searchParamsObject.onlyTallClimbs &&
+    !searchParamsObject.onlyWideClimbs &&
     (!searchParamsObject.holdsFilter || Object.keys(searchParamsObject.holdsFilter).length === 0) &&
     !hasProgressFilters;
 

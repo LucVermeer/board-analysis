@@ -171,6 +171,50 @@ void describe('createClimbFilters: zone modes', () => {
   });
 });
 
+void describe('createClimbFilters: wide climbs', () => {
+  const homewallWideParams: BoardRouteParams = {
+    board_name: 'kilter',
+    layout_id: 8,
+    size_id: 25,
+    set_ids: [26, 27, 28, 29],
+    angle: 40,
+  };
+
+  void it('uses an individual-hold EXISTS predicate for 10x10 side expansion holds', () => {
+    const filters = createClimbFilters(homewallWideParams, { onlyWideClimbs: true });
+
+    assert.equal(filters.wideClimbsConditions.length, 1);
+    const rendered = sqlToString(filters.wideClimbsConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /FROM\s+wide_ch/);
+    assert.match(rendered, /JOIN\s+wide_bp/);
+    assert.match(rendered, /JOIN\s+.*wide_bh/);
+    assert.match(rendered, /wide_bp\.set_id IN \(26, 27, 28, 29\)/);
+    assert.match(rendered, /wide_ps\.name = 10x10/);
+    assert.match(rendered, /small_ps\.name = 7x10/);
+    assert.match(rendered, /wide_bh\.y >/);
+    assert.match(rendered, /wide_bh\.y </);
+    assert.match(rendered, /wide_bh\.x <=/);
+    assert.match(rendered, /wide_bh\.x >=/);
+  });
+
+  void it('does not apply wide climbs filtering outside supported Kilter Homewall sizes', () => {
+    assert.equal(
+      createClimbFilters({ ...homewallWideParams, size_id: 17 }, { onlyWideClimbs: true }).wideClimbsConditions.length,
+      0,
+    );
+    assert.equal(
+      createClimbFilters({ ...homewallWideParams, layout_id: 1 }, { onlyWideClimbs: true }).wideClimbsConditions.length,
+      0,
+    );
+    assert.equal(
+      createClimbFilters({ ...homewallWideParams, board_name: 'tension' }, { onlyWideClimbs: true })
+        .wideClimbsConditions.length,
+      0,
+    );
+  });
+});
+
 void describe('createClimbFilters: personal progress filters are scoped to the current angle', () => {
   // Locks in the angle-scoping contract — a send at one angle must not leak
   // into hide/show filters at a different angle. Each filter renders a

@@ -11,6 +11,8 @@ export const defaultClimbSearchParameters: SearchRequestPagination = {
   sortOrder: 'desc',
   minRating: 1.0,
   onlyClassics: false,
+  onlyTallClimbs: false,
+  onlyWideClimbs: false,
   gradeAccuracy: 1,
   settername: [],
   setternameSuggestion: '',

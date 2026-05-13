@@ -115,6 +115,7 @@ export type SearchRequest = {
   name: string;
   onlyClassics: boolean;
   onlyTallClimbs: boolean;
+  onlyWideClimbs: boolean;
   settername: string[];
   setternameSuggestion: string;
   holdsFilter: HoldsFilter;

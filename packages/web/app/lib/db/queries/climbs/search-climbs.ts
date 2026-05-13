@@ -53,6 +53,7 @@ async function _executeClimbSearch(
       name: searchParams.name || undefined,
       settername: searchParams.settername && searchParams.settername.length > 0 ? searchParams.settername : undefined,
       onlyTallClimbs: searchParams.onlyTallClimbs || undefined,
+      onlyWideClimbs: searchParams.onlyWideClimbs || undefined,
       // Pass the holds filter straight through — `createClimbFilters` walks
       // the new {holdId: {TYPE: 'include' | 'exclude'}} shape directly.
       holdsFilter:
@@ -147,6 +148,7 @@ export async function cachedSearchClimbs(
       name: searchParams.name,
       settername: searchParams.settername,
       onlyTallClimbs: searchParams.onlyTallClimbs,
+      onlyWideClimbs: searchParams.onlyWideClimbs,
       holdsFilter: searchParams.holdsFilter,
       hideAttempted: searchParams.hideAttempted,
       hideCompleted: searchParams.hideCompleted,

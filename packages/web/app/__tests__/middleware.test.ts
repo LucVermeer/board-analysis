@@ -160,6 +160,7 @@ describe('hasUserSpecificFilters', () => {
     name: '',
     onlyClassics: false,
     onlyTallClimbs: false,
+    onlyWideClimbs: false,
     settername: [] as string[],
     setternameSuggestion: '',
     holdsFilter: {},

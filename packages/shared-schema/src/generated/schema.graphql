@@ -155,6 +155,8 @@ input ClimbSearchInput {
   onlyBenchmarks: Boolean
   "Only show tall/steep climbs"
   onlyTallClimbs: Boolean
+  "Only show Kilter Homewall climbs that use the 10x10 side expansion"
+  onlyWideClimbs: Boolean
   "Hold filter object: { holdId: 'ANY' | 'NOT', ... }"
   holdsFilter: JSON
   "Hide climbs the user has attempted (requires auth)"

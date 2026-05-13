@@ -94,6 +94,7 @@ const mockSearchParams: SearchRequestPagination = {
   name: '',
   onlyClassics: false,
   onlyTallClimbs: false,
+  onlyWideClimbs: false,
   settername: [],
   setternameSuggestion: '',
   holdsFilter: {},
@@ -374,6 +375,35 @@ describe('useQueueDataFetching', () => {
 
       expect(requestInputs.length).toBeGreaterThan(0);
       expect(requestInputs.every((input) => input.zoneMode === 'anyHold')).toBe(true);
+    });
+  });
+
+  it('passes wide climbs filter to GraphQL inputs when active', async () => {
+    const searchParamsWithWideClimbs = {
+      ...mockSearchParams,
+      onlyWideClimbs: true,
+    };
+
+    renderHook(
+      () =>
+        useQueueDataFetching({
+          searchParams: searchParamsWithWideClimbs,
+          countSearchParams: searchParamsWithWideClimbs,
+          queue: mockQueue,
+          parsedParams: mockParsedParams,
+          hasDoneFirstFetch: false,
+          setHasDoneFirstFetch: mockSetHasDoneFirstFetch,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      const requestInputs = mockGraphQLRequest.mock.calls
+        .map((call) => (call[1] as { input?: { onlyWideClimbs?: boolean } } | undefined)?.input)
+        .filter((input): input is { onlyWideClimbs?: boolean } => input !== undefined);
+
+      expect(requestInputs.length).toBeGreaterThan(0);
+      expect(requestInputs.every((input) => input.onlyWideClimbs === true)).toBe(true);
     });
   });
 

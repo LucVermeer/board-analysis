@@ -45,6 +45,7 @@ export type ClimbSearchParams = {
   setternameSuggestion?: string;
   onlyClassics?: boolean;
   onlyTallClimbs?: boolean;
+  onlyWideClimbs?: boolean;
   // Hold filters: per-hold partial map of {STATE: 'include' | 'exclude'} entries.
   // Walked at SQL build time by `createClimbFilters`. Shape is intentionally
   // loose (Record<string, unknown>) here so this package doesn't depend on

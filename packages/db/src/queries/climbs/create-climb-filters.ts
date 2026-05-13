@@ -10,9 +10,12 @@ import {
 } from '../../schema/index';
 import type { BoardRouteParams, ClimbSearchParams } from './types';
 
-// Kilter Homewall constants for tall-climb filtering
+// Kilter Homewall constants for expansion-aware filtering
 const KILTER_HOMEWALL_LAYOUT_ID = 8;
 const KILTER_HOMEWALL_PRODUCT_ID = 7;
+const KILTER_HOMEWALL_SMALL_SIZE_NAME = '7x10';
+const KILTER_HOMEWALL_WIDE_SIZE_NAME = '10x10';
+const KILTER_HOMEWALL_WIDE_SIZE_IDS = new Set([21, 22, 25, 26, 29]);
 
 /**
  * Creates a shared filtering object for climb search and heatmap queries.
@@ -238,6 +241,81 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     );
   }
 
+  const wideClimbsConditions: SQL[] = [];
+
+  if (
+    searchParams.onlyWideClimbs &&
+    params.board_name === 'kilter' &&
+    params.layout_id === KILTER_HOMEWALL_LAYOUT_ID &&
+    KILTER_HOMEWALL_WIDE_SIZE_IDS.has(params.size_id)
+  ) {
+    const widePlacementSetCondition =
+      params.set_ids.length === 0
+        ? sql``
+        : sql`AND wide_bp.set_id IN (${sql.join(
+            params.set_ids.map((setId) => sql`${setId}`),
+            sql`, `,
+          )})`;
+    wideClimbsConditions.push(sql`EXISTS (
+      SELECT 1
+      FROM ${boardClimbHolds} wide_ch
+      JOIN ${boardPlacements} wide_bp
+        ON wide_bp.board_type = wide_ch.board_type
+        AND wide_bp.id = wide_ch.hold_id
+        AND wide_bp.layout_id = ${params.layout_id}
+      JOIN ${boardHoles} wide_bh
+        ON wide_bh.board_type = wide_ch.board_type
+        AND wide_bh.id = wide_bp.hole_id
+        WHERE wide_ch.board_type = ${params.board_name}
+          AND wide_ch.climb_uuid = ${boardClimbs.uuid}
+          ${widePlacementSetCondition}
+        AND wide_bh.x > (
+          SELECT MIN(wide_ps.edge_left)
+          FROM ${boardProductSizes} wide_ps
+          WHERE wide_ps.board_type = ${params.board_name}
+            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
+            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
+        )
+        AND wide_bh.x < (
+          SELECT MAX(wide_ps.edge_right)
+          FROM ${boardProductSizes} wide_ps
+          WHERE wide_ps.board_type = ${params.board_name}
+            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
+            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
+        )
+        AND wide_bh.y > (
+          SELECT MIN(wide_ps.edge_bottom)
+          FROM ${boardProductSizes} wide_ps
+          WHERE wide_ps.board_type = ${params.board_name}
+            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
+            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
+        )
+        AND wide_bh.y < (
+          SELECT MAX(wide_ps.edge_top)
+          FROM ${boardProductSizes} wide_ps
+          WHERE wide_ps.board_type = ${params.board_name}
+            AND wide_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
+            AND wide_ps.name = ${KILTER_HOMEWALL_WIDE_SIZE_NAME}
+        )
+        AND (
+          wide_bh.x <= (
+            SELECT MIN(small_ps.edge_left)
+            FROM ${boardProductSizes} small_ps
+            WHERE small_ps.board_type = ${params.board_name}
+              AND small_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
+              AND small_ps.name = ${KILTER_HOMEWALL_SMALL_SIZE_NAME}
+          )
+          OR wide_bh.x >= (
+            SELECT MAX(small_ps.edge_right)
+            FROM ${boardProductSizes} small_ps
+            WHERE small_ps.board_type = ${params.board_name}
+              AND small_ps.product_id = ${KILTER_HOMEWALL_PRODUCT_ID}
+              AND small_ps.name = ${KILTER_HOMEWALL_SMALL_SIZE_NAME}
+          )
+        )
+    )`);
+  }
+
   // Set membership filter: exclude climbs that use holds from sets the user doesn't own.
   // Uses denormalized required_set_ids array (pre-computed from climb_holds -> placements).
   // The <@ operator checks that all required sets are in the user's selected sets.
@@ -374,6 +452,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
       ...holdConditions,
       ...holdStateConditions,
       ...tallClimbsConditions,
+      ...wideClimbsConditions,
       ...zoneConditions,
       ...setIdsConditions,
       ...personalProgressConditions,
@@ -405,6 +484,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     holdConditions,
     holdStateConditions,
     tallClimbsConditions,
+    wideClimbsConditions,
     zoneConditions,
     setIdsConditions,
     sizeConditions,

@@ -134,6 +134,20 @@ describe('searchParamsToUrlParams', () => {
     expect(modeWithoutZoneResult.has('zoneMode')).toBe(false);
   });
 
+  it('should serialize wide climbs filter only when enabled', () => {
+    const enabledResult = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      onlyWideClimbs: true,
+    });
+    expect(enabledResult.get('onlyWideClimbs')).toBe('true');
+
+    const defaultResult = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      onlyWideClimbs: false,
+    });
+    expect(defaultResult.has('onlyWideClimbs')).toBe(false);
+  });
+
   it('should handle page and pageSize correctly', () => {
     const result = searchParamsToUrlParams({
       ...DEFAULT_SEARCH_PARAMS,
@@ -201,6 +215,7 @@ describe('searchParamsToUrlParams', () => {
       name: undefined,
       onlyClassics: undefined,
       onlyTallClimbs: undefined,
+      onlyWideClimbs: undefined,
       settername: undefined,
       setternameSuggestion: undefined,
       holdsFilter: undefined,
@@ -405,6 +420,17 @@ describe('parsedRouteSearchParamsToSearchParams', () => {
     expect(result.zoneMode).toBe(DEFAULT_SEARCH_PARAMS.zoneMode);
   });
 
+  it('should parse wide climbs filter from SSR route params', () => {
+    const input = {
+      ...DEFAULT_SEARCH_PARAMS,
+      onlyWideClimbs: 'true' as unknown as boolean,
+    };
+
+    const result = parsedRouteSearchParamsToSearchParams(input);
+
+    expect(result.onlyWideClimbs).toBe(true);
+  });
+
   it('should handle mixed string and number inputs', () => {
     const input = {
       ...DEFAULT_SEARCH_PARAMS,
@@ -521,7 +547,14 @@ describe('urlParamsToSearchParams', () => {
     expect(result.maxGrade).toBe(DEFAULT_SEARCH_PARAMS.maxGrade);
     expect(result.name).toBe('test');
     expect(result.sortBy).toBe(DEFAULT_SEARCH_PARAMS.sortBy);
+    expect(result.onlyWideClimbs).toBe(DEFAULT_SEARCH_PARAMS.onlyWideClimbs);
     expect(result.zoneMode).toBe(DEFAULT_SEARCH_PARAMS.zoneMode);
+  });
+
+  it('should parse wide climbs filter from URL params', () => {
+    const result = urlParamsToSearchParams(new URLSearchParams({ onlyWideClimbs: 'true' }));
+
+    expect(result.onlyWideClimbs).toBe(true);
   });
 
   it('should parse any-hold zone mode only with a valid zone', () => {

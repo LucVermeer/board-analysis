@@ -84,6 +84,9 @@ export function getQualityPanelSummary(params: SearchRequestPagination): string[
   if (params.onlyTallClimbs) {
     parts.push('Tall');
   }
+  if (params.onlyWideClimbs) {
+    parts.push('Wide');
+  }
 
   return parts;
 }

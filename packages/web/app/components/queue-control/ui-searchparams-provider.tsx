@@ -40,6 +40,7 @@ export const UISearchParamsProvider: React.FC<{ children: React.ReactNode }> = (
     if (uiSearchParams.holdsFilter && Object.entries(uiSearchParams.holdsFilter).length > 0)
       activeFilters.push('holds');
     if (uiSearchParams.onlyTallClimbs) activeFilters.push('onlyTallClimbs');
+    if (uiSearchParams.onlyWideClimbs) activeFilters.push('onlyWideClimbs');
     if (uiSearchParams.hideAttempted) activeFilters.push('hideAttempted');
     if (uiSearchParams.hideCompleted) activeFilters.push('hideCompleted');
     if (uiSearchParams.showOnlyAttempted) activeFilters.push('showOnlyAttempted');
@@ -65,6 +66,7 @@ export const UISearchParamsProvider: React.FC<{ children: React.ReactNode }> = (
         projectsOnly: uiSearchParams.projectsOnly,
         establishedOnly: uiSearchParams.minAscents >= 2 && !uiSearchParams.projectsOnly,
         onlyTallClimbs: uiSearchParams.onlyTallClimbs,
+        onlyWideClimbs: uiSearchParams.onlyWideClimbs,
         onlyDrafts: uiSearchParams.onlyDrafts,
         hideAttempted: uiSearchParams.hideAttempted,
         hideCompleted: uiSearchParams.hideCompleted,
