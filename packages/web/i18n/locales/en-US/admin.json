@@ -23,8 +23,8 @@
   },
   "retention": {
     "heading": "User retention",
-    "subheading": "Of users who signed up in week W, how many came back within N days — both as ticks (climbs logged) and as any in-app activity.",
-    "definitions": "Cohort = signup week (UTC). Ticks = at least one climb logged in Boardsesh (Aurora-imported ticks excluded). Any activity = a tick, party-session host or join, favorite, playlist (created or pinned), follow (user, setter, or playlist), new-climb subscription, comment, vote, proposal vote, or feedback submission. D7 = active within 7 days of signup. Cohorts younger than the window show —.",
+    "subheading": "Of users who signed up in week W, what share were active on day N — classic Dn retention. Computed for both ticks (climbs logged) and any in-app activity.",
+    "definitions": "Cohort = signup week (UTC). Dn counts a user if they had activity in the 24-hour window starting N days after signup (so D7 = active exactly on day 7, not anytime in the first 7 days). Ticks = at least one climb logged in Boardsesh (Aurora-imported ticks excluded). Any activity = a tick, party-session host or join, favorite, playlist (created or pinned), follow (user, setter, or playlist), new-climb subscription, comment, vote, proposal vote, or feedback submission. Cohorts younger than the window show —.",
     "back": "Back to admin",
     "table": {
       "cohortWeek": "Cohort week",

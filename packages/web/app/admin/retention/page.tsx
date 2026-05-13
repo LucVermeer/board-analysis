@@ -49,20 +49,24 @@ type RawRetentionRow = {
 
 async function fetchRetention(): Promise<RetentionRow[]> {
   // Cohort = week-of-signup (UTC, Monday-anchored). The d1/d3/d7/d30 columns
-  // here are an *early-activation funnel* — "did the user do action X within
-  // the first N days of signup?" — not classic Dn retention. By construction
-  // d1 ⊆ d3 ⊆ d7 ⊆ d30. Two parallel definitions of "active":
+  // are *classic Dn retention*: a user counts toward Dn if they had activity
+  // in the 24-hour window [signup + N days, signup + (N+1) days). This is
+  // the Amplitude / Mixpanel / GA definition — "active on day N", not
+  // "active anytime in the first N days". Day-0 (the signup day itself) is
+  // not counted toward D1; that's intentional and standard for retention
+  // triangles. Two parallel definitions of "active":
   //   1. Tick activity: at least one boardsesh tick (aurora_id IS NULL —
   //      not synced in from Aurora). This is the original metric.
   //   2. Any activity: a UNION ALL of every user-attributable timestamp
   //      we record — ticks, party sessions, favorites/playlists/pins/follows,
   //      gym/board follows, controller/serial setup, comments/votes/
   //      proposals/feedback. Captures returners who don't tick.
-  // Each Dn % is NULL'd until *every* user in the cohort has had a full N days
-  // to be active (cohort_week + N + 7, since the cohort spans Mon–Sun). The
-  // 211-day prefilter on UNION branches is 180-day cohort window + 30-day Dn
-  // window + 1-day slack; it lets the planner skip very old rows without
-  // changing semantics. Today timestamps are read in UTC to match the cohort.
+  // Each Dn % is NULL'd until *every* user in the cohort has had time to
+  // complete day N (cohort_week + 7 + N + 1 days, since the cohort spans
+  // Mon–Sun and we need the latest signup to reach day N+1). The 211-day
+  // prefilter on UNION branches is 180-day cohort window + 30-day Dn window
+  // + 1-day slack; it lets the planner skip very old rows without changing
+  // semantics. Today timestamps are read in UTC to match the cohort.
   const rows = await executeRows<RawRetentionRow>(
     dbz,
     sql`
@@ -80,10 +84,14 @@ async function fetchRetention(): Promise<RetentionRow[]> {
       ticks_by_user AS (
         SELECT
           sc.user_id,
-          BOOL_OR(t.climbed_at <= sc.created_at + INTERVAL '1 day')  AS active_d1,
-          BOOL_OR(t.climbed_at <= sc.created_at + INTERVAL '3 days') AS active_d3,
-          BOOL_OR(t.climbed_at <= sc.created_at + INTERVAL '7 days') AS active_d7,
-          BOOL_OR(t.climbed_at <= sc.created_at + INTERVAL '30 days') AS active_d30
+          BOOL_OR(t.climbed_at >= sc.created_at + INTERVAL '1 day'
+              AND t.climbed_at <  sc.created_at + INTERVAL '2 days')  AS active_d1,
+          BOOL_OR(t.climbed_at >= sc.created_at + INTERVAL '3 days'
+              AND t.climbed_at <  sc.created_at + INTERVAL '4 days')  AS active_d3,
+          BOOL_OR(t.climbed_at >= sc.created_at + INTERVAL '7 days'
+              AND t.climbed_at <  sc.created_at + INTERVAL '8 days')  AS active_d7,
+          BOOL_OR(t.climbed_at >= sc.created_at + INTERVAL '30 days'
+              AND t.climbed_at <  sc.created_at + INTERVAL '31 days') AS active_d30
         FROM signup_cohorts sc
         JOIN boardsesh_ticks t
           ON t.user_id = sc.user_id
@@ -155,10 +163,14 @@ async function fetchRetention(): Promise<RetentionRow[]> {
       activity_by_user AS (
         SELECT
           sc.user_id,
-          BOOL_OR(ae.ts <= sc.created_at + INTERVAL '1 day')  AS active_d1,
-          BOOL_OR(ae.ts <= sc.created_at + INTERVAL '3 days') AS active_d3,
-          BOOL_OR(ae.ts <= sc.created_at + INTERVAL '7 days') AS active_d7,
-          BOOL_OR(ae.ts <= sc.created_at + INTERVAL '30 days') AS active_d30
+          BOOL_OR(ae.ts >= sc.created_at + INTERVAL '1 day'
+              AND ae.ts <  sc.created_at + INTERVAL '2 days')  AS active_d1,
+          BOOL_OR(ae.ts >= sc.created_at + INTERVAL '3 days'
+              AND ae.ts <  sc.created_at + INTERVAL '4 days')  AS active_d3,
+          BOOL_OR(ae.ts >= sc.created_at + INTERVAL '7 days'
+              AND ae.ts <  sc.created_at + INTERVAL '8 days')  AS active_d7,
+          BOOL_OR(ae.ts >= sc.created_at + INTERVAL '30 days'
+              AND ae.ts <  sc.created_at + INTERVAL '31 days') AS active_d30
         FROM signup_cohorts sc
         JOIN activity_events ae
           ON ae.user_id = sc.user_id
@@ -192,13 +204,13 @@ async function fetchRetention(): Promise<RetentionRow[]> {
         cr.d7_count,
         cr.d30_count,
         cr.activated_count,
-        CASE WHEN cr.cohort_week + INTERVAL '8 days'  <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '9 days'  <= today_utc.d
              THEN ROUND(100.0 * cr.d1_count  / NULLIF(cr.signups, 0), 1) END AS d1_pct,
-        CASE WHEN cr.cohort_week + INTERVAL '10 days' <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '11 days' <= today_utc.d
              THEN ROUND(100.0 * cr.d3_count  / NULLIF(cr.signups, 0), 1) END AS d3_pct,
-        CASE WHEN cr.cohort_week + INTERVAL '14 days' <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '15 days' <= today_utc.d
              THEN ROUND(100.0 * cr.d7_count  / NULLIF(cr.signups, 0), 1) END AS d7_pct,
-        CASE WHEN cr.cohort_week + INTERVAL '37 days' <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '38 days' <= today_utc.d
              THEN ROUND(100.0 * cr.d30_count / NULLIF(cr.signups, 0), 1) END AS d30_pct,
         ROUND(100.0 * cr.activated_count / NULLIF(cr.signups, 0), 1) AS activation_pct,
         cr.d1_any_count,
@@ -206,13 +218,13 @@ async function fetchRetention(): Promise<RetentionRow[]> {
         cr.d7_any_count,
         cr.d30_any_count,
         cr.activated_any_count,
-        CASE WHEN cr.cohort_week + INTERVAL '8 days'  <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '9 days'  <= today_utc.d
              THEN ROUND(100.0 * cr.d1_any_count  / NULLIF(cr.signups, 0), 1) END AS d1_any_pct,
-        CASE WHEN cr.cohort_week + INTERVAL '10 days' <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '11 days' <= today_utc.d
              THEN ROUND(100.0 * cr.d3_any_count  / NULLIF(cr.signups, 0), 1) END AS d3_any_pct,
-        CASE WHEN cr.cohort_week + INTERVAL '14 days' <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '15 days' <= today_utc.d
              THEN ROUND(100.0 * cr.d7_any_count  / NULLIF(cr.signups, 0), 1) END AS d7_any_pct,
-        CASE WHEN cr.cohort_week + INTERVAL '37 days' <= today_utc.d
+        CASE WHEN cr.cohort_week + INTERVAL '38 days' <= today_utc.d
              THEN ROUND(100.0 * cr.d30_any_count / NULLIF(cr.signups, 0), 1) END AS d30_any_pct,
         ROUND(100.0 * cr.activated_any_count / NULLIF(cr.signups, 0), 1) AS activation_any_pct
       FROM cohort_rollup cr
