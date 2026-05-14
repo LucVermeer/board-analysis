@@ -748,6 +748,33 @@ describe('queueReducer', () => {
 
       expect(result).toBe(stateWithCurrentClimb);
     });
+
+    it('suppresses null-uuid mirror events (legacy pre-B7 no-op replay)', () => {
+      // Before B7, the server published ClimbMirrored events with uuid=null
+      // when no current climb existed at publish time. Replaying such a
+      // null-uuid event later (e.g. delta-sync after reconnect) should not
+      // mirror whatever the local current climb happens to be — that would
+      // be an unrelated climb.
+      const localClimb: ClimbQueueItem = {
+        ...mockClimbQueueItem,
+        uuid: 'local-current',
+        climb: { ...mockClimb, mirrored: false },
+      };
+      const stateWithCurrentClimb: QueueState = {
+        ...initialState,
+        currentClimbQueueItem: localClimb,
+        queue: [localClimb],
+      };
+
+      const action: QueueAction = {
+        type: 'DELTA_MIRROR_CURRENT_CLIMB',
+        payload: { mirrored: true, mirroredUuid: null },
+      };
+
+      const result = queueReducer(stateWithCurrentClimb, action);
+
+      expect(result).toBe(stateWithCurrentClimb);
+    });
   });
 
   describe('DELTA_REPLACE_QUEUE_ITEM', () => {

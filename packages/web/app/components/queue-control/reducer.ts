@@ -277,13 +277,17 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
       const { mirrored, mirroredUuid } = action.payload;
       if (!state.currentClimbQueueItem) return state;
       // Server-sourced events carry the uuid of the climb that was actually
-      // mirrored. If the local current climb has since drifted to a
-      // different uuid (peer navigated to a new climb between the mirror
-      // mutation firing and the broadcast reaching us), suppress the
-      // mutation rather than mirroring the wrong climb. For local-origin
-      // dispatches, the caller passes the local current climb's uuid so
-      // the check is a no-op.
-      if (mirroredUuid !== null && state.currentClimbQueueItem.uuid !== mirroredUuid) {
+      // mirrored on the server, or null when the server had no current
+      // climb at publish time (a pre-B7 no-op event from history replay).
+      // Suppress both cases:
+      //   - null uuid: the server intentionally mirrored "nothing", so
+      //     applying it to whatever the local current climb happens to be
+      //     would mirror an unrelated climb until the next FullSync.
+      //   - uuid mismatch: peer navigated to a different climb between the
+      //     mirror mutation firing and the broadcast reaching us.
+      // Local-origin dispatches always pass the local current climb's
+      // uuid, so neither branch fires there.
+      if (mirroredUuid === null || state.currentClimbQueueItem.uuid !== mirroredUuid) {
         return state;
       }
 

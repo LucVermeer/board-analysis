@@ -217,8 +217,15 @@ export const createMockRedis = (): MockRedis => {
       return chainable;
     }),
     eval: vi.fn(async (_script: string, numkeys: number, ...args: unknown[]) => {
-      // RELEASE_LOCK_SCRIPT (numkeys=1): Delete key if value matches
-      if (numkeys === 1) {
+      // numkeys=1 covers three scripts; dispatch on args.length:
+      //   RELEASE_LOCK_SCRIPT: args.length === 2 (key, expectedValue)
+      //   REFRESH_TTL_SCRIPT:  args.length === 3 (connKey, connTTL, sessionTTL)
+      //   UPDATE_USERNAME_SCRIPT: args.length === 4 (connKey, username, avatarUrl, sessionTTL)
+      // The original code returned on numkeys===1 unconditionally, which left
+      // UPDATE_USERNAME_SCRIPT (and any future numkeys=1 script) as dead
+      // code in the mock; tests that exercised them passed vacuously.
+      if (numkeys === 1 && args.length === 2) {
+        // RELEASE_LOCK_SCRIPT
         const key = args[0] as string;
         const value = args[1] as string;
         if (store.get(key) === value) {
@@ -227,8 +234,13 @@ export const createMockRedis = (): MockRedis => {
         }
         return 0;
       }
-      // REFRESH_TTL_SCRIPT (numkeys=1 handled above)
-      // ELECT_NEW_LEADER_SCRIPT (numkeys=2): handled below
+      if (numkeys === 1 && args.length === 3) {
+        // REFRESH_TTL_SCRIPT: no-op in mock since EXPIRE is a no-op too. Just
+        // report success when the connection hash exists, mirroring the
+        // real script's behaviour.
+        const connKey = args[0] as string;
+        return hashes.has(connKey) ? 1 : 0;
+      }
       if (numkeys === 2) {
         // ELECT_NEW_LEADER_SCRIPT: Pick earliest connected candidate
         const sessionMembersKey = args[0] as string;

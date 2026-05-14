@@ -369,6 +369,11 @@ export const UPDATE_USERNAME_SCRIPT = `
   if avatarUrl ~= UNSET then
     redis.call('HSET', connKey, 'avatarUrl', avatarUrl)
   end
+  -- Refresh the connection TTL too — we just wrote to it, treat that as
+  -- activity. REFRESH_TTL_SCRIPT picks this up on the next heartbeat
+  -- regardless, but doing it here keeps username changes from accidentally
+  -- inheriting a stale TTL when the rename arrives just before expiry.
+  redis.call('EXPIRE', connKey, sessionTTL)
 
   local sessionId = redis.call('HGET', connKey, 'sessionId')
   local participantId = redis.call('HGET', connKey, 'participantId')

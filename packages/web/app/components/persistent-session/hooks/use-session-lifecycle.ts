@@ -667,21 +667,25 @@ export function useSessionLifecycle({
                         return { ...prev, users: prev.users.filter((u) => u.id !== event.userId) };
                       case 'LeaderChanged': {
                         // `prev.clientId` is the WebSocket connectionId. The
-                        // server always emits both fields, but the fallback
-                        // `|| event.leaderId` (the stable participantId) was
-                        // a forward/backward-compat trap: an authenticated
-                        // user's participantId is their userId UUID, which
-                        // never equals a connectionId — so during a deploy
-                        // window where an old backend dropped
-                        // `leaderConnectionId`, an authenticated client that
-                        // IS the new leader would incorrectly compute
-                        // `isLeader: false`. Drop the fallback; if
-                        // `leaderConnectionId` is missing we conservatively
-                        // assume the local client is not the leader (it
-                        // will get the correct state on the next read).
+                        // current backend always emits both `leaderConnectionId`
+                        // and `leaderId`; prefer the explicit connectionId.
+                        // When it's missing (rolling deploy from a pre-#2128
+                        // backend), fall back to `leaderId` ONLY if the local
+                        // client is anonymous — anonymous users bind
+                        // participantId to connectionId per the P1 fix, so
+                        // their `leaderId` is interchangeable with a
+                        // connectionId. Authenticated users have a userId
+                        // UUID as their participantId, which never equals
+                        // a connectionId, so blindly comparing would
+                        // misreport `isLeader: false`.
+                        const isAnonymous = prev.users.some(
+                          (u) => u.id === prev.clientId && (u.userId === null || u.userId === undefined),
+                        );
+                        const effectiveLeaderConnectionId =
+                          event.leaderConnectionId ?? (isAnonymous ? event.leaderId : null);
                         return {
                           ...prev,
-                          isLeader: event.leaderConnectionId === prev.clientId,
+                          isLeader: effectiveLeaderConnectionId === prev.clientId,
                           users: prev.users.map((u) => ({
                             ...u,
                             isLeader: u.id === event.leaderId,
