@@ -149,11 +149,16 @@ async function deleteStaleToken(token: string): Promise<void> {
  * Build and send an APNs Live Activity notification to the given tokens.
  */
 async function sendNotification(
+  sessionId: string,
   tokens: string[],
   event: 'update' | 'end',
   contentState?: LiveActivityContentState,
 ): Promise<void> {
   if (!provider || tokens.length === 0) return;
+
+  console.log(
+    `[APNs] Sending Live Activity ${event} for session ${sessionId} to ${String(tokens.length)} device(s)`,
+  );
 
   const notification = new apn.Notification();
   notification.topic = `${bundleId}.push-type.liveactivity`;
@@ -174,10 +179,10 @@ async function sendNotification(
 
   try {
     const result = await provider.send(notification, tokens);
-
-    if (result.sent.length > 0) {
-      console.log(`[APNs] Sent ${event} to ${String(result.sent.length)} device(s)`);
-    }
+    console.log(
+      `[APNs] Results for session ${sessionId}: ${String(result.sent.length)} sent, ` +
+        `${String(result.failed.length)} failed`,
+    );
 
     if (result.failed.length > 0) {
       // Handle stale tokens (410 Gone / BadDeviceToken / Unregistered)
@@ -188,11 +193,14 @@ async function sendNotification(
         const status = failure.status;
 
         if (status === 410 || reason === 'BadDeviceToken' || reason === 'Unregistered' || reason === 'ExpiredToken') {
-          console.log(`[APNs] Stale token (${reason ?? `status ${String(status)}`}): ${failure.device.slice(0, 8)}...`);
+          console.log(
+            `[APNs] Stale token for session ${sessionId} (${reason ?? `status ${String(status)}`}): ` +
+              `${failure.device.slice(0, 8)}...`,
+          );
           staleTokenDeletions.push(deleteStaleToken(failure.device));
         } else {
           console.error(
-            `[APNs] Send failed for ${failure.device.slice(0, 8)}...: ` +
+            `[APNs] Send failed for session ${sessionId}, token ${failure.device.slice(0, 8)}...: ` +
               `status=${String(status)} reason=${reason ?? 'unknown'}`,
           );
         }
@@ -243,9 +251,12 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
 
   // Successful lookup — clear the entry and send.
   pendingSends.delete(sessionId);
-  if (tokens.length === 0) return;
+  if (tokens.length === 0) {
+    console.info(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping update`);
+    return;
+  }
 
-  await sendNotification(tokens, 'update', entry.latestState);
+  await sendNotification(sessionId, tokens, 'update', entry.latestState);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +280,8 @@ export function sendLiveActivityUpdate(sessionId: string, contentState: LiveActi
     existing.latestState = contentState;
     return;
   }
+
+  console.info(`[APNs] Scheduled Live Activity update for session ${sessionId}`);
 
   // Schedule a new send after the debounce window
   const timeout = setTimeout(() => {
@@ -304,7 +317,9 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
   }
 
   if (tokens.length > 0) {
-    await sendNotification(tokens, 'end');
+    await sendNotification(sessionId, tokens, 'end');
+  } else {
+    console.info(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);
   }
 
   // Clean up tokens after ending (already wrapped in try/catch internally)

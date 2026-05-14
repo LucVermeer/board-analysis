@@ -25,7 +25,7 @@ async function fetchWsAuthToken(): Promise<WsAuthResponse> {
  * Includes the NextAuth session status in the query key so the token
  * is automatically re-fetched when the user logs in or out.
  */
-export function useWsAuthToken() {
+export function useWsAuthToken(enabled = true) {
   const { status } = useSession();
 
   const { data, isLoading, error } = useQuery({
@@ -33,7 +33,7 @@ export function useWsAuthToken() {
     queryFn: fetchWsAuthToken,
     staleTime: Infinity,
     retry: 1,
-    enabled: status !== 'loading',
+    enabled: enabled && status !== 'loading',
   });
 
   let errorMessage: string | null;
@@ -44,9 +44,9 @@ export function useWsAuthToken() {
   }
 
   return {
-    token: data?.token ?? null,
-    isAuthenticated: data?.authenticated ?? false,
-    isLoading: isLoading || status === 'loading',
-    error: errorMessage,
+    token: enabled ? (data?.token ?? null) : null,
+    isAuthenticated: enabled ? (data?.authenticated ?? false) : false,
+    isLoading: enabled && (isLoading || status === 'loading'),
+    error: enabled ? errorMessage : null,
   };
 }

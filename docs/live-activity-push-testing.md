@@ -287,7 +287,7 @@ All APNs activity is logged with the `[APNs]` prefix:
 [APNs] Initialized (production=false, bundleId=com.boardsesh.app)
 [APNs] Sending Live Activity update for session ... to 2 device(s)
 [APNs] Results for session ...: 2 sent, 0 failed
-[APNs] Removing stale token abc123... (reason: BadDeviceToken)
+[APNs] Stale token for session ... (BadDeviceToken): abc123...
 ```
 
 ### iOS Console Logs
@@ -347,6 +347,17 @@ APNs env vars are not set in `packages/backend/.env.local`. Double-check all fiv
 - The token may take a few seconds to arrive after `Activity.request()`
 - Check the Xcode console for "Push token updated" log
 - Check for "Failed to register push token" errors — the backend may not be reachable from the iPhone
+- If you see "Skipping push token registration: no auth token in keychain", the web app did not pass the backend auth token into `LiveActivityPlugin.startSession()`. Confirm `/api/internal/ws-auth` returns a token in the native webview before the Live Activity starts.
+
+### "No registered Live Activity tokens"
+
+The APNs hook fired for a queue change, but `activity_push_tokens` has no rows for that session:
+
+```
+[APNs] No registered Live Activity tokens for session ...; skipping update
+```
+
+This usually means ActivityKit emitted a push token but native registration failed before the backend stored it. Check iOS console logs for keychain write failures, missing auth-token warnings, GraphQL registration errors, or backend reachability errors.
 
 ### "BadDeviceToken" in APNs results
 

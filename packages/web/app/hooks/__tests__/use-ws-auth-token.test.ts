@@ -151,4 +151,16 @@ describe('useWsAuthToken', () => {
 
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  it('returns idle unauthenticated state and does not fetch when disabled', () => {
+    const { result } = renderHook(() => useWsAuthToken(false), {
+      wrapper: createQueryWrapper(),
+    });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.token).toBeNull();
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
 });

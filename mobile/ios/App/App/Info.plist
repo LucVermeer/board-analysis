@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
         <string>Boardsesh</string>
+	<key>BoardseshKeychainAccessGroup</key>
+	<string>$(AppIdentifierPrefix)group.com.boardsesh.app</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

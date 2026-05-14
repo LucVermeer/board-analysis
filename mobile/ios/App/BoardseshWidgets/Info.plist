@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>Boardsesh Widgets</string>
+	<key>BoardseshKeychainAccessGroup</key>
+	<string>$(AppIdentifierPrefix)group.com.boardsesh.app</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

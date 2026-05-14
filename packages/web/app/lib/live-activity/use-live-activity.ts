@@ -9,6 +9,7 @@ import {
   updateLiveActivityClimb,
   isLiveActivityAvailable,
 } from './live-activity-plugin';
+import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { getBackendWsUrl } from '../backend-url';
 import type { ClimbQueueItem } from '@/app/components/queue-control/types';
 import type { BoardDetails } from '../types';
@@ -31,10 +32,14 @@ export function useLiveActivity({
   const isActiveRef = useRef(false);
   const generationRef = useRef(0);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const shouldFetchAuthToken = isNativeApp() && getPlatform() === 'ios';
+  const { token: authToken, isLoading: authTokenLoading } = useWsAuthToken(shouldFetchAuthToken);
 
   // Keep refs for values the start callback needs without triggering restarts
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+  const authTokenRef = useRef(authToken);
+  authTokenRef.current = authToken;
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentClimbRef = useRef(currentClimbQueueItem);
@@ -80,7 +85,13 @@ export function useLiveActivity({
   // Start/end session — reacts to session activation, content presence, and board config.
   // Does NOT restart when the current climb changes.
   const hasContent = queue.length > 0 || currentClimbQueueItem !== null;
-  const shouldBeActive = isSessionActive && hasContent && stableBoardDetails !== null && available === true;
+  // Wait for the auth query to settle so signed-in native sessions can pass
+  // their token into Swift, but don't permanently block the Live Activity if
+  // the auth endpoint returns a settled no-token response. The native plugin
+  // logs token-registration failures when no auth token reaches the keychain.
+  const authReadyForStart = !authTokenLoading;
+  const shouldBeActive =
+    isSessionActive && hasContent && stableBoardDetails !== null && available === true && authReadyForStart;
 
   useEffect(() => {
     if (!isNativeApp() || getPlatform() !== 'ios') return;
@@ -96,6 +107,7 @@ export function useLiveActivity({
         sessionId: sessionIdRef.current ?? `local-${Date.now()}`,
         serverUrl,
         wsUrl: getBackendWsUrl() ?? undefined,
+        authToken: authTokenRef.current ?? undefined,
         boardName: stableBoardDetails.board_name,
         layoutId: stableBoardDetails.layout_id,
         sizeId: stableBoardDetails.size_id,
