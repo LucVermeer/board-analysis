@@ -30,7 +30,7 @@ async function runCleanupTick(): Promise<void> {
       .where(lt(activityPushTokens.updatedAt, cutoff))
       .returning({ token: activityPushTokens.token });
     if (result.length > 0) {
-      incrementApnsMetric('tokensCleanedUpStale', result.length);
+      incrementApnsMetric('tokensSweptStale', result.length);
       console.info(
         `[APNs Cleanup] Removed ${String(result.length)} push token(s) untouched since ${cutoff.toISOString()}`,
       );

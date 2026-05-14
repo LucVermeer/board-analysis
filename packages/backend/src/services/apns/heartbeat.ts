@@ -78,6 +78,13 @@ async function acquireHeartbeatLock(instanceId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Run `worker` against each item in `items` with at most `limit` items in
+ * flight at once. Relies on Node.js single-threading: the `const index =
+ * cursor++` claim happens synchronously and is the only mutation point — no
+ * `await` falls between the read and the increment, so two workers cannot
+ * claim the same index. Don't insert an await above the increment.
+ */
 async function processWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
   let cursor = 0;
   async function nextBatch(): Promise<void> {
@@ -111,7 +118,9 @@ async function runHeartbeatTick(roomManager: RoomManagerLike, instanceId: string
     try {
       const state = await buildHeartbeatStateFor(sessionId, roomManager);
       if (!state) return;
-      sendLiveActivityUpdate(sessionId, state);
+      // Pass source so the structured per-send log line attributes the push to
+      // the heartbeat, not a real queue event.
+      sendLiveActivityUpdate(sessionId, state, { source: 'heartbeat' });
       incrementApnsMetric('heartbeatsSent');
     } catch (error) {
       console.warn(`[APNs Heartbeat] Failed to build heartbeat state for session ${sessionId}:`, error);

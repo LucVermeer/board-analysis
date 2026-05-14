@@ -126,11 +126,14 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let (token, sessionId, serverUrl) = tokenQueue.sync {
             (_currentPushToken, _currentSessionId, _currentServerUrl)
         }
-        // Clear the widget-readable copy so the widget reverts to an
-        // un-authenticated request (which the backend handles by simply
-        // returning 401 → Darwin notification fallback) until we get a fresh
-        // token registration in.
-        SharedKeychain.remove(SharedKeychain.livePushTokenKey)
+        // Leave `livePushTokenKey` in the keychain so the widget keeps sending
+        // the same Bearer while we re-register. Once the backend rebinds the
+        // token to the current session, the widget's next call returns 200
+        // without needing a new token. Wiping the keychain here would make
+        // widget requests authenticate as 401 (not 410) during the ~50s
+        // retry window, which doesn't trigger the Darwin notification
+        // fallback — so the widget would silently fail buttons until the
+        // foreground observer eventually runs.
         if let token, let sessionId, let serverUrl {
             logger.info("Re-registering push token after widget 410")
             registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)

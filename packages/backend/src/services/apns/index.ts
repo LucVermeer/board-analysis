@@ -28,11 +28,17 @@ export interface LiveActivityContentState {
   climbUuid: string;
 }
 
+/** Source attribution for the structured per-send log line. */
+type SendSource = 'event' | 'heartbeat' | 'registration';
+
 interface DebouncedEntry {
   timeout: ReturnType<typeof setTimeout>;
   latestState: LiveActivityContentState;
   /** Index into DB_RETRY_DELAYS_MS for the next retry. */
   dbRetryAttempt: number;
+  /** Last `source` passed to `sendLiveActivityUpdate` for this entry. The
+   *  latest call wins on coalesce — same convention as `latestState`. */
+  source: SendSource;
 }
 
 // Exponential-ish backoff schedule for transient DB lookup failures.
@@ -77,7 +83,10 @@ interface ApnsMetrics {
   tokensRegistered: number;
   tokensEvicted: number;
   tokensRebound: number;
-  tokensCleanedUpStale: number;
+  /** Stale tokens removed via the live-send 410 / BadDeviceToken path. */
+  tokensRemovedOn410: number;
+  /** Stale tokens removed via the scheduled `apns/cleanup.ts` daily sweep. */
+  tokensSweptStale: number;
   sendsAttempted: number;
   sendsSucceeded: number;
   sendsFailed: number;
@@ -90,7 +99,8 @@ const metrics: ApnsMetrics = {
   tokensRegistered: 0,
   tokensEvicted: 0,
   tokensRebound: 0,
-  tokensCleanedUpStale: 0,
+  tokensRemovedOn410: 0,
+  tokensSweptStale: 0,
   sendsAttempted: 0,
   sendsSucceeded: 0,
   sendsFailed: 0,
@@ -191,7 +201,7 @@ async function getTokensForSession(sessionId: string): Promise<string[]> {
 async function deleteStaleToken(token: string): Promise<void> {
   try {
     await db.delete(activityPushTokens).where(eq(activityPushTokens.token, token));
-    metrics.tokensCleanedUpStale++;
+    metrics.tokensRemovedOn410++;
     console.log(`[APNs] Deleted stale token ${token.slice(0, 8)}...`);
   } catch (error) {
     console.error('[APNs] Failed to delete stale token:', error);
@@ -200,7 +210,7 @@ async function deleteStaleToken(token: string): Promise<void> {
 
 interface SendOptions {
   /** If set, used in the structured log line to indicate the trigger. */
-  source?: 'event' | 'heartbeat' | 'registration';
+  source?: SendSource;
 }
 
 async function sendNotification(
@@ -318,20 +328,25 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
       error,
     );
     const lastState = entry.latestState;
+    const lastSource = entry.source;
     pendingSends.delete(sessionId);
     // Requeue with a fresh retry counter so the user-visible regression is
     // bounded by one more debounce window rather than 90 s of heartbeat lag.
-    sendLiveActivityUpdate(sessionId, lastState);
+    // Synchronous delete + synchronous sendLiveActivityUpdate run on the same
+    // event-loop task — Node.js single-threading means no foreign callback
+    // can interleave between these two lines.
+    sendLiveActivityUpdate(sessionId, lastState, { source: lastSource });
     return;
   }
 
+  const source = entry.source;
   pendingSends.delete(sessionId);
   if (tokens.length === 0) {
     console.info(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping update`);
     return;
   }
 
-  await sendNotification(sessionId, tokens, 'update', entry.latestState);
+  await sendNotification(sessionId, tokens, 'update', entry.latestState, { source });
 }
 
 // ---------------------------------------------------------------------------
@@ -344,14 +359,24 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
  * If called multiple times within the debounce window, only the latest state
  * is sent. This respects APNs rate limits for Live Activity updates while
  * still feeling responsive for back-to-back queue mutations.
+ *
+ * `options.source` flows into the structured per-send log line so heartbeat
+ * sends, queue events, and registration kicks are distinguishable in logs.
+ * Latest call wins on coalesce.
  */
-export function sendLiveActivityUpdate(sessionId: string, contentState: LiveActivityContentState): void {
+export function sendLiveActivityUpdate(
+  sessionId: string,
+  contentState: LiveActivityContentState,
+  options: { source?: SendSource } = {},
+): void {
   if (!configured) return;
 
+  const source = options.source ?? 'event';
   const existing = pendingSends.get(sessionId);
 
   if (existing) {
     existing.latestState = contentState;
+    existing.source = source;
     metrics.sendsCoalesced++;
     return;
   }
@@ -362,7 +387,7 @@ export function sendLiveActivityUpdate(sessionId: string, contentState: LiveActi
     });
   }, DEBOUNCE_MS);
 
-  pendingSends.set(sessionId, { timeout, latestState: contentState, dbRetryAttempt: 0 });
+  pendingSends.set(sessionId, { timeout, latestState: contentState, dbRetryAttempt: 0, source });
 }
 
 /**
