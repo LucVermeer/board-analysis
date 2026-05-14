@@ -106,8 +106,14 @@ export const LEAVE_SESSION_SCRIPT = `
   local currentLeader = redis.call('GET', leaderKey)
   local wasLeader = (currentLeader == connectionId)
 
-  -- Update connection state
-  redis.call('HMSET', connKey, 'sessionId', '', 'isLeader', 'false')
+  -- Update connection state, but only if the hash still exists. An
+  -- unconditional HMSET would resurrect a deleted connection hash with no
+  -- TTL and no connectionId field, leaving a zombie key that leaks forever.
+  -- A concurrent removeConnection on another instance (e.g. WS disconnect
+  -- racing this leave) may already have deleted it.
+  if redis.call('EXISTS', connKey) == 1 then
+    redis.call('HMSET', connKey, 'sessionId', '', 'participantId', '', 'isLeader', 'false')
+  end
 
   -- Remove from session members
   redis.call('SREM', sessionMembersKey, connectionId)
@@ -176,6 +182,15 @@ export const JOIN_SESSION_SCRIPT = `
   local avatarUrl = ARGV[6]
   local UNSET = '__UNSET__'
 
+  -- Refuse to join if the connection hash has been reaped (TTL, manual DEL,
+  -- or instance cleanup). HSETs on a missing key would resurrect it as a
+  -- partial hash without connectionId / instanceId / connectedAt and (after
+  -- the EXPIRE) with a fresh TTL. Better to fail fast and let the caller
+  -- re-register.
+  if redis.call('EXISTS', connKey) == 0 then
+    return -1
+  end
+
   -- Update connection with session info
   redis.call('HSET', connKey, 'sessionId', sessionId)
   if username and username ~= '' and username ~= UNSET then
@@ -227,9 +242,92 @@ export const REFRESH_TTL_SCRIPT = `
   if sessionId and sessionId ~= '' then
     local sessionMembersKey = 'boardsesh:session:' .. sessionId .. ':members'
     redis.call('EXPIRE', sessionMembersKey, sessionTTL)
+
+    local participantId = redis.call('HGET', connKey, 'participantId')
+    if participantId and participantId ~= '' then
+      local sessionParticipantsKey = 'boardsesh:session:' .. sessionId .. ':participants'
+      local participantKey = 'boardsesh:participant:' .. sessionId .. ':' .. participantId
+      local participantConnectionsKey = 'boardsesh:participant:' .. sessionId .. ':' .. participantId .. ':connections'
+      redis.call('EXPIRE', sessionParticipantsKey, sessionTTL)
+      redis.call('EXPIRE', participantKey, sessionTTL)
+      redis.call('EXPIRE', participantConnectionsKey, sessionTTL)
+    end
   end
 
   return 1
+`;
+
+/**
+ * Lua script for atomic full-participant eviction.
+ * Reads the participant's connection set inside the script, then SREMs the
+ * participant from sessionParticipants, deletes the participant + connection
+ * set, and for every connectionId in the snapshot SREMs it from sessionMembers
+ * and clears its connection hash. All in one round-trip, so a concurrent join
+ * adding a fresh connection to participantConnections cannot have its work
+ * silently wiped between our read and our writes.
+ *
+ * The sibling KEYS.connection() keys are still computed inside the script via
+ * string concatenation; this keeps consistency with the rest of the file but
+ * is documented as a Redis-cluster portability concern in issue #2143.
+ * KEYS[1] = sessionParticipants set key
+ * KEYS[2] = participant hash key
+ * KEYS[3] = participantConnections set key
+ * KEYS[4] = sessionMembers set key
+ * ARGV[1] = participantId being evicted
+ * Returns: number of connection slots cleaned up
+ */
+export const REMOVE_PARTICIPANT_SCRIPT = `
+  local sessionParticipantsKey = KEYS[1]
+  local participantKey = KEYS[2]
+  local participantConnectionsKey = KEYS[3]
+  local sessionMembersKey = KEYS[4]
+  local participantId = ARGV[1]
+
+  local connectionIds = redis.call('SMEMBERS', participantConnectionsKey)
+  redis.call('SREM', sessionParticipantsKey, participantId)
+  redis.call('DEL', participantKey)
+  redis.call('DEL', participantConnectionsKey)
+  for _, connectionId in ipairs(connectionIds) do
+    redis.call('SREM', sessionMembersKey, connectionId)
+    local connKey = 'boardsesh:conn:' .. connectionId
+    if redis.call('EXISTS', connKey) == 1 then
+      redis.call('HMSET', connKey, 'sessionId', '', 'participantId', '', 'isLeader', 'false')
+    end
+  end
+  return #connectionIds
+`;
+
+/**
+ * Lua script for atomic participant-connection removal.
+ * SREM the connection from the participant's connection set, then either return
+ * the remaining count (if > 0) or atomically clean up the participant record
+ * and remove from session participants. Closing the read-then-delete race in
+ * the prior multi() implementation: a concurrent re-join that re-adds to the
+ * connection set between our SREM and DEL would otherwise be wiped out.
+ * KEYS[1] = participantConnections set key
+ * KEYS[2] = sessionParticipants set key
+ * KEYS[3] = participant hash key
+ * ARGV[1] = connectionId being removed
+ * ARGV[2] = participantId being removed
+ * Returns: remaining connection count after removal (0 means participant cleaned up)
+ */
+export const REMOVE_PARTICIPANT_CONNECTION_SCRIPT = `
+  local participantConnectionsKey = KEYS[1]
+  local sessionParticipantsKey = KEYS[2]
+  local participantKey = KEYS[3]
+  local connectionId = ARGV[1]
+  local participantId = ARGV[2]
+
+  redis.call('SREM', participantConnectionsKey, connectionId)
+  local remaining = redis.call('SCARD', participantConnectionsKey)
+  if remaining > 0 then
+    return remaining
+  end
+
+  redis.call('SREM', sessionParticipantsKey, participantId)
+  redis.call('DEL', participantKey)
+  redis.call('DEL', participantConnectionsKey)
+  return 0
 `;
 
 /**

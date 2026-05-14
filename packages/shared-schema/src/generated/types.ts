@@ -540,6 +540,10 @@ export type ClimbMirrored = {
   mirrored: Scalars['Boolean']['output'];
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
+  /** UUID of the mirrored queue item, when a current climb exists */
+  uuid?: Maybe<Scalars['ID']['output']>;
 };
 
 /** Playlist membership for a single climb in a batch query. */
@@ -967,6 +971,8 @@ export type CurrentClimbChanged = {
   item?: Maybe<ClimbQueueItem>;
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
 };
 
 /** Information needed before account deletion. */
@@ -1672,7 +1678,9 @@ export type LayoutStats = {
 /** Event when session leadership changes. */
 export type LeaderChanged = {
   __typename?: 'LeaderChanged';
-  /** ID of the new leader */
+  /** Connection ID of the new leader, for current-client leadership checks */
+  leaderConnectionId?: Maybe<Scalars['ID']['output']>;
+  /** Stable participant ID of the new leader */
   leaderId: Scalars['ID']['output'];
 };
 
@@ -1803,7 +1811,7 @@ export type Mutation = {
   deleteProposal: Scalars['Boolean']['output'];
   /** Delete a tick (climb attempt record). Only the owner can delete. */
   deleteTick: Scalars['Boolean']['output'];
-  /** End a session (leader only). */
+  /** End a session (active participant only). */
   endSession?: Maybe<SessionSummary>;
   /** Follow a board. */
   followBoard: Scalars['Boolean']['output'];
@@ -2127,6 +2135,7 @@ export type MutationJoinSessionArgs = {
   boardPath: Scalars['String']['input'];
   initialCurrentClimb?: InputMaybe<ClimbQueueItemInput>;
   initialQueue?: InputMaybe<Array<ClimbQueueItemInput>>;
+  participantId?: InputMaybe<Scalars['ID']['input']>;
   sessionId: Scalars['ID']['input'];
   sessionName?: InputMaybe<Scalars['String']['input']>;
   username?: InputMaybe<Scalars['String']['input']>;
@@ -3496,6 +3505,8 @@ export type QueueItemAdded = {
   position?: Maybe<Scalars['Int']['output']>;
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
 };
 
 /** Event when an item is removed from the queue. */
@@ -3503,6 +3514,8 @@ export type QueueItemRemoved = {
   __typename?: 'QueueItemRemoved';
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
   /** UUID of the removed item */
   uuid: Scalars['ID']['output'];
 };
@@ -3553,6 +3566,8 @@ export type QueueReordered = {
   oldIndex: Scalars['Int']['output'];
   /** Sequence number of this event */
   sequence: Scalars['Int']['output'];
+  /** Queue state hash after this event is applied */
+  stateHash: Scalars['String']['output'];
   /** UUID of the moved item */
   uuid: Scalars['ID']['output'];
 };
@@ -3803,7 +3818,7 @@ export type Session = {
   goal?: Maybe<Scalars['String']['output']>;
   /** Unique session identifier */
   id: Scalars['ID']['output'];
-  /** Whether the current client is the session leader */
+  /** Whether the current client is the session leader (presentation/backward compatibility only) */
   isLeader: Scalars['Boolean']['output'];
   /** Whether session is exempt from auto-end */
   isPermanent: Scalars['Boolean']['output'];
@@ -3818,6 +3833,9 @@ export type Session = {
   /** Users currently in the session */
   users: Array<SessionUser>;
 };
+
+/** Current realtime connection state for a session participant. */
+export type SessionConnectionState = 'CONNECTED' | 'RECONNECTING';
 
 /** Full detail for a single session, including all ticks. */
 export type SessionDetail = {
@@ -3883,7 +3901,13 @@ export type SessionEnded = {
 };
 
 /** Union of possible session events. */
-export type SessionEvent = LeaderChanged | SessionEnded | SessionStatsUpdated | UserJoined | UserLeft;
+export type SessionEvent =
+  | LeaderChanged
+  | SessionEnded
+  | SessionStatsUpdated
+  | UserJoined
+  | UserLeft
+  | UserPresenceChanged;
 
 /** A session feed card representing a group of ticks from a climbing session. */
 export type SessionFeedItem = {
@@ -4032,9 +4056,11 @@ export type SessionUser = {
   __typename?: 'SessionUser';
   /** URL to user's avatar image */
   avatarUrl?: Maybe<Scalars['String']['output']>;
-  /** Unique user identifier */
+  /** Realtime connection state for this participant */
+  connectionState: SessionConnectionState;
+  /** Stable participant identifier within this session */
   id: Scalars['ID']['output'];
-  /** Whether this user is the session leader (controls the queue) */
+  /** Whether this user is the session leader (presentation/backward compatibility only) */
   isLeader: Scalars['Boolean']['output'];
   /** Stable database user UUID (null for unauthenticated connections) */
   userId?: Maybe<Scalars['ID']['output']>;
@@ -4689,6 +4715,13 @@ export type UserLeft = {
   userId: Scalars['ID']['output'];
 };
 
+/** Event when a participant's realtime presence state changes. */
+export type UserPresenceChanged = {
+  __typename?: 'UserPresenceChanged';
+  /** The participant whose presence changed */
+  user: SessionUser;
+};
+
 /** User profile information. */
 export type UserProfile = {
   __typename?: 'UserProfile';
@@ -4857,7 +4890,7 @@ export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = Reso
   CommentEvent: CommentAdded | CommentDeleted | CommentUpdated;
   ControllerEvent: ControllerPing | ControllerQueueSync | LedUpdate;
   QueueEvent: ClimbMirrored | CurrentClimbChanged | FullSync | QueueItemAdded | QueueItemRemoved | QueueReordered;
-  SessionEvent: LeaderChanged | SessionEnded | SessionStatsUpdated | UserJoined | UserLeft;
+  SessionEvent: LeaderChanged | SessionEnded | SessionStatsUpdated | UserJoined | UserLeft | UserPresenceChanged;
 }>;
 
 /** Mapping between all available schema types and the resolvers types */
@@ -5046,6 +5079,7 @@ export type ResolversTypes = ResolversObject<{
   SendDeviceLogsInput: SendDeviceLogsInput;
   SendDeviceLogsResponse: ResolverTypeWrapper<SendDeviceLogsResponse>;
   Session: ResolverTypeWrapper<Session>;
+  SessionConnectionState: SessionConnectionState;
   SessionDetail: ResolverTypeWrapper<SessionDetail>;
   SessionDetailTick: ResolverTypeWrapper<SessionDetailTick>;
   SessionEnded: ResolverTypeWrapper<SessionEnded>;
@@ -5100,6 +5134,7 @@ export type ResolversTypes = ResolversObject<{
   UserClimbsInput: UserClimbsInput;
   UserJoined: ResolverTypeWrapper<UserJoined>;
   UserLeft: ResolverTypeWrapper<UserLeft>;
+  UserPresenceChanged: ResolverTypeWrapper<UserPresenceChanged>;
   UserProfile: ResolverTypeWrapper<UserProfile>;
   UserSearchConnection: ResolverTypeWrapper<UserSearchConnection>;
   UserSearchResult: ResolverTypeWrapper<UserSearchResult>;
@@ -5337,6 +5372,7 @@ export type ResolversParentTypes = ResolversObject<{
   UserClimbsInput: UserClimbsInput;
   UserJoined: UserJoined;
   UserLeft: UserLeft;
+  UserPresenceChanged: UserPresenceChanged;
   UserProfile: UserProfile;
   UserSearchConnection: UserSearchConnection;
   UserSearchResult: UserSearchResult;
@@ -5602,6 +5638,8 @@ export type ClimbMirroredResolvers<
 > = ResolversObject<{
   mirrored?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  uuid?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -5817,6 +5855,7 @@ export type CurrentClimbChangedResolvers<
   correlationId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   item?: Resolver<Maybe<ResolversTypes['ClimbQueueItem']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -6146,6 +6185,7 @@ export type LeaderChangedResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['LeaderChanged'] = ResolversParentTypes['LeaderChanged'],
 > = ResolversObject<{
+  leaderConnectionId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
   leaderId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
@@ -7395,6 +7435,7 @@ export type QueueItemAddedResolvers<
   item?: Resolver<ResolversTypes['ClimbQueueItem'], ParentType, ContextType>;
   position?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7403,6 +7444,7 @@ export type QueueItemRemovedResolvers<
   ParentType extends ResolversParentTypes['QueueItemRemoved'] = ResolversParentTypes['QueueItemRemoved'],
 > = ResolversObject<{
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
@@ -7445,6 +7487,7 @@ export type QueueReorderedResolvers<
   newIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   oldIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  stateHash?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
@@ -7591,7 +7634,7 @@ export type SessionEventResolvers<
   ParentType extends ResolversParentTypes['SessionEvent'] = ResolversParentTypes['SessionEvent'],
 > = ResolversObject<{
   __resolveType: TypeResolveFn<
-    'LeaderChanged' | 'SessionEnded' | 'SessionStatsUpdated' | 'UserJoined' | 'UserLeft',
+    'LeaderChanged' | 'SessionEnded' | 'SessionStatsUpdated' | 'UserJoined' | 'UserLeft' | 'UserPresenceChanged',
     ParentType,
     ContextType
   >;
@@ -7731,6 +7774,7 @@ export type SessionUserResolvers<
   ParentType extends ResolversParentTypes['SessionUser'] = ResolversParentTypes['SessionUser'],
 > = ResolversObject<{
   avatarUrl?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  connectionState?: Resolver<ResolversTypes['SessionConnectionState'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   isLeader?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   userId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
@@ -8018,6 +8062,14 @@ export type UserLeftResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type UserPresenceChangedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['UserPresenceChanged'] = ResolversParentTypes['UserPresenceChanged'],
+> = ResolversObject<{
+  user?: Resolver<ResolversTypes['SessionUser'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type UserProfileResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['UserProfile'] = ResolversParentTypes['UserProfile'],
@@ -8193,6 +8245,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   UserClimbPercentile?: UserClimbPercentileResolvers<ContextType>;
   UserJoined?: UserJoinedResolvers<ContextType>;
   UserLeft?: UserLeftResolvers<ContextType>;
+  UserPresenceChanged?: UserPresenceChangedResolvers<ContextType>;
   UserProfile?: UserProfileResolvers<ContextType>;
   UserSearchConnection?: UserSearchConnectionResolvers<ContextType>;
   UserSearchResult?: UserSearchResultResolvers<ContextType>;

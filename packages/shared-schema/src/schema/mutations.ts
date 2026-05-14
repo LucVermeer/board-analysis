@@ -12,6 +12,7 @@ export const mutationsTypeDefs = /* GraphQL */ `
       boardPath: String!
       username: String
       avatarUrl: String
+      participantId: ID
       initialQueue: [ClimbQueueItemInput!]
       initialCurrentClimb: ClimbQueueItemInput
       sessionName: String
@@ -28,7 +29,7 @@ export const mutationsTypeDefs = /* GraphQL */ `
     leaveSession: Boolean!
 
     """
-    End a session (leader only).
+    End a session (active participant only).
     """
     endSession(sessionId: ID!): SessionSummary
 

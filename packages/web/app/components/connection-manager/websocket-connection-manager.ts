@@ -20,7 +20,7 @@ type RegisteredClient = {
 };
 
 const KEEP_ALIVE_MS = 5000;
-const STALE_GRACE_MS = 10_000;
+const STALE_GRACE_MS = 25_000;
 const HEALTH_CHECK_INTERVAL_MS = 1000;
 
 class WebSocketConnectionManager {

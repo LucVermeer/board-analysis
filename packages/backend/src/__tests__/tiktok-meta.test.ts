@@ -241,7 +241,7 @@ describe('fetchTikTokMeta', () => {
     const dateSpy = vi.spyOn(Date, 'now');
     dateSpy.mockReturnValue(0);
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     for (let i = 0; i < 10; i++) {
       const url = `https://www.tiktok.com/@user/video/${String(i).padStart(19, '0')}`;

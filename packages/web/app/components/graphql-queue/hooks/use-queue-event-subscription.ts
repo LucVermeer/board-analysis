@@ -44,7 +44,7 @@ export function useQueueEventSubscription({
             type: 'DELTA_ADD_QUEUE_ITEM',
             payload: {
               item: event.addedItem as ClimbQueueItem,
-              position: event.position,
+              position: event.position ?? undefined,
             },
           });
           break;

@@ -40,6 +40,7 @@ export function createYogaInstance() {
         if (authResult) {
           return {
             connectionId: `http-${uuidv4()}`,
+            transport: 'http' as const,
             sessionId: undefined,
             userId: authResult.userId,
             isAuthenticated: true,
@@ -50,6 +51,7 @@ export function createYogaInstance() {
 
       return {
         connectionId: `http-${uuidv4()}`,
+        transport: 'http' as const,
         sessionId: undefined,
         userId: undefined,
         isAuthenticated: false,

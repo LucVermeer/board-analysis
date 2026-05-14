@@ -162,6 +162,7 @@ describe('useEventProcessor - offline FullSync merge', () => {
       result.current.handleQueueEvent({
         __typename: 'QueueItemAdded',
         sequence: 5,
+        stateHash: 'hash-2',
         addedItem,
         position: undefined,
       } as SubscriptionQueueEvent);
@@ -169,5 +170,66 @@ describe('useEventProcessor - offline FullSync merge', () => {
 
     expect(result.current.queue).toHaveLength(1);
     expect(result.current.queue[0]).toEqual(addedItem);
+    expect(result.current.lastReceivedStateHash).toBe('hash-2');
+  });
+
+  it('QueueItemRemoved clears current climb and advances state hash', () => {
+    const refs = createRefs([]);
+    const { result } = renderHook(() => useEventProcessor({ refs }), { wrapper: createWrapper() });
+    const removedItem = createItem('removed-1');
+    const keptItem = createItem('kept-1');
+
+    act(() => {
+      result.current.handleQueueEvent({
+        __typename: 'FullSync',
+        sequence: 5,
+        state: {
+          queue: [removedItem as never, keptItem as never],
+          currentClimbQueueItem: removedItem as never,
+          stateHash: 'hash-1',
+          sequence: 5,
+        },
+      });
+      result.current.handleQueueEvent({
+        __typename: 'QueueItemRemoved',
+        sequence: 6,
+        stateHash: 'hash-2',
+        uuid: removedItem.uuid,
+      });
+    });
+
+    expect(result.current.queue).toEqual([keptItem]);
+    expect(result.current.currentClimbQueueItem).toBeNull();
+    expect(result.current.lastReceivedStateHash).toBe('hash-2');
+  });
+
+  it('ClimbMirrored updates both queue item and current climb', () => {
+    const refs = createRefs([]);
+    const { result } = renderHook(() => useEventProcessor({ refs }), { wrapper: createWrapper() });
+    const item = createItem('mirror-1');
+
+    act(() => {
+      result.current.handleQueueEvent({
+        __typename: 'FullSync',
+        sequence: 5,
+        state: {
+          queue: [item as never],
+          currentClimbQueueItem: item as never,
+          stateHash: 'hash-1',
+          sequence: 5,
+        },
+      });
+      result.current.handleQueueEvent({
+        __typename: 'ClimbMirrored',
+        sequence: 6,
+        stateHash: 'hash-2',
+        mirroredUuid: item.uuid,
+        mirrored: true,
+      });
+    });
+
+    expect(result.current.queue[0]?.climb.mirrored).toBe(true);
+    expect(result.current.currentClimbQueueItem?.climb.mirrored).toBe(true);
+    expect(result.current.lastReceivedStateHash).toBe('hash-2');
   });
 });

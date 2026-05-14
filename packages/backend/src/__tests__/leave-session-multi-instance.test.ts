@@ -27,7 +27,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { leaveSession } from '../services/room-manager/client-lifecycle';
-import type { ConnectedClient } from '../services/room-manager/types';
+import type { ConnectedClient, LocalSessionParticipant } from '../services/room-manager/types';
 import type { RedisSessionStore } from '../services/redis-session-store';
 import type { DistributedStateManager } from '../services/distributed-state';
 import type { WriteScheduler } from '../services/room-manager/write-scheduler';
@@ -36,7 +36,8 @@ const GRACE_PERIOD_MS = 60_000;
 
 type MockedRedisStore = Pick<RedisSessionStore, 'markInactive' | 'saveUsers'>;
 type MockedWriteScheduler = Pick<WriteScheduler, 'cancelPendingWrites'>;
-type MockedDistState = Pick<DistributedStateManager, 'leaveSession' | 'getSessionMembers'>;
+type MockedDistState = Pick<DistributedStateManager, 'leaveSession' | 'getSessionMembers' | 'removeParticipant'> &
+  Partial<Pick<DistributedStateManager, 'getConnection'>>;
 
 function makeRedisStore(): MockedRedisStore {
   return {
@@ -55,6 +56,7 @@ function makeClient(connectionId: string, sessionId: string | null): ConnectedCl
   return {
     connectionId,
     sessionId,
+    participantId: connectionId,
     userId: 'user-1',
     username: 'test',
     isLeader: false,
@@ -66,6 +68,7 @@ function makeClient(connectionId: string, sessionId: string | null): ConnectedCl
 describe('leaveSession multi-instance markInactive race', () => {
   let clients: Map<string, ConnectedClient>;
   let sessionsMap: Map<string, Set<string>>;
+  let sessionParticipants: Map<string, Map<string, LocalSessionParticipant>>;
   let sessionGraceTimers: Map<string, NodeJS.Timeout>;
   let pendingJoinPersists: Map<string, Promise<void>>;
   let redisStore: MockedRedisStore;
@@ -78,6 +81,7 @@ describe('leaveSession multi-instance markInactive race', () => {
   beforeEach(() => {
     clients = new Map();
     sessionsMap = new Map();
+    sessionParticipants = new Map();
     sessionGraceTimers = new Map();
     pendingJoinPersists = new Map();
     redisStore = makeRedisStore();
@@ -85,6 +89,23 @@ describe('leaveSession multi-instance markInactive race', () => {
 
     clients.set(LOCAL_CONN, makeClient(LOCAL_CONN, SESSION_ID));
     sessionsMap.set(SESSION_ID, new Set([LOCAL_CONN]));
+    sessionParticipants.set(
+      SESSION_ID,
+      new Map([
+        [
+          LOCAL_CONN,
+          {
+            id: LOCAL_CONN,
+            username: 'test',
+            userId: 'user-1',
+            avatarUrl: undefined,
+            isLeader: false,
+            connectionState: 'CONNECTED',
+            connectionIds: new Set([LOCAL_CONN]),
+          },
+        ],
+      ]),
+    );
   });
 
   it('skips markInactive and keeps pending writes when other instances still have members', async () => {
@@ -92,13 +113,26 @@ describe('leaveSession multi-instance markInactive race', () => {
     // connection is still in the membership set.
     const distributedState: MockedDistState = {
       leaveSession: vi.fn().mockResolvedValue({ newLeaderId: REMOTE_CONN }),
+      getConnection: vi.fn().mockResolvedValue({
+        connectionId: REMOTE_CONN,
+        instanceId: 'remote-instance',
+        sessionId: SESSION_ID,
+        participantId: 'remote-participant',
+        userId: null,
+        username: 'b',
+        avatarUrl: null,
+        isLeader: true,
+        connectedAt: Date.now(),
+      }),
       getSessionMembers: vi.fn().mockResolvedValue([{ id: REMOTE_CONN, username: 'b', isLeader: true }]),
+      removeParticipant: vi.fn().mockResolvedValue(undefined),
     };
 
     const result = await leaveSession(
       LOCAL_CONN,
       clients,
       sessionsMap,
+      sessionParticipants,
       redisStore as unknown as RedisSessionStore,
       distributedState as unknown as DistributedStateManager,
       writeScheduler as unknown as WriteScheduler,
@@ -109,6 +143,7 @@ describe('leaveSession multi-instance markInactive race', () => {
 
     expect(result?.sessionId).toBe(SESSION_ID);
     expect(result?.newLeaderId).toBe(REMOTE_CONN);
+    expect(result?.newLeaderParticipantId).toBe('remote-participant');
 
     // The dangerous side-effects must be skipped because another instance
     // still has members.
@@ -126,12 +161,14 @@ describe('leaveSession multi-instance markInactive race', () => {
     const distributedState: MockedDistState = {
       leaveSession: vi.fn().mockResolvedValue({ newLeaderId: null }),
       getSessionMembers: vi.fn().mockResolvedValue([]),
+      removeParticipant: vi.fn().mockResolvedValue(undefined),
     };
 
     const result = await leaveSession(
       LOCAL_CONN,
       clients,
       sessionsMap,
+      sessionParticipants,
       redisStore as unknown as RedisSessionStore,
       distributedState as unknown as DistributedStateManager,
       writeScheduler as unknown as WriteScheduler,
@@ -165,12 +202,14 @@ describe('leaveSession multi-instance markInactive race', () => {
         callOrder.push('getSessionMembers');
         return [];
       }),
+      removeParticipant: vi.fn().mockResolvedValue(undefined),
     };
 
     await leaveSession(
       LOCAL_CONN,
       clients,
       sessionsMap,
+      sessionParticipants,
       redisStore as unknown as RedisSessionStore,
       distributedState as unknown as DistributedStateManager,
       writeScheduler as unknown as WriteScheduler,
@@ -190,6 +229,7 @@ describe('leaveSession multi-instance markInactive race', () => {
       LOCAL_CONN,
       clients,
       sessionsMap,
+      sessionParticipants,
       redisStore as unknown as RedisSessionStore,
       null, // no distributed state
       writeScheduler as unknown as WriteScheduler,
@@ -213,6 +253,7 @@ describe('leaveSession multi-instance markInactive race', () => {
     const distributedState: MockedDistState = {
       leaveSession: vi.fn().mockResolvedValue({ newLeaderId: null }),
       getSessionMembers: vi.fn().mockRejectedValue(new Error('redis down')),
+      removeParticipant: vi.fn().mockResolvedValue(undefined),
     };
 
     // Silence the expected console.error from the catch branch.
@@ -222,6 +263,7 @@ describe('leaveSession multi-instance markInactive race', () => {
       LOCAL_CONN,
       clients,
       sessionsMap,
+      sessionParticipants,
       redisStore as unknown as RedisSessionStore,
       distributedState as unknown as DistributedStateManager,
       writeScheduler as unknown as WriteScheduler,

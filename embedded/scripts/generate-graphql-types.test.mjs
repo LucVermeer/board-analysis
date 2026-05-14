@@ -5,7 +5,7 @@
  * Run with: node --test embedded/scripts/generate-graphql-types.test.mjs
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -16,7 +16,6 @@ import {
   parseGraphQLSchema,
   graphqlTypeToCpp,
   generateCppStruct,
-  generateHeader,
   TYPE_MAP,
   FIELD_TYPE_OVERRIDES,
   CONTROLLER_TYPES,

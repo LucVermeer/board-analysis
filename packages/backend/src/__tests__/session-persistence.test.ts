@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { roomManager } from '../services/room-manager';
 import { db } from '../db/client';
 import { sessions, sessionQueues, boardSessionParticipants } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { ClimbQueueItem } from '@boardsesh/shared-schema';
 import { createMockRedis, type MockRedis } from './helpers/mock-redis';
 
@@ -29,9 +29,18 @@ const createTestClimb = (): ClimbQueueItem => ({
   suggested: false,
 });
 
-// Helper function to register a client before joining
-const registerAndJoinSession = async (clientId: string, sessionId: string, boardPath: string, username?: string) => {
-  await roomManager.registerClient(clientId);
+// Helper function to register a client before joining.
+// Pass `userId` to simulate an authenticated user — that's the only path that
+// produces a stable participantId across reconnects (anonymous reconnects
+// intentionally yield a fresh participantId, per the join-side security fix).
+const registerAndJoinSession = async (
+  clientId: string,
+  sessionId: string,
+  boardPath: string,
+  username?: string,
+  userId?: string,
+) => {
+  await roomManager.registerClient(clientId, username, userId);
   return roomManager.joinSession(clientId, sessionId, boardPath, username);
 };
 
@@ -48,6 +57,7 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
   });
 
   afterEach(() => {
+    roomManager.reset();
     vi.clearAllTimers();
   });
 
@@ -170,6 +180,184 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       expect(results).toHaveLength(3);
       const users = await roomManager.getSessionUsers(sessionId);
       expect(users).toHaveLength(3);
+    });
+  });
+
+  describe('Reconnect Lifecycle', () => {
+    // Stable participantId across reconnects only works for authenticated
+    // users (the P1 fix removed trust in client-supplied participantId). The
+    // tests below pass userIds that are written to board_sessions.created_by_user_id;
+    // those values need to exist in the users table (FK constraint).
+    const RECONNECT_TEST_USERS = ['user-A', 'leader-participant-id', 'member-participant-id'];
+
+    beforeEach(async () => {
+      for (const userId of RECONNECT_TEST_USERS) {
+        await db.execute(sql`
+          INSERT INTO users (id, email, name, created_at, updated_at)
+          VALUES (${userId}, ${userId + '@reconnect.test'}, ${userId}, now(), now())
+          ON CONFLICT (id) DO NOTHING
+        `);
+      }
+    });
+
+    afterEach(async () => {
+      // Sessions FK-cascade onto board_sessions; clean up users we inserted.
+      for (const userId of RECONNECT_TEST_USERS) {
+        await db.execute(sql`DELETE FROM board_sessions WHERE created_by_user_id = ${userId}`);
+        await db.execute(sql`DELETE FROM users WHERE id = ${userId}`);
+      }
+    });
+
+    it('treats an anonymous reconnect as a fresh participant (no client-supplied participantId trust)', async () => {
+      // P1 security guarantee: client-supplied participantId is ignored for
+      // anonymous users so a malicious member cannot grab another peer's
+      // SessionUser.id and impersonate them. The trade-off: an anonymous
+      // user that drops the WebSocket and reconnects gets a new
+      // participantId, and peers see UserLeft + UserJoined instead of
+      // UserPresenceChanged. This test pins that intentional UX in place.
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      // First anonymous connection joins.
+      const original = await registerAndJoinSession('anon-conn-1', sessionId, boardPath, 'Anon');
+      expect(original.participantId).toBe('anon-conn-1');
+
+      await roomManager.disconnectClient('anon-conn-1');
+
+      // Reconnect from a NEW anonymous connection. Even if the client tries
+      // to replay the previous participantId, the server must reject it.
+      await roomManager.registerClient('anon-conn-2');
+      const rejoined = await roomManager.joinSession(
+        'anon-conn-2',
+        sessionId,
+        boardPath,
+        'Anon',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        original.participantId, // attacker-controlled value — must be ignored
+      );
+
+      expect(rejoined.participantId).toBe('anon-conn-2');
+      expect(rejoined.participantId).not.toBe(original.participantId);
+      expect(rejoined.participantWasReconnecting).toBe(false);
+      expect(rejoined.participantWasKnown).toBe(false);
+    });
+
+    it('marks a passively disconnected participant as reconnecting and restores them on reconnect', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      // Authenticated user: stable participantId == userId across reconnects.
+      // Anonymous users intentionally don't share continuity here; that's the
+      // P1 security fix on the join side.
+      const joined = await registerAndJoinSession('client-1', sessionId, boardPath, 'User1', 'user-A');
+
+      const disconnectResult = await roomManager.disconnectClient('client-1');
+      expect(disconnectResult?.presenceUser).toEqual(
+        expect.objectContaining({
+          id: joined.participantId,
+          username: 'User1',
+          connectionState: 'RECONNECTING',
+        }),
+      );
+
+      const reconnectingUsers = await roomManager.getSessionUsers(sessionId);
+      expect(reconnectingUsers).toContainEqual(
+        expect.objectContaining({
+          id: joined.participantId,
+          connectionState: 'RECONNECTING',
+        }),
+      );
+
+      // Reconnect: a NEW connection authenticated as the same userId resolves
+      // to the same participantId server-side.
+      await roomManager.registerClient('client-1b', 'User1', 'user-A');
+      const rejoined = await roomManager.joinSession('client-1b', sessionId, boardPath, 'User1');
+
+      expect(rejoined.participantWasReconnecting).toBe(true);
+      expect(rejoined.participantId).toBe(joined.participantId);
+      expect(rejoined.users).toContainEqual(
+        expect.objectContaining({
+          id: joined.participantId,
+          connectionState: 'CONNECTED',
+        }),
+      );
+    });
+
+    it('elects a new leader on passive leader disconnect while the old leader is reconnecting', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      const leader = await registerAndJoinSession('leader-client', sessionId, boardPath, 'Leader');
+      const member = await registerAndJoinSession('member-client', sessionId, boardPath, 'Member');
+
+      expect(leader.isLeader).toBe(true);
+      expect(member.isLeader).toBe(false);
+
+      const disconnectResult = await roomManager.disconnectClient('leader-client');
+
+      expect(disconnectResult?.newLeaderId).toBe('member-client');
+      expect(disconnectResult?.newLeaderParticipantId).toBe(member.participantId);
+      expect(disconnectResult?.presenceUser).toEqual(
+        expect.objectContaining({
+          id: leader.participantId,
+          isLeader: false,
+          connectionState: 'RECONNECTING',
+        }),
+      );
+
+      const users = await roomManager.getSessionUsers(sessionId);
+      expect(users).toContainEqual(
+        expect.objectContaining({
+          id: member.participantId,
+          isLeader: true,
+          connectionState: 'CONNECTED',
+        }),
+      );
+      expect(users).toContainEqual(
+        expect.objectContaining({
+          id: leader.participantId,
+          isLeader: false,
+          connectionState: 'RECONNECTING',
+        }),
+      );
+    });
+
+    it('returns stable participant leader IDs separately from connection IDs on passive disconnect', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      // Authenticated users: participantId is bound to userId server-side.
+      // Client-supplied participantId is ignored (P1 security fix).
+      await roomManager.registerClient('leader-conn', 'Leader', 'leader-participant-id');
+      const leader = await roomManager.joinSession('leader-conn', sessionId, boardPath, 'Leader');
+      await roomManager.registerClient('member-conn', 'Member', 'member-participant-id');
+      const member = await roomManager.joinSession('member-conn', sessionId, boardPath, 'Member');
+
+      expect(leader.participantId).toBe('leader-participant-id');
+      expect(member.participantId).toBe('member-participant-id');
+
+      const disconnectResult = await roomManager.disconnectClient('leader-conn');
+
+      expect(disconnectResult?.newLeaderId).toBe('member-conn');
+      expect(disconnectResult?.newLeaderParticipantId).toBe('member-participant-id');
+    });
+
+    it('returns stable participant leader IDs when a leader explicitly leaves', async () => {
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      await roomManager.registerClient('leader-conn', 'Leader', 'leader-participant-id');
+      await roomManager.joinSession('leader-conn', sessionId, boardPath, 'Leader');
+      await roomManager.registerClient('member-conn', 'Member', 'member-participant-id');
+      await roomManager.joinSession('member-conn', sessionId, boardPath, 'Member');
+
+      const leaveResult = await roomManager.leaveSession('leader-conn');
+
+      expect(leaveResult?.newLeaderId).toBe('member-conn');
+      expect(leaveResult?.newLeaderParticipantId).toBe('member-participant-id');
     });
   });
 

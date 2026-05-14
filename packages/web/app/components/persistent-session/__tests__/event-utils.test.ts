@@ -9,6 +9,7 @@ describe('persistent session event utils', () => {
       username: 'User A',
       isLeader: false,
       avatarUrl: undefined,
+      connectionState: 'CONNECTED',
     };
 
     it('adds a new user when id does not exist', () => {

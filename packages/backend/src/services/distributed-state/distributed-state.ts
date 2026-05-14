@@ -15,6 +15,9 @@ import {
   hasSessionMembers,
   cleanupStaleSessionMembers,
   cleanupEmptySession,
+  markParticipantPresence,
+  removeParticipant,
+  removeParticipantConnection,
 } from './session-ops';
 import {
   updateHeartbeat,
@@ -112,7 +115,13 @@ export class DistributedStateManager {
   async removeConnection(
     connectionId: string,
     electNewLeader: boolean = true,
-  ): Promise<{ sessionId: string | null; wasLeader: boolean; newLeaderId: string | null }> {
+  ): Promise<{
+    sessionId: string | null;
+    participantId: string | null;
+    wasLeader: boolean;
+    newLeaderId: string | null;
+    remainingParticipantConnections: number | null;
+  }> {
     return removeConnection(this.redis, this.instanceId, connectionId, electNewLeader);
   }
 
@@ -132,8 +141,9 @@ export class DistributedStateManager {
     sessionId: string,
     username?: string,
     avatarUrl?: string | null,
+    participantId?: string | null,
   ): Promise<{ isLeader: boolean }> {
-    return joinSession(this.redis, connectionId, sessionId, username, avatarUrl);
+    return joinSession(this.redis, connectionId, sessionId, username, avatarUrl, participantId);
   }
 
   /** Leave a session. Handles leader election if leaving member was leader. */
@@ -198,6 +208,30 @@ export class DistributedStateManager {
   /** Clean up session state when it becomes empty. */
   async cleanupEmptySession(sessionId: string): Promise<void> {
     return cleanupEmptySession(this.redis, sessionId);
+  }
+
+  /** Mark a stable participant as connected/reconnecting. */
+  async markParticipantPresence(
+    sessionId: string,
+    participantId: string,
+    connectionState: 'CONNECTED' | 'RECONNECTING',
+  ): Promise<SessionUser | null> {
+    return markParticipantPresence(this.redis, sessionId, participantId, connectionState);
+  }
+
+  /** Remove a stable participant from a session. */
+  async removeParticipant(sessionId: string, participantId: string): Promise<void> {
+    return removeParticipant(this.redis, sessionId, participantId);
+  }
+
+  /**
+   * Remove a single connection from a participant's connection set. If that was
+   * the participant's last connection, atomically tear down the participant
+   * entry. Used by explicit-leave: clicking "Leave" on one tab must not wipe
+   * the user's other tabs that are still in the session.
+   */
+  async removeParticipantConnection(sessionId: string, participantId: string, connectionId: string): Promise<void> {
+    return removeParticipantConnection(this.redis, sessionId, participantId, connectionId);
   }
 
   /**

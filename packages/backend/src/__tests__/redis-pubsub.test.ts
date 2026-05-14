@@ -60,6 +60,7 @@ describe('Redis PubSub Adapter', () => {
       const event: QueueEvent = {
         __typename: 'QueueItemAdded',
         sequence: 1,
+        stateHash: 'hash-1',
         item: {
           uuid: 'test-uuid',
           climb: {
@@ -121,6 +122,7 @@ describe('Redis PubSub Adapter', () => {
           username: 'TestUser',
           isLeader: true,
           avatarUrl: undefined,
+          connectionState: 'CONNECTED',
         },
       };
 
@@ -157,6 +159,7 @@ describe('Redis PubSub Adapter', () => {
       const event: QueueEvent = {
         __typename: 'QueueItemRemoved',
         sequence: 1,
+        stateHash: 'hash-1',
         uuid: 'removed-uuid',
       };
 
@@ -224,6 +227,8 @@ describe('Redis PubSub Adapter - Unit Tests (mocked)', () => {
     const event: QueueEvent = {
       __typename: 'ClimbMirrored',
       sequence: 1,
+      stateHash: 'hash-1',
+      uuid: 'queue-item-1',
       mirrored: true,
     };
 

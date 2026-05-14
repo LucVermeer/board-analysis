@@ -25,6 +25,7 @@ export function createContext(
   const id = connectionId || uuidv4();
   const context: ConnectionContext = {
     connectionId: id,
+    transport: 'ws',
     sessionId: undefined,
     userId: userId,
     isAuthenticated: isAuthenticated || false,
@@ -64,17 +65,20 @@ export function updateContext(connectionId: string, updates: Partial<Omit<Connec
 
   if (DEBUG) {
     console.info(
-      `[Context] updateContext: ${connectionId} -> sessionId=${updates.sessionId}, userId=${updates.userId}`,
+      `[Context] updateContext: ${connectionId} -> sessionId=${updates.sessionId}, participantId=${updates.participantId}, userId=${updates.userId}`,
     );
   }
 
-  if (updates.sessionId !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(updates, 'sessionId')) {
     context.sessionId = updates.sessionId;
   }
-  if (updates.userId !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(updates, 'participantId')) {
+    context.participantId = updates.participantId;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'userId')) {
     context.userId = updates.userId;
   }
-  if (updates.isAuthenticated !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(updates, 'isAuthenticated')) {
     context.isAuthenticated = updates.isAuthenticated;
   }
 }
