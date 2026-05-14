@@ -143,6 +143,7 @@ export const climbMutations = {
         climbUuid: uuid,
         angle: validated.angle,
         ascensionistCount: 0,
+        faUsername: preferredSetter,
       })
       .onConflictDoNothing({
         target: [
