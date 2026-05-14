@@ -29,7 +29,7 @@ async function YouProgressStreaming({
   userId: string;
   initialProfile: UserProfile | null;
 }) {
-  const statsData = await fetchProfileStatsData(userId);
+  const statsData = await fetchProfileStatsData(userId, { skipCache: true });
   return (
     <YouProgressContent
       userId={userId}

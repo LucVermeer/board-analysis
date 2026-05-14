@@ -2,6 +2,9 @@ import {
   cachedUserClimbPercentile,
   cachedUserProfileStats,
   cachedUserTicks,
+  serverUserClimbPercentile,
+  serverUserProfileStats,
+  serverUserTicks,
 } from '@/app/lib/graphql/server-cached-client';
 import { SUPPORTED_BOARDS } from '@/app/lib/board-data';
 import type { LogbookEntry } from './utils/profile-constants';
@@ -17,15 +20,30 @@ export type ProfileStatsData = {
   initialLogbook: LogbookEntry[];
 };
 
+export type FetchProfileStatsOptions = {
+  /**
+   * Skip the SSR data cache. Used by /you so the dashboard reflects a
+   * just-logged tick immediately instead of waiting on the unstable_cache TTL.
+   */
+  skipCache?: boolean;
+};
+
 /**
  * Fetches profile stats and tick data for a user across all boards.
  * Shared between /you, /profile/[user_id], and /profile/[user_id]/statistics pages.
  */
-export async function fetchProfileStatsData(userId: string): Promise<ProfileStatsData> {
+export async function fetchProfileStatsData(
+  userId: string,
+  options: FetchProfileStatsOptions = {},
+): Promise<ProfileStatsData> {
+  const profileStatsFn = options.skipCache ? serverUserProfileStats : cachedUserProfileStats;
+  const percentileFn = options.skipCache ? serverUserClimbPercentile : cachedUserClimbPercentile;
+  const ticksFn = options.skipCache ? serverUserTicks : cachedUserTicks;
+
   const [initialProfileStats, initialPercentile, ...ticksResults] = await Promise.all([
-    cachedUserProfileStats(userId),
-    cachedUserClimbPercentile(userId),
-    ...SUPPORTED_BOARDS.map((boardType) => cachedUserTicks(userId, boardType)),
+    profileStatsFn(userId),
+    percentileFn(userId),
+    ...SUPPORTED_BOARDS.map((boardType) => ticksFn(userId, boardType)),
   ]);
 
   const initialAllBoardsTicks: Record<string, LogbookEntry[]> = {};

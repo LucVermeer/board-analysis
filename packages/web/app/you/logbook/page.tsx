@@ -2,7 +2,7 @@ import React, { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import LogbookFeed from '@/app/components/library/logbook-feed';
 import LogbookLoading from './loading';
-import { cachedUserProfileStats } from '@/app/lib/graphql/server-cached-client';
+import { serverUserProfileStats } from '@/app/lib/graphql/server-cached-client';
 import { getYouSession } from '../you-auth';
 import { createNoIndexMetadata } from '@/app/lib/seo/metadata';
 import { getServerTranslation } from '@/app/lib/i18n/server';
@@ -23,7 +23,7 @@ export default async function YouLogbookPage() {
     redirect('/');
   }
   const userId = session.user.id;
-  const profileStats = await cachedUserProfileStats(userId);
+  const profileStats = await serverUserProfileStats(userId);
   const layoutStats = profileStats?.layoutStats ?? [];
 
   // Per-element protection for translator-DOM crashes (issue #2064) lives on

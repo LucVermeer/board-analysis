@@ -195,6 +195,23 @@ export async function cachedUserProfileStats(
 }
 
 /**
+ * Uncached server-side fetch of user profile stats. Used by /you (the user's
+ * own dashboard) where freshly-logged ticks must appear immediately rather
+ * than waiting on the cache TTL.
+ */
+export async function serverUserProfileStats(
+  userId: string,
+): Promise<GetUserProfileStatsQueryResponse['userProfileStats'] | null> {
+  const { GET_USER_PROFILE_STATS } = await import('@/app/lib/graphql/operations/ticks');
+  try {
+    const result = await executeGraphQLInternal<GetUserProfileStatsQueryResponse>(GET_USER_PROFILE_STATS, { userId });
+    return result.userProfileStats;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Cached server-side fetch of user climb percentile (public, no auth needed).
  */
 export async function cachedUserClimbPercentile(
@@ -217,6 +234,23 @@ export async function cachedUserClimbPercentile(
 }
 
 /**
+ * Uncached counterpart of {@link cachedUserClimbPercentile} for /you.
+ */
+export async function serverUserClimbPercentile(
+  userId: string,
+): Promise<GetUserClimbPercentileQueryResponse['userClimbPercentile'] | null> {
+  const { GET_USER_CLIMB_PERCENTILE } = await import('@/app/lib/graphql/operations/ticks');
+  try {
+    const result = await executeGraphQLInternal<GetUserClimbPercentileQueryResponse>(GET_USER_CLIMB_PERCENTILE, {
+      userId,
+    });
+    return result.userClimbPercentile;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Cached server-side fetch of user ticks for a specific board type (public, no auth needed).
  */
 export async function cachedUserTicks(
@@ -230,6 +264,23 @@ export async function cachedUserTicks(
     const tag = `user-ticks-${userId}-${boardType}`;
     const query = createCachedGraphQLQuery<Response>(GET_USER_TICKS, tag, 300);
     const result = await query({ userId, boardType });
+    return result.userTicks;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Uncached counterpart of {@link cachedUserTicks} for /you. Logging a tick
+ * must show up on the user's own dashboard immediately.
+ */
+export async function serverUserTicks(
+  userId: string,
+  boardType: string,
+): Promise<GetUserTicksQueryResponse['userTicks'] | null> {
+  const { GET_USER_TICKS } = await import('@/app/lib/graphql/operations/ticks');
+  try {
+    const result = await executeGraphQLInternal<GetUserTicksQueryResponse>(GET_USER_TICKS, { userId, boardType });
     return result.userTicks;
   } catch {
     return null;
