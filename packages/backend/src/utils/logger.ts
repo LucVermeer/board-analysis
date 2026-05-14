@@ -11,26 +11,48 @@ export function setInstanceIdProvider(provider: InstanceIdProvider): void {
 
 const SPLAT = Symbol.for('splat');
 
+type LoggerInfoRecord = Record<string | symbol, unknown>;
+
+type ErrorDetails = {
+  name: string;
+  message: string;
+  stack?: string;
+};
+
+function errorDetails(error: Error): ErrorDetails {
+  return {
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+  };
+}
+
 // Winston's `Logger.log()` merges the first trailing arg into `info` only when
 // it's an object — strings and other primitives are stashed under
 // `info[Symbol.for('splat')]` and the default `format.splat()` only consumes
 // them when the message has `%s`-style tokens. The old console patch we're
-// replacing always emitted every trailing arg, so this format concatenates
-// any leftover splat entries onto the message and clears the symbol so the
-// JSON / printf renderers don't leak it.
+// replacing always emitted every trailing arg, so this format renders leftover
+// splat entries while preserving trailing Error details as structured fields.
 const appendSplatFormat = format((info) => {
-  const splatValue = (info as unknown as Record<symbol, unknown>)[SPLAT];
-  if (!Array.isArray(splatValue) || splatValue.length === 0) return info;
+  const infoRecord = info as LoggerInfoRecord;
+  const splatValue = infoRecord[SPLAT];
+  if (!Array.isArray(splatValue)) return info;
+
+  delete infoRecord[SPLAT];
+  if (splatValue.length === 0) return info;
 
   const rendered = splatValue
     .map((arg) => {
-      if (arg instanceof Error) return arg.stack ?? `${arg.name}: ${arg.message}`;
+      if (arg instanceof Error) {
+        infoRecord.error ??= errorDetails(arg);
+        infoRecord.stack ??= arg.stack;
+        return arg.stack ?? `${arg.name}: ${arg.message}`;
+      }
       if (typeof arg === 'string') return arg;
       return util.inspect(arg, { depth: 4, breakLength: Infinity });
     })
     .join(' ');
   info.message = `${String(info.message)} ${rendered}`;
-  delete (info as unknown as Record<symbol, unknown>)[SPLAT];
   return info;
 });
 
@@ -43,13 +65,13 @@ const instanceIdFormat = format((info) => {
 const isProduction = process.env.NODE_ENV === 'production';
 
 const devPrintf = format.printf((info) => {
-  const { level, message, instanceId, service, pid, timestamp, ...rest } = info as Record<string, unknown> & {
+  const { level, message, instanceId, ...metadata } = info as Record<string, unknown> & {
     level: string;
     message: unknown;
   };
-  void service;
-  void pid;
-  void timestamp;
+  const rest = Object.fromEntries(
+    Object.entries(metadata).filter(([key]) => key !== 'service' && key !== 'pid' && key !== 'timestamp'),
+  );
   const tag = typeof instanceId === 'string' && instanceId ? `[i:${instanceId}] ` : '';
   const meta = Object.keys(rest).length > 0 ? ` ${JSON.stringify(rest)}` : '';
   return `${tag}[${level}] ${String(message)}${meta}`;

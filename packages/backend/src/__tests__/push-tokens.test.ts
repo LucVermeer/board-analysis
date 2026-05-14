@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { boardSessionParticipants } from '../db/schema';
+import { logger } from '../utils/logger';
 
 // ---------------------------------------------------------------------------
 // Mocks — exercised before the resolver is imported.
@@ -114,9 +115,9 @@ vi.mock('../services/room-manager', () => ({
 const { pushTokenMutations, __resetPushTokenRateLimitForTests } =
   await import('../graphql/resolvers/sessions/push-tokens');
 
-const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -161,9 +162,9 @@ function resetAllMocks(): void {
 // ---------------------------------------------------------------------------
 
 afterAll(() => {
-  consoleInfoSpy.mockRestore();
-  consoleWarnSpy.mockRestore();
-  consoleErrorSpy.mockRestore();
+  loggerInfoSpy.mockRestore();
+  loggerWarnSpy.mockRestore();
+  loggerErrorSpy.mockRestore();
 });
 
 describe('registerActivityPushToken', () => {
@@ -175,7 +176,7 @@ describe('registerActivityPushToken', () => {
     await expect(
       pushTokenMutations.registerActivityPushToken(undefined, { sessionId: SESSION_ID, token: VALID_TOKEN }, anonCtx()),
     ).rejects.toThrow('Authentication required');
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
       `[APNs] Rejected Live Activity token registration for session ${SESSION_ID}: unauthenticated`,
     );
   });
@@ -226,7 +227,7 @@ describe('registerActivityPushToken', () => {
       expect.objectContaining({ token: VALID_TOKEN, sessionId: SESSION_ID }),
     );
     expect(insertOnConflictDoUpdate).toHaveBeenCalled();
-    expect(consoleInfoSpy).toHaveBeenCalledWith(
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
       `[APNs] Registered Live Activity token for session ${SESSION_ID}: ${VALID_TOKEN.slice(0, 8)}...`,
     );
   });
@@ -257,7 +258,7 @@ describe('registerActivityPushToken', () => {
     );
 
     expect(result).toBe(true);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
       `[APNs] Rebound token ${VALID_TOKEN.slice(0, 8)}... from session ${OTHER_SESSION_ID} → ${SESSION_ID} (user ${USER_ID})`,
     );
     expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensRebound');
@@ -295,7 +296,7 @@ describe('registerActivityPushToken', () => {
     expect(result).toBe(true);
     expect(oldestLimit).toHaveBeenCalledWith(2);
     expect(deleteWhere).toHaveBeenCalledTimes(2);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
       `[APNs] Evicting 2 old Live Activity token(s) for session ${SESSION_ID}; cap is 8`,
     );
     expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensEvicted');
@@ -397,7 +398,7 @@ describe('unregisterActivityPushToken', () => {
 
     expect(result).toBe(true);
     expect(deleteWhere).toHaveBeenCalledTimes(1);
-    expect(consoleInfoSpy).toHaveBeenCalledWith(
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
       `[APNs] Unregistered Live Activity token for session ${SESSION_ID}: ${VALID_TOKEN.slice(0, 8)}...`,
     );
   });
