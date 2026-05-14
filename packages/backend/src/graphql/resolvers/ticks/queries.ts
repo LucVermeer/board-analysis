@@ -128,11 +128,17 @@ export const tickQueries = {
 
     const conditions = [eq(dbSchema.boardseshTicks.userId, userId), eq(dbSchema.boardseshTicks.boardType, boardType)];
 
-    // Fetch ticks with layoutId from unified board_climbs table
+    // Fetch ticks with layoutId from unified board_climbs table.
+    // COALESCE the tick's own difficulty with the climb's consensus difficulty so
+    // ticks logged without a user-picked grade still bucket into the right grade
+    // on profile stats charts (a NULL stored value means "use consensus").
     const results = await db
       .select({
         tick: dbSchema.boardseshTicks,
         layoutId: dbSchema.boardClimbs.layoutId,
+        effectiveDifficulty: sql<
+          number | null
+        >`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`,
       })
       .from(dbSchema.boardseshTicks)
       .leftJoin(
@@ -142,10 +148,18 @@ export const tickQueries = {
           eq(dbSchema.boardClimbs.boardType, boardType),
         ),
       )
+      .leftJoin(
+        dbSchema.boardClimbStats,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbStats.climbUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
+          eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
+        ),
+      )
       .where(and(...conditions))
       .orderBy(desc(dbSchema.boardseshTicks.climbedAt));
 
-    return results.map(({ tick, layoutId }) => ({
+    return results.map(({ tick, layoutId, effectiveDifficulty }) => ({
       uuid: tick.uuid,
       userId: tick.userId,
       boardType: tick.boardType,
@@ -155,7 +169,7 @@ export const tickQueries = {
       status: tick.status,
       attemptCount: tick.attemptCount,
       quality: tick.quality,
-      difficulty: tick.difficulty,
+      difficulty: effectiveDifficulty,
       isBenchmark: tick.isBenchmark,
       comment: tick.comment,
       climbedAt: tick.climbedAt,
@@ -801,13 +815,20 @@ export const tickQueries = {
 
     // Helper function to fetch stats for a single board type
     const fetchBoardStats = async (boardType: BoardName) => {
+      // COALESCE the tick's own difficulty with the climb's consensus difficulty so a
+      // tick logged without a user-picked grade still buckets into the consensus grade
+      // (a NULL stored value means "use consensus" — see the matching join in userTicks).
+      const effectiveDifficultyExpr = sql<
+        number | null
+      >`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`;
+
       // Run both queries in parallel for this board type
       const [gradeResults, distinctClimbs] = await Promise.all([
-        // Get distinct climb counts grouped by layoutId and difficulty using SQL aggregation
+        // Get distinct climb counts grouped by layoutId and effective difficulty using SQL aggregation
         db
           .select({
             layoutId: dbSchema.boardClimbs.layoutId,
-            difficulty: dbSchema.boardseshTicks.difficulty,
+            difficulty: effectiveDifficultyExpr.as('effective_difficulty'),
             distinctCount: sql<number>`count(distinct ${dbSchema.boardseshTicks.climbUuid})`.as('distinct_count'),
           })
           .from(dbSchema.boardseshTicks)
@@ -818,6 +839,14 @@ export const tickQueries = {
               eq(dbSchema.boardClimbs.boardType, boardType),
             ),
           )
+          .leftJoin(
+            dbSchema.boardClimbStats,
+            and(
+              eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbStats.climbUuid),
+              eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
+              eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
+            ),
+          )
           .where(
             and(
               eq(dbSchema.boardseshTicks.userId, userId),
@@ -825,7 +854,7 @@ export const tickQueries = {
               sql`${dbSchema.boardseshTicks.status} != 'attempt'`,
             ),
           )
-          .groupBy(dbSchema.boardClimbs.layoutId, dbSchema.boardseshTicks.difficulty),
+          .groupBy(dbSchema.boardClimbs.layoutId, effectiveDifficultyExpr),
 
         // Get all distinct climbUuids for total count
         db
