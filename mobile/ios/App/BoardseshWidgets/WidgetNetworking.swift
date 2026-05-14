@@ -47,12 +47,13 @@ enum WidgetNetworking {
             }
             if statusCode == 410 {
                 // The push token was rebound to a different session (the main
-                // app joined another session on the same device). Drop the
-                // cached widget token so we stop sending an authoritative-
-                // looking Bearer with stale binding, and ping the main app
-                // via Darwin notification so it can re-register.
+                // app joined another session on the same device). Post the
+                // Darwin notification BEFORE the keychain delete — iOS can
+                // suspend the widget extension at any point once URLSession
+                // returns, and we'd rather the main app get the re-register
+                // signal than wake up to a wiped widget token with no hint
+                // about why it's gone.
                 print("[Widget] Navigation request received 410; signaling re-registration")
-                SharedKeychain.remove(SharedKeychain.livePushTokenKey)
                 let name = CFNotificationName(SharedConstants.pushRegistrationStaleNotification as CFString)
                 CFNotificationCenterPostNotification(
                     CFNotificationCenterGetDarwinNotifyCenter(),
@@ -61,6 +62,7 @@ enum WidgetNetworking {
                     nil,
                     true
                 )
+                SharedKeychain.remove(SharedKeychain.livePushTokenKey)
                 return false
             }
             print("[Widget] Navigation request failed with status \(statusCode)")

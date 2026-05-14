@@ -12,7 +12,6 @@ import apn from '@parse/node-apn';
 import { eq } from 'drizzle-orm';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { db } from '../../db/client';
-import { redisClientManager } from '../../redis/client';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,13 +60,14 @@ const pendingSends = new Map<string, DebouncedEntry>();
 // 1 s debounce. Climb navigation needs to feel responsive on the lock screen;
 // a 5 s window made tapping Next visibly laggy. 1 s still absorbs the most
 // common burst (QueueItemAdded + CurrentClimbChanged emitted back-to-back when
-// a climb is queued).
+// a climb is queued). A restart inside this 1 s window can drop the pending
+// update; the heartbeat loop catches up within 90 s.
 const DEBOUNCE_MS = 1_000;
 
-const REDIS_PENDING_KEY_PREFIX = 'boardsesh:apns:pending:';
-// TTL slightly longer than the debounce so a restart within the window can
-// still recover the latest pending state on next startup.
-const REDIS_PENDING_TTL_SEC = 30;
+/** Whether a session currently has a pending debounced send in flight. */
+export function hasPendingSend(sessionId: string): boolean {
+  return pendingSends.has(sessionId);
+}
 
 // ---------------------------------------------------------------------------
 // Metrics
@@ -84,7 +84,6 @@ interface ApnsMetrics {
   sendsCoalesced: number;
   heartbeatsSent: number;
   dbRetriesUsed: number;
-  pendingRecovered: number;
 }
 
 const metrics: ApnsMetrics = {
@@ -98,10 +97,9 @@ const metrics: ApnsMetrics = {
   sendsCoalesced: 0,
   heartbeatsSent: 0,
   dbRetriesUsed: 0,
-  pendingRecovered: 0,
 };
 
-export function getApnsMetrics(): Readonly<ApnsMetrics> & { configured: boolean; pendingSendsInFlight: number } {
+export function getApnsMetrics(): ApnsMetrics & { configured: boolean; pendingSendsInFlight: number } {
   return {
     ...metrics,
     configured,
@@ -154,21 +152,16 @@ export function initializeApns(): void {
 
   configured = true;
   console.log(`[APNs] Initialized (production=${String(production)}, bundleId=${bundleId})`);
-
-  // Best-effort: recover any debounced sends that were pending in Redis when
-  // the previous process exited (or that another instance enqueued but never
-  // got to flush). Failures are logged and ignored — the next queue event or
-  // the heartbeat loop will catch up.
-  void recoverPendingSendsFromRedis();
 }
 
 /**
  * Shutdown the APNs provider. Call during graceful server shutdown.
+ *
+ * Pending debounce timers are cleared. A pending update that hasn't fired by
+ * shutdown is lost; the next queue event or heartbeat tick after the new
+ * process boots will produce a fresh send.
  */
 export async function shutdownApns(): Promise<void> {
-  // Clear all pending debounce timers. The latest state is already persisted
-  // in Redis (see sendLiveActivityUpdate), so recoverPendingSendsFromRedis on
-  // the next process will pick them up.
   for (const [, entry] of pendingSends) {
     clearTimeout(entry.timeout);
   }
@@ -183,80 +176,9 @@ export async function shutdownApns(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Redis-backed pending-send persistence
-// ---------------------------------------------------------------------------
-
-function redisPendingKey(sessionId: string): string {
-  return `${REDIS_PENDING_KEY_PREFIX}${sessionId}`;
-}
-
-async function writePendingToRedis(sessionId: string, state: LiveActivityContentState): Promise<void> {
-  if (!redisClientManager.isRedisConnected()) return;
-  try {
-    const { publisher } = redisClientManager.getClients();
-    await publisher.set(redisPendingKey(sessionId), JSON.stringify(state), 'EX', REDIS_PENDING_TTL_SEC);
-  } catch (error) {
-    // Persistence is best-effort; in-memory pendingSends is still the source
-    // of truth for the active process.
-    console.warn(`[APNs] Failed to persist pending send for session ${sessionId} to Redis:`, error);
-  }
-}
-
-async function deletePendingFromRedis(sessionId: string): Promise<void> {
-  if (!redisClientManager.isRedisConnected()) return;
-  try {
-    const { publisher } = redisClientManager.getClients();
-    await publisher.del(redisPendingKey(sessionId));
-  } catch (error) {
-    console.warn(`[APNs] Failed to delete persisted pending send for session ${sessionId} from Redis:`, error);
-  }
-}
-
-async function recoverPendingSendsFromRedis(): Promise<void> {
-  if (!redisClientManager.isRedisConnected()) return;
-  try {
-    const { publisher } = redisClientManager.getClients();
-    // SCAN is cheap at this volume (one key per active session at most) and
-    // avoids the latency-spike risk of KEYS.
-    let cursor = '0';
-    const recovered: { sessionId: string; state: LiveActivityContentState }[] = [];
-    do {
-      const [nextCursor, keys] = await publisher.scan(cursor, 'MATCH', `${REDIS_PENDING_KEY_PREFIX}*`, 'COUNT', 100);
-      cursor = nextCursor;
-      for (const key of keys) {
-        // GETDEL is atomic so two recovering instances don't race on the same
-        // pending send. Available since Redis 6.2.
-        const value = await publisher.call('GETDEL', key);
-        if (typeof value !== 'string') continue;
-        const sessionId = key.slice(REDIS_PENDING_KEY_PREFIX.length);
-        try {
-          const state = JSON.parse(value) as LiveActivityContentState;
-          recovered.push({ sessionId, state });
-        } catch (parseError) {
-          console.warn(`[APNs] Skipping malformed pending-send record for session ${sessionId}:`, parseError);
-        }
-      }
-    } while (cursor !== '0');
-
-    if (recovered.length === 0) return;
-
-    console.info(`[APNs] Recovering ${String(recovered.length)} pending Live Activity send(s) from Redis`);
-    for (const { sessionId, state } of recovered) {
-      metrics.pendingRecovered++;
-      sendLiveActivityUpdate(sessionId, state);
-    }
-  } catch (error) {
-    console.warn('[APNs] Failed to recover pending sends from Redis:', error);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Fetch all APNs device tokens for a given session from the database.
- */
 async function getTokensForSession(sessionId: string): Promise<string[]> {
   const rows = await db
     .select({ token: activityPushTokens.token })
@@ -266,9 +188,6 @@ async function getTokensForSession(sessionId: string): Promise<string[]> {
   return rows.map((r) => r.token);
 }
 
-/**
- * Delete a single stale device token from the database.
- */
 async function deleteStaleToken(token: string): Promise<void> {
   try {
     await db.delete(activityPushTokens).where(eq(activityPushTokens.token, token));
@@ -284,10 +203,6 @@ interface SendOptions {
   source?: 'event' | 'heartbeat' | 'registration';
 }
 
-/**
- * Build and send an APNs Live Activity notification to the given tokens.
- * Returns the number of successful sends.
- */
 async function sendNotification(
   sessionId: string,
   tokens: string[],
@@ -313,7 +228,6 @@ async function sendNotification(
     notification.aps['content-state'] = contentState;
   }
 
-  // Expire update notifications after 5 minutes, end notifications after 1 minute
   notification.expiry = Math.floor(Date.now() / 1000) + (event === 'end' ? 60 : 300);
 
   const startedAt = Date.now();
@@ -367,8 +281,13 @@ async function sendNotification(
  * Execute debounced send: looks up tokens and delivers the notification.
  *
  * On transient DB failure, re-arms the debounce timer with an exponential
- * backoff schedule (1s, 3s, 8s). The pendingSends entry is preserved across
- * the retry so the latest coalesced state is still sent when the DB recovers.
+ * backoff schedule. The pendingSends entry is preserved across the retry so
+ * the latest coalesced state is still sent when the DB recovers.
+ *
+ * On retry exhaustion, requeue the latest state with a fresh retry counter so
+ * a transient outage doesn't permanently drop the update — the next attempt
+ * starts at debounce 0 with the same `latestState` (which may have been
+ * mutated by intervening `sendLiveActivityUpdate` calls).
  */
 async function executeDebouncedSend(sessionId: string): Promise<void> {
   const entry = pendingSends.get(sessionId);
@@ -398,14 +317,15 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
       `[APNs] Giving up on session ${sessionId} after ${String(DB_RETRY_DELAYS_MS.length)} DB retry(ies):`,
       error,
     );
+    const lastState = entry.latestState;
     pendingSends.delete(sessionId);
-    void deletePendingFromRedis(sessionId);
+    // Requeue with a fresh retry counter so the user-visible regression is
+    // bounded by one more debounce window rather than 90 s of heartbeat lag.
+    sendLiveActivityUpdate(sessionId, lastState);
     return;
   }
 
-  // Successful lookup — clear the entry and send.
   pendingSends.delete(sessionId);
-  void deletePendingFromRedis(sessionId);
   if (tokens.length === 0) {
     console.info(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping update`);
     return;
@@ -428,20 +348,14 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
 export function sendLiveActivityUpdate(sessionId: string, contentState: LiveActivityContentState): void {
   if (!configured) return;
 
-  // Persist the latest state to Redis so a restart inside the debounce window
-  // can recover it. Failure to persist is non-fatal.
-  void writePendingToRedis(sessionId, contentState);
-
   const existing = pendingSends.get(sessionId);
 
   if (existing) {
-    // Replace the pending state but keep the existing timer
     existing.latestState = contentState;
     metrics.sendsCoalesced++;
     return;
   }
 
-  // Schedule a new send after the debounce window
   const timeout = setTimeout(() => {
     executeDebouncedSend(sessionId).catch((error) => {
       console.error(`[APNs] Debounced send failed for session ${sessionId}:`, error);
@@ -479,15 +393,12 @@ export async function sendLiveActivityUpdateToTokens(
 export async function endLiveActivity(sessionId: string): Promise<void> {
   if (!configured) return;
 
-  // Cancel any pending debounced update
   const pending = pendingSends.get(sessionId);
   if (pending) {
     clearTimeout(pending.timeout);
     pendingSends.delete(sessionId);
   }
-  void deletePendingFromRedis(sessionId);
 
-  // Best-effort lookup — log and continue if the DB is unavailable.
   let tokens: string[] = [];
   try {
     tokens = await getTokensForSession(sessionId);
@@ -501,13 +412,9 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
     console.info(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);
   }
 
-  // Clean up tokens after ending (already wrapped in try/catch internally)
   await cleanupTokensForSession(sessionId);
 }
 
-/**
- * Delete all APNs device tokens for a session from the database.
- */
 export async function cleanupTokensForSession(sessionId: string): Promise<void> {
   try {
     await db.delete(activityPushTokens).where(eq(activityPushTokens.sessionId, sessionId));
@@ -517,10 +424,13 @@ export async function cleanupTokensForSession(sessionId: string): Promise<void> 
   }
 }
 
-/** Test-only utility for clearing pendingSends between tests. */
-export function __resetApnsPendingForTests(): void {
+/** Test-only utility: clears pendingSends timers and resets counters. */
+export function __resetApnsStateForTests(): void {
   for (const [, entry] of pendingSends) {
     clearTimeout(entry.timeout);
   }
   pendingSends.clear();
+  for (const key of Object.keys(metrics) as (keyof ApnsMetrics)[]) {
+    metrics[key] = 0;
+  }
 }

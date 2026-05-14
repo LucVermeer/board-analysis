@@ -8,67 +8,91 @@
  * tip over into "Session ended" before any new event arrives.
  *
  * This module runs a periodic sweep every 90 s that re-sends the current
- * content state for every session with at least one registered push token. It
- * piggybacks on the existing debounce path, so if a real queue event was
- * already coalesced into the pending window the heartbeat just gets dropped
- * harmlessly.
+ * content state for every session with at least one registered push token.
+ *
+ * Multi-instance safety: each tick acquires a cluster-wide Redis lock so that
+ * only one instance in the cluster does the sweep on any given tick. Without
+ * the lock, N instances would each push N times for every session, eating
+ * into APNs' per-activity rate budget. Same pattern as
+ * `warmPopularConfigsCache` in social/boards.ts.
  */
 
-import { sql } from 'drizzle-orm';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { db } from '../../db/client';
-import { type LiveActivityContentState, incrementApnsMetric, isApnsConfigured, sendLiveActivityUpdate } from './index';
-import type { roomManager as RoomManagerType } from '../room-manager';
+import { redisClientManager } from '../../redis/client';
+import {
+  type LiveActivityContentState,
+  hasPendingSend,
+  incrementApnsMetric,
+  isApnsConfigured,
+  sendLiveActivityUpdate,
+} from './index';
+import { buildContentStateFromQueueState } from './content-state';
+import type { QueueState } from '../room-manager';
 
-/**
- * 90 s gives 6× headroom against the 10-minute iOS staleInterval. We need to
- * stay well below the staleInterval so a single dropped APNs (network blip,
- * APNs latency spike, server restart) doesn't tip the activity into stale.
- */
 const HEARTBEAT_INTERVAL_MS = 90 * 1000;
+
+// Lock TTL is twice the tick interval so a slow/crashing leader doesn't lock
+// the cluster out indefinitely.
+const HEARTBEAT_LOCK_KEY = 'boardsesh:apns:heartbeat-lock';
+const HEARTBEAT_LOCK_TTL_SEC = 180;
+
+// Process at most this many sessions in parallel per tick so a slow Redis or
+// roomManager doesn't serialize the whole sweep.
+const HEARTBEAT_CONCURRENCY = 10;
 
 let heartbeatHandle: ReturnType<typeof setInterval> | null = null;
 
-type RoomManager = Pick<typeof RoomManagerType, 'getQueueState'>;
-
-/**
- * Distinct session_ids that currently have at least one registered push token.
- * Bounded by the total number of active iOS Live Activities in the cluster,
- * which is small enough that a SELECT DISTINCT every 90 s is fine.
- */
-async function getSessionsWithRegisteredTokens(): Promise<string[]> {
-  const rows = await db.execute<{ session_id: string }>(sql`SELECT DISTINCT session_id FROM ${activityPushTokens}`);
-  // drizzle's execute returns either { rows: [...] } or the raw array depending
-  // on the dialect/driver. Normalize.
-  const data =
-    (rows as unknown as { rows?: { session_id: string }[] }).rows ?? (rows as unknown as { session_id: string }[]);
-  return data.map((r) => r.session_id);
+interface RoomManagerLike {
+  getQueueState(sessionId: string): Promise<QueueState>;
 }
 
-async function buildContentStateForSession(
+async function getSessionsWithRegisteredTokens(): Promise<string[]> {
+  const rows = await db.selectDistinct({ sessionId: activityPushTokens.sessionId }).from(activityPushTokens);
+  return rows.map((r) => r.sessionId);
+}
+
+async function buildHeartbeatStateFor(
   sessionId: string,
-  roomManager: RoomManager,
+  roomManager: RoomManagerLike,
 ): Promise<LiveActivityContentState | null> {
   const queueState = await roomManager.getQueueState(sessionId);
-  const currentItem = queueState.currentClimbQueueItem;
-  if (!currentItem) return null;
-
-  const currentIndex = queueState.queue.findIndex((item) => item.uuid === currentItem.uuid);
-
-  return {
-    climbName: currentItem.climb.name,
-    climbDifficulty: currentItem.climb.difficulty,
-    angle: currentItem.climb.angle,
-    currentIndex: currentIndex >= 0 ? currentIndex : 0,
-    totalClimbs: queueState.queue.length,
-    hasNext: currentIndex >= 0 && currentIndex < queueState.queue.length - 1,
-    hasPrevious: currentIndex > 0,
-    climbUuid: currentItem.climb.uuid,
-  };
+  return buildContentStateFromQueueState(queueState);
 }
 
-async function runHeartbeatTick(roomManager: RoomManager): Promise<void> {
+/**
+ * Try to acquire the cluster-wide heartbeat lock. Returns true if this
+ * instance won. If Redis isn't connected, returns true so single-instance dev
+ * still works — the lock is purely a multi-instance dedupe, not a correctness
+ * primitive.
+ */
+async function acquireHeartbeatLock(instanceId: string): Promise<boolean> {
+  if (!redisClientManager.isRedisConnected()) return true;
+  try {
+    const { publisher } = redisClientManager.getClients();
+    const result = await publisher.set(HEARTBEAT_LOCK_KEY, instanceId, 'EX', HEARTBEAT_LOCK_TTL_SEC, 'NX');
+    return result === 'OK';
+  } catch (error) {
+    console.warn('[APNs Heartbeat] Failed to acquire lock; skipping tick:', error);
+    return false;
+  }
+}
+
+async function processWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  async function nextBatch(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor++;
+      await worker(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => nextBatch()));
+}
+
+async function runHeartbeatTick(roomManager: RoomManagerLike, instanceId: string): Promise<void> {
   if (!isApnsConfigured()) return;
+
+  if (!(await acquireHeartbeatLock(instanceId))) return;
 
   let sessions: string[];
   try {
@@ -80,30 +104,33 @@ async function runHeartbeatTick(roomManager: RoomManager): Promise<void> {
 
   if (sessions.length === 0) return;
 
-  for (const sessionId of sessions) {
+  await processWithConcurrency(sessions, HEARTBEAT_CONCURRENCY, async (sessionId) => {
+    // Skip sessions where a real queue event already has a debounce timer in
+    // flight — the heartbeat is a backstop, not a primary update path.
+    if (hasPendingSend(sessionId)) return;
     try {
-      const state = await buildContentStateForSession(sessionId, roomManager);
-      if (!state) continue;
+      const state = await buildHeartbeatStateFor(sessionId, roomManager);
+      if (!state) return;
       sendLiveActivityUpdate(sessionId, state);
       incrementApnsMetric('heartbeatsSent');
     } catch (error) {
       console.warn(`[APNs Heartbeat] Failed to build heartbeat state for session ${sessionId}:`, error);
     }
-  }
+  });
 }
 
 /**
  * Start the periodic heartbeat loop. Safe to call multiple times; subsequent
  * calls are no-ops until `stopApnsHeartbeat()` is called.
  */
-export function startApnsHeartbeat(roomManager: RoomManager): void {
+export function startApnsHeartbeat(roomManager: RoomManagerLike, instanceId: string): void {
   if (heartbeatHandle !== null) return;
   if (!isApnsConfigured()) return;
 
-  console.info(`[APNs Heartbeat] Started (interval=${String(HEARTBEAT_INTERVAL_MS)}ms)`);
+  console.info(`[APNs Heartbeat] Started (interval=${String(HEARTBEAT_INTERVAL_MS)}ms, instance=${instanceId})`);
 
   heartbeatHandle = setInterval(() => {
-    runHeartbeatTick(roomManager).catch((error) => {
+    runHeartbeatTick(roomManager, instanceId).catch((error) => {
       console.error('[APNs Heartbeat] Tick failed:', error);
     });
   }, HEARTBEAT_INTERVAL_MS);
@@ -119,6 +146,6 @@ export function stopApnsHeartbeat(): void {
 }
 
 /** Test-only utility. */
-export async function __runHeartbeatTickForTests(roomManager: RoomManager): Promise<void> {
-  await runHeartbeatTick(roomManager);
+export async function __runHeartbeatTickForTests(roomManager: RoomManagerLike, instanceId = 'test'): Promise<void> {
+  await runHeartbeatTick(roomManager, instanceId);
 }

@@ -27,6 +27,13 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private var _currentServerUrl: String?
     private var _currentSessionId: String?
 
+    /// Monotonically increments every time `registerPushTokenWithBackend` is
+    /// called. A retry chain captures its generation and aborts as soon as the
+    /// counter advances — so a second entry point (foreground, WS reconnect,
+    /// widget 410, fresh ActivityKit token) supersedes any in-flight chain
+    /// rather than running in parallel with it.
+    private var _activeRegistrationGeneration: UInt64 = 0
+
     /// Retry schedule for push-token registration when the initial HTTP attempt
     /// fails (network blip on the just-locked phone is the common case). Five
     /// attempts spread across ~50 seconds, all in-process and non-blocking.
@@ -69,9 +76,13 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         guard observingDarwinNotification else { return }
         observingDarwinNotification = false
 
+        // Pass the specific name; CFNotificationCenterRemoveObserver with
+        // nil-name would clobber every Darwin observer registered against
+        // `self`, not just this one.
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         let observer = Unmanaged.passUnretained(self).toOpaque()
-        CFNotificationCenterRemoveObserver(center, observer, nil, nil)
+        let name = CFNotificationName(SharedConstants.queueNavigateNotification as CFString)
+        CFNotificationCenterRemoveObserver(center, observer, name, nil)
     }
 
     // MARK: - Push registration stale (widget 410)
@@ -107,7 +118,8 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         let observer = Unmanaged.passUnretained(self).toOpaque()
-        CFNotificationCenterRemoveObserver(center, observer, nil, nil)
+        let name = CFNotificationName(SharedConstants.pushRegistrationStaleNotification as CFString)
+        CFNotificationCenterRemoveObserver(center, observer, name, nil)
     }
 
     private func handlePushRegistrationStale() {
@@ -200,7 +212,21 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Remove the pending-registration record unconditionally. Used by
+    /// `endSession`; callers in the success path should prefer
+    /// `clearPendingRegistrationIfMatches` to avoid wiping a record written
+    /// for a fresher (token, sessionId) by a later `startSession`.
     private func clearPendingRegistration() {
+        SharedKeychain.remove(SharedKeychain.pendingPushRegistrationKey)
+    }
+
+    /// Remove the pending record only if it still describes the same
+    /// (token, sessionId) we just registered. Protects against a late-arriving
+    /// URLSession completion clobbering a record that a new session wrote in
+    /// the meantime.
+    private func clearPendingRegistrationIfMatches(token: String, sessionId: String) {
+        guard let pending = readPendingRegistration() else { return }
+        guard pending.token == token, pending.sessionId == sessionId else { return }
         SharedKeychain.remove(SharedKeychain.pendingPushRegistrationKey)
     }
 
@@ -215,15 +241,28 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         return (token: token, sessionId: sessionId, serverUrl: serverUrl)
     }
 
-    /// Kick off a push-token registration with exponential retries. Persists a
-    /// pending-record to the shared keychain on first attempt; the record is
-    /// cleared on success or on `endSession`. Safe to call from any thread.
+    /// Kick off a push-token registration with exponential retries.
+    ///
+    /// Bumps the active registration generation, so any in-flight retry chain
+    /// from a previous call aborts on its next tick. Persists a pending record
+    /// to the shared keychain so foreground / WS-reconnect hooks can retry
+    /// later. Safe to call from any thread.
     private func registerPushTokenWithBackend(token: String, sessionId: String, serverUrl: String) {
+        let generation = tokenQueue.sync { () -> UInt64 in
+            _activeRegistrationGeneration += 1
+            return _activeRegistrationGeneration
+        }
         writePendingRegistration(token: token, sessionId: sessionId, serverUrl: serverUrl)
-        scheduleRegistrationAttempt(token: token, sessionId: sessionId, serverUrl: serverUrl, attemptIndex: 0)
+        scheduleRegistrationAttempt(
+            token: token, sessionId: sessionId, serverUrl: serverUrl,
+            attemptIndex: 0, generation: generation
+        )
     }
 
-    private func scheduleRegistrationAttempt(token: String, sessionId: String, serverUrl: String, attemptIndex: Int) {
+    private func scheduleRegistrationAttempt(
+        token: String, sessionId: String, serverUrl: String,
+        attemptIndex: Int, generation: UInt64
+    ) {
         guard attemptIndex < pushRegistrationRetryDelays.count else {
             logger.error(
                 "Push token registration exhausted retries (\(self.pushRegistrationRetryDelays.count, privacy: .public)); leaving pending record for later retry"
@@ -232,7 +271,10 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let delay = pushRegistrationRetryDelays[attemptIndex]
         let work: () -> Void = { [weak self] in
-            self?.attemptRegistration(token: token, sessionId: sessionId, serverUrl: serverUrl, attemptIndex: attemptIndex)
+            self?.attemptRegistration(
+                token: token, sessionId: sessionId, serverUrl: serverUrl,
+                attemptIndex: attemptIndex, generation: generation
+            )
         }
         if delay == 0 {
             DispatchQueue.global(qos: .utility).async(execute: work)
@@ -241,14 +283,27 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    private func attemptRegistration(token: String, sessionId: String, serverUrl: String, attemptIndex: Int) {
-        // Bail if the session changed mid-flight. A stale retry from a
-        // previously active session must not be allowed to clobber the current
-        // session's registration.
-        let activeSessionId = tokenQueue.sync { _currentSessionId }
-        if let activeSessionId, activeSessionId != sessionId {
+    private func attemptRegistration(
+        token: String, sessionId: String, serverUrl: String,
+        attemptIndex: Int, generation: UInt64
+    ) {
+        // Treat both a session-mismatch AND a nil active session as "abort":
+        // nil means `endSession` has already cleared module state, so an
+        // in-flight retry must not re-register a token for a session the user
+        // has just left. A superseding `registerPushTokenWithBackend` call
+        // also aborts us via the generation counter.
+        let (activeSessionId, activeGeneration) = tokenQueue.sync {
+            (_currentSessionId, _activeRegistrationGeneration)
+        }
+        guard activeSessionId == sessionId else {
             logger.info(
-                "Aborting stale push token registration: active session is \(activeSessionId, privacy: .public), retry was for \(sessionId, privacy: .public)"
+                "Aborting stale push token registration: active session is \(activeSessionId ?? "nil", privacy: .public), retry was for \(sessionId, privacy: .public)"
+            )
+            return
+        }
+        guard activeGeneration == generation else {
+            logger.info(
+                "Aborting superseded push token registration (generation \(generation, privacy: .public) < \(activeGeneration, privacy: .public))"
             )
             return
         }
@@ -289,7 +344,6 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self else { return }
 
-            // Treat network errors, non-2xx HTTP, and GraphQL errors as failures.
             var failureReason: String?
             if let error = error {
                 failureReason = error.localizedDescription
@@ -306,7 +360,10 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
                     self.logger.warning(
                         "Push token registration attempt \(attemptIndex + 1, privacy: .public) failed (\(failureReason, privacy: .public)); retrying in \(self.pushRegistrationRetryDelays[nextAttemptIndex], privacy: .public)s"
                     )
-                    self.scheduleRegistrationAttempt(token: token, sessionId: sessionId, serverUrl: serverUrl, attemptIndex: nextAttemptIndex)
+                    self.scheduleRegistrationAttempt(
+                        token: token, sessionId: sessionId, serverUrl: serverUrl,
+                        attemptIndex: nextAttemptIndex, generation: generation
+                    )
                 } else {
                     self.logger.error(
                         "Push token registration failed after \(self.pushRegistrationRetryDelays.count, privacy: .public) attempts (\(failureReason, privacy: .public)); pending record retained for foreground retry"
@@ -315,28 +372,41 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
 
-            self.clearPendingRegistration()
+            // Only clear the pending record if it still describes this
+            // (token, sessionId). A later startSession may have already
+            // written a fresh record we mustn't wipe.
+            self.clearPendingRegistrationIfMatches(token: token, sessionId: sessionId)
             self.logger.info("Push token registered with backend (attempt \(attemptIndex + 1, privacy: .public))")
         }.resume()
     }
 
     /// Trigger another registration attempt from any persisted pending record.
     /// Called on app foreground and on WebSocket reconnect.
+    ///
+    /// If the pending record is for a different session than the currently
+    /// active one (force-quit during session A, started session B), drop the
+    /// orphan rather than letting it accumulate in the keychain across
+    /// installs.
     private func retryPendingRegistrationIfNeeded(trigger: String) {
         guard let pending = readPendingRegistration() else { return }
         let activeSessionId = tokenQueue.sync { _currentSessionId }
         if let activeSessionId, activeSessionId != pending.sessionId {
             logger.info(
-                "Skipping pending push registration (\(trigger, privacy: .public)): active session \(activeSessionId, privacy: .public) ≠ pending \(pending.sessionId, privacy: .public)"
+                "Discarding orphan pending push registration (\(trigger, privacy: .public)): active session \(activeSessionId, privacy: .public) ≠ pending \(pending.sessionId, privacy: .public)"
             )
+            clearPendingRegistration()
+            return
+        }
+        if activeSessionId == nil {
+            // No session is active — nothing to register against. Wait for
+            // the next startSession to either re-register or clear.
             return
         }
         logger.info("Retrying pending push token registration (\(trigger, privacy: .public))")
-        scheduleRegistrationAttempt(
+        registerPushTokenWithBackend(
             token: pending.token,
             sessionId: pending.sessionId,
-            serverUrl: pending.serverUrl,
-            attemptIndex: 0
+            serverUrl: pending.serverUrl
         )
     }
 

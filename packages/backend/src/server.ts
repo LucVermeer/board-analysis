@@ -24,8 +24,8 @@ import { warmRecentBetaLinksCache } from './graphql/resolvers/beta-videos/querie
 import { initializeApns, shutdownApns, sendLiveActivityUpdate, isApnsConfigured } from './services/apns';
 import { startApnsHeartbeat, stopApnsHeartbeat } from './services/apns/heartbeat';
 import { startApnsStaleTokenCleanup, stopApnsStaleTokenCleanup } from './services/apns/cleanup';
+import { buildContentStateFromQueueState } from './services/apns/content-state';
 import type { QueueEvent } from '@boardsesh/shared-schema';
-import type { LiveActivityContentState } from './services/apns';
 
 /**
  * Start the Boardsesh Backend server
@@ -139,8 +139,9 @@ export async function startServer(): Promise<ServerResources> {
     console.info(`[Server] APNs configured for instance ${instanceId}`);
     // Heartbeat keeps the lock-screen Live Activity alive during long idle
     // periods. The 90-s tick re-sends the latest content state for every
-    // session with at least one registered push token.
-    startApnsHeartbeat(roomManager);
+    // session with at least one registered push token. Only one instance in
+    // the cluster runs the sweep on any given tick (Redis lock).
+    startApnsHeartbeat(roomManager, instanceId);
     // Periodic cleanup of week-old push tokens that never had a chance to
     // bounce back as stale via a real send.
     startApnsStaleTokenCleanup();
@@ -153,36 +154,48 @@ export async function startServer(): Promise<ServerResources> {
     );
   }
 
-  // F10: multi-instance APNs configuration sanity check. Each instance writes
-  // its own configured/unconfigured marker to Redis with a 60-s TTL refresh.
-  // If any peer is configured but we are not (or vice-versa) we escalate the
-  // log to ERROR so a half-rolled-out deploy doesn't silently lose pushes.
+  // Multi-instance APNs configuration sanity check. Each instance writes its
+  // own configured/unconfigured marker to a shared Redis hash. If any peer is
+  // configured but we are not (or vice-versa), escalate to ERROR so a
+  // half-rolled-out deploy doesn't silently lose pushes. Stored as a single
+  // hash with HSET + HGETALL so reads are O(1) round-trips regardless of
+  // cluster size, and stale entries time out via per-field expiry simulation
+  // (instance writes its own value every 30 s; markers older than 60 s are
+  // ignored by the freshness check below).
   if (redisClientManager.isRedisConfigured()) {
-    const APNS_INSTANCE_KEY_PREFIX = 'boardsesh:apns:instance-config:';
-    const APNS_INSTANCE_TTL_SEC = 60;
+    const APNS_INSTANCE_HASH_KEY = 'boardsesh:apns:instance-config';
+    const APNS_INSTANCE_STALE_MS = 60 * 1000;
     const APNS_INSTANCE_REFRESH_MS = 30 * 1000;
 
     async function refreshApnsInstanceConfigMarker(): Promise<void> {
       if (!redisClientManager.isRedisConnected()) return;
       try {
         const { publisher } = redisClientManager.getClients();
-        const key = `${APNS_INSTANCE_KEY_PREFIX}${instanceId}`;
-        await publisher.set(key, isApnsConfigured() ? '1' : '0', 'EX', APNS_INSTANCE_TTL_SEC);
+        const now = Date.now();
+        const value = JSON.stringify({ configured: isApnsConfigured(), ts: now });
+        await publisher.hset(APNS_INSTANCE_HASH_KEY, instanceId, value);
 
-        // Scan peers and detect mixed configuration.
-        let cursor = '0';
+        const all = await publisher.hgetall(APNS_INSTANCE_HASH_KEY);
         let configuredPeers = 0;
         let unconfiguredPeers = 0;
-        do {
-          const [next, keys] = await publisher.scan(cursor, 'MATCH', `${APNS_INSTANCE_KEY_PREFIX}*`, 'COUNT', 100);
-          cursor = next;
-          for (const peerKey of keys) {
-            if (peerKey === key) continue;
-            const value = await publisher.get(peerKey);
-            if (value === '1') configuredPeers++;
-            else if (value === '0') unconfiguredPeers++;
+        const stalePeers: string[] = [];
+        for (const [peerId, raw] of Object.entries(all)) {
+          if (peerId === instanceId) continue;
+          try {
+            const parsed = JSON.parse(raw) as { configured: boolean; ts: number };
+            if (now - parsed.ts > APNS_INSTANCE_STALE_MS) {
+              stalePeers.push(peerId);
+              continue;
+            }
+            if (parsed.configured) configuredPeers++;
+            else unconfiguredPeers++;
+          } catch {
+            stalePeers.push(peerId);
           }
-        } while (cursor !== '0');
+        }
+        if (stalePeers.length > 0) {
+          await publisher.hdel(APNS_INSTANCE_HASH_KEY, ...stalePeers);
+        }
 
         if (isApnsConfigured() && unconfiguredPeers > 0) {
           console.error(
@@ -200,9 +213,6 @@ export async function startServer(): Promise<ServerResources> {
       }
     }
 
-    // Fire once shortly after startup, then on the refresh interval. The
-    // initial delay lets other instances boot and write their markers so the
-    // first check sees a stable picture.
     const initialApnsConfigDelay = setTimeout(() => {
       refreshApnsInstanceConfigMarker().catch((err) => {
         console.warn('[APNs] Initial config marker refresh failed:', err);
@@ -242,23 +252,8 @@ export async function startServer(): Promise<ServerResources> {
     void (async () => {
       try {
         const queueState = await roomManager.getQueueState(sessionId);
-        const { queue, currentClimbQueueItem } = queueState;
-
-        if (!currentClimbQueueItem) return;
-
-        const currentIndex = queue.findIndex((item) => item.uuid === currentClimbQueueItem.uuid);
-
-        const contentState: LiveActivityContentState = {
-          climbName: currentClimbQueueItem.climb.name,
-          climbDifficulty: currentClimbQueueItem.climb.difficulty,
-          angle: currentClimbQueueItem.climb.angle,
-          currentIndex: currentIndex >= 0 ? currentIndex : 0,
-          totalClimbs: queue.length,
-          hasNext: currentIndex < queue.length - 1,
-          hasPrevious: currentIndex > 0,
-          climbUuid: currentClimbQueueItem.climb.uuid,
-        };
-
+        const contentState = buildContentStateFromQueueState(queueState);
+        if (!contentState) return;
         sendLiveActivityUpdate(sessionId, contentState);
       } catch (error) {
         console.error(`[APNs Hook] Failed to send Live Activity update for session ${sessionId}:`, error);

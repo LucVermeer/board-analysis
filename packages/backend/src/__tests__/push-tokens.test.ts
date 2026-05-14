@@ -218,6 +218,22 @@ describe('registerActivityPushToken', () => {
     );
   });
 
+  it('does NOT fire an immediate APNs send when APNs is not configured', async () => {
+    // Default mock returns false; this test makes that contract explicit so a
+    // regression in the `isApnsConfigured()` guard would fail loudly.
+    isApnsConfiguredMock.mockReturnValue(false);
+
+    const result = await pushTokenMutations.registerActivityPushToken(
+      undefined,
+      { sessionId: SESSION_ID, token: VALID_TOKEN },
+      authedCtx(),
+    );
+
+    expect(result).toBe(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(sendLiveActivityUpdateToTokensMock).not.toHaveBeenCalled();
+  });
+
   it('logs a rebind warning when an existing token moves between sessions', async () => {
     existingTokenRows.mockReturnValue([{ sessionId: OTHER_SESSION_ID }]);
 

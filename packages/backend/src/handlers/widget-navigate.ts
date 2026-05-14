@@ -171,15 +171,10 @@ async function authenticateWidget(authHeader: string | undefined, sessionId: str
 export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResponse): Promise<void> {
   ensurePrunerRunning();
 
-  // CORS headers (allow the widget's URLSession to call this)
+  // CORS headers (allow the widget's URLSession to call this).
+  // applyCorsHeaders already replies 200 for OPTIONS preflight and returns
+  // false, so we short-circuit on that path.
   if (!applyCorsHeaders(req, res)) return;
-
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
 
   if (req.method !== 'POST') {
     res.writeHead(405, { 'Content-Type': 'application/json' });

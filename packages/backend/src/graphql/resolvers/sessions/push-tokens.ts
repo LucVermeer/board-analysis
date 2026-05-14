@@ -9,6 +9,7 @@ import {
   sendLiveActivityUpdateToTokens,
   type LiveActivityContentState,
 } from '../../../services/apns';
+import { buildContentStateFromQueueState } from '../../../services/apns/content-state';
 import { roomManager } from '../../../services/room-manager';
 
 /**
@@ -22,6 +23,15 @@ const APNS_TOKEN_PATTERN = /^[0-9a-fA-F]{32,128}$/;
 /** Per-session cap on registered push tokens. Bounds blast radius if a single
  *  session somehow accumulates many tokens (e.g. user reinstalls repeatedly). */
 const MAX_TOKENS_PER_SESSION = 8;
+
+/**
+ * Advisory-lock namespace for push-token operations. `pg_advisory_xact_lock`
+ * uses a global lock space, so two unrelated callers that hash to the same
+ * 32-bit key contend on the same lock. The two-int form namespaces the lock
+ * by an arbitrary first arg — `0x70757368` is ASCII "push". Any other
+ * advisory-lock user in this codebase should pick a distinct namespace.
+ */
+const PUSH_TOKEN_LOCK_NAMESPACE = 0x70757368;
 
 /**
  * Eviction freshness window. When the cap is hit we only evict tokens that
@@ -129,31 +139,10 @@ function describeSessionForLog(sessionId: string | null | undefined): string {
   return sessionId || '<missing>';
 }
 
-/**
- * Build a Live Activity content state from the current queue state for a
- * session, or null if the queue is empty / has no current item.
- *
- * Shared with the queue-event hook in server.ts; kept here as a small helper
- * so the resolver doesn't grow a manual dependency on roomManager internals.
- */
 async function buildContentStateForSession(sessionId: string): Promise<LiveActivityContentState | null> {
   try {
     const queueState = await roomManager.getQueueState(sessionId);
-    const currentItem = queueState.currentClimbQueueItem;
-    if (!currentItem) return null;
-
-    const currentIndex = queueState.queue.findIndex((item) => item.uuid === currentItem.uuid);
-
-    return {
-      climbName: currentItem.climb.name,
-      climbDifficulty: currentItem.climb.difficulty,
-      angle: currentItem.climb.angle,
-      currentIndex: currentIndex >= 0 ? currentIndex : 0,
-      totalClimbs: queueState.queue.length,
-      hasNext: currentIndex >= 0 && currentIndex < queueState.queue.length - 1,
-      hasPrevious: currentIndex > 0,
-      climbUuid: currentItem.climb.uuid,
-    };
+    return buildContentStateFromQueueState(queueState);
   } catch (error) {
     console.warn(`[APNs] Failed to build content state for session ${sessionId} during token registration:`, error);
     return null;
@@ -221,7 +210,7 @@ export const pushTokenMutations = {
     // error paths.
     try {
       await db.transaction(async (tx) => {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`);
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(${PUSH_TOKEN_LOCK_NAMESPACE}, hashtext(${sessionId}))`);
 
         // F4: detect token rebinding. Reading the existing row inside the
         // lock means we get a consistent before/after view in the same txn.

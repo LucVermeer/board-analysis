@@ -4,6 +4,11 @@ import { getApnsMetrics } from '../services/apns';
 
 const APNS_STATS_SECRET = process.env.APNS_STATS_SECRET;
 
+// The same identifier convention used by `server.ts` for the multi-instance
+// config marker. Including it in the response makes the endpoint useful in a
+// multi-instance deploy — without it you can't tell which node responded.
+const INSTANCE_ID = process.env.HOSTNAME || process.env.FLY_MACHINE_ID || 'local';
+
 /**
  * GET /api/internal/apns-stats
  *
@@ -15,12 +20,6 @@ const APNS_STATS_SECRET = process.env.APNS_STATS_SECRET;
  */
 export async function handleApnsStats(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!applyCorsHeaders(req, res)) return;
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
 
   if (req.method !== 'GET') {
     res.writeHead(405, { 'Content-Type': 'application/json' });
@@ -43,5 +42,5 @@ export async function handleApnsStats(req: IncomingMessage, res: ServerResponse)
   }
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(getApnsMetrics()));
+  res.end(JSON.stringify({ instanceId: INSTANCE_ID, ...getApnsMetrics() }));
 }
