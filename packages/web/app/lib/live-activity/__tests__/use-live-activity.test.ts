@@ -21,6 +21,20 @@ const mockEndLiveActivitySession = vi.fn<() => Promise<void>>(() => Promise.reso
 const mockUpdateLiveActivity = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const mockUpdateLiveActivityClimb = vi.fn<() => Promise<void>>(() => Promise.resolve());
 
+type MockWsAuthTokenResult = {
+  token: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+};
+
+const mockUseWsAuthToken = vi.fn<() => MockWsAuthTokenResult>(() => ({
+  token: 'test-auth-token',
+  isAuthenticated: true,
+  isLoading: false,
+  error: null,
+}));
+
 vi.mock('../live-activity-plugin', () => ({
   isLiveActivityAvailable: () => mockIsLiveActivityAvailable(),
   startLiveActivitySession: (...args: unknown[]) => mockStartLiveActivitySession(...(args as [])),
@@ -31,6 +45,10 @@ vi.mock('../live-activity-plugin', () => ({
 
 vi.mock('../../backend-url', () => ({
   getBackendWsUrl: () => 'ws://localhost:8080/graphql',
+}));
+
+vi.mock('@/app/hooks/use-ws-auth-token', () => ({
+  useWsAuthToken: () => mockUseWsAuthToken(),
 }));
 
 // Import after mocks are set up
@@ -149,6 +167,12 @@ describe('useLiveActivity', () => {
     mockIsNativeApp.mockReturnValue(false);
     mockGetPlatform.mockReturnValue('web');
     mockIsLiveActivityAvailable.mockResolvedValue(true);
+    mockUseWsAuthToken.mockReturnValue({
+      token: 'test-auth-token',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
   });
 
   it('does not call plugin on non-iOS platforms', async () => {
@@ -222,6 +246,7 @@ describe('useLiveActivity', () => {
     expect(mockStartLiveActivitySession).toHaveBeenCalledWith(
       expect.objectContaining({
         boardName: 'kilter',
+        authToken: 'test-auth-token',
         layoutId: 1,
         sizeId: 1,
       }),
@@ -472,6 +497,87 @@ describe('useLiveActivity', () => {
     // Effect 2 must have been suppressed — if effects were declared in reverse order
     // this assertion would fail because Effect 2 would fire before queueSyncedRef is set.
     expect(mockUpdateLiveActivityClimb).not.toHaveBeenCalled();
+
+    await hook.unmount();
+  });
+
+  it('waits for authenticated token resolution before starting Live Activity', async () => {
+    mockIsNativeApp.mockReturnValue(true);
+    mockGetPlatform.mockReturnValue('ios');
+    mockUseWsAuthToken.mockReturnValue({
+      token: null,
+      isAuthenticated: true,
+      isLoading: true,
+      error: null,
+    });
+
+    const item = makeQueueItem('1');
+    const hook = await renderLiveActivityHook({
+      ...defaultProps(),
+      queue: [item],
+      currentClimbQueueItem: item,
+      boardDetails: makeBoardDetails(),
+      isSessionActive: true,
+      sessionId: 'test-session',
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(mockStartLiveActivitySession).not.toHaveBeenCalled();
+
+    mockUseWsAuthToken.mockReturnValue({
+      token: 'resolved-auth-token',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+
+    await hook.rerender({});
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(mockStartLiveActivitySession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authToken: 'resolved-auth-token',
+      }),
+    );
+
+    await hook.unmount();
+  });
+
+  it('starts without authToken after a settled unauthenticated auth-token response', async () => {
+    mockIsNativeApp.mockReturnValue(true);
+    mockGetPlatform.mockReturnValue('ios');
+    mockUseWsAuthToken.mockReturnValue({
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: 'Failed to fetch auth token',
+    });
+
+    const item = makeQueueItem('1');
+    const hook = await renderLiveActivityHook({
+      ...defaultProps(),
+      queue: [item],
+      currentClimbQueueItem: item,
+      boardDetails: makeBoardDetails(),
+      isSessionActive: true,
+      sessionId: 'test-session',
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(mockStartLiveActivitySession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'test-session',
+        authToken: undefined,
+      }),
+    );
 
     await hook.unmount();
   });

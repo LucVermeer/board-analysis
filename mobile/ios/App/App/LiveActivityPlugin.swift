@@ -123,9 +123,14 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = jsonData
 
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
                 self?.logger.error("Failed to register push token: \(error.localizedDescription, privacy: .public)")
+            } else if let httpResponse = response as? HTTPURLResponse,
+                      !(200...299).contains(httpResponse.statusCode) {
+                self?.logger.error("Failed to register push token: HTTP \(httpResponse.statusCode, privacy: .public)")
+            } else if let graphQLError = Self.graphQLErrorMessage(from: data) {
+                self?.logger.error("Failed to register push token: \(graphQLError, privacy: .public)")
             } else {
                 self?.logger.info("Push token registered with backend")
             }
@@ -160,13 +165,34 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = jsonData
 
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
                 self?.logger.error("Failed to unregister push token: \(error.localizedDescription, privacy: .public)")
+            } else if let httpResponse = response as? HTTPURLResponse,
+                      !(200...299).contains(httpResponse.statusCode) {
+                self?.logger.error("Failed to unregister push token: HTTP \(httpResponse.statusCode, privacy: .public)")
+            } else if let graphQLError = Self.graphQLErrorMessage(from: data) {
+                self?.logger.error("Failed to unregister push token: \(graphQLError, privacy: .public)")
             } else {
                 self?.logger.info("Push token unregistered from backend")
             }
         }.resume()
+    }
+
+    private static func graphQLErrorMessage(from data: Data?) -> String? {
+        guard let data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let errors = json["errors"] as? [[String: Any]],
+              !errors.isEmpty
+        else {
+            return nil
+        }
+
+        let messages = errors.compactMap { $0["message"] as? String }
+        if messages.isEmpty {
+            return "GraphQL returned errors"
+        }
+        return messages.joined(separator: "; ")
     }
 
     // MARK: - isAvailable
@@ -228,7 +254,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.set(setIds, forKey: SharedConstants.setIdsKey)
         }
         if let authToken = authToken, !authToken.isEmpty {
-            SharedKeychain.set(authToken, for: SharedKeychain.authTokenKey)
+            if !SharedKeychain.set(authToken, for: SharedKeychain.authTokenKey) {
+                logger.error("Failed to write auth token to shared keychain")
+            }
         }
 
         // For party mode (real session), connect the WebSocket manager
@@ -288,7 +316,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             // Write the APNs push token to the shared keychain so the
             // widget extension can attach it as a Bearer header on
             // /api/widget/navigate calls.
-            SharedKeychain.set(token, for: SharedKeychain.livePushTokenKey)
+            if !SharedKeychain.set(token, for: SharedKeychain.livePushTokenKey) {
+                self.logger.error("Failed to write Live Activity push token to shared keychain")
+            }
             if let sessionId = sid, let serverUrl = surl {
                 self.registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)
             }

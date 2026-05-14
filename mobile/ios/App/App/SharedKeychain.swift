@@ -22,11 +22,26 @@ import Security
 /// - `ThisDeviceOnly` keeps it out of iCloud Keychain backups, since
 ///   these are short-lived per-session credentials.
 enum SharedKeychain {
-    /// Keychain access group declared in both `App.entitlements` and
-    /// `BoardseshWidgets.entitlements`. The `$(AppIdentifierPrefix)` is
-    /// resolved at build time to the team identifier; at runtime we pass
-    /// the bare group name and the OS resolves it from the entitlement.
-    private static let accessGroup = "group.com.boardsesh.app"
+    /// Keychain access group suffix declared in both `App.entitlements` and
+    /// `BoardseshWidgets.entitlements`.
+    private static let accessGroupSuffix = "group.com.boardsesh.app"
+    private static let fallbackAccessGroupPrefix = "9L3HKPZBH3."
+
+    /// Resolved keychain access group. Keychain queries need the fully
+    /// expanded entitlement value, including the app identifier prefix. The
+    /// build setting is expanded into both app and widget Info.plists so this
+    /// remains extension-safe.
+    private static let accessGroup: String = {
+        if let plistGroup = Bundle.main.object(forInfoDictionaryKey: "BoardseshKeychainAccessGroup") as? String,
+           !plistGroup.isEmpty,
+           !plistGroup.contains("$(")
+        {
+            return plistGroup
+        }
+
+        print("[SharedKeychain] Could not resolve expanded keychain group from Info.plist; falling back to project team")
+        return "\(fallbackAccessGroupPrefix)\(accessGroupSuffix)"
+    }()
 
     static let authTokenKey = "bs_auth_token"
     static let livePushTokenKey = "bs_live_push_token"
@@ -49,6 +64,7 @@ enum SharedKeychain {
             return true
         }
         if updateStatus != errSecItemNotFound {
+            logFailure("update", key: key, status: updateStatus)
             return false
         }
 
@@ -57,7 +73,11 @@ enum SharedKeychain {
             query[k] = v
         }
         let addStatus = SecItemAdd(query as CFDictionary, nil)
-        return addStatus == errSecSuccess
+        if addStatus != errSecSuccess {
+            logFailure("add", key: key, status: addStatus)
+            return false
+        }
+        return true
     }
 
     /// Read a string value from the shared keychain, or `nil` if absent.
@@ -69,6 +89,9 @@ enum SharedKeychain {
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         guard status == errSecSuccess, let data = result as? Data else {
+            if status != errSecItemNotFound {
+                logFailure("read", key: key, status: status)
+            }
             return nil
         }
         return String(data: data, encoding: .utf8)
@@ -77,7 +100,10 @@ enum SharedKeychain {
     /// Delete the value associated with `key`. No-op if absent.
     static func remove(_ key: String) {
         let query = baseQuery(for: key)
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            logFailure("delete", key: key, status: status)
+        }
     }
 
     // MARK: - Internals
@@ -88,5 +114,9 @@ enum SharedKeychain {
             kSecAttrAccount as String: key,
             kSecAttrAccessGroup as String: accessGroup,
         ]
+    }
+
+    private static func logFailure(_ operation: String, key: String, status: OSStatus) {
+        print("[SharedKeychain] \(operation) failed for \(key): OSStatus \(status)")
     }
 }
