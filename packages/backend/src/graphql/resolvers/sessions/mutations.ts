@@ -324,10 +324,17 @@ export const sessionMutations = {
       // Notify session about the stable participant leaving. The schema field
       // is named `userId` for historical reasons, but current clients compare
       // it with `SessionUser.id`, which is the stable participant ID.
-      pubsub.publishSessionEvent(sessionId, {
-        __typename: 'UserLeft',
-        userId: result.participantId || participantId || ctx.connectionId,
-      });
+      //
+      // Only fire UserLeft when the participant's last connection just left.
+      // If the user has another tab open in the same session (authenticated
+      // users share one participantId across tabs), suppress the broadcast —
+      // peers should keep seeing the participant.
+      if (result.participantFullyLeft) {
+        pubsub.publishSessionEvent(sessionId, {
+          __typename: 'UserLeft',
+          userId: result.participantId || participantId || ctx.connectionId,
+        });
+      }
 
       // Notify about new leader if changed
       if (result.newLeaderId) {

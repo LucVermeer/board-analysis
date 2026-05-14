@@ -486,6 +486,17 @@ export function useSessionLifecycle({
         const sessionData = await joinSession(clientForReconnect);
         if (!sessionData || !mountedRef.current) return;
 
+        // Match the initial `connect()` success path: reset both retry
+        // counters now that we know the rejoin succeeded. Otherwise a
+        // low-traffic session where every reconnect succeeds but no event
+        // arrives before the next disconnect accumulates strikes across
+        // recovery cycles and silently force-clears the session after
+        // MAX_TRANSIENT_RETRIES, even though every individual join was
+        // healthy. The next-handler reset only fires when an event arrives,
+        // which isn't guaranteed during a quiet window.
+        transientRetryCount = 0;
+        subscriptionRetryCount = 0;
+
         const currentSeq = sessionData.queueState.sequence;
         const gap = lastSeq !== null ? currentSeq - lastSeq : 0;
 

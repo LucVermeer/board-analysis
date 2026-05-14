@@ -296,16 +296,31 @@ export async function leaveSession(
   // Elect new leader. This also atomically removes our connection from
   // distributed state, so the post-leave membership re-check below sees
   // an accurate global view.
+  //
+  // Multi-tab handling: an authenticated user opening the same session in
+  // two tabs shares one `participantId` (their userId). Clicking "Leave" on
+  // one tab must NOT wipe the other tab's participant entry. We drop only
+  // this connection from the participant and let the entry persist if any
+  // sibling connection remains. The participant is fully torn down only
+  // when its connection set hits zero.
   const participants = sessionParticipants.get(sessionId);
   const participant = participants?.get(participantId);
+  let participantBecameEmpty = false;
   if (participant) {
-    if (participant.reconnectTimer) {
-      clearTimeout(participant.reconnectTimer);
+    participant.connectionIds.delete(connectionId);
+    if (participant.connectionIds.size === 0) {
+      if (participant.reconnectTimer) {
+        clearTimeout(participant.reconnectTimer);
+      }
+      participants?.delete(participantId);
+      if (participants?.size === 0) {
+        sessionParticipants.delete(sessionId);
+      }
+      participantBecameEmpty = true;
     }
-    participants?.delete(participantId);
-    if (participants?.size === 0) {
-      sessionParticipants.delete(sessionId);
-    }
+  } else {
+    // Local view doesn't know this participant; treat as drained.
+    participantBecameEmpty = true;
   }
   let newLeaderId: string | undefined;
   let newLeaderParticipantId: string | undefined;
@@ -320,7 +335,17 @@ export async function leaveSession(
         localNewLeader.isLeader = true;
       }
     }
-    await distributedState.removeParticipant(sessionId, participantId);
+    if (participantBecameEmpty) {
+      // No more connections for this participant — tear down the participant
+      // entry and broadcast UserLeft to peers.
+      await distributedState.removeParticipant(sessionId, participantId);
+    } else {
+      // Sibling tab still in the session — only detach this connection.
+      // `removeParticipantConnection` is atomic via Lua: SREM the connection
+      // from the participant's set; if the set just hit zero, delete the
+      // participant entry.
+      await distributedState.removeParticipantConnection(sessionId, participantId, connectionId);
+    }
   } else if (wasLeader && sessionClientIds && sessionClientIds.size > 0) {
     const clientsArray = Array.from(sessionClientIds)
       .map((id) => clients.get(id))
@@ -396,7 +421,13 @@ export async function leaveSession(
     }
   }
 
-  return { sessionId, participantId, newLeaderId, newLeaderParticipantId };
+  return {
+    sessionId,
+    participantId,
+    newLeaderId,
+    newLeaderParticipantId,
+    participantFullyLeft: participantBecameEmpty,
+  };
 }
 
 /**
@@ -608,6 +639,14 @@ export type SessionLeaveResult = {
   participantId?: string;
   newLeaderId?: string;
   newLeaderParticipantId?: string;
+  /**
+   * True when this leave drained the last connection for the participant —
+   * peers should see a `UserLeft` event. False when the participant still has
+   * sibling connections (e.g. another tab open as the same authenticated
+   * user); in that case the leave is per-tab and peers should not be told
+   * the user departed.
+   */
+  participantFullyLeft: boolean;
 };
 
 export type SessionDisconnectResult = {

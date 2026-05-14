@@ -52,6 +52,16 @@ export async function joinSession(
     avatarUrl !== undefined ? avatarUrl || '' : UNSET_SENTINEL,
   )) as number;
 
+  // -1 means the connection hash was reaped between registerClient and join
+  // (TTL expiry, manual cleanup, etc.). The caller has to re-register first;
+  // surfacing a typed error lets graphql-yoga return a transient-join error
+  // that the client's lifecycle hook already knows how to recover from.
+  if (becameLeader === -1) {
+    throw new Error(
+      `[DistributedState] joinSession refused for ${connectionId.slice(0, 8)}: connection hash missing (reaped). Re-register and retry.`,
+    );
+  }
+
   if (becameLeader === 1) {
     console.info(
       `[DistributedState] Connection ${connectionId.slice(0, 8)} became leader of session ${sessionId.slice(0, 8)}`,
@@ -152,8 +162,13 @@ async function leaveSessionFallback(
       const currentLeader = await redis.get(KEYS.sessionLeader(sessionId));
       const wasLeader = currentLeader === connectionId;
 
+      // Mirror the Lua-side guard: only touch the connection hash if it still
+      // exists, otherwise the HMSET would resurrect a zombie key without TTL.
+      const connectionExists = (await redis.exists(KEYS.connection(connectionId))) === 1;
       const multi = redis.multi();
-      multi.hmset(KEYS.connection(connectionId), { sessionId: '', participantId: '', isLeader: 'false' });
+      if (connectionExists) {
+        multi.hmset(KEYS.connection(connectionId), { sessionId: '', participantId: '', isLeader: 'false' });
+      }
       multi.srem(KEYS.sessionMembers(sessionId), connectionId);
       const execResult = await multi.exec();
 
@@ -460,7 +475,7 @@ async function getConnectionForParticipantCleanup(
   return hashToConnection(data);
 }
 
-async function removeParticipantConnection(
+export async function removeParticipantConnection(
   redis: Redis,
   sessionId: string,
   participantId: string,

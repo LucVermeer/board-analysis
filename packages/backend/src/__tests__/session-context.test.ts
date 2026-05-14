@@ -170,6 +170,10 @@ describe('leaveSession publishes UserLeft with the stable participant ID', () =>
       sessionId: 'session-aaaa-bbbb-cccc-dddd',
       participantId: realUserId,
       newLeaderId: undefined,
+      // participant had only this connection; UserLeft should fire. (When
+      // false — e.g. a sibling tab still in the session — the resolver
+      // intentionally suppresses the broadcast.)
+      participantFullyLeft: true,
     });
     const ctx: ConnectionContext = {
       connectionId: 'ws-conn-abc-123',
@@ -206,6 +210,7 @@ describe('leaveSession publishes UserLeft with the stable participant ID', () =>
       sessionId: 'session-zzzz',
       participantId: 'anon-stable-participant',
       newLeaderId: undefined,
+      participantFullyLeft: true,
     });
     const ctx: ConnectionContext = {
       connectionId: 'ws-conn-anon-456',

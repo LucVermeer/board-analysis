@@ -106,8 +106,14 @@ export const LEAVE_SESSION_SCRIPT = `
   local currentLeader = redis.call('GET', leaderKey)
   local wasLeader = (currentLeader == connectionId)
 
-  -- Update connection state
-  redis.call('HMSET', connKey, 'sessionId', '', 'participantId', '', 'isLeader', 'false')
+  -- Update connection state, but only if the hash still exists. An
+  -- unconditional HMSET would resurrect a deleted connection hash with no
+  -- TTL and no connectionId field, leaving a zombie key that leaks forever.
+  -- A concurrent removeConnection on another instance (e.g. WS disconnect
+  -- racing this leave) may already have deleted it.
+  if redis.call('EXISTS', connKey) == 1 then
+    redis.call('HMSET', connKey, 'sessionId', '', 'participantId', '', 'isLeader', 'false')
+  end
 
   -- Remove from session members
   redis.call('SREM', sessionMembersKey, connectionId)
@@ -175,6 +181,15 @@ export const JOIN_SESSION_SCRIPT = `
   local username = ARGV[5]
   local avatarUrl = ARGV[6]
   local UNSET = '__UNSET__'
+
+  -- Refuse to join if the connection hash has been reaped (TTL, manual DEL,
+  -- or instance cleanup). HSETs on a missing key would resurrect it as a
+  -- partial hash without connectionId / instanceId / connectedAt and (after
+  -- the EXPIRE) with a fresh TTL. Better to fail fast and let the caller
+  -- re-register.
+  if redis.call('EXISTS', connKey) == 0 then
+    return -1
+  end
 
   -- Update connection with session info
   redis.call('HSET', connKey, 'sessionId', sessionId)

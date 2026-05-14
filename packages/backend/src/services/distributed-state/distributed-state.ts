@@ -17,6 +17,7 @@ import {
   cleanupEmptySession,
   markParticipantPresence,
   removeParticipant,
+  removeParticipantConnection,
 } from './session-ops';
 import {
   updateHeartbeat,
@@ -221,6 +222,16 @@ export class DistributedStateManager {
   /** Remove a stable participant from a session. */
   async removeParticipant(sessionId: string, participantId: string): Promise<void> {
     return removeParticipant(this.redis, sessionId, participantId);
+  }
+
+  /**
+   * Remove a single connection from a participant's connection set. If that was
+   * the participant's last connection, atomically tear down the participant
+   * entry. Used by explicit-leave: clicking "Leave" on one tab must not wipe
+   * the user's other tabs that are still in the session.
+   */
+  async removeParticipantConnection(sessionId: string, participantId: string, connectionId: string): Promise<void> {
+    return removeParticipantConnection(this.redis, sessionId, participantId, connectionId);
   }
 
   /**

@@ -16,7 +16,6 @@ import {
   parseGraphQLSchema,
   graphqlTypeToCpp,
   generateCppStruct,
-  generateHeader,
   TYPE_MAP,
   FIELD_TYPE_OVERRIDES,
   CONTROLLER_TYPES,
