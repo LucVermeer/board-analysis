@@ -7,16 +7,22 @@
  * - Bad token format is rejected.
  * - Authenticated participant + good token succeeds.
  * - The unregister DELETE is scoped by both token AND sessionId.
+ * - Token rebind is detected and logged.
+ * - Eviction respects the 1-hour freshness window.
+ * - An immediate APNs push is fired for the just-registered token.
  */
 
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
+import { activityPushTokens } from '@boardsesh/db/schema/app';
+import { boardSessionParticipants } from '../db/schema';
 
 // ---------------------------------------------------------------------------
 // Mocks — exercised before the resolver is imported.
 // ---------------------------------------------------------------------------
 
 const participantRows = vi.fn<() => Array<{ sessionId: string }>>(() => []);
+const existingTokenRows = vi.fn<() => Array<{ sessionId: string }>>(() => []);
 const countRows = vi.fn<() => Array<{ value: number }>>(() => [{ value: 0 }]);
 const oldestTokenRows = vi.fn<() => Array<{ token: string }>>(() => []);
 const oldestLimit = vi.fn<(_n: number) => Promise<Array<{ token: string }>>>(async (_n) => oldestTokenRows());
@@ -27,18 +33,28 @@ const insertValuesReturn = { onConflictDoUpdate: insertOnConflictDoUpdate };
 const insertReturn = { values: vi.fn(() => insertValuesReturn) };
 
 vi.mock('../db/client', () => {
-  const limit = vi.fn(async (_n: number) => participantRows());
-
-  // Drizzle-style chain: select().from().where().limit() OR
-  //                     select({...count}).from().where()
+  // Drizzle-style chain: select().from(table).where().limit() OR
+  //                     select(...).from(table).where()   (thenable for count)
+  //                     select(...).from(table).where().orderBy(...).limit() (oldest)
+  //
+  // The chain remembers which table was passed to from(...) so .limit(1) can
+  // dispatch to the right mocked row source: `boardSessionParticipants` →
+  // participantRows (the participant lookup), `activityPushTokens` →
+  // existingTokenRows (the rebind lookup inside the transaction).
   function makeSelectChain() {
+    let currentTable: unknown = null;
     const chain: Record<string, unknown> = {};
-    chain.from = vi.fn(() => chain);
+    chain.from = vi.fn((table: unknown) => {
+      currentTable = table;
+      return chain;
+    });
     chain.where = vi.fn(() => {
-      // For count(): the `where()` is awaited directly. We hand back a thenable.
-      // For participant: a `.limit()` call is appended.
       const result: Record<string, unknown> = {};
-      result.limit = limit;
+      result.limit = vi.fn(async (_n: number) => {
+        if (currentTable === activityPushTokens) return existingTokenRows();
+        if (currentTable === boardSessionParticipants) return participantRows();
+        return [];
+      });
       result.orderBy = vi.fn(() => ({
         limit: oldestLimit,
       }));
@@ -54,11 +70,12 @@ vi.mock('../db/client', () => {
     select: vi.fn(() => makeSelectChain()),
     insert: vi.fn(() => insertReturn),
     delete: vi.fn(() => ({ where: deleteWhere })),
-    // The resolver runs count + delete + insert inside `db.transaction(...)`
-    // under a Postgres advisory lock. The mock transaction just exposes the
-    // same surface and invokes the callback synchronously — `execute` is a
-    // no-op here because the tests don't care about the lock SQL itself,
-    // only about the chained select/delete/insert calls.
+    // The resolver runs the rebind lookup, count, optional eviction and the
+    // insert inside `db.transaction(...)` under a Postgres advisory lock. The
+    // mock transaction just exposes the same surface and invokes the callback
+    // synchronously — `execute` is a no-op here because the tests don't care
+    // about the lock SQL itself, only about the chained select/delete/insert
+    // calls.
     transaction: vi.fn(
       async <T>(callback: (tx: typeof db & { execute: (q: unknown) => Promise<void> }) => Promise<T>): Promise<T> => {
         const tx = {
@@ -72,6 +89,27 @@ vi.mock('../db/client', () => {
 
   return { db };
 });
+
+// Stub the APNs service so the resolver's immediate-send-on-register branch
+// can be observed without touching real APNs state.
+const sendLiveActivityUpdateToTokensMock = vi.fn(async () => undefined);
+const isApnsConfiguredMock = vi.fn(() => false);
+const incrementApnsMetricMock = vi.fn();
+
+vi.mock('../services/apns', () => ({
+  isApnsConfigured: () => isApnsConfiguredMock(),
+  sendLiveActivityUpdateToTokens: sendLiveActivityUpdateToTokensMock,
+  incrementApnsMetric: incrementApnsMetricMock,
+}));
+
+vi.mock('../services/room-manager', () => ({
+  roomManager: {
+    getQueueState: vi.fn(async () => ({
+      queue: [{ uuid: 'q1', climb: { uuid: 'c1', name: 'Test', difficulty: 'V5', angle: 40 } }],
+      currentClimbQueueItem: { uuid: 'q1', climb: { uuid: 'c1', name: 'Test', difficulty: 'V5', angle: 40 } },
+    })),
+  },
+}));
 
 const { pushTokenMutations, __resetPushTokenRateLimitForTests } =
   await import('../graphql/resolvers/sessions/push-tokens');
@@ -87,6 +125,7 @@ const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => unde
 const VALID_TOKEN = 'a'.repeat(64); // 64 hex chars
 const INVALID_TOKEN = 'not-a-real-hex-token';
 const SESSION_ID = 'session-test-1';
+const OTHER_SESSION_ID = 'session-test-2';
 const USER_ID = 'user-test-1';
 
 function authedCtx(userId = USER_ID): ConnectionContext {
@@ -107,6 +146,16 @@ function anonCtx(): ConnectionContext {
   };
 }
 
+function resetAllMocks(): void {
+  vi.clearAllMocks();
+  __resetPushTokenRateLimitForTests();
+  participantRows.mockReturnValue([{ sessionId: SESSION_ID }]);
+  existingTokenRows.mockReturnValue([]);
+  countRows.mockReturnValue([{ value: 0 }]);
+  oldestTokenRows.mockReturnValue([]);
+  isApnsConfiguredMock.mockReturnValue(false);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -119,11 +168,7 @@ afterAll(() => {
 
 describe('registerActivityPushToken', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    __resetPushTokenRateLimitForTests();
-    participantRows.mockReturnValue([{ sessionId: SESSION_ID }]);
-    countRows.mockReturnValue([{ value: 0 }]);
-    oldestTokenRows.mockReturnValue([]);
+    resetAllMocks();
   });
 
   it('rejects unauthenticated callers', async () => {
@@ -173,7 +218,56 @@ describe('registerActivityPushToken', () => {
     );
   });
 
-  it('evicts oldest tokens when the per-session cap is reached', async () => {
+  it('does NOT fire an immediate APNs send when APNs is not configured', async () => {
+    // Default mock returns false; this test makes that contract explicit so a
+    // regression in the `isApnsConfigured()` guard would fail loudly.
+    isApnsConfiguredMock.mockReturnValue(false);
+
+    const result = await pushTokenMutations.registerActivityPushToken(
+      undefined,
+      { sessionId: SESSION_ID, token: VALID_TOKEN },
+      authedCtx(),
+    );
+
+    expect(result).toBe(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(sendLiveActivityUpdateToTokensMock).not.toHaveBeenCalled();
+  });
+
+  it('logs a rebind warning when an existing token moves between sessions', async () => {
+    existingTokenRows.mockReturnValue([{ sessionId: OTHER_SESSION_ID }]);
+
+    const result = await pushTokenMutations.registerActivityPushToken(
+      undefined,
+      { sessionId: SESSION_ID, token: VALID_TOKEN },
+      authedCtx(),
+    );
+
+    expect(result).toBe(true);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      `[APNs] Rebound token ${VALID_TOKEN.slice(0, 8)}... from session ${OTHER_SESSION_ID} → ${SESSION_ID} (user ${USER_ID})`,
+    );
+    expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensRebound');
+  });
+
+  it('does not evict when at cap but oldest token is fresh (within 1h)', async () => {
+    // Cap is 8; we report a count of 9 (over cap) but the freshness-filtered
+    // SELECT returns no eviction candidates because every token was updated
+    // in the last hour. The resolver should refuse instead of evicting.
+    countRows.mockReturnValue([{ value: 9 }]);
+    oldestTokenRows.mockReturnValue([]); // no stale candidates
+
+    await expect(
+      pushTokenMutations.registerActivityPushToken(
+        undefined,
+        { sessionId: SESSION_ID, token: VALID_TOKEN },
+        authedCtx(),
+      ),
+    ).rejects.toThrow('Too many active devices');
+    expect(insertReturn.values).not.toHaveBeenCalled();
+  });
+
+  it('evicts oldest tokens when the per-session cap is reached and they are stale', async () => {
     const oldestTokens = [{ token: 'b'.repeat(64) }, { token: 'c'.repeat(64) }];
     countRows.mockReturnValue([{ value: 9 }]);
     oldestTokenRows.mockReturnValue(oldestTokens);
@@ -191,6 +285,46 @@ describe('registerActivityPushToken', () => {
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       `[APNs] Evicting 2 old Live Activity token(s) for session ${SESSION_ID}; cap is 8`,
     );
+    expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensEvicted');
+  });
+
+  it('does not enforce the cap when upserting an existing token in the same session', async () => {
+    // Rebind for the same session = no row growth = cap shouldn't apply even
+    // if we're already at 9.
+    existingTokenRows.mockReturnValue([{ sessionId: SESSION_ID }]);
+    countRows.mockReturnValue([{ value: 9 }]);
+    oldestTokenRows.mockReturnValue([]);
+
+    const result = await pushTokenMutations.registerActivityPushToken(
+      undefined,
+      { sessionId: SESSION_ID, token: VALID_TOKEN },
+      authedCtx(),
+    );
+
+    expect(result).toBe(true);
+    expect(insertOnConflictDoUpdate).toHaveBeenCalled();
+  });
+
+  it('triggers an immediate APNs send when APNs is configured', async () => {
+    isApnsConfiguredMock.mockReturnValue(true);
+    sendLiveActivityUpdateToTokensMock.mockResolvedValue(undefined);
+
+    const result = await pushTokenMutations.registerActivityPushToken(
+      undefined,
+      { sessionId: SESSION_ID, token: VALID_TOKEN },
+      authedCtx(),
+    );
+
+    expect(result).toBe(true);
+    // The immediate send is fire-and-forget; flush microtasks so the test
+    // observes the call.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(sendLiveActivityUpdateToTokensMock).toHaveBeenCalledWith(
+      SESSION_ID,
+      [VALID_TOKEN],
+      expect.objectContaining({ climbUuid: 'c1' }),
+      { source: 'registration' },
+    );
   });
 
   it('rejects empty sessionId or token', async () => {
@@ -205,9 +339,7 @@ describe('registerActivityPushToken', () => {
 
 describe('unregisterActivityPushToken', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    __resetPushTokenRateLimitForTests();
-    participantRows.mockReturnValue([{ sessionId: SESSION_ID }]);
+    resetAllMocks();
   });
 
   it('rejects unauthenticated callers', async () => {
@@ -260,11 +392,7 @@ describe('unregisterActivityPushToken', () => {
 
 describe('rate limiting', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    __resetPushTokenRateLimitForTests();
-    participantRows.mockReturnValue([{ sessionId: SESSION_ID }]);
-    countRows.mockReturnValue([{ value: 0 }]);
-    oldestTokenRows.mockReturnValue([]);
+    resetAllMocks();
     deleteWhere.mockResolvedValue(undefined);
   });
 

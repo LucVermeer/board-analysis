@@ -1,8 +1,16 @@
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { boardSessionParticipants } from '../../../db/schema';
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, lt, sql } from 'drizzle-orm';
 import { db } from '../../../db/client';
+import {
+  incrementApnsMetric,
+  isApnsConfigured,
+  sendLiveActivityUpdateToTokens,
+  type LiveActivityContentState,
+} from '../../../services/apns';
+import { buildContentStateFromQueueState } from '../../../services/apns/content-state';
+import { roomManager } from '../../../services/room-manager';
 
 /**
  * APNs ActivityKit device tokens are 32-byte values rendered as hex strings,
@@ -15,6 +23,25 @@ const APNS_TOKEN_PATTERN = /^[0-9a-fA-F]{32,128}$/;
 /** Per-session cap on registered push tokens. Bounds blast radius if a single
  *  session somehow accumulates many tokens (e.g. user reinstalls repeatedly). */
 const MAX_TOKENS_PER_SESSION = 8;
+
+/**
+ * Advisory-lock namespace for push-token operations. `pg_advisory_xact_lock`
+ * uses a global lock space, so two unrelated callers that hash to the same
+ * 32-bit key contend on the same lock. The two-int form namespaces the lock
+ * by an arbitrary first arg — `0x70757368` is ASCII "push". Any other
+ * advisory-lock user in this codebase should pick a distinct namespace.
+ */
+const PUSH_TOKEN_LOCK_NAMESPACE = 0x70757368;
+
+/**
+ * Eviction freshness window. When the cap is hit we only evict tokens that
+ * haven't been touched in over an hour, so a burst of fresh registrations
+ * cannot wipe an active device's still-valid token. If every slot is
+ * fresh-but-saturated (8 distinct active devices in one session), the new
+ * registration is rejected with a clear error and iOS retries later via the
+ * pending-registration flow in `LiveActivityPlugin.swift`.
+ */
+const EVICTION_FRESHNESS_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * Per-(userId, sessionId) token bucket protecting the push-token mutations
@@ -112,11 +139,25 @@ function describeSessionForLog(sessionId: string | null | undefined): string {
   return sessionId || '<missing>';
 }
 
+async function buildContentStateForSession(sessionId: string): Promise<LiveActivityContentState | null> {
+  try {
+    const queueState = await roomManager.getQueueState(sessionId);
+    return buildContentStateFromQueueState(queueState);
+  } catch (error) {
+    console.warn(`[APNs] Failed to build content state for session ${sessionId} during token registration:`, error);
+    return null;
+  }
+}
+
 export const pushTokenMutations = {
   /**
    * Register (upsert) an APNs device token for Live Activity push updates.
    * Requires authentication and that the caller is a participant in the session.
    * If the token already exists, updates the associated sessionId and updatedAt.
+   *
+   * On success, immediately dispatches a single APNs push to the newly
+   * registered token so the lock-screen widget shows real content instead of
+   * "Loading…" without waiting for the next organic queue event.
    */
   registerActivityPushToken: async (
     _: unknown,
@@ -158,41 +199,69 @@ export const pushTokenMutations = {
       throw new Error('Unauthorized: not a participant in this session');
     }
 
-    // Bound the number of tokens per session.
+    // Bound the number of tokens per session and detect rebinding.
     //
-    // Run count + delete + insert inside one transaction with a per-session
-    // Postgres advisory lock so concurrent registrations against the same
-    // session serialize at the lock. Without this, two requests could both
-    // observe currentCount = cap - 1, both skip the eviction, and both
+    // Run lookup + (optional) eviction + insert inside one transaction with a
+    // per-session Postgres advisory lock so concurrent registrations against
+    // the same session serialize at the lock. Without this, two requests could
+    // both observe currentCount = cap - 1, both skip the eviction, and both
     // insert, ending up at cap + 1. The advisory lock auto-releases at
     // transaction end (`_xact_` variant) so we don't have to clean up on
     // error paths.
     try {
       await db.transaction(async (tx) => {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`);
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(${PUSH_TOKEN_LOCK_NAMESPACE}, hashtext(${sessionId}))`);
+
+        // F4: detect token rebinding. Reading the existing row inside the
+        // lock means we get a consistent before/after view in the same txn.
+        const existingRows = await tx
+          .select({ sessionId: activityPushTokens.sessionId })
+          .from(activityPushTokens)
+          .where(eq(activityPushTokens.token, token))
+          .limit(1);
+        const previousSessionId = existingRows[0]?.sessionId ?? null;
+        if (previousSessionId && previousSessionId !== sessionId) {
+          incrementApnsMetric('tokensRebound');
+          console.warn(
+            `[APNs] Rebound token ${describeTokenForLog(token)} from session ${previousSessionId} → ${sessionId} (user ${ctx.userId})`,
+          );
+        }
 
         const [{ value: currentCount } = { value: 0 }] = await tx
           .select({ value: count() })
           .from(activityPushTokens)
           .where(eq(activityPushTokens.sessionId, sessionId));
 
-        if (currentCount >= MAX_TOKENS_PER_SESSION) {
+        // Only enforce the cap if this is a *new* registration for the
+        // session. A rebind/upsert of an existing token doesn't grow the row
+        // count, so it should never be blocked by the cap.
+        const isNewRegistration = previousSessionId !== sessionId;
+        if (isNewRegistration && currentCount >= MAX_TOKENS_PER_SESSION) {
           const evictionCount = currentCount - MAX_TOKENS_PER_SESSION + 1;
+          const freshnessCutoff = new Date(Date.now() - EVICTION_FRESHNESS_WINDOW_MS);
           const oldest = await tx
             .select({ token: activityPushTokens.token })
             .from(activityPushTokens)
-            .where(eq(activityPushTokens.sessionId, sessionId))
+            .where(and(eq(activityPushTokens.sessionId, sessionId), lt(activityPushTokens.updatedAt, freshnessCutoff)))
             .orderBy(activityPushTokens.updatedAt)
             .limit(evictionCount);
 
-          if (oldest.length > 0) {
+          if (oldest.length < evictionCount) {
+            // Every slot is occupied by a fresh registration. Refuse rather
+            // than evict a still-valid token. iOS will retry later.
             console.warn(
-              `[APNs] Evicting ${String(oldest.length)} old Live Activity token(s) for session ${sessionId}; cap is ${String(MAX_TOKENS_PER_SESSION)}`,
+              `[APNs] Refusing Live Activity token registration for session ${sessionId}: ` +
+                `all ${String(MAX_TOKENS_PER_SESSION)} slots used by tokens registered within the last hour`,
             );
+            throw new Error('Too many active devices for this session right now; please retry shortly');
           }
 
+          console.warn(
+            `[APNs] Evicting ${String(oldest.length)} old Live Activity token(s) for session ${sessionId}; cap is ${String(MAX_TOKENS_PER_SESSION)}`,
+          );
           for (const row of oldest) {
             await tx.delete(activityPushTokens).where(eq(activityPushTokens.token, row.token));
+            incrementApnsMetric('tokensEvicted');
           }
         }
 
@@ -218,7 +287,27 @@ export const pushTokenMutations = {
       throw error;
     }
 
+    incrementApnsMetric('tokensRegistered');
     console.info(`[APNs] Registered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
+
+    // F3: fire a single, debounce-bypassing APNs push to the newly registered
+    // token so the widget exits "Loading…" right away. Fire-and-forget — the
+    // resolver still returns `true` even if the immediate send fails, because
+    // the next queue event or the heartbeat loop will pick up the slack.
+    if (isApnsConfigured()) {
+      void (async () => {
+        const state = await buildContentStateForSession(sessionId);
+        if (!state) return;
+        try {
+          await sendLiveActivityUpdateToTokens(sessionId, [token], state, { source: 'registration' });
+        } catch (error) {
+          console.warn(
+            `[APNs] Failed initial Live Activity send for session ${sessionId} (${describeTokenForLog(token)}):`,
+            error,
+          );
+        }
+      })();
+    }
 
     return true;
   },

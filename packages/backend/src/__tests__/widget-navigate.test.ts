@@ -16,7 +16,11 @@ import { EventEmitter } from 'node:events';
 // Mocks (must be hoisted before importing the handler)
 // ---------------------------------------------------------------------------
 
-const tokenLookupRows = vi.fn<() => Array<{ token: string }>>(() => []);
+// The handler now looks up `(token,)` (not `(token, sessionId)`) so the
+// returned row's `sessionId` can distinguish "no row at all → 401" from
+// "row exists but bound to a different session → 410". The mock returns
+// `{sessionId}` rows accordingly.
+const tokenLookupRows = vi.fn<() => Array<{ sessionId: string }>>(() => []);
 
 vi.mock('../db/client', () => {
   function makeChain() {
@@ -159,7 +163,7 @@ describe('handleWidgetNavigate', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('returns 401 when bearer token is not registered for sessionId', async () => {
+  it('returns 401 when bearer token is not in the table at all', async () => {
     tokenLookupRows.mockReturnValue([]); // no matching row
     const req = makeRequest({
       method: 'POST',
@@ -172,8 +176,27 @@ describe('handleWidgetNavigate', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('returns 410 when bearer token is bound to a different sessionId', async () => {
+    // Token exists in the DB but is bound to a different session — signal
+    // the widget to re-register rather than silently 401.
+    tokenLookupRows.mockReturnValue([{ sessionId: 'session-other' }]);
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'next', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(410);
+    const parsed = JSON.parse(res.body) as { success: boolean; error: string };
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('re-register');
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it('returns 200 when bearer token is registered for sessionId', async () => {
-    tokenLookupRows.mockReturnValue([{ token: REGISTERED_TOKEN }]);
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID }]);
     const req = makeRequest({
       method: 'POST',
       authHeader: `Bearer ${REGISTERED_TOKEN}`,
@@ -189,7 +212,7 @@ describe('handleWidgetNavigate', () => {
   });
 
   it('returns 429 once the per-session token bucket is exhausted', async () => {
-    tokenLookupRows.mockReturnValue([{ token: REGISTERED_TOKEN }]);
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID }]);
 
     // Bucket capacity is 2 — first two requests allowed, third returns 429.
     for (let i = 0; i < 2; i++) {

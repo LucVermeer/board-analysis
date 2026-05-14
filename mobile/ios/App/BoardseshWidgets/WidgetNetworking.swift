@@ -41,10 +41,32 @@ enum WidgetNetworking {
 
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if statusCode == 200 {
                 return true
             }
-            print("[Widget] Navigation request failed with status \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+            if statusCode == 410 {
+                // The push token was rebound to a different session (the main
+                // app joined another session on the same device). Post the
+                // Darwin notification so the main app re-registers; do NOT
+                // clear the keychain entry. The Bearer is still the right
+                // APNs token — the backend just needs to update its
+                // (token, sessionId) mapping. Wiping the keychain here would
+                // turn subsequent widget calls into 401s (no Bearer), which
+                // do NOT trigger the Darwin notification, so the widget
+                // would silently fail until the foreground observer runs.
+                print("[Widget] Navigation request received 410; signaling re-registration")
+                let name = CFNotificationName(SharedConstants.pushRegistrationStaleNotification as CFString)
+                CFNotificationCenterPostNotification(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    name,
+                    nil,
+                    nil,
+                    true
+                )
+                return false
+            }
+            print("[Widget] Navigation request failed with status \(statusCode)")
             return false
         } catch {
             print("[Widget] Navigation request failed: \(error.localizedDescription)")

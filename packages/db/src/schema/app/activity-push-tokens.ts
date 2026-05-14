@@ -14,6 +14,11 @@ export const activityPushTokens = pgTable(
   },
   (table) => ({
     sessionIdx: index('activity_push_tokens_session_idx').on(table.sessionId),
+    // Supports the cluster-wide stale-token sweep in `apns/cleanup.ts`
+    // (`DELETE WHERE updated_at < cutoff`). The per-session eviction in
+    // `registerActivityPushToken` is served by the existing
+    // (session_id) index at the small row counts involved (≤8 per session).
+    updatedAtIdx: index('activity_push_tokens_updated_at_idx').on(table.updatedAt),
   }),
 );
 

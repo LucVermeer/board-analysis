@@ -33,7 +33,7 @@ Server-to-device (push updates):
        |
   roomManager.getQueueState() --> build ContentState
        |
-  apnsService.sendLiveActivityUpdate() (5s debounce)
+  apnsService.sendLiveActivityUpdate() (1s debounce)
        |
   Apple Push Notification Service (production)
        |
