@@ -253,10 +253,14 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.set(sizeId, forKey: SharedConstants.sizeIdKey)
             defaults.set(setIds, forKey: SharedConstants.setIdsKey)
         }
-        if let authToken = authToken, !authToken.isEmpty {
-            if !SharedKeychain.set(authToken, for: SharedKeychain.authTokenKey) {
+        if let authToken = authToken {
+            if authToken.isEmpty {
+                logger.warning("Skipping shared keychain auth token write: authToken was empty")
+            } else if !SharedKeychain.set(authToken, for: SharedKeychain.authTokenKey) {
                 logger.error("Failed to write auth token to shared keychain")
             }
+        } else {
+            logger.debug("Skipping shared keychain auth token write: authToken was not provided")
         }
 
         // For party mode (real session), connect the WebSocket manager

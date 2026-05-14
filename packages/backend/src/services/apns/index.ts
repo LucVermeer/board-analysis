@@ -156,9 +156,7 @@ async function sendNotification(
 ): Promise<void> {
   if (!provider || tokens.length === 0) return;
 
-  console.log(
-    `[APNs] Sending Live Activity ${event} for session ${sessionId} to ${String(tokens.length)} device(s)`,
-  );
+  console.log(`[APNs] Sending Live Activity ${event} for session ${sessionId} to ${String(tokens.length)} device(s)`);
 
   const notification = new apn.Notification();
   notification.topic = `${bundleId}.push-type.liveactivity`;
@@ -278,10 +276,11 @@ export function sendLiveActivityUpdate(sessionId: string, contentState: LiveActi
   if (existing) {
     // Replace the pending state but keep the existing timer
     existing.latestState = contentState;
+    console.info(`[APNs] Coalesced Live Activity update for session ${sessionId} into pending debounce`);
     return;
   }
 
-  console.info(`[APNs] Scheduled Live Activity update for session ${sessionId}`);
+  console.info(`[APNs] Queued Live Activity update for session ${sessionId}; waiting for debounce`);
 
   // Schedule a new send after the debounce window
   const timeout = setTimeout(() => {

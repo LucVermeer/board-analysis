@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 import Security
 
 /// Shared-access-group Keychain helper for credentials that the widget
@@ -22,25 +23,33 @@ import Security
 /// - `ThisDeviceOnly` keeps it out of iCloud Keychain backups, since
 ///   these are short-lived per-session credentials.
 enum SharedKeychain {
+    private static let logger = Logger(subsystem: "com.boardsesh.app", category: "SharedKeychain")
+
     /// Keychain access group suffix declared in both `App.entitlements` and
     /// `BoardseshWidgets.entitlements`.
     private static let accessGroupSuffix = "group.com.boardsesh.app"
-    private static let fallbackAccessGroupPrefix = "9L3HKPZBH3."
 
     /// Resolved keychain access group. Keychain queries need the fully
     /// expanded entitlement value, including the app identifier prefix. The
     /// build setting is expanded into both app and widget Info.plists so this
     /// remains extension-safe.
-    private static let accessGroup: String = {
-        if let plistGroup = Bundle.main.object(forInfoDictionaryKey: "BoardseshKeychainAccessGroup") as? String,
-           !plistGroup.isEmpty,
-           !plistGroup.contains("$(")
-        {
-            return plistGroup
+    private static let accessGroup: String? = {
+        guard let plistGroup = Bundle.main.object(forInfoDictionaryKey: "BoardseshKeychainAccessGroup") as? String else {
+            return unresolvedAccessGroup("missing BoardseshKeychainAccessGroup")
         }
 
-        print("[SharedKeychain] Could not resolve expanded keychain group from Info.plist; falling back to project team")
-        return "\(fallbackAccessGroupPrefix)\(accessGroupSuffix)"
+        let trimmedGroup = plistGroup.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedGroup.isEmpty else {
+            return unresolvedAccessGroup("empty BoardseshKeychainAccessGroup")
+        }
+        guard !trimmedGroup.contains("$(") else {
+            return unresolvedAccessGroup("unexpanded BoardseshKeychainAccessGroup: \(trimmedGroup)")
+        }
+        guard trimmedGroup.hasSuffix(accessGroupSuffix) else {
+            return unresolvedAccessGroup("unexpected BoardseshKeychainAccessGroup suffix: \(trimmedGroup)")
+        }
+
+        return trimmedGroup
     }()
 
     static let authTokenKey = "bs_auth_token"
@@ -53,7 +62,10 @@ enum SharedKeychain {
     @discardableResult
     static func set(_ value: String, for key: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
-        var query = baseQuery(for: key)
+        guard var query = baseQuery(for: key) else {
+            logUnavailable("set", key: key)
+            return false
+        }
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
@@ -82,7 +94,10 @@ enum SharedKeychain {
 
     /// Read a string value from the shared keychain, or `nil` if absent.
     static func get(_ key: String) -> String? {
-        var query = baseQuery(for: key)
+        guard var query = baseQuery(for: key) else {
+            logUnavailable("read", key: key)
+            return nil
+        }
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecReturnData as String] = true
 
@@ -99,7 +114,10 @@ enum SharedKeychain {
 
     /// Delete the value associated with `key`. No-op if absent.
     static func remove(_ key: String) {
-        let query = baseQuery(for: key)
+        guard let query = baseQuery(for: key) else {
+            logUnavailable("delete", key: key)
+            return
+        }
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
             logFailure("delete", key: key, status: status)
@@ -108,15 +126,36 @@ enum SharedKeychain {
 
     // MARK: - Internals
 
-    private static func baseQuery(for key: String) -> [String: Any] {
+    private static func baseQuery(for key: String) -> [String: Any]? {
+        guard let resolvedAccessGroup = accessGroup else { return nil }
+
         return [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
-            kSecAttrAccessGroup as String: accessGroup,
+            kSecAttrAccessGroup as String: resolvedAccessGroup,
         ]
     }
 
+    private static func unresolvedAccessGroup(_ reason: String) -> String? {
+        let message = "[SharedKeychain] Invalid keychain access group configuration: \(reason). " +
+            "Set BoardseshKeychainAccessGroup in each Info.plist to $(AppIdentifierPrefix)\(accessGroupSuffix)."
+        logger.fault("\(message, privacy: .public)")
+#if DEBUG
+        fatalError(message)
+#else
+        return nil
+#endif
+    }
+
+    private static func logUnavailable(_ operation: String, key: String) {
+        logger.error(
+            "[SharedKeychain] \(operation, privacy: .public) skipped for \(key, privacy: .public): keychain access group unavailable"
+        )
+    }
+
     private static func logFailure(_ operation: String, key: String, status: OSStatus) {
-        print("[SharedKeychain] \(operation) failed for \(key): OSStatus \(status)")
+        logger.error(
+            "[SharedKeychain] \(operation, privacy: .public) failed for \(key, privacy: .public): OSStatus \(String(status), privacy: .public)"
+        )
     }
 }

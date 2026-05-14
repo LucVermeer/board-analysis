@@ -9,7 +9,7 @@
  * - The unregister DELETE is scoped by both token AND sessionId.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 
 // ---------------------------------------------------------------------------
@@ -19,6 +19,7 @@ import type { ConnectionContext } from '@boardsesh/shared-schema';
 const participantRows = vi.fn<() => Array<{ sessionId: string }>>(() => []);
 const countRows = vi.fn<() => Array<{ value: number }>>(() => [{ value: 0 }]);
 const oldestTokenRows = vi.fn<() => Array<{ token: string }>>(() => []);
+const oldestLimit = vi.fn<(_n: number) => Promise<Array<{ token: string }>>>(async (_n) => oldestTokenRows());
 
 const insertOnConflictDoUpdate = vi.fn();
 const deleteWhere = vi.fn();
@@ -39,9 +40,10 @@ vi.mock('../db/client', () => {
       const result: Record<string, unknown> = {};
       result.limit = limit;
       result.orderBy = vi.fn(() => ({
-        limit: vi.fn(async (_n: number) => oldestTokenRows()),
+        limit: oldestLimit,
       }));
       // Make this object thenable so `await db.select().from().where()` resolves
+      // eslint-disable-next-line unicorn/no-thenable -- The Drizzle mock must be both awaitable and chainable.
       result.then = (onFulfilled: (rows: Array<{ value: number }>) => unknown) => onFulfilled(countRows());
       return result;
     });
@@ -74,6 +76,10 @@ vi.mock('../db/client', () => {
 const { pushTokenMutations, __resetPushTokenRateLimitForTests } =
   await import('../graphql/resolvers/sessions/push-tokens');
 
+const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -105,6 +111,12 @@ function anonCtx(): ConnectionContext {
 // Tests
 // ---------------------------------------------------------------------------
 
+afterAll(() => {
+  consoleInfoSpy.mockRestore();
+  consoleWarnSpy.mockRestore();
+  consoleErrorSpy.mockRestore();
+});
+
 describe('registerActivityPushToken', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,6 +130,9 @@ describe('registerActivityPushToken', () => {
     await expect(
       pushTokenMutations.registerActivityPushToken(undefined, { sessionId: SESSION_ID, token: VALID_TOKEN }, anonCtx()),
     ).rejects.toThrow('Authentication required');
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      `[APNs] Rejected Live Activity token registration for session ${SESSION_ID}: unauthenticated`,
+    );
   });
 
   it('rejects authenticated non-participants', async () => {
@@ -153,6 +168,29 @@ describe('registerActivityPushToken', () => {
       expect.objectContaining({ token: VALID_TOKEN, sessionId: SESSION_ID }),
     );
     expect(insertOnConflictDoUpdate).toHaveBeenCalled();
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      `[APNs] Registered Live Activity token for session ${SESSION_ID}: ${VALID_TOKEN.slice(0, 8)}...`,
+    );
+  });
+
+  it('evicts oldest tokens when the per-session cap is reached', async () => {
+    const oldestTokens = [{ token: 'b'.repeat(64) }, { token: 'c'.repeat(64) }];
+    countRows.mockReturnValue([{ value: 9 }]);
+    oldestTokenRows.mockReturnValue(oldestTokens);
+    deleteWhere.mockResolvedValue(undefined);
+
+    const result = await pushTokenMutations.registerActivityPushToken(
+      undefined,
+      { sessionId: SESSION_ID, token: VALID_TOKEN },
+      authedCtx(),
+    );
+
+    expect(result).toBe(true);
+    expect(oldestLimit).toHaveBeenCalledWith(2);
+    expect(deleteWhere).toHaveBeenCalledTimes(2);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      `[APNs] Evicting 2 old Live Activity token(s) for session ${SESSION_ID}; cap is 8`,
+    );
   });
 
   it('rejects empty sessionId or token', async () => {
@@ -214,6 +252,9 @@ describe('unregisterActivityPushToken', () => {
 
     expect(result).toBe(true);
     expect(deleteWhere).toHaveBeenCalledTimes(1);
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      `[APNs] Unregistered Live Activity token for session ${SESSION_ID}: ${VALID_TOKEN.slice(0, 8)}...`,
+    );
   });
 });
 
