@@ -53,9 +53,22 @@ vi.mock('../pubsub/index', () => ({
   pubsub: {},
 }));
 
-const mockNavigate = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
+// Typed to match `navigateToQueueItem`'s actual signature so a future change
+// to the return shape (e.g. adding fields, switching to a discriminated union)
+// surfaces here as a type error instead of slipping through a `true`/truthy
+// coincidence.
+type NavigateToQueueItem = typeof import('../services/queue-navigation').navigateToQueueItem;
+type NavigateToQueueItemResult = Awaited<ReturnType<NavigateToQueueItem>>;
+
+const mockNavigate = vi.fn<NavigateToQueueItem>(
+  async (_sessionId, _targetIndex, _roomManager, _pubsub, _clientId, _correlationId) =>
+    ({
+      item: { uuid: 'q1', climb: { uuid: 'c1' } },
+      sequence: 1,
+    }) as NonNullable<NavigateToQueueItemResult>,
+);
 vi.mock('../services/queue-navigation', () => ({
-  navigateToQueueItem: (...args: unknown[]) => mockNavigate(...args),
+  navigateToQueueItem: (...args: Parameters<NavigateToQueueItem>) => mockNavigate(...args),
 }));
 
 const { handleWidgetNavigate, __resetWidgetRateLimitForTests } = await import('../handlers/widget-navigate');

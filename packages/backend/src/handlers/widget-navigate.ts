@@ -18,7 +18,13 @@ function isValidBody(body: unknown): body is WidgetNavigateBody {
   const candidate = body as Record<string, unknown>;
   if (typeof candidate.sessionId !== 'string' || candidate.sessionId.length === 0) return false;
   if (candidate.action !== 'next' && candidate.action !== 'previous') return false;
-  if (typeof candidate.currentIndex !== 'number' || !Number.isInteger(candidate.currentIndex)) return false;
+  if (
+    typeof candidate.currentIndex !== 'number' ||
+    !Number.isInteger(candidate.currentIndex) ||
+    candidate.currentIndex < 0
+  ) {
+    return false;
+  }
   return true;
 }
 

@@ -6,5 +6,9 @@
 	<array>
 		<string>group.com.boardsesh.app</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)group.com.boardsesh.app</string>
+	</array>
 </dict>
 </plist>

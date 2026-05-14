@@ -15,5 +15,9 @@
 	<true/>
 	<key>aps-environment</key>
 	<string>production</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)group.com.boardsesh.app</string>
+	</array>
 </dict>
 </plist>

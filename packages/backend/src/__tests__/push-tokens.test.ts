@@ -52,6 +52,20 @@ vi.mock('../db/client', () => {
     select: vi.fn(() => makeSelectChain()),
     insert: vi.fn(() => insertReturn),
     delete: vi.fn(() => ({ where: deleteWhere })),
+    // The resolver runs count + delete + insert inside `db.transaction(...)`
+    // under a Postgres advisory lock. The mock transaction just exposes the
+    // same surface and invokes the callback synchronously — `execute` is a
+    // no-op here because the tests don't care about the lock SQL itself,
+    // only about the chained select/delete/insert calls.
+    transaction: vi.fn(
+      async <T>(callback: (tx: typeof db & { execute: (q: unknown) => Promise<void> }) => Promise<T>): Promise<T> => {
+        const tx = {
+          ...db,
+          execute: vi.fn(async (_q: unknown) => undefined),
+        };
+        return callback(tx);
+      },
+    ),
   };
 
   return { db };

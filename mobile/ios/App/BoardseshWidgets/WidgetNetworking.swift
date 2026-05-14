@@ -28,11 +28,12 @@ enum WidgetNetworking {
 
         // Attach the APNs Live Activity push token as a Bearer header. The
         // backend looks up `(token, sessionId)` in `activity_push_tokens` to
-        // authenticate the request. If the token isn't in shared defaults yet
-        // (early in lifecycle), the request goes out without auth and the
-        // backend will reject with 401 — that's acceptable; the widget will
-        // simply do nothing until the next refresh.
-        if let pushToken = defaults.string(forKey: SharedConstants.livePushTokenKey),
+        // authenticate the request. Token is in the shared keychain (App
+        // Group access-group); if it isn't there yet (early in lifecycle),
+        // the request goes out without auth and the backend rejects with
+        // 401 — the widget then quietly does nothing until the next
+        // refresh.
+        if let pushToken = SharedKeychain.get(SharedKeychain.livePushTokenKey),
            !pushToken.isEmpty
         {
             request.setValue("Bearer \(pushToken)", forHTTPHeaderField: "Authorization")

@@ -1,7 +1,7 @@
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { boardSessionParticipants } from '../../../db/schema';
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 import { db } from '../../../db/client';
 
 /**
@@ -135,41 +135,50 @@ export const pushTokenMutations = {
       throw new Error('Unauthorized: not a participant in this session');
     }
 
-    // Bound the number of tokens per session. Count first; if at the cap,
-    // delete the oldest before inserting so we never blow past the limit.
-    const [{ value: currentCount } = { value: 0 }] = await db
-      .select({ value: count() })
-      .from(activityPushTokens)
-      .where(eq(activityPushTokens.sessionId, sessionId));
+    // Bound the number of tokens per session.
+    //
+    // Run count + delete + insert inside one transaction with a per-session
+    // Postgres advisory lock so concurrent registrations against the same
+    // session serialize at the lock. Without this, two requests could both
+    // observe currentCount = cap - 1, both skip the eviction, and both
+    // insert, ending up at cap + 1. The advisory lock auto-releases at
+    // transaction end (`_xact_` variant) so we don't have to clean up on
+    // error paths.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`);
 
-    if (currentCount >= MAX_TOKENS_PER_SESSION) {
-      const oldest = await db
-        .select({ token: activityPushTokens.token })
+      const [{ value: currentCount } = { value: 0 }] = await tx
+        .select({ value: count() })
         .from(activityPushTokens)
-        .where(eq(activityPushTokens.sessionId, sessionId))
-        .orderBy(activityPushTokens.updatedAt)
-        .limit(currentCount - MAX_TOKENS_PER_SESSION + 1);
+        .where(eq(activityPushTokens.sessionId, sessionId));
 
-      if (oldest.length > 0) {
+      if (currentCount >= MAX_TOKENS_PER_SESSION) {
+        const oldest = await tx
+          .select({ token: activityPushTokens.token })
+          .from(activityPushTokens)
+          .where(eq(activityPushTokens.sessionId, sessionId))
+          .orderBy(activityPushTokens.updatedAt)
+          .limit(currentCount - MAX_TOKENS_PER_SESSION + 1);
+
         for (const row of oldest) {
-          await db.delete(activityPushTokens).where(eq(activityPushTokens.token, row.token));
+          await tx.delete(activityPushTokens).where(eq(activityPushTokens.token, row.token));
         }
       }
-    }
 
-    await db
-      .insert(activityPushTokens)
-      .values({
-        token,
-        sessionId,
-      })
-      .onConflictDoUpdate({
-        target: activityPushTokens.token,
-        set: {
+      await tx
+        .insert(activityPushTokens)
+        .values({
+          token,
           sessionId,
-          updatedAt: new Date(),
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: activityPushTokens.token,
+          set: {
+            sessionId,
+            updatedAt: new Date(),
+          },
+        });
+    });
 
     return true;
   },

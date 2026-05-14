@@ -16,10 +16,13 @@ enum SharedConstants {
     static let sizeIdKey = "bs_size_id"
     static let setIdsKey = "bs_set_ids"
     static let pendingActionKey = "bs_pending_action"
+    /// Legacy key — auth token now lives in `SharedKeychain` under
+    /// `SharedKeychain.authTokenKey`. Kept here only so upgrade paths can
+    /// `removeObject` any leftover plaintext value from earlier installs.
     static let authTokenKey = "bs_auth_token"
-    /// APNs Live Activity push token, written by `LiveActivityPlugin` after the
-    /// Activity reports a push token via `pushTokenUpdates`. Read by
-    /// `WidgetNetworking` to attach a Bearer header to widget-navigate calls.
+    /// Legacy key — APNs Live Activity push token now lives in
+    /// `SharedKeychain` under `SharedKeychain.livePushTokenKey`. Kept here
+    /// only for the same migration cleanup as `authTokenKey`.
     static let livePushTokenKey = "bs_live_push_token"
 
     // MARK: Darwin Notification

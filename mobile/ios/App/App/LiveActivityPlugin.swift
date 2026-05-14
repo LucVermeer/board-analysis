@@ -98,10 +98,10 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private func registerPushTokenWithBackend(token: String, sessionId: String, serverUrl: String) {
         // The backend resolver authenticates via ConnectionContext, so we MUST
         // attach the user's app auth token. Without it the resolver rejects.
-        guard let authToken = SharedConstants.sharedDefaults?.string(forKey: SharedConstants.authTokenKey),
+        guard let authToken = SharedKeychain.get(SharedKeychain.authTokenKey),
               !authToken.isEmpty
         else {
-            logger.warning("Skipping push token registration: no auth token in shared defaults")
+            logger.warning("Skipping push token registration: no auth token in keychain")
             return
         }
 
@@ -135,10 +135,10 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private func unregisterPushTokenFromBackend(token: String, sessionId: String, serverUrl: String) {
         // The backend resolver authenticates via ConnectionContext, so we MUST
         // attach the user's app auth token. Without it the resolver rejects.
-        guard let authToken = SharedConstants.sharedDefaults?.string(forKey: SharedConstants.authTokenKey),
+        guard let authToken = SharedKeychain.get(SharedKeychain.authTokenKey),
               !authToken.isEmpty
         else {
-            logger.warning("Skipping push token unregistration: no auth token in shared defaults")
+            logger.warning("Skipping push token unregistration: no auth token in keychain")
             return
         }
 
@@ -216,7 +216,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         // Store board details in shared UserDefaults for App Intents
-        // and thumbnail URL construction.
+        // and thumbnail URL construction. Auth + push tokens go through
+        // the shared Keychain instead — App Group UserDefaults are
+        // unencrypted on disk and we don't want Bearer credentials there.
         if let defaults = SharedConstants.sharedDefaults {
             defaults.set(sessionId, forKey: SharedConstants.sessionIdKey)
             defaults.set(serverUrl, forKey: SharedConstants.serverUrlKey)
@@ -224,9 +226,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.set(layoutId, forKey: SharedConstants.layoutIdKey)
             defaults.set(sizeId, forKey: SharedConstants.sizeIdKey)
             defaults.set(setIds, forKey: SharedConstants.setIdsKey)
-            if let authToken = authToken {
-                defaults.set(authToken, forKey: SharedConstants.authTokenKey)
-            }
+        }
+        if let authToken = authToken, !authToken.isEmpty {
+            SharedKeychain.set(authToken, for: SharedKeychain.authTokenKey)
         }
 
         // For party mode (real session), connect the WebSocket manager
@@ -274,14 +276,19 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         // silently drop it.
         let pushTokenHandler: @Sendable (String) -> Void = { [weak self] token in
             guard let self else { return }
-            self.tokenQueue.sync {
+            // Single sync block: write the token and read sessionId/serverUrl
+            // in one critical section. Two separate tokenQueue.sync calls
+            // would deadlock if ActivityKit ever delivers the token on a
+            // thread already holding the queue (Swift serial DispatchQueues
+            // are not reentrant).
+            let (sid, surl) = self.tokenQueue.sync { () -> (String?, String?) in
                 self._currentPushToken = token
+                return (self._currentSessionId, self._currentServerUrl)
             }
-            // Write the APNs push token to shared UserDefaults so the
+            // Write the APNs push token to the shared keychain so the
             // widget extension can attach it as a Bearer header on
             // /api/widget/navigate calls.
-            SharedConstants.sharedDefaults?.set(token, forKey: SharedConstants.livePushTokenKey)
-            let (sid, surl) = self.tokenQueue.sync { (self._currentSessionId, self._currentServerUrl) }
+            SharedKeychain.set(token, for: SharedKeychain.livePushTokenKey)
             if let sessionId = sid, let serverUrl = surl {
                 self.registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)
             }
@@ -332,9 +339,13 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.removeObject(forKey: SharedConstants.currentIndexKey)
             defaults.removeObject(forKey: SharedConstants.sessionIdKey)
             defaults.removeObject(forKey: SharedConstants.pendingActionKey)
+            // Cover earlier builds that wrote tokens to UserDefaults so
+            // we don't leave plaintext credentials behind after upgrade.
             defaults.removeObject(forKey: SharedConstants.authTokenKey)
             defaults.removeObject(forKey: SharedConstants.livePushTokenKey)
         }
+        SharedKeychain.remove(SharedKeychain.authTokenKey)
+        SharedKeychain.remove(SharedKeychain.livePushTokenKey)
 
         if #available(iOS 17.0, *) {
             Task {
