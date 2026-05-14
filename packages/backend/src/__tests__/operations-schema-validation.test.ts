@@ -34,10 +34,12 @@ describe('shared-schema operations validate against the executable schema', () =
   // operations.ts uses plain template-literal strings (not gql tags), so we
   // duck-type by checking it starts with `mutation`/`query`/`subscription`
   // after optional whitespace.
-  const operationEntries = Object.entries(operations).filter(([, value]): value is string => {
-    if (typeof value !== 'string') return false;
-    return /^\s*(query|mutation|subscription)\b/i.test(value);
-  });
+  const operationEntries: Array<[string, string]> = [];
+  for (const [name, value] of Object.entries(operations)) {
+    if (typeof value !== 'string') continue;
+    if (!/^\s*(query|mutation|subscription)\b/i.test(value)) continue;
+    operationEntries.push([name, value]);
+  }
 
   it('found at least one exported operation to validate', () => {
     expect(operationEntries.length).toBeGreaterThan(0);
