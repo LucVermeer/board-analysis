@@ -114,6 +114,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
           results[boardType] = response.userTicks.map((tick) => ({
             climbed_at: tick.climbedAt,
             difficulty: tick.difficulty,
+            effectiveDifficulty: tick.effectiveDifficulty ?? null,
             tries: tick.attemptCount,
             angle: tick.angle,
             status: tick.status,
@@ -223,12 +224,15 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     let maxFlashDifficulty = -1;
 
     for (const tick of allTicks) {
-      if (tick.difficulty == null) continue;
+      // Prefer the server-coalesced consensus value; fall back to the raw
+      // override when absent (test fixtures, transient optimistic writes).
+      const grade = tick.effectiveDifficulty ?? tick.difficulty;
+      if (grade == null) continue;
       if (tick.status === 'send' || tick.status === 'flash') {
-        if (tick.difficulty > maxSendDifficulty) maxSendDifficulty = tick.difficulty;
+        if (grade > maxSendDifficulty) maxSendDifficulty = grade;
       }
       if (tick.status === 'flash') {
-        if (tick.difficulty > maxFlashDifficulty) maxFlashDifficulty = tick.difficulty;
+        if (grade > maxFlashDifficulty) maxFlashDifficulty = grade;
       }
     }
 

@@ -26,7 +26,13 @@ export type UserProfile = {
 
 export type LogbookEntry = {
   climbed_at: string;
+  // Raw user override (null when the user did not attach a personal grade).
   difficulty: number | null;
+  // COALESCE(difficulty, climb consensus). Use this for charts and bucketing
+  // so ungraded ticks fall back to the climb's consensus grade rather than
+  // dropping out of every per-grade aggregate. See docs/ascents-and-attempts.md.
+  // Optional so test fixtures can omit it; producers in production always set it.
+  effectiveDifficulty?: number | null;
   tries: number;
   angle: number;
   status?: 'flash' | 'send' | 'attempt';

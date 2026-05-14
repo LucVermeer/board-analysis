@@ -32,7 +32,9 @@ type LogAscentFormValues = {
   angle: number;
   attempts: number;
   quality: number;
-  difficulty: number;
+  // `undefined` means "no personal grade override; use the climb's consensus".
+  // See docs/ascents-and-attempts.md — never coerce to 0, that's a real grade_id.
+  difficulty: number | undefined;
   notes?: string;
   videoUrl?: string;
 };
@@ -68,7 +70,7 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
     angle: currentClimb?.angle || 0,
     attempts: 1,
     quality: 0,
-    difficulty: grades.find((grade) => grade.difficulty_name === currentClimb?.difficulty)?.difficulty_id || 0,
+    difficulty: grades.find((grade) => grade.difficulty_name === currentClimb?.difficulty)?.difficulty_id,
   });
 
   const [formValues, setFormValues] = useState<LogAscentFormValues>(getInitialValues);
@@ -85,7 +87,7 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
       date: dayjs(),
       angle: currentClimb?.angle || prev.angle,
       difficulty:
-        grades.find((grade) => grade.difficulty_name === currentClimb?.difficulty)?.difficulty_id || prev.difficulty,
+        grades.find((grade) => grade.difficulty_name === currentClimb?.difficulty)?.difficulty_id ?? prev.difficulty,
       attempts: 1,
     }));
     setIsMirrored(!!currentClimb?.mirrored);
@@ -278,12 +280,21 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
           <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.difficulty')}</Typography>
           <Box sx={{ flex: 1 }}>
-            <MuiSelect
-              value={formValues.difficulty}
-              onChange={(e) => setFormValues((prev) => ({ ...prev, difficulty: Number(e.target.value) }))}
+            <MuiSelect<number | ''>
+              value={formValues.difficulty ?? ''}
+              onChange={(e) =>
+                setFormValues((prev) => ({
+                  ...prev,
+                  difficulty: e.target.value === '' ? undefined : Number(e.target.value),
+                }))
+              }
               size="small"
               sx={{ width: 120 }}
+              displayEmpty
             >
+              <MenuItem value="">
+                <em>{tProfile('logbook.form.difficultyNoOverride')}</em>
+              </MenuItem>
               {grades.map((grade) => (
                 <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
                   {grade.difficulty_name}

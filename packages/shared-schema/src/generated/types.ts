@@ -4398,10 +4398,12 @@ export type Tick = {
   commentCount?: Maybe<Scalars['Int']['output']>;
   /** When this record was created (ISO 8601) */
   createdAt: Scalars['String']['output'];
-  /** User's difficulty rating */
+  /** User's personal grade override as a difficulty_id. Null means the user did not attach a personal grade — read `effectiveDifficulty` for the value to display (it falls back to the climb's consensus). See docs/ascents-and-attempts.md. */
   difficulty?: Maybe<Scalars['Int']['output']>;
   /** Number of downvotes on this tick. Null unless populated by a read query. */
   downvotes?: Maybe<Scalars['Int']['output']>;
+  /** Effective grade for display and aggregation: COALESCE(difficulty, ROUND(consensus_difficulty)). Still nullable when the climb has no consensus yet. */
+  effectiveDifficulty?: Maybe<Scalars['Int']['output']>;
   /** Whether this is a benchmark climb */
   isBenchmark: Scalars['Boolean']['output'];
   /** Whether the climb was mirrored */
@@ -7987,6 +7989,7 @@ export type TickResolvers<
   createdAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   difficulty?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   downvotes?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  effectiveDifficulty?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   isBenchmark?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   isMirror?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   layoutId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
