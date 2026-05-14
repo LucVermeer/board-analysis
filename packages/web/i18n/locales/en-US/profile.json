@@ -106,6 +106,7 @@
       "attempts": "Attempts",
       "quality": "Quality",
       "difficulty": "Difficulty",
+      "difficultyNoOverride": "Use consensus grade",
       "notes": "Notes",
       "video": "Video",
       "videoPlaceholder": "Instagram or TikTok URL",

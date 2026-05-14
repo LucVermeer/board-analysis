@@ -2,7 +2,7 @@ import { dbz } from '@/app/lib/db/db';
 import type { ClimbUuid } from '../types';
 import type { LogbookEntry, AuroraBoardName } from '../api-wrappers/aurora/types';
 import { boardseshTicks } from '@/app/lib/db/schema';
-import { eq, and, inArray, isNotNull, desc } from 'drizzle-orm';
+import { eq, and, inArray, desc } from 'drizzle-orm';
 
 /**
  * Get logbook entries for a user from boardsesh_ticks.
@@ -19,9 +19,6 @@ export async function getLogbook(
 
   if (climbUuids && climbUuids.length > 0) {
     baseConditions.push(inArray(boardseshTicks.climbUuid, climbUuids));
-  } else {
-    // When no specific climbs requested, only return entries with difficulty
-    baseConditions.push(isNotNull(boardseshTicks.difficulty));
   }
 
   const results = await dbz
@@ -50,7 +47,7 @@ export async function getLogbook(
       attempt_id: attemptId,
       tries: tick.attemptCount,
       quality: tick.quality ?? 0,
-      difficulty: tick.difficulty ?? 0,
+      difficulty: tick.difficulty,
       is_benchmark: tick.isBenchmark ?? false,
       is_listed: true,
       comment: tick.comment ?? '',

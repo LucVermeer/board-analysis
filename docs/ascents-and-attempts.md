@@ -19,11 +19,11 @@ This document describes how Boardsesh models a user's interactions with a climb 
 
 ## Mental Model
 
-A **tick** is a single row in `boardsesh_ticks`. It records that a user did *something* on a climb at a specific angle at a specific time. There are exactly three things a tick can represent:
+A **tick** is a single row in `boardsesh_ticks`. It records that a user did _something_ on a climb at a specific angle at a specific time. There are exactly three things a tick can represent:
 
 - **flash** — user completed the climb on the first attempt
 - **send** — user completed the climb after one or more failed attempts
-- **attempt** — user tried and did *not* complete the climb (a "bid")
+- **attempt** — user tried and did _not_ complete the climb (a "bid")
 
 A flash and a send are collectively "ascents". Attempts are "bids". The same user can log many ticks against the same climb at the same angle over time — ticks are not deduplicated; their natural key is `(uuid)` (a Boardsesh-generated UUID), with `aurora_id` as the cross-system anchor when the tick has been synced.
 
@@ -35,29 +35,29 @@ Everything about ascents is single-table: one PostgreSQL table (`boardsesh_ticks
 
 Schema lives at `packages/db/src/schema/app/ascents.ts`. Key fields:
 
-| Field | Type | Purpose |
-|---|---|---|
-| `uuid` | `text` (unique) | Boardsesh-generated UUID, the stable identifier we expose externally |
-| `user_id` | `text` → `users.id` | Owner of this tick; cascades on user delete |
-| `board_type` | `text` | `'kilter'`, `'tension'`, or `'moonboard'` |
-| `climb_uuid` | `text` | References `board_climbs.uuid` (logically — there's intentionally no FK; see schema comments) |
-| `angle` | `int` | Wall angle at climb time, in degrees |
-| `is_mirror` | `bool` | Whether the user climbed the mirrored variant |
-| `status` | `tick_status` enum | `'flash'` / `'send'` / `'attempt'` |
-| `attempt_count` | `int` | Number of attempts for this entry. **Always `1` for flash.** For sends and attempts, it's the count the user reported |
-| `quality` | `int?` | 1–5 user star rating. **Null for attempts**, optionally null for ascents |
-| `difficulty` | `int?` | User's personal grade override (a `difficulty_id`, not a name). **Null means "use the climb's consensus grade"** — see below |
-| `is_benchmark` | `bool` | Whether the user marked the climb as a benchmark |
-| `comment` | `text` | Free-form note |
-| `climbed_at` | `timestamp` | When the climb happened (user-supplied, not server-time) |
-| `created_at` / `updated_at` | `timestamp` | Row audit |
-| `session_id` | `text?` → `board_sessions.id` | If logged inside a party-mode session |
-| `inferred_session_id` | `text?` → `inferred_sessions.id` | Auto-assigned grouping; see [Inferred Sessions](inferred-sessions.md) |
-| `board_id` | `bigint?` → `user_boards.id` | The physical board the tick was recorded on, when known |
-| `aurora_type` | `aurora_table_type?` enum | `'ascents'` / `'bids'`; null until synced to Aurora |
-| `aurora_id` | `text?` | Aurora's UUID once synced (uniquely indexed) |
-| `aurora_synced_at` | `timestamp?` | When the sync succeeded |
-| `aurora_sync_error` | `text?` | Last sync error if a sync attempt failed |
+| Field                       | Type                             | Purpose                                                                                                                      |
+| --------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `uuid`                      | `text` (unique)                  | Boardsesh-generated UUID, the stable identifier we expose externally                                                         |
+| `user_id`                   | `text` → `users.id`              | Owner of this tick; cascades on user delete                                                                                  |
+| `board_type`                | `text`                           | `'kilter'`, `'tension'`, or `'moonboard'`                                                                                    |
+| `climb_uuid`                | `text`                           | References `board_climbs.uuid` (logically — there's intentionally no FK; see schema comments)                                |
+| `angle`                     | `int`                            | Wall angle at climb time, in degrees                                                                                         |
+| `is_mirror`                 | `bool`                           | Whether the user climbed the mirrored variant                                                                                |
+| `status`                    | `tick_status` enum               | `'flash'` / `'send'` / `'attempt'`                                                                                           |
+| `attempt_count`             | `int`                            | Number of attempts for this entry. **Always `1` for flash.** For sends and attempts, it's the count the user reported        |
+| `quality`                   | `int?`                           | 1–5 user star rating. **Null for attempts**, optionally null for ascents                                                     |
+| `difficulty`                | `int?`                           | User's personal grade override (a `difficulty_id`, not a name). **Null means "use the climb's consensus grade"** — see below |
+| `is_benchmark`              | `bool`                           | Whether the user marked the climb as a benchmark                                                                             |
+| `comment`                   | `text`                           | Free-form note                                                                                                               |
+| `climbed_at`                | `timestamp`                      | When the climb happened (user-supplied, not server-time)                                                                     |
+| `created_at` / `updated_at` | `timestamp`                      | Row audit                                                                                                                    |
+| `session_id`                | `text?` → `board_sessions.id`    | If logged inside a party-mode session                                                                                        |
+| `inferred_session_id`       | `text?` → `inferred_sessions.id` | Auto-assigned grouping; see [Inferred Sessions](inferred-sessions.md)                                                        |
+| `board_id`                  | `bigint?` → `user_boards.id`     | The physical board the tick was recorded on, when known                                                                      |
+| `aurora_type`               | `aurora_table_type?` enum        | `'ascents'` / `'bids'`; null until synced to Aurora                                                                          |
+| `aurora_id`                 | `text?`                          | Aurora's UUID once synced (uniquely indexed)                                                                                 |
+| `aurora_synced_at`          | `timestamp?`                     | When the sync succeeded                                                                                                      |
+| `aurora_sync_error`         | `text?`                          | Last sync error if a sync attempt failed                                                                                     |
 
 The `tick_status` and `aurora_table_type` enums are defined alongside the table. Don't introduce new enum values without coordinating with the Aurora API mapping in `packages/aurora-sync/src/sync/user-sync.ts`.
 
@@ -84,7 +84,7 @@ The `tick_status` and `aurora_table_type` enums are defined alongside the table.
 Two write paths derive status differently:
 
 - **QuickTickBar** (compact in-app tick bar — `packages/web/app/components/logbook/quick-tick-bar.tsx`) derives status from `(hasPriorHistory, attemptCount)`:
-  - If `attemptCount === 1` *and* the user has no prior logbook entry for this climb → `flash`
+  - If `attemptCount === 1` _and_ the user has no prior logbook entry for this climb → `flash`
   - Otherwise an ascent → `send`
   - Explicit attempt button → `attempt`
 - **LogAscentForm** (the full form — `packages/web/app/components/logbook/logascent-form.tsx`) uses the simpler `getAscentStatus(attempts) = attempts === 1 ? 'flash' : 'send'` plus an explicit `LogType` toggle for attempts.
@@ -97,7 +97,7 @@ These rules can diverge — keep them in mind when adding a new save UI. The sta
 
 ## `difficulty` Is Nullable — and That's Intentional
 
-`boardsesh_ticks.difficulty` is the user's *personal* grade for this ascent. It is **not** the climb's consensus grade.
+`boardsesh_ticks.difficulty` is the user's _personal_ grade for this ascent. It is **not** the climb's consensus grade.
 
 A user logging a tick may:
 
@@ -105,7 +105,7 @@ A user logging a tick may:
 2. **Tap "tick" without opening the grade picker** → `difficulty = null`
 3. **Log a `attempt`** → `difficulty = null` (by convention; attempts don't carry a grade)
 
-Option 2 is the common case. `QuickTickBar` initializes `difficulty` state to `undefined` and only sets it if the user explicitly picks one. The consensus grade is offered as a *focus hint* in the picker (`focusGradeId={consensusGradeId}`) but is intentionally **not** baked into the saved row. This keeps the stored data honest: `null` means "use whatever the current consensus is", so the tick's effective grade tracks the climb's consensus over time even if it gets re-graded later.
+Option 2 is the common case. `QuickTickBar` initializes `difficulty` state to `undefined` and only sets it if the user explicitly picks one. The consensus grade is offered as a _focus hint_ in the picker (`focusGradeId={consensusGradeId}`) but is intentionally **not** baked into the saved row. This keeps the stored data honest: `null` means "use whatever the current consensus is", so the tick's effective grade tracks the climb's consensus over time even if it gets re-graded later.
 
 **Aurora imports are also allowed to be null.** `packages/aurora-sync/src/sync/user-sync.ts:176` does `item.difficulty ? Number(item.difficulty) : null` — if Aurora doesn't send a difficulty (e.g. some older rows), we store null and lean on the read-side fallback.
 
@@ -116,7 +116,7 @@ Any aggregation or display that groups by grade **must** COALESCE `boardsesh_tic
 Two backend resolvers already implement this (`packages/backend/src/graphql/resolvers/ticks/queries.ts`):
 
 ```ts
-COALESCE(boardseshTicks.difficulty, consensusDifficultyExpr)
+COALESCE(boardseshTicks.difficulty, consensusDifficultyExpr);
 ```
 
 where `consensusDifficultyExpr = ROUND(boardClimbStats.displayDifficulty)`, defined in `packages/backend/src/graphql/resolvers/shared/sql-expressions.ts`.
@@ -167,14 +167,14 @@ Two client hooks call it:
 
 ## Read Paths and the Consensus Fallback
 
-| Surface | Resolver / fetch | Joins `board_climb_stats`? |
-|---|---|---|
-| Profile stats (per-grade chart, hardest send/flash, V-points) | `userTicks` (`queries.ts:126`) | ✅ uses consensus fallback |
-| Profile stats summary (layout %, grade buckets) | `userProfileStats` (`queries.ts:773`) | ✅ uses consensus fallback |
-| Profile activity feed | `userAscentsFeed` (`queries.ts:176`) | ✅ joins `board_climb_stats` — exposes both `tick.difficulty` (raw) and `consensusDifficulty` (rounded) for the UI to choose |
-| Logbook (`/you/logbook`) | `userAscentsFeed` via React Query | Inherits from feed resolver |
-| Climb pages (counters per-user) | various climb queries | n/a — they count rows, not grades |
-| Percentile ranking | `userClimbPercentile` (`queries.ts`) | Doesn't need it — counts distinct climbs, not grade buckets |
+| Surface                                                       | Resolver / fetch                      | Joins `board_climb_stats`?                                                                                                   |
+| ------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Profile stats (per-grade chart, hardest send/flash, V-points) | `userTicks` (`queries.ts:126`)        | ✅ uses consensus fallback                                                                                                   |
+| Profile stats summary (layout %, grade buckets)               | `userProfileStats` (`queries.ts:773`) | ✅ uses consensus fallback                                                                                                   |
+| Profile activity feed                                         | `userAscentsFeed` (`queries.ts:176`)  | ✅ joins `board_climb_stats` — exposes both `tick.difficulty` (raw) and `consensusDifficulty` (rounded) for the UI to choose |
+| Logbook (`/you/logbook`)                                      | `userAscentsFeed` via React Query     | Inherits from feed resolver                                                                                                  |
+| Climb pages (counters per-user)                               | various climb queries                 | n/a — they count rows, not grades                                                                                            |
+| Percentile ranking                                            | `userClimbPercentile` (`queries.ts`)  | Doesn't need it — counts distinct climbs, not grade buckets                                                                  |
 
 When you add a new chart, leaderboard, or stat that groups ticks by grade, follow the join-and-coalesce pattern. Don't query `boardsesh_ticks.difficulty` directly.
 
@@ -206,7 +206,7 @@ Every tick belongs to exactly one session — either an explicit party-mode `boa
 
 ## Rules for Future Code
 
-1. **Don't treat `tick.difficulty` as required.** If you see a non-null assertion, a Zod schema marking it required, or a `.filter(t => t.difficulty != null)` that's being used to *exclude* ascents from a count, that's a bug.
+1. **Don't treat `tick.difficulty` as required.** If you see a non-null assertion, a Zod schema marking it required, or a `.filter(t => t.difficulty != null)` that's being used to _exclude_ ascents from a count, that's a bug.
 2. **Don't pre-bake the consensus grade into the saved row.** The whole point of the nullable column is that it tracks consensus changes over time. If a user genuinely meant to override, they would have picked a grade.
 3. **Always join `board_climb_stats` and COALESCE** when grouping ticks by grade. Reuse `consensusDifficultyExpr` from `packages/backend/src/graphql/resolvers/shared/sql-expressions.ts`.
 4. **Status is the source of truth, not `attempt_count`.** New code must check `status === 'flash'` / `'send'` / `'attempt'`, not infer from attempt counts. The attempt-count heuristic in `buildFlashRedpointBars` is a legacy fallback for pre-status rows only.
