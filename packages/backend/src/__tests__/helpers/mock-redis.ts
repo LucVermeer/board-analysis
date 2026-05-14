@@ -265,7 +265,135 @@ export const createMockRedis = (): MockRedis => {
         }
         return newLeader;
       }
-      // numkeys=3: Both JOIN and LEAVE use 3 keys
+      // numkeys=1: RELEASE_LOCK or UPDATE_USERNAME_SCRIPT.
+      // UPDATE_USERNAME_SCRIPT has 3+ ARGV: username, avatarUrl (sentinel),
+      // sessionTTL. RELEASE_LOCK has 1 ARGV (value).
+      if (numkeys === 1 && args.length === 4) {
+        const connKey = args[0] as string;
+        const username = args[1] as string;
+        const avatarUrl = args[2] as string;
+
+        if (!hashes.has(connKey)) {
+          return 0;
+        }
+        const connData = hashes.get(connKey)!;
+        connData.username = username;
+        if (avatarUrl !== UNSET_SENTINEL) connData.avatarUrl = avatarUrl;
+
+        const sessionId = connData.sessionId;
+        const participantId = connData.participantId;
+        if (sessionId && sessionId !== '' && participantId && participantId !== '') {
+          const participantKey = `boardsesh:participant:${sessionId}:${participantId}`;
+          if (hashes.has(participantKey)) {
+            const partData = hashes.get(participantKey)!;
+            partData.username = username;
+            if (avatarUrl !== UNSET_SENTINEL) partData.avatarUrl = avatarUrl;
+          }
+        }
+        return 1;
+      }
+      // REMOVE_PARTICIPANT_CONNECTION_SCRIPT (numkeys=3, 2 ARGV).
+      if (numkeys === 3 && args.length === 5) {
+        const participantConnectionsKey = args[0] as string;
+        const sessionParticipantsKey = args[1] as string;
+        const participantKey = args[2] as string;
+        const connectionId = args[3] as string;
+        const participantId = args[4] as string;
+
+        const connSet = sets.get(participantConnectionsKey);
+        if (connSet) connSet.delete(connectionId);
+        const remaining = connSet?.size ?? 0;
+        if (remaining > 0) return remaining;
+
+        const partSet = sets.get(sessionParticipantsKey);
+        if (partSet) partSet.delete(participantId);
+        hashes.delete(participantKey);
+        sets.delete(participantConnectionsKey);
+        return 0;
+      }
+      // REMOVE_PARTICIPANT_SCRIPT (numkeys=4, 1 ARGV).
+      if (numkeys === 4) {
+        const sessionParticipantsKey = args[0] as string;
+        const participantKey = args[1] as string;
+        const participantConnectionsKey = args[2] as string;
+        const sessionMembersKey = args[3] as string;
+        const participantId = args[4] as string;
+
+        const connectionIds = sets.get(participantConnectionsKey)
+          ? Array.from(sets.get(participantConnectionsKey)!)
+          : [];
+        const partSet = sets.get(sessionParticipantsKey);
+        if (partSet) partSet.delete(participantId);
+        hashes.delete(participantKey);
+        sets.delete(participantConnectionsKey);
+        const memberSet = sets.get(sessionMembersKey);
+        for (const connectionId of connectionIds) {
+          if (memberSet) memberSet.delete(connectionId);
+          const connKey = `boardsesh:conn:${connectionId}`;
+          if (hashes.has(connKey)) {
+            const cd = hashes.get(connKey)!;
+            cd.sessionId = '';
+            cd.participantId = '';
+            cd.isLeader = 'false';
+          }
+        }
+        return connectionIds.length;
+      }
+      // JOIN_SESSION_SCRIPT new shape (numkeys=6, includes participant writes).
+      if (numkeys === 6) {
+        const connKey = args[0] as string;
+        const sessionMembersKey = args[1] as string;
+        const leaderKey = args[2] as string;
+        const sessionParticipantsKey = args[3] as string;
+        const participantKey = args[4] as string;
+        const participantConnectionsKey = args[5] as string;
+        const connectionId = args[6] as string;
+        const sessionId = args[7] as string;
+        const username = args[10] as string;
+        const avatarUrl = args[11] as string;
+        const participantId = args[12] as string;
+        const now = args[13] as string;
+
+        if (!hashes.has(connKey)) {
+          return -1;
+        }
+
+        const connData = hashes.get(connKey)!;
+        connData.connectionId = connectionId;
+        connData.sessionId = sessionId;
+        if (username && username !== UNSET_SENTINEL) connData.username = username;
+        if (avatarUrl !== UNSET_SENTINEL) connData.avatarUrl = avatarUrl;
+        connData.isLeader = 'false';
+
+        if (!sets.has(sessionMembersKey)) sets.set(sessionMembersKey, new Set());
+        sets.get(sessionMembersKey)!.add(connectionId);
+
+        connData.participantId = participantId;
+        const resolvedUsername = connData.username ?? '';
+        const resolvedAvatarUrl = connData.avatarUrl ?? '';
+        const resolvedUserId = connData.userId ?? '';
+        if (!sets.has(sessionParticipantsKey)) sets.set(sessionParticipantsKey, new Set());
+        sets.get(sessionParticipantsKey)!.add(participantId);
+        hashes.set(participantKey, {
+          participantId,
+          sessionId,
+          userId: resolvedUserId,
+          username: resolvedUsername,
+          avatarUrl: resolvedAvatarUrl,
+          connectionState: 'CONNECTED',
+          lastSeenAt: now,
+        });
+        if (!sets.has(participantConnectionsKey)) sets.set(participantConnectionsKey, new Set());
+        sets.get(participantConnectionsKey)!.add(connectionId);
+
+        if (!store.has(leaderKey)) {
+          store.set(leaderKey, connectionId);
+          connData.isLeader = 'true';
+          return 1;
+        }
+        return 0;
+      }
+      // numkeys=3: Both JOIN (legacy) and LEAVE use 3 keys
       // Distinguish by argument count: JOIN has 9+ args, LEAVE has 6
       if (numkeys === 3) {
         const connectionKey = args[0] as string;

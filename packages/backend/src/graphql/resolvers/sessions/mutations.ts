@@ -382,20 +382,20 @@ export const sessionMutations = {
       }
     } else {
       await requireSessionMember(ctx, sessionId);
-      const sessionUsers = await roomManager.getSessionUsers(sessionId);
-      // Prefer authenticated identity for actor lookup. ctx.connectionId is a
-      // last-ditch fallback only — it will never match SessionUser.id since
-      // those are participantIds — so when actor ends up undefined here, log
-      // the inputs we tried so the misleading "Only the session creator or
-      // current leader" error has a paper trail to debug.
-      const actorId = ctx.participantId || ctx.userId || ctx.connectionId;
-      const actor = sessionUsers.find(
-        (user) => user.id === actorId || (ctx.userId ? user.userId === ctx.userId : false),
-      );
+      // Use the authoritative leader from distributed state for authorization,
+      // not `SessionUser.isLeader` derived from getSessionUsers. The user-list
+      // path reads from `sessionParticipants` (or the connection-key fallback)
+      // and can briefly show stale leadership during handoff — a participant
+      // whose local entry still says isLeader=true could otherwise authorize
+      // a destructive endSession after the leader has already moved on. The
+      // leader key in Redis is the source of truth; compare connectionIds
+      // directly since that's what's stored there.
       const isCreator = !!ctx.userId && sessionData.createdByUserId === ctx.userId;
-      if (!isCreator && !actor?.isLeader) {
+      const leaderConnectionId = await roomManager.getSessionLeaderConnectionId(sessionId);
+      const isLeader = leaderConnectionId !== null && leaderConnectionId === ctx.connectionId;
+      if (!isCreator && !isLeader) {
         console.warn(
-          `[endSession] actor lookup failed for session ${sessionId.slice(0, 8)}: connectionId=${ctx.connectionId.slice(0, 8)}, participantId=${ctx.participantId?.slice(0, 8) ?? 'none'}, userId=${ctx.userId?.slice(0, 8) ?? 'none'}, isAuthenticated=${ctx.isAuthenticated}, members=${sessionUsers.length}`,
+          `[endSession] authorization denied for session ${sessionId.slice(0, 8)}: connectionId=${ctx.connectionId.slice(0, 8)}, participantId=${ctx.participantId?.slice(0, 8) ?? 'none'}, userId=${ctx.userId?.slice(0, 8) ?? 'none'}, isAuthenticated=${ctx.isAuthenticated}, leaderConnectionId=${leaderConnectionId?.slice(0, 8) ?? 'none'}`,
         );
         throw new Error('Only the session creator or current leader can end this session');
       }

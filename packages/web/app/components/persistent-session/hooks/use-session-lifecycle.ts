@@ -666,10 +666,22 @@ export function useSessionLifecycle({
                       case 'UserLeft':
                         return { ...prev, users: prev.users.filter((u) => u.id !== event.userId) };
                       case 'LeaderChanged': {
-                        const leaderConnectionId = event.leaderConnectionId || event.leaderId;
+                        // `prev.clientId` is the WebSocket connectionId. The
+                        // server always emits both fields, but the fallback
+                        // `|| event.leaderId` (the stable participantId) was
+                        // a forward/backward-compat trap: an authenticated
+                        // user's participantId is their userId UUID, which
+                        // never equals a connectionId — so during a deploy
+                        // window where an old backend dropped
+                        // `leaderConnectionId`, an authenticated client that
+                        // IS the new leader would incorrectly compute
+                        // `isLeader: false`. Drop the fallback; if
+                        // `leaderConnectionId` is missing we conservatively
+                        // assume the local client is not the leader (it
+                        // will get the correct state on the next read).
                         return {
                           ...prev,
-                          isLeader: leaderConnectionId === prev.clientId,
+                          isLeader: event.leaderConnectionId === prev.clientId,
                           users: prev.users.map((u) => ({
                             ...u,
                             isLeader: u.id === event.leaderId,

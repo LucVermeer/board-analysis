@@ -290,6 +290,28 @@ class RoomManager {
   }
 
   /**
+   * Get the authoritative leader connectionId for a session from distributed
+   * state. Returns null when the session has no leader (or single-instance
+   * mode falls back to local view). Use this instead of `SessionUser.isLeader`
+   * for authorization checks — that field can be momentarily stale during
+   * leader handoff, and a participant whose local `isLeader=true` reflects a
+   * stale read could pass an authorization check after the leader has
+   * already moved on.
+   */
+  async getSessionLeaderConnectionId(sessionId: string): Promise<string | null> {
+    if (this.distributedState) {
+      return this.distributedState.getSessionLeader(sessionId);
+    }
+    const clients = this.sessions.get(sessionId);
+    if (!clients) return null;
+    for (const clientId of clients) {
+      const client = this.clients.get(clientId);
+      if (client?.isLeader) return clientId;
+    }
+    return null;
+  }
+
+  /**
    * Check if a session is active (has connected users across all instances OR exists in Redis within TTL)
    */
   async isSessionActive(sessionId: string): Promise<boolean> {

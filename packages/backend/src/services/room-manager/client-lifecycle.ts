@@ -611,7 +611,16 @@ export async function disconnectClient(
           return;
         }
         const currentUser = users.find((user) => user.id === participantId);
-        if (currentUser?.connectionState === 'CONNECTED') {
+        // Spare the participant whenever they're still present in the
+        // session, regardless of connectionState. `getSessionParticipants`
+        // already prunes participants whose connection set is empty (and
+        // who aren't actively RECONNECTING) before returning, so a
+        // participant we still see here is one with at least one live
+        // connection or one that just flipped to RECONNECTING with the
+        // reconnect WS already open. Either way, expelling them would race
+        // with the in-flight reconnect — exactly the bug the grace period
+        // is meant to prevent. Only evict when truly absent.
+        if (currentUser) {
           return;
         }
         await distributedState.removeParticipant(sessionId, participantId).catch((err) => {

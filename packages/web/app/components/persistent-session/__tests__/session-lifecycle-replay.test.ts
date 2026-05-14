@@ -73,6 +73,29 @@ describe('session lifecycle replay helpers', () => {
     });
   });
 
+  it('keeps mirroredUuid null when ClimbMirrored arrives with no current climb', () => {
+    // The backend resolver early-returns when there's no current climb (B7
+    // fix), but historic replay payloads can still carry null uuid. The
+    // transform must preserve null instead of fabricating a value — the
+    // downstream reducer's uuid guard relies on null meaning "no specific
+    // climb."
+    const event: QueueEvent = {
+      __typename: 'ClimbMirrored',
+      sequence: 9,
+      stateHash: 'hash-9',
+      uuid: null,
+      mirrored: true,
+    };
+
+    expect(transformToSubscriptionEvent(event)).toEqual({
+      __typename: 'ClimbMirrored',
+      sequence: 9,
+      stateHash: 'hash-9',
+      mirroredUuid: null,
+      mirrored: true,
+    });
+  });
+
   it('rejects replay coverage with a missing sequence', () => {
     const events: SubscriptionQueueEvent[] = [
       {
