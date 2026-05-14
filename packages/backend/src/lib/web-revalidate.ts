@@ -11,17 +11,17 @@
  * call.
  */
 
-const WEB_URL = process.env.BOARDSESH_WEB_URL;
+const WEB_URL = process.env.BOARDSESH_WEB_URL ?? 'https://www.boardsesh.com';
 const REVALIDATE_SECRET = process.env.REVALIDATE_SECRET;
 const REQUEST_TIMEOUT_MS = 5000;
 
 let warned = false;
 
 export async function notifyClimbRevalidated(climbUuid: string): Promise<void> {
-  if (!WEB_URL || !REVALIDATE_SECRET) {
+  if (!REVALIDATE_SECRET) {
     if (!warned) {
       console.warn(
-        '[web-revalidate] BOARDSESH_WEB_URL or REVALIDATE_SECRET not set; climb-cache invalidation disabled. Cached climb pages will refresh on the configured TTL.',
+        '[web-revalidate] REVALIDATE_SECRET not set; climb-cache invalidation disabled. Cached climb pages will refresh on the configured TTL.',
       );
       warned = true;
     }
