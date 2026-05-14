@@ -258,6 +258,46 @@ export const REFRESH_TTL_SCRIPT = `
 `;
 
 /**
+ * Lua script for atomic full-participant eviction.
+ * Reads the participant's connection set inside the script, then SREMs the
+ * participant from sessionParticipants, deletes the participant + connection
+ * set, and for every connectionId in the snapshot SREMs it from sessionMembers
+ * and clears its connection hash. All in one round-trip, so a concurrent join
+ * adding a fresh connection to participantConnections cannot have its work
+ * silently wiped between our read and our writes.
+ *
+ * The sibling KEYS.connection() keys are still computed inside the script via
+ * string concatenation; this keeps consistency with the rest of the file but
+ * is documented as a Redis-cluster portability concern in issue #2143.
+ * KEYS[1] = sessionParticipants set key
+ * KEYS[2] = participant hash key
+ * KEYS[3] = participantConnections set key
+ * KEYS[4] = sessionMembers set key
+ * ARGV[1] = participantId being evicted
+ * Returns: number of connection slots cleaned up
+ */
+export const REMOVE_PARTICIPANT_SCRIPT = `
+  local sessionParticipantsKey = KEYS[1]
+  local participantKey = KEYS[2]
+  local participantConnectionsKey = KEYS[3]
+  local sessionMembersKey = KEYS[4]
+  local participantId = ARGV[1]
+
+  local connectionIds = redis.call('SMEMBERS', participantConnectionsKey)
+  redis.call('SREM', sessionParticipantsKey, participantId)
+  redis.call('DEL', participantKey)
+  redis.call('DEL', participantConnectionsKey)
+  for _, connectionId in ipairs(connectionIds) do
+    redis.call('SREM', sessionMembersKey, connectionId)
+    local connKey = 'boardsesh:conn:' .. connectionId
+    if redis.call('EXISTS', connKey) == 1 then
+      redis.call('HMSET', connKey, 'sessionId', '', 'participantId', '', 'isLeader', 'false')
+    end
+  end
+  return #connectionIds
+`;
+
+/**
  * Lua script for atomic participant-connection removal.
  * SREM the connection from the participant's connection set, then either return
  * the remaining count (if > 0) or atomically clean up the participant record

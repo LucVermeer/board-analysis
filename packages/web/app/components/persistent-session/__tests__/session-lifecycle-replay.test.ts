@@ -146,4 +146,31 @@ describe('session lifecycle replay helpers', () => {
 
     expect(hasContiguousReplayCoverage(events, 5, 8)).toBe(true);
   });
+
+  it('handles QueueItemAdded co-sequenced with a FullSync (delta arrives first)', () => {
+    // Same tie-break invariant as the CurrentClimbChanged case but with a
+    // QueueItemAdded delta. The sort puts FullSync first so the contiguity
+    // check still passes regardless of arrival order.
+    const events: SubscriptionQueueEvent[] = [
+      {
+        __typename: 'QueueItemAdded',
+        sequence: 8,
+        stateHash: 'hash-8',
+        addedItem: queueItem,
+        position: null,
+      },
+      {
+        __typename: 'FullSync',
+        sequence: 8,
+        state: {
+          sequence: 8,
+          stateHash: 'hash-8',
+          queue: [queueItem],
+          currentClimbQueueItem: queueItem,
+        },
+      },
+    ];
+
+    expect(hasContiguousReplayCoverage(events, 5, 8)).toBe(true);
+  });
 });

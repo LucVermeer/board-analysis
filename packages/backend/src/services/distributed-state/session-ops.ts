@@ -16,6 +16,7 @@ import {
   REFRESH_TTL_SCRIPT,
   PRUNE_STALE_SESSION_MEMBERS_SCRIPT,
   REMOVE_PARTICIPANT_CONNECTION_SCRIPT,
+  REMOVE_PARTICIPANT_SCRIPT,
 } from './lua-scripts';
 
 /**
@@ -466,15 +467,6 @@ export async function markParticipantPresence(
   };
 }
 
-async function getConnectionForParticipantCleanup(
-  redis: Redis,
-  connectionId: string,
-): Promise<ReturnType<typeof hashToConnection> | null> {
-  const data = await redis.hgetall(KEYS.connection(connectionId));
-  if (!data?.connectionId) return null;
-  return hashToConnection(data);
-}
-
 export async function removeParticipantConnection(
   redis: Redis,
   sessionId: string,
@@ -500,16 +492,20 @@ export async function removeParticipantConnection(
 export async function removeParticipant(redis: Redis, sessionId: string, participantId: string): Promise<void> {
   validateSessionId(sessionId);
   validateParticipantId(participantId);
-  const connectionIds = await redis.smembers(KEYS.participantConnections(sessionId, participantId));
-  const multi = redis.multi();
-  multi.srem(KEYS.sessionParticipants(sessionId), participantId);
-  multi.del(KEYS.participant(sessionId, participantId));
-  multi.del(KEYS.participantConnections(sessionId, participantId));
-  for (const connectionId of connectionIds) {
-    multi.srem(KEYS.sessionMembers(sessionId), connectionId);
-    multi.hset(KEYS.connection(connectionId), 'sessionId', '', 'participantId', '', 'isLeader', 'false');
-  }
-  await multi.exec();
+  // Atomic via Lua. The prior `smembers` -> `multi().exec()` sequence had a
+  // race window where a concurrent join (cross-instance, e.g. another tab
+  // reconnecting in the grace window) could insert a fresh connection into
+  // participantConnections between the snapshot and the multi's `del`, and
+  // its participant hash would be wiped after this multi ran.
+  await redis.eval(
+    REMOVE_PARTICIPANT_SCRIPT,
+    4,
+    KEYS.sessionParticipants(sessionId),
+    KEYS.participant(sessionId, participantId),
+    KEYS.participantConnections(sessionId, participantId),
+    KEYS.sessionMembers(sessionId),
+    participantId,
+  );
 }
 
 /**

@@ -37,6 +37,11 @@ vi.mock('../services/room-manager', () => ({
       sessionId: 'session-aaaa-bbbb-cccc-dddd',
       participantId: 'stable-participant-123',
       newLeaderId: undefined,
+      // Default to a full departure so the UserLeft broadcast path is
+      // exercised by tests that don't override with `mockResolvedValueOnce`.
+      // The per-tab leave case (`participantFullyLeft: false`) is covered by
+      // its own explicit override elsewhere.
+      participantFullyLeft: true,
     }),
     createDiscoverableSession: vi.fn().mockResolvedValue({}),
     getSessionById: vi.fn().mockResolvedValue(null),

@@ -362,6 +362,14 @@ export const sessionMutations = {
   endSession: async (_: unknown, { sessionId }: { sessionId: string }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx, 5);
     validateInput(SessionIdSchema, sessionId, 'sessionId');
+    // Ending a session is destructive (terminates every subscriber, generates
+    // a summary row, marks the session ended in Postgres). The pre-#2128 code
+    // required authentication unconditionally; the reland accidentally
+    // narrowed the auth check to the HTTP branch only, which would let an
+    // anonymous WS member who is the current leader destroy the session.
+    // Restore the unconditional requirement so the WS branch's
+    // membership-and-leadership check is gated on an authenticated principal.
+    requireAuthenticated(ctx);
 
     const sessionData = await roomManager.getSessionById(sessionId);
     if (!sessionData) {
@@ -369,7 +377,6 @@ export const sessionMutations = {
     }
 
     if (ctx.transport === 'http') {
-      requireAuthenticated(ctx);
       if (!sessionData.createdByUserId || sessionData.createdByUserId !== ctx.userId) {
         throw new Error('Only the session creator can end this session over HTTP');
       }
