@@ -74,7 +74,7 @@ export type QueueAction =
         serverCorrelationId?: string;
       };
     }
-  | { type: 'DELTA_MIRROR_CURRENT_CLIMB'; payload: { mirrored: boolean } }
+  | { type: 'DELTA_MIRROR_CURRENT_CLIMB'; payload: { mirrored: boolean; mirroredUuid: string | null } }
   | { type: 'DELTA_REPLACE_QUEUE_ITEM'; payload: { uuid: string; item: ClimbQueueItem } }
   | { type: 'CLEANUP_PENDING_UPDATE'; payload: { correlationId: string } }
   | { type: 'CLEANUP_PENDING_UPDATES_BATCH'; payload: { correlationIds: string[] } }

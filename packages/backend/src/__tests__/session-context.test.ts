@@ -45,6 +45,9 @@ vi.mock('../services/room-manager', () => ({
     }),
     createDiscoverableSession: vi.fn().mockResolvedValue({}),
     getSessionById: vi.fn().mockResolvedValue(null),
+    endSession: vi.fn().mockResolvedValue(undefined),
+    getSessionUsers: vi.fn().mockResolvedValue([]),
+    getSessionLeaderConnectionId: vi.fn().mockResolvedValue(null),
   },
 }));
 
@@ -54,6 +57,16 @@ vi.mock('../pubsub/index', () => ({
 
 vi.mock('../graphql/context', () => ({
   updateContext: vi.fn(),
+  // requireSessionMember (shared helper) consults getContext to find the
+  // latest sessionId for a connection. Returning the same shape the test
+  // passes in lets membership checks pass cleanly so endSession tests
+  // reach the authorization branch under test.
+  getContext: vi.fn((connectionId: string) => ({
+    connectionId,
+    sessionId: 'session-end-1',
+    transport: 'ws',
+    isAuthenticated: true,
+  })),
 }));
 
 vi.mock('uuid', () => ({
@@ -235,5 +248,88 @@ describe('leaveSession publishes UserLeft with the stable participant ID', () =>
     );
     expect(userLeftCall).toBeDefined();
     expect(userLeftCall![1].userId).toBe('anon-stable-participant');
+  });
+});
+
+vi.mock('../graphql/resolvers/shared/helpers', async (importOriginal) => {
+  // Real validateInput / requireAuthenticated / requireSessionMember; bypass
+  // applyRateLimit so endSession tests aren't subject to per-process limits.
+  const original = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...original,
+    applyRateLimit: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+describe('endSession authorization (B2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: session exists, no stable leader, empty user list.
+    vi.mocked(roomManager.getSessionById).mockResolvedValue({
+      id: 'session-end-1',
+      createdByUserId: 'creator-user-uuid',
+    } as unknown as Awaited<ReturnType<typeof roomManager.getSessionById>>);
+  });
+
+  function makeAuthenticatedMemberCtx(connectionId: string, userId: string): ConnectionContext {
+    return {
+      connectionId,
+      transport: 'ws',
+      sessionId: 'session-end-1',
+      userId,
+      participantId: userId,
+      isAuthenticated: true,
+    };
+  }
+
+  it('rejects an authenticated WS member whose getSessionUsers entry says isLeader=true but the authoritative leader is someone else', async () => {
+    // The exact scenario the B2 fix targets: SessionUser.isLeader can be
+    // stale during handoff. Without the distributedState check, the stale
+    // user-list entry would have authorized this caller.
+    const ctx = makeAuthenticatedMemberCtx('ws-caller', 'caller-user');
+    vi.mocked(roomManager.getSessionUsers).mockResolvedValueOnce([
+      { id: 'caller-user', userId: 'caller-user', isLeader: true, username: 'Caller', connectionState: 'CONNECTED' },
+    ] as unknown as Awaited<ReturnType<typeof roomManager.getSessionUsers>>);
+    vi.mocked(roomManager.getSessionLeaderConnectionId).mockResolvedValueOnce('ws-other-leader');
+
+    await expect(sessionMutations.endSession(undefined, { sessionId: 'session-end-1' }, ctx)).rejects.toThrow(
+      /Only the session creator or current leader/,
+    );
+    expect(roomManager.endSession).not.toHaveBeenCalled();
+  });
+
+  it('accepts when distributedState reports the caller as the leader (connectionId match)', async () => {
+    const ctx = makeAuthenticatedMemberCtx('ws-real-leader', 'leader-user');
+    vi.mocked(roomManager.getSessionLeaderConnectionId).mockResolvedValueOnce('ws-real-leader');
+
+    await sessionMutations.endSession(undefined, { sessionId: 'session-end-1' }, ctx);
+    expect(roomManager.endSession).toHaveBeenCalledWith('session-end-1');
+  });
+
+  it('accepts the session creator even when not the current leader', async () => {
+    // ctx.userId matches sessionData.createdByUserId; leader can be anyone.
+    const ctx = makeAuthenticatedMemberCtx('ws-creator', 'creator-user-uuid');
+    vi.mocked(roomManager.getSessionLeaderConnectionId).mockResolvedValueOnce('ws-someone-else');
+
+    await sessionMutations.endSession(undefined, { sessionId: 'session-end-1' }, ctx);
+    expect(roomManager.endSession).toHaveBeenCalledWith('session-end-1');
+  });
+
+  it('rejects an unauthenticated WS caller even when they are the current leader', async () => {
+    // Auth regression guard: requireAuthenticated must run before the
+    // leader check, so an anonymous leader cannot destroy the session.
+    const ctx: ConnectionContext = {
+      connectionId: 'ws-anon-leader',
+      transport: 'ws',
+      sessionId: 'session-end-1',
+      userId: undefined,
+      isAuthenticated: false,
+    };
+    vi.mocked(roomManager.getSessionLeaderConnectionId).mockResolvedValueOnce('ws-anon-leader');
+
+    await expect(sessionMutations.endSession(undefined, { sessionId: 'session-end-1' }, ctx)).rejects.toThrow(
+      /Authentication required/,
+    );
+    expect(roomManager.endSession).not.toHaveBeenCalled();
   });
 });

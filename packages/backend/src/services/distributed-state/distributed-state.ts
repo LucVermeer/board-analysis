@@ -2,7 +2,13 @@ import type Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
 import type { SessionUser } from '@boardsesh/shared-schema';
 import { KEYS, type DistributedConnection } from './constants';
-import { registerConnection, getConnection, removeConnection, updateUsername } from './connection-ops';
+import {
+  registerConnection,
+  getConnection,
+  removeConnection,
+  updateUsername,
+  countLiveParticipantConnections,
+} from './connection-ops';
 import {
   joinSession,
   leaveSession,
@@ -232,6 +238,19 @@ export class DistributedStateManager {
    */
   async removeParticipantConnection(sessionId: string, participantId: string, connectionId: string): Promise<void> {
     return removeParticipantConnection(this.redis, sessionId, participantId, connectionId);
+  }
+
+  /**
+   * Count live (non-expired) connections currently bound to a participant.
+   * Stale connectionIds (whose connection hash has expired) are pruned as a
+   * side effect. Used by the grace-timer callback to distinguish a
+   * still-reconnecting participant (>0 live conns, in-flight rejoin) from a
+   * truly absent one (0 live conns, evict). The user list alone is
+   * ambiguous: `getSessionParticipants` retains RECONNECTING entries even
+   * with 0 live conns, so the timer needs this direct query.
+   */
+  async getParticipantLiveConnectionCount(sessionId: string, participantId: string): Promise<number> {
+    return countLiveParticipantConnections(this.redis, sessionId, participantId);
   }
 
   /**

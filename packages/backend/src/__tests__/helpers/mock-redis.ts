@@ -217,8 +217,15 @@ export const createMockRedis = (): MockRedis => {
       return chainable;
     }),
     eval: vi.fn(async (_script: string, numkeys: number, ...args: unknown[]) => {
-      // RELEASE_LOCK_SCRIPT (numkeys=1): Delete key if value matches
-      if (numkeys === 1) {
+      // numkeys=1 covers three scripts; dispatch on args.length:
+      //   RELEASE_LOCK_SCRIPT: args.length === 2 (key, expectedValue)
+      //   REFRESH_TTL_SCRIPT:  args.length === 3 (connKey, connTTL, sessionTTL)
+      //   UPDATE_USERNAME_SCRIPT: args.length === 4 (connKey, username, avatarUrl, sessionTTL)
+      // The original code returned on numkeys===1 unconditionally, which left
+      // UPDATE_USERNAME_SCRIPT (and any future numkeys=1 script) as dead
+      // code in the mock; tests that exercised them passed vacuously.
+      if (numkeys === 1 && args.length === 2) {
+        // RELEASE_LOCK_SCRIPT
         const key = args[0] as string;
         const value = args[1] as string;
         if (store.get(key) === value) {
@@ -227,8 +234,13 @@ export const createMockRedis = (): MockRedis => {
         }
         return 0;
       }
-      // REFRESH_TTL_SCRIPT (numkeys=1 handled above)
-      // ELECT_NEW_LEADER_SCRIPT (numkeys=2): handled below
+      if (numkeys === 1 && args.length === 3) {
+        // REFRESH_TTL_SCRIPT: no-op in mock since EXPIRE is a no-op too. Just
+        // report success when the connection hash exists, mirroring the
+        // real script's behaviour.
+        const connKey = args[0] as string;
+        return hashes.has(connKey) ? 1 : 0;
+      }
       if (numkeys === 2) {
         // ELECT_NEW_LEADER_SCRIPT: Pick earliest connected candidate
         const sessionMembersKey = args[0] as string;
@@ -265,8 +277,144 @@ export const createMockRedis = (): MockRedis => {
         }
         return newLeader;
       }
-      // numkeys=3: Both JOIN and LEAVE use 3 keys
-      // Distinguish by argument count: JOIN has 9+ args, LEAVE has 6
+      // UPDATE_USERNAME_SCRIPT (numkeys=1, 4 args: connKey, username,
+      // avatarUrl-sentinel, sessionTTL). RELEASE_LOCK_SCRIPT and
+      // REFRESH_TTL_SCRIPT (also numkeys=1) are dispatched earlier in this
+      // function by args.length.
+      if (numkeys === 1 && args.length === 4) {
+        const connKey = args[0] as string;
+        const username = args[1] as string;
+        const avatarUrl = args[2] as string;
+
+        if (!hashes.has(connKey)) {
+          return 0;
+        }
+        const connData = hashes.get(connKey)!;
+        connData.username = username;
+        if (avatarUrl !== UNSET_SENTINEL) connData.avatarUrl = avatarUrl;
+
+        const sessionId = connData.sessionId;
+        const participantId = connData.participantId;
+        if (sessionId && sessionId !== '' && participantId && participantId !== '') {
+          const participantKey = `boardsesh:participant:${sessionId}:${participantId}`;
+          if (hashes.has(participantKey)) {
+            const partData = hashes.get(participantKey)!;
+            partData.username = username;
+            if (avatarUrl !== UNSET_SENTINEL) partData.avatarUrl = avatarUrl;
+          }
+        }
+        return 1;
+      }
+      // REMOVE_PARTICIPANT_CONNECTION_SCRIPT (numkeys=3, 2 ARGV).
+      if (numkeys === 3 && args.length === 5) {
+        const participantConnectionsKey = args[0] as string;
+        const sessionParticipantsKey = args[1] as string;
+        const participantKey = args[2] as string;
+        const connectionId = args[3] as string;
+        const participantId = args[4] as string;
+
+        const connSet = sets.get(participantConnectionsKey);
+        if (connSet) connSet.delete(connectionId);
+        const remaining = connSet?.size ?? 0;
+        if (remaining > 0) return remaining;
+
+        const partSet = sets.get(sessionParticipantsKey);
+        if (partSet) partSet.delete(participantId);
+        hashes.delete(participantKey);
+        sets.delete(participantConnectionsKey);
+        return 0;
+      }
+      // REMOVE_PARTICIPANT_SCRIPT (numkeys=4, 1 ARGV).
+      if (numkeys === 4) {
+        const sessionParticipantsKey = args[0] as string;
+        const participantKey = args[1] as string;
+        const participantConnectionsKey = args[2] as string;
+        const sessionMembersKey = args[3] as string;
+        const participantId = args[4] as string;
+
+        const connectionIds = sets.get(participantConnectionsKey)
+          ? Array.from(sets.get(participantConnectionsKey)!)
+          : [];
+        const partSet = sets.get(sessionParticipantsKey);
+        if (partSet) partSet.delete(participantId);
+        hashes.delete(participantKey);
+        sets.delete(participantConnectionsKey);
+        const memberSet = sets.get(sessionMembersKey);
+        for (const connectionId of connectionIds) {
+          if (memberSet) memberSet.delete(connectionId);
+          const connKey = `boardsesh:conn:${connectionId}`;
+          if (hashes.has(connKey)) {
+            const cd = hashes.get(connKey)!;
+            cd.sessionId = '';
+            cd.participantId = '';
+            cd.isLeader = 'false';
+          }
+        }
+        return connectionIds.length;
+      }
+      // JOIN_SESSION_SCRIPT new shape (numkeys=6, includes participant writes).
+      if (numkeys === 6) {
+        const connKey = args[0] as string;
+        const sessionMembersKey = args[1] as string;
+        const leaderKey = args[2] as string;
+        const sessionParticipantsKey = args[3] as string;
+        const participantKey = args[4] as string;
+        const participantConnectionsKey = args[5] as string;
+        const connectionId = args[6] as string;
+        const sessionId = args[7] as string;
+        const username = args[10] as string;
+        const avatarUrl = args[11] as string;
+        const participantId = args[12] as string;
+        const now = args[13] as string;
+
+        if (!hashes.has(connKey)) {
+          return -1;
+        }
+
+        const connData = hashes.get(connKey)!;
+        connData.connectionId = connectionId;
+        connData.sessionId = sessionId;
+        if (username && username !== UNSET_SENTINEL) connData.username = username;
+        if (avatarUrl !== UNSET_SENTINEL) connData.avatarUrl = avatarUrl;
+        connData.isLeader = 'false';
+
+        if (!sets.has(sessionMembersKey)) sets.set(sessionMembersKey, new Set());
+        sets.get(sessionMembersKey)!.add(connectionId);
+
+        connData.participantId = participantId;
+        const resolvedUsername = connData.username ?? '';
+        const resolvedAvatarUrl = connData.avatarUrl ?? '';
+        const resolvedUserId = connData.userId ?? '';
+        if (!sets.has(sessionParticipantsKey)) sets.set(sessionParticipantsKey, new Set());
+        sets.get(sessionParticipantsKey)!.add(participantId);
+        hashes.set(participantKey, {
+          participantId,
+          sessionId,
+          userId: resolvedUserId,
+          username: resolvedUsername,
+          avatarUrl: resolvedAvatarUrl,
+          connectionState: 'CONNECTED',
+          lastSeenAt: now,
+        });
+        if (!sets.has(participantConnectionsKey)) sets.set(participantConnectionsKey, new Set());
+        sets.get(participantConnectionsKey)!.add(connectionId);
+
+        if (!store.has(leaderKey)) {
+          store.set(leaderKey, connectionId);
+          connData.isLeader = 'true';
+          return 1;
+        }
+        return 0;
+      }
+      // numkeys=3 branches by args.length:
+      //   - LEAVE_SESSION_SCRIPT: 3 keys + 3 ARGV (connectionId, membersTTL,
+      //     leaderTTL) → 6 args total.
+      //   - Legacy 3-key JOIN_SESSION_SCRIPT: pre-A8 shape, kept here so an
+      //     older test or call site doesn't silently no-op. **Not exercised
+      //     in production after A8**; the live script uses numkeys=6 and is
+      //     handled above. Future contributors: do not extend this branch
+      //     without also updating the production script — the new shape
+      //     should be the only path used.
       if (numkeys === 3) {
         const connectionKey = args[0] as string;
         const sessionMembersKey = args[1] as string;
@@ -274,7 +422,8 @@ export const createMockRedis = (): MockRedis => {
         const connectionId = args[3] as string;
 
         if (args.length > 6) {
-          // JOIN_SESSION_SCRIPT: Store connection, add to members, leader election
+          // Legacy JOIN_SESSION_SCRIPT path — see comment above. Replaced
+          // by the numkeys=6 branch earlier in this function.
           const username = args[7] as string;
           const avatarUrl = args[8] as string;
 

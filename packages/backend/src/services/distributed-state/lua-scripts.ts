@@ -174,12 +174,17 @@ export const JOIN_SESSION_SCRIPT = `
   local connKey = KEYS[1]
   local sessionMembersKey = KEYS[2]
   local leaderKey = KEYS[3]
+  local sessionParticipantsKey = KEYS[4]
+  local participantKey = KEYS[5]
+  local participantConnectionsKey = KEYS[6]
   local connectionId = ARGV[1]
   local sessionId = ARGV[2]
   local connTTL = tonumber(ARGV[3])
   local sessionTTL = tonumber(ARGV[4])
   local username = ARGV[5]
   local avatarUrl = ARGV[6]
+  local participantId = ARGV[7]
+  local now = ARGV[8]
   local UNSET = '__UNSET__'
 
   -- Refuse to join if the connection hash has been reaped (TTL, manual DEL,
@@ -196,8 +201,8 @@ export const JOIN_SESSION_SCRIPT = `
   if username and username ~= '' and username ~= UNSET then
     redis.call('HSET', connKey, 'username', username)
   end
-  -- Only update avatarUrl if explicitly provided (not the sentinel value)
-  -- Empty string is valid (means clear avatar), sentinel means don't update
+  -- Only update avatarUrl if explicitly provided (not the sentinel value).
+  -- Empty string is valid (means clear avatar), sentinel means don't update.
   if avatarUrl ~= UNSET then
     redis.call('HSET', connKey, 'avatarUrl', avatarUrl)
   end
@@ -206,6 +211,32 @@ export const JOIN_SESSION_SCRIPT = `
   -- Add to session members
   redis.call('SADD', sessionMembersKey, connectionId)
   redis.call('EXPIRE', sessionMembersKey, sessionTTL)
+
+  -- Participant identity: bind the connection to its participant and write
+  -- the participant hash atomically with the membership update. Previously
+  -- this was a follow-up multi() in the JS caller; that left a brief window
+  -- where the connection was in sessionMembers but absent from
+  -- sessionParticipants, so getSessionMembers fell back to the
+  -- connection-keyed branch and returned id=connectionId for one tick before
+  -- the multi completed and the user reappeared with id=participantId.
+  -- Doing it all here collapses that flicker.
+  redis.call('HSET', connKey, 'participantId', participantId)
+  local resolvedUsername = redis.call('HGET', connKey, 'username') or ''
+  local resolvedAvatarUrl = redis.call('HGET', connKey, 'avatarUrl') or ''
+  local resolvedUserId = redis.call('HGET', connKey, 'userId') or ''
+  redis.call('SADD', sessionParticipantsKey, participantId)
+  redis.call('EXPIRE', sessionParticipantsKey, sessionTTL)
+  redis.call('HMSET', participantKey,
+    'participantId', participantId,
+    'sessionId', sessionId,
+    'userId', resolvedUserId,
+    'username', resolvedUsername,
+    'avatarUrl', resolvedAvatarUrl,
+    'connectionState', 'CONNECTED',
+    'lastSeenAt', now)
+  redis.call('EXPIRE', participantKey, sessionTTL)
+  redis.call('SADD', participantConnectionsKey, connectionId)
+  redis.call('EXPIRE', participantConnectionsKey, sessionTTL)
 
   -- Try to become leader (only if no leader exists)
   local currentLeader = redis.call('GET', leaderKey)
@@ -223,6 +254,15 @@ export const JOIN_SESSION_SCRIPT = `
  * Lua script for atomic TTL refresh of connection and session membership.
  * Atomically refreshes both TTLs based on the connection's current session.
  * Returns: 1 if successful, 0 if connection doesn't exist
+ *
+ * CLUSTER-UNSAFE: builds session-* / participant-* / leader keys via string
+ * concatenation inside the script body instead of passing them in via
+ * KEYS[]. Redis Cluster would reject this because all touched keys must
+ * be declared up front and hash to the same slot. Tracked as part of
+ * issue #2143's A3 follow-up; the fix needs a coordinated change to
+ * either pass every key as a separate KEYS entry or adopt hash tags
+ * (e.g. `boardsesh:{sessionId}:...`) so the cluster proxy can route
+ * them together.
  */
 export const REFRESH_TTL_SCRIPT = `
   local connKey = KEYS[1]
@@ -241,7 +281,17 @@ export const REFRESH_TTL_SCRIPT = `
   local sessionId = redis.call('HGET', connKey, 'sessionId')
   if sessionId and sessionId ~= '' then
     local sessionMembersKey = 'boardsesh:session:' .. sessionId .. ':members'
+    local sessionLeaderKey = 'boardsesh:session:' .. sessionId .. ':leader'
     redis.call('EXPIRE', sessionMembersKey, sessionTTL)
+    -- Also refresh the leader key. Without this, a long-running session
+    -- (>= sessionTTL of activity) drops its leader key when the original
+    -- election TTL expires; the next mutation triggers a fresh election and
+    -- clients see a surprise LeaderChanged mid-session for no apparent
+    -- reason. Touching it on every connection refresh keeps it alive as
+    -- long as any connection in the session is still alive. EXPIRE on a
+    -- missing key is a no-op, so this is safe when the leader has just
+    -- handed off and the key is briefly absent.
+    redis.call('EXPIRE', sessionLeaderKey, sessionTTL)
 
     local participantId = redis.call('HGET', connKey, 'participantId')
     if participantId and participantId ~= '' then
@@ -295,6 +345,62 @@ export const REMOVE_PARTICIPANT_SCRIPT = `
     end
   end
   return #connectionIds
+`;
+
+/**
+ * Lua script for atomic username/avatar update across the connection hash
+ * AND the participant hash.
+ *
+ * The previous code only wrote to the connection hash. But once a session
+ * has `sessionParticipants`, `getSessionMembers` returns username/avatar
+ * from the participant hash — so updating only the connection silently left
+ * the participant entry stale and peers saw the old name until the next
+ * full session refresh.
+ *
+ * KEYS[1] = connection hash key
+ * ARGV[1] = username
+ * ARGV[2] = avatarUrl (sentinel '__UNSET__' = don't touch)
+ * ARGV[3] = session TTL
+ * Returns: 1 if update succeeded, 0 if connection hash is missing
+ */
+// CLUSTER-UNSAFE: same pattern as REFRESH_TTL_SCRIPT — builds
+// participantKey via string concatenation rather than KEYS[]. Tracked
+// under issue #2143's A3 follow-up.
+export const UPDATE_USERNAME_SCRIPT = `
+  local connKey = KEYS[1]
+  local username = ARGV[1]
+  local avatarUrl = ARGV[2]
+  local sessionTTL = tonumber(ARGV[3])
+  local UNSET = '__UNSET__'
+
+  if redis.call('EXISTS', connKey) == 0 then
+    return 0
+  end
+
+  redis.call('HSET', connKey, 'username', username)
+  if avatarUrl ~= UNSET then
+    redis.call('HSET', connKey, 'avatarUrl', avatarUrl)
+  end
+  -- Refresh the connection TTL too — we just wrote to it, treat that as
+  -- activity. REFRESH_TTL_SCRIPT picks this up on the next heartbeat
+  -- regardless, but doing it here keeps username changes from accidentally
+  -- inheriting a stale TTL when the rename arrives just before expiry.
+  redis.call('EXPIRE', connKey, sessionTTL)
+
+  local sessionId = redis.call('HGET', connKey, 'sessionId')
+  local participantId = redis.call('HGET', connKey, 'participantId')
+  if sessionId and sessionId ~= '' and participantId and participantId ~= '' then
+    local participantKey = 'boardsesh:participant:' .. sessionId .. ':' .. participantId
+    if redis.call('EXISTS', participantKey) == 1 then
+      redis.call('HSET', participantKey, 'username', username)
+      if avatarUrl ~= UNSET then
+        redis.call('HSET', participantKey, 'avatarUrl', avatarUrl)
+      end
+      redis.call('EXPIRE', participantKey, sessionTTL)
+    end
+  end
+
+  return 1
 `;
 
 /**

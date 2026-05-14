@@ -39,10 +39,13 @@ export async function joinSession(
 
   const becameLeader = (await redis.eval(
     JOIN_SESSION_SCRIPT,
-    3,
+    6,
     KEYS.connection(connectionId),
     KEYS.sessionMembers(sessionId),
     KEYS.sessionLeader(sessionId),
+    KEYS.sessionParticipants(sessionId),
+    KEYS.participant(sessionId, resolvedParticipantId),
+    KEYS.participantConnections(sessionId, resolvedParticipantId),
     connectionId,
     sessionId,
     TTL.connection.toString(),
@@ -51,6 +54,8 @@ export async function joinSession(
     // Use sentinel when avatarUrl is undefined (not provided), otherwise use actual value
     // This allows empty string to explicitly clear the avatar
     avatarUrl !== undefined ? avatarUrl || '' : UNSET_SENTINEL,
+    resolvedParticipantId,
+    Date.now().toString(),
   )) as number;
 
   // -1 means the connection hash was reaped between registerClient and join
@@ -68,31 +73,6 @@ export async function joinSession(
       `[DistributedState] Connection ${connectionId.slice(0, 8)} became leader of session ${sessionId.slice(0, 8)}`,
     );
   }
-
-  const connection = hashToConnection(await redis.hgetall(KEYS.connection(connectionId)));
-  const resolvedUsername = username || connection.username;
-  const resolvedAvatarUrl = avatarUrl !== undefined ? avatarUrl || null : connection.avatarUrl;
-  const now = Date.now().toString();
-
-  const participantKey = KEYS.participant(sessionId, resolvedParticipantId);
-  const participantConnectionsKey = KEYS.participantConnections(sessionId, resolvedParticipantId);
-  const multi = redis.multi();
-  multi.hset(KEYS.connection(connectionId), 'participantId', resolvedParticipantId);
-  multi.sadd(KEYS.sessionParticipants(sessionId), resolvedParticipantId);
-  multi.expire(KEYS.sessionParticipants(sessionId), TTL.sessionMembership);
-  multi.hmset(participantKey, {
-    participantId: resolvedParticipantId,
-    sessionId,
-    userId: connection.userId || '',
-    username: resolvedUsername,
-    avatarUrl: resolvedAvatarUrl || '',
-    connectionState: 'CONNECTED',
-    lastSeenAt: now,
-  });
-  multi.expire(participantKey, TTL.sessionMembership);
-  multi.sadd(participantConnectionsKey, connectionId);
-  multi.expire(participantConnectionsKey, TTL.sessionMembership);
-  await multi.exec();
 
   return { isLeader: becameLeader === 1 };
 }

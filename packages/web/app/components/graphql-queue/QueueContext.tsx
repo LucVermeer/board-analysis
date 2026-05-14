@@ -517,7 +517,13 @@ export const GraphQLQueueProvider = ({
     if (!r.state.currentClimbQueueItem?.climb) return;
     const mode: QueueOperationMode = resolveQueueOperationMode(r.isPersistentSessionActive, r.isDisconnected);
     const newMirroredState = !r.state.currentClimbQueueItem.climb?.mirrored;
-    r.dispatch({ type: 'DELTA_MIRROR_CURRENT_CLIMB', payload: { mirrored: newMirroredState } });
+    // Local-origin dispatch: pass the current climb's uuid so the reducer's
+    // server-event uuid guard is a no-op here (it only suppresses when uuid
+    // diverges).
+    r.dispatch({
+      type: 'DELTA_MIRROR_CURRENT_CLIMB',
+      payload: { mirrored: newMirroredState, mirroredUuid: r.state.currentClimbQueueItem.uuid },
+    });
     if (!r.isDisconnected && r.hasConnected && r.isPersistentSessionActive) {
       r.persistentSession
         .mirrorCurrentClimb(newMirroredState)

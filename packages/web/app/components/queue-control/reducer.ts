@@ -274,8 +274,22 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
     }
 
     case 'DELTA_MIRROR_CURRENT_CLIMB': {
-      const { mirrored } = action.payload;
+      const { mirrored, mirroredUuid } = action.payload;
       if (!state.currentClimbQueueItem) return state;
+      // Server-sourced events carry the uuid of the climb that was actually
+      // mirrored on the server, or null when the server had no current
+      // climb at publish time (a pre-B7 no-op event from history replay).
+      // Suppress both cases:
+      //   - null uuid: the server intentionally mirrored "nothing", so
+      //     applying it to whatever the local current climb happens to be
+      //     would mirror an unrelated climb until the next FullSync.
+      //   - uuid mismatch: peer navigated to a different climb between the
+      //     mirror mutation firing and the broadcast reaching us.
+      // Local-origin dispatches always pass the local current climb's
+      // uuid, so neither branch fires there.
+      if (mirroredUuid === null || state.currentClimbQueueItem.uuid !== mirroredUuid) {
+        return state;
+      }
 
       const updatedCurrentItem = {
         ...state.currentClimbQueueItem,

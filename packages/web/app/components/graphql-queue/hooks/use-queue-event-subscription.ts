@@ -78,9 +78,14 @@ export function useQueueEventSubscription({
           });
           break;
         case 'ClimbMirrored':
+          // Pass the server-issued mirroredUuid so the reducer can suppress
+          // the mutation when the local current climb has drifted to a
+          // different uuid (peer navigated away mid-mirror). Without this
+          // guard the local view would mirror the wrong climb in that race
+          // until the next FullSync corrects it.
           dispatch({
             type: 'DELTA_MIRROR_CURRENT_CLIMB',
-            payload: { mirrored: event.mirrored },
+            payload: { mirrored: event.mirrored, mirroredUuid: event.mirroredUuid ?? null },
           });
           break;
       }

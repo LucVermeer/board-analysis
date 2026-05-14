@@ -315,32 +315,34 @@ export const queueMutations = {
 
     const currentState = await roomManager.getQueueState(sessionId);
     let currentClimb = currentState.currentClimbQueueItem;
-    let sequence = currentState.sequence;
-    let stateHash = currentState.stateHash;
-    const mirroredUuid = currentClimb?.uuid ?? null;
 
-    if (currentClimb) {
-      // Update the mirrored state
-      currentClimb = {
-        ...currentClimb,
-        climb: { ...currentClimb.climb, mirrored },
-      };
-
-      // Also update in queue if present
-      const queue = currentState.queue.map((i) =>
-        i.uuid === currentClimb!.uuid ? { ...i, climb: { ...i.climb, mirrored } } : i,
-      );
-
-      const result = await roomManager.updateQueueState(sessionId, queue, currentClimb);
-      sequence = result.sequence;
-      stateHash = result.stateHash;
+    // No current climb means there's nothing to mirror. Don't publish a
+    // no-op ClimbMirrored event — it clutters logs, occupies bus
+    // bandwidth, and (because sequence/stateHash don't advance) is fragile
+    // under co-sequencing with FullSync replay.
+    if (!currentClimb) {
+      logMutationMetrics('mirrorCurrentClimb', performance.now() - startTime, sessionId);
+      return null;
     }
+
+    // Update the mirrored state
+    currentClimb = {
+      ...currentClimb,
+      climb: { ...currentClimb.climb, mirrored },
+    };
+
+    // Also update in queue if present
+    const queue = currentState.queue.map((i) =>
+      i.uuid === currentClimb!.uuid ? { ...i, climb: { ...i.climb, mirrored } } : i,
+    );
+
+    const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, currentClimb);
 
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'ClimbMirrored',
       sequence,
       stateHash,
-      uuid: mirroredUuid,
+      uuid: currentClimb.uuid,
       mirrored,
     });
 

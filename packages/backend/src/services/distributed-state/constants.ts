@@ -50,7 +50,15 @@ export const KEYS = {
  * TTL values in seconds.
  */
 export const TTL = {
-  connection: 60 * 60, // 1 hour - refreshed on activity
+  // Connection TTL is aligned with sessionMembership so a long-idle leader's
+  // connection hash doesn't expire while the session keys still exist. The
+  // prior 1h connection TTL left a window (between connection expiry and the
+  // ~2-minute stale-member cleanup) where the leader key still pointed at a
+  // dead connectionId; getLeaderParticipantId would return null and every
+  // SessionUser.isLeader for the session was false until the cleanup ran.
+  // REFRESH_TTL_SCRIPT bumps this on every connection refresh so an active
+  // connection keeps itself alive regardless.
+  connection: 4 * 60 * 60, // 4 hours - aligned with sessionMembership
   instanceHeartbeat: 60, // 1 minute - refreshed every 30s
   sessionMembership: 4 * 60 * 60, // 4 hours - matches session TTL
 } as const;

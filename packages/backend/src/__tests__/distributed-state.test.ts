@@ -123,6 +123,36 @@ describe.skipIf(!redisAvailable)('DistributedStateManager', () => {
       expect(connection!.username).toBe('NewName');
       expect(connection!.avatarUrl).toBe('https://new-avatar.url');
     });
+
+    it('writes the rename through to the participant hash (A4)', async () => {
+      // The bug A4 fixed: `updateUsername` only updated the connection hash,
+      // but `getSessionMembers` returns from the participant hash once
+      // `sessionParticipants` is populated. Renames silently never reached
+      // peers. Verify both hashes now carry the new values.
+      await manager.registerConnection('conn-rename', 'OldName', 'user-rename');
+      await manager.joinSession('conn-rename', 'session-rename', 'OldName', 'https://old.avatar', 'user-rename');
+
+      await manager.updateUsername('conn-rename', 'NewName', 'https://new.avatar');
+
+      const members = await manager.getSessionMembers('session-rename');
+      const me = members.find((u) => u.id === 'user-rename');
+      expect(me?.username).toBe('NewName');
+      expect(me?.avatarUrl).toBe('https://new.avatar');
+
+      // And the connection hash too, for parity with the legacy code path.
+      const connection = await manager.getConnection('conn-rename');
+      expect(connection?.username).toBe('NewName');
+      expect(connection?.avatarUrl).toBe('https://new.avatar');
+    });
+
+    it('updateUsername is a no-op when the connection hash is missing', async () => {
+      // Defensive: the Lua script early-returns when the connection hash
+      // was reaped (TTL or manual cleanup). Should not throw and should
+      // not create a participant hash from thin air.
+      await manager.updateUsername('conn-vanished', 'NewName', 'https://x');
+      const connection = await manager.getConnection('conn-vanished');
+      expect(connection).toBeNull();
+    });
   });
 
   describe('Session Joining', () => {

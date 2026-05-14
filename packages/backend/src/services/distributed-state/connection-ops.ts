@@ -2,12 +2,13 @@ import type Redis from 'ioredis';
 import {
   KEYS,
   TTL,
+  UNSET_SENTINEL,
   validateConnectionId,
   connectionToHash,
   hashToConnection,
   type DistributedConnection,
 } from './constants';
-import { ELECT_NEW_LEADER_SCRIPT } from './lua-scripts';
+import { ELECT_NEW_LEADER_SCRIPT, UPDATE_USERNAME_SCRIPT } from './lua-scripts';
 
 /**
  * Register a new connection in distributed state.
@@ -131,7 +132,7 @@ export async function removeConnection(
   return { sessionId, participantId, wasLeader, newLeaderId, remainingParticipantConnections };
 }
 
-async function countLiveParticipantConnections(
+export async function countLiveParticipantConnections(
   redis: Redis,
   sessionId: string,
   participantId: string,
@@ -263,9 +264,17 @@ export async function updateUsername(
   avatarUrl?: string,
 ): Promise<void> {
   validateConnectionId(connectionId);
-  const updates: Record<string, string> = { username };
-  if (avatarUrl !== undefined) {
-    updates.avatarUrl = avatarUrl || '';
-  }
-  await redis.hmset(KEYS.connection(connectionId), updates);
+  // Updates the connection hash AND the participant hash atomically (Lua).
+  // Without the participant-side write, getSessionMembers (which prefers
+  // sessionParticipants once it's populated) keeps returning the stale
+  // username/avatar — peers see the old name until something else triggers
+  // a refresh.
+  await redis.eval(
+    UPDATE_USERNAME_SCRIPT,
+    1,
+    KEYS.connection(connectionId),
+    username,
+    avatarUrl !== undefined ? avatarUrl || '' : UNSET_SENTINEL,
+    TTL.sessionMembership.toString(),
+  );
 }
