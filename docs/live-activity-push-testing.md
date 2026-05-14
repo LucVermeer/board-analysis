@@ -35,7 +35,7 @@ Server-to-device (push updates):
        |
   apnsService.sendLiveActivityUpdate() (5s debounce)
        |
-  Apple Push Notification Service (sandbox)
+  Apple Push Notification Service (production)
        |
   iOS ActivityKit updates Live Activity
        |
@@ -107,7 +107,7 @@ APNS_KEY_ID=ABC123DEF4              # Your Key ID from step 1
 APNS_TEAM_ID=9A2B3C4D5E             # Your Team ID from step 2
 APNS_KEY_CONTENTS=LS0tLS1CRUdJT...  # Base64-encoded .p8 key from step 4
 APNS_BUNDLE_ID=com.boardsesh.app    # Must match your iOS app's bundle ID
-APNS_PRODUCTION=false                # false = sandbox APNs (for development builds)
+APNS_PRODUCTION=true                 # true = production APNs (matches the app's aps-environment=production entitlement)
 ```
 
 When the backend starts, you should see:
@@ -350,7 +350,7 @@ APNs env vars are not set in `packages/backend/.env.local`. Double-check all fiv
 
 ### "BadDeviceToken" in APNs results
 
-- **Wrong environment**: Development-signed app requires `APNS_PRODUCTION=false` (sandbox APNs). Production/TestFlight builds require `APNS_PRODUCTION=true`.
+- **Wrong environment**: All build configs (Debug + TestFlight + App Store) use `aps-environment=production`, so the backend must run with `APNS_PRODUCTION=true`. The sandbox APNs host (`api.sandbox.push.apple.com`) is not used by any current build.
 - **Wrong bundle ID**: `APNS_BUNDLE_ID` must match the app's actual bundle identifier.
 - **Stale token**: The activity may have ended. Start a new session.
 
@@ -368,7 +368,7 @@ The .p8 key JWT has expired (tokens are valid for 1 hour). The `@parse/node-apn`
 
 - APNs pushes are not reaching the device. Check backend logs for send failures.
 - The APNs rate limit may be exceeded (~4/hr for non-prominent activities). When the activity is on the lock screen, the limit is much higher.
-- Verify `APNS_PRODUCTION=false` for development builds.
+- Verify `APNS_PRODUCTION=true` — all builds (Debug + TestFlight + App Store) use `aps-environment=production`.
 
 ### CORS errors on widget HTTP request
 
