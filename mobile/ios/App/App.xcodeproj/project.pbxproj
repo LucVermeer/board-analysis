@@ -32,8 +32,11 @@
 		LA100011 /* ClimbSessionLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200011 /* ClimbSessionLiveActivity.swift */; };
 		LA100012 /* NextClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200012 /* NextClimbIntent.swift */; };
 		LA100013 /* PreviousClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200013 /* PreviousClimbIntent.swift */; };
+		LA100070 /* WidgetNetworking.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200070 /* WidgetNetworking.swift */; };
 		LA100020 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200001 /* SharedConstants.swift */; };
 		LA100021 /* ClimbSessionAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200002 /* ClimbSessionAttributes.swift */; };
+		LA100080 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200080 /* SharedKeychain.swift */; };
+		LA100081 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200080 /* SharedKeychain.swift */; };
 		LA100030 /* SessionWebSocketManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200030 /* SessionWebSocketManagerTests.swift */; };
 		LA100031 /* ThumbnailFetcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200031 /* ThumbnailFetcherTests.swift */; };
 		LA100032 /* LiveActivityManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200032 /* LiveActivityManagerTests.swift */; };
@@ -106,6 +109,8 @@
 		LA200011 /* ClimbSessionLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClimbSessionLiveActivity.swift; sourceTree = "<group>"; };
 		LA200012 /* NextClimbIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextClimbIntent.swift; sourceTree = "<group>"; };
 		LA200013 /* PreviousClimbIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousClimbIntent.swift; sourceTree = "<group>"; };
+		LA200070 /* WidgetNetworking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetNetworking.swift; sourceTree = "<group>"; };
+		LA200080 /* SharedKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedKeychain.swift; sourceTree = "<group>"; };
 		LA200014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		LA200015 /* BoardseshWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoardseshWidgets.entitlements; sourceTree = "<group>"; };
 		LA200030 /* SessionWebSocketManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWebSocketManagerTests.swift; sourceTree = "<group>"; };
@@ -182,6 +187,7 @@
 				B1A2C3D4E5F60717 /* SceneDelegate.swift */,
 				C1A2B3D4E5F60719 /* BoardseshViewController.swift */,
 				LA200001 /* SharedConstants.swift */,
+				LA200080 /* SharedKeychain.swift */,
 				LA200002 /* ClimbSessionAttributes.swift */,
 				LA200003 /* ThumbnailFetcher.swift */,
 				LA200004 /* SessionWebSocketManager.swift */,
@@ -231,6 +237,7 @@
 				LA200011 /* ClimbSessionLiveActivity.swift */,
 				LA200012 /* NextClimbIntent.swift */,
 				LA200013 /* PreviousClimbIntent.swift */,
+				LA200070 /* WidgetNetworking.swift */,
 				LA200014 /* Info.plist */,
 				LA200015 /* BoardseshWidgets.entitlements */,
 				PI200002 /* PrivacyInfo.xcprivacy */,
@@ -436,6 +443,7 @@
 				B1A2C3D4E5F60718 /* SceneDelegate.swift in Sources */,
 				C1A2B3D4E5F60720 /* BoardseshViewController.swift in Sources */,
 				LA100001 /* SharedConstants.swift in Sources */,
+				LA100080 /* SharedKeychain.swift in Sources */,
 				LA100002 /* ClimbSessionAttributes.swift in Sources */,
 				LA100003 /* ThumbnailFetcher.swift in Sources */,
 				LA100004 /* SessionWebSocketManager.swift in Sources */,
@@ -469,7 +477,9 @@
 				LA100011 /* ClimbSessionLiveActivity.swift in Sources */,
 				LA100012 /* NextClimbIntent.swift in Sources */,
 				LA100013 /* PreviousClimbIntent.swift in Sources */,
+				LA100070 /* WidgetNetworking.swift in Sources */,
 				LA100020 /* SharedConstants.swift in Sources */,
+				LA100081 /* SharedKeychain.swift in Sources */,
 				LA100021 /* ClimbSessionAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

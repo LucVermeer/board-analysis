@@ -1,6 +1,6 @@
 {
-  "id": "c52c79c0-28a4-47d2-b849-6332cb6f9e19",
-  "prevId": "254e8903-0130-4ca8-a57e-b2a4ba00ab71",
+  "id": "cc82e724-7230-47d2-9150-2c722327fe91",
+  "prevId": "f2f65111-55dd-4d1e-92fe-4aa1bc9a763f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7983,6 +7983,71 @@
           "tableFrom": "user_climb_percentiles",
           "tableTo": "users",
           "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.activity_push_tokens": {
+      "name": "activity_push_tokens",
+      "schema": "",
+      "columns": {
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "activity_push_tokens_session_idx": {
+          "name": "activity_push_tokens_session_idx",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "activity_push_tokens_session_id_board_sessions_id_fk": {
+          "name": "activity_push_tokens_session_id_board_sessions_id_fk",
+          "tableFrom": "activity_push_tokens",
+          "tableTo": "board_sessions",
+          "columnsFrom": ["session_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"

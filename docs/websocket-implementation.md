@@ -14,7 +14,10 @@ This document describes the WebSocket implementation used for real-time party se
 8. [Failure States and Recovery](#failure-states-and-recovery)
 9. [Client-Side Connection Supervisor](#client-side-connection-supervisor)
 10. [Data Persistence Strategy](#data-persistence-strategy)
-11. [Native iOS WebSocket Client](#native-ios-websocket-client)
+11. [iOS Live Activity Integration](#ios-live-activity-integration)
+12. [Live Activity Push Notifications (APNs)](#live-activity-push-notifications-apns)
+13. [Activity Push Token Lifecycle](#activity-push-token-lifecycle)
+14. [Widget Navigation REST Endpoint](#widget-navigation-rest-endpoint)
 
 ---
 
@@ -1487,118 +1490,277 @@ Requires user authentication and controller ownership.
 
 ---
 
-## Native iOS WebSocket Client
+## iOS Live Activity Integration
 
-The iOS app includes a native WebSocket client (`SessionWebSocketManager`) that maintains its own connection to the GraphQL backend, independent of the web view's connection. This enables Live Activities (Lock Screen and Dynamic Island widgets) to receive real-time queue updates even when the web view is backgrounded.
+On iOS, the JavaScript webapp runs inside a single Capacitor webview and owns the `graphql-ws` WebSocket connection (same client as the browser path). A separate native `SessionWebSocketManager` holds its own `URLSessionWebSocketTask` purely to feed the Live Activity widget — the JS-side WebSocket is suspended when the phone is locked, so without the native connection the lock-screen widget would freeze the moment the app goes to background. APNs push notifications carry the same queue updates to the Live Activity once both the app and the native WS are suspended (see [Live Activity Push Notifications](#live-activity-push-notifications-apns) below).
 
-### Why a Separate Native Client
+The earlier multi-webview + native-WebSocket bridge architecture (Capacitor plugin proxying the JS layer through `URLSessionWebSocketTask`) was removed when main reverted the multi-webview / native tab bar work (#1803). Today there is no `NativeWebSocketPlugin` and no JS-side `NativeWSClient`; iOS uses the same browser-based `graphql-ws` client as web and Android.
 
-The web view's `graphql-ws` connection is tied to the web view's lifecycle — when iOS suspends the web view (backgrounding, Lock Screen), the connection drops. Live Activities need continuous updates to show the current climb on the Lock Screen. A native `URLSessionWebSocketTask` connection persists longer and can be managed by the app's main process.
-
-### Protocol
-
-The native client implements the same `graphql-ws` protocol as the web client:
-
-1. **ConnectionInit** — Sent on connect with optional `authToken` in `connectionParams`
-2. **ConnectionAck** — Server confirms
-3. **JoinSession** — Mutation to join the session, which sets `ctx.sessionId` on the server so subsequent mutations are authorized
-4. **Subscribe** — `queueUpdates(sessionId:)` subscription for queue delta events
-5. **Next** — Queue delta events (FullSync, CurrentClimbChanged, QueueItemAdded, etc.)
-6. **Ping/Pong** — Server sends pings every 30s, client responds with pong
-
-### Reconnection
-
-Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s. Reconnection stops on intentional disconnect (session end, app termination). After reconnection, the first event from the server is always a `FullSync`, which resets the client's queue state.
-
-### Sequence Gap Detection
-
-Each queue event carries a `sequence` number. The native client tracks the last received sequence and detects gaps (missed events). When a gap is detected, the client relies on the server's next `FullSync` to recover — no explicit resync request is needed since the server sends a full state on reconnection.
-
-### Data Flow
+### Architecture
 
 ```
-SessionWebSocketManager
+JS webview (graphql-ws Client)
   │ subscribes to queueUpdates(sessionId:)
-  │ receives delta events
+  │ runs mutations + receives delta events
   ▼
-LiveActivityManager
-  │ calls Activity.update() with new ContentState
-  ▼
-Lock Screen / Dynamic Island
-  │ renders updated climb info
+GraphQL Backend ◄────────────────────────┐
+  │                                      │
+  │ in parallel, while the app is        │
+  │ foregrounded:                        │
+  ▼                                      │
+SessionWebSocketManager (native)         │
+  │ second graphql-ws connection         │
+  │ same queueUpdates subscription       │
+  │ onQueueStateChanged callback         │
+  ▼                                      │
+LiveActivityManager.updateActivity(...)  │
+  │ Activity.update(content)             │
+  ▼                                      │
+Lock Screen / Dynamic Island             │
+  ▲                                      │
+  │ when the phone is locked, native     │
+  │ WS dies; the Live Activity widget    │
+  │ is refreshed instead by APNs pushes  │
+  │ delivered to its ActivityKit         │
+  │ pushType: .token callback ───────────┘
 ```
 
-Widget button taps (next/prev) flow in the opposite direction:
+### Why a Second Connection (and Not a Bridge)
 
-```
-Widget App Intent (NextClimbIntent / PreviousClimbIntent)
-  │ updates App Group UserDefaults optimistically
-  │ updates Live Activity directly
-  │ posts Darwin notification
-  ▼
-LiveActivityPlugin (main app process, Capacitor plugin)
-  │ reads updated queue state from App Group
-  │ calls SessionWebSocketManager.navigateToItem()
-  │ also emits JS event (fallback for foregrounded app)
-  ▼
-SessionWebSocketManager
-  │ sends setCurrentClimb mutation via native WS
-  ▼
-Backend publishes CurrentClimbChanged
-  │ all clients (web + native) receive update
-```
+A bridge would be cheaper on the server side, but the trade-offs ended up favouring two independent connections:
 
-### App Group Shared State
+- The webview can rebuild its WebSocket from JS state in milliseconds; the native side wakes from background separately and reuses a long-lived task. Coupling them through a bridge meant a webview reload could cascade into a native reconnect (or vice versa) and observed in production as bursts of disconnect / reconnect storms.
+- Live Activity push tokens live on the native side. Keeping the ActivityKit lifecycle co-located with the connection that drives it is simpler than synchronising it across the bridge.
+- The 2× server connection cost is bounded — only foregrounded iOS sessions pay it, and even then the second connection consumes only what's needed to drive Live Activity updates.
 
-The main app and widget extension share data via App Group (`group.com.boardsesh.app`):
+### Native Live Activity WebSocket — Scope
 
-| Key                                             | Type       | Purpose                                           |
-| ----------------------------------------------- | ---------- | ------------------------------------------------- |
-| `queue_items`                                   | JSON array | Serialized `SharedQueueItem` list                 |
-| `current_index`                                 | Int        | Current position in queue                         |
-| `session_id`                                    | String     | Active session identifier                         |
-| `server_url`                                    | String     | Backend URL for thumbnail fetching                |
-| `board_name`, `layout_id`, `size_id`, `set_ids` | String/Int | Board details for thumbnail URL construction      |
-| `pending_action`                                | String     | Widget→app navigation request ("next"/"previous") |
+`SessionWebSocketManager` is purposely narrow:
+
+- One `URLSessionWebSocketTask`, one `queueUpdates(sessionId:)` subscription, one `onQueueStateChanged` callback.
+- No external-subscription registration API — the JS side does all of its own subscribing.
+- The same `graphql-transport-ws` handshake (`connection_init` with optional `authToken`, `connection_ack`, `subscribe`, `next`, `complete`, ping/pong) as the JS client.
+- Exponential reconnection backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s. Reconnect stops on intentional disconnect (`endSession`, app termination).
+- Stale-date handling: 3-minute stale window refreshed every 60s by the ping timer. After force-quit or crash, the Live Activity goes stale within 3 minutes instead of lingering for 30.
+
+### Thread Safety
+
+All mutable state in `SessionWebSocketManager` is protected by a serial `DispatchQueue` (`stateQueue`). Publicly exposed properties (`isConnected`, `reconnectAttempt`, `sessionId`, `authToken`, …) use thread-safe computed accessors that read through `stateQueue.sync`. Internal code on `stateQueue` accesses the backing `_`-prefixed properties directly to avoid reentrant deadlock (`DispatchQueue` is not reentrant). Delegate callbacks (`onQueueStateChanged`) are dispatched to the main queue so Capacitor / UIKit calls never block `stateQueue`.
+
+### App Group + Keychain Shared State
+
+The main app and widget extension share data through two channels:
+
+**App Group (`group.com.boardsesh.app`) UserDefaults** — board details, queue, and ephemeral navigation state. Stored in plaintext on disk inside the App Group container; appropriate for non-secret data only.
+
+| Key                                                         | Type       | Purpose                                           |
+| ----------------------------------------------------------- | ---------- | ------------------------------------------------- |
+| `bs_queue_items`                                            | JSON array | Serialized `SharedQueueItem` list                 |
+| `bs_current_index`                                          | Int        | Current position in queue                         |
+| `bs_session_id`                                             | String     | Active session identifier                         |
+| `bs_server_url`                                             | String     | Backend URL for thumbnail fetching                |
+| `bs_board_name`, `bs_layout_id`, `bs_size_id`, `bs_set_ids` | String/Int | Board details for thumbnail URL construction      |
+| `bs_pending_action`                                         | String     | Widget→app navigation request ("next"/"previous") |
+
+**Shared Keychain (`group.com.boardsesh.app` access group)** — Bearer credentials only. Encrypted at rest, hardware-backed, accessible only to processes that declare the `keychain-access-groups` entitlement. Accessibility is `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` so the widget extension can read them while the device is locked (after the first post-boot unlock), without syncing them into iCloud Keychain backups.
+
+| Key (account name)   | Stored by            | Read by              | Purpose                                                                                  |
+| -------------------- | -------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| `bs_auth_token`      | `LiveActivityPlugin` | `LiveActivityPlugin` | User's Bearer token attached to GraphQL `register…`/`unregister…ActivityPushToken` calls |
+| `bs_live_push_token` | `LiveActivityPlugin` | `WidgetNetworking`   | APNs Live Activity push token used as the Bearer credential on `/api/widget/navigate`    |
+
+Earlier builds wrote both credentials to App Group UserDefaults. The current `LiveActivityPlugin.endSession()` clears those legacy keys on top of the new keychain delete so an upgrade doesn't leave plaintext tokens behind.
+
+The helper lives in `mobile/ios/App/App/SharedKeychain.swift`. The `keychain-access-groups` entitlement is declared in `App.entitlements`, `App.release.entitlements`, and `BoardseshWidgets.entitlements`.
+
+### Widget Button Flow
+
+Lock-screen widget taps (next/prev climb) do NOT go through the native WebSocket. They hit the backend directly via `/api/widget/navigate` (see [Widget Navigation REST Endpoint](#widget-navigation-rest-endpoint)) because the widget extension can't talk to `SessionWebSocketManager` (different process). The backend updates the queue, publishes a `CurrentClimbChanged` event, and the APNs hook fans the change back out to every device's Live Activity.
 
 ### Lifecycle
 
-- **Start**: `LiveActivityPlugin.startSession()` stores board details in App Group, connects the WebSocket manager, and starts the Live Activity
-- **End**: `LiveActivityPlugin.endSession()` clears the callback, disconnects WebSocket, ends all Live Activities, and cleans up App Group state
-- **App termination**: `SceneDelegate.sceneDidDisconnect` and `AppDelegate.applicationWillTerminate` attempt to end the Live Activity and disconnect the WebSocket, but these callbacks are **not reliably called** on force-quit. As a fallback, the stale date is set to 3 minutes (refreshed every 60s by the ping timer), and `SceneDelegate.sceneWillEnterForeground` / `scene(_:willConnectTo:)` clean up any stale or orphaned activities on the next app launch or foreground return
+- **Start** — `LiveActivityPlugin.startSession()` stores board details in App Group UserDefaults, writes the auth token to the shared keychain, installs the `onQueueStateChanged` callback before connecting `SessionWebSocketManager`, then starts the Live Activity with `pushType: .token`. The push-token handler is passed into `Activity.request(...)` atomically so ActivityKit's first emission isn't dropped.
+- **End** — `LiveActivityPlugin.endSession()` fires `unregisterActivityPushToken` on the backend (best-effort), clears the keychain entries, removes the App Group queue keys, ends all Live Activities, and disconnects `SessionWebSocketManager`.
+- **Force-quit / crash** — `SceneDelegate.sceneDidDisconnect` and `AppDelegate.applicationWillTerminate` attempt the same cleanup but aren't reliably called. The 3-minute stale window from the Live Activity manager and the orphaned-activity cleanup in `SceneDelegate.sceneWillEnterForeground` / `scene(_:willConnectTo:)` handle the leftovers on next launch.
+
+## Live Activity Push Notifications (APNs)
+
+When the app is fully foregrounded, queue mutations land via the JS WebSocket; when the app is backgrounded or terminated, the native WS goes silent and the **Live Activity widget is kept fresh by APNs push notifications**.
+
+### Backend Send Path
+
+```
+GraphQL mutation (e.g. setCurrentClimb)
+  │ resolver updates state via RoomManager
+  ▼
+pubsub.publishQueueEvent(sessionId, event)
+  │ runs the per-event subscriber fan-out as usual,
+  │ then fires the externally registered hook (if any)
+  ▼
+queueEventHook = sendLiveActivityUpdate(...)  ← installed in server.ts
+  │ packs a LiveActivityContentState (current climb name,
+  │ grade, angle, index, totals, hasNext/hasPrevious, climbUuid)
+  │ debounces ~5s per session to coalesce bursts
+  ▼
+APNs HTTP/2 send
+  │ topic:      {APNS_BUNDLE_ID}.push-type.liveactivity
+  │ pushType:   liveactivity
+  │ payload:    { aps: { timestamp, event: "update", content-state } }
+  ▼
+Apple Push Notification service
+  ▼
+ActivityKit on every device that registered a token for this session
+```
+
+`apns/index.ts` is **configured-or-noop**: if any of `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_KEY_CONTENTS`, `APNS_BUNDLE_ID`, or `APNS_PRODUCTION` is missing, all public functions short-circuit and the rest of the backend keeps running normally. The boot log warns when env is missing (see `packages/backend/src/server.ts` startup section).
+
+### Event Types That Trigger a Push
+
+`APNS_RELEVANT_EVENTS` in `server.ts` controls which `publishQueueEvent` types fan out to APNs:
+
+- `CurrentClimbChanged`
+- `FullSync`
+- `QueueItemAdded`
+- `QueueItemRemoved`
+- `QueueReordered`
+
+Other event types (`ClimbMirrored`, etc.) intentionally don't push so the lock-screen widget doesn't flicker for cosmetic state.
+
+### Publisher-Side Semantics (Multi-Instance)
+
+The hook fires only on the instance that calls `publishQueueEvent`. It is **not** invoked from `dispatchToLocalQueueSubscribers` when a Redis fan-out message arrives from another instance — that path bypasses the hook intentionally so a single event published in a 3-instance cluster does not produce 3 redundant APNs sends.
+
+Implication: every backend instance that can publish queue mutations should have APNs env vars configured. If env is missing on the publishing instance, the hook still runs but every `sendLiveActivityUpdate` call becomes a no-op via the `configured` flag.
+
+### Ending the Activity
+
+`endSession` mutation calls the APNs service with `event: "end"`, which fires the same APNs send shape but tells ActivityKit to dismiss the widget. Local `LiveActivityManager.endAllActivities()` covers the path where the session ends from the foregrounded app.
+
+## Activity Push Token Lifecycle
+
+```
+ActivityKit (iOS)
+  │ Activity.request(..., pushType: .token)
+  │ emits a token via activity.pushTokenUpdates AsyncSequence
+  ▼
+LiveActivityManager.deliverPushTokenUpdate(token)
+  │ hops into the actor for Swift 6 strict-concurrency safety
+  │ calls onPushTokenUpdate(token) on the LiveActivityPlugin handler
+  ▼
+LiveActivityPlugin pushTokenHandler
+  │ single tokenQueue.sync block writes _currentPushToken AND reads
+  │ (_currentSessionId, _currentServerUrl) — one critical section so
+  │ ActivityKit delivering the token on any thread can't deadlock
+  │ writes token to SharedKeychain.livePushTokenKey
+  ▼
+POST /graphql registerActivityPushToken(sessionId, token)
+  │ Authorization: Bearer <app auth token from keychain>
+  ▼
+Backend resolver (packages/backend/src/graphql/resolvers/sessions/push-tokens.ts)
+  │ - require authentication (ctx.userId)
+  │ - validate APNs token format ([0-9a-fA-F]{32,128})
+  │ - rate limit (token bucket 5 capacity / 1 refill per 2s)
+  │ - verify participant via board_session_participants
+  │ - upsert into activity_push_tokens inside a transaction:
+  │     pg_advisory_xact_lock(hashtext(sessionId))
+  │     count rows for sessionId
+  │     if >= MAX_TOKENS_PER_SESSION (8), delete oldest
+  │     insert with ON CONFLICT (token) DO UPDATE
+  ▼
+activity_push_tokens table (DB)
+```
+
+### Per-Session Cap and TOCTOU Avoidance
+
+The 8-tokens-per-session cap is enforced under a Postgres advisory lock (`pg_advisory_xact_lock(hashtext(sessionId))`) so concurrent register calls for the same session serialize. Without the lock, two requests could both observe `count = cap - 1`, both skip the eviction, and both insert, leaving the session at `cap + 1` rows. The lock is per-transaction, so it auto-releases on commit or rollback.
+
+### Unregister
+
+`unregisterActivityPushToken(sessionId, token)` is the symmetric mutation. The delete is scoped to `(token, sessionId)` so an attacker holding a leaked token cannot wipe another session's registrations. Same auth + participant + rate-limit checks apply.
+
+## Widget Navigation REST Endpoint
+
+Lock-screen widget extensions cannot reach the JS webapp or its WebSocket. Instead, the Next / Previous buttons hit a dedicated REST endpoint:
+
+```
+POST /api/widget/navigate
+  Authorization: Bearer <APNs Live Activity push token>
+  Content-Type: application/json
+
+  { "sessionId": "<id>", "action": "next" | "previous", "currentIndex": <int ≥ 0> }
+```
+
+### Auth
+
+The Bearer credential is the device's APNs Live Activity push token — the same value the widget pulled from `SharedKeychain.livePushTokenKey`. The handler looks up `(token, sessionId)` in `activity_push_tokens`; a mismatch returns 401. Treating the push token as the credential keeps the widget extension out of the user-auth path entirely (it never sees the user's Bearer token) and is safe because the token is already a per-session, per-device secret.
+
+### Validation
+
+- `sessionId`: non-empty string
+- `action`: `"next"` or `"previous"`
+- `currentIndex`: integer, `>= 0`
+- Request body capped at 4 KB
+
+Anything else returns 400.
+
+### Rate Limiting
+
+Per-session token bucket — capacity 2, refill 1 per 1.5s. Burst clicks are smoothed; sustained tapping caps at ~40 req/min per session. Returns 429 when the bucket is empty. The session-scoped bucket means one device can't deny service for another.
+
+### Server-Authoritative Navigation
+
+The handler does NOT trust the `currentIndex` from the widget — it fetches the server's queue state via `roomManager.getQueueState(sessionId)`, computes the target index from `action` (wrapping at boundaries for `next`, clamped to 0 for `previous`), and calls `navigateToQueueItem` (shared with the `setCurrentClimb` GraphQL mutation). That function does optimistic-lock retry against the room manager and publishes the resulting `CurrentClimbChanged` via `pubsub.publishQueueEvent`, which fans out to JS subscribers and triggers the APNs push hook described above.
+
+The `currentIndex` field in the request is validated for shape only; the handler reads server state for the actual position.
+
+### Why HTTP and Not a GraphQL Mutation
+
+A GraphQL mutation would require either the JS GraphQL client (not available in the widget process) or hand-rolled GraphQL-over-HTTP in Swift. The REST handler is simpler, cheaper, and lets us keep the widget extension free of GraphQL tooling. The downside — a second endpoint surface to keep in sync — is small for one operation.
 
 ## Related Files
 
 ### Backend
 
 - `packages/backend/src/websocket/setup.ts` - WebSocket server configuration
-- `packages/backend/src/pubsub/index.ts` - Event pub/sub system
+- `packages/backend/src/pubsub/index.ts` - Event pub/sub system + `setQueueEventHook`
 - `packages/backend/src/pubsub/redis-adapter.ts` - Redis pub/sub adapter
 - `packages/backend/src/services/room-manager.ts` - Session & queue management
 - `packages/backend/src/services/redis-session-store.ts` - Redis session persistence
 - `packages/backend/src/services/distributed-state.ts` - Multi-instance state management
+- `packages/backend/src/services/queue-navigation.ts` - Shared queue-navigation logic (used by `setCurrentClimb` and `/api/widget/navigate`)
+- `packages/backend/src/services/apns/index.ts` - APNs HTTP/2 send + 5s debounce + Live Activity content state assembly
+- `packages/backend/src/handlers/widget-navigate.ts` - REST handler for `POST /api/widget/navigate`
 - `packages/backend/src/graphql/resolvers/queue/` - Queue mutations & subscriptions
 - `packages/backend/src/graphql/resolvers/sessions/` - Session mutations & subscriptions
+- `packages/backend/src/graphql/resolvers/sessions/push-tokens.ts` - `registerActivityPushToken` / `unregisterActivityPushToken` resolvers with the per-session cap + advisory-lock TOCTOU fix
 - `packages/backend/src/graphql/resolvers/shared/helpers.ts` - Cross-instance auth validation
+- `packages/db/src/schema/app/activity-push-tokens.ts` - Drizzle schema for the `activity_push_tokens` table
 
 ### Frontend
 
 - `packages/web/app/lib/backend-url.ts` - Runtime backend URL resolver (preview deploys, dev overrides)
-- `packages/web/app/components/graphql-queue/graphql-client.ts` - WebSocket client
+- `packages/web/app/components/graphql-queue/graphql-client.ts` - Browser-based `graphql-ws` client used on web, Android, and iOS Capacitor
+- `packages/web/app/components/connection-manager/websocket-connection-manager.ts` - Connection state tracking
+- `packages/web/app/components/persistent-session/hooks/use-session-lifecycle.ts` - Session lifecycle
+- `packages/web/app/components/persistent-session/hooks/use-queue-mutations.ts` - Queue mutations
 - `packages/web/app/components/graphql-queue/use-queue-session.ts` - Session hook
 - `packages/web/app/components/persistent-session/persistent-session-context.tsx` - Root-level session management (split into ActionsContext + StateContext for render performance)
 - `packages/web/app/components/graphql-queue/QueueContext.tsx` - Queue state context (split into ActionsContext + DataContext; actions use `latestRef` pattern for stable callback identity)
 
 ### Native iOS
 
-- `mobile/ios/App/App/SessionWebSocketManager.swift` - Native graphql-ws client for queue subscriptions
-- `mobile/ios/App/App/LiveActivityPlugin.swift` - Capacitor plugin bridge (start/end session, update activity)
-- `mobile/ios/App/App/LiveActivityManager.swift` - ActivityKit lifecycle management
-- `mobile/ios/App/App/SharedConstants.swift` - App Group ID, UserDefaults keys, shared queue state helpers
+- `mobile/ios/App/App/SessionWebSocketManager.swift` - Native graphql-ws client used only to drive Live Activity updates while the app is foregrounded
+- `mobile/ios/App/App/LiveActivityPlugin.swift` - Capacitor plugin: start/end session, update activity, observe + forward APNs push tokens to the backend
+- `mobile/ios/App/App/LiveActivityManager.swift` - ActivityKit lifecycle (`pushType: .token`, push-token observer, stale-date refresh)
+- `mobile/ios/App/App/SharedConstants.swift` - App Group ID and non-secret UserDefaults keys + helpers
+- `mobile/ios/App/App/SharedKeychain.swift` - Shared-access-group Keychain helper for auth + push tokens
+- `mobile/ios/App/App/App.entitlements` / `App.release.entitlements` - App Group, `aps-environment`, `keychain-access-groups` declarations
 - `mobile/ios/App/App/ThumbnailFetcher.swift` - Board-render thumbnail fetching and caching
-- `mobile/ios/App/BoardseshWidgets/NextClimbIntent.swift` - Widget next button App Intent
-- `mobile/ios/App/BoardseshWidgets/PreviousClimbIntent.swift` - Widget previous button App Intent
-- `packages/web/app/lib/live-activity/use-live-activity.ts` - React hook bridging queue state to native Live Activity
+- `mobile/ios/App/BoardseshWidgets/BoardseshWidgets.entitlements` - Widget extension entitlements (App Group + Keychain access group)
+- `mobile/ios/App/BoardseshWidgets/NextClimbIntent.swift` - Widget Next button App Intent
+- `mobile/ios/App/BoardseshWidgets/PreviousClimbIntent.swift` - Widget Previous button App Intent
+- `mobile/ios/App/BoardseshWidgets/WidgetNetworking.swift` - HTTP client that calls `/api/widget/navigate` from the widget extension
+- `packages/web/app/lib/live-activity/use-live-activity.ts` - React hook bridging queue state to the native Live Activity plugin
 
 ### Shared
 

@@ -134,22 +134,8 @@ export function createGraphQLClient(
 }
 
 /**
- * Execute a GraphQL mutation and return the result as a promise.
- *
- * Why over WebSocket and not HTTP: session-scoped mutations
- * (ADD_QUEUE_ITEM, SET_CURRENT_CLIMB, MIRROR_CURRENT_CLIMB,
- * LEAVE_SESSION, etc.) need to ride the same connection as the
- * subscriptions so the backend can fan them out to peers in the same
- * party room via the connection's `connectionParams`/`ConnectionContext`.
- * Sending them over HTTP would lose that room context. graphql-ws
- * supports queries/mutations as well as subscriptions on a single
- * socket — the server (Yoga + useServer) accepts all three operation
- * types over WS without filtering. Stateless queries and mutations
- * that don't need session routing should still go through the HTTP
- * client in `app/lib/graphql/client.ts`.
- *
- * Includes automatic cleanup and a 30s timeout so a wedged socket
- * can't hang a mutation forever.
+ * Execute a GraphQL mutation and return the result as a promise
+ * Includes automatic cleanup and timeout handling
  */
 export function execute<TData = unknown, TVariables = Record<string, unknown>>(
   client: Client,

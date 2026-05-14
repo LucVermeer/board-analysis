@@ -465,6 +465,25 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     revokeRole(input: RevokeRoleInput!): Boolean!
 
+    # ============================================
+    # APNs Push Token Mutations (auth required)
+    # ============================================
+
+    """
+    Register an APNs device token for Live Activity push updates in a session.
+    Caller must be authenticated and be a participant in the session.
+    Upserts: if the token already exists, updates the associated session.
+    """
+    registerActivityPushToken(sessionId: ID!, token: String!): Boolean!
+
+    """
+    Unregister an APNs device token for Live Activity push updates.
+    Caller must be authenticated and be a participant in the session.
+    The delete is scoped to (token, sessionId) so a leaked token cannot
+    be used to clear another session's registration.
+    """
+    unregisterActivityPushToken(sessionId: ID!, token: String!): Boolean!
+
     # ESP32 sends LED positions from official app Bluetooth
     # frames: Pre-built frames string from ESP32 (preferred)
     # positions: Legacy LED positions array (for backwards compatibility)

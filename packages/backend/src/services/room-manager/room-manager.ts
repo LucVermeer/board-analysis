@@ -26,6 +26,8 @@ import {
   type SessionLeaveResult,
 } from './client-lifecycle';
 import { pubsub } from '../../pubsub/index';
+import { endLiveActivity } from '../apns/index';
+import type { SessionEvent } from '@boardsesh/shared-schema';
 import {
   getSessionById as getSessionByIdFn,
   createDiscoverableSession as createDiscoverableSessionFn,
@@ -106,9 +108,27 @@ class RoomManager {
 
     if (!this.inactivitySweepInterval) {
       this.inactivitySweepInterval = setInterval(() => {
-        endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS).catch((err) => {
-          console.error('[RoomManager] Inactivity sweep failed:', err);
-        });
+        endStaleInactiveSessions(INACTIVITY_THRESHOLD_MS)
+          .then((endedIds) => {
+            // For every auto-ended session, mirror the side effects of the
+            // explicit endSession mutation: publish SessionEnded so connected
+            // clients tear down, and end the iOS Live Activity so lock-screen
+            // tiles don't linger with stale data until ActivityKit's stale
+            // date elapses.
+            for (const sessionId of endedIds) {
+              const event: SessionEvent = {
+                __typename: 'SessionEnded',
+                reason: 'Session ended due to inactivity',
+              };
+              pubsub.publishSessionEvent(sessionId, event);
+              endLiveActivity(sessionId).catch((err) => {
+                console.error(`[APNs] endLiveActivity failed for auto-ended session ${sessionId}:`, err);
+              });
+            }
+          })
+          .catch((err) => {
+            console.error('[RoomManager] Inactivity sweep failed:', err);
+          });
       }, INACTIVITY_SWEEP_INTERVAL_MS);
       this.inactivitySweepInterval.unref();
       console.info(

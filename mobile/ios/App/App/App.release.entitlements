@@ -13,5 +13,9 @@
 	</array>
 	<key>com.apple.developer.healthkit</key>
 	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)group.com.boardsesh.app</string>
+	</array>
 </dict>
 </plist>

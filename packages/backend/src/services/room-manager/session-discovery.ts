@@ -248,15 +248,18 @@ const INACTIVITY_SWEEP_LOCK_KEY = 19551850;
  * rows don't re-match the WHERE clause), so the lock is a fan-out optimisation
  * rather than a correctness requirement.
  *
- * Returns the number of sessions ended.
+ * Returns the IDs of sessions that were ended so the caller can fire follow-up
+ * side effects (publish SessionEnded events, end any active iOS Live
+ * Activities). Returns an empty array when another instance held the advisory
+ * lock for this tick.
  */
-export async function endStaleInactiveSessions(thresholdMs: number): Promise<number> {
+export async function endStaleInactiveSessions(thresholdMs: number): Promise<string[]> {
   return db.transaction(async (tx) => {
     const lockResult = await tx.execute<{ locked: boolean }>(
       sql`SELECT pg_try_advisory_xact_lock(${INACTIVITY_SWEEP_LOCK_KEY}) AS locked`,
     );
     if (!lockResult[0]?.locked) {
-      return 0;
+      return [];
     }
 
     const cutoff = new Date(Date.now() - thresholdMs);
@@ -271,6 +274,6 @@ export async function endStaleInactiveSessions(thresholdMs: number): Promise<num
     if (result.length > 0) {
       console.info(`[RoomManager] Auto-ended ${result.length} inactive session(s)`);
     }
-    return result.length;
+    return result.map((row) => row.id);
   });
 }

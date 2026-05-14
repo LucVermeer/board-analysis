@@ -137,4 +137,19 @@ describe('endStaleInactiveSessions', () => {
     expect(byId.get(fresh)).toBe('active');
     expect(byId.get(permanent)).toBe('active');
   });
+
+  it('returns the ids of newly-ended sessions so the caller can fire SessionEnded and end Live Activities', async () => {
+    const stale = uuidv4();
+    const fresh = uuidv4();
+
+    await db.insert(sessions).values([
+      { id: stale, boardPath: '/kilter/1/2/3/40', status: 'active', isPermanent: false, lastActivity: minutesAgo(90) },
+      { id: fresh, boardPath: '/kilter/1/2/3/40', status: 'active', isPermanent: false, lastActivity: minutesAgo(5) },
+    ]);
+
+    const endedIds = await endStaleInactiveSessions(ONE_HOUR_MS);
+
+    expect(endedIds).toContain(stale);
+    expect(endedIds).not.toContain(fresh);
+  });
 });

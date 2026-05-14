@@ -17,6 +17,13 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityPlugin")
     private var observingDarwinNotification = false
 
+    /// Serial queue protecting push token state accessed from both the Capacitor
+    /// thread and the LiveActivityManager push token callback.
+    private let tokenQueue = DispatchQueue(label: "com.boardsesh.LiveActivityPlugin.token")
+    private var _currentPushToken: String?
+    private var _currentServerUrl: String?
+    private var _currentSessionId: String?
+
     // MARK: - Darwin Notification (Widget → JS bridge)
 
     /// Start observing Darwin notifications from the widget's Next/Previous intents.
@@ -42,6 +49,10 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             nil,
             .deliverImmediately
         )
+    }
+
+    deinit {
+        stopDarwinObservation()
     }
 
     private func stopDarwinObservation() {
@@ -80,6 +91,82 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             "currentIndex": currentIndex,
             "correlationId": correlationId,
         ], retainUntilConsumed: true)
+    }
+
+    // MARK: - Push Token Registration
+
+    private func registerPushTokenWithBackend(token: String, sessionId: String, serverUrl: String) {
+        // The backend resolver authenticates via ConnectionContext, so we MUST
+        // attach the user's app auth token. Without it the resolver rejects.
+        guard let authToken = SharedKeychain.get(SharedKeychain.authTokenKey),
+              !authToken.isEmpty
+        else {
+            logger.warning("Skipping push token registration: no auth token in keychain")
+            return
+        }
+
+        let query = """
+        mutation RegisterToken($sessionId: ID!, $token: String!) {
+          registerActivityPushToken(sessionId: $sessionId, token: $token)
+        }
+        """
+        let body: [String: Any] = [
+            "query": query,
+            "variables": ["sessionId": sessionId, "token": token]
+        ]
+        guard let url = URL(string: "\(serverUrl)/graphql"),
+              let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = jsonData
+
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+            if let error = error {
+                self?.logger.error("Failed to register push token: \(error.localizedDescription, privacy: .public)")
+            } else {
+                self?.logger.info("Push token registered with backend")
+            }
+        }.resume()
+    }
+
+    private func unregisterPushTokenFromBackend(token: String, sessionId: String, serverUrl: String) {
+        // The backend resolver authenticates via ConnectionContext, so we MUST
+        // attach the user's app auth token. Without it the resolver rejects.
+        guard let authToken = SharedKeychain.get(SharedKeychain.authTokenKey),
+              !authToken.isEmpty
+        else {
+            logger.warning("Skipping push token unregistration: no auth token in keychain")
+            return
+        }
+
+        let query = """
+        mutation UnregisterToken($sessionId: ID!, $token: String!) {
+          unregisterActivityPushToken(sessionId: $sessionId, token: $token)
+        }
+        """
+        let body: [String: Any] = [
+            "query": query,
+            "variables": ["sessionId": sessionId, "token": token]
+        ]
+        guard let url = URL(string: "\(serverUrl)/graphql"),
+              let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = jsonData
+
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+            if let error = error {
+                self?.logger.error("Failed to unregister push token: \(error.localizedDescription, privacy: .public)")
+            } else {
+                self?.logger.info("Push token unregistered from backend")
+            }
+        }.resume()
     }
 
     // MARK: - isAvailable
@@ -122,8 +209,16 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let authToken = call.getString("authToken")
         let wsUrl = call.getString("wsUrl")
 
+        // Store session details for push token registration.
+        tokenQueue.sync {
+            _currentServerUrl = serverUrl
+            _currentSessionId = sessionId
+        }
+
         // Store board details in shared UserDefaults for App Intents
-        // and thumbnail URL construction.
+        // and thumbnail URL construction. Auth + push tokens go through
+        // the shared Keychain instead — App Group UserDefaults are
+        // unencrypted on disk and we don't want Bearer credentials there.
         if let defaults = SharedConstants.sharedDefaults {
             defaults.set(sessionId, forKey: SharedConstants.sessionIdKey)
             defaults.set(serverUrl, forKey: SharedConstants.serverUrlKey)
@@ -131,6 +226,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.set(layoutId, forKey: SharedConstants.layoutIdKey)
             defaults.set(sizeId, forKey: SharedConstants.sizeIdKey)
             defaults.set(setIds, forKey: SharedConstants.setIdsKey)
+        }
+        if let authToken = authToken, !authToken.isEmpty {
+            SharedKeychain.set(authToken, for: SharedKeychain.authTokenKey)
         }
 
         // For party mode (real session), connect the WebSocket manager
@@ -172,12 +270,37 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             climbUuid: ""
         )
 
+        // Build the push-token callback up front so it's installed atomically
+        // with the activity creation — ActivityKit can emit the first token
+        // before a follow-up setOnPushTokenUpdate would land, which would
+        // silently drop it.
+        let pushTokenHandler: @Sendable (String) -> Void = { [weak self] token in
+            guard let self else { return }
+            // Single sync block: write the token and read sessionId/serverUrl
+            // in one critical section. Two separate tokenQueue.sync calls
+            // would deadlock if ActivityKit ever delivers the token on a
+            // thread already holding the queue (Swift serial DispatchQueues
+            // are not reentrant).
+            let (sid, surl) = self.tokenQueue.sync { () -> (String?, String?) in
+                self._currentPushToken = token
+                return (self._currentSessionId, self._currentServerUrl)
+            }
+            // Write the APNs push token to the shared keychain so the
+            // widget extension can attach it as a Bearer header on
+            // /api/widget/navigate calls.
+            SharedKeychain.set(token, for: SharedKeychain.livePushTokenKey)
+            if let sessionId = sid, let serverUrl = surl {
+                self.registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)
+            }
+        }
+
         Task {
             do {
                 try await activityManager.startActivity(
                     boardName: boardName,
                     sessionId: sessionId,
-                    initialState: initialState
+                    initialState: initialState,
+                    onPushTokenUpdate: pushTokenHandler
                 )
                 self.logger.info("Started session \(sessionId, privacy: .public) with Live Activity")
                 call.resolve()
@@ -193,6 +316,19 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func endSession(_ call: CAPPluginCall) {
         stopDarwinObservation()
 
+        // Unregister the push token from the backend before tearing down.
+        let (token, sessionId, serverUrl) = tokenQueue.sync {
+            (_currentPushToken, _currentSessionId, _currentServerUrl)
+        }
+        if let token, let sessionId, let serverUrl {
+            unregisterPushTokenFromBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)
+        }
+        tokenQueue.sync {
+            _currentPushToken = nil
+            _currentServerUrl = nil
+            _currentSessionId = nil
+        }
+
         let wsManager = SessionWebSocketManager.shared
         wsManager.onQueueStateChanged = nil
         wsManager.disconnect()
@@ -203,7 +339,13 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.removeObject(forKey: SharedConstants.currentIndexKey)
             defaults.removeObject(forKey: SharedConstants.sessionIdKey)
             defaults.removeObject(forKey: SharedConstants.pendingActionKey)
+            // Cover earlier builds that wrote tokens to UserDefaults so
+            // we don't leave plaintext credentials behind after upgrade.
+            defaults.removeObject(forKey: SharedConstants.authTokenKey)
+            defaults.removeObject(forKey: SharedConstants.livePushTokenKey)
         }
+        SharedKeychain.remove(SharedKeychain.authTokenKey)
+        SharedKeychain.remove(SharedKeychain.livePushTokenKey)
 
         if #available(iOS 17.0, *) {
             Task {

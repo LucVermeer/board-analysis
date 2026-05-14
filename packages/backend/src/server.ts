@@ -15,10 +15,14 @@ import { handleSyncCron } from './handlers/sync';
 import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
+import { handleWidgetNavigate } from './handlers/widget-navigate';
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
 import { warmPopularConfigsCache } from './graphql/resolvers/social/boards';
 import { warmRecentBetaLinksCache } from './graphql/resolvers/beta-videos/queries';
+import { initializeApns, shutdownApns, sendLiveActivityUpdate, isApnsConfigured } from './services/apns';
+import type { QueueEvent } from '@boardsesh/shared-schema';
+import type { LiveActivityContentState } from './services/apns';
 
 /**
  * Start the Boardsesh Backend server
@@ -113,6 +117,75 @@ export async function startServer(): Promise<ServerResources> {
     console.info('[Server] No Redis - EventBroker disabled, inline notification fallback active');
   }
 
+  // Initialize APNs for iOS Live Activity push notifications
+  initializeApns();
+
+  // Surface APNs configuration status at startup. The queue event hook
+  // wired below has *publisher-side* semantics: it only fires on the
+  // instance that originates a queue event. So in a multi-instance cluster
+  // every node that handles queue mutations must also have APNs configured —
+  // otherwise queue mutations that land on the unconfigured node will silently
+  // skip the Live Activity push.
+  const instanceId = process.env.HOSTNAME || process.env.FLY_MACHINE_ID || 'local';
+  if (isApnsConfigured()) {
+    console.info(`[Server] APNs configured for instance ${instanceId}`);
+  } else {
+    console.warn(
+      `[Server] APNs NOT configured on instance ${instanceId}. ` +
+        'Live Activity push notifications will be silently dropped for queue ' +
+        'events that originate on this instance. Set APNS_KEY_ID, APNS_TEAM_ID, ' +
+        'and APNS_KEY_CONTENTS on every backend node that handles queue mutations.',
+    );
+  }
+
+  // Wire PubSub queue events to APNs Live Activity updates.
+  // The hook is fire-and-forget: it reads queue state from roomManager and
+  // sends a debounced push via the APNs service. Failures are logged, never
+  // thrown, so they cannot block PubSub dispatch.
+  const APNS_RELEVANT_EVENTS = new Set([
+    'CurrentClimbChanged',
+    'FullSync',
+    'QueueItemAdded',
+    'QueueItemRemoved',
+    'QueueReordered',
+  ]);
+
+  pubsub.setQueueEventHook((sessionId: string, event: QueueEvent) => {
+    if (!APNS_RELEVANT_EVENTS.has(event.__typename)) return;
+    // Skip the queue-state read entirely when APNs is disabled —
+    // sendLiveActivityUpdate would be a no-op, so the getQueueState round-trip
+    // (Postgres read on miss, Redis on hit) is pure waste on every queue
+    // mutation when env vars aren't configured.
+    if (!isApnsConfigured()) return;
+
+    // Async work wrapped in a void IIFE — never awaited, never throws
+    void (async () => {
+      try {
+        const queueState = await roomManager.getQueueState(sessionId);
+        const { queue, currentClimbQueueItem } = queueState;
+
+        if (!currentClimbQueueItem) return;
+
+        const currentIndex = queue.findIndex((item) => item.uuid === currentClimbQueueItem.uuid);
+
+        const contentState: LiveActivityContentState = {
+          climbName: currentClimbQueueItem.climb.name,
+          climbDifficulty: currentClimbQueueItem.climb.difficulty,
+          angle: currentClimbQueueItem.climb.angle,
+          currentIndex: currentIndex >= 0 ? currentIndex : 0,
+          totalClimbs: queue.length,
+          hasNext: currentIndex < queue.length - 1,
+          hasPrevious: currentIndex > 0,
+          climbUuid: currentClimbQueueItem.climb.uuid,
+        };
+
+        sendLiveActivityUpdate(sessionId, contentState);
+      } catch (error) {
+        console.error(`[APNs Hook] Failed to send Live Activity update for session ${sessionId}:`, error);
+      }
+    })();
+  });
+
   const PORT = parseInt(process.env.PORT || '8080', 10);
   const BOARDSESH_URL = process.env.BOARDSESH_URL || 'https://boardsesh.com';
 
@@ -202,6 +275,12 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      // Widget queue navigation endpoint (called by iOS lock-screen widget)
+      if (pathname === '/api/widget/navigate' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleWidgetNavigate(req, res);
+        return;
+      }
+
       // Sync cron endpoint (triggered by external cron service)
       if (pathname === '/sync-cron' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleSyncCron(req, res);
@@ -265,6 +344,7 @@ export async function startServer(): Promise<ServerResources> {
     console.info(`  OCR test data: ${httpScheme}://0.0.0.0:${PORT}/api/ocr-test-data`);
     console.info(`  PostHog proxy: ${httpScheme}://0.0.0.0:${PORT}/api/posthog/*`);
     console.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
+    console.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
     console.info(`  Sync cron: ${httpScheme}://0.0.0.0:${PORT}/sync-cron`);
 
     // Warm up popular board configs cache in the background.
@@ -300,6 +380,13 @@ export async function startServer(): Promise<ServerResources> {
    */
   async function shutdownServices(): Promise<void> {
     eventBroker.shutdown();
+
+    try {
+      await shutdownApns();
+      console.log('[Server] APNs shutdown complete');
+    } catch (error) {
+      console.error('[Server] Error during APNs shutdown:', error);
+    }
 
     try {
       await roomManager.shutdown();

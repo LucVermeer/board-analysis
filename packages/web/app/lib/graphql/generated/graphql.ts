@@ -1851,6 +1851,12 @@ export type Mutation = {
    * Only playlists the user can access (own or public) may be pinned.
    */
   pinPlaylist: Scalars['Boolean']['output'];
+  /**
+   * Register an APNs device token for Live Activity push updates in a session.
+   * Caller must be authenticated and be a participant in the session.
+   * Upserts: if the token already exists, updates the associated session.
+   */
+  registerActivityPushToken: Scalars['Boolean']['output'];
   registerController: ControllerRegistration;
   /** Remove a climb from a playlist. */
   removeClimbFromPlaylist: Scalars['Boolean']['output'];
@@ -1929,6 +1935,13 @@ export type Mutation = {
   unfollowUser: Scalars['Boolean']['output'];
   /** Unpin a playlist. Idempotent. */
   unpinPlaylist: Scalars['Boolean']['output'];
+  /**
+   * Unregister an APNs device token for Live Activity push updates.
+   * Caller must be authenticated and be a participant in the session.
+   * The delete is scoped to (token, sessionId) so a leaked token cannot
+   * be used to clear another session's registration.
+   */
+  unregisterActivityPushToken: Scalars['Boolean']['output'];
   /** Unsubscribe from new climbs for a board type and layout. */
   unsubscribeNewClimbs: Scalars['Boolean']['output'];
   /** Update a board's metadata. */
@@ -2174,6 +2187,12 @@ export type MutationPinPlaylistArgs = {
 };
 
 /** Root mutation type for all write operations. */
+export type MutationRegisterActivityPushTokenArgs = {
+  sessionId: Scalars['ID']['input'];
+  token: Scalars['String']['input'];
+};
+
+/** Root mutation type for all write operations. */
 export type MutationRegisterControllerArgs = {
   input: RegisterControllerInput;
 };
@@ -2325,6 +2344,12 @@ export type MutationUnfollowUserArgs = {
 /** Root mutation type for all write operations. */
 export type MutationUnpinPlaylistArgs = {
   input: PinPlaylistInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationUnregisterActivityPushTokenArgs = {
+  sessionId: Scalars['ID']['input'];
+  token: Scalars['String']['input'];
 };
 
 /** Root mutation type for all write operations. */
