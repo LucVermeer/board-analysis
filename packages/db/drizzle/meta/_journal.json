@@ -680,6 +680,13 @@
       "when": 1778796374010,
       "tag": "0096_abnormal_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1778796374020,
+      "tag": "0097_backfill_user_climb_stats",
+      "breakpoints": true
     }
   ]
 }

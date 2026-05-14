@@ -131,6 +131,27 @@ export const climbMutations = {
     // Populate denormalized required_set_ids and compatible_size_ids
     await populateDenormalizedColumns(db, validated.boardType, [uuid]);
 
+    // Stats rows used to come exclusively from the Aurora sync pipeline, so
+    // Boardsesh-originated climbs had none. The hot search path INNER JOINs
+    // board_climb_stats (search-climbs.ts:statsDrivenSearch), which hid these
+    // climbs from search until someone synced them. Seed a row at the chosen
+    // angle so the climb is discoverable immediately.
+    await db
+      .insert(dbSchema.boardClimbStats)
+      .values({
+        boardType: validated.boardType,
+        climbUuid: uuid,
+        angle: validated.angle,
+        ascensionistCount: 0,
+      })
+      .onConflictDoNothing({
+        target: [
+          dbSchema.boardClimbStats.boardType,
+          dbSchema.boardClimbStats.climbUuid,
+          dbSchema.boardClimbStats.angle,
+        ],
+      });
+
     await publishSocialEvent({
       type: 'climb.created',
       actorId: ctx.userId!,
@@ -211,7 +232,9 @@ export const climbMutations = {
       await db.insert(dbSchema.boardClimbHolds).values(holdRows).onConflictDoNothing();
     }
 
-    // Optional grade stats
+    // Always seed a stats row so the climb is visible to the global search,
+    // which uses an INNER JOIN against board_climb_stats. When the user
+    // supplied a grade we can resolve, fill in difficulty fields too.
     const difficultyId = await resolveDifficultyId(validated.boardType, validated.userGrade);
     if (difficultyId !== null) {
       await db
@@ -239,6 +262,23 @@ export const climbMutations = {
             benchmarkDifficulty: validated.isBenchmark ? difficultyId : null,
             difficultyAverage: difficultyId,
           },
+        });
+    } else {
+      await db
+        .insert(dbSchema.boardClimbStats)
+        .values({
+          boardType: validated.boardType,
+          climbUuid: uuid,
+          angle: validated.angle,
+          ascensionistCount: 0,
+          faUsername: validated.setter || null,
+        })
+        .onConflictDoNothing({
+          target: [
+            dbSchema.boardClimbStats.boardType,
+            dbSchema.boardClimbStats.climbUuid,
+            dbSchema.boardClimbStats.angle,
+          ],
         });
     }
 
@@ -296,6 +336,7 @@ export const climbMutations = {
         isDraft: dbSchema.boardClimbs.isDraft,
         publishedAt: dbSchema.boardClimbs.publishedAt,
         createdAt: dbSchema.boardClimbs.createdAt,
+        angle: dbSchema.boardClimbs.angle,
       })
       .from(dbSchema.boardClimbs)
       .where(
@@ -364,6 +405,30 @@ export const climbMutations = {
     // so search filters still match.
     if (validated.frames !== undefined) {
       await populateDenormalizedColumns(db, validated.boardType, [validated.uuid]);
+    }
+
+    // The search hot path INNER JOINs board_climb_stats by (boardType, climbUuid, angle).
+    // Make sure a row exists at the resolved angle whenever the climb is, or just became,
+    // searchable. The old row at the previous angle is left in place — it's harmless
+    // because search filters by exact angle, and removing it would race with concurrent ticks.
+    const resolvedAngle = validated.angle ?? existing.angle;
+    const angleChanged = validated.angle !== undefined && validated.angle !== existing.angle;
+    if (resolvedAngle !== null && !nextIsDraft && (transitioningToPublished || angleChanged)) {
+      await db
+        .insert(dbSchema.boardClimbStats)
+        .values({
+          boardType: validated.boardType,
+          climbUuid: validated.uuid,
+          angle: resolvedAngle,
+          ascensionistCount: 0,
+        })
+        .onConflictDoNothing({
+          target: [
+            dbSchema.boardClimbStats.boardType,
+            dbSchema.boardClimbStats.climbUuid,
+            dbSchema.boardClimbStats.angle,
+          ],
+        });
     }
 
     // Tell the web app to drop the cached climb-view render so the edit

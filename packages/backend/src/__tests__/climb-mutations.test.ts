@@ -108,10 +108,15 @@ describe('climb mutations', () => {
       makeCtx(),
     );
 
-    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls).toHaveLength(2);
     expect(insertCalls[0].values).toMatchObject({
       isDraft: false,
       isListed: true,
+    });
+    expect(insertCalls[1].values).toMatchObject({
+      boardType: 'kilter',
+      angle: 40,
+      ascensionistCount: 0,
     });
   });
 
