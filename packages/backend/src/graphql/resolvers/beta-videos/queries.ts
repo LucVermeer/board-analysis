@@ -353,25 +353,29 @@ async function getCachedRecentBetaLinks(): Promise<CachedRecentBetaLinkRow[]> {
  * fresh value when the resolver runs.
  */
 export async function warmRecentBetaLinksCache(): Promise<void> {
-  if (redisClientManager.isRedisConnected()) {
-    try {
-      const { publisher } = redisClientManager.getClients();
-      const lockAcquired = await publisher.set(
-        RECENT_BETA_LINKS_REDIS_LOCK_KEY,
-        '1',
-        'EX',
-        RECENT_BETA_LINKS_REDIS_LOCK_TTL_SECONDS,
-        'NX',
-      );
-      if (!lockAcquired) {
-        console.info('[RecentBetaLinks] Another node is refreshing the cache, skipping');
-        return;
-      }
-      // Winning node: delete stale cache so getCachedRecentBetaLinks() runs the SQL query
-      await publisher.del(RECENT_BETA_LINKS_REDIS_KEY);
-    } catch (err) {
-      console.error('[RecentBetaLinks] Redis lock failed:', err);
+  // No Redis means there's no cache to warm — running the CTE here would
+  // just discard the result. Skip the work and the log so dev/test logs
+  // stay honest.
+  if (!redisClientManager.isRedisConnected()) return;
+
+  try {
+    const { publisher } = redisClientManager.getClients();
+    const lockAcquired = await publisher.set(
+      RECENT_BETA_LINKS_REDIS_LOCK_KEY,
+      '1',
+      'EX',
+      RECENT_BETA_LINKS_REDIS_LOCK_TTL_SECONDS,
+      'NX',
+    );
+    if (!lockAcquired) {
+      console.info('[RecentBetaLinks] Another node is refreshing the cache, skipping');
+      return;
     }
+    // Winning node: delete stale cache so getCachedRecentBetaLinks() runs the SQL query
+    await publisher.del(RECENT_BETA_LINKS_REDIS_KEY);
+  } catch (err) {
+    console.error('[RecentBetaLinks] Redis lock failed:', err);
+    return;
   }
 
   console.info('[RecentBetaLinks] Refreshing cache...');
@@ -441,13 +445,16 @@ export const betaLinkQueries = {
     for (const r of cached) {
       if (boardType && r.board_type !== boardType) continue;
       if (isKayaClimbUrl(r.link)) continue;
+      // The CTE filters `thumbnail LIKE '/static/beta-link-thumbnails/%'`,
+      // so every cached row's thumbnail is already on our static prefix —
+      // no isOurS3Url() re-check needed in this path.
       filtered.push({
         betaLink: {
           climbUuid: r.climb_uuid,
           link: r.link,
           foreignUsername: r.foreign_username,
           angle: r.angle,
-          thumbnail: isOurS3Url(r.thumbnail) ? r.thumbnail : null,
+          thumbnail: r.thumbnail,
           isListed: r.is_listed,
           createdAt: r.created_at,
         },
@@ -464,6 +471,12 @@ export const betaLinkQueries = {
   // parsed from their userProfiles.instagramUrl. The OR semantics also
   // surface videos someone else uploaded that point at this user's IG —
   // intentional. Pre-cached thumbnails only; no live enrichment.
+  //
+  // Intentionally **public**: anyone (including unauthenticated callers)
+  // can enumerate a user's beta videos by userId. The data surfaces on
+  // the public profile page already; the resolver doesn't expose anything
+  // the page doesn't. If we ever add a "private profile" mode, gate this
+  // resolver there.
   userBetaLinks: async (
     _: unknown,
     { userId, limit }: { userId: string; limit?: number | null },

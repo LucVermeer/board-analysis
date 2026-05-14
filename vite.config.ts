@@ -64,6 +64,11 @@ export default defineConfig({
         dependsOn: ['db:up'],
         cache: false,
       },
+      'seed:beta-links': {
+        command: 'bun run --filter=@boardsesh/db db:seed-beta-links',
+        dependsOn: ['db:up'],
+        cache: false,
+      },
       'db:import-moonboard': {
         command: 'bun run --filter=@boardsesh/db db:import-moonboard',
         dependsOn: ['db:up'],

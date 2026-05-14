@@ -58,7 +58,7 @@ export default function ProfileBetaSection({ userId, initialBeta }: ProfileBetaS
         variant="body2"
         fontWeight={themeTokens.typography.fontWeight.semibold}
         sx={{
-          color: 'var(--neutral-400)',
+          color: themeTokens.neutral[400],
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
           fontSize: themeTokens.typography.fontSize.xs,

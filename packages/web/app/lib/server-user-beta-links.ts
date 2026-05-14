@@ -33,7 +33,11 @@ export const getUserBetaLinks = React.cache(async (userId: string, limit = 50): 
     });
     const result = await client.request<UserBetaLinksResponse>(GET_USER_BETA_LINKS, { userId, limit });
     return result.userBetaLinks;
-  } catch {
+  } catch (err) {
+    // Surface the failure in Vercel logs so a future regression names
+    // itself. Same observability rationale as server-recent-beta-links.ts
+    // and server-popular-configs.ts.
+    console.error('[home-page-ssr] userBetaLinks fetch failed:', err instanceof Error ? err.message : err);
     return [];
   } finally {
     clearTimeout(timer);
