@@ -22,6 +22,7 @@ import { sessionBoards } from '../../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { generateSessionSummary } from './session-summary';
 import { adoptRecentTicksForSession, extractBoardType } from '../../../jobs/inferred-session-builder';
+import { endLiveActivity } from '../../../services/apns';
 
 /**
  * Auto-authorize all controllers owned by a user for a session.
@@ -421,6 +422,13 @@ export const sessionMutations = {
       reason: 'Session ended by participant',
     };
     pubsub.publishSessionEvent(sessionId, sessionEndedEvent);
+
+    // Send APNs `end` push to dismiss every device's Live Activity. Without
+    // this, other participants' lock-screen tiles linger with stale data
+    // until ActivityKit's stale date elapses.
+    endLiveActivity(sessionId).catch((err) => {
+      console.error(`[APNs] endLiveActivity failed for session ${sessionId}:`, err);
+    });
 
     // Generate and return summary
     const summary = await generateSessionSummary(sessionId);

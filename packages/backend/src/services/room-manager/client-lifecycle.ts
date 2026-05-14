@@ -1,6 +1,6 @@
 import type { ClimbQueueItem, SessionUser } from '@boardsesh/shared-schema';
 import { db } from '../../db/client';
-import { sessions, type Session } from '../../db/schema';
+import { sessions, boardSessionParticipants, type Session } from '../../db/schema';
 import type { RedisSessionStore } from '../redis-session-store';
 import type { DistributedStateManager } from '../distributed-state';
 import type { ConnectedClient, LocalSessionParticipant } from './types';
@@ -200,6 +200,17 @@ export async function joinSession(
       if (pendingJoinPersists.get(sessionId) === chained) {
         pendingJoinPersists.delete(sessionId);
       }
+    }
+  }
+
+  // Record the authenticated user as a permanent participant in this session.
+  // Used by the push-token resolver to authorize Live Activity registrations.
+  // Idempotent on (session_id, user_id) primary key.
+  if (client.userId) {
+    try {
+      await db.insert(boardSessionParticipants).values({ sessionId, userId: client.userId }).onConflictDoNothing();
+    } catch (err) {
+      console.error(`[joinSession] Failed to record participant for ${sessionId}:`, err);
     }
   }
 

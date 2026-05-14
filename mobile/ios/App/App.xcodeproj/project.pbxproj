@@ -32,6 +32,7 @@
 		LA100011 /* ClimbSessionLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200011 /* ClimbSessionLiveActivity.swift */; };
 		LA100012 /* NextClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200012 /* NextClimbIntent.swift */; };
 		LA100013 /* PreviousClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200013 /* PreviousClimbIntent.swift */; };
+		LA100070 /* WidgetNetworking.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200070 /* WidgetNetworking.swift */; };
 		LA100020 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200001 /* SharedConstants.swift */; };
 		LA100021 /* ClimbSessionAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200002 /* ClimbSessionAttributes.swift */; };
 		LA100030 /* SessionWebSocketManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200030 /* SessionWebSocketManagerTests.swift */; };
@@ -106,6 +107,7 @@
 		LA200011 /* ClimbSessionLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClimbSessionLiveActivity.swift; sourceTree = "<group>"; };
 		LA200012 /* NextClimbIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextClimbIntent.swift; sourceTree = "<group>"; };
 		LA200013 /* PreviousClimbIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousClimbIntent.swift; sourceTree = "<group>"; };
+		LA200070 /* WidgetNetworking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetNetworking.swift; sourceTree = "<group>"; };
 		LA200014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		LA200015 /* BoardseshWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoardseshWidgets.entitlements; sourceTree = "<group>"; };
 		LA200030 /* SessionWebSocketManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWebSocketManagerTests.swift; sourceTree = "<group>"; };
@@ -231,6 +233,7 @@
 				LA200011 /* ClimbSessionLiveActivity.swift */,
 				LA200012 /* NextClimbIntent.swift */,
 				LA200013 /* PreviousClimbIntent.swift */,
+				LA200070 /* WidgetNetworking.swift */,
 				LA200014 /* Info.plist */,
 				LA200015 /* BoardseshWidgets.entitlements */,
 				PI200002 /* PrivacyInfo.xcprivacy */,
@@ -469,6 +472,7 @@
 				LA100011 /* ClimbSessionLiveActivity.swift in Sources */,
 				LA100012 /* NextClimbIntent.swift in Sources */,
 				LA100013 /* PreviousClimbIntent.swift in Sources */,
+				LA100070 /* WidgetNetworking.swift in Sources */,
 				LA100020 /* SharedConstants.swift in Sources */,
 				LA100021 /* ClimbSessionAttributes.swift in Sources */,
 			);

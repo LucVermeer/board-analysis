@@ -51,6 +51,7 @@ Before working on a specific part of the codebase, check the `docs/` directory f
 
 - `docs/websocket-implementation.md` - WebSocket party session architecture, connection flow, failure states and recovery mechanisms
 - `docs/ai-design-guidelines.md` - Comprehensive UI design guidelines, patterns, and tokens for redesigning components
+- `docs/live-activity-push-testing.md` - Local testing guide for APNs Live Activity push notifications and widget navigation
 
 **Important:**
 

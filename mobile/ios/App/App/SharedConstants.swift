@@ -16,6 +16,11 @@ enum SharedConstants {
     static let sizeIdKey = "bs_size_id"
     static let setIdsKey = "bs_set_ids"
     static let pendingActionKey = "bs_pending_action"
+    static let authTokenKey = "bs_auth_token"
+    /// APNs Live Activity push token, written by `LiveActivityPlugin` after the
+    /// Activity reports a push token via `pushTokenUpdates`. Read by
+    /// `WidgetNetworking` to attach a Bearer header to widget-navigate calls.
+    static let livePushTokenKey = "bs_live_push_token"
 
     // MARK: Darwin Notification
 

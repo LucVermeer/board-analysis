@@ -63,7 +63,11 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
   const queueEventSubscribersRef = useRef<Set<(event: SubscriptionQueueEvent) => void>>(new Set());
   const sessionEventSubscribersRef = useRef<Set<(event: SessionEvent) => void>>(new Set());
 
-  // Keep auth/profile refs in sync
+  // Keep auth ref in sync. The graphql-ws connectionParams are baked in at
+  // connect-time, so when the token loads *after* the lifecycle hook has
+  // established an unauthenticated connection, the lifecycle effect's
+  // `wsAuthToken` dependency below tears the socket down and reconnects with
+  // the token in connectionParams.
   useEffect(() => {
     wsAuthTokenRef.current = wsAuthToken;
   }, [wsAuthToken]);

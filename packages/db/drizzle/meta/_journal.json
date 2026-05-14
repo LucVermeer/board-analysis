@@ -666,6 +666,13 @@
       "when": 1779000100000,
       "tag": "0094_replay_board_placements_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1778738922542,
+      "tag": "0095_activity_push_tokens",
+      "breakpoints": true
     }
   ]
 }
