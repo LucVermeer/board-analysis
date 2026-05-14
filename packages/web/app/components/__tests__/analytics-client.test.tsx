@@ -2,11 +2,20 @@ import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import AnalyticsClient from '../analytics-client';
 
+type VitalMetric = {
+  name: string;
+  value: number;
+  rating: string;
+  delta: number;
+  id: string;
+  navigationType: string | null;
+};
+
 const mocks = vi.hoisted(() => ({
   capturePosthog: vi.fn(),
   pageview: vi.fn(),
   track: vi.fn(),
-  vitalCallbacks: [] as Array<(metric: Record<string, string | number | null>) => void>,
+  vitalCallbacks: [] as Array<(metric: VitalMetric) => void>,
 }));
 let pathname = '/';
 
@@ -25,7 +34,6 @@ vi.mock('web-vitals', () => ({
   onFCP: vi.fn((callback) => mocks.vitalCallbacks.push(callback)),
   onINP: vi.fn((callback) => mocks.vitalCallbacks.push(callback)),
   onLCP: vi.fn((callback) => mocks.vitalCallbacks.push(callback)),
-  onTTFB: vi.fn((callback) => mocks.vitalCallbacks.push(callback)),
 }));
 
 describe('AnalyticsClient', () => {
@@ -35,6 +43,7 @@ describe('AnalyticsClient', () => {
     mocks.pageview.mockClear();
     mocks.track.mockClear();
     mocks.vitalCallbacks.length = 0;
+    vi.useRealTimers();
   });
 
   it('sends path-only PostHog pageviews', async () => {
@@ -57,30 +66,77 @@ describe('AnalyticsClient', () => {
     });
   });
 
-  it('sends web vitals only to PostHog', async () => {
+  it('batches all four web vitals into one PostHog event', async () => {
     render(<AnalyticsClient />);
 
     await waitFor(() => {
       expect(mocks.vitalCallbacks.length).toBeGreaterThan(0);
     });
 
-    mocks.vitalCallbacks[0]({
-      name: 'LCP',
-      value: 123.4,
-      rating: 'good',
-      delta: 12.3,
-      id: 'metric-1',
+    const reportVital = mocks.vitalCallbacks[0];
+    reportVital({ name: 'LCP', value: 123.4, rating: 'good', delta: 12.3, id: 'lcp-1', navigationType: 'navigate' });
+    reportVital({ name: 'CLS', value: 0.05, rating: 'good', delta: 0.05, id: 'cls-1', navigationType: 'navigate' });
+    reportVital({ name: 'FCP', value: 800, rating: 'good', delta: 800, id: 'fcp-1', navigationType: 'navigate' });
+    reportVital({
+      name: 'INP',
+      value: 50,
+      rating: 'needs-improvement',
+      delta: 50,
+      id: 'inp-1',
       navigationType: 'navigate',
     });
 
+    expect(mocks.capturePosthog).toHaveBeenCalledTimes(1);
     expect(mocks.capturePosthog).toHaveBeenCalledWith('$web_vitals', {
-      metric: 'LCP',
-      value: 123.4,
-      rating: 'good',
-      delta: 12.3,
-      id: 'metric-1',
-      navigationType: 'navigate',
+      $current_url: '/',
+      $web_vitals_LCP_value: 123.4,
+      $web_vitals_LCP_rating: 'good',
+      $web_vitals_LCP_delta: 12.3,
+      $web_vitals_LCP_id: 'lcp-1',
+      $web_vitals_LCP_navigation_type: 'navigate',
+      $web_vitals_CLS_value: 0.05,
+      $web_vitals_CLS_rating: 'good',
+      $web_vitals_CLS_delta: 0.05,
+      $web_vitals_CLS_id: 'cls-1',
+      $web_vitals_CLS_navigation_type: 'navigate',
+      $web_vitals_FCP_value: 800,
+      $web_vitals_FCP_rating: 'good',
+      $web_vitals_FCP_delta: 800,
+      $web_vitals_FCP_id: 'fcp-1',
+      $web_vitals_FCP_navigation_type: 'navigate',
+      $web_vitals_INP_value: 50,
+      $web_vitals_INP_rating: 'needs-improvement',
+      $web_vitals_INP_delta: 50,
+      $web_vitals_INP_id: 'inp-1',
+      $web_vitals_INP_navigation_type: 'navigate',
     });
     expect(mocks.track).not.toHaveBeenCalled();
+  });
+
+  it('flushes a partial buffer after the 5s timer elapses', async () => {
+    render(<AnalyticsClient />);
+
+    await waitFor(() => {
+      expect(mocks.vitalCallbacks.length).toBeGreaterThan(0);
+    });
+
+    vi.useFakeTimers();
+    const reportVital = mocks.vitalCallbacks[0];
+    reportVital({ name: 'LCP', value: 200, rating: 'good', delta: 200, id: 'lcp-2', navigationType: 'navigate' });
+
+    expect(mocks.capturePosthog).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(5000);
+
+    expect(mocks.capturePosthog).toHaveBeenCalledTimes(1);
+    expect(mocks.capturePosthog).toHaveBeenCalledWith(
+      '$web_vitals',
+      expect.objectContaining({
+        $current_url: '/',
+        $web_vitals_LCP_value: 200,
+        $web_vitals_LCP_rating: 'good',
+        $web_vitals_LCP_id: 'lcp-2',
+      }),
+    );
   });
 });
