@@ -234,23 +234,6 @@ export async function cachedUserClimbPercentile(
 }
 
 /**
- * Uncached counterpart of {@link cachedUserClimbPercentile} for /you.
- */
-export async function serverUserClimbPercentile(
-  userId: string,
-): Promise<GetUserClimbPercentileQueryResponse['userClimbPercentile'] | null> {
-  const { GET_USER_CLIMB_PERCENTILE } = await import('@/app/lib/graphql/operations/ticks');
-  try {
-    const result = await executeGraphQLInternal<GetUserClimbPercentileQueryResponse>(GET_USER_CLIMB_PERCENTILE, {
-      userId,
-    });
-    return result.userClimbPercentile;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Cached server-side fetch of user ticks for a specific board type (public, no auth needed).
  */
 export async function cachedUserTicks(

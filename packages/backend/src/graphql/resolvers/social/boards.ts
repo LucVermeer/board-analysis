@@ -5,6 +5,7 @@ import { rowsFromResult } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/helpers';
+import { consensusDifficultyExpr } from '../shared/sql-expressions';
 import {
   CreateBoardInputSchema,
   UpdateBoardInputSchema,
@@ -1026,16 +1027,29 @@ export const socialBoardQueries = {
 
     const totalCount = Number(countResult?.count || 0);
 
-    // Get leaderboard entries
+    // Get leaderboard entries. `hardestGrade` falls back to the climb's
+    // consensus grade when the user didn't attach a personal override (NULL
+    // difficulty means "use consensus" — see docs/ascents-and-attempts.md).
+    // board_climb_stats joined on its PK so the join doesn't multiply rows.
     const entries = await db
       .select({
         userId: dbSchema.boardseshTicks.userId,
         totalSends: count(),
         totalFlashes: sql<number>`SUM(CASE WHEN ${dbSchema.boardseshTicks.status} = 'flash' THEN 1 ELSE 0 END)`,
-        hardestGrade: sql<number | null>`MAX(${dbSchema.boardseshTicks.difficulty})`,
+        hardestGrade: sql<
+          number | null
+        >`MAX(COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr}))`,
         totalSessions: sql<number>`COUNT(DISTINCT DATE(${dbSchema.boardseshTicks.climbedAt}))`,
       })
       .from(dbSchema.boardseshTicks)
+      .leftJoin(
+        dbSchema.boardClimbStats,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbStats.climbUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
+          eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
+        ),
+      )
       .where(whereClause)
       .groupBy(dbSchema.boardseshTicks.userId)
       .orderBy(sql`COUNT(*) DESC`)

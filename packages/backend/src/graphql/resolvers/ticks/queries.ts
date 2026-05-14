@@ -1,4 +1,4 @@
-import { eq, and, or, desc, inArray, isNull, sql, count, ilike, gte, lte } from 'drizzle-orm';
+import { eq, ne, and, or, desc, inArray, isNull, sql, count, ilike, gte, lte } from 'drizzle-orm';
 import { type ConnectionContext, type BoardName, SUPPORTED_BOARDS } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
@@ -128,10 +128,12 @@ export const tickQueries = {
 
     const conditions = [eq(dbSchema.boardseshTicks.userId, userId), eq(dbSchema.boardseshTicks.boardType, boardType)];
 
-    // Fetch ticks with layoutId from unified board_climbs table.
-    // COALESCE the tick's own difficulty with the climb's consensus difficulty so
-    // ticks logged without a user-picked grade still bucket into the right grade
-    // on profile stats charts (a NULL stored value means "use consensus").
+    // Fetch ticks with layoutId from unified board_climbs table. We surface
+    // `difficulty` as the raw user override (preserving the field's pre-fix
+    // contract so optimistic writes don't flicker), and an additional
+    // `effectiveDifficulty` that COALESCEs with the climb's consensus grade
+    // for chart-bucket / aggregation consumers. NULL difficulty means "use
+    // consensus" — see docs/ascents-and-attempts.md.
     const results = await db
       .select({
         tick: dbSchema.boardseshTicks,
@@ -169,7 +171,8 @@ export const tickQueries = {
       status: tick.status,
       attemptCount: tick.attemptCount,
       quality: tick.quality,
-      difficulty: effectiveDifficulty,
+      difficulty: tick.difficulty,
+      effectiveDifficulty,
       isBenchmark: tick.isBenchmark,
       comment: tick.comment,
       climbedAt: tick.climbedAt,
@@ -256,6 +259,11 @@ export const tickQueries = {
       ELSE false
     END`;
 
+    // Filter on the effective difficulty (user override → consensus fallback) so
+    // a grade-range filter doesn't silently hide ungraded ascents whose consensus
+    // is in range. See docs/ascents-and-attempts.md.
+    const effectiveDifficultyExpr = sql<number>`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`;
+
     // Build shared WHERE conditions
     const tickConditions = [
       eq(dbSchema.boardseshTicks.userId, userId),
@@ -263,8 +271,8 @@ export const tickQueries = {
       ...(boardTypes && boardTypes.length > 0 && !boardType
         ? [inArray(dbSchema.boardseshTicks.boardType, boardTypes)]
         : []),
-      ...(minDifficulty !== undefined ? [gte(dbSchema.boardseshTicks.difficulty, minDifficulty)] : []),
-      ...(maxDifficulty !== undefined ? [lte(dbSchema.boardseshTicks.difficulty, maxDifficulty)] : []),
+      ...(minDifficulty !== undefined ? [gte(effectiveDifficultyExpr, minDifficulty)] : []),
+      ...(maxDifficulty !== undefined ? [lte(effectiveDifficultyExpr, maxDifficulty)] : []),
       ...(minAngle !== undefined ? [gte(dbSchema.boardseshTicks.angle, minAngle)] : []),
       ...(maxAngle !== undefined ? [lte(dbSchema.boardseshTicks.angle, maxAngle)] : []),
       ...(fromDate ? [gte(dbSchema.boardseshTicks.climbedAt, fromDate)] : []),
@@ -808,6 +816,7 @@ export const tickQueries = {
       {
         boardType: string;
         layoutId: number | null;
+        distinctClimbCount: number;
         gradeCounts: Array<{ grade: string; count: number }>;
       }
     > = {};
@@ -822,9 +831,19 @@ export const tickQueries = {
         number | null
       >`COALESCE(${dbSchema.boardseshTicks.difficulty}, ${consensusDifficultyExpr})`;
 
-      // Run both queries in parallel for this board type
-      const [gradeResults, distinctClimbs] = await Promise.all([
-        // Get distinct climb counts grouped by layoutId and effective difficulty using SQL aggregation
+      const baseConditions = and(
+        eq(dbSchema.boardseshTicks.userId, userId),
+        eq(dbSchema.boardseshTicks.boardType, boardType),
+        ne(dbSchema.boardseshTicks.status, 'attempt'),
+      );
+
+      // Run three queries in parallel for this board type:
+      // - gradeResults: counts per (layout, effective difficulty) for the chart
+      // - distinctByLayout: per-layout distinct climb count (correct even when one
+      //   climb appears across multiple grade buckets — e.g. logged at multiple
+      //   angles whose consensus differs)
+      // - distinctClimbs: global distinct climbs for `totalDistinctClimbs`
+      const [gradeResults, distinctByLayout, distinctClimbs] = await Promise.all([
         db
           .select({
             layoutId: dbSchema.boardClimbs.layoutId,
@@ -847,55 +866,63 @@ export const tickQueries = {
               eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
             ),
           )
-          .where(
-            and(
-              eq(dbSchema.boardseshTicks.userId, userId),
-              eq(dbSchema.boardseshTicks.boardType, boardType),
-              sql`${dbSchema.boardseshTicks.status} != 'attempt'`,
-            ),
-          )
+          .where(baseConditions)
           .groupBy(dbSchema.boardClimbs.layoutId, effectiveDifficultyExpr),
 
-        // Get all distinct climbUuids for total count
+        db
+          .select({
+            layoutId: dbSchema.boardClimbs.layoutId,
+            distinctCount: sql<number>`count(distinct ${dbSchema.boardseshTicks.climbUuid})`.as('distinct_count'),
+          })
+          .from(dbSchema.boardseshTicks)
+          .leftJoin(
+            dbSchema.boardClimbs,
+            and(
+              eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbs.uuid),
+              eq(dbSchema.boardClimbs.boardType, boardType),
+            ),
+          )
+          .where(baseConditions)
+          .groupBy(dbSchema.boardClimbs.layoutId),
+
         db
           .selectDistinct({ climbUuid: dbSchema.boardseshTicks.climbUuid })
           .from(dbSchema.boardseshTicks)
-          .where(
-            and(
-              eq(dbSchema.boardseshTicks.userId, userId),
-              eq(dbSchema.boardseshTicks.boardType, boardType),
-              sql`${dbSchema.boardseshTicks.status} != 'attempt'`,
-            ),
-          ),
+          .where(baseConditions),
       ]);
 
-      return { gradeResults, distinctClimbs, boardType };
+      return { gradeResults, distinctByLayout, distinctClimbs, boardType };
     };
 
     // Fetch stats for all board types in parallel
     const boardResults = await Promise.all(boardTypes.map(fetchBoardStats));
 
+    const ensureLayoutEntry = (boardType: string, layoutId: number | null) => {
+      const layoutKey = `${boardType}-${layoutId ?? 'unknown'}`;
+      if (!layoutStatsMap[layoutKey]) {
+        layoutStatsMap[layoutKey] = { boardType, layoutId, distinctClimbCount: 0, gradeCounts: [] };
+      }
+      return layoutStatsMap[layoutKey];
+    };
+
     // Process results from all boards
-    for (const { gradeResults, distinctClimbs, boardType } of boardResults) {
-      // Add to total distinct climbs set
+    for (const { gradeResults, distinctByLayout, distinctClimbs, boardType } of boardResults) {
       for (const row of distinctClimbs) {
         allClimbUuids.add(row.climbUuid);
       }
 
-      // Process grade results into layout stats
+      // Per-layout distinct climb count — separate sub-query so a climb logged at
+      // multiple angles with different consensus grades only counts once.
+      for (const row of distinctByLayout) {
+        const entry = ensureLayoutEntry(boardType, row.layoutId);
+        entry.distinctClimbCount = Number(row.distinctCount);
+      }
+
+      // Per-(layout, effective grade) counts for the chart bucketing.
       for (const row of gradeResults) {
-        const layoutKey = `${boardType}-${row.layoutId ?? 'unknown'}`;
-
-        if (!layoutStatsMap[layoutKey]) {
-          layoutStatsMap[layoutKey] = {
-            boardType,
-            layoutId: row.layoutId,
-            gradeCounts: [],
-          };
-        }
-
+        const entry = ensureLayoutEntry(boardType, row.layoutId);
         if (row.difficulty !== null) {
-          layoutStatsMap[layoutKey].gradeCounts.push({
+          entry.gradeCounts.push({
             grade: String(row.difficulty),
             count: Number(row.distinctCount),
           });
@@ -903,19 +930,13 @@ export const tickQueries = {
       }
     }
 
-    // Convert to response format with sorted grade counts
-    const layoutStats = Object.entries(layoutStatsMap).map(([layoutKey, stats]) => {
-      // Calculate total distinct climbs for this layout by summing grade counts
-      const distinctClimbCount = stats.gradeCounts.reduce((sum, gc) => sum + gc.count, 0);
-
-      return {
-        layoutKey,
-        boardType: stats.boardType,
-        layoutId: stats.layoutId,
-        distinctClimbCount,
-        gradeCounts: stats.gradeCounts.sort((a, b) => parseInt(a.grade) - parseInt(b.grade)),
-      };
-    });
+    const layoutStats = Object.entries(layoutStatsMap).map(([layoutKey, stats]) => ({
+      layoutKey,
+      boardType: stats.boardType,
+      layoutId: stats.layoutId,
+      distinctClimbCount: stats.distinctClimbCount,
+      gradeCounts: stats.gradeCounts.sort((a, b) => parseInt(a.grade) - parseInt(b.grade)),
+    }));
 
     return {
       totalDistinctClimbs: allClimbUuids.size,

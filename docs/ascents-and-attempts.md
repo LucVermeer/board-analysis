@@ -111,17 +111,33 @@ Option 2 is the common case. `QuickTickBar` initializes `difficulty` state to `u
 
 ### The consequence: read paths must fall back to consensus
 
-Any aggregation or display that groups by grade **must** COALESCE `boardsesh_ticks.difficulty` with the climb's consensus difficulty from `board_climb_stats`. Otherwise ungraded ticks silently disappear from charts.
+Any aggregation, display, or filter that touches grade **must** COALESCE `boardsesh_ticks.difficulty` with the climb's consensus difficulty from `board_climb_stats`. Otherwise ungraded ticks silently disappear from charts or fall outside grade-range filters.
 
-Two backend resolvers already implement this (`packages/backend/src/graphql/resolvers/ticks/queries.ts`):
+The pattern (`packages/backend/src/graphql/resolvers/ticks/queries.ts`):
 
 ```ts
 COALESCE(boardseshTicks.difficulty, consensusDifficultyExpr);
 ```
 
-where `consensusDifficultyExpr = ROUND(boardClimbStats.displayDifficulty)`, defined in `packages/backend/src/graphql/resolvers/shared/sql-expressions.ts`.
+where `consensusDifficultyExpr = ROUND(boardClimbStats.displayDifficulty)`, defined in `packages/backend/src/graphql/resolvers/shared/sql-expressions.ts`. Reusing this expression in any new tick-aggregation query also keeps the `board_climb_stats` join shape consistent — it's joined on `(climbUuid, boardType, angle)` (its primary key, so the join doesn't multiply rows).
 
-The `userTicks` and `userProfileStats` resolvers LEFT JOIN `board_climb_stats` on `(climbUuid, boardType, angle)` (its primary key — fast) and return the coalesced value as `difficulty`. The client side then receives an effective difficulty that respects the user's override when set and the consensus otherwise. **Reuse this pattern** for any new tick-aggregation query.
+### `difficulty` and `effectiveDifficulty` — two separate GraphQL fields
+
+The `Tick` GraphQL type exposes both:
+
+- `difficulty: Int` — the **raw** stored value. NULL when the user didn't attach a personal override. Use this when you care about the user's intent (e.g. an "edit my grade" UI, or an Aurora sync write-back).
+- `effectiveDifficulty: Int` — the COALESCE'd value. Use this for charts, leaderboards, filters, and any per-grade bucketing. Still nullable when neither the tick nor the climb has a grade yet.
+
+Splitting them prevents an optimistic write (`useSaveTick` puts the raw user input on a temp row) from flickering when the server hydration comes back: optimistic and server `difficulty` agree (both null for ungraded), and `effectiveDifficulty` simply fills in once the server knows the consensus.
+
+### Resolvers that fall back to consensus
+
+| Resolver                                                      | Surface                                            | How                                                                                                                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `userTicks` (`queries.ts:126`)                                | profile stats charts, hardest send/flash, V-points | LEFT JOIN `board_climb_stats`, expose both `difficulty` and `effectiveDifficulty`                                                                                        |
+| `userProfileStats` (`queries.ts:773`)                         | per-layout grade buckets, layout %s                | Same JOIN, `groupBy(layoutId, COALESCE(...))`, plus a separate per-layout distinct sub-query so `distinctClimbCount` is correct when a climb appears in multiple buckets |
+| `userAscentsFeed` (`queries.ts:176`)                          | activity feed                                      | `minDifficulty` / `maxDifficulty` filter on `COALESCE(...)` so ungraded ticks whose consensus is in range still appear                                                   |
+| `followingLeaderboard.hardestGrade` (`social/boards.ts:1035`) | follow-leaderboard                                 | `MAX(COALESCE(...))` so ungraded sends still raise a user's hardest grade                                                                                                |
 
 If neither the tick nor `board_climb_stats` has a difficulty (e.g. a brand-new unrated climb), the effective difficulty remains `null` and the row is excluded from grade buckets but still counts toward total ascent counts. That's the correct behavior — there's no way to bucket it.
 

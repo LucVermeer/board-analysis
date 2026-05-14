@@ -24,6 +24,16 @@ import {
 const FLASH_COLOR = `${themeTokens.colors.success}99`; // 60% opacity hex
 const REDPOINT_COLOR = `${themeTokens.colors.error}99`;
 
+/**
+ * Grade id to use for chart bucketing: prefer the server-supplied
+ * `effectiveDifficulty` (COALESCE of user override + climb consensus) and
+ * fall back to the raw `difficulty` when absent. See
+ * docs/ascents-and-attempts.md.
+ */
+function gradeIdForEntry(entry: LogbookEntry): number | null {
+  return entry.effectiveDifficulty ?? entry.difficulty ?? null;
+}
+
 dayjs.extend(isoWeek);
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
@@ -115,8 +125,9 @@ export function buildAggregatedStackedBars(
     const filteredTicks = filterByUnifiedTimeframe(ticks, timeframe, fromDate, toDate);
 
     filteredTicks.forEach((entry) => {
-      if (entry.difficulty === null || entry.status === 'attempt' || !entry.climbUuid) return;
-      const grade = mapping[entry.difficulty];
+      const gradeId = gradeIdForEntry(entry);
+      if (gradeId == null || entry.status === 'attempt' || !entry.climbUuid) return;
+      const grade = mapping[gradeId];
       if (grade) {
         const layoutKey = getLayoutKey(boardType, entry.layoutId);
         if (!layoutGradeClimbs[layoutKey]) layoutGradeClimbs[layoutKey] = {};
@@ -217,8 +228,9 @@ export function buildWeeklyBars(
 
   const weeklyData: Record<string, Record<string, number>> = {};
   entries.forEach((entry) => {
-    if (entry.difficulty === null) return;
-    const grade = mapping[entry.difficulty];
+    const gradeId = gradeIdForEntry(entry);
+    if (gradeId == null) return;
+    const grade = mapping[gradeId];
     if (!grade) return;
     const d = parseTickTime(entry.climbed_at);
     const weekKey = `${d.isoWeekYear()}-W${d.isoWeek()}`;
@@ -267,8 +279,9 @@ export function buildFlashRedpointBars(
   const redpoint: Record<string, number> = {};
 
   filteredLogbook.forEach((entry) => {
-    if (entry.difficulty === null) return;
-    const difficulty = mapping[entry.difficulty];
+    const gradeId = gradeIdForEntry(entry);
+    if (gradeId == null) return;
+    const difficulty = mapping[gradeId];
     if (!difficulty) return;
     // Prefer the canonical status field when available. Fall back to the old
     // tries-based heuristic for legacy rows that don't have status set.
@@ -403,8 +416,9 @@ export function buildVPointsTimeline(
   for (const layoutKey of activeLayouts) {
     const weekPoints: Record<string, number> = {};
     for (const entry of entriesByLayout[layoutKey]) {
-      if (entry.difficulty === null) continue;
-      const grade = difficultyMapping[entry.difficulty];
+      const gradeId = gradeIdForEntry(entry);
+      if (gradeId == null) continue;
+      const grade = difficultyMapping[gradeId];
       if (!grade) continue;
       const d = parseTickTime(entry.climbed_at);
       const wk = `${d.isoWeekYear()}-W${d.isoWeek()}`;

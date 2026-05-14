@@ -641,8 +641,10 @@ type Tick {
   attemptCount: Int!
   "User's quality rating (1-5)"
   quality: Int
-  "User's difficulty rating"
+  "User's personal grade override as a difficulty_id. Null means the user did not attach a personal grade — read `effectiveDifficulty` for the value to display (it falls back to the climb's consensus). See docs/ascents-and-attempts.md."
   difficulty: Int
+  "Effective grade for display and aggregation: COALESCE(difficulty, ROUND(consensus_difficulty)). Still nullable when the climb has no consensus yet."
+  effectiveDifficulty: Int
   "Whether this is a benchmark climb"
   isBenchmark: Boolean!
   "User's comment about the climb"

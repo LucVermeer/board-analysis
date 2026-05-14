@@ -12,7 +12,14 @@ export type Tick = {
   status: TickStatus;
   attemptCount: number;
   quality: number | null;
+  // Raw user grade override; null means "use the climb's consensus grade".
+  // See docs/ascents-and-attempts.md.
   difficulty: number | null;
+  // COALESCE(difficulty, ROUND(consensus_difficulty)) — what charts, leaderboards,
+  // and grade-range filters should bucket on. Null when neither the user nor
+  // the climb has a grade yet. Populated by read queries; mutation responses
+  // (saveTick / updateTick) don't compute it.
+  effectiveDifficulty?: number | null;
   isBenchmark: boolean;
   comment: string;
   climbedAt: string;

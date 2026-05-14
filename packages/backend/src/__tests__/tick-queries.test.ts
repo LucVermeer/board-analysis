@@ -107,13 +107,30 @@ const insertTick = async (params: {
   attemptCount?: number;
   boardType?: string;
   difficulty?: number;
+  angle?: number;
 }) => {
   const userId = params.userId ?? TEST_USER_ID;
   const attemptCount = params.attemptCount ?? 1;
   const boardType = params.boardType ?? 'kilter';
+  const angle = params.angle ?? 40;
   await db.execute(sql`
     INSERT INTO boardsesh_ticks (uuid, user_id, board_type, climb_uuid, angle, status, attempt_count, difficulty, climbed_at)
-    VALUES (${params.uuid}, ${userId}, ${boardType}, ${params.climbUuid}, 40, ${params.status}, ${attemptCount}, ${params.difficulty ?? null}, ${params.climbedAt})
+    VALUES (${params.uuid}, ${userId}, ${boardType}, ${params.climbUuid}, ${angle}, ${params.status}, ${attemptCount}, ${params.difficulty ?? null}, ${params.climbedAt})
+  `);
+};
+
+const insertBoardClimbStats = async (params: {
+  climbUuid: string;
+  boardType?: string;
+  angle?: number;
+  displayDifficulty: number;
+}) => {
+  const boardType = params.boardType ?? 'kilter';
+  const angle = params.angle ?? 40;
+  await db.execute(sql`
+    INSERT INTO board_climb_stats (board_type, climb_uuid, angle, display_difficulty, ascensionist_count, difficulty_average, quality_average)
+    VALUES (${boardType}, ${params.climbUuid}, ${angle}, ${params.displayDifficulty}, 10, ${params.displayDifficulty}, 4)
+    ON CONFLICT (board_type, climb_uuid, angle) DO UPDATE SET display_difficulty = excluded.display_difficulty
   `);
 };
 
@@ -571,6 +588,115 @@ describe('tickQueries — behavior fixes', () => {
         percentile: 0,
         totalActiveUsers: 88,
       });
+    });
+  });
+
+  // Hard invariant from docs/ascents-and-attempts.md: a tick with
+  // `difficulty IS NULL` must bucket under the climb's consensus grade,
+  // not be silently dropped from per-grade aggregates / range filters.
+  describe('NULL-difficulty ticks fall back to consensus grade', () => {
+    it('userTicks exposes raw difficulty and effectiveDifficulty (consensus fallback)', async () => {
+      const climbUuid = CLIMB_PREFIX + 'null-diff-userticks';
+      await insertClimb(climbUuid, 'Null-diff via userTicks');
+      await insertBoardClimbStats({ climbUuid, displayDifficulty: 22.4 });
+
+      // User-graded tick on the same climb at a different angle
+      await insertTick({
+        uuid: 'tick-null-diff-graded',
+        climbUuid,
+        climbedAt: '2026-04-01 10:00:00',
+        status: 'flash',
+        difficulty: 18,
+        angle: 30,
+      });
+
+      // Ungraded tick — should bucket at consensus (ROUND(22.4) = 22)
+      await insertTick({
+        uuid: 'tick-null-diff-ungraded',
+        climbUuid,
+        climbedAt: '2026-04-02 10:00:00',
+        status: 'send',
+        attemptCount: 2,
+      });
+
+      const ticks = (await tickQueries.userTicks(undefined, {
+        userId: TEST_USER_ID,
+        boardType: 'kilter',
+      })) as Array<{
+        uuid: string;
+        difficulty: number | null;
+        effectiveDifficulty: number | null;
+      }>;
+
+      const graded = ticks.find((t) => t.uuid === 'tick-null-diff-graded');
+      const ungraded = ticks.find((t) => t.uuid === 'tick-null-diff-ungraded');
+
+      // Raw field preserves user-state: null vs. explicit override.
+      expect(graded?.difficulty).toBe(18);
+      expect(ungraded?.difficulty).toBeNull();
+      // Effective field falls back to consensus for the ungraded tick.
+      expect(graded?.effectiveDifficulty).toBe(18);
+      expect(ungraded?.effectiveDifficulty).toBe(22);
+    });
+
+    it('userProfileStats buckets NULL-difficulty ticks under the consensus grade', async () => {
+      const gradedClimb = CLIMB_PREFIX + 'null-diff-stats-graded';
+      const ungradedClimb = CLIMB_PREFIX + 'null-diff-stats-ungraded';
+      await insertClimb(gradedClimb, 'graded climb');
+      await insertClimb(ungradedClimb, 'ungraded climb');
+      await insertBoardClimbStats({ climbUuid: ungradedClimb, displayDifficulty: 19.8 });
+
+      await insertTick({
+        uuid: 'tick-stats-graded',
+        climbUuid: gradedClimb,
+        climbedAt: '2026-04-01 10:00:00',
+        status: 'flash',
+        difficulty: 16,
+      });
+      await insertTick({
+        uuid: 'tick-stats-ungraded',
+        climbUuid: ungradedClimb,
+        climbedAt: '2026-04-02 10:00:00',
+        status: 'flash',
+      });
+
+      const stats = (await tickQueries.userProfileStats(undefined, { userId: TEST_USER_ID })) as {
+        totalDistinctClimbs: number;
+        layoutStats: Array<{
+          layoutKey: string;
+          distinctClimbCount: number;
+          gradeCounts: Array<{ grade: string; count: number }>;
+        }>;
+      };
+
+      const kilter1 = stats.layoutStats.find((l) => l.layoutKey === 'kilter-1');
+      expect(kilter1).toBeDefined();
+      // Both climbs counted distinctly.
+      expect(kilter1?.distinctClimbCount).toBe(2);
+      // Both grades present — the ungraded one bucketed at ROUND(19.8) = 20.
+      const gradeMap = new Map(kilter1?.gradeCounts.map((gc) => [gc.grade, gc.count]) ?? []);
+      expect(gradeMap.get('16')).toBe(1);
+      expect(gradeMap.get('20')).toBe(1);
+    });
+
+    it('userAscentsFeed minDifficulty includes NULL-difficulty ticks whose consensus is in range', async () => {
+      const climbUuid = CLIMB_PREFIX + 'null-diff-feed-filter';
+      await insertClimb(climbUuid, 'feed filter test');
+      await insertBoardClimbStats({ climbUuid, displayDifficulty: 24.1 });
+
+      // Tick has no user grade; consensus rounds to 24
+      await insertTick({
+        uuid: 'tick-feed-ungraded',
+        climbUuid,
+        climbedAt: '2026-04-03 10:00:00',
+        status: 'flash',
+      });
+
+      const inRange = await callUserAscentsFeed(TEST_USER_ID, { minDifficulty: 22, maxDifficulty: 26, limit: 50 });
+      expect(inRange.items.map((i) => i.uuid)).toContain('tick-feed-ungraded');
+
+      const outOfRange = await callUserAscentsFeed(TEST_USER_ID, { minDifficulty: 26, limit: 50 });
+      expect(outOfRange.items.map((i) => i.uuid)).not.toContain('tick-feed-ungraded');
     });
   });
 });

@@ -30,6 +30,7 @@ export const GET_USER_TICKS = gql`
       status
       attemptCount
       difficulty
+      effectiveDifficulty
       climbedAt
       layoutId
     }
@@ -73,7 +74,7 @@ type TickFromGetTicks = Pick<
 >;
 type TickFromGetUserTicks = Pick<
   Tick,
-  'climbUuid' | 'angle' | 'status' | 'attemptCount' | 'difficulty' | 'climbedAt' | 'layoutId'
+  'climbUuid' | 'angle' | 'status' | 'attemptCount' | 'difficulty' | 'effectiveDifficulty' | 'climbedAt' | 'layoutId'
 >;
 type TickFromSaveTick = Pick<
   Tick,

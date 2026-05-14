@@ -2,7 +2,6 @@ import {
   cachedUserClimbPercentile,
   cachedUserProfileStats,
   cachedUserTicks,
-  serverUserClimbPercentile,
   serverUserProfileStats,
   serverUserTicks,
 } from '@/app/lib/graphql/server-cached-client';
@@ -37,12 +36,13 @@ export async function fetchProfileStatsData(
   options: FetchProfileStatsOptions = {},
 ): Promise<ProfileStatsData> {
   const profileStatsFn = options.skipCache ? serverUserProfileStats : cachedUserProfileStats;
-  const percentileFn = options.skipCache ? serverUserClimbPercentile : cachedUserClimbPercentile;
   const ticksFn = options.skipCache ? serverUserTicks : cachedUserTicks;
 
+  // Percentile is a snapshot of the user's rank in a community-wide leaderboard;
+  // a single new tick doesn't shift it. Always serve from the cache.
   const [initialProfileStats, initialPercentile, ...ticksResults] = await Promise.all([
     profileStatsFn(userId),
-    percentileFn(userId),
+    cachedUserClimbPercentile(userId),
     ...SUPPORTED_BOARDS.map((boardType) => ticksFn(userId, boardType)),
   ]);
 
@@ -53,6 +53,7 @@ export async function fetchProfileStatsData(
       ? ticks.map((tick) => ({
           climbed_at: tick.climbedAt,
           difficulty: tick.difficulty,
+          effectiveDifficulty: tick.effectiveDifficulty ?? null,
           tries: tick.attemptCount,
           angle: tick.angle,
           status: tick.status as LogbookEntry['status'],

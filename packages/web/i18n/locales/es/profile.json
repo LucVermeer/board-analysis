@@ -106,6 +106,7 @@
       "attempts": "Intentos",
       "quality": "Calidad",
       "difficulty": "Dificultad",
+      "difficultyNoOverride": "Usar grado de consenso",
       "notes": "Notas",
       "video": "Vídeo",
       "videoPlaceholder": "URL de Instagram o TikTok",

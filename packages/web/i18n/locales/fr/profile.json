@@ -106,6 +106,7 @@
       "attempts": "Essais",
       "quality": "Qualité",
       "difficulty": "Difficulté",
+      "difficultyNoOverride": "Utiliser la cotation consensus",
       "notes": "Notes",
       "video": "Vidéo",
       "videoPlaceholder": "Lien Instagram ou TikTok",
