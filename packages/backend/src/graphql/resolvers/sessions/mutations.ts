@@ -392,6 +392,17 @@ export const sessionMutations = {
       // directly since that's what's stored there.
       const isCreator = !!ctx.userId && sessionData.createdByUserId === ctx.userId;
       const leaderConnectionId = await roomManager.getSessionLeaderConnectionId(sessionId);
+      // Note: `leaderConnectionId === null` is treated as "no current
+      // leader" → the caller is not the leader. There is a brief window
+      // between an election and the new leader key's TTL refresh where
+      // the key can be momentarily absent; a current leader hitting that
+      // window will get a 403 here instead of being authorized. With
+      // connection/sessionTTL now aligned at 4h and REFRESH_TTL_SCRIPT
+      // bumping the leader key on every refresh (A7), this window is on
+      // the order of milliseconds. Behavior is a deliberate trade-off
+      // for not trusting stale `SessionUser.isLeader`: failing closed is
+      // safer than authorizing destructive ops on a stale read. The
+      // creator path above always succeeds regardless.
       const isLeader = leaderConnectionId !== null && leaderConnectionId === ctx.connectionId;
       if (!isCreator && !isLeader) {
         console.warn(

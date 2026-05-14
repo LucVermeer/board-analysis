@@ -254,6 +254,15 @@ export const JOIN_SESSION_SCRIPT = `
  * Lua script for atomic TTL refresh of connection and session membership.
  * Atomically refreshes both TTLs based on the connection's current session.
  * Returns: 1 if successful, 0 if connection doesn't exist
+ *
+ * CLUSTER-UNSAFE: builds session-* / participant-* / leader keys via string
+ * concatenation inside the script body instead of passing them in via
+ * KEYS[]. Redis Cluster would reject this because all touched keys must
+ * be declared up front and hash to the same slot. Tracked as part of
+ * issue #2143's A3 follow-up; the fix needs a coordinated change to
+ * either pass every key as a separate KEYS entry or adopt hash tags
+ * (e.g. `boardsesh:{sessionId}:...`) so the cluster proxy can route
+ * them together.
  */
 export const REFRESH_TTL_SCRIPT = `
   local connKey = KEYS[1]
@@ -354,6 +363,9 @@ export const REMOVE_PARTICIPANT_SCRIPT = `
  * ARGV[3] = session TTL
  * Returns: 1 if update succeeded, 0 if connection hash is missing
  */
+// CLUSTER-UNSAFE: same pattern as REFRESH_TTL_SCRIPT — builds
+// participantKey via string concatenation rather than KEYS[]. Tracked
+// under issue #2143's A3 follow-up.
 export const UPDATE_USERNAME_SCRIPT = `
   local connKey = KEYS[1]
   local username = ARGV[1]

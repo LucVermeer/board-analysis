@@ -406,8 +406,15 @@ export const createMockRedis = (): MockRedis => {
         }
         return 0;
       }
-      // numkeys=3: Both JOIN (legacy) and LEAVE use 3 keys
-      // Distinguish by argument count: JOIN has 9+ args, LEAVE has 6
+      // numkeys=3 branches by args.length:
+      //   - LEAVE_SESSION_SCRIPT: 3 keys + 3 ARGV (connectionId, membersTTL,
+      //     leaderTTL) → 6 args total.
+      //   - Legacy 3-key JOIN_SESSION_SCRIPT: pre-A8 shape, kept here so an
+      //     older test or call site doesn't silently no-op. **Not exercised
+      //     in production after A8**; the live script uses numkeys=6 and is
+      //     handled above. Future contributors: do not extend this branch
+      //     without also updating the production script — the new shape
+      //     should be the only path used.
       if (numkeys === 3) {
         const connectionKey = args[0] as string;
         const sessionMembersKey = args[1] as string;
@@ -415,7 +422,8 @@ export const createMockRedis = (): MockRedis => {
         const connectionId = args[3] as string;
 
         if (args.length > 6) {
-          // JOIN_SESSION_SCRIPT: Store connection, add to members, leader election
+          // Legacy JOIN_SESSION_SCRIPT path — see comment above. Replaced
+          // by the numkeys=6 branch earlier in this function.
           const username = args[7] as string;
           const avatarUrl = args[8] as string;
 
