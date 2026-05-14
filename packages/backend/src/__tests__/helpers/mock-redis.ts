@@ -277,9 +277,10 @@ export const createMockRedis = (): MockRedis => {
         }
         return newLeader;
       }
-      // numkeys=1: RELEASE_LOCK or UPDATE_USERNAME_SCRIPT.
-      // UPDATE_USERNAME_SCRIPT has 3+ ARGV: username, avatarUrl (sentinel),
-      // sessionTTL. RELEASE_LOCK has 1 ARGV (value).
+      // UPDATE_USERNAME_SCRIPT (numkeys=1, 4 args: connKey, username,
+      // avatarUrl-sentinel, sessionTTL). RELEASE_LOCK_SCRIPT and
+      // REFRESH_TTL_SCRIPT (also numkeys=1) are dispatched earlier in this
+      // function by args.length.
       if (numkeys === 1 && args.length === 4) {
         const connKey = args[0] as string;
         const username = args[1] as string;

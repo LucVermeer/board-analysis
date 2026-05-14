@@ -669,18 +669,28 @@ export function useSessionLifecycle({
                         // `prev.clientId` is the WebSocket connectionId. The
                         // current backend always emits both `leaderConnectionId`
                         // and `leaderId`; prefer the explicit connectionId.
-                        // When it's missing (rolling deploy from a pre-#2128
-                        // backend), fall back to `leaderId` ONLY if the local
-                        // client is anonymous — anonymous users bind
-                        // participantId to connectionId per the P1 fix, so
-                        // their `leaderId` is interchangeable with a
-                        // connectionId. Authenticated users have a userId
-                        // UUID as their participantId, which never equals
-                        // a connectionId, so blindly comparing would
-                        // misreport `isLeader: false`.
-                        const isAnonymous = prev.users.some(
-                          (u) => u.id === prev.clientId && (u.userId === null || u.userId === undefined),
-                        );
+                        //
+                        // When `leaderConnectionId` is missing (rolling deploy
+                        // from a pre-#2128 backend), fall back to `leaderId`
+                        // ONLY if the local client is anonymous. Anonymous
+                        // users bind `participantId` to `connectionId` per
+                        // the P1 fix, so their `leaderId` is interchangeable
+                        // with a `connectionId`. Authenticated users have a
+                        // userId UUID as their participantId — comparing it
+                        // to a connectionId never matches, so the fallback
+                        // for them would silently misreport `isLeader: false`.
+                        //
+                        // Detect anonymity by looking up the local client's
+                        // entry in the user list: anonymous participants
+                        // appear there with `id === clientId` (since
+                        // participantId === connectionId). If the local
+                        // user isn't in the list yet — possible during a
+                        // very fresh join — we conservatively skip the
+                        // fallback. That's a brief, recoverable window:
+                        // the next read corrects state, and the modern
+                        // backend always sends `leaderConnectionId` anyway.
+                        const localEntry = prev.users.find((u) => u.id === prev.clientId);
+                        const isAnonymous = localEntry !== undefined && !localEntry.userId;
                         const effectiveLeaderConnectionId =
                           event.leaderConnectionId ?? (isAnonymous ? event.leaderId : null);
                         return {
