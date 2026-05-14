@@ -347,7 +347,8 @@ APNs env vars are not set in `packages/backend/.env.local`. Double-check all fiv
 - The token may take a few seconds to arrive after `Activity.request()`
 - Check the Xcode console for "Push token updated" log
 - Check for "Failed to register push token" errors — the backend may not be reachable from the iPhone
-- If you see "Skipping push token registration: no auth token in keychain", the web app did not pass the backend auth token into `LiveActivityPlugin.startSession()`. Confirm `/api/internal/ws-auth` returns a token in the native webview before the Live Activity starts.
+- If you see "Skipping shared keychain auth token write: authToken was empty" or "Skipping shared keychain auth token write: authToken was not provided", the web app did not pass a usable backend auth token into `LiveActivityPlugin.startSession()`. Confirm `/api/internal/ws-auth` returns a token in the native webview before the Live Activity starts.
+- If you see "Skipping push token registration: no auth token in keychain", the ActivityKit push token arrived, but the native plugin could not read a stored auth token when registering it. Check for the shared keychain auth-token write logs immediately before this message.
 
 ### "No registered Live Activity tokens"
 
