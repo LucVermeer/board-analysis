@@ -132,7 +132,7 @@ export async function removeConnection(
   return { sessionId, participantId, wasLeader, newLeaderId, remainingParticipantConnections };
 }
 
-async function countLiveParticipantConnections(
+export async function countLiveParticipantConnections(
   redis: Redis,
   sessionId: string,
   participantId: string,

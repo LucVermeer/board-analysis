@@ -359,6 +359,51 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       expect(leaveResult?.newLeaderId).toBe('member-conn');
       expect(leaveResult?.newLeaderParticipantId).toBe('member-participant-id');
     });
+
+    it('evicts a participant who disconnects and never reconnects after the grace period', async () => {
+      // Regression for the A6 ghost-participant bug. Before this fix, the
+      // grace-timer callback spared any participant present in the user
+      // list — but getSessionParticipants intentionally retains
+      // RECONNECTING entries with zero live connections during the grace
+      // window, so a never-reconnecting participant would linger as a
+      // RECONNECTING ghost until the Redis TTL expired (~4h). The fix
+      // queries the live-connection count and evicts when it's zero.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const sessionId = uuidv4();
+        const boardPath = '/kilter/1/2/3/40';
+
+        const joined = await registerAndJoinSession('ghost-conn', sessionId, boardPath, 'GhostUser', 'user-A');
+
+        // Sanity: participant is present and CONNECTED.
+        let users = await roomManager.getSessionUsers(sessionId);
+        expect(users).toContainEqual(
+          expect.objectContaining({ id: joined.participantId, connectionState: 'CONNECTED' }),
+        );
+
+        // Passive disconnect (e.g. WS dropped, tab closed). Participant
+        // flips to RECONNECTING and the grace timer is armed.
+        const disconnectResult = await roomManager.disconnectClient('ghost-conn');
+        expect(disconnectResult?.presenceUser).toEqual(
+          expect.objectContaining({ id: joined.participantId, connectionState: 'RECONNECTING' }),
+        );
+
+        users = await roomManager.getSessionUsers(sessionId);
+        expect(users).toContainEqual(
+          expect.objectContaining({ id: joined.participantId, connectionState: 'RECONNECTING' }),
+        );
+
+        // Advance past the grace period. No reconnect arrives.
+        await vi.advanceTimersByTimeAsync(70_000);
+
+        // The participant must be gone — evicted by the grace timer once
+        // it confirmed zero live connections, not lingering as a ghost.
+        users = await roomManager.getSessionUsers(sessionId);
+        expect(users.find((u) => u.id === joined.participantId)).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('Lazy Restoration from Postgres', () => {

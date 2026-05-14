@@ -611,17 +611,38 @@ export async function disconnectClient(
           return;
         }
         const currentUser = users.find((user) => user.id === participantId);
-        // Spare the participant whenever they're still present in the
-        // session, regardless of connectionState. `getSessionParticipants`
-        // already prunes participants whose connection set is empty (and
-        // who aren't actively RECONNECTING) before returning, so a
-        // participant we still see here is one with at least one live
-        // connection or one that just flipped to RECONNECTING with the
-        // reconnect WS already open. Either way, expelling them would race
-        // with the in-flight reconnect — exactly the bug the grace period
-        // is meant to prevent. Only evict when truly absent.
-        if (currentUser) {
+        // The participant might be present in the user list as RECONNECTING
+        // with zero live connections — `getSessionParticipants` intentionally
+        // retains those entries so peers continue to see the RECONNECTING
+        // badge during the grace window. So "present in user list" alone
+        // does NOT mean "still reconnecting"; it could equally mean "ghost".
+        // Disambiguate by querying the actual live-connection count.
+        //
+        // - CONNECTED user → live conns > 0 → spare (active participant).
+        // - RECONNECTING + live conns > 0 → in-flight reconnect, spare.
+        // - RECONNECTING + 0 live conns → ghost, evict.
+        // - Not in user list at all → already cleaned up, fall through.
+        if (currentUser?.connectionState === 'CONNECTED') {
           return;
+        }
+        if (currentUser?.connectionState === 'RECONNECTING') {
+          let liveConnectionCount: number;
+          try {
+            liveConnectionCount = await distributedState.getParticipantLiveConnectionCount(sessionId, participantId);
+          } catch (err) {
+            // Same conservative behaviour as the getSessionMembers failure
+            // above: if Redis can't answer, don't expel; the next reconnect
+            // will run the grace logic again.
+            console.error(
+              `[RoomManager] Grace timer failed to count live connections for participant ${participantId.slice(0, 8)}; keeping them alive:`,
+              err,
+            );
+            return;
+          }
+          if (liveConnectionCount > 0) {
+            return; // In-flight reconnect; let the rejoin promote them back to CONNECTED.
+          }
+          // Fall through to eviction: RECONNECTING with no live connections is a ghost.
         }
         await distributedState.removeParticipant(sessionId, participantId).catch((err) => {
           console.error(`[RoomManager] Failed to expire participant ${participantId.slice(0, 8)}:`, err);
