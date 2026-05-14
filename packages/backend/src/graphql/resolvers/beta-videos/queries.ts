@@ -1,6 +1,7 @@
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
-import { eq, and, desc, isNotNull, like } from 'drizzle-orm';
+import { eq, and, desc, isNotNull, like, or, sql } from 'drizzle-orm';
+import { rowsFromResult } from '@boardsesh/db/client';
 import { fetchInstagramMeta, getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
 import { fetchTikTokMeta, getTikTokCacheId, isTikTokUrl } from '../../../lib/tiktok-meta';
 import {
@@ -11,6 +12,7 @@ import {
   isS3Configured,
   STATIC_THUMBNAIL_PREFIX,
 } from '../../../lib/beta-link-thumbnails';
+import { redisClientManager } from '../../../redis/client';
 
 type BetaLinkResult = {
   climbUuid: string;
@@ -30,6 +32,48 @@ type RecentBetaLinkResult = {
 
 const RECENT_BETA_LINKS_MAX_LIMIT = 50;
 const RECENT_BETA_LINKS_DEFAULT_LIMIT = 20;
+const USER_BETA_LINKS_MAX_LIMIT = 100;
+const USER_BETA_LINKS_DEFAULT_LIMIT = 50;
+// Cap rows per foreign_username on the home slider so a single climber's
+// bulk upload doesn't push the rest of the community off the strip. NULL
+// usernames are uncapped per product direction (per-user issue is the
+// known-handle case).
+const HOME_PER_USER_CAP = 3;
+
+// Aggressive caching for the home-strip query: it runs a window function
+// over the full beta-links table joined to board_climbs, which was slow
+// enough in production to starve the DB connection pool (see incident
+// triggered by the previous merge of this PR). Mirrors the strategy in
+// resolvers/social/boards.ts (`warmPopularConfigsCache`): a Redis key
+// with a long TTL refreshed at deploy via a distributed lock, plus
+// invalidation on writes for snappier feedback.
+//
+// Cache key is intentionally parameter-free — we store the unfiltered,
+// uncapped (post-window-cap) row set and let the resolver slice by
+// `limit` + filter by `boardType` in JavaScript. One cache key covers
+// every caller.
+const RECENT_BETA_LINKS_REDIS_KEY = 'boardsesh:recent-beta-links';
+// 24 h TTL: beta-link content rotates faster than popular-board catalog,
+// but writes bust the cache anyway. TTL is the safety net, not the
+// primary freshness mechanism.
+const RECENT_BETA_LINKS_REDIS_TTL_SECONDS = 24 * 60 * 60;
+const RECENT_BETA_LINKS_REDIS_LOCK_KEY = 'boardsesh:recent-beta-links:lock';
+const RECENT_BETA_LINKS_REDIS_LOCK_TTL_SECONDS = 120;
+// Cache up to 2x the public max so JS-side `boardType` filtering still has
+// headroom and a single boardType call can return MAX_LIMIT rows.
+const RECENT_BETA_LINKS_CACHE_SIZE = RECENT_BETA_LINKS_MAX_LIMIT * 2;
+
+// Extract an Instagram handle from `userProfiles.instagramUrl`. The field
+// holds a profile URL — we only want the handle so we can match against
+// `board_beta_links.foreign_username`. Returns null for anything that
+// doesn't look like a recognisable instagram.com profile URL.
+function extractInstagramHandle(profileUrl: string | null): string | null {
+  if (!profileUrl) return null;
+  const trimmed = profileUrl.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([A-Za-z0-9._]+)\/?/i);
+  return match ? match[1] : null;
+}
 
 // We never surface KayaClimb beta links — we don't want to drive traffic to a
 // competing climbing app from our slider. Filter them out at the resolver.
@@ -217,6 +261,147 @@ async function enrichRowSafe(row: Row): Promise<BetaLinkResult | null> {
   return passthroughResult(row);
 }
 
+// snake_case shape returned by the raw SQL CTE; we cache the row set in this
+// form so the cache contents survive any future camelCase refactor on the
+// resolver result type.
+type CachedRecentBetaLinkRow = {
+  board_type: string;
+  climb_uuid: string;
+  link: string;
+  foreign_username: string | null;
+  angle: number | null;
+  thumbnail: string | null;
+  is_listed: boolean | null;
+  created_at: string | null;
+  climb_name: string | null;
+};
+
+/**
+ * Run the actual CTE that powers the home strip. Returns the unfiltered,
+ * uncapped (post-window-cap) top-N rows ordered by `created_at DESC`. No
+ * boardType arg — we cache one global result set and filter in JS at the
+ * resolver layer.
+ */
+async function runRecentBetaLinksQuery(): Promise<CachedRecentBetaLinkRow[]> {
+  const result = await db.execute<CachedRecentBetaLinkRow>(sql`
+    WITH ranked AS (
+      SELECT
+        bl.board_type,
+        bl.climb_uuid,
+        bl.link,
+        bl.foreign_username,
+        bl.angle,
+        bl.thumbnail,
+        bl.is_listed,
+        bl.created_at,
+        bc.name AS climb_name,
+        ROW_NUMBER() OVER (
+          PARTITION BY bl.foreign_username
+          ORDER BY bl.created_at DESC
+        ) AS user_rank
+      FROM ${dbSchema.boardBetaLinks} bl
+      LEFT JOIN ${dbSchema.boardClimbs} bc
+        ON bc.board_type = bl.board_type AND bc.uuid = bl.climb_uuid
+      WHERE bl.is_listed = true
+        AND bl.thumbnail IS NOT NULL
+        AND bl.thumbnail LIKE ${`${STATIC_THUMBNAIL_PREFIX}%`}
+    )
+    SELECT board_type, climb_uuid, link, foreign_username, angle, thumbnail, is_listed, created_at, climb_name
+    FROM ranked
+    WHERE foreign_username IS NULL OR user_rank <= ${HOME_PER_USER_CAP}
+    ORDER BY created_at DESC
+    LIMIT ${RECENT_BETA_LINKS_CACHE_SIZE}
+  `);
+  return rowsFromResult<CachedRecentBetaLinkRow>(result);
+}
+
+/**
+ * Redis-cached read for the home strip. Falls through to the CTE on miss
+ * and writes the result back. On Redis unavailable, runs the CTE inline
+ * (same fall-through pattern as `getPopularConfigs` in social/boards.ts).
+ */
+async function getCachedRecentBetaLinks(): Promise<CachedRecentBetaLinkRow[]> {
+  if (redisClientManager.isRedisConnected()) {
+    try {
+      const { publisher } = redisClientManager.getClients();
+      const cached = await publisher.get(RECENT_BETA_LINKS_REDIS_KEY);
+      if (cached) {
+        return JSON.parse(cached) as CachedRecentBetaLinkRow[];
+      }
+    } catch (err) {
+      console.error('[RecentBetaLinks] Redis read failed:', err);
+    }
+  }
+
+  const rows = await runRecentBetaLinksQuery();
+
+  if (redisClientManager.isRedisConnected()) {
+    try {
+      const { publisher } = redisClientManager.getClients();
+      await publisher.set(RECENT_BETA_LINKS_REDIS_KEY, JSON.stringify(rows), 'EX', RECENT_BETA_LINKS_REDIS_TTL_SECONDS);
+    } catch (err) {
+      console.error('[RecentBetaLinks] Redis write failed:', err);
+    }
+  }
+  return rows;
+}
+
+/**
+ * Refresh the recent-beta-links Redis cache on server startup.
+ * Mirrors `warmPopularConfigsCache`: a distributed Redis lock ensures only
+ * one node across the cluster runs the underlying query; others read the
+ * fresh value when the resolver runs.
+ */
+export async function warmRecentBetaLinksCache(): Promise<void> {
+  // No Redis means there's no cache to warm — running the CTE here would
+  // just discard the result. Skip the work and the log so dev/test logs
+  // stay honest.
+  if (!redisClientManager.isRedisConnected()) return;
+
+  try {
+    const { publisher } = redisClientManager.getClients();
+    const lockAcquired = await publisher.set(
+      RECENT_BETA_LINKS_REDIS_LOCK_KEY,
+      '1',
+      'EX',
+      RECENT_BETA_LINKS_REDIS_LOCK_TTL_SECONDS,
+      'NX',
+    );
+    if (!lockAcquired) {
+      console.info('[RecentBetaLinks] Another node is refreshing the cache, skipping');
+      return;
+    }
+    // Winning node: delete stale cache so getCachedRecentBetaLinks() runs the SQL query
+    await publisher.del(RECENT_BETA_LINKS_REDIS_KEY);
+  } catch (err) {
+    console.error('[RecentBetaLinks] Redis lock failed:', err);
+    return;
+  }
+
+  console.info('[RecentBetaLinks] Refreshing cache...');
+  try {
+    const rows = await getCachedRecentBetaLinks();
+    console.info(`[RecentBetaLinks] Cache warmed with ${rows.length} rows`);
+  } catch (err) {
+    console.error('[RecentBetaLinks] Cache warm-up failed:', err);
+  }
+}
+
+/**
+ * Bust the cache after a write so newly-added beta links surface on the
+ * next read (instead of waiting up to the TTL). Best-effort: never throws,
+ * never blocks the calling mutation.
+ */
+export async function invalidateRecentBetaLinksCache(): Promise<void> {
+  if (!redisClientManager.isRedisConnected()) return;
+  try {
+    const { publisher } = redisClientManager.getClients();
+    await publisher.del(RECENT_BETA_LINKS_REDIS_KEY);
+  } catch (err) {
+    console.error('[RecentBetaLinks] Redis invalidation failed:', err);
+  }
+}
+
 export const betaLinkQueries = {
   betaLinks: async (
     _: unknown,
@@ -237,14 +422,77 @@ export const betaLinkQueries = {
   // pre-cached rows here — fanning out the live IG/TikTok enrichment in
   // `betaLinks` across the whole table is the failure mode this resolver
   // exists to avoid.
+  //
+  // Window function caps rows per `foreign_username` at HOME_PER_USER_CAP so
+  // a single climber's burst upload can't dominate the strip. Rows with a
+  // NULL foreign_username are uncapped (per product direction — the dedup
+  // problem is the known-handle case).
+  //
+  // Wrapped in a Redis cache (see `getCachedRecentBetaLinks` below) because
+  // the underlying CTE was slow enough in production to starve the DB
+  // connection pool. The cache holds the unfiltered top-N; this resolver
+  // slices by `limit` and filters by `boardType` in JavaScript so every
+  // call hits the same cache key.
   recentBetaLinks: async (
     _: unknown,
     { limit, boardType }: { limit?: number | null; boardType?: string | null },
   ): Promise<RecentBetaLinkResult[]> => {
     const cappedLimit = Math.min(Math.max(limit ?? RECENT_BETA_LINKS_DEFAULT_LIMIT, 1), RECENT_BETA_LINKS_MAX_LIMIT);
 
-    // LEFT JOIN: beta links can land before their climb during sync, and we
-    // still want them in the slider — UI tolerates a null climbName.
+    const cached = await getCachedRecentBetaLinks();
+
+    const filtered: RecentBetaLinkResult[] = [];
+    for (const r of cached) {
+      if (boardType && r.board_type !== boardType) continue;
+      if (isKayaClimbUrl(r.link)) continue;
+      // The CTE filters `thumbnail LIKE '/static/beta-link-thumbnails/%'`,
+      // so every cached row's thumbnail is already on our static prefix —
+      // no isOurS3Url() re-check needed in this path.
+      filtered.push({
+        betaLink: {
+          climbUuid: r.climb_uuid,
+          link: r.link,
+          foreignUsername: r.foreign_username,
+          angle: r.angle,
+          thumbnail: r.thumbnail,
+          isListed: r.is_listed,
+          createdAt: r.created_at,
+        },
+        climbName: r.climb_name,
+        boardType: r.board_type,
+      });
+      if (filtered.length >= cappedLimit) break;
+    }
+    return filtered;
+  },
+
+  // Powers the profile-page "Their beta" slider. Returns videos this user
+  // either added (created_by_user_id match) OR posted under the IG handle
+  // parsed from their userProfiles.instagramUrl. The OR semantics also
+  // surface videos someone else uploaded that point at this user's IG —
+  // intentional. Pre-cached thumbnails only; no live enrichment.
+  //
+  // Intentionally **public**: anyone (including unauthenticated callers)
+  // can enumerate a user's beta videos by userId. The data surfaces on
+  // the public profile page already; the resolver doesn't expose anything
+  // the page doesn't. If we ever add a "private profile" mode, gate this
+  // resolver there.
+  userBetaLinks: async (
+    _: unknown,
+    { userId, limit }: { userId: string; limit?: number | null },
+  ): Promise<RecentBetaLinkResult[]> => {
+    const cappedLimit = Math.min(Math.max(limit ?? USER_BETA_LINKS_DEFAULT_LIMIT, 1), USER_BETA_LINKS_MAX_LIMIT);
+
+    // Look up the user's IG handle from their profile, if set. Independent
+    // query so we don't pay the cost of a second join when no profile row
+    // exists.
+    const profileRows = await db
+      .select({ instagramUrl: dbSchema.userProfiles.instagramUrl })
+      .from(dbSchema.userProfiles)
+      .where(eq(dbSchema.userProfiles.userId, userId))
+      .limit(1);
+    const igHandle = extractInstagramHandle(profileRows[0]?.instagramUrl ?? null);
+
     const rows = await db
       .select({ betaLink: dbSchema.boardBetaLinks, climbName: dbSchema.boardClimbs.name })
       .from(dbSchema.boardBetaLinks)
@@ -260,7 +508,12 @@ export const betaLinkQueries = {
           eq(dbSchema.boardBetaLinks.isListed, true),
           isNotNull(dbSchema.boardBetaLinks.thumbnail),
           like(dbSchema.boardBetaLinks.thumbnail, `${STATIC_THUMBNAIL_PREFIX}%`),
-          boardType ? eq(dbSchema.boardBetaLinks.boardType, boardType) : undefined,
+          igHandle
+            ? or(
+                eq(dbSchema.boardBetaLinks.createdByUserId, userId),
+                eq(dbSchema.boardBetaLinks.foreignUsername, igHandle),
+              )
+            : eq(dbSchema.boardBetaLinks.createdByUserId, userId),
         ),
       )
       .orderBy(desc(dbSchema.boardBetaLinks.createdAt))

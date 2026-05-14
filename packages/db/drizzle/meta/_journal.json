@@ -652,6 +652,20 @@
       "when": 1778632284839,
       "tag": "0092_long_demogoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1779000000000,
+      "tag": "0093_amused_loners",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1779000100000,
+      "tag": "0094_replay_board_placements_idx",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { authOptions } from '@/app/lib/auth/auth-options';
 import ProfilePageContent from './profile-page-content';
 import { getProfileData } from './server-profile-data';
 import { fetchProfileStatsData } from './server-profile-stats';
+import { getUserBetaLinks } from '@/app/lib/server-user-beta-links';
 import { buildVersionedOgImagePath, OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH } from '@/app/lib/seo/og';
 import { getProfileOgSummary } from '@/app/lib/seo/dynamic-og-data';
 import { getServerTranslation } from '@/app/lib/i18n/server';
@@ -87,8 +88,11 @@ export default async function ProfilePage({ params }: PageProps) {
     notFound();
   }
 
-  const statsData = await fetchProfileStatsData(user_id);
-  const locale = await getLocale();
+  const [statsData, initialUserBeta, locale] = await Promise.all([
+    fetchProfileStatsData(user_id),
+    getUserBetaLinks(user_id),
+    getLocale(),
+  ]);
 
   return (
     <I18nProvider locale={locale} namespaces={['profile', 'feed']}>
@@ -100,6 +104,7 @@ export default async function ProfilePage({ params }: PageProps) {
         initialAllBoardsTicks={statsData.initialAllBoardsTicks}
         initialLogbook={statsData.initialLogbook}
         initialIsOwnProfile={viewerUserId === user_id}
+        initialUserBeta={initialUserBeta}
       />
     </I18nProvider>
   );

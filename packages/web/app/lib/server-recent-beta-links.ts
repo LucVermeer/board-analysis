@@ -38,7 +38,11 @@ export const getRecentBetaLinks = React.cache(async (limit = 20): Promise<Recent
     });
     const result = await client.request<RecentBetaLinksResponse>(GET_RECENT_BETA_LINKS, { limit });
     return result.recentBetaLinks;
-  } catch {
+  } catch (err) {
+    // Log the failure so a future regression names itself in Vercel logs.
+    // PR #2119 broke this section in prod and the missing log made root
+    // cause analysis slow — keep this line even if cheap.
+    console.error('[home-page-ssr] recentBetaLinks fetch failed:', err instanceof Error ? err.message : err);
     return [];
   } finally {
     clearTimeout(timer);
