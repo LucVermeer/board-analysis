@@ -201,6 +201,16 @@ final class SessionWebSocketManager {
         set { stateQueue.sync { _onQueueStateChanged = newValue } }
     }
 
+    /// Fires every time the WebSocket transitions to the connected state
+    /// (initial connect AND reconnects). Used by `LiveActivityPlugin` to retry
+    /// pending push-token registrations that failed while we were offline.
+    private var _onConnected: (() -> Void)?
+
+    var onConnected: (() -> Void)? {
+        get { stateQueue.sync { _onConnected } }
+        set { stateQueue.sync { _onConnected = newValue } }
+    }
+
     // MARK: - Configuration
 
     private(set) var sessionId: String?
@@ -547,6 +557,13 @@ final class SessionWebSocketManager {
                 self.reconnectAttempt = 0
                 self.sendJoinSession()
                 self.sendSubscription()
+                // Fire after join/subscribe so observers can rely on the
+                // session being usable when they're invoked.
+                if let onConnected = self._onConnected {
+                    DispatchQueue.main.async {
+                        onConnected()
+                    }
+                }
             }
             startPingTimeoutTimer()
 

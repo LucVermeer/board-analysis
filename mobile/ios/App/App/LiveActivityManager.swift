@@ -31,11 +31,14 @@ actor LiveActivityManager {
     /// Timestamp of the last ActivityKit update, used for deduplication.
     private var lastUpdateTime: Date?
 
-    /// How far in the future the stale date is set. The ping timeout timer
-    /// refreshes this every 60s, so 3 minutes gives a comfortable 2× margin
-    /// during normal operation. After a force-quit the activity goes stale
-    /// in 3 minutes instead of lingering for 30.
-    private let staleInterval: TimeInterval = 3 * 60
+    /// How far in the future the stale date is set. The server-side APNs
+    /// heartbeat (`packages/backend/src/services/apns/heartbeat.ts`) re-sends
+    /// the latest content state every 90 s while at least one push token is
+    /// registered for the session, so a 10-minute stale interval gives ~6×
+    /// headroom against missed pushes (network blip, APNs latency, server
+    /// restart). After a force-quit with no server keepalive the activity
+    /// goes stale in 10 minutes instead of lingering indefinitely.
+    private let staleInterval: TimeInterval = 10 * 60
 
     // MARK: - Init
 

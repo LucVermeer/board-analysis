@@ -16,11 +16,14 @@ import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
+import { handleApnsStats } from './handlers/apns-stats';
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
 import { warmPopularConfigsCache } from './graphql/resolvers/social/boards';
 import { warmRecentBetaLinksCache } from './graphql/resolvers/beta-videos/queries';
 import { initializeApns, shutdownApns, sendLiveActivityUpdate, isApnsConfigured } from './services/apns';
+import { startApnsHeartbeat, stopApnsHeartbeat } from './services/apns/heartbeat';
+import { startApnsStaleTokenCleanup, stopApnsStaleTokenCleanup } from './services/apns/cleanup';
 import type { QueueEvent } from '@boardsesh/shared-schema';
 import type { LiveActivityContentState } from './services/apns';
 
@@ -117,6 +120,11 @@ export async function startServer(): Promise<ServerResources> {
     console.info('[Server] No Redis - EventBroker disabled, inline notification fallback active');
   }
 
+  // Holds the F10 multi-instance APNs config marker interval. Set when Redis
+  // is configured (see below); cleared by `shutdownServices` so the timer
+  // doesn't outlive the process during tests.
+  let apnsInstanceConfigInterval: ReturnType<typeof setInterval> | null = null;
+
   // Initialize APNs for iOS Live Activity push notifications
   initializeApns();
 
@@ -129,6 +137,13 @@ export async function startServer(): Promise<ServerResources> {
   const instanceId = process.env.HOSTNAME || process.env.FLY_MACHINE_ID || 'local';
   if (isApnsConfigured()) {
     console.info(`[Server] APNs configured for instance ${instanceId}`);
+    // Heartbeat keeps the lock-screen Live Activity alive during long idle
+    // periods. The 90-s tick re-sends the latest content state for every
+    // session with at least one registered push token.
+    startApnsHeartbeat(roomManager);
+    // Periodic cleanup of week-old push tokens that never had a chance to
+    // bounce back as stale via a real send.
+    startApnsStaleTokenCleanup();
   } else {
     console.warn(
       `[Server] APNs NOT configured on instance ${instanceId}. ` +
@@ -136,6 +151,71 @@ export async function startServer(): Promise<ServerResources> {
         'events that originate on this instance. Set APNS_KEY_ID, APNS_TEAM_ID, ' +
         'and APNS_KEY_CONTENTS on every backend node that handles queue mutations.',
     );
+  }
+
+  // F10: multi-instance APNs configuration sanity check. Each instance writes
+  // its own configured/unconfigured marker to Redis with a 60-s TTL refresh.
+  // If any peer is configured but we are not (or vice-versa) we escalate the
+  // log to ERROR so a half-rolled-out deploy doesn't silently lose pushes.
+  if (redisClientManager.isRedisConfigured()) {
+    const APNS_INSTANCE_KEY_PREFIX = 'boardsesh:apns:instance-config:';
+    const APNS_INSTANCE_TTL_SEC = 60;
+    const APNS_INSTANCE_REFRESH_MS = 30 * 1000;
+
+    async function refreshApnsInstanceConfigMarker(): Promise<void> {
+      if (!redisClientManager.isRedisConnected()) return;
+      try {
+        const { publisher } = redisClientManager.getClients();
+        const key = `${APNS_INSTANCE_KEY_PREFIX}${instanceId}`;
+        await publisher.set(key, isApnsConfigured() ? '1' : '0', 'EX', APNS_INSTANCE_TTL_SEC);
+
+        // Scan peers and detect mixed configuration.
+        let cursor = '0';
+        let configuredPeers = 0;
+        let unconfiguredPeers = 0;
+        do {
+          const [next, keys] = await publisher.scan(cursor, 'MATCH', `${APNS_INSTANCE_KEY_PREFIX}*`, 'COUNT', 100);
+          cursor = next;
+          for (const peerKey of keys) {
+            if (peerKey === key) continue;
+            const value = await publisher.get(peerKey);
+            if (value === '1') configuredPeers++;
+            else if (value === '0') unconfiguredPeers++;
+          }
+        } while (cursor !== '0');
+
+        if (isApnsConfigured() && unconfiguredPeers > 0) {
+          console.error(
+            `[APNs] Mixed cluster configuration detected: ${String(unconfiguredPeers)} peer(s) lack APNs env vars. ` +
+              'Queue events originating on those instances will silently skip Live Activity pushes.',
+          );
+        } else if (!isApnsConfigured() && configuredPeers > 0) {
+          console.error(
+            `[APNs] This instance (${instanceId}) is missing APNs env vars while ${String(configuredPeers)} peer(s) ` +
+              'are configured. Push notifications will be silently dropped for queue events originating here.',
+          );
+        }
+      } catch (error) {
+        console.warn('[APNs] Failed to refresh multi-instance config marker:', error);
+      }
+    }
+
+    // Fire once shortly after startup, then on the refresh interval. The
+    // initial delay lets other instances boot and write their markers so the
+    // first check sees a stable picture.
+    const initialApnsConfigDelay = setTimeout(() => {
+      refreshApnsInstanceConfigMarker().catch((err) => {
+        console.warn('[APNs] Initial config marker refresh failed:', err);
+      });
+    }, 5_000);
+    if (typeof initialApnsConfigDelay.unref === 'function') initialApnsConfigDelay.unref();
+
+    apnsInstanceConfigInterval = setInterval(() => {
+      refreshApnsInstanceConfigMarker().catch((err) => {
+        console.warn('[APNs] Config marker refresh failed:', err);
+      });
+    }, APNS_INSTANCE_REFRESH_MS);
+    if (typeof apnsInstanceConfigInterval.unref === 'function') apnsInstanceConfigInterval.unref();
   }
 
   // Wire PubSub queue events to APNs Live Activity updates.
@@ -281,6 +361,12 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      // APNs metrics (debugging aid, gated on APNS_STATS_SECRET)
+      if (pathname === '/api/internal/apns-stats' && (req.method === 'GET' || req.method === 'OPTIONS')) {
+        await handleApnsStats(req, res);
+        return;
+      }
+
       // Sync cron endpoint (triggered by external cron service)
       if (pathname === '/sync-cron' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleSyncCron(req, res);
@@ -380,6 +466,23 @@ export async function startServer(): Promise<ServerResources> {
    */
   async function shutdownServices(): Promise<void> {
     eventBroker.shutdown();
+
+    if (apnsInstanceConfigInterval !== null) {
+      clearInterval(apnsInstanceConfigInterval);
+      apnsInstanceConfigInterval = null;
+    }
+
+    try {
+      stopApnsHeartbeat();
+    } catch (error) {
+      console.error('[Server] Error stopping APNs heartbeat:', error);
+    }
+
+    try {
+      stopApnsStaleTokenCleanup();
+    } catch (error) {
+      console.error('[Server] Error stopping APNs cleanup:', error);
+    }
 
     try {
       await shutdownApns();

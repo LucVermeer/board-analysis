@@ -29,6 +29,11 @@ enum SharedConstants {
 
     static let queueNavigateNotification = "com.boardsesh.app.queueNavigate"
 
+    /// Fired by the widget extension when `/api/widget/navigate` responds 410
+    /// Gone, signaling that the cached APNs push token is bound to a different
+    /// session and the main app should re-register.
+    static let pushRegistrationStaleNotification = "com.boardsesh.app.pushRegistrationStale"
+
     // MARK: Live Activity
 
     /// Minimum seconds between consecutive ActivityKit pushes.

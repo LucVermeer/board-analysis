@@ -14,6 +14,12 @@ export const activityPushTokens = pgTable(
   },
   (table) => ({
     sessionIdx: index('activity_push_tokens_session_idx').on(table.sessionId),
+    // Supports the eviction freshness filter (`WHERE updated_at < cutoff`) in
+    // `registerActivityPushToken` and the periodic stale-token sweep in
+    // `apns/cleanup.ts`. Both queries also filter by session, but a global
+    // index on `updated_at` is cheap and lets the cleanup sweep stay cluster-
+    // wide rather than per-session.
+    updatedAtIdx: index('activity_push_tokens_updated_at_idx').on(table.updatedAt),
   }),
 );
 

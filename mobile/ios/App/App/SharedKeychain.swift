@@ -54,6 +54,11 @@ enum SharedKeychain {
 
     static let authTokenKey = "bs_auth_token"
     static let livePushTokenKey = "bs_live_push_token"
+    /// Persisted record describing a push-token registration that didn't make
+    /// it through to the backend yet. Stored as JSON. Cleared on success and
+    /// on session end. Schema:
+    /// `{"token": "...", "sessionId": "...", "serverUrl": "https://..."}`
+    static let pendingPushRegistrationKey = "bs_pending_push_registration"
 
     // MARK: - Public API
 

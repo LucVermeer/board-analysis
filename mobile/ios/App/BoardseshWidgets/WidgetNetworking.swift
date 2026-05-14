@@ -41,10 +41,29 @@ enum WidgetNetworking {
 
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if statusCode == 200 {
                 return true
             }
-            print("[Widget] Navigation request failed with status \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+            if statusCode == 410 {
+                // The push token was rebound to a different session (the main
+                // app joined another session on the same device). Drop the
+                // cached widget token so we stop sending an authoritative-
+                // looking Bearer with stale binding, and ping the main app
+                // via Darwin notification so it can re-register.
+                print("[Widget] Navigation request received 410; signaling re-registration")
+                SharedKeychain.remove(SharedKeychain.livePushTokenKey)
+                let name = CFNotificationName(SharedConstants.pushRegistrationStaleNotification as CFString)
+                CFNotificationCenterPostNotification(
+                    CFNotificationCenterGetDarwinNotifyCenter(),
+                    name,
+                    nil,
+                    nil,
+                    true
+                )
+                return false
+            }
+            print("[Widget] Navigation request failed with status \(statusCode)")
             return false
         } catch {
             print("[Widget] Navigation request failed: \(error.localizedDescription)")
