@@ -56,6 +56,9 @@ export default function AnalyticsClient() {
   const bufferRef = useRef<VitalsBuffer>({ metrics: new Map(), pageUrl: null, timerId: null });
 
   useEffect(() => {
+    // web-vitals' on* callbacks attach document-lifetime listeners — guard so
+    // StrictMode's effect re-run can't double-register them and double-count
+    // each metric.
     if (vitalsRegistered.current) return;
     vitalsRegistered.current = true;
 
@@ -73,7 +76,11 @@ export default function AnalyticsClient() {
     onFCP(reportVital);
     onINP(reportVital);
     onLCP(reportVital);
+  }, []);
 
+  // Separate effect so StrictMode's cleanup-and-remount in dev re-attaches
+  // the pagehide listener instead of leaving it removed.
+  useEffect(() => {
     const onPageHide = (): void => flushVitalsBuffer(bufferRef.current);
     window.addEventListener('pagehide', onPageHide);
     return () => {
