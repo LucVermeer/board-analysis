@@ -1571,7 +1571,7 @@ The main app and widget extension share data through two channels:
 
 Earlier builds wrote both credentials to App Group UserDefaults. The current `LiveActivityPlugin.endSession()` clears those legacy keys on top of the new keychain delete so an upgrade doesn't leave plaintext tokens behind.
 
-The helper lives in `mobile/ios/App/App/SharedKeychain.swift`. The `keychain-access-groups` entitlement is declared in `App.entitlements`, `App.release.entitlements`, and `BoardseshWidgets.entitlements`.
+The helper lives in `mobile/ios/App/App/SharedKeychain.swift`. The `keychain-access-groups` entitlement is declared in `App.entitlements` and `BoardseshWidgets.entitlements`.
 
 ### Widget Button Flow
 
@@ -1754,7 +1754,7 @@ A GraphQL mutation would require either the JS GraphQL client (not available in 
 - `mobile/ios/App/App/LiveActivityManager.swift` - ActivityKit lifecycle (`pushType: .token`, push-token observer, stale-date refresh)
 - `mobile/ios/App/App/SharedConstants.swift` - App Group ID and non-secret UserDefaults keys + helpers
 - `mobile/ios/App/App/SharedKeychain.swift` - Shared-access-group Keychain helper for auth + push tokens
-- `mobile/ios/App/App/App.entitlements` / `App.release.entitlements` - App Group, `aps-environment`, `keychain-access-groups` declarations
+- `mobile/ios/App/App/App.entitlements` - App Group, `aps-environment`, `keychain-access-groups` declarations
 - `mobile/ios/App/App/ThumbnailFetcher.swift` - Board-render thumbnail fetching and caching
 - `mobile/ios/App/BoardseshWidgets/BoardseshWidgets.entitlements` - Widget extension entitlements (App Group + Keychain access group)
 - `mobile/ios/App/BoardseshWidgets/NextClimbIntent.swift` - Widget Next button App Intent
