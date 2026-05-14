@@ -98,7 +98,6 @@ export async function leaveSession(
 ): Promise<{ newLeaderId: string | null }> {
   validateConnectionId(connectionId);
   validateSessionId(sessionId);
-  const connection = await getConnectionForParticipantCleanup(redis, connectionId);
 
   try {
     const result = (await redis.eval(
@@ -112,9 +111,12 @@ export async function leaveSession(
       TTL.sessionMembership.toString(),
     )) as string | null;
 
-    if (connection?.participantId) {
-      await removeParticipantConnection(redis, sessionId, connection.participantId, connectionId);
-    }
+    // Participant cleanup intentionally not done here. The explicit-leave
+    // caller in `client-lifecycle.ts` follows this call with
+    // `removeParticipant`, which evicts the whole participant entry
+    // (correct semantics for "user clicked leave" even when they have other
+    // tabs open). Doing connection-level cleanup here too would be redundant
+    // double-work on every explicit leave.
 
     // Result: null = wasn't leader, '' = was leader but no new leader, otherwise = new leader ID
     if (result === null) {
@@ -143,7 +145,6 @@ async function leaveSessionFallback(
   connectionId: string,
   sessionId: string,
 ): Promise<{ newLeaderId: string | null }> {
-  const connection = await getConnectionForParticipantCleanup(redis, connectionId);
   try {
     await redis.watch(KEYS.sessionLeader(sessionId));
 
@@ -191,11 +192,8 @@ async function leaveSessionFallback(
     }
   } catch {
     // Ignore fallback error - self-healing via next join
-  } finally {
-    if (connection?.participantId) {
-      await removeParticipantConnection(redis, sessionId, connection.participantId, connectionId).catch(() => {});
-    }
   }
+  // Participant cleanup intentionally not done here; see leaveSession above.
   return { newLeaderId: null };
 }
 

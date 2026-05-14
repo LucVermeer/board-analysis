@@ -208,6 +208,43 @@ describe('Session Persistence - Hybrid Redis + Postgres', () => {
       }
     });
 
+    it('treats an anonymous reconnect as a fresh participant (no client-supplied participantId trust)', async () => {
+      // P1 security guarantee: client-supplied participantId is ignored for
+      // anonymous users so a malicious member cannot grab another peer's
+      // SessionUser.id and impersonate them. The trade-off: an anonymous
+      // user that drops the WebSocket and reconnects gets a new
+      // participantId, and peers see UserLeft + UserJoined instead of
+      // UserPresenceChanged. This test pins that intentional UX in place.
+      const sessionId = uuidv4();
+      const boardPath = '/kilter/1/2/3/40';
+
+      // First anonymous connection joins.
+      const original = await registerAndJoinSession('anon-conn-1', sessionId, boardPath, 'Anon');
+      expect(original.participantId).toBe('anon-conn-1');
+
+      await roomManager.disconnectClient('anon-conn-1');
+
+      // Reconnect from a NEW anonymous connection. Even if the client tries
+      // to replay the previous participantId, the server must reject it.
+      await roomManager.registerClient('anon-conn-2');
+      const rejoined = await roomManager.joinSession(
+        'anon-conn-2',
+        sessionId,
+        boardPath,
+        'Anon',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        original.participantId, // attacker-controlled value — must be ignored
+      );
+
+      expect(rejoined.participantId).toBe('anon-conn-2');
+      expect(rejoined.participantId).not.toBe(original.participantId);
+      expect(rejoined.participantWasReconnecting).toBe(false);
+      expect(rejoined.participantWasKnown).toBe(false);
+    });
+
     it('marks a passively disconnected participant as reconnecting and restores them on reconnect', async () => {
       const sessionId = uuidv4();
       const boardPath = '/kilter/1/2/3/40';

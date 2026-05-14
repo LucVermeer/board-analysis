@@ -192,7 +192,7 @@ sequenceDiagram
 2. **Authentication**: Optional auth token passed in `connectionParams`
 3. **Eager Subscription**: Queue subscription starts BEFORE fetching state to prevent race conditions
 4. **Session Restoration**: Sessions can be restored from Redis (warm cache) or PostgreSQL (dormant durable state)
-5. **Stable Participant Identity**: Anonymous clients persist a `participantId` in `ACTIVE_SESSION_KEY`; authenticated clients use their `userId`. Reconnects therefore update the same participant instead of creating a new user row for every socket.
+5. **Stable Participant Identity (authenticated only)**: Authenticated clients bind `participantId` to their verified `userId`, so reconnects across socket drops update the same participant row (peers see `UserPresenceChanged`, not `UserLeft` + `UserJoined`). Anonymous clients bind `participantId` to their `connectionId` instead — a client-supplied participantId is intentionally rejected on the server (it would let any session member impersonate any other participant, since `SessionUser.id` is broadcast to peers). Each anonymous WebSocket drop therefore appears as a fresh participant.
 6. **Initial Queue Seeding**: When creating a new session, clients can provide `initialQueue` and `initialCurrentClimb` to seed the session with an existing local queue (e.g., when starting party mode with climbs already queued)
 
 ### Initial Queue Seeding
