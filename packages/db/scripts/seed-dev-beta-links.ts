@@ -109,9 +109,10 @@ async function main(): Promise<void> {
       if (result.length > 0) inserted += 1;
     }
 
+    const userIdLabel = testUserId ?? `(none — login as ${TEST_USER_EMAIL} first)`;
     console.info(
       `[seed-dev-beta-links] Inserted ${inserted} of ${FIXTURES.length} rows (others already present). ` +
-        `Test user ID: ${testUserId ?? '(none — login as ${TEST_USER_EMAIL} first)'}`,
+        `Test user ID: ${userIdLabel}`,
     );
   } finally {
     await close();

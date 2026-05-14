@@ -444,9 +444,17 @@ export const boardBetaLinks = pgTable(
     // Boardsesh user who attached this link. Populated by attachBetaLink and
     // by the saveTick beta-link insert path; NULL for legacy rows written
     // before this column existed and for any future write path that didn't
-    // route through requireAuthenticated. The FK to users(id) is added in
-    // the migration as ON DELETE SET NULL so deleting an account preserves
-    // the community video record but drops the attribution.
+    // route through requireAuthenticated.
+    //
+    // ⚠️ FK managed manually — there's a foreign key
+    //   `board_beta_links_created_by_user_id_fkey`
+    //   on this column referencing `users(id) ON DELETE SET NULL`, added in
+    //   migration `0093_amused_loners.sql`. It is NOT declared via
+    //   `.references()` here because the `boards/` schema avoids
+    //   cross-package FKs to `auth/users`. Drizzle-kit's snapshot does not
+    //   know about this FK, so the next `drizzle-kit generate` against
+    //   this table could emit a migration that drops it. If you change
+    //   this column, double-check the generated SQL and preserve the FK.
     createdByUserId: text('created_by_user_id'),
   },
   (table) => ({

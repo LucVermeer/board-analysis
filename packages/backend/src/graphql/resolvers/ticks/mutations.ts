@@ -384,9 +384,13 @@ export const tickMutations = {
     // Bust the home-strip cache so newly-attached beta links surface on the
     // next read. Skip when the tick path didn't insert (no video URL, or
     // same-climb dup that was silently skipped) so we don't churn the cache
-    // for the common "just logging an attempt" case.
+    // for the common "just logging an attempt" case. Fire-and-forget so a
+    // slow Redis doesn't add latency to saveTick — matches the
+    // `assignInferredSession` pattern below.
     if (attachedVideoUrl && betaPlan.action === 'insert') {
-      await invalidateRecentBetaLinksCache();
+      invalidateRecentBetaLinksCache().catch((err) => {
+        console.error('[saveTick] recent-beta-links cache invalidation failed:', err);
+      });
     }
 
     const result = {
@@ -493,9 +497,11 @@ export const tickMutations = {
     }
 
     // Bust the home-strip cache so this new link surfaces on the next read
-    // instead of waiting for the 24h TTL. Best-effort: never blocks the
-    // mutation result.
-    await invalidateRecentBetaLinksCache();
+    // instead of waiting for the 24h TTL. Fire-and-forget — never blocks
+    // the mutation result on Redis.
+    invalidateRecentBetaLinksCache().catch((err) => {
+      console.error('[attachBetaLink] recent-beta-links cache invalidation failed:', err);
+    });
 
     return true;
   },
