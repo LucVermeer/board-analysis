@@ -70,9 +70,9 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     }
 
     const plugin = getNativeBoardBlePlugin();
-    const devices = new Map<string, DiscoveredDevice>();
+    const devicesById = new Map<string, DiscoveredDevice>();
     let updateListener: ((devices: DiscoveredDevice[]) => void) | null = null;
-    const pushDevices = () => updateListener?.([...devices.values()]);
+    const pushDevices = () => updateListener?.([...devicesById.values()]);
 
     let autoSelectResolve: ((deviceId: string) => void) | null = null;
     let autoSelectReject: ((error: Error) => void) | null = null;
@@ -96,13 +96,13 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
         const deviceId = result.device?.deviceId;
         if (!deviceId) return;
 
+        const previousDevice = devicesById.get(deviceId);
         const device: DiscoveredDevice = {
           deviceId,
-          name: result.localName || result.device?.name,
-          rssi: result.rssi ?? 0,
+          name: result.localName || result.device?.name || previousDevice?.name,
+          rssi: result.rssi ?? previousDevice?.rssi ?? 0,
         };
-        const dedupeKey = device.name || device.deviceId;
-        devices.set(dedupeKey, device);
+        devicesById.set(deviceId, device);
         pushDevices();
 
         if (autoSelectResolve && targetSerial) {
@@ -136,12 +136,7 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       await stopScanQuietly(plugin);
     }
 
-    for (const device of devices.values()) {
-      if (device.deviceId === selectedDeviceId) {
-        selectedDeviceName = device.name;
-        break;
-      }
-    }
+    selectedDeviceName = devicesById.get(selectedDeviceId)?.name;
 
     await plugin.connect({ deviceId: selectedDeviceId });
     this.deviceId = selectedDeviceId;

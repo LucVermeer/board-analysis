@@ -93,6 +93,40 @@ describe('NativeIosBleAdapter', () => {
     expect(mockBoardBlePlugin.stopScan).toHaveBeenCalled();
   });
 
+  it('dedupes scan results by device id and preserves the known name', async () => {
+    let resolvePickedDevice: (deviceId: string) => void = () => {
+      throw new Error('Picker promise was not initialized');
+    };
+    let pickerDevices: DiscoveredDevice[] = [];
+    const adapter = new NativeIosBleAdapter((subscribe) => {
+      subscribe((devices) => {
+        pickerDevices = devices;
+      });
+      return new Promise<string>((resolve) => {
+        resolvePickedDevice = resolve;
+      });
+    });
+
+    const connectionPromise = adapter.requestAndConnect();
+    await Promise.resolve();
+
+    scanResultCallback?.({
+      device: { deviceId: 'native-dev-1', name: 'Kilter Board#123@3' },
+      localName: 'Kilter Board#123@3',
+      rssi: -55,
+    });
+    scanResultCallback?.({
+      device: { deviceId: 'native-dev-1' },
+      rssi: -60,
+    });
+    resolvePickedDevice('native-dev-1');
+
+    const connection = await connectionPromise;
+
+    expect(pickerDevices).toEqual([{ deviceId: 'native-dev-1', name: 'Kilter Board#123@3', rssi: -60 }]);
+    expect(connection).toEqual({ deviceId: 'native-dev-1', deviceName: 'Kilter Board#123@3' });
+  });
+
   it('writes packets as a hex string through the native plugin', async () => {
     let resolvePickedDevice: (deviceId: string) => void = () => {
       throw new Error('Picker promise was not initialized');

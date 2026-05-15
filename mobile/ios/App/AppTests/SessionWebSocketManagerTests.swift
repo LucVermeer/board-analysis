@@ -667,6 +667,44 @@ final class SessionWebSocketManagerTests: XCTestCase {
         XCTAssertNil(QueueMessageParser.parseQueueUpdate(updates))
     }
 
+    // MARK: - QueueEventRepaintPolicy
+
+    func testQueueEventRepaintPolicyOnlyRepaintsDisplayChangingEvents() {
+        let item = makeQueueItem()
+
+        XCTAssertTrue(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .currentClimbChanged(item: item, sequence: 1)
+            )
+        )
+        XCTAssertTrue(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .climbMirrored(uuid: item.uuid, mirrored: true, sequence: 2)
+            )
+        )
+
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .fullSync(items: [item], currentItem: item, sequence: 3)
+            )
+        )
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .itemAdded(item: item, position: 0, sequence: 4)
+            )
+        )
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .itemRemoved(uuid: item.uuid, sequence: 5)
+            )
+        )
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .reordered(uuid: item.uuid, oldIndex: 0, newIndex: 1, sequence: 6)
+            )
+        )
+    }
+
     // MARK: - Sequence Gap Detection
 
     func testSequenceGapDetectionNoGap() {

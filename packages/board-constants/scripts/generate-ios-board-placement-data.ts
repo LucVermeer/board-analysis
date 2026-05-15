@@ -8,9 +8,10 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { LED_PLACEMENTS } from '../src/generated/led-placements-data';
 import { HOLE_PLACEMENTS } from '../src/generated/product-sizes-data';
+import { stableStringify } from '../src/stable-json';
 
 const scriptDir = fileURLToPath(new URL('.', import.meta.url));
 const outputPath = join(scriptDir, '../../../mobile/ios/App/App/BoardPlacementData.swift');
@@ -39,11 +40,7 @@ function buildMirroredPlacements(): Record<string, Record<string, Record<string,
   return mirroredPlacements;
 }
 
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value);
-}
-
-function generateSwiftFile(): string {
+export function generateSwiftFile(): string {
   const ledPlacementsJson = stableStringify(LED_PLACEMENTS);
   const mirroredPlacementsJson = stableStringify(buildMirroredPlacements());
 
@@ -94,19 +91,25 @@ ${mirroredPlacementsJson}
 `;
 }
 
-const generatedSwift = generateSwiftFile();
+function runCli() {
+  const generatedSwift = generateSwiftFile();
 
-if (checkMode) {
-  const currentSwift = existsSync(outputPath) ? readFileSync(outputPath, 'utf-8') : '';
-  if (currentSwift !== generatedSwift) {
-    console.error(
-      `Generated iOS board placement data is out of date. Run "vp run generate:ios-board-placement-data" and commit ${outputPath}.`,
-    );
-    process.exit(1);
+  if (checkMode) {
+    const currentSwift = existsSync(outputPath) ? readFileSync(outputPath, 'utf-8') : '';
+    if (currentSwift !== generatedSwift) {
+      console.error(
+        `Generated iOS board placement data is out of date. Run "vp run generate:ios-board-placement-data" and commit ${outputPath}.`,
+      );
+      process.exit(1);
+    }
+    console.info(`Generated iOS board placement data is up to date: ${outputPath}`);
+  } else {
+    mkdirSync(dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, generatedSwift, 'utf-8');
+    console.info(`Wrote ${outputPath}`);
   }
-  console.info(`Generated iOS board placement data is up to date: ${outputPath}`);
-} else {
-  mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, generatedSwift, 'utf-8');
-  console.info(`Wrote ${outputPath}`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runCli();
 }

@@ -45,6 +45,17 @@ enum QueueUpdateEvent {
     case climbMirrored(uuid: String?, mirrored: Bool, sequence: Int)
 }
 
+enum QueueEventRepaintPolicy {
+    static func shouldRepaintBoard(for event: QueueUpdateEvent) -> Bool {
+        switch event {
+        case .currentClimbChanged(_, _), .climbMirrored(_, _, _):
+            return true
+        case .fullSync(_, _, _), .itemAdded(_, _, _), .itemRemoved(_, _), .reordered(_, _, _, _):
+            return false
+        }
+    }
+}
+
 // MARK: - Message Parsing Helpers
 
 enum QueueMessageParser {
@@ -635,6 +646,8 @@ final class SessionWebSocketManager {
 
     /// Applies a queue update event. MUST be called on `stateQueue`.
     private func applyEventOnQueue(_ event: QueueUpdateEvent) {
+        let shouldRepaintBoard = QueueEventRepaintPolicy.shouldRepaintBoard(for: event)
+
         switch event {
         case .fullSync(let items, let currentItem, _):
             queueItems = items
@@ -673,7 +686,7 @@ final class SessionWebSocketManager {
                 queueItems.remove(at: found)
                 let dest = min(max(newIndex, 0), queueItems.count)
                 queueItems.insert(item, at: dest)
-                persistAndNotify()
+                persistAndNotify(repaintBoard: shouldRepaintBoard)
                 return
             } else {
                 return
@@ -686,7 +699,7 @@ final class SessionWebSocketManager {
             guard let uuid,
                   let itemIndex = queueItems.firstIndex(where: { $0.uuid == uuid })
             else {
-                persistAndNotify()
+                persistAndNotify(repaintBoard: shouldRepaintBoard)
                 return
             }
             let item = queueItems[itemIndex]
@@ -703,14 +716,16 @@ final class SessionWebSocketManager {
             queueItems[itemIndex] = updatedItem
         }
 
-        persistAndNotify()
+        persistAndNotify(repaintBoard: shouldRepaintBoard)
     }
 
-    private func persistAndNotify() {
+    private func persistAndNotify(repaintBoard: Bool = false) {
         if let defaults = SharedConstants.sharedDefaults {
             SharedQueueState.save(items: queueItems, currentIndex: currentIndex, to: defaults)
         }
-        BoardBleManager.shared.displayCurrentItem(items: queueItems, currentIndex: currentIndex)
+        if repaintBoard {
+            BoardBleManager.shared.displayCurrentItem(items: queueItems, currentIndex: currentIndex)
+        }
         _onQueueStateChanged?(queueItems, currentIndex)
     }
 
@@ -777,7 +792,7 @@ final class SessionWebSocketManager {
 
             self.pendingMutations[correlationId] = previousIndex
 
-            self.persistAndNotify()
+            self.persistAndNotify(repaintBoard: true)
             self.sendSetCurrentClimb(item: item, correlationId: correlationId)
         }
     }
@@ -804,7 +819,7 @@ final class SessionWebSocketManager {
             guard let self = self else { return }
             if let previousIndex = self.pendingMutations.removeValue(forKey: correlationId) {
                 self.currentIndex = previousIndex
-                self.persistAndNotify()
+                self.persistAndNotify(repaintBoard: true)
             }
         }
     }
