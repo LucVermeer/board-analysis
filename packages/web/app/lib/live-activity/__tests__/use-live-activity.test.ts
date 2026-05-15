@@ -43,9 +43,12 @@ vi.mock('../live-activity-plugin', () => ({
   updateLiveActivityClimb: (...args: unknown[]) => mockUpdateLiveActivityClimb(...(args as [])),
 }));
 
+const mockGetBackendWsUrl = vi.fn<() => string | null>(() => 'ws://localhost:8080/graphql');
+const mockGetGraphQLHttpUrl = vi.fn<() => string>(() => 'http://localhost:8080/graphql');
+
 vi.mock('../../backend-url', () => ({
-  getBackendWsUrl: () => 'ws://localhost:8080/graphql',
-  getGraphQLHttpUrl: () => 'http://localhost:8080/graphql',
+  getBackendWsUrl: () => mockGetBackendWsUrl(),
+  getGraphQLHttpUrl: () => mockGetGraphQLHttpUrl(),
 }));
 
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
@@ -174,6 +177,8 @@ describe('useLiveActivity', () => {
       isLoading: false,
       error: null,
     });
+    mockGetBackendWsUrl.mockReturnValue('ws://localhost:8080/graphql');
+    mockGetGraphQLHttpUrl.mockReturnValue('http://localhost:8080/graphql');
   });
 
   it('does not call plugin on non-iOS platforms', async () => {
@@ -250,9 +255,6 @@ describe('useLiveActivity', () => {
         authToken: 'test-auth-token',
         layoutId: 1,
         sizeId: 1,
-        // The HTTP graphql URL must be derived from the WS URL so the iOS
-        // plugin posts registerActivityPushToken at the backend host, not
-        // the web origin. Regressing this re-creates the 404-loop bug.
         wsUrl: 'ws://localhost:8080/graphql',
         graphqlUrl: 'http://localhost:8080/graphql',
       }),
@@ -582,6 +584,37 @@ describe('useLiveActivity', () => {
       expect.objectContaining({
         sessionId: 'test-session',
         authToken: undefined,
+      }),
+    );
+
+    await hook.unmount();
+  });
+
+  it('falls back to graphqlUrl: undefined when no backend URL is configured', async () => {
+    mockIsNativeApp.mockReturnValue(true);
+    mockGetPlatform.mockReturnValue('ios');
+    mockGetGraphQLHttpUrl.mockImplementation(() => {
+      throw new Error('Backend WebSocket URL could not be determined.');
+    });
+
+    const item = makeQueueItem('1');
+    const hook = await renderLiveActivityHook({
+      ...defaultProps(),
+      queue: [item],
+      currentClimbQueueItem: item,
+      boardDetails: makeBoardDetails(),
+      isSessionActive: true,
+      sessionId: 'test-session',
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    expect(mockStartLiveActivitySession).toHaveBeenCalledTimes(1);
+    expect(mockStartLiveActivitySession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphqlUrl: undefined,
       }),
     );
 

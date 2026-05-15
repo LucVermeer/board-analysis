@@ -10,8 +10,12 @@ type LiveActivityStartOptions = {
    * `registerActivityPushToken` mutation here. We pass an explicit URL because
    * `serverUrl` is the web origin (`https://www.boardsesh.com`), which has no
    * `/graphql` route and would 404.
+   *
+   * Required-but-nullable on purpose: every caller must consciously decide what
+   * to put here. Allowing the key to be omitted entirely would let a future
+   * caller silently re-introduce the wrong-host registration bug.
    */
-  graphqlUrl?: string;
+  graphqlUrl: string | undefined;
   authToken?: string;
   boardName: string;
   layoutId: number;
