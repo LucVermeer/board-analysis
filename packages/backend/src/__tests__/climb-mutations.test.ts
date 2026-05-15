@@ -121,6 +121,37 @@ describe('climb mutations', () => {
     });
   });
 
+  it('skips the stats seed for draft Aurora climbs', async () => {
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
+    );
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.saveClimb(
+      {},
+      {
+        input: {
+          boardType: 'kilter',
+          layoutId: 1,
+          name: 'Draft Aurora Climb',
+          description: '',
+          isDraft: true,
+          frames: 'p1r43',
+          angle: 40,
+        },
+      },
+      makeCtx(),
+    );
+
+    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls[0].values).toMatchObject({
+      isDraft: true,
+      isListed: false,
+    });
+  });
+
   it('stores non-draft MoonBoard climbs as listed', async () => {
     mockDb.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     mockDb.select
@@ -243,6 +274,7 @@ describe('climb mutations', () => {
             publishedAt: null,
             createdAt: '2026-05-14T20:00:00.000Z',
             angle: 35,
+            setterUsername: 'Alice Setter',
           },
         ]),
       )
@@ -272,6 +304,7 @@ describe('climb mutations', () => {
       climbUuid: 'climb-1',
       angle: 35,
       ascensionistCount: 0,
+      faUsername: 'Alice Setter',
     });
   });
 
@@ -286,6 +319,7 @@ describe('climb mutations', () => {
           publishedAt,
           createdAt: publishedAt,
           angle: 35,
+          setterUsername: 'Bob Setter',
         },
       ]),
     );
@@ -312,6 +346,7 @@ describe('climb mutations', () => {
       climbUuid: 'climb-2',
       angle: 40,
       ascensionistCount: 0,
+      faUsername: 'Bob Setter',
     });
   });
 
@@ -326,6 +361,7 @@ describe('climb mutations', () => {
           publishedAt,
           createdAt: publishedAt,
           angle: 35,
+          setterUsername: 'Carol Setter',
         },
       ]),
     );

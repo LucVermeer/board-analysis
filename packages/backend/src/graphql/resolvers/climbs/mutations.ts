@@ -136,22 +136,30 @@ export const climbMutations = {
     // board_climb_stats (search-climbs.ts:statsDrivenSearch), which hid these
     // climbs from search until someone synced them. Seed a row at the chosen
     // angle so the climb is discoverable immediately.
-    await db
-      .insert(dbSchema.boardClimbStats)
-      .values({
-        boardType: validated.boardType,
-        climbUuid: uuid,
-        angle: validated.angle,
-        ascensionistCount: 0,
-        faUsername: preferredSetter,
-      })
-      .onConflictDoNothing({
-        target: [
-          dbSchema.boardClimbStats.boardType,
-          dbSchema.boardClimbStats.climbUuid,
-          dbSchema.boardClimbStats.angle,
-        ],
-      });
+    //
+    // Skip drafts: search uses LEFT JOIN for drafts and a stats row there would
+    // expose the climb to the listed/INNER-JOIN path the moment is_listed flips,
+    // before any other write occurs. Matches migration 0096 Step 1, which only
+    // backfills rows where is_draft = FALSE, and updateClimb (below) which seeds
+    // on draft → publish transition.
+    if (!validated.isDraft) {
+      await db
+        .insert(dbSchema.boardClimbStats)
+        .values({
+          boardType: validated.boardType,
+          climbUuid: uuid,
+          angle: validated.angle,
+          ascensionistCount: 0,
+          faUsername: preferredSetter,
+        })
+        .onConflictDoNothing({
+          target: [
+            dbSchema.boardClimbStats.boardType,
+            dbSchema.boardClimbStats.climbUuid,
+            dbSchema.boardClimbStats.angle,
+          ],
+        });
+    }
 
     await publishSocialEvent({
       type: 'climb.created',
@@ -338,6 +346,7 @@ export const climbMutations = {
         publishedAt: dbSchema.boardClimbs.publishedAt,
         createdAt: dbSchema.boardClimbs.createdAt,
         angle: dbSchema.boardClimbs.angle,
+        setterUsername: dbSchema.boardClimbs.setterUsername,
       })
       .from(dbSchema.boardClimbs)
       .where(
@@ -422,6 +431,7 @@ export const climbMutations = {
           climbUuid: validated.uuid,
           angle: resolvedAngle,
           ascensionistCount: 0,
+          faUsername: existing.setterUsername,
         })
         .onConflictDoNothing({
           target: [
