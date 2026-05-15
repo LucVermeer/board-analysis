@@ -42,7 +42,7 @@ enum QueueUpdateEvent {
     case itemAdded(item: SharedQueueItem, position: Int, sequence: Int)
     case itemRemoved(uuid: String, sequence: Int)
     case reordered(uuid: String, oldIndex: Int, newIndex: Int, sequence: Int)
-    case climbMirrored(mirrored: Bool, sequence: Int)
+    case climbMirrored(uuid: String?, mirrored: Bool, sequence: Int)
 }
 
 // MARK: - Message Parsing Helpers
@@ -74,6 +74,7 @@ enum QueueMessageParser {
         let angle = Self.parseIntValue(climb["angle"]) ?? 0
         let frames = climb["frames"] as? String ?? ""
         let setter = climb["setter_username"] as? String ?? ""
+        let mirrored = climb["mirrored"] as? Bool ?? false
 
         return SharedQueueItem(
             uuid: uuid,
@@ -82,7 +83,8 @@ enum QueueMessageParser {
             difficulty: difficulty,
             angle: angle,
             frames: frames,
-            setterUsername: setter
+            setterUsername: setter,
+            mirrored: mirrored
         )
     }
 
@@ -134,8 +136,9 @@ enum QueueMessageParser {
     /// Parse a ClimbMirrored event.
     static func parseClimbMirrored(_ updates: [String: Any]) -> QueueUpdateEvent? {
         let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
+        let uuid = updates["uuid"] as? String
         let mirrored = updates["mirrored"] as? Bool ?? false
-        return .climbMirrored(mirrored: mirrored, sequence: sequence)
+        return .climbMirrored(uuid: uuid, mirrored: mirrored, sequence: sequence)
     }
 
     /// Route the queueUpdates dictionary to the correct parser based on __typename.
@@ -376,7 +379,7 @@ final class SessionWebSocketManager {
               sequence
               currentItem: item {
                 uuid
-                climb { uuid setter_username name frames angle difficulty }
+                climb { uuid setter_username name frames angle difficulty mirrored }
                 addedBy
                 suggested
               }
@@ -387,7 +390,7 @@ final class SessionWebSocketManager {
               sequence
               addedItem: item {
                 uuid
-                climb { uuid setter_username name frames angle difficulty }
+                climb { uuid setter_username name frames angle difficulty mirrored }
                 addedBy
                 suggested
               }
@@ -405,6 +408,7 @@ final class SessionWebSocketManager {
             }
             ... on ClimbMirrored {
               sequence
+              uuid
               mirrored
             }
           }
@@ -492,6 +496,7 @@ final class SessionWebSocketManager {
             "quality_average": "0",
             "stars": 0.0,
             "difficulty_error": "0",
+            "mirrored": item.mirrored,
         ]
 
         let itemInput: [String: Any] = [
@@ -617,7 +622,7 @@ final class SessionWebSocketManager {
         case .itemAdded(_, _, let seq): return seq
         case .itemRemoved(_, let seq): return seq
         case .reordered(_, _, _, let seq): return seq
-        case .climbMirrored(_, let seq): return seq
+        case .climbMirrored(_, _, let seq): return seq
         }
     }
 
@@ -677,9 +682,25 @@ final class SessionWebSocketManager {
             let dest = min(max(newIndex, 0), queueItems.count)
             queueItems.insert(item, at: dest)
 
-        case .climbMirrored:
-            // Ignored for Live Activity display
-            return
+        case .climbMirrored(let uuid, let mirrored, _):
+            guard let uuid,
+                  let itemIndex = queueItems.firstIndex(where: { $0.uuid == uuid })
+            else {
+                persistAndNotify()
+                return
+            }
+            let item = queueItems[itemIndex]
+            let updatedItem = SharedQueueItem(
+                uuid: item.uuid,
+                climbUuid: item.climbUuid,
+                climbName: item.climbName,
+                difficulty: item.difficulty,
+                angle: item.angle,
+                frames: item.frames,
+                setterUsername: item.setterUsername,
+                mirrored: mirrored
+            )
+            queueItems[itemIndex] = updatedItem
         }
 
         persistAndNotify()
@@ -689,6 +710,7 @@ final class SessionWebSocketManager {
         if let defaults = SharedConstants.sharedDefaults {
             SharedQueueState.save(items: queueItems, currentIndex: currentIndex, to: defaults)
         }
+        BoardBleManager.shared.displayCurrentItem(items: queueItems, currentIndex: currentIndex)
         _onQueueStateChanged?(queueItems, currentIndex)
     }
 

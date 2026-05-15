@@ -1,5 +1,11 @@
 import type { BoardName } from '@/app/lib/types';
-import { isCapacitor, isCapacitorWebView, waitForCapacitor, CAPACITOR_BRIDGE_TIMEOUT_MS } from './capacitor-utils';
+import {
+  isCapacitor,
+  isCapacitorWebView,
+  waitForCapacitor,
+  CAPACITOR_BRIDGE_TIMEOUT_MS,
+  supportsNativeIosBoardBle,
+} from './capacitor-utils';
 import type { BluetoothAdapter, DevicePickerFn } from './types';
 
 // Cache the detected adapter class after the first call so subsequent
@@ -26,9 +32,16 @@ export async function createBluetoothAdapter(
   }
 
   if (isCapacitor()) {
-    const { CapacitorBleAdapter } = await import('./capacitor-adapter');
-    cachedFactory = async (nextBoardName, nextPicker) => new CapacitorBleAdapter(nextBoardName, nextPicker);
-    return new CapacitorBleAdapter(boardName, devicePicker);
+    cachedFactory = async (nextBoardName, nextPicker) => {
+      if (nextBoardName !== 'moonboard' && supportsNativeIosBoardBle()) {
+        const { NativeIosBleAdapter } = await import('./native-ios-adapter');
+        return new NativeIosBleAdapter(nextBoardName, nextPicker);
+      }
+
+      const { CapacitorBleAdapter } = await import('./capacitor-adapter');
+      return new CapacitorBleAdapter(nextBoardName, nextPicker);
+    };
+    return cachedFactory(boardName, devicePicker);
   }
 
   const { WebBluetoothAdapter } = await import('./web-adapter');

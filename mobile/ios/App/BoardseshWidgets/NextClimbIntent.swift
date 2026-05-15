@@ -43,6 +43,8 @@ struct NextClimbIntent: LiveActivityIntent {
             await activity.update(content)
         }
 
+        postBoardBleDisplayNotification()
+
         // Send navigation to the backend directly via HTTP. This works even
         // when the main app is suspended. Only fall back to the Darwin
         // notification path (which wakes the main app to send a WS mutation)
@@ -58,6 +60,15 @@ struct NextClimbIntent: LiveActivityIntent {
 
     private func postDarwinNotification() {
         let name = SharedConstants.queueNavigateNotification as CFString
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName(name),
+            nil, nil, true
+        )
+    }
+
+    private func postBoardBleDisplayNotification() {
+        let name = SharedConstants.boardBleDisplayNotification as CFString
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
             CFNotificationName(name),

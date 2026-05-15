@@ -68,11 +68,30 @@ type CapacitorGlobal = {
     DevUrl?: CapacitorDevUrlPlugin;
     InAppReview?: CapacitorInAppReviewPlugin;
     Motion?: CapacitorMotionPlugin;
+    BoardBle?: {
+      isAvailable(): Promise<{ available: boolean }>;
+      startScan(options: { services?: string[] }): Promise<void>;
+      stopScan(): Promise<void>;
+      connect(options: { deviceId: string }): Promise<void>;
+      disconnect(): Promise<void>;
+      write(options: { value: string }): Promise<void>;
+      configureBoard(options: {
+        boardName: string;
+        layoutId: number;
+        sizeId: number;
+        colorOverrides?: Record<string, string>;
+      }): Promise<void>;
+      addListener(
+        eventName: string,
+        callback: (data: Record<string, unknown>) => void,
+      ): { remove: () => void } | Promise<{ remove: () => void }>;
+    };
     LiveActivity?: {
       isAvailable(): Promise<{ available: boolean }>;
       startSession(options: Record<string, unknown>): Promise<void>;
       endSession(): Promise<void>;
       updateActivity(options: Record<string, unknown>): Promise<void>;
+      updateActivityClimb(options: Record<string, unknown>): Promise<void>;
       addListener(
         eventName: string,
         callback: (data: Record<string, unknown>) => void,

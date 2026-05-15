@@ -12,7 +12,7 @@ import { useWakeLock } from './use-wake-lock';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from '@/app/lib/ble/types';
 import { createBluetoothAdapter } from '@/app/lib/ble/adapter-factory';
 import { incrementBluetoothSends, maybeFireFeedbackPromptEvent } from '@/app/lib/feedback-prompt-db';
-import { supportsCapacitorBleManualScan } from '@/app/lib/ble/capacitor-utils';
+import { supportsCapacitorBleManualScan, supportsNativeIosBoardBle } from '@/app/lib/ble/capacitor-utils';
 
 export type PickerState = {
   devices: DiscoveredDevice[];
@@ -303,7 +303,7 @@ export function useBoardBluetooth({
         // manual scan APIs. Older app installs stay on requestDevice().
         const adapter = await createBluetoothAdapter(
           boardDetails.board_name,
-          supportsCapacitorBleManualScan() ? devicePicker : undefined,
+          supportsCapacitorBleManualScan() || supportsNativeIosBoardBle() ? devicePicker : undefined,
         );
 
         const available = await adapter.isAvailable();
@@ -331,6 +331,12 @@ export function useBoardBluetooth({
         // Connect via the adapter and parse API level from device name
         const connection = await adapter.requestAndConnect(targetSerial);
         apiLevelRef.current = parseApiLevel(connection.deviceName);
+        await adapter.configureBoard?.({
+          boardName: boardDetails.board_name,
+          layoutId: boardDetails.layout_id,
+          sizeId: boardDetails.size_id,
+          colorOverrides: ledColorOverrides,
+        });
 
         // Set up disconnection listener
         unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
@@ -370,8 +376,27 @@ export function useBoardBluetooth({
 
       return false;
     },
-    [handleDisconnection, boardDetails, boardUuid, onConnectionChange, sendFramesToBoard, showMessage, devicePicker],
+    [
+      handleDisconnection,
+      boardDetails,
+      boardUuid,
+      onConnectionChange,
+      sendFramesToBoard,
+      showMessage,
+      devicePicker,
+      ledColorOverrides,
+    ],
   );
+
+  useEffect(() => {
+    if (!isConnected || !boardDetails) return;
+    void adapterRef.current?.configureBoard?.({
+      boardName: boardDetails.board_name,
+      layoutId: boardDetails.layout_id,
+      sizeId: boardDetails.size_id,
+      colorOverrides: ledColorOverrides,
+    });
+  }, [isConnected, boardDetails, ledColorOverrides]);
 
   // Disconnect from the board — update state synchronously for immediate UI
   // feedback, then await the native BLE disconnect in the background.

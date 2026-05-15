@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vite-plus/test';
 import { createBluetoothAdapter, _resetFactoryCache } from '../adapter-factory';
-import { isCapacitor, isCapacitorWebView, waitForCapacitor } from '../capacitor-utils';
+import { isCapacitor, isCapacitorWebView, waitForCapacitor, supportsNativeIosBoardBle } from '../capacitor-utils';
 
 // Mock capacitor-utils to allow per-test control over platform detection.
 // vi.mock is hoisted before imports, so adapter-factory sees the mocked version.
@@ -11,6 +11,7 @@ vi.mock('../capacitor-utils', async (importOriginal) => {
     isCapacitor: vi.fn().mockReturnValue(false),
     isCapacitorWebView: vi.fn().mockReturnValue(false),
     waitForCapacitor: vi.fn().mockResolvedValue(false),
+    supportsNativeIosBoardBle: vi.fn().mockReturnValue(false),
   };
 });
 
@@ -21,6 +22,7 @@ describe('adapter-factory', () => {
     vi.mocked(isCapacitor).mockReturnValue(false);
     vi.mocked(isCapacitorWebView).mockReturnValue(false);
     vi.mocked(waitForCapacitor).mockResolvedValue(false);
+    vi.mocked(supportsNativeIosBoardBle).mockReturnValue(false);
   });
 
   describe('_resetFactoryCache', () => {
@@ -71,6 +73,24 @@ describe('adapter-factory', () => {
       vi.mocked(isCapacitor).mockReturnValue(true);
 
       const adapter = await createBluetoothAdapter('kilter');
+
+      expect(adapter.constructor.name).toBe('CapacitorBleAdapter');
+    });
+
+    it('returns a NativeIosBleAdapter for Aurora boards when the native plugin is present', async () => {
+      vi.mocked(isCapacitor).mockReturnValue(true);
+      vi.mocked(supportsNativeIosBoardBle).mockReturnValue(true);
+
+      const adapter = await createBluetoothAdapter('kilter');
+
+      expect(adapter.constructor.name).toBe('NativeIosBleAdapter');
+    });
+
+    it('keeps MoonBoard on the Capacitor adapter even when native BoardBle exists', async () => {
+      vi.mocked(isCapacitor).mockReturnValue(true);
+      vi.mocked(supportsNativeIosBoardBle).mockReturnValue(true);
+
+      const adapter = await createBluetoothAdapter('moonboard');
 
       expect(adapter.constructor.name).toBe('CapacitorBleAdapter');
     });

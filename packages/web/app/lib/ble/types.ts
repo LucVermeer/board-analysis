@@ -63,4 +63,15 @@ export type BluetoothAdapter = {
 
   /** Register a callback for disconnection events. Returns an unsubscribe function. */
   onDisconnect(callback: () => void): () => void;
+
+  /**
+   * Optional native-only board configuration used for background BLE writes.
+   * Existing adapters ignore this, which keeps older app shells compatible.
+   */
+  configureBoard?(options: {
+    boardName: string;
+    layoutId: number;
+    sizeId: number;
+    colorOverrides?: Record<string, string>;
+  }): Promise<void>;
 };

@@ -12,14 +12,15 @@ Control the climbing board from the lock screen while the app is backgrounded. T
 - All queue delta events (FullSync, ItemAdded, ItemRemoved, CurrentClimbChanged, Reordered) are processed natively and persisted to App Group
 - Message buffering when webview is backgrounded, with flush or resync on foreground
 - Rust board renderer (`packages/board-renderer-wasm/`) compiles to WASM, used in both Node.js backend (server-rendered thumbnails) and web frontend (Web Worker). Already has `HoldData` types, frame string parsing (`p<hold_id>r<state_code>`), and Aurora hold state color mapping
+- Native iOS `BoardBle` owns the CoreBluetooth connection for Aurora boards, writes UART packets from Swift, and stays additive so old app shells without the plugin keep using the existing Capacitor BLE adapter
+- The native BLE manager reads queue state from App Group, stores the board configuration in App Group, and uses generated Swift placement data for LED lookup and mirroring
 
-**What's missing for full lock-screen board control:**
+**What's still missing for full lock-screen board control:**
 
-1. No native BLE (CoreBluetooth) -- LED commands can only be sent from the webview's JS context via `@capacitor-community/bluetooth-le`
-2. Widget can only do prev/next -- no add, remove, reorder, or mirror mutations from lock screen
-3. No LED illumination when app is backgrounded (BLE connection drops with the webview)
-4. Widget extension runs in a separate process with no access to the main app's BLE connection
-5. Rust board renderer has no Swift/iOS bindings -- only targets WASM today
+1. Widget can only do prev/next -- no add, remove, reorder, or mirror mutations from lock screen
+2. Widget extension runs in a separate process with no direct access to the main app's BLE connection; it only signals the main app process
+3. Rust board renderer has no Swift/iOS bindings -- only targets WASM today
+4. MoonBoard remains on the existing Capacitor BLE path; the native background BLE path currently targets Aurora boards only
 
 ## Architecture Decision: Where Does BLE Live?
 
@@ -33,8 +34,9 @@ Widget (Next/Previous tap)
   ▼
 Main app process (even if backgrounded)
   │ LiveActivityPlugin receives Darwin notification
-  │ sends setCurrentClimb mutation via native WS
-  │ waits for CurrentClimbChanged confirmation
+  │ repaints the connected board from optimistic App Group queue state
+  │ sends setCurrentClimb via widget HTTP or native WS fallback
+  │ repaints again when CurrentClimbChanged confirms server state
   ▼
 Native BLE manager (CoreBluetooth, main app process)
   │ looks up hold positions for the new current climb
@@ -47,7 +49,7 @@ The main app process can maintain a CoreBluetooth connection in the background i
 
 ## Phases
 
-### Phase 1: Native CoreBluetooth Manager
+### Phase 1: Native CoreBluetooth Manager [IMPLEMENTED FOR AURORA]
 
 Move BLE from JS-only to a native Swift layer that can run when the webview is suspended.
 
@@ -74,11 +76,11 @@ The UART packet encoding (frame string → LED bytes) already exists in the Type
 
 Recommend **Option A** for Phase 1 -- keep it simple, ship fast. Revisit Option B if we add more shared logic to the Rust crate (see Phase 3b).
 
-**Hold data requirement:** To illuminate LEDs, the native layer needs hold positions and LED mappings. For Phase 1, the webview can write the current climb's hold data to App Group when the climb changes. Phase 3 replaces this with compiled-in static data generated from the same pipeline that produces the TypeScript and C++ constants, so the native layer can resolve any climb's LEDs independently.
+**Hold data requirement:** To illuminate LEDs, the native layer needs hold positions and LED mappings. The implementation uses compiled-in Swift placement data generated from the board constants package, so the native layer can resolve any queued Aurora climb's LEDs independently without a live webview.
 
 **Definition of done:** Board LEDs light up when navigating climbs via the Lock Screen widget while the app is in the background.
 
-### Phase 2: Background BLE Connection Persistence
+### Phase 2: Background BLE Connection Persistence [PARTIALLY IMPLEMENTED]
 
 Ensure the CoreBluetooth connection survives app backgrounding and can recover.
 
@@ -92,37 +94,38 @@ Ensure the CoreBluetooth connection survives app backgrounding and can recover.
 
 **Definition of done:** BLE connection persists through backgrounding and app suspension. LED writes work reliably after returning from background.
 
-### Phase 3: Embedded Hold/LED Placement Data in Native Code
+### Phase 3: Embedded Hold/LED Placement Data in Native Code [IMPLEMENTED FOR iOS BLE]
 
 The native layer needs hold positions and LED mappings to illuminate the board. Rather than sending this over the WebSocket (which would bloat every message), embed the static board data directly in the compiled Swift code -- the same approach already used for TypeScript and the ESP32 controller.
 
-**Existing generated data pipeline:**
+**Generated data pipeline:**
 
-- `packages/web/scripts/generate-size-edges.ts` queries PostgreSQL and generates:
-  - `packages/web/app/lib/__generated__/product-sizes-data.ts` -- hold placements as `HoldTuple[]` (`[placementId, mirroredPlacementId, x, y]`), indexed by `boardName` → `"layoutId-setId"`
-  - `packages/web/app/lib/__generated__/led-placements-data.ts` -- LED strip positions as `Record<placementId, ledIndex>`, indexed by `boardName` → `"layoutId-sizeId"`
+- `packages/board-constants/scripts/generate-board-constants.ts` produces the committed TypeScript board constants:
+  - `packages/board-constants/src/generated/product-sizes-data.ts` -- hold placements as `HoldTuple[]` (`[placementId, mirroredPlacementId, x, y]`), indexed by `boardName` → `"layoutId-setId"`
+  - `packages/board-constants/src/generated/led-placements-data.ts` -- LED strip positions as `Record<placementId, ledIndex>`, indexed by `boardName` → `"layoutId-sizeId"`
+- `packages/board-constants/scripts/generate-ios-board-placement-data.ts` reads those committed constants and writes `mobile/ios/App/App/BoardPlacementData.swift`
 - `packages/board-controller/esp32/scripts/generate-led-mapping.js` reads the TS LED data and generates a C++ header (`led_placement_map.h`) for the embedded controller
 
 **Key work:**
 
-- Extend the generator script to also output a portable format (JSON) alongside the TypeScript files
-- Add a second codegen step that converts the JSON to a Swift file (e.g., `mobile/ios/App/App/__generated__/BoardPlacementData.swift`) with static dictionaries
-- Include both hole placements (for rendering/BLE) and LED placements (for UART packet encoding)
+- Add a second codegen step that converts the TypeScript constants to a Swift file (`mobile/ios/App/App/BoardPlacementData.swift`) with static dictionaries
+- Include mirrored hole placements and LED placements
 - The Swift data is compiled into the app binary -- no runtime fetching, no App Group, no WebSocket overhead
 - Each climb's `frames` string (already in `SharedQueueItem`) contains `p<placementId>r<stateCode>` pairs. The native BLE manager looks up each placementId in the embedded data to get the LED index, then encodes the UART packet.
 
 **Generator output structure:**
 
 ```
-packages/web/scripts/generate-size-edges.ts
-  → packages/web/app/lib/__generated__/product-sizes-data.ts     (existing, TypeScript)
-  �� packages/web/app/lib/__generated__/led-placements-data.ts    (existing, TypeScript)
-  → packages/shared-data/board-placements.json                   (new, portable)
-  → mobile/ios/App/App/__generated__/BoardPlacementData.swift    (new, from JSON)
-  → packages/board-controller/esp32/src/config/led_placement_map.h (existing, C++)
+packages/board-constants/scripts/generate-board-constants.ts
+  -> packages/board-constants/src/generated/product-sizes-data.ts (existing, TypeScript)
+  -> packages/board-constants/src/generated/led-placements-data.ts (existing, TypeScript)
+packages/board-constants/scripts/generate-ios-board-placement-data.ts
+  -> mobile/ios/App/App/BoardPlacementData.swift (new, Swift)
+packages/board-controller/esp32/scripts/generate-led-mapping.js
+  -> packages/board-controller/esp32/src/config/led_placement_map.h (existing, C++)
 ```
 
-**Trade-off:** Board data changes require regenerating and recompiling the app. This is fine -- board hardware configurations are static and change at most once per board revision (years). The generator already runs manually (`bunx tsx scripts/generate-size-edges.ts`), adding one more output target is trivial.
+**Trade-off:** Board data changes require regenerating and recompiling the app. This is fine -- board hardware configurations are static and change at most once per board revision (years). Run the board-constants generator or its iOS-only generator script to refresh the Swift output after board-constant changes.
 
 **Definition of done:** The native layer can look up LED positions for any hold placement without the webview, using data compiled into the app binary. `BoardBleManager` can encode a UART packet from a frames string alone.
 

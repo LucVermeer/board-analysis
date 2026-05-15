@@ -129,6 +129,23 @@ final class AppIntentNavigationTests: XCTestCase {
         XCTAssertEqual(updatedIndex, 3)
     }
 
+    func testSharedQueueItemDecodesOldPayloadWithoutMirroredField() throws {
+        let json = """
+        {
+          "uuid": "queue-1",
+          "climbUuid": "climb-1",
+          "climbName": "Old Payload",
+          "difficulty": "V4",
+          "angle": 40,
+          "frames": "p1r12",
+          "setterUsername": "tester"
+        }
+        """
+        let item = try JSONDecoder().decode(SharedQueueItem.self, from: Data(json.utf8))
+
+        XCTAssertFalse(item.mirrored)
+    }
+
     // MARK: - ContentState Flags
 
     func testBuildContentStateAfterNavigation() {
