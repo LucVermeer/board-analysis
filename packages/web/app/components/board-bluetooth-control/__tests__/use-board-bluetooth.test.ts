@@ -217,6 +217,24 @@ describe('useBoardBluetooth', () => {
     expect(result.current.isConnected).toBe(true);
   });
 
+  it('configures the native board once when connect flips isConnected', async () => {
+    const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(mockAdapter.configureBoard).toHaveBeenCalledOnce();
+    expect(mockAdapter.configureBoard).toHaveBeenCalledWith({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      apiLevel: 3,
+      deviceName: 'Test Board',
+      colorOverrides: undefined,
+    });
+  });
+
   it('creates a board-aware adapter for the active board', async () => {
     const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockMoonboardDetails }));
 

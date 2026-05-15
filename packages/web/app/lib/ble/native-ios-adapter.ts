@@ -1,5 +1,4 @@
-import type { BoardName } from '@/app/lib/types';
-import type { BleConnection, BluetoothAdapter, DevicePickerFn, DiscoveredDevice, PluginListenerHandle } from './types';
+import type { BleConnection, BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import {
   AURORA_SCAN_SERVICE_UUIDS,
   parseSerialNumber,
@@ -7,27 +6,8 @@ import {
 
 const SCAN_TIMEOUT_MS = 30_000;
 
-type NativeBoardBlePlugin = {
-  isAvailable(): Promise<{ available: boolean }>;
-  startScan(options: { services?: string[] }): Promise<void>;
-  stopScan(): Promise<void>;
-  connect(options: { deviceId: string }): Promise<void>;
-  disconnect(): Promise<void>;
-  write(options: { value: string }): Promise<void>;
-  cancelWrites?(): Promise<void>;
-  configureBoard(options: {
-    boardName: string;
-    layoutId: number;
-    sizeId: number;
-    apiLevel?: number;
-    deviceName?: string;
-    colorOverrides?: Record<string, string>;
-  }): Promise<void>;
-  addListener(
-    eventName: 'scanResult' | 'disconnected',
-    callback: (data: Record<string, unknown>) => void,
-  ): PluginListenerHandle | Promise<PluginListenerHandle>;
-};
+type NativeBoardBlePlugin = NonNullable<NonNullable<Window['Capacitor']>['Plugins']['BoardBle']>;
+type NativeBoardBleListenerHandle = Awaited<ReturnType<NativeBoardBlePlugin['addListener']>>;
 
 type NativeScanResult = {
   device?: { deviceId?: string; name?: string };
@@ -40,7 +20,7 @@ function getNativeBoardBlePlugin(): NativeBoardBlePlugin {
   if (!plugin) {
     throw new Error('Native BoardBle plugin not available');
   }
-  return plugin as NativeBoardBlePlugin;
+  return plugin;
 }
 
 function toHexString(data: Uint8Array): string {
@@ -59,8 +39,8 @@ function createAbortError(): DOMException | Error {
 }
 
 async function normalizeListenerHandle(
-  handle: PluginListenerHandle | Promise<PluginListenerHandle>,
-): Promise<PluginListenerHandle> {
+  handle: NativeBoardBleListenerHandle | Promise<NativeBoardBleListenerHandle>,
+): Promise<NativeBoardBleListenerHandle> {
   return await Promise.resolve(handle);
 }
 
@@ -69,14 +49,11 @@ function stopScanQuietly(plugin: NativeBoardBlePlugin): Promise<void> {
 }
 
 export class NativeIosBleAdapter implements BluetoothAdapter {
-  constructor(
-    private readonly boardName: BoardName = 'kilter',
-    private readonly devicePicker?: DevicePickerFn,
-  ) {}
+  constructor(private readonly devicePicker?: DevicePickerFn) {}
 
   private deviceId: string | null = null;
   private disconnectCallback: (() => void) | null = null;
-  private disconnectListenerHandle: PluginListenerHandle | null = null;
+  private disconnectListenerHandle: NativeBoardBleListenerHandle | null = null;
 
   async isAvailable(): Promise<boolean> {
     try {
@@ -250,7 +227,6 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     deviceName?: string;
     colorOverrides?: Record<string, string>;
   }): Promise<void> {
-    if (this.boardName === 'moonboard') return;
     await getNativeBoardBlePlugin().configureBoard(options);
   }
 }

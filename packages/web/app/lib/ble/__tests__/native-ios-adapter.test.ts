@@ -63,7 +63,7 @@ describe('NativeIosBleAdapter', () => {
       throw new Error('Picker promise was not initialized');
     };
     let pickerDevices: DiscoveredDevice[] = [];
-    const adapter = new NativeIosBleAdapter('kilter', (subscribe) => {
+    const adapter = new NativeIosBleAdapter((subscribe) => {
       subscribe((devices) => {
         pickerDevices = devices;
       });
@@ -97,7 +97,7 @@ describe('NativeIosBleAdapter', () => {
     let resolvePickedDevice: (deviceId: string) => void = () => {
       throw new Error('Picker promise was not initialized');
     };
-    const adapter = new NativeIosBleAdapter('kilter', () => {
+    const adapter = new NativeIosBleAdapter(() => {
       return new Promise<string>((resolve) => {
         resolvePickedDevice = resolve;
       });
@@ -122,7 +122,7 @@ describe('NativeIosBleAdapter', () => {
     let resolvePickedDevice: (deviceId: string) => void = () => {
       throw new Error('Picker promise was not initialized');
     };
-    const adapter = new NativeIosBleAdapter('kilter', () => {
+    const adapter = new NativeIosBleAdapter(() => {
       return new Promise<string>((resolve) => {
         resolvePickedDevice = resolve;
       });
@@ -149,7 +149,7 @@ describe('NativeIosBleAdapter', () => {
   });
 
   it('forwards board configuration for background native writes', async () => {
-    const adapter = new NativeIosBleAdapter('kilter');
+    const adapter = new NativeIosBleAdapter();
 
     await adapter.configureBoard({
       boardName: 'kilter',
@@ -175,7 +175,7 @@ describe('NativeIosBleAdapter', () => {
       throw new Error('Picker promise was not initialized');
     };
     const onDisconnect = vi.fn();
-    const adapter = new NativeIosBleAdapter('kilter', () => {
+    const adapter = new NativeIosBleAdapter(() => {
       return new Promise<string>((resolve) => {
         resolvePickedDevice = resolve;
       });

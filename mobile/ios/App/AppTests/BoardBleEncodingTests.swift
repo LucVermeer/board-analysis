@@ -47,9 +47,8 @@ final class BoardBleEncodingTests: XCTestCase {
     }
 
     func testMirroredFramesUseGeneratedPlacementMap() {
-        let mirroredFrames = BoardBleEncoding.mirroredFrames(frames: "p4265r45p4331r43", boardName: "kilter", layoutId: 8)
+        let mirroredFrames = BoardBleEncoding.mirroredFrames(frames: "p1r1p3r2", boardName: "tension", layoutId: 9)
 
-        XCTAssertNotNil(mirroredFrames)
-        XCTAssertNotEqual(mirroredFrames, "p4265r45p4331r43")
+        XCTAssertEqual(mirroredFrames, "p2r1p4r2")
     }
 }

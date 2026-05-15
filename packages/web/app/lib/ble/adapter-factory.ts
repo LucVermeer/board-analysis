@@ -35,7 +35,7 @@ export async function createBluetoothAdapter(
     cachedFactory = async (nextBoardName, nextPicker) => {
       if (nextBoardName !== 'moonboard' && supportsNativeIosBoardBle()) {
         const { NativeIosBleAdapter } = await import('./native-ios-adapter');
-        return new NativeIosBleAdapter(nextBoardName, nextPicker);
+        return new NativeIosBleAdapter(nextPicker);
       }
 
       const { CapacitorBleAdapter } = await import('./capacitor-adapter');

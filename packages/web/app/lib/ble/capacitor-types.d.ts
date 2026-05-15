@@ -56,6 +56,10 @@ type CapacitorDevUrlPlugin = {
   clearUrl(): Promise<void>;
 };
 
+type CapacitorPluginListenerHandle = {
+  remove(): void | Promise<void>;
+};
+
 type CapacitorGlobal = {
   isNativePlatform(): boolean;
   getPlatform(): string;
@@ -87,7 +91,7 @@ type CapacitorGlobal = {
       addListener(
         eventName: string,
         callback: (data: Record<string, unknown>) => void,
-      ): { remove: () => void } | Promise<{ remove: () => void }>;
+      ): CapacitorPluginListenerHandle | Promise<CapacitorPluginListenerHandle>;
     };
     LiveActivity?: {
       isAvailable(): Promise<{ available: boolean }>;
