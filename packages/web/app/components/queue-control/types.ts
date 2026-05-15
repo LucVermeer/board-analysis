@@ -24,10 +24,22 @@ export type ClimbQueueItem = {
 
 export type ClimbQueue = ClimbQueueItem[];
 
+export type PlaylistSuggestionSource = {
+  playlistUuid: string;
+  activatedClimbUuid: string;
+  boardKey: string;
+  climbs: Climb[];
+};
+
+export type SetCurrentClimbOptions = {
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
+};
+
 export type QueueState = {
   queue: ClimbQueue;
   currentClimbQueueItem: ClimbQueueItem | null;
   climbSearchParams: SearchRequestPagination;
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
   hasDoneFirstFetch: boolean;
   initialQueueDataReceivedFromPeers: boolean;
   // Track locally-initiated current climb updates by correlation ID to skip server echoes
@@ -80,10 +92,13 @@ export type QueueAction =
         myClientId?: string;
         correlationId?: string;
         serverCorrelationId?: string;
+        playlistSuggestionSource?: PlaylistSuggestionSource | null;
       };
     }
   | { type: 'DELTA_MIRROR_CURRENT_CLIMB'; payload: { mirrored: boolean; mirroredUuid: string | null } }
   | { type: 'DELTA_REPLACE_QUEUE_ITEM'; payload: { uuid: string; item: ClimbQueueItem } }
+  | { type: 'SET_PLAYLIST_SUGGESTION_SOURCE'; payload: PlaylistSuggestionSource | null }
+  | { type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE'; payload: PlaylistSuggestionSource }
   | { type: 'CLEANUP_PENDING_UPDATE'; payload: { correlationId: string } }
   | { type: 'CLEANUP_PENDING_UPDATES_BATCH'; payload: { correlationIds: string[] } }
   | { type: 'CLEAR_RESYNC_FLAG' }
@@ -101,7 +116,7 @@ export type QueueActionsType = {
    *  so callers can capture its uuid (e.g. the create form tracks this uuid
    *  to later replace the item in place on subsequent saves). Resolves to
    *  null when validation fails or the mutation is guarded. */
-  setCurrentClimb: (climb: Climb) => Promise<ClimbQueueItem | null>;
+  setCurrentClimb: (climb: Climb, options?: SetCurrentClimbOptions) => Promise<ClimbQueueItem | null>;
   setCurrentClimbQueueItem: (item: ClimbQueueItem) => void;
   /** Browse-initiated drawer open. In solo (no active party session) this is
    *  equivalent to setCurrentClimb + opening the play drawer — the climb is
@@ -111,6 +126,8 @@ export type QueueActionsType = {
    *  party members are not yanked off the wall. The Set Active Climb menu
    *  action is the only browse-initiated path that broadcasts in party. */
   previewClimbFromBrowse: (climb: Climb) => void;
+  setPlaylistSuggestionSource: (source: PlaylistSuggestionSource | null) => void;
+  refreshPlaylistSuggestionSource: (source: PlaylistSuggestionSource) => void;
   /** Replace an existing queue item (by its queue-item uuid) with a new climb,
    *  preserving addedBy attribution. Used by the create form to keep the
    *  tracked queue item in sync as the user keeps editing a climb. */
@@ -167,6 +184,7 @@ export type QueueDataType = {
   climbSearchParams: SearchRequestPagination;
   climbSearchResults: Climb[] | null;
   suggestedClimbs: Climb[];
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
   totalSearchResultCount: number | null;
   hasMoreResults: boolean;
   isFetchingClimbs: boolean;

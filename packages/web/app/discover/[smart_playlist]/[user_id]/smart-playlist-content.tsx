@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import MuiButton from '@mui/material/Button';
 import { IosShare, SentimentDissatisfiedOutlined } from '@mui/icons-material';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { Climb } from '@/app/lib/types';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
@@ -30,8 +30,14 @@ import { LoadingSpinner } from '@/app/components/ui/loading-spinner';
 import { EmptyState } from '@/app/components/ui/empty-state';
 import PlaylistPreviewSquare from '@/app/components/library/playlist-preview-square';
 import MultiboardClimbList from '@/app/components/climb-list/multiboard-climb-list';
+import { PlaylistActivationProvider } from '@/app/components/climb-actions/playlist-activation-context';
+import { useOptionalQueueActions } from '@/app/components/graphql-queue';
+import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
+import { createPlaylistSuggestionSource } from '@/app/components/queue-control/playlist-suggestions';
+import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
 import BackButton from '@/app/components/back-button';
 import LocaleLink from '@/app/components/i18n/locale-link';
+import { getBoardDetailsForPlaylist, getUserBoardDetails } from '@/app/lib/board-config-for-playlist';
 import styles from '@/app/components/library/playlist-view.module.css';
 
 type Props = {
@@ -43,6 +49,13 @@ type Props = {
   initialSmartPlaylist?: SmartPlaylistResult | null;
 };
 
+const SMART_PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE = 100;
+const MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_PAGES = 10;
+const MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE = 250;
+
+const isAbortError = (err: unknown): boolean =>
+  typeof err === 'object' && err !== null && 'name' in err && err.name === 'AbortError';
+
 export default function SmartPlaylistContent({
   smartPlaylistType,
   smartPlaylistSlug,
@@ -53,9 +66,13 @@ export default function SmartPlaylistContent({
   const { t } = useTranslation('playlists');
   const { showMessage } = useSnackbar();
   const { token, isLoading: tokenLoading } = useWsAuthToken();
+  const queueActions = useOptionalQueueActions();
+  const activeQueueBoardInfo = useQueueBridgeBoardInfo();
   const preset = smartPlaylistByType(smartPlaylistType);
 
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(() => findMatchingBoard(initialMyBoards));
+  const smartPlaylistSuggestionsRefreshAbortRef = useRef<AbortController | null>(null);
+  useClearPlaylistSuggestionSourceOnUnmount(queueActions);
   const { boards: myBoards, isLoading: boardsLoading } = useMyBoards(true, 50, initialMyBoards);
   // Mark SSR data fresh so react-query honours staleTime instead of triggering
   // an immediate refetch (initialDataUpdatedAt defaults to 0 = epoch).
@@ -135,6 +152,142 @@ export default function SmartPlaylistContent({
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const selectedBoardDetails = useMemo(
+    () => (selectedBoard ? getUserBoardDetails(selectedBoard) : null),
+    [selectedBoard],
+  );
+
+  useEffect(() => {
+    return () => {
+      smartPlaylistSuggestionsRefreshAbortRef.current?.abort();
+    };
+  }, []);
+
+  const fetchSmartPlaylistClimbsForBoard = useCallback(
+    async (boardDetails: BoardDetails, activatedClimbUuid: string, signal: AbortSignal): Promise<Climb[]> => {
+      const client = createGraphQLHttpClient(token);
+      const fetchedClimbs: Climb[] = [];
+      let page = 0;
+      let hasMore = true;
+      let activatedClimbSeen = false;
+      let loadedClimbsAfterActivated = 0;
+
+      while (
+        hasMore &&
+        page < MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_PAGES &&
+        loadedClimbsAfterActivated < MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE &&
+        !signal.aborted
+      ) {
+        const response = await client.request<GetSmartPlaylistQueryResponse, GetSmartPlaylistQueryVariables>({
+          document: GET_SMART_PLAYLIST,
+          variables: {
+            input: {
+              type: smartPlaylistType,
+              userId,
+              boardName: boardDetails.board_name,
+              page,
+              pageSize: SMART_PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE,
+            },
+          },
+          signal,
+        });
+
+        const pageClimbs = response.smartPlaylist.climbs as Climb[];
+        for (const pageClimb of pageClimbs) {
+          if (activatedClimbSeen) {
+            loadedClimbsAfterActivated += 1;
+          }
+          if (pageClimb.uuid === activatedClimbUuid) {
+            activatedClimbSeen = true;
+          }
+        }
+
+        fetchedClimbs.push(...pageClimbs);
+        hasMore = response.smartPlaylist.hasMore;
+        page += 1;
+      }
+
+      return fetchedClimbs;
+    },
+    [smartPlaylistType, token, userId],
+  );
+
+  const activateSmartPlaylistClimb = useCallback(
+    async (climb: Climb): Promise<void> => {
+      if (!queueActions) return;
+
+      const activeBoardDetails = activeQueueBoardInfo.boardDetails;
+      const targetBoardDetails =
+        activeBoardDetails ??
+        selectedBoardDetails ??
+        getBoardDetailsForPlaylist(
+          climb.boardType ?? selectedBoard?.boardType ?? '',
+          climb.layoutId ?? selectedBoard?.layoutId,
+        );
+
+      if (!targetBoardDetails) {
+        await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
+        return;
+      }
+
+      const sourceId = `smart:${smartPlaylistType}:${userId}`;
+      const initialSource = createPlaylistSuggestionSource({
+        playlistUuid: sourceId,
+        activatedClimb: climb,
+        climbs: allClimbs,
+        boardDetails: targetBoardDetails,
+      });
+
+      const activeItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: initialSource });
+      if (!activeItem) return;
+
+      smartPlaylistSuggestionsRefreshAbortRef.current?.abort();
+      const abortController = new AbortController();
+      smartPlaylistSuggestionsRefreshAbortRef.current = abortController;
+
+      void (async () => {
+        try {
+          const fetchedClimbs = await fetchSmartPlaylistClimbsForBoard(
+            targetBoardDetails,
+            climb.uuid,
+            abortController.signal,
+          );
+          if (abortController.signal.aborted) return;
+          const refreshedSource = createPlaylistSuggestionSource({
+            playlistUuid: sourceId,
+            activatedClimb: climb,
+            climbs: fetchedClimbs,
+            boardDetails: targetBoardDetails,
+          });
+          queueActions.refreshPlaylistSuggestionSource(refreshedSource);
+        } catch (err: unknown) {
+          if (isAbortError(err)) return;
+          console.error('Failed to refresh smart playlist suggestions:', err);
+        } finally {
+          if (smartPlaylistSuggestionsRefreshAbortRef.current === abortController) {
+            smartPlaylistSuggestionsRefreshAbortRef.current = null;
+          }
+        }
+      })();
+    },
+    [
+      queueActions,
+      activeQueueBoardInfo.boardDetails,
+      selectedBoardDetails,
+      selectedBoard?.boardType,
+      selectedBoard?.layoutId,
+      smartPlaylistType,
+      userId,
+      allClimbs,
+      fetchSmartPlaylistClimbsForBoard,
+    ],
+  );
+
+  const playlistActivationValue = useMemo(
+    () => ({ activatePlaylistClimb: activateSmartPlaylistClimb }),
+    [activateSmartPlaylistClimb],
+  );
+
   const handleShare = useCallback(async () => {
     const url = `${window.location.origin}/discover/${smartPlaylistSlug}/${encodeURIComponent(userId)}`;
     await shareWithFallback({
@@ -179,6 +332,25 @@ export default function SmartPlaylistContent({
     );
   }
 
+  const climbList =
+    allClimbs.length === 0 && !isFetching ? (
+      <EmptyState description={t('library.smart.empty')} />
+    ) : (
+      <MultiboardClimbList
+        climbs={allClimbs}
+        isFetching={isFetching}
+        isLoading={isLoading}
+        hasMore={hasNextPage ?? false}
+        onLoadMore={handleLoadMore}
+        showBoardFilter
+        boardTypes={boardTypes}
+        selectedBoard={selectedBoard}
+        onBoardSelect={setSelectedBoard}
+        boards={myBoards}
+        boardsLoading={boardsLoading}
+      />
+    );
+
   return (
     <>
       <div className={styles.actionsSection}>
@@ -220,22 +392,10 @@ export default function SmartPlaylistContent({
         </div>
 
         <div className={styles.climbsSection}>
-          {allClimbs.length === 0 && !isFetching ? (
-            <EmptyState description={t('library.smart.empty')} />
+          {queueActions ? (
+            <PlaylistActivationProvider value={playlistActivationValue}>{climbList}</PlaylistActivationProvider>
           ) : (
-            <MultiboardClimbList
-              climbs={allClimbs}
-              isFetching={isFetching}
-              isLoading={isLoading}
-              hasMore={hasNextPage ?? false}
-              onLoadMore={handleLoadMore}
-              showBoardFilter
-              boardTypes={boardTypes}
-              selectedBoard={selectedBoard}
-              onBoardSelect={setSelectedBoard}
-              boards={myBoards}
-              boardsLoading={boardsLoading}
-            />
+            climbList
           )}
         </div>
       </div>

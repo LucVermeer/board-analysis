@@ -29,7 +29,7 @@ import { usePersistentSession } from '../persistent-session';
 import { usePartyProfile } from '../party-manager/party-profile-context';
 import { getBaseBoardPath, DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { BoardDetails, Angle, Climb, SearchRequestPagination } from '@/app/lib/types';
-import type { ClimbQueueItem, QueueItemUser } from './types';
+import type { ClimbQueueItem, QueueItemUser, PlaylistSuggestionSource, SetCurrentClimbOptions } from './types';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { canAddClimbToBoard } from '@/app/lib/board-compatibility';
@@ -39,6 +39,13 @@ import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import { deriveIsDriver } from '../graphql-queue/driver-state';
+import {
+  getPlaylistSuggestionSourceOverride,
+  getPlaylistSuggestedClimbs,
+  insertQueueItemAfterCurrent,
+  playlistSuggestionSourceMatches,
+  pruneSuggestedQueueItemsAfterCurrent,
+} from './playlist-suggestions';
 
 const LiveActivityBridge = dynamic(() => import('@/app/lib/live-activity/live-activity-bridge'), {
   ssr: false,
@@ -121,6 +128,7 @@ function usePersistentSessionQueueAdapter(): {
     if (!profile?.id) return undefined;
     return { id: profile.id, username: username || '', avatarUrl };
   }, [profile?.id, username, avatarUrl]);
+  const [playlistSuggestionSource, setPlaylistSuggestionSourceState] = useState<PlaylistSuggestionSource | null>(null);
 
   const isParty = !!ps.activeSession;
   const queue = isParty ? ps.queue : ps.localQueue;
@@ -161,6 +169,7 @@ function usePersistentSessionQueueAdapter(): {
     ps,
     showMessage,
     currentUserInfo,
+    playlistSuggestionSource,
   });
   latestRef.current = {
     queue,
@@ -170,6 +179,7 @@ function usePersistentSessionQueueAdapter(): {
     ps,
     showMessage,
     currentUserInfo,
+    playlistSuggestionSource,
   };
 
   // Counter for correlation IDs sent with party-mode SET_CURRENT_CLIMB
@@ -326,9 +336,13 @@ function usePersistentSessionQueueAdapter(): {
   }, []);
 
   const setCurrentClimb = useCallback(
-    async (climb: Climb): Promise<ClimbQueueItem | null> => {
+    async (climb: Climb, options?: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
       const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
       if (!validateClimbForQueue(climb)) return null;
+      const nextPlaylistSuggestionSource = getPlaylistSuggestionSourceOverride(options);
+      if (nextPlaylistSuggestionSource !== undefined) {
+        setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
+      }
       if (ps.activeSession) {
         const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
         // If the climb is already in the queue, reuse the existing item
@@ -338,7 +352,11 @@ function usePersistentSessionQueueAdapter(): {
         const existing = queue.find((q) => q.climb?.uuid === climb.uuid);
         if (existing) {
           try {
-            await ps.setCurrentClimb(existing, false, correlationId);
+            if (nextPlaylistSuggestionSource) {
+              await ps.setQueue(pruneSuggestedQueueItemsAfterCurrent(queue, existing), existing);
+            } else {
+              await ps.setCurrentClimb(existing, false, correlationId);
+            }
             return existing;
           } catch (err: unknown) {
             console.error('Failed to set current climb:', err);
@@ -348,6 +366,17 @@ function usePersistentSessionQueueAdapter(): {
         const newItem = buildQueueItem(climb);
         const currentIdx = current ? queue.findIndex((q) => q.uuid === current.uuid) : -1;
         const position = currentIdx === -1 ? undefined : currentIdx + 1;
+        if (nextPlaylistSuggestionSource) {
+          const queueWithNewItem = insertQueueItemAfterCurrent(queue, current, newItem);
+          const prunedQueue = pruneSuggestedQueueItemsAfterCurrent(queueWithNewItem, newItem);
+          try {
+            await ps.setQueue(prunedQueue, newItem);
+            return newItem;
+          } catch (err: unknown) {
+            console.error('Failed to replace queue before setting playlist current:', err);
+            return null;
+          }
+        }
         // Split the awaits so a partial failure is observable: addQueueItem
         // adds the item to the shared queue, then setCurrentClimb activates
         // it. If addQueueItem fails, nothing landed on the server. If
@@ -389,7 +418,10 @@ function usePersistentSessionQueueAdapter(): {
       } else {
         newQueue.push(newItem);
       }
-      ps.setLocalQueueState(newQueue, newItem, baseBoardPath, boardDetails);
+      const nextQueue = nextPlaylistSuggestionSource
+        ? pruneSuggestedQueueItemsAfterCurrent(newQueue, newItem)
+        : newQueue;
+      ps.setLocalQueueState(nextQueue, newItem, baseBoardPath, boardDetails);
       return newItem;
     },
     [validateClimbForQueue, buildQueueItem],
@@ -413,7 +445,7 @@ function usePersistentSessionQueueAdapter(): {
         dispatchOpenPlayDrawer(climb);
         return;
       }
-      void setCurrentClimb(climb);
+      void setCurrentClimb(climb, { playlistSuggestionSource: null });
       dispatchOpenPlayDrawer();
     },
     [setCurrentClimb],
@@ -488,6 +520,16 @@ function usePersistentSessionQueueAdapter(): {
     ps.setLocalQueueState(newQueue, nextCurrent, baseBoardPath, boardDetails);
   }, []);
 
+  const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
+    setPlaylistSuggestionSourceState(source);
+  }, []);
+
+  const refreshPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource) => {
+    setPlaylistSuggestionSourceState((current) =>
+      playlistSuggestionSourceMatches(current, source) ? source : current,
+    );
+  }, []);
+
   // No-op functions for fields not used by the bottom bar
   const noop = useCallback(() => {}, []);
   const noopStartSession = useCallback(
@@ -509,6 +551,8 @@ function usePersistentSessionQueueAdapter(): {
       setCurrentClimb,
       previewClimbFromBrowse,
       setCurrentClimbQueueItem,
+      setPlaylistSuggestionSource,
+      refreshPlaylistSuggestionSource,
       replaceQueueItem,
       setClimbSearchParams: noopSetClimbSearchParams,
       setCountSearchParams: noopSetClimbSearchParams,
@@ -531,6 +575,8 @@ function usePersistentSessionQueueAdapter(): {
       setCurrentClimb,
       previewClimbFromBrowse,
       setCurrentClimbQueueItem,
+      setPlaylistSuggestionSource,
+      refreshPlaylistSuggestionSource,
       replaceQueueItem,
       noopSetClimbSearchParams,
       mirrorClimb,
@@ -553,7 +599,8 @@ function usePersistentSessionQueueAdapter(): {
       currentClimb: currentClimbQueueItem?.climb ?? null,
       climbSearchParams: DEFAULT_SEARCH_PARAMS,
       climbSearchResults: null,
-      suggestedClimbs: [],
+      suggestedClimbs: getPlaylistSuggestedClimbs(playlistSuggestionSource, queue),
+      playlistSuggestionSource,
       totalSearchResultCount: null,
       hasMoreResults: false,
       isFetchingClimbs: false,
@@ -587,6 +634,7 @@ function usePersistentSessionQueueAdapter(): {
     [
       queue,
       currentClimbQueueItem,
+      playlistSuggestionSource,
       parsedParams,
       isParty,
       ps.hasConnected,

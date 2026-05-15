@@ -8,6 +8,7 @@ import type { ClimbActionProps, ClimbActionResult } from '../types';
 import { useOptionalQueueActions, useOptionalQueueData } from '../../graphql-queue';
 import { themeTokens } from '@/app/theme/theme-config';
 import { buildActionResult, computeActionDisplay, ActionIconElement } from '../action-view-renderer';
+import { useOptionalPlaylistActivation } from '../playlist-activation-context';
 
 export function SetActiveAction({
   climb,
@@ -22,6 +23,7 @@ export function SetActiveAction({
   const { t } = useTranslation('climbs');
   const queueActions = useOptionalQueueActions();
   const queueData = useOptionalQueueData();
+  const playlistActivation = useOptionalPlaylistActivation();
   const { iconSize } = computeActionDisplay(viewMode, size, showLabel);
 
   const isCurrentClimb = queueData?.currentClimb?.uuid === climb.uuid;
@@ -31,9 +33,13 @@ export function SetActiveAction({
       e?.stopPropagation();
       e?.preventDefault();
 
-      if (!queueActions || isCurrentClimb) return;
+      if ((!queueActions && !playlistActivation) || isCurrentClimb) return;
 
-      void queueActions.setCurrentClimb(climb);
+      if (playlistActivation) {
+        void playlistActivation.activatePlaylistClimb(climb);
+      } else {
+        void queueActions?.setCurrentClimb(climb, { playlistSuggestionSource: null });
+      }
 
       // PostHog event name stays "Set Active Climb" for analytics continuity
       // — the time series spans the rename and we don't want to break it.
@@ -46,7 +52,7 @@ export function SetActiveAction({
 
       onComplete?.();
     },
-    [queueActions, isCurrentClimb, climb, boardDetails.layout_name, onComplete],
+    [queueActions, playlistActivation, isCurrentClimb, climb, boardDetails.layout_name, onComplete],
   );
 
   const label = isCurrentClimb ? t('actions.sendToBoard.active') : t('actions.sendToBoard.label');
@@ -64,7 +70,7 @@ export function SetActiveAction({
     showLabel,
     disabled: disabled || isCurrentClimb,
     className,
-    available: !!queueActions,
+    available: !!queueActions || !!playlistActivation,
     iconElementOverride: (
       <ActionIconElement tooltip={tooltip} onClick={handleClick} className={className}>
         <span style={{ cursor: isCurrentClimb ? 'default' : 'pointer' }}>{icon}</span>

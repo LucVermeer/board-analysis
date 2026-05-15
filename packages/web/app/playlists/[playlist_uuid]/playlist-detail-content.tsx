@@ -24,7 +24,7 @@ import {
 } from '@mui/icons-material';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { Climb } from '@/app/lib/types';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 import { executeGraphQL, createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
   type GetPlaylistQueryResponse,
@@ -62,7 +62,11 @@ import FollowButton from '@/app/components/ui/follow-button';
 import PlaylistPreviewSquare from '@/app/components/library/playlist-preview-square';
 import { recordPlaylistOpen } from '@/app/lib/recent-playlists-db';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
-import { getBoardDetailsForPlaylist, getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
+import {
+  getBoardDetailsForPlaylist,
+  getDefaultAngleForBoard,
+  getUserBoardDetails,
+} from '@/app/lib/board-config-for-playlist';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import BackButton from '@/app/components/back-button';
@@ -70,6 +74,11 @@ import { PlaylistGeneratorDrawer } from '@/app/components/playlist-generator';
 import PlaylistEditDrawer from '@/app/components/library/playlist-edit-drawer';
 import CommentSection from '@/app/components/social/comment-section';
 import MultiboardClimbList from '@/app/components/climb-list/multiboard-climb-list';
+import { PlaylistActivationProvider } from '@/app/components/climb-actions/playlist-activation-context';
+import { useOptionalQueueActions } from '@/app/components/graphql-queue';
+import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
+import { createPlaylistSuggestionSource } from '@/app/components/queue-control/playlist-suggestions';
+import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard, type BoardConfig } from '@/app/lib/find-matching-board';
 import { ssrSeedMatchesQueryKey } from '@/app/lib/graphql/ssr-query-seed';
@@ -91,6 +100,13 @@ const PLAYLIST_COLORS = [
   themeTokens.colors.accentRose,
   themeTokens.colors.amber,
 ];
+
+const PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE = 100;
+const MAX_PLAYLIST_SUGGESTION_REFRESH_PAGES = 10;
+const MAX_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE = 250;
+
+const isAbortError = (err: unknown): boolean =>
+  typeof err === 'object' && err !== null && 'name' in err && err.name === 'AbortError';
 
 type PlaylistDetailContentProps = {
   playlistUuid: string;
@@ -150,7 +166,11 @@ export default function PlaylistDetailContent({
     boardUuid: selectedBoard?.uuid ?? null,
     refreshKey: 0,
   });
+  const playlistSuggestionsRefreshAbortRef = useRef<AbortController | null>(null);
   const { token, isLoading: tokenLoading } = useWsAuthToken();
+  const queueActions = useOptionalQueueActions();
+  const activeQueueBoardInfo = useQueueBridgeBoardInfo();
+  useClearPlaylistSuggestionSourceOnUnmount(queueActions);
 
   // Fetch user's boards (with SSR initial data to avoid loading skeleton).
   // These boards are forwarded to MultiboardClimbList via the `boards` prop so
@@ -326,6 +346,152 @@ export default function PlaylistDetailContent({
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const selectedBoardDetails = useMemo(
+    () => (selectedBoard ? getUserBoardDetails(selectedBoard) : null),
+    [selectedBoard],
+  );
+
+  useEffect(() => {
+    return () => {
+      playlistSuggestionsRefreshAbortRef.current?.abort();
+    };
+  }, []);
+
+  const fetchPlaylistClimbsForBoard = useCallback(
+    async (
+      boardDetails: BoardDetails,
+      angle: number,
+      activatedClimbUuid: string,
+      signal: AbortSignal,
+    ): Promise<Climb[]> => {
+      const client = createGraphQLHttpClient(token);
+      const setIds = Array.isArray(boardDetails.set_ids)
+        ? boardDetails.set_ids.join(',')
+        : String(boardDetails.set_ids);
+      const fetchedClimbs: Climb[] = [];
+      let page = 0;
+      let hasMore = true;
+      let activatedClimbSeen = false;
+      let loadedClimbsAfterActivated = 0;
+
+      while (
+        hasMore &&
+        page < MAX_PLAYLIST_SUGGESTION_REFRESH_PAGES &&
+        loadedClimbsAfterActivated < MAX_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE &&
+        !signal.aborted
+      ) {
+        const response = await client.request<GetPlaylistClimbsQueryResponse, GetPlaylistClimbsQueryVariables>({
+          document: GET_PLAYLIST_CLIMBS,
+          variables: {
+            input: {
+              playlistId: playlistUuid,
+              boardName: boardDetails.board_name,
+              layoutId: boardDetails.layout_id,
+              sizeId: boardDetails.size_id,
+              setIds,
+              angle,
+              page,
+              pageSize: PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE,
+            },
+          },
+          signal,
+        });
+
+        const pageClimbs = response.playlistClimbs.climbs as Climb[];
+        for (const pageClimb of pageClimbs) {
+          if (activatedClimbSeen) {
+            loadedClimbsAfterActivated += 1;
+          }
+          if (pageClimb.uuid === activatedClimbUuid) {
+            activatedClimbSeen = true;
+          }
+        }
+
+        fetchedClimbs.push(...pageClimbs);
+        hasMore = response.playlistClimbs.hasMore;
+        page += 1;
+      }
+
+      return fetchedClimbs;
+    },
+    [playlistUuid, token],
+  );
+
+  const activatePlaylistClimb = useCallback(
+    async (climb: Climb): Promise<void> => {
+      if (!queueActions) return;
+
+      const activeBoardDetails = activeQueueBoardInfo.boardDetails;
+      const targetBoardDetails =
+        activeBoardDetails ??
+        selectedBoardDetails ??
+        getBoardDetailsForPlaylist(climb.boardType ?? playlist?.boardType ?? '', climb.layoutId ?? playlist?.layoutId);
+
+      if (!targetBoardDetails) {
+        await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
+        return;
+      }
+
+      const targetAngle = activeBoardDetails
+        ? activeQueueBoardInfo.angle
+        : (selectedBoard?.angle ?? climb.angle ?? getDefaultAngleForBoard(targetBoardDetails.board_name));
+
+      const initialSource = createPlaylistSuggestionSource({
+        playlistUuid,
+        activatedClimb: climb,
+        climbs: allClimbs,
+        boardDetails: targetBoardDetails,
+      });
+
+      const activeItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: initialSource });
+      if (!activeItem) return;
+
+      playlistSuggestionsRefreshAbortRef.current?.abort();
+      const abortController = new AbortController();
+      playlistSuggestionsRefreshAbortRef.current = abortController;
+
+      void (async () => {
+        try {
+          const fetchedClimbs = await fetchPlaylistClimbsForBoard(
+            targetBoardDetails,
+            targetAngle,
+            climb.uuid,
+            abortController.signal,
+          );
+          if (abortController.signal.aborted) return;
+          const refreshedSource = createPlaylistSuggestionSource({
+            playlistUuid,
+            activatedClimb: climb,
+            climbs: fetchedClimbs,
+            boardDetails: targetBoardDetails,
+          });
+          queueActions.refreshPlaylistSuggestionSource(refreshedSource);
+        } catch (err: unknown) {
+          if (isAbortError(err)) return;
+          console.error('Failed to refresh playlist suggestions:', err);
+        } finally {
+          if (playlistSuggestionsRefreshAbortRef.current === abortController) {
+            playlistSuggestionsRefreshAbortRef.current = null;
+          }
+        }
+      })();
+    },
+    [
+      queueActions,
+      activeQueueBoardInfo.boardDetails,
+      activeQueueBoardInfo.angle,
+      selectedBoardDetails,
+      playlist?.boardType,
+      playlist?.layoutId,
+      selectedBoard?.angle,
+      playlistUuid,
+      allClimbs,
+      fetchPlaylistClimbsForBoard,
+    ],
+  );
+
+  const playlistActivationValue = useMemo(() => ({ activatePlaylistClimb }), [activatePlaylistClimb]);
+
   const handleEditSuccess = useCallback((updatedPlaylist: Playlist) => {
     setPlaylist(updatedPlaylist);
   }, []);
@@ -445,6 +611,23 @@ export default function PlaylistDetailContent({
       </div>
     );
   }
+
+  const climbList = (
+    <MultiboardClimbList
+      climbs={allClimbs}
+      isFetching={isFetchingClimbs}
+      isLoading={isClimbsLoading}
+      hasMore={hasNextPage ?? false}
+      onLoadMore={handleLoadMore}
+      showBoardFilter
+      boardTypes={boardTypes}
+      selectedBoard={selectedBoard}
+      onBoardSelect={handleBoardSelect}
+      fallbackBoardTypes={[playlist.boardType]}
+      boards={myBoards}
+      boardsLoading={boardsLoading}
+    />
+  );
 
   return (
     <>
@@ -601,21 +784,10 @@ export default function PlaylistDetailContent({
         <div className={styles.climbsSection}>
           {allClimbs.length === 0 && !isFetchingClimbs && !isClimbsLoading ? (
             <EmptyState description={t('detail.empty')} />
+          ) : queueActions ? (
+            <PlaylistActivationProvider value={playlistActivationValue}>{climbList}</PlaylistActivationProvider>
           ) : (
-            <MultiboardClimbList
-              climbs={allClimbs}
-              isFetching={isFetchingClimbs}
-              isLoading={isClimbsLoading}
-              hasMore={hasNextPage ?? false}
-              onLoadMore={handleLoadMore}
-              showBoardFilter
-              boardTypes={boardTypes}
-              selectedBoard={selectedBoard}
-              onBoardSelect={handleBoardSelect}
-              fallbackBoardTypes={[playlist.boardType]}
-              boards={myBoards}
-              boardsLoading={boardsLoading}
-            />
+            climbList
           )}
         </div>
 

@@ -716,7 +716,7 @@ export default function CreateClimbForm({
         queueActions.replaceQueueItem(queueItemUuid, climb);
         return;
       }
-      const newItem = await queueActions.setCurrentClimb(climb);
+      const newItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
       if (newItem) {
         setQueueItemUuid(newItem.uuid);
       }
@@ -738,7 +738,7 @@ export default function CreateClimbForm({
     if (queueItemUuid) {
       queueActions.replaceQueueItem(queueItemUuid, climb);
     } else {
-      const newItem = await queueActions.setCurrentClimb(climb);
+      const newItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
       if (newItem) {
         setQueueItemUuid(newItem.uuid);
       }
@@ -1295,7 +1295,7 @@ export default function CreateClimbForm({
       // so subsequent saves replace the same item in place.
       setQueueItemUuid(null);
       if (queueActions) {
-        void queueActions.setCurrentClimb(climb).then((newItem) => {
+        void queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null }).then((newItem) => {
           if (newItem) setQueueItemUuid(newItem.uuid);
         });
       }
