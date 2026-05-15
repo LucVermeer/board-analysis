@@ -536,6 +536,25 @@ final class SessionWebSocketManagerTests: XCTestCase {
         XCTAssertTrue(mirrored)
     }
 
+    func testParseClimbMirroredUsesAliasedUuid() {
+        let updates: [String: Any] = [
+            "__typename": "ClimbMirrored",
+            "mirroredUuid": "q1",
+            "sequence": 30,
+            "mirrored": true
+        ]
+
+        let event = QueueMessageParser.parseClimbMirrored(updates)
+        guard case let .climbMirrored(uuid, mirrored, sequence) = event else {
+            XCTFail("Expected climbMirrored event")
+            return
+        }
+
+        XCTAssertEqual(uuid, "q1")
+        XCTAssertEqual(sequence, 30)
+        XCTAssertTrue(mirrored)
+    }
+
     // MARK: - QueueMessageParser: parseQueueUpdate (routing)
 
     func testParseQueueUpdateRoutesFullSync() {

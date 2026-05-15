@@ -20,20 +20,25 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
     private let logger = Logger(subsystem: "com.boardsesh.app", category: "BoardBlePlugin")
 
     public override func load() {
-        let manager = BoardBleManager.shared
-        manager.onScanResult = { [weak self] result in
-            self?.notifyListeners("scanResult", data: [
-                "device": [
-                    "deviceId": result.deviceId,
-                    "name": result.name ?? "",
-                ],
-                "localName": result.name ?? "",
-                "rssi": result.rssi,
-            ])
-        }
-        manager.onDisconnect = { [weak self] deviceId in
-            self?.notifyListeners("disconnected", data: ["deviceId": deviceId])
-        }
+        BoardBleManager.shared.setEventHandlers(
+            onScanResult: { [weak self] result in
+                DispatchQueue.main.async {
+                    self?.notifyListeners("scanResult", data: [
+                        "device": [
+                            "deviceId": result.deviceId,
+                            "name": result.name ?? "",
+                        ],
+                        "localName": result.name ?? "",
+                        "rssi": result.rssi,
+                    ])
+                }
+            },
+            onDisconnect: { [weak self] deviceId in
+                DispatchQueue.main.async {
+                    self?.notifyListeners("disconnected", data: ["deviceId": deviceId])
+                }
+            }
+        )
     }
 
     @objc func isAvailable(_ call: CAPPluginCall) {
@@ -43,12 +48,14 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func startScan(_ call: CAPPluginCall) {
         let services = (call.getArray("services") ?? []).compactMap { $0 as? String }
         BoardBleManager.shared.startScan(serviceUuids: services) { result in
-            switch result {
-            case .success:
-                call.resolve()
-            case .failure(let error):
-                self.logger.error("BLE scan failed: \(error.localizedDescription, privacy: .public)")
-                call.reject(error.localizedDescription)
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    call.resolve()
+                case .failure(let error):
+                    self.logger.error("BLE scan failed: \(error.localizedDescription, privacy: .public)")
+                    call.reject(error.localizedDescription)
+                }
             }
         }
     }
@@ -65,19 +72,23 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         BoardBleManager.shared.connect(deviceId: deviceId) { result in
-            switch result {
-            case .success:
-                call.resolve()
-            case .failure(let error):
-                self.logger.error("BLE connect failed: \(error.localizedDescription, privacy: .public)")
-                call.reject(error.localizedDescription)
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    call.resolve()
+                case .failure(let error):
+                    self.logger.error("BLE connect failed: \(error.localizedDescription, privacy: .public)")
+                    call.reject(error.localizedDescription)
+                }
             }
         }
     }
 
     @objc func disconnect(_ call: CAPPluginCall) {
         BoardBleManager.shared.disconnect {
-            call.resolve()
+            DispatchQueue.main.async {
+                call.resolve()
+            }
         }
     }
 
@@ -88,12 +99,14 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         BoardBleManager.shared.write(hex: value) { result in
-            switch result {
-            case .success:
-                call.resolve()
-            case .failure(let error):
-                self.logger.error("BLE write failed: \(error.localizedDescription, privacy: .public)")
-                call.reject(error.localizedDescription)
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    call.resolve()
+                case .failure(let error):
+                    self.logger.error("BLE write failed: \(error.localizedDescription, privacy: .public)")
+                    call.reject(error.localizedDescription)
+                }
             }
         }
     }

@@ -136,7 +136,7 @@ enum QueueMessageParser {
     /// Parse a ClimbMirrored event.
     static func parseClimbMirrored(_ updates: [String: Any]) -> QueueUpdateEvent? {
         let sequence = Self.parseIntValue(updates["sequence"]) ?? 0
-        let uuid = updates["uuid"] as? String
+        let uuid = updates["mirroredUuid"] as? String ?? updates["uuid"] as? String
         let mirrored = updates["mirrored"] as? Bool ?? false
         return .climbMirrored(uuid: uuid, mirrored: mirrored, sequence: sequence)
     }
@@ -408,7 +408,7 @@ final class SessionWebSocketManager {
             }
             ... on ClimbMirrored {
               sequence
-              uuid
+              mirroredUuid: uuid
               mirrored
             }
           }
