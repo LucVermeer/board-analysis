@@ -201,6 +201,19 @@ describe('registerActivityPushToken', () => {
     ).rejects.toThrow('Invalid APNs token format');
   });
 
+  it('accepts the 160-hex-char ActivityKit token shape used on iOS 17.2+', async () => {
+    // iOS 17.2+ ships 80-byte Live Activity push tokens. The previous regex
+    // capped at 128 hex chars and rejected real tokens with a confusing
+    // "invalid token format (length 160)" error — guard against re-tightening.
+    const longActivityToken = 'b'.repeat(160);
+    const result = await pushTokenMutations.registerActivityPushToken(
+      undefined,
+      { sessionId: SESSION_ID, token: longActivityToken },
+      authedCtx(),
+    );
+    expect(result).toBe(true);
+  });
+
   it('inserts when authenticated participant supplies a valid token', async () => {
     const result = await pushTokenMutations.registerActivityPushToken(
       undefined,
