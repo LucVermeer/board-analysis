@@ -291,7 +291,6 @@ export const pushTokenMutations = {
     }
 
     incrementApnsMetric('tokensRegistered');
-    incrementApnsMetric('tokensRegistered');
     logger.info(`[APNs] Registered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
 
     // F3: fire a single, debounce-bypassing APNs push to the newly registered

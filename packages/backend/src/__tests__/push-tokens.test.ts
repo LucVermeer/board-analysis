@@ -227,6 +227,8 @@ describe('registerActivityPushToken', () => {
       expect.objectContaining({ token: VALID_TOKEN, sessionId: SESSION_ID }),
     );
     expect(insertOnConflictDoUpdate).toHaveBeenCalled();
+    expect(incrementApnsMetricMock).toHaveBeenCalledTimes(1);
+    expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensRegistered');
     expect(loggerInfoSpy).toHaveBeenCalledWith(
       `[APNs] Registered Live Activity token for session ${SESSION_ID}: ${VALID_TOKEN.slice(0, 8)}...`,
     );
