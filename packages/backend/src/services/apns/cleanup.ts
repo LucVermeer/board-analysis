@@ -15,6 +15,7 @@ import { lt } from 'drizzle-orm';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { db } from '../../db/client';
 import { incrementApnsMetric, isApnsConfigured } from './index';
+import { logger } from '../../utils/logger';
 
 const STALE_TOKEN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -31,19 +32,19 @@ async function runCleanupTick(): Promise<void> {
       .returning({ token: activityPushTokens.token });
     if (result.length > 0) {
       incrementApnsMetric('tokensSweptStale', result.length);
-      console.info(
+      logger.info(
         `[APNs Cleanup] Removed ${String(result.length)} push token(s) untouched since ${cutoff.toISOString()}`,
       );
     }
   } catch (error) {
-    console.error('[APNs Cleanup] Failed to remove stale tokens:', error);
+    logger.error('[APNs Cleanup] Failed to remove stale tokens:', error);
   }
 }
 
 /** Start the periodic stale-token cleanup loop. */
 export function startApnsStaleTokenCleanup(): void {
   if (cleanupHandle !== null) return;
-  console.info(
+  logger.info(
     `[APNs Cleanup] Started (interval=${String(CLEANUP_INTERVAL_MS)}ms, ` +
       `staleAfter=${String(STALE_TOKEN_AGE_MS / (24 * 60 * 60 * 1000))}d)`,
   );
@@ -53,14 +54,14 @@ export function startApnsStaleTokenCleanup(): void {
   // process boot.
   const initialDelay = setTimeout(() => {
     runCleanupTick().catch((error) => {
-      console.error('[APNs Cleanup] Initial tick failed:', error);
+      logger.error('[APNs Cleanup] Initial tick failed:', error);
     });
   }, 60 * 1000);
   if (typeof initialDelay.unref === 'function') initialDelay.unref();
 
   cleanupHandle = setInterval(() => {
     runCleanupTick().catch((error) => {
-      console.error('[APNs Cleanup] Tick failed:', error);
+      logger.error('[APNs Cleanup] Tick failed:', error);
     });
   }, CLEANUP_INTERVAL_MS);
 
@@ -71,7 +72,7 @@ export function stopApnsStaleTokenCleanup(): void {
   if (cleanupHandle === null) return;
   clearInterval(cleanupHandle);
   cleanupHandle = null;
-  console.info('[APNs Cleanup] Stopped');
+  logger.info('[APNs Cleanup] Stopped');
 }
 
 /** Test-only utility. */

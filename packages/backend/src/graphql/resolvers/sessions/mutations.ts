@@ -15,6 +15,7 @@ import {
   ClimbQueueItemSchema,
   QueueArraySchema,
 } from '../../../validation/schemas';
+import { logger } from '../../../utils/logger';
 import type { CreateSessionInput } from '../shared/types';
 import { db } from '../../../db/client';
 import { esp32Controllers, userBoards } from '@boardsesh/db/schema/app';
@@ -36,10 +37,10 @@ async function authorizeUserControllersForSession(userId: string, sessionId: str
       .set({ authorizedSessionId: sessionId })
       .where(eq(esp32Controllers.userId, userId));
 
-    console.info(`[Session] Auto-authorized user ${userId}'s controllers for session ${sessionId}`);
+    logger.info(`[Session] Auto-authorized user ${userId}'s controllers for session ${sessionId}`);
   } catch (error) {
     // Log but don't fail the join - controller auth is a bonus feature
-    console.error('[Session] Failed to auto-authorize controllers:', error);
+    logger.error('[Session] Failed to auto-authorize controllers:', error);
   }
 }
 
@@ -78,7 +79,7 @@ export const sessionMutations = {
     ctx: ConnectionContext,
   ) => {
     if (DEBUG)
-      console.info(
+      logger.info(
         `[joinSession] START - connectionId: ${ctx.connectionId}, sessionId: ${sessionId}, username: ${username}, sessionName: ${sessionName}, initialQueueLength: ${initialQueue?.length || 0}`,
       );
 
@@ -106,7 +107,7 @@ export const sessionMutations = {
       participantId || undefined,
     );
     if (DEBUG)
-      console.info(
+      logger.info(
         `[joinSession] roomManager.joinSession completed - clientId: ${result.clientId}, isLeader: ${result.isLeader}`,
       );
 
@@ -117,9 +118,9 @@ export const sessionMutations = {
     // `clientId: connectionId`), and writing it to `ctx.userId` would
     // clobber the real UUID for every downstream resolver on this connection
     // (ESP32 auto-authorize, tick inserts, climb ownership, etc.).
-    if (DEBUG) console.info(`[joinSession] Before updateContext - ctx.sessionId: ${ctx.sessionId}`);
+    if (DEBUG) logger.info(`[joinSession] Before updateContext - ctx.sessionId: ${ctx.sessionId}`);
     updateContext(ctx.connectionId, { sessionId, participantId: result.participantId });
-    if (DEBUG) console.info(`[joinSession] After updateContext - ctx.sessionId: ${ctx.sessionId}`);
+    if (DEBUG) logger.info(`[joinSession] After updateContext - ctx.sessionId: ${ctx.sessionId}`);
 
     // Auto-authorize user's ESP32 controllers for this session (if authenticated)
     if (ctx.isAuthenticated && ctx.userId) {
@@ -128,7 +129,7 @@ export const sessionMutations = {
       // this point (ensureSessionRecordExists ran inside roomManager.joinSession).
       const boardTypeFromPath = extractBoardType(boardPath);
       adoptRecentTicksForSession(ctx.userId, sessionId, boardTypeFromPath).catch((err) => {
-        console.error(`[joinSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
+        logger.error(`[joinSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
       });
     }
 
@@ -177,7 +178,7 @@ export const sessionMutations = {
    * Optionally creates a discoverable session with GPS coordinates
    */
   createSession: async (_: unknown, { input }: { input: CreateSessionInput }, ctx: ConnectionContext) => {
-    if (DEBUG) console.info(`[createSession] START - connectionId: ${ctx.connectionId}, boardPath: ${input.boardPath}`);
+    if (DEBUG) logger.info(`[createSession] START - connectionId: ${ctx.connectionId}, boardPath: ${input.boardPath}`);
 
     await applyRateLimit(ctx, 5); // Limit session creation to prevent abuse
 
@@ -186,7 +187,7 @@ export const sessionMutations = {
 
     // Generate a unique session ID
     const sessionId = uuidv4();
-    if (DEBUG) console.info(`[createSession] Generated sessionId: ${sessionId}`);
+    if (DEBUG) logger.info(`[createSession] Generated sessionId: ${sessionId}`);
 
     if (input.discoverable) {
       // Discoverable sessions require authentication (they write to DB with userId)
@@ -252,7 +253,7 @@ export const sessionMutations = {
         input.discoverable ? undefined : input.name,
       );
       if (DEBUG)
-        console.info(`[createSession] Joined session - clientId: ${result.clientId}, isLeader: ${result.isLeader}`);
+        logger.info(`[createSession] Joined session - clientId: ${result.clientId}, isLeader: ${result.isLeader}`);
 
       updateContext(ctx.connectionId, { sessionId, participantId: result.participantId });
 
@@ -261,7 +262,7 @@ export const sessionMutations = {
       if (ctx.isAuthenticated && ctx.userId) {
         const boardTypeFromPath = extractBoardType(input.boardPath);
         adoptRecentTicksForSession(ctx.userId, sessionId, boardTypeFromPath).catch((err) => {
-          console.error(`[createSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
+          logger.error(`[createSession] Failed to adopt recent ticks for session ${sessionId}:`, err);
         });
       }
 
@@ -291,7 +292,7 @@ export const sessionMutations = {
     // via WebSocket (avoids double invocation for HTTP + discoverable sessions).
 
     // HTTP path: return session metadata only; client joins via WebSocket later
-    if (DEBUG) console.info(`[createSession] HTTP request - returning session metadata without joining`);
+    if (DEBUG) logger.info(`[createSession] HTTP request - returning session metadata without joining`);
 
     return {
       id: sessionId,
@@ -406,7 +407,7 @@ export const sessionMutations = {
       // creator path above always succeeds regardless.
       const isLeader = leaderConnectionId !== null && leaderConnectionId === ctx.connectionId;
       if (!isCreator && !isLeader) {
-        console.warn(
+        logger.warn(
           `[endSession] authorization denied for session ${sessionId.slice(0, 8)}: connectionId=${ctx.connectionId.slice(0, 8)}, participantId=${ctx.participantId?.slice(0, 8) ?? 'none'}, userId=${ctx.userId?.slice(0, 8) ?? 'none'}, isAuthenticated=${ctx.isAuthenticated}, leaderConnectionId=${leaderConnectionId?.slice(0, 8) ?? 'none'}`,
         );
         throw new Error('Only the session creator or current leader can end this session');
@@ -427,7 +428,7 @@ export const sessionMutations = {
     // this, other participants' lock-screen tiles linger with stale data
     // until ActivityKit's stale date elapses.
     endLiveActivity(sessionId).catch((err) => {
-      console.error(`[APNs] endLiveActivity failed for session ${sessionId}:`, err);
+      logger.error(`[APNs] endLiveActivity failed for session ${sessionId}:`, err);
     });
 
     // Generate and return summary

@@ -6,6 +6,7 @@ import type { DistributedStateManager } from '../distributed-state';
 import type { ConnectedClient, LocalSessionParticipant } from './types';
 import { restoreSessionWithLock } from './session-restoration';
 import type { WriteScheduler } from './write-scheduler';
+import { logger } from '../../utils/logger';
 
 /**
  * Register a new client connection.
@@ -36,7 +37,7 @@ export async function registerClient(
     } catch (err) {
       clients.delete(connectionId);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`[RoomManager] Failed to register connection in distributed state: ${errorMessage}`);
+      logger.error(`[RoomManager] Failed to register connection in distributed state: ${errorMessage}`);
       throw new Error(`Failed to register client: distributed state error`);
     }
   }
@@ -135,7 +136,7 @@ export async function joinSession(
   if (graceTimer) {
     clearTimeout(graceTimer);
     sessionGraceTimers.delete(sessionId);
-    console.info(`[RoomManager] Cancelled grace timer for session ${sessionId} (client reconnecting)`);
+    logger.info(`[RoomManager] Cancelled grace timer for session ${sessionId} (client reconnecting)`);
   }
 
   // Create or get session in memory - with lazy restore
@@ -143,7 +144,7 @@ export async function joinSession(
     if (redisStore) {
       isNewSession = await restoreSessionWithLock(sessionId, sessionsMap, redisStore, getSessionById);
       if (isNewSession) {
-        console.info(
+        logger.info(
           `[RoomManager] Creating new session ${sessionId} with ${initialQueue?.length || 0} initial queue items`,
         );
       }
@@ -152,7 +153,7 @@ export async function joinSession(
       const pgSession = await getSessionById(sessionId);
       if (!pgSession || pgSession.status === 'ended') {
         isNewSession = true;
-        console.info(
+        logger.info(
           `[RoomManager] Creating new session ${sessionId} with ${initialQueue?.length || 0} initial queue items`,
         );
       }
@@ -210,13 +211,13 @@ export async function joinSession(
     try {
       await db.insert(boardSessionParticipants).values({ sessionId, userId: client.userId }).onConflictDoNothing();
     } catch (err) {
-      console.error(`[joinSession] Failed to record participant for ${sessionId}:`, err);
+      logger.error(`[joinSession] Failed to record participant for ${sessionId}:`, err);
     }
   }
 
   // Initialize queue state for new sessions with provided initial queue
   if (isNewSession && initialQueue && initialQueue.length > 0) {
-    console.info(`[RoomManager] Initializing queue for new session ${sessionId} with ${initialQueue.length} items`);
+    logger.info(`[RoomManager] Initializing queue for new session ${sessionId} with ${initialQueue.length} items`);
     await updateQueueStateImmediate(sessionId, initialQueue, initialCurrentClimb || null, 0);
   }
 
@@ -292,7 +293,7 @@ export async function leaveSession(
       const currentClients = sessionsMap.get(sessionId);
       if (currentClients && currentClients.size === 0) {
         sessionsMap.delete(sessionId);
-        console.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
+        logger.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
       }
       sessionGraceTimers.delete(sessionId);
     }, SESSION_GRACE_PERIOD_MS);
@@ -409,7 +410,7 @@ export async function leaveSession(
       } catch (error) {
         // If the distributed check fails, default to the legacy behaviour
         // (mark inactive) rather than risk a leaked session.
-        console.error(`[RoomManager] Failed to query distributed members for ${sessionId} during leaveSession:`, error);
+        logger.error(`[RoomManager] Failed to query distributed members for ${sessionId} during leaveSession:`, error);
       }
     }
 
@@ -421,7 +422,7 @@ export async function leaveSession(
         if (!distributedState) {
           await redisStore.saveUsers(sessionId, []);
         }
-        console.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+        logger.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
       }
     }
 
@@ -489,7 +490,7 @@ export async function disconnectClient(
       if (currentClients && currentClients.size === 0) {
         sessionsMap.delete(sessionId);
         writeScheduler.cancelPendingWrites(sessionId);
-        console.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
+        logger.info(`[RoomManager] Session ${sessionId} removed from memory after grace period`);
       }
       sessionGraceTimers.delete(sessionId);
     }, SESSION_GRACE_PERIOD_MS);
@@ -516,7 +517,7 @@ export async function disconnectClient(
       } catch (error) {
         // If Redis cannot answer, keep the legacy conservative behaviour:
         // mark inactive rather than leave hot session state indefinitely.
-        console.error(
+        logger.error(
           `[RoomManager] Failed to query distributed member count for ${sessionId} during disconnectClient:`,
           error,
         );
@@ -525,7 +526,7 @@ export async function disconnectClient(
 
     if (globallyNoLiveConnections && redisStore) {
       await redisStore.markInactive(sessionId);
-      console.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
+      logger.info(`[RoomManager] Session ${sessionId} marked inactive - grace period started (60s)`);
     }
 
     const pending = pendingJoinPersists.get(sessionId);
@@ -615,7 +616,7 @@ export async function disconnectClient(
         try {
           users = await distributedState.getSessionMembers(sessionId);
         } catch (err) {
-          console.error(
+          logger.error(
             `[RoomManager] Grace timer failed to query session ${sessionId.slice(0, 8)} members; keeping participant ${participantId.slice(0, 8)} alive:`,
             err,
           );
@@ -644,7 +645,7 @@ export async function disconnectClient(
             // Same conservative behaviour as the getSessionMembers failure
             // above: if Redis can't answer, don't expel; the next reconnect
             // will run the grace logic again.
-            console.error(
+            logger.error(
               `[RoomManager] Grace timer failed to count live connections for participant ${participantId.slice(0, 8)}; keeping them alive:`,
               err,
             );
@@ -656,7 +657,7 @@ export async function disconnectClient(
           // Fall through to eviction: RECONNECTING with no live connections is a ghost.
         }
         await distributedState.removeParticipant(sessionId, participantId).catch((err) => {
-          console.error(`[RoomManager] Failed to expire participant ${participantId.slice(0, 8)}:`, err);
+          logger.error(`[RoomManager] Failed to expire participant ${participantId.slice(0, 8)}:`, err);
         });
       }
 
@@ -715,7 +716,7 @@ async function resolveLeaderParticipantId(
         return distributedLeader.participantId;
       }
     } catch (error) {
-      console.error(`[RoomManager] Failed to resolve leader participant for ${leaderConnectionId.slice(0, 8)}:`, error);
+      logger.error(`[RoomManager] Failed to resolve leader participant for ${leaderConnectionId.slice(0, 8)}:`, error);
     }
   }
 
@@ -737,11 +738,11 @@ export async function removeClient(
     try {
       const result = await distributedState.removeConnection(connectionId);
       if (result.newLeaderId) {
-        console.info(`[RoomManager] New leader ${result.newLeaderId.slice(0, 8)} elected after client removal`);
+        logger.info(`[RoomManager] New leader ${result.newLeaderId.slice(0, 8)} elected after client removal`);
       }
     } catch (err) {
       distributedStateCleanedUp = false;
-      console.error(
+      logger.error(
         `[RoomManager] Failed to remove connection ${connectionId.slice(0, 8)} from distributed state. ` +
           `Redis data may remain until TTL expires. Error: ${String(err)}`,
       );

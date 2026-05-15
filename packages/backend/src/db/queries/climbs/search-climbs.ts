@@ -5,6 +5,7 @@ import {
   type ClimbSearchParams,
 } from '@boardsesh/db/queries';
 import type { Climb, ClimbSearchResult } from '@boardsesh/shared-schema';
+import { logger } from '../../../utils/logger';
 
 // Re-export shared types for backward compatibility
 export type { ClimbSearchParams, BoardRouteParams as ParsedBoardRouteParameters };
@@ -29,7 +30,7 @@ export const searchClimbs = async (
       totalCount: 0, // Resolved lazily by the totalCount field resolver
     };
   } catch (error) {
-    console.error('Error in searchClimbs:', error);
+    logger.error('Error in searchClimbs:', error);
     throw error;
   }
 };

@@ -13,6 +13,7 @@ import {
   STATIC_THUMBNAIL_PREFIX,
 } from '../../../lib/beta-link-thumbnails';
 import { redisClientManager } from '../../../redis/client';
+import { logger } from '../../../utils/logger';
 
 type BetaLinkResult = {
   climbUuid: string;
@@ -142,7 +143,7 @@ async function persistEnriched(row: Row, persistedThumbnail: string | null, newU
         ),
       );
   } catch (err) {
-    console.error('[BetaLinks] Failed to persist enriched metadata:', err);
+    logger.error('[BetaLinks] Failed to persist enriched metadata:', err);
   }
 }
 
@@ -329,7 +330,7 @@ async function getCachedRecentBetaLinks(): Promise<CachedRecentBetaLinkRow[]> {
         return JSON.parse(cached) as CachedRecentBetaLinkRow[];
       }
     } catch (err) {
-      console.error('[RecentBetaLinks] Redis read failed:', err);
+      logger.error('[RecentBetaLinks] Redis read failed:', err);
     }
   }
 
@@ -340,7 +341,7 @@ async function getCachedRecentBetaLinks(): Promise<CachedRecentBetaLinkRow[]> {
       const { publisher } = redisClientManager.getClients();
       await publisher.set(RECENT_BETA_LINKS_REDIS_KEY, JSON.stringify(rows), 'EX', RECENT_BETA_LINKS_REDIS_TTL_SECONDS);
     } catch (err) {
-      console.error('[RecentBetaLinks] Redis write failed:', err);
+      logger.error('[RecentBetaLinks] Redis write failed:', err);
     }
   }
   return rows;
@@ -368,22 +369,22 @@ export async function warmRecentBetaLinksCache(): Promise<void> {
       'NX',
     );
     if (!lockAcquired) {
-      console.info('[RecentBetaLinks] Another node is refreshing the cache, skipping');
+      logger.info('[RecentBetaLinks] Another node is refreshing the cache, skipping');
       return;
     }
     // Winning node: delete stale cache so getCachedRecentBetaLinks() runs the SQL query
     await publisher.del(RECENT_BETA_LINKS_REDIS_KEY);
   } catch (err) {
-    console.error('[RecentBetaLinks] Redis lock failed:', err);
+    logger.error('[RecentBetaLinks] Redis lock failed:', err);
     return;
   }
 
-  console.info('[RecentBetaLinks] Refreshing cache...');
+  logger.info('[RecentBetaLinks] Refreshing cache...');
   try {
     const rows = await getCachedRecentBetaLinks();
-    console.info(`[RecentBetaLinks] Cache warmed with ${rows.length} rows`);
+    logger.info(`[RecentBetaLinks] Cache warmed with ${rows.length} rows`);
   } catch (err) {
-    console.error('[RecentBetaLinks] Cache warm-up failed:', err);
+    logger.error('[RecentBetaLinks] Cache warm-up failed:', err);
   }
 }
 
@@ -398,7 +399,7 @@ export async function invalidateRecentBetaLinksCache(): Promise<void> {
     const { publisher } = redisClientManager.getClients();
     await publisher.del(RECENT_BETA_LINKS_REDIS_KEY);
   } catch (err) {
-    console.error('[RecentBetaLinks] Redis invalidation failed:', err);
+    logger.error('[RecentBetaLinks] Redis invalidation failed:', err);
   }
 }
 

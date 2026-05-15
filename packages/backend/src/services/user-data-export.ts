@@ -19,6 +19,7 @@ import {
   getUserDataExportS3Key,
   type AuroraJsonExport,
 } from './user-data-export-format';
+import { logger } from '../utils/logger';
 
 export type UserDataExportStatus = {
   boardType: AuroraBoardName;
@@ -294,7 +295,7 @@ async function generateAndStoreUserDataExport(job: ExportJob, downloadUrl: strin
       error: undefined,
     });
   } catch (error) {
-    console.error('[User Data Export] Export generation failed:', error);
+    logger.error('[User Data Export] Export generation failed:', error);
     storeExportJob({
       ...job,
       status: 'failed',

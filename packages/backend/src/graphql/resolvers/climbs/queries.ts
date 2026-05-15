@@ -6,6 +6,7 @@ import {
   SUPPORTED_BOARDS,
   USER_SPECIFIC_SEARCH_PARAMS,
 } from '@boardsesh/shared-schema';
+import { logger } from '../../../utils/logger';
 import {
   type ClimbSearchParams,
   type ParsedBoardRouteParameters,
@@ -96,7 +97,7 @@ export const climbQueries = {
     };
 
     if (DEBUG) {
-      console.info(
+      logger.info(
         '[searchClimbs] onlyDrafts:',
         input.onlyDrafts,
         'userId:',
@@ -172,7 +173,7 @@ export const climbQueries = {
     if (angle < 0 || angle > 90) throw new Error('Invalid angle: must be between 0 and 90');
     validateInput(ExternalUUIDSchema, climbUuid, 'climbUuid');
 
-    if (DEBUG) console.info('[climb] Fetching:', { boardName, layoutId, sizeId, setIds, angle, climbUuid });
+    if (DEBUG) logger.info('[climb] Fetching:', { boardName, layoutId, sizeId, setIds, angle, climbUuid });
 
     const climb = await getClimbByUuid({
       board_name: boardName,

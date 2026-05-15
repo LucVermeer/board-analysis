@@ -9,6 +9,7 @@ import type {
   SendDeviceLogsInput,
   SendDeviceLogsResponse,
 } from '@boardsesh/shared-schema';
+import { logger } from '../../../utils/logger';
 import { findClimbIndex } from './navigation-helpers';
 import { db } from '../../../db/client';
 import { esp32Controllers } from '@boardsesh/db/schema/app';
@@ -134,7 +135,7 @@ export const controllerMutations = {
 
     // Require either frames or positions
     if (!frames && (!positions || positions.length === 0)) {
-      console.info(`[Controller] No frames or positions provided for session ${sessionId}`);
+      logger.info(`[Controller] No frames or positions provided for session ${sessionId}`);
       return {
         matched: false,
         climbUuid: null,
@@ -146,7 +147,7 @@ export const controllerMutations = {
     const currentState = await roomManager.getQueueState(sessionId);
     const angle = currentState.currentClimbQueueItem?.climb?.angle ?? 40;
 
-    console.info(
+    logger.info(
       `[Controller] Matching climb for session ${sessionId} at angle ${angle}, frames: ${frames ? 'provided' : 'not provided'}, positions: ${positions?.length ?? 0}`,
     );
 
@@ -165,11 +166,11 @@ export const controllerMutations = {
         controller.layoutId,
         controller.sizeId,
       );
-      console.info(`[Controller] Built frames string from ${positions.length} positions: ${framesString}`);
+      logger.info(`[Controller] Built frames string from ${positions.length} positions: ${framesString}`);
     }
 
     if (!framesString) {
-      console.info(`[Controller] Could not build frames string for session ${sessionId}`);
+      logger.info(`[Controller] Could not build frames string for session ${sessionId}`);
       return {
         matched: false,
         climbUuid: null,
@@ -181,12 +182,12 @@ export const controllerMutations = {
     const match = await matchClimbByFrames(controller.boardName as BoardName, controller.layoutId, framesString, angle);
 
     if (!match) {
-      console.info(`[Controller] No climb found matching frames for session ${sessionId}`);
+      logger.info(`[Controller] No climb found matching frames for session ${sessionId}`);
 
       // Publish event so ESP32 display shows "Unknown Climb" with ability to navigate back
       // Use controllerMac as clientId so ESP32 can compare with its own MAC address
       const clientIdForEvent = ctx.controllerMac || controllerId;
-      console.info(`[Controller] Publishing CurrentClimbChanged (no match) with clientId: ${clientIdForEvent}`);
+      logger.info(`[Controller] Publishing CurrentClimbChanged (no match) with clientId: ${clientIdForEvent}`);
       pubsub.publishQueueEvent(sessionId, {
         __typename: 'CurrentClimbChanged',
         sequence: currentState.sequence,
@@ -213,7 +214,7 @@ export const controllerMutations = {
     });
 
     if (!climb) {
-      console.info(`[Controller] Climb data not found for matched UUID: ${match.uuid}`);
+      logger.info(`[Controller] Climb data not found for matched UUID: ${match.uuid}`);
       return {
         matched: false,
         climbUuid: null,
@@ -258,7 +259,7 @@ export const controllerMutations = {
     // Publish CurrentClimbChanged event with controllerMac as clientId
     // ESP32 compares this with its own MAC address to decide whether to disconnect BLE client
     const matchClientId = ctx.controllerMac || controllerId;
-    console.info(`[Controller] Publishing CurrentClimbChanged with clientId: ${matchClientId}`);
+    logger.info(`[Controller] Publishing CurrentClimbChanged with clientId: ${matchClientId}`);
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'CurrentClimbChanged',
       sequence,
@@ -268,7 +269,7 @@ export const controllerMutations = {
       correlationId: null,
     });
 
-    console.info(`[Controller] Matched climb: ${match.name} (${match.uuid})`);
+    logger.info(`[Controller] Matched climb: ${match.name} (${match.uuid})`);
     return {
       matched: true,
       climbUuid: match.uuid,
@@ -333,7 +334,7 @@ export const controllerMutations = {
       .set({ authorizedSessionId: sessionId })
       .where(eq(esp32Controllers.id, controllerId));
 
-    console.info(`[Controller] Controller ${controllerId} authorized for session ${sessionId}`);
+    logger.info(`[Controller] Controller ${controllerId} authorized for session ${sessionId}`);
     return true;
   },
 
@@ -367,7 +368,7 @@ export const controllerMutations = {
     const { queue, currentClimbQueueItem } = currentState;
 
     if (queue.length === 0) {
-      console.info(`[Controller] Navigate: queue is empty`);
+      logger.info(`[Controller] Navigate: queue is empty`);
       return null;
     }
 
@@ -378,11 +379,11 @@ export const controllerMutations = {
     if (queueItemUuid) {
       targetIndex = queue.findIndex((item) => item.uuid === queueItemUuid);
       if (targetIndex === -1) {
-        console.info(`[Controller] Navigate: queueItemUuid ${queueItemUuid} not found in queue`);
+        logger.info(`[Controller] Navigate: queueItemUuid ${queueItemUuid} not found in queue`);
         // Fall back to direction-based navigation
       } else {
         newCurrentClimb = queue[targetIndex];
-        console.info(
+        logger.info(
           `[Controller] Navigate: direct to queueItemUuid ${queueItemUuid}, index ${targetIndex}, climb: ${newCurrentClimb.climb.name}`,
         );
 
@@ -412,7 +413,7 @@ export const controllerMutations = {
     const referenceUuid = currentClimbUuid || currentClimbQueueItem?.uuid;
     const currentIndex = findClimbIndex(queue, referenceUuid);
 
-    console.info(
+    logger.info(
       `[Controller] Navigate ${direction}: using referenceUuid=${referenceUuid} (from ESP32: ${!!currentClimbUuid}), found at index ${currentIndex}`,
     );
 
@@ -424,7 +425,7 @@ export const controllerMutations = {
         targetIndex = 0;
       } else if (currentIndex >= queue.length - 1) {
         // Already at end, stay there
-        console.info(`[Controller] Navigate next: already at end of queue`);
+        logger.info(`[Controller] Navigate next: already at end of queue`);
         return queue[currentIndex]; // Return the climb at current index
       } else {
         targetIndex = currentIndex + 1;
@@ -436,7 +437,7 @@ export const controllerMutations = {
         targetIndex = queue.length - 1;
       } else if (currentIndex <= 0) {
         // Already at beginning, stay there
-        console.info(`[Controller] Navigate previous: already at start of queue`);
+        logger.info(`[Controller] Navigate previous: already at start of queue`);
         return queue[currentIndex]; // Return the climb at current index
       } else {
         targetIndex = currentIndex - 1;
@@ -446,10 +447,10 @@ export const controllerMutations = {
     // Get the new current climb
     newCurrentClimb = queue[targetIndex];
 
-    console.info(
+    logger.info(
       `[Controller] Navigate ${direction}: index ${currentIndex} -> ${targetIndex}, climb: ${newCurrentClimb.climb.name} (queueItem uuid: ${newCurrentClimb.uuid})`,
     );
-    console.info(`[Controller] Queue has ${queue.length} items, updating current to index ${targetIndex}`);
+    logger.info(`[Controller] Queue has ${queue.length} items, updating current to index ${targetIndex}`);
 
     // Update queue state (keep the same queue, just change current climb)
     const { sequence, stateHash } = await roomManager.updateQueueState(sessionId, queue, newCurrentClimb);

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { execFileSync } from 'node:child_process';
+import { logger } from '../utils/logger';
 
 // Vercel preview deployment pattern: https://boardsesh-{hash}-marcodejonghs-projects.vercel.app
 const VERCEL_PREVIEW_REGEX = /^https:\/\/boardsesh-[a-z0-9]+-marcodejonghs-projects\.vercel\.app$/;
@@ -121,10 +122,10 @@ export function initCors(boardseshUrl: string): void {
       // servers on auto-incremented ports (3005, 3010, …) work without env tweaks.
       const escaped = tailscale.hostname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       devTailscaleOriginRegex = new RegExp(`^https?:\\/\\/${escaped}(?::\\d+)?$`);
-      console.info(`[CORS] Added Tailscale dev origins for ${tailscale.hostname} (${tailscale.reason})`);
+      logger.info(`[CORS] Added Tailscale dev origins for ${tailscale.hostname} (${tailscale.reason})`);
     } else {
       devTailscaleOriginRegex = null;
-      console.info(`[CORS] Skipping Tailscale dev origins: ${tailscale.reason}`);
+      logger.info(`[CORS] Skipping Tailscale dev origins: ${tailscale.reason}`);
     }
   } else {
     devTailscaleOriginRegex = null;

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { redisClientManager } from '../redis/client';
 import type { ClimbSearchParams, ParsedBoardRouteParameters } from '../db/queries/climbs/index';
+import { logger } from '../utils/logger';
 
 /** Default TTL for cached search results: 24 hours. */
 export const DEFAULT_SEARCH_CACHE_TTL = 86400;
@@ -85,7 +86,7 @@ export class SearchCacheService {
       }
       return JSON.parse(raw) as T;
     } catch (error) {
-      console.error('[SearchCache] Error reading cache key', key, error);
+      logger.error('[SearchCache] Error reading cache key', key, error);
       return null;
     }
   }
@@ -103,10 +104,10 @@ export class SearchCacheService {
     try {
       const { publisher } = redisClientManager.getClients();
       publisher.set(key, JSON.stringify(data), 'EX', ttlSeconds).catch((error: unknown) => {
-        console.error('[SearchCache] Error writing cache key', key, error);
+        logger.error('[SearchCache] Error writing cache key', key, error);
       });
     } catch (error) {
-      console.error('[SearchCache] Error initiating cache write for key', key, error);
+      logger.error('[SearchCache] Error initiating cache write for key', key, error);
     }
   }
 }

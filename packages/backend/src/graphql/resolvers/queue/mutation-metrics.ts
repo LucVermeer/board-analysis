@@ -1,3 +1,4 @@
+import { logger } from '../../../utils/logger';
 const SLOW_MUTATION_THRESHOLD_MS = 200;
 
 export function logMutationMetrics(
@@ -17,8 +18,8 @@ export function logMutationMetrics(
   };
 
   if (rounded > SLOW_MUTATION_THRESHOLD_MS) {
-    console.warn(`[MutationMetrics] SLOW ${operation}: ${rounded}ms`, JSON.stringify(payload));
+    logger.warn(`[MutationMetrics] SLOW ${operation}: ${rounded}ms`, JSON.stringify(payload));
   } else if (process.env.NODE_ENV === 'development') {
-    console.info(`[MutationMetrics] ${operation}: ${rounded}ms`, JSON.stringify(payload));
+    logger.info(`[MutationMetrics] ${operation}: ${rounded}ms`, JSON.stringify(payload));
   }
 }

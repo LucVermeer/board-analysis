@@ -1,3 +1,4 @@
+import { logger } from './logger';
 /**
  * Error handling utilities for preventing information disclosure.
  */
@@ -16,7 +17,7 @@ export async function wrapDatabaseOperation<T>(operation: () => Promise<T>, cont
     return await operation();
   } catch (error) {
     // Log the full error internally for debugging
-    console.error(`[${context}] Database operation failed:`, error);
+    logger.error(`[${context}] Database operation failed:`, error);
 
     // Check for specific error types we want to handle specially
     if (error instanceof Error) {
@@ -76,7 +77,7 @@ export function logSecurityEvent(event: {
   };
 
   // Log to console in structured format
-  console.info('[SECURITY]', JSON.stringify(logEntry));
+  logger.info('[SECURITY]', JSON.stringify(logEntry));
 
   // In production, this could be sent to a security monitoring service
 }

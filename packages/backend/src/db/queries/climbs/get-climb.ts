@@ -3,6 +3,7 @@ import { db } from '../../client';
 import { UNIFIED_TABLES, type BoardName } from '../util/table-select';
 import { getClimbStars, getGradeLabel } from '@boardsesh/db/queries';
 import type { Climb } from '@boardsesh/shared-schema';
+import { logger } from '../../../utils/logger';
 
 type GetClimbParams = {
   board_name: BoardName;
@@ -77,7 +78,7 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
 
     return climb;
   } catch (error) {
-    console.error('Error in getClimbByUuid:', error);
+    logger.error('Error in getClimbByUuid:', error);
     throw error;
   }
 };

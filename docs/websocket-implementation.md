@@ -977,7 +977,7 @@ sequenceDiagram
 - 30 second cooldown between corruption-triggered resyncs
 - Prevents infinite loop if server keeps returning corrupted data
 - During cooldown: filter corrupted items locally instead of resyncing
-- All corruption events logged at `console.error` level for Sentry visibility
+- All corruption events logged at `logger.error` level (see [Backend Logging](./logging.md)) for Sentry visibility
 
 **Implementation:**
 

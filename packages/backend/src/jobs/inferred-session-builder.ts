@@ -3,6 +3,7 @@ import { db } from '../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { sql, eq, and, isNull, desc, inArray, gte } from 'drizzle-orm';
 import { recalculateSessionStats } from '../graphql/resolvers/social/session-stats';
+import { logger } from '../utils/logger';
 
 // Namespace UUID for generating deterministic inferred session IDs
 const INFERRED_SESSION_NAMESPACE = '6ba7b812-9dad-11d1-80b4-00c04fd430c8';
@@ -451,7 +452,7 @@ export async function adoptRecentTicksForSession(
       }
     }
 
-    console.info(`[adoptRecentTicks] Adopted ${tickUuids.length} tick(s) into session ${sessionId} for user ${userId}`);
+    logger.info(`[adoptRecentTicks] Adopted ${tickUuids.length} tick(s) into session ${sessionId} for user ${userId}`);
 
     return tickUuids.length;
   });

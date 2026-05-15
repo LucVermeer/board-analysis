@@ -4,6 +4,7 @@ import { sessions, sessionQueues } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import type { DistributedStateManager } from '../distributed-state';
 import { isForeignKeyViolation, type PendingWrite } from './types';
+import { logger } from '../../utils/logger';
 
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY = 1000; // 1 second
@@ -66,7 +67,7 @@ export class WriteScheduler {
     // Refresh session membership TTL on activity to prevent expiry during long sessions
     if (distributedState) {
       distributedState.refreshSessionMembership(sessionId).catch((err) => {
-        console.warn(`[RoomManager] Failed to refresh session TTL for ${sessionId}:`, err);
+        logger.warn(`[RoomManager] Failed to refresh session TTL for ${sessionId}:`, err);
       });
     }
 
@@ -87,9 +88,9 @@ export class WriteScheduler {
           await writeQueueStateToPostgres(sessionId, state, this);
           this.pendingWrites.delete(sessionId);
           this.postgresWriteTimers.delete(sessionId);
-          console.info(`[RoomManager] Debounced Postgres write completed for session ${sessionId}`);
+          logger.info(`[RoomManager] Debounced Postgres write completed for session ${sessionId}`);
         } catch (error) {
-          console.error(`[RoomManager] Debounced Postgres write failed for session ${sessionId}:`, error);
+          logger.error(`[RoomManager] Debounced Postgres write failed for session ${sessionId}:`, error);
           // Retry with exponential backoff instead of giving up
           await this.retryPostgresWrite(sessionId, state, error);
         }
@@ -123,7 +124,7 @@ export class WriteScheduler {
   ): Promise<void> {
     // Don't retry FK violations - session doesn't exist, retries will never succeed
     if (lastError && isForeignKeyViolation(lastError)) {
-      console.warn(`[RoomManager] Not retrying write for session ${sessionId} - session doesn't exist in Postgres`);
+      logger.warn(`[RoomManager] Not retrying write for session ${sessionId} - session doesn't exist in Postgres`);
       this.cancelPendingWrites(sessionId);
       return;
     }
@@ -131,7 +132,7 @@ export class WriteScheduler {
     const attempts = this.writeRetryAttempts.get(sessionId) || 0;
 
     if (attempts >= MAX_RETRY_ATTEMPTS) {
-      console.error(
+      logger.error(
         `[RoomManager] Max retry attempts (${MAX_RETRY_ATTEMPTS}) reached for session ${sessionId}. ` +
           `Data may be lost. Last state:`,
         { queueLength: state.queue.length, version: state.version },
@@ -145,7 +146,7 @@ export class WriteScheduler {
     this.writeRetryAttempts.set(sessionId, attempts + 1);
     const delay = this.calculateRetryDelay(attempts);
 
-    console.info(
+    logger.info(
       `[RoomManager] Scheduling retry ${attempts + 1}/${MAX_RETRY_ATTEMPTS} ` +
         `for session ${sessionId} in ${delay}ms`,
     );
@@ -166,9 +167,9 @@ export class WriteScheduler {
           await writeQueueStateToPostgres(sessionId, currentState, this);
           this.pendingWrites.delete(sessionId);
           this.writeRetryAttempts.delete(sessionId);
-          console.info(`[RoomManager] Retry successful for session ${sessionId}`);
+          logger.info(`[RoomManager] Retry successful for session ${sessionId}`);
         } catch (error) {
-          console.error(`[RoomManager] Retry ${attempts + 1} failed for session ${sessionId}:`, error);
+          logger.error(`[RoomManager] Retry ${attempts + 1} failed for session ${sessionId}:`, error);
           await this.retryPostgresWrite(sessionId, currentState, error);
         }
       }
@@ -182,7 +183,7 @@ export class WriteScheduler {
    * Called on graceful shutdown to ensure durability.
    */
   async flushPendingWrites(sessionGraceTimers: Map<string, NodeJS.Timeout>): Promise<void> {
-    console.info(`[RoomManager] Flushing ${this.pendingWrites.size} pending writes to Postgres...`);
+    logger.info(`[RoomManager] Flushing ${this.pendingWrites.size} pending writes to Postgres...`);
 
     const writePromises: Promise<void>[] = [];
 
@@ -197,7 +198,7 @@ export class WriteScheduler {
       // Write immediately
       writePromises.push(
         writeQueueStateToPostgres(sessionId, state, this).catch((error) => {
-          console.error(`[RoomManager] Failed to flush write for session ${sessionId}:`, error);
+          logger.error(`[RoomManager] Failed to flush write for session ${sessionId}:`, error);
         }),
       );
     }
@@ -218,7 +219,7 @@ export class WriteScheduler {
     }
     sessionGraceTimers.clear();
 
-    console.info('[RoomManager] All pending writes flushed');
+    logger.info('[RoomManager] All pending writes flushed');
   }
 }
 
@@ -234,7 +235,7 @@ export async function writeQueueStateToPostgres(
   const sessionExists = await db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, sessionId)).limit(1);
 
   if (sessionExists.length === 0) {
-    console.warn(
+    logger.warn(
       `[RoomManager] Skipping queue write for session ${sessionId} - session not in Postgres. ` +
         `Queue had ${state.queue.length} items.`,
     );

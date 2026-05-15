@@ -48,7 +48,12 @@ describe('user data export service', () => {
     dbMocks.dbRead.select.mockImplementation(() => {
       throw new Error('database password leaked in stack trace');
     });
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Import the logger module via the same dynamic-import path that
+    // `./user-data-export` uses, so we spy on the instance that the
+    // module-under-test actually calls. `vi.resetModules()` in `beforeEach`
+    // would otherwise hand the SUT a fresh logger that our spy never sees.
+    const { logger } = await import('../utils/logger');
+    const consoleError = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
     const { getUserDataExportStatus, requestUserDataExport } = await import('./user-data-export');
 

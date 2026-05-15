@@ -18,6 +18,7 @@ import {
   UUIDSchema,
 } from '../../../validation/schemas';
 import { generateUniqueGymSlug } from './gyms';
+import { logger } from '../../../utils/logger';
 import { redisClientManager } from '../../../redis/client';
 
 // ============================================
@@ -455,7 +456,7 @@ async function getPopularConfigs(): Promise<CachedPopularConfig[]> {
         return JSON.parse(cached) as CachedPopularConfig[];
       }
     } catch (err) {
-      console.error('[PopularConfigs] Redis read failed:', err);
+      logger.error('[PopularConfigs] Redis read failed:', err);
     }
   }
 
@@ -565,7 +566,7 @@ async function getPopularConfigs(): Promise<CachedPopularConfig[]> {
       const { publisher } = redisClientManager.getClients();
       await publisher.set(REDIS_CACHE_KEY, JSON.stringify(configs), 'EX', REDIS_CACHE_TTL_SECONDS);
     } catch (err) {
-      console.error('[PopularConfigs] Redis write failed:', err);
+      logger.error('[PopularConfigs] Redis write failed:', err);
     }
   }
   return configs;
@@ -585,22 +586,22 @@ export async function warmPopularConfigsCache(): Promise<void> {
       // Try to acquire lock — only the winning node runs the query
       const lockAcquired = await publisher.set(REDIS_LOCK_KEY, '1', 'EX', REDIS_LOCK_TTL_SECONDS, 'NX');
       if (!lockAcquired) {
-        console.info('[PopularConfigs] Another node is refreshing the cache, skipping');
+        logger.info('[PopularConfigs] Another node is refreshing the cache, skipping');
         return;
       }
       // Winning node: delete stale cache so getPopularConfigs() runs the SQL query
       await publisher.del(REDIS_CACHE_KEY);
     } catch (err) {
-      console.error('[PopularConfigs] Redis lock failed:', err);
+      logger.error('[PopularConfigs] Redis lock failed:', err);
     }
   }
 
-  console.info('[PopularConfigs] Refreshing cache...');
+  logger.info('[PopularConfigs] Refreshing cache...');
   try {
     const configs = await getPopularConfigs();
-    console.info(`[PopularConfigs] Cache warmed with ${configs.length} configs`);
+    logger.info(`[PopularConfigs] Cache warmed with ${configs.length} configs`);
   } catch (err) {
-    console.error('[PopularConfigs] Cache warm-up failed:', err);
+    logger.error('[PopularConfigs] Cache warm-up failed:', err);
   }
 }
 
@@ -1292,7 +1293,7 @@ export const socialBoardMutations = {
           return await enrichBoard(board, userId);
         } catch (error) {
           // Auto-gym creation failed; continue to create the board without a gym
-          console.error('Auto-gym creation failed, creating board without gym:', error);
+          logger.error('Auto-gym creation failed, creating board without gym:', error);
         }
       }
     }

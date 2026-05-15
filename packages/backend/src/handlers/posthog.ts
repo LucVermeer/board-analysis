@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { applyCorsHeaders } from './cors';
+import { logger } from '../utils/logger';
 
 const POSTHOG_UPSTREAM = 'https://us.i.posthog.com';
 const MAX_BODY_BYTES = 64 * 1024;
@@ -97,10 +98,10 @@ export async function handlePosthogProxy(req: IncomingMessage, res: ServerRespon
     res.writeHead(upstream.status, { 'Content-Type': contentType });
     res.end(responseBody);
 
-    console.info('[posthog-proxy]', { status: upstream.status, durationMs: Date.now() - startedAt, path: rest });
+    logger.info('[posthog-proxy]', { status: upstream.status, durationMs: Date.now() - startedAt, path: rest });
   } catch (err) {
     const aborted = err instanceof Error && err.name === 'AbortError';
-    console.error('[posthog-proxy] upstream error', {
+    logger.error('[posthog-proxy] upstream error', {
       aborted,
       durationMs: Date.now() - startedAt,
       path: rest,

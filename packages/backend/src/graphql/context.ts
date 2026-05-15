@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
+import { logger } from '../utils/logger';
 
 const DEBUG = process.env.NODE_ENV === 'development';
 
@@ -35,7 +36,7 @@ export function createContext(
   };
   connections.set(id, context);
   if (DEBUG) {
-    console.info(
+    logger.info(
       `[Context] createContext: ${id} (authenticated: ${isAuthenticated}, userId: ${userId}, controllerId: ${controllerId}, mac: ${controllerMac}). Total connections: ${connections.size}`,
     );
   }
@@ -57,14 +58,14 @@ export function getContext(connectionId: string): ConnectionContext | undefined 
 export function updateContext(connectionId: string, updates: Partial<Omit<ConnectionContext, 'connectionId'>>): void {
   const context = connections.get(connectionId);
   if (!context) {
-    console.warn(
+    logger.warn(
       `[Context] updateContext: connection ${connectionId} not found (likely disconnected mid-operation). Map has ${connections.size} entries.`,
     );
     return;
   }
 
   if (DEBUG) {
-    console.info(
+    logger.info(
       `[Context] updateContext: ${connectionId} -> sessionId=${updates.sessionId}, participantId=${updates.participantId}, userId=${updates.userId}`,
     );
   }

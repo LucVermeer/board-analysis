@@ -17,6 +17,7 @@ import {
 } from '../middleware/auth';
 import { isOriginAllowed } from '../handlers/cors';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
+import { logger } from '../utils/logger';
 
 const DEBUG = process.env.NODE_ENV === 'development';
 
@@ -69,7 +70,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
         return;
       }
 
-      console.warn(`[WebSocket] Rejected connection from unauthorized origin: ${origin}`);
+      logger.warn(`[WebSocket] Rejected connection from unauthorized origin: ${origin}`);
       callback(false, 403, 'Origin not allowed');
     },
   });
@@ -94,7 +95,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
           if (authResult) {
             isAuthenticated = true;
             authenticatedUserId = authResult.userId;
-            console.info(`[Auth] Authenticated user: ${authenticatedUserId}`);
+            logger.info(`[Auth] Authenticated user: ${authenticatedUserId}`);
           }
         }
 
@@ -110,14 +111,14 @@ export function setupWebSocketServer(httpServer: HttpServer): {
           if (controllerResult) {
             controllerId = controllerResult.controllerId;
             controllerApiKey = controllerResult.controllerApiKey;
-            console.info(`[Auth] Authenticated controller: ${controllerId}`);
+            logger.info(`[Auth] Authenticated controller: ${controllerId}`);
           }
         }
 
         // Extract controller MAC address from connection params (used as clientId for BLE disconnect logic)
         if (connectionParams?.controllerMac && typeof connectionParams.controllerMac === 'string') {
           controllerMac = connectionParams.controllerMac;
-          console.info(`[Auth] Controller MAC: ${controllerMac}`);
+          logger.info(`[Auth] Controller MAC: ${controllerMac}`);
         }
 
         // Create context on initial connection with auth info
@@ -130,7 +131,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
           controllerMac,
         );
         await roomManager.registerClient(context.connectionId, undefined, authenticatedUserId);
-        console.info(`Client connected: ${context.connectionId} (authenticated: ${isAuthenticated})`);
+        logger.info(`Client connected: ${context.connectionId} (authenticated: ${isAuthenticated})`);
 
         // Store context in ctx.extra for access in other hooks
         ctx.extra.context = context;
@@ -143,7 +144,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
 
         if (!extra.context) {
           // This should never happen - onConnect should always set context
-          console.error('[Context] CRITICAL: No context in extra - onConnect may have failed');
+          logger.error('[Context] CRITICAL: No context in extra - onConnect may have failed');
           throw new Error('Connection context not initialized - onConnect may have failed');
         }
 
@@ -151,12 +152,12 @@ export function setupWebSocketServer(httpServer: HttpServer): {
         const latestContext = getContext(extra.context.connectionId);
 
         if (!latestContext) {
-          console.error(`[Context] Context lost for connection ${extra.context.connectionId}`);
+          logger.error(`[Context] Context lost for connection ${extra.context.connectionId}`);
           throw new Error(`Connection context lost for ${extra.context.connectionId}`);
         }
 
         if (DEBUG) {
-          console.info(
+          logger.info(
             `[Context] Retrieved context: ${latestContext.connectionId}, sessionId: ${latestContext.sessionId}`,
           );
         }
@@ -165,7 +166,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
       onDisconnect: async (ctx: ServerContext, code?: number) => {
         const context = ctx.extra?.context;
         if (context) {
-          console.info(`Client disconnected: ${context.connectionId} (code: ${code})`);
+          logger.info(`Client disconnected: ${context.connectionId} (code: ${code})`);
 
           // Get the latest context state (sessionId may have been updated)
           const latestContext = getContext(context.connectionId);
@@ -195,7 +196,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
       },
       onSubscribe: (_ctx: ServerContext, _id: string, payload) => {
         if (DEBUG) {
-          console.info(`Subscription started: ${payload.operationName || 'anonymous'}`);
+          logger.info(`Subscription started: ${payload.operationName || 'anonymous'}`);
         }
 
         // Validate query depth to prevent DoS via deeply nested subscriptions
@@ -208,7 +209,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
         }
       },
       onError: (_ctx: ServerContext, _id: string, _payload, errors) => {
-        console.error('GraphQL error:', errors);
+        logger.error('GraphQL error:', errors);
         // Only report errors that wrap an internal exception. GraphQLError
         // instances without `originalError` are validation/parse/auth/depth
         // errors triggered by malformed client input — noisy, not actionable.
@@ -219,7 +220,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
       },
       onComplete: (_ctx: ServerContext, _id: string, payload) => {
         if (DEBUG) {
-          console.info(`Subscription completed: ${payload.operationName || 'anonymous'}`);
+          logger.info(`Subscription completed: ${payload.operationName || 'anonymous'}`);
         }
       },
     },
@@ -243,7 +244,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
     wss.clients.forEach((ws) => {
       const aliveWs = ws as AliveWebSocket;
       if (!aliveWs.isAlive) {
-        if (DEBUG) console.info('[WebSocket] Terminating unresponsive connection');
+        if (DEBUG) logger.info('[WebSocket] Terminating unresponsive connection');
         aliveWs.terminate();
         return;
       }

@@ -16,6 +16,20 @@ export default defineConfig({
       typeAware: true,
       typeCheck: true,
     },
+    overrides: [
+      {
+        files: ['packages/backend/src/**/*.ts'],
+        rules: {
+          'no-console': 'error',
+        },
+      },
+      {
+        files: ['packages/backend/src/__tests__/**/*.ts', 'packages/backend/src/**/*.test.ts'],
+        rules: {
+          'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
+        },
+      },
+    ],
   },
   test: {
     projects: [

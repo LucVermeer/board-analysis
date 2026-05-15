@@ -9,6 +9,7 @@ import {
   type DistributedConnection,
 } from './constants';
 import { ELECT_NEW_LEADER_SCRIPT, UPDATE_USERNAME_SCRIPT } from './lua-scripts';
+import { logger } from '../../utils/logger';
 
 /**
  * Register a new connection in distributed state.
@@ -47,7 +48,7 @@ export async function registerConnection(
 
   await multi.exec();
 
-  console.info(
+  logger.info(
     `[DistributedState] Registered connection: ${connectionId.slice(0, 8)} on instance: ${instanceId.slice(0, 8)}`,
   );
 }
@@ -116,7 +117,7 @@ export async function removeConnection(
 
   await multi.exec();
 
-  console.info(`[DistributedState] Removed connection: ${connectionId.slice(0, 8)}`);
+  logger.info(`[DistributedState] Removed connection: ${connectionId.slice(0, 8)}`);
 
   let remainingParticipantConnections: number | null = null;
   if (sessionId && participantId) {
@@ -185,13 +186,13 @@ async function electLeaderAfterRemoval(redis: Redis, sessionId: string, connecti
     )) as string | null;
 
     if (newLeaderId) {
-      console.info(
+      logger.info(
         `[DistributedState] Elected new leader: ${newLeaderId.slice(0, 8)} after removing ${connectionId.slice(0, 8)}`,
       );
     }
     return newLeaderId;
   } catch (err) {
-    console.error(`[DistributedState] Failed to elect new leader after removing ${connectionId.slice(0, 8)}:`, err);
+    logger.error(`[DistributedState] Failed to elect new leader after removing ${connectionId.slice(0, 8)}:`, err);
     // Fallback: try to manually elect a leader from remaining members
     return electLeaderFallback(redis, sessionId, connectionId);
   }
@@ -234,7 +235,7 @@ async function electLeaderFallback(redis: Redis, sessionId: string, connectionId
       const chosenLeader = earliestCandidate || candidates[0];
       await redis.set(KEYS.sessionLeader(sessionId), chosenLeader, 'EX', TTL.sessionMembership);
       await redis.hset(KEYS.connection(chosenLeader), 'isLeader', 'true');
-      console.info(
+      logger.info(
         `[DistributedState] Fallback elected leader: ${chosenLeader.slice(0, 8)} after removing ${connectionId.slice(0, 8)}`,
       );
       return chosenLeader;

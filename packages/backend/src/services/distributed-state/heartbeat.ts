@@ -2,6 +2,7 @@ import type Redis from 'ioredis';
 import { KEYS, TTL } from './constants';
 import { cleanupStaleSessionMembers } from './session-ops';
 import { removeConnection } from './connection-ops';
+import { logger } from '../../utils/logger';
 
 /**
  * Update instance heartbeat in Redis.
@@ -67,7 +68,7 @@ export async function cleanupDeadInstanceConnections(
     return { deadInstances: [], staleConnections: [], sessionsAffected: [] };
   }
 
-  console.info(
+  logger.info(
     `[DistributedState] Found ${deadInstances.length} dead instances: ${deadInstances.map((id) => id.slice(0, 8)).join(', ')}`,
   );
 
@@ -82,7 +83,7 @@ export async function cleanupDeadInstanceConnections(
       continue;
     }
 
-    console.info(
+    logger.info(
       `[DistributedState] Dead instance ${deadInstanceId.slice(0, 8)} has ${connectionIds.length} orphaned connections`,
     );
 
@@ -122,12 +123,12 @@ export async function cleanupDeadInstanceConnections(
       try {
         await cleanupStaleSessionMembers(redis, sessionId);
       } catch (err) {
-        console.error(`[DistributedState] Failed to prune session ${sessionId.slice(0, 8)}:`, err);
+        logger.error(`[DistributedState] Failed to prune session ${sessionId.slice(0, 8)}:`, err);
       }
     }
   }
 
-  console.info(
+  logger.info(
     `[DistributedState] Cleanup complete: removed ${allStaleConnections.length} stale connections ` +
       `from ${deadInstances.length} dead instances affecting ${allSessionsAffected.size} sessions`,
   );
@@ -160,7 +161,7 @@ export async function cleanupInstanceConnections(redis: Redis, instanceId: strin
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
     if (result.status === 'rejected') {
-      console.error(
+      logger.error(
         `[DistributedState] Failed to remove connection ${connectionIds[i].slice(0, 8)} during cleanup:`,
         result.reason,
       );
@@ -170,7 +171,7 @@ export async function cleanupInstanceConnections(redis: Redis, instanceId: strin
 
   // Force cleanup of failed connections to prevent orphaned data
   if (failedConnectionIds.length > 0) {
-    console.warn(`[DistributedState] Force cleaning ${failedConnectionIds.length} failed connections`);
+    logger.warn(`[DistributedState] Force cleaning ${failedConnectionIds.length} failed connections`);
     const cleanupMulti = redis.multi();
     for (const connectionId of failedConnectionIds) {
       cleanupMulti.del(KEYS.connection(connectionId));
@@ -178,7 +179,7 @@ export async function cleanupInstanceConnections(redis: Redis, instanceId: strin
     try {
       await cleanupMulti.exec();
     } catch (err) {
-      console.error('[DistributedState] Failed to force cleanup connections:', err);
+      logger.error('[DistributedState] Failed to force cleanup connections:', err);
     }
   }
 
@@ -188,7 +189,7 @@ export async function cleanupInstanceConnections(redis: Redis, instanceId: strin
   multi.del(KEYS.instanceHeartbeat(instanceId));
   await multi.exec();
 
-  console.info(
+  logger.info(
     `[DistributedState] Cleaned up ${connectionIds.length} connections for instance: ${instanceId.slice(0, 8)}`,
   );
 }

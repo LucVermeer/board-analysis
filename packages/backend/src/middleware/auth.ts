@@ -3,6 +3,7 @@ import { hkdf } from '@panva/hkdf';
 import { db } from '../db/client';
 import { esp32Controllers } from '@boardsesh/db/schema/app';
 import { eq } from 'drizzle-orm';
+import { logger } from '../utils/logger';
 
 export type AuthResult = {
   userId: string;
@@ -71,7 +72,7 @@ export async function validateNextAuthToken(token: string): Promise<AuthResult |
   try {
     const secret = process.env.NEXTAUTH_SECRET;
     if (!secret) {
-      console.warn('[Auth] NEXTAUTH_SECRET not configured');
+      logger.warn('[Auth] NEXTAUTH_SECRET not configured');
       return null;
     }
 
@@ -83,7 +84,7 @@ export async function validateNextAuthToken(token: string): Promise<AuthResult |
 
     const userId = payload.sub;
     if (!userId) {
-      console.warn('[Auth] Token missing sub claim');
+      logger.warn('[Auth] Token missing sub claim');
       tokenCache.set(token, { result: null, expiresAt: now + TOKEN_CACHE_TTL_MS });
       return null;
     }
@@ -93,7 +94,7 @@ export async function validateNextAuthToken(token: string): Promise<AuthResult |
     return result;
   } catch (error) {
     if (error instanceof Error) {
-      console.warn('[Auth] Token validation failed:', error.message);
+      logger.warn('[Auth] Token validation failed:', error.message);
     }
     tokenCache.set(token, { result: null, expiresAt: now + TOKEN_CACHE_TTL_MS });
     return null;
@@ -146,11 +147,11 @@ export async function validateControllerApiKey(apiKey: string): Promise<Controll
     const [controller] = await db.select().from(esp32Controllers).where(eq(esp32Controllers.apiKey, apiKey)).limit(1);
 
     if (!controller) {
-      console.warn('[Auth] Controller API key not found');
+      logger.warn('[Auth] Controller API key not found');
       return null;
     }
 
-    console.info(`[Auth] Authenticated controller: ${controller.id}`);
+    logger.info(`[Auth] Authenticated controller: ${controller.id}`);
     return {
       controllerId: controller.id,
       controllerApiKey: apiKey,
@@ -162,7 +163,7 @@ export async function validateControllerApiKey(apiKey: string): Promise<Controll
     };
   } catch (error) {
     if (error instanceof Error) {
-      console.warn('[Auth] Controller validation failed:', error.message);
+      logger.warn('[Auth] Controller validation failed:', error.message);
     }
     return null;
   }

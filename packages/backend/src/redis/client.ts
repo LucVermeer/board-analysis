@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { logger } from '../utils/logger';
 
 const REDIS_URL = process.env.REDIS_URL;
 
@@ -25,7 +26,7 @@ class RedisClientManager {
     }
 
     if (!REDIS_URL) {
-      console.info('[Redis] No REDIS_URL configured - Redis pub/sub is required for multi-instance mode');
+      logger.info('[Redis] No REDIS_URL configured - Redis pub/sub is required for multi-instance mode');
       return false;
     }
 
@@ -35,18 +36,18 @@ class RedisClientManager {
 
   private async doConnect(): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      console.info('[Redis] Connecting to Redis...');
+      logger.info('[Redis] Connecting to Redis...');
 
       // Create publisher connection
       this.publisher = new Redis(REDIS_URL!, {
         maxRetriesPerRequest: 3,
         retryStrategy: (times) => {
           if (times > 10) {
-            console.error('[Redis] Max reconnection attempts reached');
+            logger.error('[Redis] Max reconnection attempts reached');
             return null; // Stop retrying
           }
           const delay = Math.min(times * 1000, 5000);
-          console.info(`[Redis] Reconnecting in ${delay}ms (attempt ${times})`);
+          logger.info(`[Redis] Reconnecting in ${delay}ms (attempt ${times})`);
           return delay;
         },
         lazyConnect: false,
@@ -84,7 +85,7 @@ class RedisClientManager {
       const checkAllReady = () => {
         if (publisherReady && subscriberReady && streamConsumerReady) {
           this.isConnected = true;
-          console.info('[Redis] Connected successfully (3 connections: publisher, subscriber, streamConsumer)');
+          logger.info('[Redis] Connected successfully (3 connections: publisher, subscriber, streamConsumer)');
           resolve(true);
         }
       };
@@ -105,21 +106,21 @@ class RedisClientManager {
       });
 
       this.publisher.on('error', (err) => {
-        console.error('[Redis] Publisher error:', err.message);
+        logger.error('[Redis] Publisher error:', err.message);
         if (!this.isConnected) {
           reject(new Error(`Redis publisher connection failed: ${err.message}`));
         }
       });
 
       this.subscriber.on('error', (err) => {
-        console.error('[Redis] Subscriber error:', err.message);
+        logger.error('[Redis] Subscriber error:', err.message);
         if (!this.isConnected) {
           reject(new Error(`Redis subscriber connection failed: ${err.message}`));
         }
       });
 
       this.streamConsumer.on('error', (err) => {
-        console.error('[Redis] Stream consumer error:', err.message);
+        logger.error('[Redis] Stream consumer error:', err.message);
         if (!this.isConnected) {
           reject(new Error(`Redis stream consumer connection failed: ${err.message}`));
         }
@@ -128,36 +129,36 @@ class RedisClientManager {
       // Handle disconnection after initial connection
       this.publisher.on('close', () => {
         if (this.isConnected) {
-          console.warn('[Redis] Publisher connection closed');
+          logger.warn('[Redis] Publisher connection closed');
           this.isConnected = false;
         }
       });
 
       this.subscriber.on('close', () => {
         if (this.isConnected) {
-          console.warn('[Redis] Subscriber connection closed');
+          logger.warn('[Redis] Subscriber connection closed');
           this.isConnected = false;
         }
       });
 
       this.streamConsumer.on('close', () => {
         if (this.isConnected) {
-          console.warn('[Redis] Stream consumer connection closed');
+          logger.warn('[Redis] Stream consumer connection closed');
           this.isConnected = false;
         }
       });
 
       // Handle reconnection
       this.publisher.on('reconnecting', () => {
-        console.info('[Redis] Publisher reconnecting...');
+        logger.info('[Redis] Publisher reconnecting...');
       });
 
       this.subscriber.on('reconnecting', () => {
-        console.info('[Redis] Subscriber reconnecting...');
+        logger.info('[Redis] Subscriber reconnecting...');
       });
 
       this.streamConsumer.on('reconnecting', () => {
-        console.info('[Redis] Stream consumer reconnecting...');
+        logger.info('[Redis] Stream consumer reconnecting...');
       });
     });
   }
@@ -194,14 +195,14 @@ class RedisClientManager {
    * Gracefully disconnect from Redis.
    */
   async disconnect(): Promise<void> {
-    console.info('[Redis] Disconnecting...');
+    logger.info('[Redis] Disconnecting...');
 
     const disconnectPromises: Promise<void>[] = [];
 
     if (this.publisher) {
       disconnectPromises.push(
         this.publisher.quit().then(() => {
-          console.info('[Redis] Publisher disconnected');
+          logger.info('[Redis] Publisher disconnected');
         }),
       );
     }
@@ -209,7 +210,7 @@ class RedisClientManager {
     if (this.subscriber) {
       disconnectPromises.push(
         this.subscriber.quit().then(() => {
-          console.info('[Redis] Subscriber disconnected');
+          logger.info('[Redis] Subscriber disconnected');
         }),
       );
     }
@@ -217,7 +218,7 @@ class RedisClientManager {
     if (this.streamConsumer) {
       disconnectPromises.push(
         this.streamConsumer.quit().then(() => {
-          console.info('[Redis] Stream consumer disconnected');
+          logger.info('[Redis] Stream consumer disconnected');
         }),
       );
     }

@@ -6,6 +6,7 @@ import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/h
 import { VoteInputSchema, BulkVoteSummaryInputSchema, SocialEntityTypeSchema } from '../../../validation/schemas';
 import { validateEntityExists } from './entity-validation';
 import { publishSocialEvent } from '../../../events/index';
+import { logger } from '../../../utils/logger';
 
 async function getVoteSummary(
   entityType: SocialEntityType,
@@ -179,7 +180,7 @@ export const socialVoteMutations = {
         entityId,
         timestamp: Date.now(),
         metadata: { value: String(value) },
-      }).catch((err) => console.error('[Votes] Failed to publish social event:', err));
+      }).catch((err) => logger.error('[Votes] Failed to publish social event:', err));
     }
 
     return getVoteSummary(entityType as SocialEntityType, entityId, userId);

@@ -7,6 +7,7 @@ import {
   INSTAGRAM_TRANSIENT_TTL_MS,
   isInstagramUrl,
 } from '../lib/instagram-meta';
+import { logger } from '../utils/logger';
 
 const SAMPLE_URL = 'https://www.instagram.com/p/ABC123xyz/';
 
@@ -221,14 +222,15 @@ describe('fetchInstagramMeta', () => {
     const dateSpy = vi.spyOn(Date, 'now');
     dateSpy.mockReturnValue(0);
 
-    // Suppress the breaker's console.warn so the test output stays clean.
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Suppress the breaker's logger.warn so the test output stays clean.
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
     for (let i = 0; i < 10; i++) {
       const result = await fetchInstagramMeta(`https://www.instagram.com/p/CIRCUIT${i}/`);
       expect(result).toEqual({ status: 'transient_error' });
     }
     expect(fetchMock).toHaveBeenCalledTimes(10);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
 
     // Eleventh URL: breaker is open, no fetch call is made.
     const blocked = await fetchInstagramMeta('https://www.instagram.com/p/CIRCUITX/');
@@ -298,7 +300,7 @@ describe('fetchInstagramMeta', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
     for (let i = 0; i < 11; i++) {
       const result = await fetchInstagramMeta(`https://www.instagram.com/p/BODYCAP${i}/`);
