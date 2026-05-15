@@ -12,6 +12,7 @@ import { resolveBoardFromPath } from '../social/boards';
 import { publishSocialEvent } from '../../../events';
 import { assignInferredSession } from '../../../jobs/inferred-session-builder';
 import { publishDebouncedSessionStats } from '../sessions/debounced-stats-publisher';
+import { queueClimbStatsRecompute } from './debounced-climb-stats-publisher';
 import { getInstagramMediaId, isInstagramUrl } from '../../../lib/instagram-meta';
 import {
   InstagramBetaValidationError,
@@ -220,6 +221,9 @@ export const tickMutations = {
         uuid: dbSchema.boardseshTicks.uuid,
         userId: dbSchema.boardseshTicks.userId,
         sessionId: dbSchema.boardseshTicks.sessionId,
+        boardType: dbSchema.boardseshTicks.boardType,
+        climbUuid: dbSchema.boardseshTicks.climbUuid,
+        angle: dbSchema.boardseshTicks.angle,
       })
       .from(dbSchema.boardseshTicks)
       .where(eq(dbSchema.boardseshTicks.uuid, uuid))
@@ -268,6 +272,10 @@ export const tickMutations = {
         await tx.update(sessions).set({ lastActivity: new Date() }).where(eq(sessions.id, tick.sessionId));
       }
     });
+
+    // Recompute the stats row so a deleted ascent doesn't leave the count
+    // inflated or the FA pinned to a now-vanished tick.
+    queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
 
     return true;
   },
@@ -438,6 +446,11 @@ export const tickMutations = {
       publishDebouncedSessionStats(tick.sessionId);
     }
 
+    // Recompute board_climb_stats for this climb so the ascent count and FA
+    // fields stay in sync with boardsesh_ticks. Debounced so a burst of saves
+    // on the same climb collapses into one recompute.
+    queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
+
     return result;
   },
 
@@ -550,6 +563,11 @@ export const tickMutations = {
       .set(updates)
       .where(eq(dbSchema.boardseshTicks.uuid, uuid))
       .returning();
+
+    // Status edits (attempt → send and back) flip whether this tick counts
+    // toward ascensionist_count, and a quality/difficulty/comment edit can
+    // also change downstream derived stats once we aggregate those. Recompute.
+    queueClimbStatsRecompute(updated.boardType, updated.climbUuid, updated.angle);
 
     return {
       uuid: updated.uuid,

@@ -413,18 +413,28 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
   const climbStatHistorySchema = UNIFIED_TABLES.climbStatsHistory;
 
   await processBatches(data, async (batch) => {
-    const values = batch.map((item) => ({
-      boardType: board,
-      climbUuid: item.climb_uuid,
-      angle: Number(item.angle),
-      displayDifficulty: Number(item.display_difficulty || item.difficulty_average),
-      benchmarkDifficulty: item.benchmark_difficulty != null ? Number(item.benchmark_difficulty) : null,
-      ascensionistCount: Number(item.ascensionist_count),
-      difficultyAverage: Number(item.difficulty_average),
-      qualityAverage: Number(item.quality_average),
-      faUsername: item.fa_username,
-      faAt: item.fa_at,
-    }));
+    // Two cooperating writers feed this row: Aurora sync (here) and the
+    // Boardsesh tick recompute (recomputeClimbStats). Each owns its own count
+    // column; ascensionist_count is the materialized sum kept in lockstep.
+    // Same idea protects fa_username / fa_at — Aurora COALESCEs onto an
+    // existing FA so a Boardsesh-side FA on a user-created climb survives
+    // subsequent syncs.
+    const values = batch.map((item) => {
+      const auroraCount = Number(item.ascensionist_count);
+      return {
+        boardType: board,
+        climbUuid: item.climb_uuid,
+        angle: Number(item.angle),
+        displayDifficulty: Number(item.display_difficulty || item.difficulty_average),
+        benchmarkDifficulty: item.benchmark_difficulty != null ? Number(item.benchmark_difficulty) : null,
+        ascensionistCount: auroraCount,
+        auroraAscensionistCount: auroraCount,
+        difficultyAverage: Number(item.difficulty_average),
+        qualityAverage: Number(item.quality_average),
+        faUsername: item.fa_username,
+        faAt: item.fa_at,
+      };
+    });
 
     await db
       .insert(climbStatsSchema)
@@ -434,11 +444,18 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
         set: {
           displayDifficulty: sql`excluded.display_difficulty`,
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
-          ascensionistCount: sql`excluded.ascensionist_count`,
+          auroraAscensionistCount: sql`excluded.aurora_ascensionist_count`,
+          ascensionistCount: sql`COALESCE(excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
-          faUsername: sql`excluded.fa_username`,
-          faAt: sql`excluded.fa_at`,
+          // Aurora is authoritative for FA on Aurora-synced climbs. Take the
+          // incoming value when it's set, otherwise preserve whatever's there
+          // (which protects a Boardsesh-supplied FA on the rare case where
+          // Aurora hasn't filled one in yet). Boardsesh climbs never go
+          // through this path — they're not synced — so we don't need to
+          // distinguish ownership here.
+          faUsername: sql`COALESCE(excluded.fa_username, ${climbStatsSchema.faUsername})`,
+          faAt: sql`COALESCE(excluded.fa_at, ${climbStatsSchema.faAt})`,
         },
       });
 

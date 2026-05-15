@@ -366,7 +366,15 @@ export const boardClimbStats = pgTable(
     angle: integer('angle').notNull(),
     displayDifficulty: doublePrecision('display_difficulty'),
     benchmarkDifficulty: doublePrecision('benchmark_difficulty'),
+    // ascensionistCount is the materialized sum kept in sync by both writers:
+    // Aurora sync updates aurora_ascensionist_count + ascensionist_count in one
+    // statement; the Boardsesh tick recompute updates
+    // boardsesh_ascensionist_count + ascensionist_count in one statement.
+    // Keep it as a regular column (not GENERATED) so the custom covering index
+    // board_climb_stats_ascents_covering_idx (migration 0067) keeps working.
     ascensionistCount: bigint('ascensionist_count', { mode: 'number' }),
+    auroraAscensionistCount: bigint('aurora_ascensionist_count', { mode: 'number' }),
+    boardseshAscensionistCount: bigint('boardsesh_ascensionist_count', { mode: 'number' }),
     difficultyAverage: doublePrecision('difficulty_average'),
     qualityAverage: doublePrecision('quality_average'),
     faUsername: text('fa_username'),
