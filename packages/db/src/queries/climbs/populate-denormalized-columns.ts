@@ -44,6 +44,13 @@ export async function populateDenormalizedColumns(
     sql`, `,
   )}]::text[]`;
 
+  // The regex 'p(\d+)r' must be written with a doubled backslash in source.
+  // A JS string literal silently drops the backslash before unrecognized
+  // escapes, so `'p(\d+)r'` becomes `'p(d+)r'` at runtime and matches `pd+r`
+  // literally — that's why user-created climbs never got their edges or
+  // required_set_ids populated. Doubling it gives PG the expected `p(\d+)r`.
+  const holdIdRegex = 'p(\\d+)r';
+
   // Step 1: Compute missing edge values from hold positions.
   // Locally created climbs don't have edges set, but we can derive them from
   // the hold IDs in the frames string -> placements -> holes (x, y).
@@ -58,7 +65,7 @@ export async function populateDenormalizedColumns(
         MIN(bh.x) as min_x, MAX(bh.x) as max_x,
         MIN(bh.y) as min_y, MAX(bh.y) as max_y
       FROM board_climbs c2
-      CROSS JOIN LATERAL regexp_matches(c2.frames, 'p(\d+)r', 'g') AS m(hold_id_arr)
+      CROSS JOIN LATERAL regexp_matches(c2.frames, ${holdIdRegex}, 'g') AS m(hold_id_arr)
       JOIN board_placements bp
         ON bp.id = (m.hold_id_arr[1])::int
         AND bp.board_type = c2.board_type
@@ -85,7 +92,7 @@ export async function populateDenormalizedColumns(
       SELECT c2.uuid,
         ARRAY_AGG(DISTINCT bp.set_id ORDER BY bp.set_id) as sets
       FROM board_climbs c2
-      CROSS JOIN LATERAL regexp_matches(c2.frames, 'p(\d+)r', 'g') AS m(hold_id_arr)
+      CROSS JOIN LATERAL regexp_matches(c2.frames, ${holdIdRegex}, 'g') AS m(hold_id_arr)
       JOIN board_placements bp
         ON bp.id = (m.hold_id_arr[1])::int
         AND bp.board_type = c2.board_type
