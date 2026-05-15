@@ -264,6 +264,79 @@ describe('climb mutations', () => {
     expect(statsInsert?.values).not.toHaveProperty('difficultyAverage');
   });
 
+  it('skips the stats seed for draft MoonBoard climbs without a grade', async () => {
+    mockDb.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([{ name: 'Bob', displayName: 'Bob Setter', image: null, avatarUrl: null }]),
+    );
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.saveMoonBoardClimb(
+      {},
+      {
+        input: {
+          boardType: 'moonboard',
+          layoutId: 3,
+          name: 'Draft No-grade MoonBoard',
+          description: '',
+          holds: { start: ['A1'], hand: ['B2'], finish: ['C3'] },
+          angle: 40,
+          isDraft: true,
+        },
+      },
+      makeCtx(),
+    );
+
+    // climb_holds rows are still inserted, but no board_climb_stats row should appear.
+    const statsInsert = insertCalls.find(
+      (call) => typeof call.values === 'object' && call.values !== null && 'ascensionistCount' in call.values,
+    );
+    expect(statsInsert).toBeUndefined();
+  });
+
+  it('seeds a stats row with the grade for draft MoonBoard climbs that supplied one', async () => {
+    mockDb.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockDb.select
+      .mockReturnValueOnce(createMockChain([{ name: 'Bob', displayName: 'Bob Setter', image: null, avatarUrl: null }]))
+      .mockReturnValueOnce(createMockChain([{ difficulty: 17 }]));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.saveMoonBoardClimb(
+      {},
+      {
+        input: {
+          boardType: 'moonboard',
+          layoutId: 3,
+          name: 'Draft Graded MoonBoard',
+          description: '',
+          holds: { start: ['A1'], hand: ['B2'], finish: ['C3'] },
+          angle: 40,
+          isDraft: true,
+          userGrade: '6A+',
+          isBenchmark: false,
+        },
+      },
+      makeCtx(),
+    );
+
+    // We preserve the grade for draft MoonBoard climbs even though the search
+    // filter masks the draft. Otherwise the user's grade would be lost on
+    // publish (updateClimb has no userGrade source to reconstruct it from).
+    const statsInsert = insertCalls.find(
+      (call) => typeof call.values === 'object' && call.values !== null && 'displayDifficulty' in call.values,
+    );
+    expect(statsInsert?.values).toMatchObject({
+      boardType: 'moonboard',
+      angle: 40,
+      displayDifficulty: 17,
+      difficultyAverage: 17,
+    });
+  });
+
   it('seeds a stats row on draft → publish transition in updateClimb', async () => {
     mockDb.select
       .mockReturnValueOnce(
@@ -348,6 +421,10 @@ describe('climb mutations', () => {
       ),
     ).rejects.toThrow('Cannot publish climb without an angle');
 
+    // The throw must fire BEFORE the board_climbs update — otherwise the caller
+    // sees a 500 but the row is left in a half-published state (isDraft = false,
+    // publishedAt = now, no stats row), which is the bug this PR is fixing.
+    expect(mockDb.update).not.toHaveBeenCalled();
     expect(insertCalls).toHaveLength(0);
   });
 

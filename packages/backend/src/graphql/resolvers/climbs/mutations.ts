@@ -241,9 +241,22 @@ export const climbMutations = {
       await db.insert(dbSchema.boardClimbHolds).values(holdRows).onConflictDoNothing();
     }
 
-    // Always seed a stats row so the climb is visible to the global search,
-    // which uses an INNER JOIN against board_climb_stats. When the user
-    // supplied a grade we can resolve, fill in difficulty fields too.
+    // Seed a stats row so the climb is visible to the global search, which
+    // uses an INNER JOIN against board_climb_stats.
+    //
+    // Drafts: search already filters by `is_draft = false` (create-climb-filters
+    // baseConditions), so a stats row on a draft is not directly search-visible.
+    // The seed is still important when the user supplied a grade — board_climb_stats
+    // is the only place we persist the resolved difficulty, and skipping the row
+    // would lose the grade through draft → publish (updateClimb's stats seed has
+    // no grade source to reconstruct it from). So:
+    //   - draft + grade  → seed the row (preserves grade; search filter masks the draft)
+    //   - draft + no grade → skip the seed (matches saveClimb's gate; updateClimb
+    //                        will create a barebones row at publish time)
+    //   - non-draft + grade → seed with grade (current behaviour)
+    //   - non-draft + no grade → seed barebones (current behaviour)
+    // The uuid is freshly generated per call, so the inserts can never conflict —
+    // both branches use `onConflictDoNothing` for consistency with saveClimb.
     const difficultyId = await resolveDifficultyId(validated.boardType, validated.userGrade);
     if (difficultyId !== null) {
       await db
@@ -260,19 +273,14 @@ export const climbMutations = {
           faUsername: validated.setter || null,
           faAt: null,
         })
-        .onConflictDoUpdate({
+        .onConflictDoNothing({
           target: [
             dbSchema.boardClimbStats.boardType,
             dbSchema.boardClimbStats.climbUuid,
             dbSchema.boardClimbStats.angle,
           ],
-          set: {
-            displayDifficulty: difficultyId,
-            benchmarkDifficulty: validated.isBenchmark ? difficultyId : null,
-            difficultyAverage: difficultyId,
-          },
         });
-    } else {
+    } else if (!isDraft) {
       await db
         .insert(dbSchema.boardClimbStats)
         .values({
@@ -391,6 +399,22 @@ export const climbMutations = {
     const now = new Date().toISOString();
     const nextPublishedAt = transitioningToPublished ? now : existing.publishedAt;
 
+    // Decide whether this update needs to seed a board_climb_stats row at the
+    // climb's resolved angle, and validate the angle up front. Doing this
+    // BEFORE the board_climbs UPDATE means a malformed-publish attempt fails
+    // cleanly — without it, we'd flip isDraft=false / publishedAt=now and
+    // then throw, leaving a published climb with no stats row (exactly the
+    // broken state this PR is fixing).
+    const resolvedAngle = validated.angle ?? existing.angle;
+    const angleChanged = validated.angle !== undefined && validated.angle !== existing.angle;
+    const shouldSeedStats = !nextIsDraft && (transitioningToPublished || angleChanged);
+    if (shouldSeedStats && resolvedAngle === null) {
+      // board_climbs.angle is nullable in the schema but board_climb_stats.angle
+      // is NOT NULL. angleChanged can't reach this — validated.angle would be
+      // set; this only fires on publish of a draft created without an angle.
+      throw new Error('Cannot publish climb without an angle');
+    }
+
     // Build the update set from provided fields only.
     const updateSet: Record<string, unknown> = {
       isDraft: nextIsDraft,
@@ -421,18 +445,9 @@ export const climbMutations = {
     // Make sure a row exists at the resolved angle whenever the climb is, or just became,
     // searchable. The old row at the previous angle is left in place — it's harmless
     // because search filters by exact angle, and removing it would race with concurrent ticks.
-    const resolvedAngle = validated.angle ?? existing.angle;
-    const angleChanged = validated.angle !== undefined && validated.angle !== existing.angle;
-    if (!nextIsDraft && (transitioningToPublished || angleChanged)) {
-      if (resolvedAngle === null) {
-        // board_climbs.angle is nullable in the schema but board_climb_stats.angle
-        // is NOT NULL, so a null angle here would either crash the insert or, with
-        // the `null` short-circuit we used to have, silently leave the climb out
-        // of the INNER-JOIN search forever. Surface the malformed state instead.
-        // angleChanged can't reach this — validated.angle would be set; this only
-        // fires on publish of a draft created without an angle.
-        throw new Error('Cannot publish climb without an angle');
-      }
+    // The combined check also re-narrows `resolvedAngle` to non-null for TS — we threw
+    // above on (shouldSeedStats && null) so the second clause is the only path through.
+    if (shouldSeedStats && resolvedAngle !== null) {
       await db
         .insert(dbSchema.boardClimbStats)
         .values({
