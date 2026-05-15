@@ -6,11 +6,11 @@ enum WidgetNetworking {
     @discardableResult
     static func sendNavigation(action: String, currentIndex: Int) async -> Bool {
         guard let defaults = SharedConstants.sharedDefaults,
-              let serverUrl = defaults.string(forKey: SharedConstants.serverUrlKey),
+              let widgetNavigateUrl = defaults.string(forKey: SharedConstants.widgetNavigateUrlKey),
               let sessionId = defaults.string(forKey: SharedConstants.sessionIdKey)
         else { return false }
 
-        guard let url = URL(string: "\(serverUrl)/api/widget/navigate") else { return false }
+        guard let url = URL(string: widgetNavigateUrl) else { return false }
 
         let body: [String: Any] = [
             "sessionId": sessionId,

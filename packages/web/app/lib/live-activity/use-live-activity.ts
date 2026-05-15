@@ -103,10 +103,18 @@ export function useLiveActivity({
       isActiveRef.current = true;
       const startGeneration = ++generationRef.current;
 
+      const wsUrl = getBackendWsUrl();
+      // Backend GraphQL is hosted on a different domain than the web app (e.g.
+      // ws.boardsesh.com vs www.boardsesh.com). The native plugin can't derive
+      // the right host from `serverUrl`, so pass the HTTP form of wsUrl
+      // explicitly. Without this, registerActivityPushToken hits 404.
+      const graphqlUrl = wsUrl ? wsUrl.replace(/^ws(s?):\/\//, 'http$1://') : undefined;
+
       void startLiveActivitySession({
         sessionId: sessionIdRef.current ?? `local-${Date.now()}`,
         serverUrl,
-        wsUrl: getBackendWsUrl() ?? undefined,
+        wsUrl: wsUrl ?? undefined,
+        graphqlUrl,
         authToken: authTokenRef.current ?? undefined,
         boardName: stableBoardDetails.board_name,
         layoutId: stableBoardDetails.layout_id,
