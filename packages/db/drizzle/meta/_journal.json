@@ -687,6 +687,13 @@
       "when": 1778796374020,
       "tag": "0097_backfill_user_climb_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1778814078423,
+      "tag": "0098_mute_talos",
+      "breakpoints": true
     }
   ]
 }

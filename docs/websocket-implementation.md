@@ -1600,7 +1600,7 @@ pubsub.publishQueueEvent(sessionId, event)
 queueEventHook = sendLiveActivityUpdate(...)  ← installed in server.ts
   │ packs a LiveActivityContentState (current climb name,
   │ grade, angle, index, totals, hasNext/hasPrevious, climbUuid)
-  │ debounces ~5s per session to coalesce bursts
+  │ debounces ~1s per session to coalesce bursts
   ▼
 APNs HTTP/2 send
   │ topic:      {APNS_BUNDLE_ID}.push-type.liveactivity
@@ -1613,6 +1613,19 @@ ActivityKit on every device that registered a token for this session
 ```
 
 `apns/index.ts` is **configured-or-noop**: if any of `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_KEY_CONTENTS`, `APNS_BUNDLE_ID`, or `APNS_PRODUCTION` is missing, all public functions short-circuit and the rest of the backend keeps running normally. The boot log warns when env is missing (see `packages/backend/src/server.ts` startup section).
+
+### Server-Side Analytics
+
+Live Activity actions that happen outside the web view are captured server-side through PostHog when `POSTHOG_PROJECT_KEY` is configured. `POSTHOG_HOST` defaults to `https://us.i.posthog.com`; server events are sent directly rather than through the browser `/api/posthog/*` proxy.
+
+Event taxonomy:
+
+- `Live Activity Started`: emitted after `registerActivityPushToken` successfully upserts a token; attributed to the authenticated `userId`.
+- `Live Activity Ended`: emitted after explicit unregister and when a session end cleans up still-registered tokens; attributed to `activity_push_tokens.user_id` when available.
+- `Live Activity Widget Navigation`: emitted for attributed widget next/previous attempts, including success, rate limit, wrong-session, empty-queue, target-out-of-bounds, and server-error outcomes.
+- `Live Activity Push Delivery`: emitted once per APNs send batch with token/sent/failed/stale counts only. It uses a session-scoped distinct ID with PostHog person-profile processing disabled.
+
+Analytics intentionally excludes APNs tokens, bearer tokens, user emails, climb names, and queue item names. Existing token rows from before the `activity_push_tokens.user_id` migration continue to work; they gain user attribution the next time the device registers.
 
 ### Event Types That Trigger a Push
 

@@ -12,6 +12,7 @@ import apn from '@parse/node-apn';
 import { eq } from 'drizzle-orm';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { db } from '../../db/client';
+import { trackLiveActivityEnded, trackLiveActivityPushDelivery } from '../analytics/live-activity';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +40,11 @@ interface DebouncedEntry {
   /** Last `source` passed to `sendLiveActivityUpdate` for this entry. The
    *  latest call wins on coalesce — same convention as `latestState`. */
   source: SendSource;
+}
+
+interface TokenRegistration {
+  token: string;
+  userId: string | null;
 }
 
 // Exponential-ish backoff schedule for transient DB lookup failures.
@@ -190,12 +196,20 @@ export async function shutdownApns(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function getTokensForSession(sessionId: string): Promise<string[]> {
+  const registrations = await getTokenRegistrationsForSession(sessionId);
+  return registrations.map((registration) => registration.token);
+}
+
+async function getTokenRegistrationsForSession(sessionId: string): Promise<TokenRegistration[]> {
   const rows = await db
-    .select({ token: activityPushTokens.token })
+    .select({ token: activityPushTokens.token, userId: activityPushTokens.userId })
     .from(activityPushTokens)
     .where(eq(activityPushTokens.sessionId, sessionId));
 
-  return rows.map((r) => r.token);
+  return rows.map((registration) => ({
+    token: registration.token,
+    userId: registration.userId ?? null,
+  }));
 }
 
 async function deleteStaleToken(token: string): Promise<void> {
@@ -278,12 +292,49 @@ async function sendNotification(
         `tokens=${String(tokens.length)} sent=${String(sent)} failed=${String(failed)} stale=${String(stale)} ` +
         `elapsedMs=${String(Date.now() - startedAt)}`,
     );
+    trackLiveActivityPushDelivery({
+      sessionId,
+      event,
+      source: options.source ?? 'event',
+      tokenCount: tokens.length,
+      sentCount: sent,
+      failedCount: failed,
+      staleCount: stale,
+      elapsedMs: Date.now() - startedAt,
+    });
 
     return { sent, failed, stale };
   } catch (error) {
     metrics.sendsFailed += tokens.length;
     console.error(`[APNs] Send error for session ${sessionId}:`, error);
+    trackLiveActivityPushDelivery({
+      sessionId,
+      event,
+      source: options.source ?? 'event',
+      tokenCount: tokens.length,
+      sentCount: 0,
+      failedCount: tokens.length,
+      staleCount: 0,
+      elapsedMs: Date.now() - startedAt,
+    });
     return { sent: 0, failed: tokens.length, stale: 0 };
+  }
+}
+
+function trackSessionEndedForRegistrations(sessionId: string, registrations: TokenRegistration[]): void {
+  const tokenCountsByUserId = new Map<string, number>();
+  for (const registration of registrations) {
+    if (!registration.userId) continue;
+    tokenCountsByUserId.set(registration.userId, (tokenCountsByUserId.get(registration.userId) ?? 0) + 1);
+  }
+
+  for (const [userId, tokenCount] of tokenCountsByUserId.entries()) {
+    trackLiveActivityEnded({
+      userId,
+      sessionId,
+      reason: 'session-ended',
+      tokenCount,
+    });
   }
 }
 
@@ -427,15 +478,17 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
     pendingSends.delete(sessionId);
   }
 
-  let tokens: string[] = [];
+  let registrations: TokenRegistration[] = [];
   try {
-    tokens = await getTokensForSession(sessionId);
+    registrations = await getTokenRegistrationsForSession(sessionId);
   } catch (error) {
     console.error(`[APNs] endLiveActivity: token lookup failed for session ${sessionId}:`, error);
   }
+  const tokens = registrations.map((registration) => registration.token);
 
   if (tokens.length > 0) {
     await sendNotification(sessionId, tokens, 'end');
+    trackSessionEndedForRegistrations(sessionId, registrations);
   } else {
     console.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);
   }

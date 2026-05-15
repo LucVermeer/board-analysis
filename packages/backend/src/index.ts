@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/node';
 import { startServer } from './server';
 import { redisClientManager } from './redis/client';
 import { closePool, closeReadPool } from '@boardsesh/db/client';
+import { shutdownPosthog } from './services/analytics/posthog';
 
 async function main() {
   const { wss, httpServer, cleanupIntervals, shutdownServices } = await startServer();
@@ -62,6 +63,7 @@ async function main() {
       console.warn('Error closing database pools:', error);
     }
 
+    await shutdownPosthog();
     await Sentry.flush(2000);
     console.info('Shutdown complete');
     process.exit(0);
