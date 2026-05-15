@@ -10,7 +10,7 @@ import {
   isLiveActivityAvailable,
 } from './live-activity-plugin';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
-import { getBackendWsUrl } from '../backend-url';
+import { getBackendWsUrl, getGraphQLHttpUrl } from '../backend-url';
 import type { ClimbQueueItem } from '@/app/components/queue-control/types';
 import type { BoardDetails } from '../types';
 
@@ -108,7 +108,15 @@ export function useLiveActivity({
       // ws.boardsesh.com vs www.boardsesh.com). The native plugin can't derive
       // the right host from `serverUrl`, so pass the HTTP form of wsUrl
       // explicitly. Without this, registerActivityPushToken hits 404.
-      const graphqlUrl = wsUrl ? wsUrl.replace(/^ws(s?):\/\//, 'http$1://') : undefined;
+      // `getGraphQLHttpUrl` throws when no backend URL is configured — fall
+      // back to undefined so iOS still gets the foreground-only Live Activity
+      // (WebSocket path works without a registered token).
+      let graphqlUrl: string | undefined;
+      try {
+        graphqlUrl = getGraphQLHttpUrl();
+      } catch {
+        graphqlUrl = undefined;
+      }
 
       void startLiveActivitySession({
         sessionId: sessionIdRef.current ?? `local-${Date.now()}`,

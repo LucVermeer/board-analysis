@@ -5,6 +5,14 @@ enum WidgetNetworking {
     /// Returns `true` if the request succeeded (HTTP 200), `false` otherwise.
     @discardableResult
     static func sendNavigation(action: String, currentIndex: Int) async -> Bool {
+        // `widgetNavigateUrlKey` is written by `LiveActivityPlugin.startSession`.
+        // If the user upgrades the app mid-session without re-running
+        // `startSession` (e.g. they had a Live Activity running, installed the
+        // new build, didn't relaunch the main app), the key won't be in
+        // UserDefaults and the widget will silently no-op. Acceptable: the
+        // pre-fix build already had broken widget navigation, and the user
+        // gets recovery as soon as they open the main app and start a new
+        // session. The optimistic UI update in the widget intent still fires.
         guard let defaults = SharedConstants.sharedDefaults,
               let widgetNavigateUrl = defaults.string(forKey: SharedConstants.widgetNavigateUrlKey),
               let sessionId = defaults.string(forKey: SharedConstants.sessionIdKey)
