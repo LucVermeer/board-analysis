@@ -34,7 +34,7 @@ function errorDetails(error: Error): ErrorDetails {
 // them when the message has `%s`-style tokens. The old console patch we're
 // replacing always emitted every trailing arg, so this format renders leftover
 // splat entries while preserving trailing Error details as structured fields.
-const appendSplatFormat = format((info) => {
+export const appendSplatFormat = format((info) => {
   const infoRecord = info as LoggerInfoRecord;
   const splatValue = infoRecord[SPLAT];
   if (!Array.isArray(splatValue)) return info;
@@ -58,7 +58,7 @@ const appendSplatFormat = format((info) => {
   return info;
 });
 
-const instanceIdFormat = format((info) => {
+export const instanceIdFormat = format((info) => {
   const id = instanceIdProvider?.();
   if (id) info.instanceId = id.slice(0, 8);
   return info;

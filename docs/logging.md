@@ -10,11 +10,11 @@ The logger picks its format from `NODE_ENV`:
   `[i:abcd1234] [info] message {…fields}`. The leading `[i:abcd1234]` tag is the first 8 chars of the pubsub instance UUID — the same prefix style the previous `installInstanceLogTag` console-patch produced, so existing grep workflows keep working. When the backend runs without Redis (local-only mode) there is no instance id and the prefix is omitted.
 - **Production**: JSON, one object per line. Each event includes `level`, `message`, `timestamp`, `service: "backend"`, `pid`, and (when set) `instanceId`. JSON is the lowest-common-denominator format that works on Railway, plain Docker, and any successor host — staying portable is a goal from `CLAUDE.md`.
 
-`console.error` and `console.warn` events go to `stderr`; `info` / `debug` go to `stdout`. This matches the stream semantics the patched console used to provide.
+`error` and `warn` events go to `stderr`; `info` and `debug` go to `stdout`. This intentionally follows Node's `console.error` / `console.warn` stream behavior while keeping lower-severity logs on stdout. `debug` only emits when `LOG_LEVEL=debug`.
 
 ## Configuration
 
-- `LOG_LEVEL` — minimum level emitted (`error`, `warn`, `info`, `debug`). Defaults to `info`. Set in env to raise verbosity for a single subsystem investigation without a deploy.
+- `LOG_LEVEL` — minimum level emitted (`error`, `warn`, `info`, `debug`). Defaults to `info`. Set `LOG_LEVEL=debug` to raise verbosity for a single subsystem investigation without a deploy.
 - `NODE_ENV` — selects dev vs prod format as described above.
 
 The logger never reads any Railway-specific env var. If you need to ship logs somewhere else, point the host's log aggregator at the backend's stdout/stderr.
