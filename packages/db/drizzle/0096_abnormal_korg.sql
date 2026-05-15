@@ -1,1 +1,1 @@
-CREATE INDEX "activity_push_tokens_updated_at_idx" ON "activity_push_tokens" USING btree ("updated_at");
+CREATE INDEX IF NOT EXISTS "activity_push_tokens_updated_at_idx" ON "activity_push_tokens" USING btree ("updated_at");
