@@ -13,12 +13,14 @@ import { buildContentStateFromQueueState } from '../../../services/apns/content-
 import { roomManager } from '../../../services/room-manager';
 
 /**
- * APNs ActivityKit device tokens are 32-byte values rendered as hex strings,
- * so 64 hex characters in the common case. We accept the slightly broader
- * 32–128 hex range to be forward-compatible with any future APNs token
- * length changes while still rejecting obviously malformed input.
+ * APNs device tokens are hex-encoded byte blobs. Classic remote-notification
+ * tokens are 32 bytes (64 hex chars), but ActivityKit Live Activity tokens
+ * observed on iOS 17.2+ are 80 bytes (160 hex chars), and Apple may grow them
+ * further. We accept a wide 32–512 hex-char range so a future token-format
+ * bump doesn't break registration, while still rejecting obviously malformed
+ * input (non-hex, way too short, or absurdly long).
  */
-const APNS_TOKEN_PATTERN = /^[0-9a-fA-F]{32,128}$/;
+const APNS_TOKEN_PATTERN = /^[0-9a-fA-F]{32,512}$/;
 
 /** Per-session cap on registered push tokens. Bounds blast radius if a single
  *  session somehow accumulates many tokens (e.g. user reinstalls repeatedly). */
