@@ -10,7 +10,14 @@ enum SharedConstants {
     static let queueItemsKey = "bs_queue_items"
     static let currentIndexKey = "bs_current_index"
     static let sessionIdKey = "bs_session_id"
+    /// Web origin (e.g. https://www.boardsesh.com). Used by the widget for
+    /// Next.js-hosted routes like `/api/internal/board-render`.
     static let serverUrlKey = "bs_server_url"
+    /// Fully-qualified backend `/api/widget/navigate` URL (e.g.
+    /// https://ws.boardsesh.com/api/widget/navigate). The widget POSTs button
+    /// taps here. Distinct from `serverUrlKey` because the backend lives on a
+    /// different host than the web app.
+    static let widgetNavigateUrlKey = "bs_widget_navigate_url"
     static let boardNameKey = "bs_board_name"
     static let layoutIdKey = "bs_layout_id"
     static let sizeIdKey = "bs_size_id"

@@ -342,7 +342,10 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
   const source = entry.source;
   pendingSends.delete(sessionId);
   if (tokens.length === 0) {
-    console.info(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping update`);
+    // Demoted to debug because every queue event on a party session without an
+    // iOS Live Activity device produces one of these. Multiplied by N backend
+    // instances and M queue events/min, the info-level version was unreadable.
+    console.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping update`);
     return;
   }
 
@@ -434,7 +437,7 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
   if (tokens.length > 0) {
     await sendNotification(sessionId, tokens, 'end');
   } else {
-    console.info(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);
+    console.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);
   }
 
   await cleanupTokensForSession(sessionId);

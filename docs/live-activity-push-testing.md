@@ -352,13 +352,13 @@ APNs env vars are not set in `packages/backend/.env.local`. Double-check all fiv
 
 ### "No registered Live Activity tokens"
 
-The APNs hook fired for a queue change, but `activity_push_tokens` has no rows for that session:
+The APNs hook fired for a queue change, but `activity_push_tokens` has no rows for that session. The log lives at `debug` level (because most party sessions don't have an iOS device watching, and at `info` the channel would be unreadable):
 
 ```
 [APNs] No registered Live Activity tokens for session ...; skipping update
 ```
 
-This usually means ActivityKit emitted a push token but native registration failed before the backend stored it. Check iOS console logs for keychain write failures, missing auth-token warnings, GraphQL registration errors, or backend reachability errors.
+For a session you *expect* to have an iOS device, this means ActivityKit emitted a push token but native registration failed before the backend stored it. Check iOS console logs for keychain write failures, missing auth-token warnings, GraphQL registration errors, or backend reachability errors. A common past failure mode: the plugin was POSTing the mutation to the web origin (`https://www.boardsesh.com/graphql`) instead of the backend host (`https://ws.boardsesh.com/graphql`) — every request 404'd silently. Verify `graphqlUrl` is passed in to `startSession` from JS and stored in `_currentGraphqlUrl`.
 
 ### "BadDeviceToken" in APNs results
 
@@ -372,7 +372,7 @@ The .p8 key JWT has expired (tokens are valid for 1 hour). The `@parse/node-apn`
 
 ### Widget buttons don't send HTTP request
 
-- Check that `serverUrl` is stored in SharedDefaults. The `LiveActivityPlugin.startSession()` stores it — verify by checking Xcode console logs during session start.
+- Check that `bs_widget_navigate_url` (constant: `SharedConstants.widgetNavigateUrlKey`) is stored in SharedDefaults. `LiveActivityPlugin.startSession()` derives it from `graphqlUrl` (e.g. `https://ws.boardsesh.com/api/widget/navigate`) and writes it — verify in the Xcode console during session start. The widget reads this exact URL via `WidgetNetworking.sendNavigation`; if the key is missing the call silently no-ops. Earlier builds derived the URL from `bs_server_url` (the web origin), which is wrong because `/api/widget/navigate` is a backend route, not a Next.js route — if you're seeing the old key in SharedDefaults, the user is on a stale build.
 - The widget extension must have the App Group entitlement to read SharedDefaults.
 - Check backend logs for incoming requests to `/api/widget/navigate`.
 

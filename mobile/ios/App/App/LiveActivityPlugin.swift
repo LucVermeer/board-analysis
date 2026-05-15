@@ -25,6 +25,10 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private let tokenQueue = DispatchQueue(label: "com.boardsesh.LiveActivityPlugin.token")
     private var _currentPushToken: String?
     private var _currentServerUrl: String?
+    /// HTTP GraphQL endpoint on the backend (e.g. https://ws.boardsesh.com/graphql).
+    /// Distinct from _currentServerUrl, which is the web origin
+    /// (https://www.boardsesh.com) — the backend lives on a different host.
+    private var _currentGraphqlUrl: String?
     private var _currentSessionId: String?
 
     /// Monotonically increments every time `registerPushTokenWithBackend` is
@@ -123,8 +127,8 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func handlePushRegistrationStale() {
-        let (token, sessionId, serverUrl) = tokenQueue.sync {
-            (_currentPushToken, _currentSessionId, _currentServerUrl)
+        let (token, sessionId, serverUrl, graphqlUrl) = tokenQueue.sync {
+            (_currentPushToken, _currentSessionId, _currentServerUrl, _currentGraphqlUrl)
         }
         // Leave `livePushTokenKey` in the keychain so the widget keeps sending
         // the same Bearer while we re-register. Once the backend rebinds the
@@ -134,9 +138,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         // retry window, which doesn't trigger the Darwin notification
         // fallback — so the widget would silently fail buttons until the
         // foreground observer eventually runs.
-        if let token, let sessionId, let serverUrl {
+        if let token, let sessionId, let serverUrl, let graphqlUrl {
             logger.info("Re-registering push token after widget 410")
-            registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)
+            registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl, graphqlUrl: graphqlUrl)
         } else {
             logger.warning("Push registration stale notification received but no current session/token to re-register")
         }
@@ -202,11 +206,12 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Persist a pending-registration record to the shared keychain so that a
     /// crash, app relaunch, or backgrounded retry path can pick it up later.
-    private func writePendingRegistration(token: String, sessionId: String, serverUrl: String) {
+    private func writePendingRegistration(token: String, sessionId: String, serverUrl: String, graphqlUrl: String) {
         let payload: [String: String] = [
             "token": token,
             "sessionId": sessionId,
             "serverUrl": serverUrl,
+            "graphqlUrl": graphqlUrl,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else { return }
@@ -233,15 +238,22 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         SharedKeychain.remove(SharedKeychain.pendingPushRegistrationKey)
     }
 
-    private func readPendingRegistration() -> (token: String, sessionId: String, serverUrl: String)? {
+    private func readPendingRegistration() -> (token: String, sessionId: String, serverUrl: String, graphqlUrl: String)? {
         guard let json = SharedKeychain.get(SharedKeychain.pendingPushRegistrationKey),
               let data = json.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let token = obj["token"], !token.isEmpty,
               let sessionId = obj["sessionId"], !sessionId.isEmpty,
-              let serverUrl = obj["serverUrl"], !serverUrl.isEmpty
+              let serverUrl = obj["serverUrl"], !serverUrl.isEmpty,
+              // graphqlUrl was added in the same release that fixed the
+              // wrong-host registration bug. Records written by earlier builds
+              // lack it; discard them so we don't retry against a stale URL.
+              // ActivityKit will deliver a fresh push token shortly after
+              // foregrounding, which kicks off a new registration with the
+              // correct URL.
+              let graphqlUrl = obj["graphqlUrl"], !graphqlUrl.isEmpty
         else { return nil }
-        return (token: token, sessionId: sessionId, serverUrl: serverUrl)
+        return (token: token, sessionId: sessionId, serverUrl: serverUrl, graphqlUrl: graphqlUrl)
     }
 
     /// Kick off a push-token registration with exponential retries.
@@ -250,20 +262,20 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     /// from a previous call aborts on its next tick. Persists a pending record
     /// to the shared keychain so foreground / WS-reconnect hooks can retry
     /// later. Safe to call from any thread.
-    private func registerPushTokenWithBackend(token: String, sessionId: String, serverUrl: String) {
+    private func registerPushTokenWithBackend(token: String, sessionId: String, serverUrl: String, graphqlUrl: String) {
         let generation = tokenQueue.sync { () -> UInt64 in
             _activeRegistrationGeneration += 1
             return _activeRegistrationGeneration
         }
-        writePendingRegistration(token: token, sessionId: sessionId, serverUrl: serverUrl)
+        writePendingRegistration(token: token, sessionId: sessionId, serverUrl: serverUrl, graphqlUrl: graphqlUrl)
         scheduleRegistrationAttempt(
-            token: token, sessionId: sessionId, serverUrl: serverUrl,
+            token: token, sessionId: sessionId, serverUrl: serverUrl, graphqlUrl: graphqlUrl,
             attemptIndex: 0, generation: generation
         )
     }
 
     private func scheduleRegistrationAttempt(
-        token: String, sessionId: String, serverUrl: String,
+        token: String, sessionId: String, serverUrl: String, graphqlUrl: String,
         attemptIndex: Int, generation: UInt64
     ) {
         guard attemptIndex < pushRegistrationRetryDelays.count else {
@@ -275,7 +287,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let delay = pushRegistrationRetryDelays[attemptIndex]
         let work: () -> Void = { [weak self] in
             self?.attemptRegistration(
-                token: token, sessionId: sessionId, serverUrl: serverUrl,
+                token: token, sessionId: sessionId, serverUrl: serverUrl, graphqlUrl: graphqlUrl,
                 attemptIndex: attemptIndex, generation: generation
             )
         }
@@ -287,7 +299,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func attemptRegistration(
-        token: String, sessionId: String, serverUrl: String,
+        token: String, sessionId: String, serverUrl: String, graphqlUrl: String,
         attemptIndex: Int, generation: UInt64
     ) {
         // Treat both a session-mismatch AND a nil active session as "abort":
@@ -334,7 +346,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             "query": query,
             "variables": ["sessionId": sessionId, "token": token]
         ]
-        guard let url = URL(string: "\(serverUrl)/graphql"),
+        guard let url = URL(string: graphqlUrl),
               let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
 
         var request = URLRequest(url: url)
@@ -364,7 +376,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
                         "Push token registration attempt \(attemptIndex + 1, privacy: .public) failed (\(failureReason, privacy: .public)); retrying in \(self.pushRegistrationRetryDelays[nextAttemptIndex], privacy: .public)s"
                     )
                     self.scheduleRegistrationAttempt(
-                        token: token, sessionId: sessionId, serverUrl: serverUrl,
+                        token: token, sessionId: sessionId, serverUrl: serverUrl, graphqlUrl: graphqlUrl,
                         attemptIndex: nextAttemptIndex, generation: generation
                     )
                 } else {
@@ -409,11 +421,12 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         registerPushTokenWithBackend(
             token: pending.token,
             sessionId: pending.sessionId,
-            serverUrl: pending.serverUrl
+            serverUrl: pending.serverUrl,
+            graphqlUrl: pending.graphqlUrl
         )
     }
 
-    private func unregisterPushTokenFromBackend(token: String, sessionId: String, serverUrl: String) {
+    private func unregisterPushTokenFromBackend(token: String, sessionId: String, graphqlUrl: String) {
         // The backend resolver authenticates via ConnectionContext, so we MUST
         // attach the user's app auth token. Without it the resolver rejects.
         guard let authToken = SharedKeychain.get(SharedKeychain.authTokenKey),
@@ -432,7 +445,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             "query": query,
             "variables": ["sessionId": sessionId, "token": token]
         ]
-        guard let url = URL(string: "\(serverUrl)/graphql"),
+        guard let url = URL(string: graphqlUrl),
               let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
 
         var request = URLRequest(url: url)
@@ -510,12 +523,28 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let setIds = call.getString("setIds") ?? ""
         let authToken = call.getString("authToken")
         let wsUrl = call.getString("wsUrl")
+        // Backend GraphQL endpoint. The web origin (`serverUrl`) does not
+        // serve `/graphql` — that route is on the backend host (e.g.
+        // ws.boardsesh.com). Without this, registerActivityPushToken hits
+        // the web origin and 404s silently.
+        let graphqlUrl = call.getString("graphqlUrl")
 
         // Store session details for push token registration.
         tokenQueue.sync {
             _currentServerUrl = serverUrl
+            _currentGraphqlUrl = graphqlUrl
             _currentSessionId = sessionId
         }
+
+        // Derive the widget navigate URL from the backend GraphQL URL —
+        // they share host + scheme, just different paths.
+        let widgetNavigateUrl: String? = {
+            guard let graphqlUrl, var components = URLComponents(string: graphqlUrl) else { return nil }
+            components.path = "/api/widget/navigate"
+            components.query = nil
+            components.fragment = nil
+            return components.url?.absoluteString
+        }()
 
         // Store board details in shared UserDefaults for App Intents
         // and thumbnail URL construction. Auth + push tokens go through
@@ -524,6 +553,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         if let defaults = SharedConstants.sharedDefaults {
             defaults.set(sessionId, forKey: SharedConstants.sessionIdKey)
             defaults.set(serverUrl, forKey: SharedConstants.serverUrlKey)
+            if let widgetNavigateUrl {
+                defaults.set(widgetNavigateUrl, forKey: SharedConstants.widgetNavigateUrlKey)
+            }
             defaults.set(boardName, forKey: SharedConstants.boardNameKey)
             defaults.set(layoutId, forKey: SharedConstants.layoutIdKey)
             defaults.set(sizeId, forKey: SharedConstants.sizeIdKey)
@@ -597,14 +629,14 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         // silently drop it.
         let pushTokenHandler: @Sendable (String) -> Void = { [weak self] token in
             guard let self else { return }
-            // Single sync block: write the token and read sessionId/serverUrl
-            // in one critical section. Two separate tokenQueue.sync calls
-            // would deadlock if ActivityKit ever delivers the token on a
+            // Single sync block: write the token and read sessionId/serverUrl/
+            // graphqlUrl in one critical section. Two separate tokenQueue.sync
+            // calls would deadlock if ActivityKit ever delivers the token on a
             // thread already holding the queue (Swift serial DispatchQueues
             // are not reentrant).
-            let (sid, surl) = self.tokenQueue.sync { () -> (String?, String?) in
+            let (sid, surl, gurl) = self.tokenQueue.sync { () -> (String?, String?, String?) in
                 self._currentPushToken = token
-                return (self._currentSessionId, self._currentServerUrl)
+                return (self._currentSessionId, self._currentServerUrl, self._currentGraphqlUrl)
             }
             // Write the APNs push token to the shared keychain so the
             // widget extension can attach it as a Bearer header on
@@ -612,8 +644,12 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             if !SharedKeychain.set(token, for: SharedKeychain.livePushTokenKey) {
                 self.logger.error("Failed to write Live Activity push token to shared keychain")
             }
-            if let sessionId = sid, let serverUrl = surl {
-                self.registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)
+            if let sessionId = sid, let serverUrl = surl, let graphqlUrl = gurl {
+                self.registerPushTokenWithBackend(token: token, sessionId: sessionId, serverUrl: serverUrl, graphqlUrl: graphqlUrl)
+            } else {
+                self.logger.warning(
+                    "Received push token but cannot register (sessionId=\(sid ?? "nil", privacy: .public), serverUrl=\(surl ?? "nil", privacy: .public), graphqlUrl=\(gurl ?? "nil", privacy: .public))"
+                )
             }
         }
 
@@ -642,15 +678,16 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         stopForegroundObservation()
 
         // Unregister the push token from the backend before tearing down.
-        let (token, sessionId, serverUrl) = tokenQueue.sync {
-            (_currentPushToken, _currentSessionId, _currentServerUrl)
+        let (token, sessionId, graphqlUrl) = tokenQueue.sync {
+            (_currentPushToken, _currentSessionId, _currentGraphqlUrl)
         }
-        if let token, let sessionId, let serverUrl {
-            unregisterPushTokenFromBackend(token: token, sessionId: sessionId, serverUrl: serverUrl)
+        if let token, let sessionId, let graphqlUrl {
+            unregisterPushTokenFromBackend(token: token, sessionId: sessionId, graphqlUrl: graphqlUrl)
         }
         tokenQueue.sync {
             _currentPushToken = nil
             _currentServerUrl = nil
+            _currentGraphqlUrl = nil
             _currentSessionId = nil
         }
         // Drop any in-flight pending registration so a stale retry can't
@@ -668,6 +705,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             defaults.removeObject(forKey: SharedConstants.currentIndexKey)
             defaults.removeObject(forKey: SharedConstants.sessionIdKey)
             defaults.removeObject(forKey: SharedConstants.pendingActionKey)
+            defaults.removeObject(forKey: SharedConstants.widgetNavigateUrlKey)
             // Cover earlier builds that wrote tokens to UserDefaults so
             // we don't leave plaintext credentials behind after upgrade.
             defaults.removeObject(forKey: SharedConstants.authTokenKey)

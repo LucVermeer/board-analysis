@@ -45,6 +45,7 @@ vi.mock('../live-activity-plugin', () => ({
 
 vi.mock('../../backend-url', () => ({
   getBackendWsUrl: () => 'ws://localhost:8080/graphql',
+  getGraphQLHttpUrl: () => 'http://localhost:8080/graphql',
 }));
 
 vi.mock('@/app/hooks/use-ws-auth-token', () => ({
@@ -249,6 +250,11 @@ describe('useLiveActivity', () => {
         authToken: 'test-auth-token',
         layoutId: 1,
         sizeId: 1,
+        // The HTTP graphql URL must be derived from the WS URL so the iOS
+        // plugin posts registerActivityPushToken at the backend host, not
+        // the web origin. Regressing this re-creates the 404-loop bug.
+        wsUrl: 'ws://localhost:8080/graphql',
+        graphqlUrl: 'http://localhost:8080/graphql',
       }),
     );
 

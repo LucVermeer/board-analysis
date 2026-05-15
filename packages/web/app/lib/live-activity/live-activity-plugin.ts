@@ -4,6 +4,14 @@ type LiveActivityStartOptions = {
   sessionId: string;
   serverUrl: string;
   wsUrl?: string;
+  /**
+   * Fully-qualified HTTP GraphQL endpoint on the backend (e.g.
+   * `https://ws.boardsesh.com/graphql`). The native plugin POSTs the
+   * `registerActivityPushToken` mutation here. We pass an explicit URL because
+   * `serverUrl` is the web origin (`https://www.boardsesh.com`), which has no
+   * `/graphql` route and would 404.
+   */
+  graphqlUrl?: string;
   authToken?: string;
   boardName: string;
   layoutId: number;
