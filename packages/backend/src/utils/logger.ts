@@ -10,6 +10,7 @@ export function setInstanceIdProvider(provider: InstanceIdProvider): void {
 }
 
 const SPLAT = Symbol.for('splat');
+const TRAILING_ERROR = Symbol('boardsesh.trailingError');
 
 type LoggerInfoRecord = Record<string | symbol, unknown>;
 
@@ -46,6 +47,7 @@ const appendSplatFormat = format((info) => {
       if (arg instanceof Error) {
         infoRecord.error ??= errorDetails(arg);
         infoRecord.stack ??= arg.stack;
+        infoRecord[TRAILING_ERROR] = true;
         return arg.stack ?? `${arg.name}: ${arg.message}`;
       }
       if (typeof arg === 'string') return arg;
@@ -69,8 +71,15 @@ const devPrintf = format.printf((info) => {
     level: string;
     message: unknown;
   };
+  const hasTrailingError = Boolean((info as LoggerInfoRecord)[TRAILING_ERROR]);
   const rest = Object.fromEntries(
-    Object.entries(metadata).filter(([key]) => key !== 'service' && key !== 'pid' && key !== 'timestamp'),
+    Object.entries(metadata).filter(
+      ([key]) =>
+        key !== 'service' &&
+        key !== 'pid' &&
+        key !== 'timestamp' &&
+        (!hasTrailingError || (key !== 'error' && key !== 'stack')),
+    ),
   );
   const tag = typeof instanceId === 'string' && instanceId ? `[i:${instanceId}] ` : '';
   const meta = Object.keys(rest).length > 0 ? ` ${JSON.stringify(rest)}` : '';
