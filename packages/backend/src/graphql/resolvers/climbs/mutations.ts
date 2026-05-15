@@ -423,7 +423,16 @@ export const climbMutations = {
     // because search filters by exact angle, and removing it would race with concurrent ticks.
     const resolvedAngle = validated.angle ?? existing.angle;
     const angleChanged = validated.angle !== undefined && validated.angle !== existing.angle;
-    if (resolvedAngle !== null && !nextIsDraft && (transitioningToPublished || angleChanged)) {
+    if (!nextIsDraft && (transitioningToPublished || angleChanged)) {
+      if (resolvedAngle === null) {
+        // board_climbs.angle is nullable in the schema but board_climb_stats.angle
+        // is NOT NULL, so a null angle here would either crash the insert or, with
+        // the `null` short-circuit we used to have, silently leave the climb out
+        // of the INNER-JOIN search forever. Surface the malformed state instead.
+        // angleChanged can't reach this — validated.angle would be set; this only
+        // fires on publish of a draft created without an angle.
+        throw new Error('Cannot publish climb without an angle');
+      }
       await db
         .insert(dbSchema.boardClimbStats)
         .values({

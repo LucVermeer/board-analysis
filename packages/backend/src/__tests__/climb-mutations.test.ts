@@ -8,6 +8,7 @@ const { mockDb, mockPublishSocialEvent, insertCalls } = vi.hoisted(() => {
   const mockDb = {
     select: vi.fn(),
     insert: vi.fn(),
+    update: vi.fn(),
     delete: vi.fn(),
     transaction: vi.fn(),
     execute: vi.fn(),
@@ -306,6 +307,48 @@ describe('climb mutations', () => {
       ascensionistCount: 0,
       faUsername: 'Alice Setter',
     });
+    // Prove the full publish path ran past the stats insert — getUserProfile is
+    // called inside the `transitioningToPublished` block and feeds the social
+    // event payload, so a successful publish event call means both the second
+    // select mock was consumed and publishSocialEvent received it.
+    expect(mockPublishSocialEvent).toHaveBeenCalledTimes(1);
+    expect(mockPublishSocialEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'climb.created',
+        entityId: 'climb-1',
+        metadata: expect.objectContaining({ setterDisplayName: 'Alice Setter' }),
+      }),
+    );
+  });
+
+  it('throws when publishing a draft without an angle', async () => {
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([
+        {
+          uuid: 'climb-no-angle',
+          userId: 'user-123',
+          isDraft: true,
+          publishedAt: null,
+          createdAt: '2026-05-14T20:00:00.000Z',
+          angle: null,
+          setterUsername: null,
+        },
+      ]),
+    );
+    mockDb.update = vi.fn().mockReturnValue(createMockChain(undefined));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await expect(
+      climbMutations.updateClimb(
+        {},
+        { input: { boardType: 'kilter', uuid: 'climb-no-angle', isDraft: false } },
+        makeCtx(),
+      ),
+    ).rejects.toThrow('Cannot publish climb without an angle');
+
+    expect(insertCalls).toHaveLength(0);
   });
 
   it('seeds a stats row on angle change for a published climb in updateClimb', async () => {

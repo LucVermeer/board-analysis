@@ -23,11 +23,18 @@
 --   This migration patches the historical data.
 --
 -- Safety / idempotency:
---   - Drafts are deliberately skipped — search uses LEFT JOIN for drafts
---     and the denormalized columns are only consulted on the listed path.
---   - Step 1 (stats backfill): ON CONFLICT DO NOTHING, idempotent.
---   - Steps 2-4 (denormalization): WHERE clauses guard each update so a
---     re-run only touches rows that still need work.
+--   - Step 1 (stats backfill) skips drafts — search uses an INNER JOIN
+--     against board_climb_stats only for listed climbs, and seeding a row
+--     on a draft would prematurely expose it the moment is_listed flips.
+--     ON CONFLICT DO NOTHING makes it idempotent.
+--   - Steps 2-4 (denormalization) intentionally include drafts. saveClimb
+--     calls populateDenormalizedColumns unconditionally on every climb, so
+--     this matches runtime behavior. The columns are unused while is_draft
+--     is true, but pre-populating them means a future draft → publish that
+--     doesn't touch frames (updateClimb only re-runs populateDenormalized
+--     Columns on a frames change) is search-ready immediately. Each step's
+--     WHERE clause guards by NULL so a re-run only touches rows that still
+--     need work.
 
 -- Step 1: insert missing stats rows so listed user climbs are JOIN-visible.
 INSERT INTO board_climb_stats (
