@@ -40,6 +40,7 @@ type LiveActivityUpdateOptions = {
     angle: number;
     frames: string;
     setterUsername: string;
+    mirrored: boolean;
   }>;
 };
 

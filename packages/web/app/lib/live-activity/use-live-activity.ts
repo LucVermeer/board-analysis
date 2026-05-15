@@ -57,6 +57,7 @@ export function useLiveActivity({
         angle: q.climb.angle,
         frames: q.climb.frames,
         setterUsername: q.climb.setter_username,
+        mirrored: q.climb.mirrored === true,
       })),
     [queue],
   );

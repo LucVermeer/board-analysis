@@ -5,10 +5,30 @@ type CapacitorBleManualScanPlugin = {
   stopLEScan?: unknown;
 };
 
+type NativeIosBoardBlePlugin = {
+  startScan?: unknown;
+  stopScan?: unknown;
+  connect?: unknown;
+  write?: unknown;
+  configureBoard?: unknown;
+};
+
 export const supportsCapacitorBleManualScan = (): boolean => {
   if (!isCapacitor()) return false;
   const plugin = window.Capacitor?.Plugins?.BluetoothLe as CapacitorBleManualScanPlugin | undefined;
   return typeof plugin?.requestLEScan === 'function' && typeof plugin?.stopLEScan === 'function';
+};
+
+export const supportsNativeIosBoardBle = (): boolean => {
+  if (!isCapacitor() || getPlatform() !== 'ios') return false;
+  const plugin = window.Capacitor?.Plugins?.BoardBle as NativeIosBoardBlePlugin | undefined;
+  return (
+    typeof plugin?.startScan === 'function' &&
+    typeof plugin?.stopScan === 'function' &&
+    typeof plugin?.connect === 'function' &&
+    typeof plugin?.write === 'function' &&
+    typeof plugin?.configureBoard === 'function'
+  );
 };
 
 /**

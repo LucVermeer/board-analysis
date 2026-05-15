@@ -96,6 +96,7 @@ function makeQueueItem(id: string): ClimbQueueItem {
       stars: 3,
       difficulty_error: '0.5',
       benchmark_difficulty: null,
+      mirrored: false,
     },
   };
 }

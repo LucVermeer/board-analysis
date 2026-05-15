@@ -139,6 +139,16 @@ export default defineConfig({
         command: 'bun packages/web/scripts/check-orphaned-i18n-keys.ts',
         cache: false,
       },
+      'generate:ios-board-placement-data': {
+        command: 'node --import tsx packages/board-constants/scripts/generate-ios-board-placement-data.ts',
+        dependsOn: ['build:constants'],
+        cache: false,
+      },
+      'check:ios-board-placement-data': {
+        command: 'node --import tsx packages/board-constants/scripts/generate-ios-board-placement-data.ts --check',
+        dependsOn: ['build:constants'],
+        cache: false,
+      },
       build: {
         command: 'true',
         dependsOn: ['build:backend', 'build:web'],

@@ -17,6 +17,11 @@
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		B1A2C3D4E5F60718 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A2C3D4E5F60717 /* SceneDelegate.swift */; };
 		C1A2B3D4E5F60720 /* BoardseshViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3D4E5F60719 /* BoardseshViewController.swift */; };
+		BB100001 /* BoardPlacementData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB200001 /* BoardPlacementData.swift */; };
+		BB100002 /* BoardBleEncoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB200002 /* BoardBleEncoding.swift */; };
+		BB100003 /* BoardBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB200003 /* BoardBleManager.swift */; };
+		BB100004 /* BoardBlePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB200004 /* BoardBlePlugin.swift */; };
+		BB100005 /* BoardBlePlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = BB200005 /* BoardBlePlugin.m */; };
 		LA100001 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200001 /* SharedConstants.swift */; };
 		LA100002 /* ClimbSessionAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200002 /* ClimbSessionAttributes.swift */; };
 		LA100003 /* ThumbnailFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200003 /* ThumbnailFetcher.swift */; };
@@ -42,6 +47,7 @@
 		LA100032 /* LiveActivityManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200032 /* LiveActivityManagerTests.swift */; };
 		LA100033 /* AppIntentNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200033 /* AppIntentNavigationTests.swift */; };
 		LA100034 /* VGradeFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200034 /* VGradeFormatterTests.swift */; };
+		BB100030 /* BoardBleEncodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB200030 /* BoardBleEncodingTests.swift */; };
 		LA100040 /* BoardseshWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = LA300001 /* BoardseshWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		PI100001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = PI200001 /* PrivacyInfo.xcprivacy */; };
 		PI100002 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = PI200002 /* PrivacyInfo.xcprivacy */; };
@@ -91,6 +97,11 @@
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		B1A2C3D4E5F60717 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		BB200001 /* BoardPlacementData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardPlacementData.swift; sourceTree = "<group>"; };
+		BB200002 /* BoardBleEncoding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardBleEncoding.swift; sourceTree = "<group>"; };
+		BB200003 /* BoardBleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardBleManager.swift; sourceTree = "<group>"; };
+		BB200004 /* BoardBlePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardBlePlugin.swift; sourceTree = "<group>"; };
+		BB200005 /* BoardBlePlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BoardBlePlugin.m; sourceTree = "<group>"; };
 		C1A2B3D4E5F60719 /* BoardseshViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardseshViewController.swift; sourceTree = "<group>"; };
 		E1A2B3C401000001 /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
@@ -118,6 +129,7 @@
 		LA200032 /* LiveActivityManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManagerTests.swift; sourceTree = "<group>"; };
 		LA200033 /* AppIntentNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntentNavigationTests.swift; sourceTree = "<group>"; };
 		LA200034 /* VGradeFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VGradeFormatterTests.swift; sourceTree = "<group>"; };
+		BB200030 /* BoardBleEncodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardBleEncodingTests.swift; sourceTree = "<group>"; };
 		LA300001 /* BoardseshWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BoardseshWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		PI200001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		PI200002 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -188,6 +200,11 @@
 				C1A2B3D4E5F60719 /* BoardseshViewController.swift */,
 				LA200001 /* SharedConstants.swift */,
 				LA200080 /* SharedKeychain.swift */,
+				BB200001 /* BoardPlacementData.swift */,
+				BB200002 /* BoardBleEncoding.swift */,
+				BB200003 /* BoardBleManager.swift */,
+				BB200004 /* BoardBlePlugin.swift */,
+				BB200005 /* BoardBlePlugin.m */,
 				LA200002 /* ClimbSessionAttributes.swift */,
 				LA200003 /* ThumbnailFetcher.swift */,
 				LA200004 /* SessionWebSocketManager.swift */,
@@ -226,6 +243,7 @@
 				LA200032 /* LiveActivityManagerTests.swift */,
 				LA200033 /* AppIntentNavigationTests.swift */,
 				LA200034 /* VGradeFormatterTests.swift */,
+				BB200030 /* BoardBleEncodingTests.swift */,
 			);
 			path = AppTests;
 			sourceTree = "<group>";
@@ -444,6 +462,11 @@
 				C1A2B3D4E5F60720 /* BoardseshViewController.swift in Sources */,
 				LA100001 /* SharedConstants.swift in Sources */,
 				LA100080 /* SharedKeychain.swift in Sources */,
+				BB100001 /* BoardPlacementData.swift in Sources */,
+				BB100002 /* BoardBleEncoding.swift in Sources */,
+				BB100003 /* BoardBleManager.swift in Sources */,
+				BB100004 /* BoardBlePlugin.swift in Sources */,
+				BB100005 /* BoardBlePlugin.m in Sources */,
 				LA100002 /* ClimbSessionAttributes.swift in Sources */,
 				LA100003 /* ThumbnailFetcher.swift in Sources */,
 				LA100004 /* SessionWebSocketManager.swift in Sources */,
@@ -466,6 +489,7 @@
 				LA100032 /* LiveActivityManagerTests.swift in Sources */,
 				LA100033 /* AppIntentNavigationTests.swift in Sources */,
 				LA100034 /* VGradeFormatterTests.swift in Sources */,
+				BB100030 /* BoardBleEncodingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

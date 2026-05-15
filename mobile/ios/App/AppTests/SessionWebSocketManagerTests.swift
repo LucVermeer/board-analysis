@@ -520,16 +520,37 @@ final class SessionWebSocketManagerTests: XCTestCase {
     func testParseClimbMirrored() {
         let updates: [String: Any] = [
             "__typename": "ClimbMirrored",
+            "uuid": "q1",
             "sequence": 30,
             "mirrored": true
         ]
 
         let event = QueueMessageParser.parseClimbMirrored(updates)
-        guard case let .climbMirrored(mirrored, sequence) = event else {
+        guard case let .climbMirrored(uuid, mirrored, sequence) = event else {
             XCTFail("Expected climbMirrored event")
             return
         }
 
+        XCTAssertEqual(uuid, "q1")
+        XCTAssertEqual(sequence, 30)
+        XCTAssertTrue(mirrored)
+    }
+
+    func testParseClimbMirroredUsesAliasedUuid() {
+        let updates: [String: Any] = [
+            "__typename": "ClimbMirrored",
+            "mirroredUuid": "q1",
+            "sequence": 30,
+            "mirrored": true
+        ]
+
+        let event = QueueMessageParser.parseClimbMirrored(updates)
+        guard case let .climbMirrored(uuid, mirrored, sequence) = event else {
+            XCTFail("Expected climbMirrored event")
+            return
+        }
+
+        XCTAssertEqual(uuid, "q1")
         XCTAssertEqual(sequence, 30)
         XCTAssertTrue(mirrored)
     }
@@ -644,6 +665,44 @@ final class SessionWebSocketManagerTests: XCTestCase {
         ]
 
         XCTAssertNil(QueueMessageParser.parseQueueUpdate(updates))
+    }
+
+    // MARK: - QueueEventRepaintPolicy
+
+    func testQueueEventRepaintPolicyOnlyRepaintsDisplayChangingEvents() {
+        let item = makeQueueItem()
+
+        XCTAssertTrue(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .currentClimbChanged(item: item, sequence: 1)
+            )
+        )
+        XCTAssertTrue(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .climbMirrored(uuid: item.uuid, mirrored: true, sequence: 2)
+            )
+        )
+
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .fullSync(items: [item], currentItem: item, sequence: 3)
+            )
+        )
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .itemAdded(item: item, position: 0, sequence: 4)
+            )
+        )
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .itemRemoved(uuid: item.uuid, sequence: 5)
+            )
+        )
+        XCTAssertFalse(
+            QueueEventRepaintPolicy.shouldRepaintBoard(
+                for: .reordered(uuid: item.uuid, oldIndex: 0, newIndex: 1, sequence: 6)
+            )
+        )
     }
 
     // MARK: - Sequence Gap Detection

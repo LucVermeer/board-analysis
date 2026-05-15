@@ -12,7 +12,7 @@ import { useWakeLock } from './use-wake-lock';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from '@/app/lib/ble/types';
 import { createBluetoothAdapter } from '@/app/lib/ble/adapter-factory';
 import { incrementBluetoothSends, maybeFireFeedbackPromptEvent } from '@/app/lib/feedback-prompt-db';
-import { supportsCapacitorBleManualScan } from '@/app/lib/ble/capacitor-utils';
+import { supportsCapacitorBleManualScan, supportsNativeIosBoardBle } from '@/app/lib/ble/capacitor-utils';
 
 export type PickerState = {
   devices: DiscoveredDevice[];
@@ -89,6 +89,29 @@ function recordBoardSerial(serialNumber: string, boardDetails: BoardDetails, boa
   }).catch(() => {});
 }
 
+type BoardConfigurationRequest = {
+  boardName: string;
+  layoutId: number;
+  sizeId: number;
+  apiLevel: number;
+  deviceName: string | undefined;
+  colorOverrides: LedColorOverrides | undefined;
+};
+
+function createBoardConfigurationKey(configuration: BoardConfigurationRequest): string {
+  const sortedColorOverrides = Object.entries(configuration.colorOverrides ?? {}).sort(([leftKey], [rightKey]) =>
+    leftKey.localeCompare(rightKey),
+  );
+  return JSON.stringify([
+    configuration.boardName,
+    configuration.layoutId,
+    configuration.sizeId,
+    configuration.apiLevel,
+    configuration.deviceName ?? null,
+    sortedColorOverrides,
+  ]);
+}
+
 export function useBoardBluetooth({
   boardDetails,
   boardUuid,
@@ -105,6 +128,8 @@ export function useBoardBluetooth({
   // Store the BLE adapter and API level across renders
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
+  const deviceNameRef = useRef<string | undefined>(undefined);
+  const configuredBoardKeyRef = useRef<string | null>(null);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
   // Timestamp of the most recent successful BLE connect — drives the
   // duration_connected_ms property on Bluetooth Disconnected events.
@@ -151,6 +176,7 @@ export function useBoardBluetooth({
   const handleDisconnection = useCallback(() => {
     const connectedAt = connectedAtRef.current;
     connectedAtRef.current = null;
+    configuredBoardKeyRef.current = null;
     if (connectedAt !== null) {
       track('Bluetooth Disconnected', {
         reason: 'lost',
@@ -287,6 +313,27 @@ export function useBoardBluetooth({
     [boardDetails, showMessage, ledColorOverrides],
   );
 
+  const configureConnectedBoard = useCallback(
+    async (adapter: BluetoothAdapter) => {
+      if (!boardDetails) return;
+      const boardConfiguration = {
+        boardName: boardDetails.board_name,
+        layoutId: boardDetails.layout_id,
+        sizeId: boardDetails.size_id,
+        apiLevel: apiLevelRef.current,
+        deviceName: deviceNameRef.current,
+        colorOverrides: ledColorOverrides,
+      };
+      const boardConfigurationKey = createBoardConfigurationKey(boardConfiguration);
+      if (configuredBoardKeyRef.current === boardConfigurationKey) return;
+      if (adapter.configureBoard) {
+        await adapter.configureBoard(boardConfiguration);
+      }
+      configuredBoardKeyRef.current = boardConfigurationKey;
+    },
+    [boardDetails, ledColorOverrides],
+  );
+
   // Handle connection initiation
   const connect = useCallback(
     async (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => {
@@ -303,7 +350,7 @@ export function useBoardBluetooth({
         // manual scan APIs. Older app installs stay on requestDevice().
         const adapter = await createBluetoothAdapter(
           boardDetails.board_name,
-          supportsCapacitorBleManualScan() ? devicePicker : undefined,
+          supportsCapacitorBleManualScan() || supportsNativeIosBoardBle() ? devicePicker : undefined,
         );
 
         const available = await adapter.isAvailable();
@@ -318,6 +365,7 @@ export function useBoardBluetooth({
         if (adapterRef.current) {
           const previousConnectedAt = connectedAtRef.current;
           connectedAtRef.current = null;
+          configuredBoardKeyRef.current = null;
           unsubDisconnectRef.current?.();
           if (previousConnectedAt !== null) {
             track('Bluetooth Disconnected', {
@@ -330,7 +378,9 @@ export function useBoardBluetooth({
 
         // Connect via the adapter and parse API level from device name
         const connection = await adapter.requestAndConnect(targetSerial);
+        deviceNameRef.current = connection.deviceName;
         apiLevelRef.current = parseApiLevel(connection.deviceName);
+        await configureConnectedBoard(adapter);
 
         // Set up disconnection listener
         unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
@@ -360,6 +410,7 @@ export function useBoardBluetooth({
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
+        configuredBoardKeyRef.current = null;
         setIsConnected(false);
         track('Bluetooth Connection Failed', {
           boardLayout: `${boardDetails.layout_name}`,
@@ -370,8 +421,22 @@ export function useBoardBluetooth({
 
       return false;
     },
-    [handleDisconnection, boardDetails, boardUuid, onConnectionChange, sendFramesToBoard, showMessage, devicePicker],
+    [
+      handleDisconnection,
+      boardDetails,
+      boardUuid,
+      onConnectionChange,
+      sendFramesToBoard,
+      showMessage,
+      devicePicker,
+      configureConnectedBoard,
+    ],
   );
+
+  useEffect(() => {
+    if (!isConnected || !adapterRef.current) return;
+    void configureConnectedBoard(adapterRef.current);
+  }, [isConnected, configureConnectedBoard]);
 
   // Disconnect from the board — update state synchronously for immediate UI
   // feedback, then await the native BLE disconnect in the background.
@@ -382,6 +447,8 @@ export function useBoardBluetooth({
     unsubDisconnectRef.current = null;
     const adapter = adapterRef.current;
     adapterRef.current = null;
+    deviceNameRef.current = undefined;
+    configuredBoardKeyRef.current = null;
     setIsConnected(false);
     onConnectionChange?.(false);
     if (connectedAt !== null) {
@@ -407,6 +474,7 @@ export function useBoardBluetooth({
       pickerRejectRef.current = null;
       const connectedAt = connectedAtRef.current;
       connectedAtRef.current = null;
+      configuredBoardKeyRef.current = null;
       unsubDisconnectRef.current?.();
       if (connectedAt !== null) {
         track('Bluetooth Disconnected', {

@@ -23,6 +23,7 @@ enum SharedConstants {
     static let sizeIdKey = "bs_size_id"
     static let setIdsKey = "bs_set_ids"
     static let pendingActionKey = "bs_pending_action"
+    static let bleBoardConfigKey = "bs_ble_board_config"
     /// Legacy key — auth token now lives in `SharedKeychain` under
     /// `SharedKeychain.authTokenKey`. Kept here only so upgrade paths can
     /// `removeObject` any leftover plaintext value from earlier installs.
@@ -35,6 +36,11 @@ enum SharedConstants {
     // MARK: Darwin Notification
 
     static let queueNavigateNotification = "com.boardsesh.app.queueNavigate"
+
+    /// Fired by the widget after an optimistic current-index update so the
+    /// backgrounded main app can repaint the connected board without sending a
+    /// duplicate queue mutation.
+    static let boardBleDisplayNotification = "com.boardsesh.app.boardBleDisplay"
 
     /// Fired by the widget extension when `/api/widget/navigate` responds 410
     /// Gone, signaling that the cached APNs push token is bound to a different
@@ -69,6 +75,50 @@ struct SharedQueueItem: Codable, Hashable {
     let angle: Int
     let frames: String
     let setterUsername: String
+    let mirrored: Bool
+
+    init(
+        uuid: String,
+        climbUuid: String,
+        climbName: String,
+        difficulty: String,
+        angle: Int,
+        frames: String,
+        setterUsername: String,
+        mirrored: Bool = false
+    ) {
+        self.uuid = uuid
+        self.climbUuid = climbUuid
+        self.climbName = climbName
+        self.difficulty = difficulty
+        self.angle = angle
+        self.frames = frames
+        self.setterUsername = setterUsername
+        self.mirrored = mirrored
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case uuid
+        case climbUuid
+        case climbName
+        case difficulty
+        case angle
+        case frames
+        case setterUsername
+        case mirrored
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try container.decode(String.self, forKey: .uuid)
+        climbUuid = try container.decode(String.self, forKey: .climbUuid)
+        climbName = try container.decode(String.self, forKey: .climbName)
+        difficulty = try container.decode(String.self, forKey: .difficulty)
+        angle = try container.decode(Int.self, forKey: .angle)
+        frames = try container.decode(String.self, forKey: .frames)
+        setterUsername = try container.decode(String.self, forKey: .setterUsername)
+        mirrored = try container.decodeIfPresent(Bool.self, forKey: .mirrored) ?? false
+    }
 }
 
 // MARK: - Shared Queue State

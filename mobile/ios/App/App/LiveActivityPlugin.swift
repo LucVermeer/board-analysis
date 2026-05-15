@@ -757,6 +757,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
                     let itemAngle = item["angle"] as? Int ?? 0
                     let itemFrames = item["frames"] as? String ?? ""
                     let itemSetterUsername = item["setterUsername"] as? String ?? ""
+                    let itemMirrored = item["mirrored"] as? Bool ?? false
 
                     queueItems.append(SharedQueueItem(
                         uuid: itemUuid,
@@ -765,7 +766,8 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
                         difficulty: itemDifficulty,
                         angle: itemAngle,
                         frames: itemFrames,
-                        setterUsername: itemSetterUsername
+                        setterUsername: itemSetterUsername,
+                        mirrored: itemMirrored
                     ))
                 }
             }

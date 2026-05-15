@@ -56,6 +56,10 @@ type CapacitorDevUrlPlugin = {
   clearUrl(): Promise<void>;
 };
 
+type CapacitorPluginListenerHandle = {
+  remove(): void | Promise<void>;
+};
+
 type CapacitorGlobal = {
   isNativePlatform(): boolean;
   getPlatform(): string;
@@ -68,11 +72,33 @@ type CapacitorGlobal = {
     DevUrl?: CapacitorDevUrlPlugin;
     InAppReview?: CapacitorInAppReviewPlugin;
     Motion?: CapacitorMotionPlugin;
+    BoardBle?: {
+      isAvailable(): Promise<{ available: boolean }>;
+      startScan(options: { services?: string[] }): Promise<void>;
+      stopScan(): Promise<void>;
+      connect(options: { deviceId: string }): Promise<void>;
+      disconnect(): Promise<void>;
+      write(options: { value: string }): Promise<void>;
+      cancelWrites?(): Promise<void>;
+      configureBoard(options: {
+        boardName: string;
+        layoutId: number;
+        sizeId: number;
+        apiLevel?: number;
+        deviceName?: string;
+        colorOverrides?: Record<string, string>;
+      }): Promise<void>;
+      addListener(
+        eventName: string,
+        callback: (data: Record<string, unknown>) => void,
+      ): CapacitorPluginListenerHandle | Promise<CapacitorPluginListenerHandle>;
+    };
     LiveActivity?: {
       isAvailable(): Promise<{ available: boolean }>;
       startSession(options: Record<string, unknown>): Promise<void>;
       endSession(): Promise<void>;
       updateActivity(options: Record<string, unknown>): Promise<void>;
+      updateActivityClimb(options: Record<string, unknown>): Promise<void>;
       addListener(
         eventName: string,
         callback: (data: Record<string, unknown>) => void,

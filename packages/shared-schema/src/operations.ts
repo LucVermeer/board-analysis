@@ -407,3 +407,69 @@ export const QUEUE_UPDATES = `
     }
   }
 `;
+
+// Mirrors the native iOS subscription in SessionWebSocketManager.swift. Keeping
+// a copy here lets the schema-validation test catch drift in fields that native
+// decodes manually, including climb.mirrored for widget-triggered BLE updates.
+export const NATIVE_IOS_QUEUE_UPDATES = `
+  subscription QueueUpdates($sessionId: ID!) {
+    queueUpdates(sessionId: $sessionId) {
+      __typename
+      ... on FullSync {
+        sequence
+        state {
+          sequence
+          stateHash
+          queue {
+            uuid
+            climb { uuid setter_username name frames angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
+            addedBy
+            suggested
+          }
+          currentClimbQueueItem {
+            uuid
+            climb { uuid setter_username name frames angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
+            addedBy
+            suggested
+          }
+        }
+      }
+      ... on CurrentClimbChanged {
+        sequence
+        currentItem: item {
+          uuid
+          climb { uuid setter_username name frames angle difficulty mirrored }
+          addedBy
+          suggested
+        }
+        clientId
+        correlationId
+      }
+      ... on QueueItemAdded {
+        sequence
+        addedItem: item {
+          uuid
+          climb { uuid setter_username name frames angle difficulty mirrored }
+          addedBy
+          suggested
+        }
+        position
+      }
+      ... on QueueItemRemoved {
+        sequence
+        uuid
+      }
+      ... on QueueReordered {
+        sequence
+        uuid
+        oldIndex
+        newIndex
+      }
+      ... on ClimbMirrored {
+        sequence
+        mirroredUuid: uuid
+        mirrored
+      }
+    }
+  }
+`;

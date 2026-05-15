@@ -21,6 +21,7 @@ const {
     requestAndConnect: vi.fn(),
     disconnect: vi.fn(),
     write: vi.fn(),
+    configureBoard: vi.fn(),
     onDisconnect: vi.fn<(handler: () => void) => () => void>(() => () => {}),
   };
 
@@ -90,6 +91,7 @@ vi.mock('@/app/lib/analytics', () => ({
 
 vi.mock('@/app/lib/ble/capacitor-utils', () => ({
   supportsCapacitorBleManualScan: vi.fn(() => false),
+  supportsNativeIosBoardBle: vi.fn(() => false),
   isNativeApp: vi.fn(() => false),
 }));
 
@@ -132,6 +134,7 @@ describe('useBoardBluetooth', () => {
     });
     mockAdapter.disconnect.mockResolvedValue(undefined);
     mockAdapter.write.mockResolvedValue(undefined);
+    mockAdapter.configureBoard.mockResolvedValue(undefined);
     mockAdapter.onDisconnect.mockReturnValue(vi.fn());
     mockGetAuroraBluetoothPacket.mockReturnValue({
       packet: new Uint8Array([1, 2, 3]),
@@ -212,6 +215,24 @@ describe('useBoardBluetooth', () => {
     });
 
     expect(result.current.isConnected).toBe(true);
+  });
+
+  it('configures the native board once when connect flips isConnected', async () => {
+    const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(mockAdapter.configureBoard).toHaveBeenCalledOnce();
+    expect(mockAdapter.configureBoard).toHaveBeenCalledWith({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      apiLevel: 3,
+      deviceName: 'Test Board',
+      colorOverrides: undefined,
+    });
   });
 
   it('creates a board-aware adapter for the active board', async () => {

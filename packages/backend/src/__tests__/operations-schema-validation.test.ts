@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vite-plus/test';
+import { readFileSync } from 'fs';
 import { buildSchema, parse, validate, type DocumentNode, type GraphQLSchema } from 'graphql';
 import { typeDefs } from '@boardsesh/shared-schema';
 import * as operations from '@boardsesh/shared-schema/operations';
@@ -13,6 +14,26 @@ try {
   schema = buildSchema(typeDefs.join('\n\n'));
 } catch (error) {
   throw new Error(`Failed to build schema from shared-schema typeDefs: ${(error as Error).message}`);
+}
+
+function normalizeGraphQLOperation(source: string): string {
+  return source.replace(/\s+/g, ' ').trim();
+}
+
+function readNativeIosQueueUpdatesOperation(): string {
+  const sessionWebSocketManagerSource = readFileSync(
+    new URL('../../../../mobile/ios/App/App/SessionWebSocketManager.swift', import.meta.url),
+    'utf-8',
+  );
+  const queryMatch = sessionWebSocketManagerSource.match(
+    /private func sendSubscription\(\) \{[\s\S]*?let query = """\n([\s\S]*?)\n\s*"""/,
+  );
+
+  if (!queryMatch?.[1]) {
+    throw new Error('Could not extract native iOS queue subscription query from SessionWebSocketManager.swift');
+  }
+
+  return queryMatch[1];
 }
 
 /**
@@ -61,4 +82,14 @@ describe('shared-schema operations validate against the executable schema', () =
       }
     });
   }
+});
+
+describe('native iOS queue subscription drift guard', () => {
+  it('matches the shared-schema native queue operation exactly after whitespace normalization', () => {
+    const nativeOperation = readNativeIosQueueUpdatesOperation();
+
+    expect(normalizeGraphQLOperation(nativeOperation)).toBe(
+      normalizeGraphQLOperation(operations.NATIVE_IOS_QUEUE_UPDATES),
+    );
+  });
 });
