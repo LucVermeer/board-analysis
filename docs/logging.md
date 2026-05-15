@@ -12,6 +12,8 @@ The logger picks its format from `NODE_ENV`:
 
 `error` and `warn` events go to `stderr`; `info` and `debug` go to `stdout`. This intentionally follows Node's `console.error` / `console.warn` stream behavior while keeping lower-severity logs on stdout. `debug` only emits when `LOG_LEVEL=debug`.
 
+Operational note: configure log collection to ingest both stdout and stderr. Docker, Railway, and most drains can display a combined view, but a collector that tails only stdout will miss warnings and errors.
+
 ## Configuration
 
 - `LOG_LEVEL` — minimum level emitted (`error`, `warn`, `info`, `debug`). Defaults to `info`. Set `LOG_LEVEL=debug` to raise verbosity for a single subsystem investigation without a deploy.

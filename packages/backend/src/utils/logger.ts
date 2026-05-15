@@ -1,11 +1,11 @@
 import util from 'node:util';
-import { createLogger, format, transports } from 'winston';
+import { createLogger, format, transports, type Logger, type LoggerOptions } from 'winston';
 
 type InstanceIdProvider = () => string | null;
 
 let instanceIdProvider: InstanceIdProvider | null = null;
 
-export function setInstanceIdProvider(provider: InstanceIdProvider): void {
+export function setInstanceIdProvider(provider: InstanceIdProvider | null): void {
   instanceIdProvider = provider;
 }
 
@@ -59,12 +59,10 @@ export const appendSplatFormat = format((info) => {
 });
 
 export const instanceIdFormat = format((info) => {
-  const id = instanceIdProvider?.();
-  if (id) info.instanceId = id.slice(0, 8);
+  const instanceId = instanceIdProvider?.();
+  if (instanceId) info.instanceId = instanceId.slice(0, 8);
   return info;
 });
-
-const isProduction = process.env.NODE_ENV === 'production';
 
 const devPrintf = format.printf((info) => {
   const { level, message, instanceId, ...metadata } = info as Record<string, unknown> & {
@@ -86,18 +84,30 @@ const devPrintf = format.printf((info) => {
   return `${tag}[${level}] ${String(message)}${meta}`;
 });
 
-export const logger = createLogger({
-  level: process.env.LOG_LEVEL ?? 'info',
-  exitOnError: false,
-  defaultMeta: { service: 'backend', pid: process.pid },
-  format: isProduction
-    ? format.combine(
-        instanceIdFormat(),
-        format.timestamp(),
-        format.errors({ stack: true }),
-        appendSplatFormat(),
-        format.json(),
-      )
-    : format.combine(instanceIdFormat(), appendSplatFormat(), format.colorize(), devPrintf),
-  transports: [new transports.Console({ stderrLevels: ['error', 'warn'] })],
-});
+type BackendLoggerOptions = {
+  loggerTransports?: LoggerOptions['transports'];
+  logLevel?: string;
+  nodeEnv?: string;
+  processId?: number;
+};
+
+export function createBackendLogger(options: BackendLoggerOptions = {}): Logger {
+  const isProduction = (options.nodeEnv ?? process.env.NODE_ENV) === 'production';
+  return createLogger({
+    level: options.logLevel ?? process.env.LOG_LEVEL ?? 'info',
+    exitOnError: false,
+    defaultMeta: { service: 'backend', pid: options.processId ?? process.pid },
+    format: isProduction
+      ? format.combine(
+          instanceIdFormat(),
+          format.timestamp(),
+          format.errors({ stack: true }),
+          appendSplatFormat(),
+          format.json(),
+        )
+      : format.combine(instanceIdFormat(), appendSplatFormat(), format.colorize(), devPrintf),
+    transports: options.loggerTransports ?? [new transports.Console({ stderrLevels: ['error', 'warn'] })],
+  });
+}
+
+export const logger = createBackendLogger();

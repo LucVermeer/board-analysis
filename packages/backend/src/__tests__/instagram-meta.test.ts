@@ -223,13 +223,14 @@ describe('fetchInstagramMeta', () => {
     dateSpy.mockReturnValue(0);
 
     // Suppress the breaker's logger.warn so the test output stays clean.
-    vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
     for (let i = 0; i < 10; i++) {
       const result = await fetchInstagramMeta(`https://www.instagram.com/p/CIRCUIT${i}/`);
       expect(result).toEqual({ status: 'transient_error' });
     }
     expect(fetchMock).toHaveBeenCalledTimes(10);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
 
     // Eleventh URL: breaker is open, no fetch call is made.
     const blocked = await fetchInstagramMeta('https://www.instagram.com/p/CIRCUITX/');
