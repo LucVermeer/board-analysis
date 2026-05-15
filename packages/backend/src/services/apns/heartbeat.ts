@@ -29,6 +29,7 @@ import {
 } from './index';
 import { buildContentStateFromQueueState } from './content-state';
 import type { QueueState } from '../room-manager';
+import { logger } from '../../utils/logger';
 
 const HEARTBEAT_INTERVAL_MS = 90 * 1000;
 
@@ -73,7 +74,7 @@ async function acquireHeartbeatLock(instanceId: string): Promise<boolean> {
     const result = await publisher.set(HEARTBEAT_LOCK_KEY, instanceId, 'EX', HEARTBEAT_LOCK_TTL_SEC, 'NX');
     return result === 'OK';
   } catch (error) {
-    console.warn('[APNs Heartbeat] Failed to acquire lock; skipping tick:', error);
+    logger.warn('[APNs Heartbeat] Failed to acquire lock; skipping tick:', error);
     return false;
   }
 }
@@ -105,7 +106,7 @@ async function runHeartbeatTick(roomManager: RoomManagerLike, instanceId: string
   try {
     sessions = await getSessionsWithRegisteredTokens();
   } catch (error) {
-    console.error('[APNs Heartbeat] Failed to list sessions with registered tokens:', error);
+    logger.error('[APNs Heartbeat] Failed to list sessions with registered tokens:', error);
     return;
   }
 
@@ -123,7 +124,7 @@ async function runHeartbeatTick(roomManager: RoomManagerLike, instanceId: string
       sendLiveActivityUpdate(sessionId, state, { source: 'heartbeat' });
       incrementApnsMetric('heartbeatsSent');
     } catch (error) {
-      console.warn(`[APNs Heartbeat] Failed to build heartbeat state for session ${sessionId}:`, error);
+      logger.warn(`[APNs Heartbeat] Failed to build heartbeat state for session ${sessionId}:`, error);
     }
   });
 }
@@ -136,11 +137,11 @@ export function startApnsHeartbeat(roomManager: RoomManagerLike, instanceId: str
   if (heartbeatHandle !== null) return;
   if (!isApnsConfigured()) return;
 
-  console.info(`[APNs Heartbeat] Started (interval=${String(HEARTBEAT_INTERVAL_MS)}ms, instance=${instanceId})`);
+  logger.info(`[APNs Heartbeat] Started (interval=${String(HEARTBEAT_INTERVAL_MS)}ms, instance=${instanceId})`);
 
   heartbeatHandle = setInterval(() => {
     runHeartbeatTick(roomManager, instanceId).catch((error) => {
-      console.error('[APNs Heartbeat] Tick failed:', error);
+      logger.error('[APNs Heartbeat] Tick failed:', error);
     });
   }, HEARTBEAT_INTERVAL_MS);
 
@@ -151,7 +152,7 @@ export function stopApnsHeartbeat(): void {
   if (heartbeatHandle === null) return;
   clearInterval(heartbeatHandle);
   heartbeatHandle = null;
-  console.info('[APNs Heartbeat] Stopped');
+  logger.info('[APNs Heartbeat] Stopped');
 }
 
 /** Test-only utility. */

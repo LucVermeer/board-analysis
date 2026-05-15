@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vite-plus/test';
+import { logger } from '../utils/logger';
 
 const deleteReturningMock = vi.fn<() => Promise<Array<{ token: string }>>>(async () => []);
 const deleteWhereMock = vi.fn(() => ({ returning: deleteReturningMock }));
@@ -30,12 +31,12 @@ vi.mock('../services/apns', () => ({
 
 const { __runCleanupTickForTests } = await import('../services/apns/cleanup');
 
-const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
 afterAll(() => {
-  consoleInfoSpy.mockRestore();
-  consoleErrorSpy.mockRestore();
+  loggerInfoSpy.mockRestore();
+  loggerErrorSpy.mockRestore();
 });
 
 describe('runCleanupTick', () => {
@@ -73,7 +74,7 @@ describe('runCleanupTick', () => {
     await __runCleanupTickForTests();
 
     expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensSweptStale', 3);
-    expect(consoleInfoSpy).toHaveBeenCalledWith(
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
       expect.stringContaining('[APNs Cleanup] Removed 3 push token(s) untouched since'),
     );
   });
@@ -83,7 +84,7 @@ describe('runCleanupTick', () => {
     deleteReturningMock.mockRejectedValue(boom);
 
     await expect(__runCleanupTickForTests()).resolves.toBeUndefined();
-    expect(consoleErrorSpy).toHaveBeenCalledWith('[APNs Cleanup] Failed to remove stale tokens:', boom);
+    expect(loggerErrorSpy).toHaveBeenCalledWith('[APNs Cleanup] Failed to remove stale tokens:', boom);
     expect(incrementApnsMetricMock).not.toHaveBeenCalled();
   });
 });

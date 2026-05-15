@@ -225,7 +225,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       // Token is known but bound to a different session. Returning 410 Gone
       // signals the widget to clear its cached push token and trigger a
       // re-registration via the main app.
-      console.info(
+      logger.info(
         `[WidgetNavigate] Token bound to session ${authResult.boundSessionId}, request was for ${sessionId}; signaling re-register`,
       );
       res.writeHead(410, { 'Content-Type': 'application/json' });
