@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 /**
  * Axiom Log Forwarding Service
  *
@@ -38,7 +39,7 @@ export async function forwardLogs(logs: DeviceLog[]): Promise<boolean> {
   if (!isAxiomConfigured()) {
     // In development, just log that we would have sent logs
     if (process.env.NODE_ENV !== 'production') {
-      console.info(`[Axiom] Would forward ${logs.length} logs (disabled in development)`);
+      logger.info(`[Axiom] Would forward ${logs.length} logs (disabled in development)`);
     }
     return true;
   }
@@ -47,7 +48,7 @@ export async function forwardLogs(logs: DeviceLog[]): Promise<boolean> {
   const dataset = process.env.AXIOM_DATASET;
 
   if (!token || !dataset) {
-    console.error('[Axiom] Missing AXIOM_TOKEN or AXIOM_DATASET');
+    logger.error('[Axiom] Missing AXIOM_TOKEN or AXIOM_DATASET');
     return false;
   }
 
@@ -63,15 +64,15 @@ export async function forwardLogs(logs: DeviceLog[]): Promise<boolean> {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Axiom] Ingest failed: ${response.status} ${errorText}`);
+      logger.error(`[Axiom] Ingest failed: ${response.status} ${errorText}`);
       return false;
     }
 
-    console.info(`[Axiom] Successfully forwarded ${logs.length} logs`);
+    logger.info(`[Axiom] Successfully forwarded ${logs.length} logs`);
     return true;
   } catch (error) {
     // Fire-and-forget: log error but don't throw
-    console.error('[Axiom] Ingest error:', error);
+    logger.error('[Axiom] Ingest error:', error);
     return false;
   }
 }

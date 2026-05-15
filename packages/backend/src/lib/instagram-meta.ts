@@ -1,5 +1,6 @@
 import { getInstagramMediaId, INSTAGRAM_URL_REGEX, isInstagramUrl } from '@boardsesh/shared-schema';
 import { createCircuitBreaker } from './circuit-breaker';
+import { logger } from '../utils/logger';
 
 export { INSTAGRAM_URL_REGEX, isInstagramUrl, getInstagramMediaId };
 
@@ -144,7 +145,7 @@ const circuit = createCircuitBreaker({
   threshold: CIRCUIT_THRESHOLD,
   cooldownMs: CIRCUIT_COOLDOWN_MS,
   onOpen: (count, cooldownMs) => {
-    console.warn(
+    logger.warn(
       `[instagram-meta] circuit breaker open for ${cooldownMs / 1000}s after ${count} transient errors in ${CIRCUIT_WINDOW_MS / 1000}s`,
     );
   },

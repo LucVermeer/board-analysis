@@ -20,6 +20,7 @@ import {
 } from '../../../utils/instagram-beta-validation';
 import { cacheInstagramThumbnail, isS3Configured } from '../../../lib/beta-link-thumbnails';
 import { invalidateRecentBetaLinksCache } from '../beta-videos/queries';
+import { logger } from '../../../utils/logger';
 
 // Beta links are only attached on successful ascents (flash / send), never
 // on `attempt`. Returns the URL to attach, or null if the tick shouldn't
@@ -389,7 +390,7 @@ export const tickMutations = {
     // `assignInferredSession` pattern below.
     if (attachedVideoUrl && betaPlan.action === 'insert') {
       invalidateRecentBetaLinksCache().catch((err) => {
-        console.error('[saveTick] recent-beta-links cache invalidation failed:', err);
+        logger.error('[saveTick] recent-beta-links cache invalidation failed:', err);
       });
     }
 
@@ -420,7 +421,7 @@ export const tickMutations = {
     // On failure, the tick stays unassigned until the daily safety-net cron picks it up.
     if (!validatedInput.sessionId) {
       assignInferredSession(uuid, userId, climbedAt, validatedInput.status).catch((err) => {
-        console.error(`[saveTick] Failed to assign inferred session for tick ${uuid} (user ${userId}):`, err);
+        logger.error(`[saveTick] Failed to assign inferred session for tick ${uuid} (user ${userId}):`, err);
       });
     }
 
@@ -490,7 +491,7 @@ export const tickMutations = {
         })
         .onConflictDoNothing();
     } catch (err) {
-      console.error('[attachBetaLink] insert failed after validation passed:', err);
+      logger.error('[attachBetaLink] insert failed after validation passed:', err);
       throw new GraphQLError("Couldn't save the beta link. Please try again.", {
         extensions: { code: 'BETA_LINK_INSERT_FAILED' },
       });
@@ -500,7 +501,7 @@ export const tickMutations = {
     // instead of waiting for the 24h TTL. Fire-and-forget — never blocks
     // the mutation result on Redis.
     invalidateRecentBetaLinksCache().catch((err) => {
-      console.error('[attachBetaLink] recent-beta-links cache invalidation failed:', err);
+      logger.error('[attachBetaLink] recent-beta-links cache invalidation failed:', err);
     });
 
     return true;
@@ -681,7 +682,7 @@ async function publishAscentEvent(
       return; // Success
     } catch (error) {
       if (attempt === MAX_EVENT_RETRIES) {
-        console.error(
+        logger.error(
           `[saveTick] Failed to publish ascent.logged event after ${MAX_EVENT_RETRIES} attempts for tick ${tick.uuid}:`,
           error,
         );

@@ -1,4 +1,5 @@
 import { PostHog } from 'posthog-node';
+import { logger } from '../../utils/logger';
 
 type AnalyticsPropertyValue = string | number | boolean | null | undefined;
 export type AnalyticsProperties = Record<string, AnalyticsPropertyValue>;
@@ -47,7 +48,7 @@ function getPosthogClient(): PostHog | null {
   });
 
   client.on('error', (error) => {
-    console.warn('[PostHog] SDK error:', error);
+    logger.warn('[PostHog] SDK error:', error);
   });
 
   posthogClient = client;
@@ -73,7 +74,7 @@ export function captureBackendEvent(eventName: string, options: CaptureBackendEv
     });
     return true;
   } catch (error) {
-    console.warn('[PostHog] Capture failed:', error);
+    logger.warn('[PostHog] Capture failed:', error);
     return false;
   }
 }
@@ -88,11 +89,6 @@ export async function shutdownPosthog(): Promise<void> {
   try {
     await posthog.shutdown();
   } catch (error) {
-    console.warn('[PostHog] Shutdown failed:', error);
+    logger.warn('[PostHog] Shutdown failed:', error);
   }
-}
-
-export function __resetPosthogForTests(): void {
-  posthogClient = null;
-  initAttempted = false;
 }

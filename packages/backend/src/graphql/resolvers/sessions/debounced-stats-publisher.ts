@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { buildSessionStatsUpdatedEvent } from './live-session-stats';
 import { pubsub } from '../../../pubsub/index';
 import { redisClientManager } from '../../../redis/client';
+import { logger } from '../../../utils/logger';
 
 const DEBOUNCE_MS = 2000;
 const REDIS_KEY_PREFIX = 'boardsesh:debounce:stats:';
@@ -41,7 +42,7 @@ export function publishDebouncedSessionStats(sessionId: string): void {
   if (redisClientManager.isRedisConnected()) {
     const { publisher } = redisClientManager.getClients();
     publisher.set(redisKey, nonce, 'PX', DEBOUNCE_MS + 500).catch((err) => {
-      console.error(`[debouncedStats] Redis SET failed for ${sessionId}:`, err);
+      logger.error(`[debouncedStats] Redis SET failed for ${sessionId}:`, err);
     });
   }
 
@@ -63,7 +64,7 @@ export function publishDebouncedSessionStats(sessionId: string): void {
           // Clean up the key now that we're publishing.
           await publisher.del(redisKey);
         } catch (err) {
-          console.error(`[debouncedStats] Redis GET failed for ${sessionId}, publishing anyway:`, err);
+          logger.error(`[debouncedStats] Redis GET failed for ${sessionId}, publishing anyway:`, err);
           // Fall through to publish — better to duplicate than to drop.
         }
       }
@@ -74,7 +75,7 @@ export function publishDebouncedSessionStats(sessionId: string): void {
           pubsub.publishSessionEvent(sessionId, event);
         }
       } catch (error) {
-        console.error(`[debouncedStats] Failed to publish SessionStatsUpdated for session ${sessionId}:`, error);
+        logger.error(`[debouncedStats] Failed to publish SessionStatsUpdated for session ${sessionId}:`, error);
       }
     }, DEBOUNCE_MS),
   );

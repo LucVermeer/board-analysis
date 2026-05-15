@@ -7,6 +7,7 @@ import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
 import { navigateToQueueItem } from '../services/queue-navigation';
 import { trackLiveActivityWidgetNavigation } from '../services/analytics/live-activity';
+import { logger } from '../utils/logger';
 
 interface WidgetNavigateBody {
   sessionId: string;
@@ -215,7 +216,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
   try {
     authResult = await authenticateWidget(authHeaderValue, sessionId);
   } catch (error) {
-    console.error('[WidgetNavigate] Auth lookup failed:', error);
+    logger.error('[WidgetNavigate] Auth lookup failed:', error);
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: 'Auth error' }));
     return;
@@ -226,7 +227,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       // Token is known but bound to a different session. Returning 410 Gone
       // signals the widget to clear its cached push token and trigger a
       // re-registration via the main app.
-      console.info(
+      logger.info(
         `[WidgetNavigate] Token bound to session ${authResult.boundSessionId}, request was for ${sessionId}; signaling re-register`,
       );
       if (authResult.userId) {
@@ -350,7 +351,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       res.end(JSON.stringify({ success: false, error: 'Target index out of bounds' }));
     }
   } catch (error) {
-    console.error('[WidgetNavigate] Error:', error);
+    logger.error('[WidgetNavigate] Error:', error);
     if (authResult.userId) {
       trackLiveActivityWidgetNavigation({
         userId: authResult.userId,

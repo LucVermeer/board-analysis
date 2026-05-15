@@ -1,5 +1,6 @@
 import type Redis from 'ioredis';
 import type { ClimbQueueItem, SessionUser } from '@boardsesh/shared-schema';
+import { logger } from '../utils/logger';
 
 /**
  * Safely parse JSON with fallback for empty strings and malformed data.
@@ -11,7 +12,7 @@ function safeJSONParse<T>(value: string | undefined | null, fallback: T): T {
   try {
     return JSON.parse(value) as T;
   } catch (error) {
-    console.error('[RedisSessionStore] JSON parse error:', error, 'Value:', value?.substring(0, 100));
+    logger.error('[RedisSessionStore] JSON parse error:', error, 'Value:', value?.substring(0, 100));
     return fallback;
   }
 }

@@ -7,6 +7,7 @@ import { validateNextAuthToken } from '../middleware/auth';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { maxDepthPlugin } from '@escape.tech/graphql-armor-max-depth';
 import { costLimitPlugin } from '@escape.tech/graphql-armor-cost-limit';
+import { logger } from '../utils/logger';
 
 /**
  * Create and configure the GraphQL Yoga instance
@@ -70,10 +71,10 @@ export function createYogaInstance() {
     // Logging - suppress debug entirely (Yoga internals like "Parsing request" are noisy)
     logging: {
       debug: () => {},
-      info: (...args: unknown[]) => console.info('[Yoga]', ...args),
-      warn: (...args: unknown[]) => console.warn('[Yoga]', ...args),
+      info: (...args: unknown[]) => logger.info('[Yoga]', ...args),
+      warn: (...args: unknown[]) => logger.warn('[Yoga]', ...args),
       error: (...args: unknown[]) => {
-        console.error('[Yoga]', ...args);
+        logger.error('[Yoga]', ...args);
         // Skip GraphQLErrors triggered purely by client input (no originalError):
         // validation, parse, depth/cost limit, auth — high volume, low signal.
         for (const arg of args) {

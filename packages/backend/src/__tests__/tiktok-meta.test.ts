@@ -7,6 +7,7 @@ import {
   TIKTOK_META_TTL_MS,
   TIKTOK_TRANSIENT_TTL_MS,
 } from '../lib/tiktok-meta';
+import { logger } from '../utils/logger';
 
 const LONG_URL = 'https://www.tiktok.com/@scout2015/video/6718335390845095173';
 const SHORT_URL = 'https://vm.tiktok.com/ZSL4xXWxR/';
@@ -241,7 +242,7 @@ describe('fetchTikTokMeta', () => {
     const dateSpy = vi.spyOn(Date, 'now');
     dateSpy.mockReturnValue(0);
 
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
     for (let i = 0; i < 10; i++) {
       const url = `https://www.tiktok.com/@user/video/${String(i).padStart(19, '0')}`;
@@ -249,6 +250,7 @@ describe('fetchTikTokMeta', () => {
       expect(result).toEqual({ status: 'transient_error' });
     }
     expect(fetchMock).toHaveBeenCalledTimes(10);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
 
     // Eleventh URL: breaker is open, no fetch call is made.
     const blocked = await fetchTikTokMeta('https://www.tiktok.com/@user/video/9999999999999999999');

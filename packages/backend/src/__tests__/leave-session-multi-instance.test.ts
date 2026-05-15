@@ -31,6 +31,7 @@ import type { ConnectedClient, LocalSessionParticipant } from '../services/room-
 import type { RedisSessionStore } from '../services/redis-session-store';
 import type { DistributedStateManager } from '../services/distributed-state';
 import type { WriteScheduler } from '../services/room-manager/write-scheduler';
+import { logger } from '../utils/logger';
 
 const GRACE_PERIOD_MS = 60_000;
 
@@ -256,8 +257,8 @@ describe('leaveSession multi-instance markInactive race', () => {
       removeParticipant: vi.fn().mockResolvedValue(undefined),
     };
 
-    // Silence the expected console.error from the catch branch.
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Silence the expected logger.error from the catch branch.
+    const errSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
     await leaveSession(
       LOCAL_CONN,

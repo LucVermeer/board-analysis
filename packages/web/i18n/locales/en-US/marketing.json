@@ -484,10 +484,8 @@
   },
   "privacy": {
     "title": "Privacy Policy",
-    "lastUpdated": "Last updated: April 2026",
     "lastUpdatedProductAnalytics": "Last updated: May 2026",
     "intro1": "Boardsesh is an open-source app for controlling climbing training boards (Kilter, Tension, MoonBoard) over Bluetooth. This policy explains what data we collect, why, and what we do with it.",
-    "intro2": "The short version: we collect only what we need to make the app work. We do not sell your data, we do not run ads, and we do not use third-party tracking.",
     "intro2ProductAnalytics": "The short version: we collect only what we need to make the app work. We do not sell your data, we do not run ads, and we do not share data with third-party marketers or data brokers.",
     "collect": {
       "title": "What we collect",
@@ -497,8 +495,6 @@
       "activityBody": "When you log a send or attempt, we store the climb details, grade, date, and any notes you add. This powers your logbook and progression tracking.",
       "locationLabel": "Location.",
       "locationBody": "If you grant location permission, we use your approximate location to help you discover nearby Party Mode sessions. We do not track your location in the background or store location history.",
-      "analyticsLabel": "Analytics.",
-      "analyticsBody": "We use Vercel Analytics to collect anonymous page view and performance data. This helps us understand which features are used and where the app is slow. This data is not linked to your account.",
       "productAnalyticsLabel": "Product analytics.",
       "productAnalyticsBody": "We use PostHog and Vercel Analytics to understand feature usage, page views, performance, and where the app is slow. Some signed-in product events are linked to your Boardsesh account so we can understand which features are useful. We do not use this data for ads."
     },
@@ -526,7 +522,6 @@
     },
     "sharing": {
       "title": "Data sharing",
-      "body1": "We do not sell your data. We do not run ads. We do not share your information with third-party marketers or data brokers. The only data shared externally is what is described above (Vercel hosting/analytics, Aurora Climbing sync when you opt in).",
       "body1ProductAnalytics": "We do not sell your data. We do not run ads. We do not share your information with third-party marketers or data brokers. The only data shared externally is what is described above (Vercel hosting/analytics, PostHog product analytics, Aurora Climbing sync when you opt in).",
       "body2": "Other Boardsesh users can see your username, profile, and logged climbs if you participate in social features like Party Mode. This is visible in the app and is part of how the product works."
     },

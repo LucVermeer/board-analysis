@@ -12,6 +12,7 @@ import {
 import { buildContentStateFromQueueState } from '../../../services/apns/content-state';
 import { roomManager } from '../../../services/room-manager';
 import { trackLiveActivityEnded, trackLiveActivityStarted } from '../../../services/analytics/live-activity';
+import { logger } from '../../../utils/logger';
 
 /**
  * APNs device tokens are hex-encoded byte blobs. Classic remote-notification
@@ -147,7 +148,7 @@ async function buildContentStateForSession(sessionId: string): Promise<LiveActiv
     const queueState = await roomManager.getQueueState(sessionId);
     return buildContentStateFromQueueState(queueState);
   } catch (error) {
-    console.warn(`[APNs] Failed to build content state for session ${sessionId} during token registration:`, error);
+    logger.warn(`[APNs] Failed to build content state for session ${sessionId} during token registration:`, error);
     return null;
   }
 }
@@ -168,35 +169,35 @@ export const pushTokenMutations = {
     ctx: ConnectionContext,
   ) => {
     if (!ctx.isAuthenticated || !ctx.userId) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token registration for session ${describeSessionForLog(sessionId)}: unauthenticated`,
       );
       throw new Error('Authentication required to perform this operation');
     }
 
     if (!sessionId || !token) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token registration for session ${describeSessionForLog(sessionId)}: missing sessionId or token`,
       );
       throw new Error('sessionId and token are required');
     }
 
     if (!APNS_TOKEN_PATTERN.test(token)) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token registration for session ${sessionId}: invalid token format (length ${String(token.length)})`,
       );
       throw new Error('Invalid APNs token format');
     }
 
     if (!checkTokenMutationRateLimit(ctx.userId, sessionId)) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token registration for session ${sessionId}: rate limited user ${ctx.userId}`,
       );
       throw new Error('Too many push-token requests, please retry later');
     }
 
     if (!(await isParticipant(ctx.userId, sessionId))) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token registration for session ${sessionId}: user ${ctx.userId} is not a participant`,
       );
       throw new Error('Unauthorized: not a participant in this session');
@@ -227,7 +228,7 @@ export const pushTokenMutations = {
         previousTokenSessionId = existingRows[0]?.sessionId ?? null;
         if (previousTokenSessionId && previousTokenSessionId !== sessionId) {
           incrementApnsMetric('tokensRebound');
-          console.warn(
+          logger.warn(
             `[APNs] Rebound token ${describeTokenForLog(token)} from session ${previousTokenSessionId} → ${sessionId} (user ${ctx.userId})`,
           );
         }
@@ -254,14 +255,14 @@ export const pushTokenMutations = {
           if (oldest.length < evictionCount) {
             // Every slot is occupied by a fresh registration. Refuse rather
             // than evict a still-valid token. iOS will retry later.
-            console.warn(
+            logger.warn(
               `[APNs] Refusing Live Activity token registration for session ${sessionId}: ` +
                 `all ${String(MAX_TOKENS_PER_SESSION)} slots used by tokens registered within the last hour`,
             );
             throw new Error('Too many active devices for this session right now; please retry shortly');
           }
 
-          console.warn(
+          logger.warn(
             `[APNs] Evicting ${String(oldest.length)} old Live Activity token(s) for session ${sessionId}; cap is ${String(MAX_TOKENS_PER_SESSION)}`,
           );
           for (const row of oldest) {
@@ -287,7 +288,7 @@ export const pushTokenMutations = {
           });
       });
     } catch (error) {
-      console.error(
+      logger.error(
         `[APNs] Failed to register Live Activity token for session ${sessionId} (${describeTokenForLog(token)}):`,
         error,
       );
@@ -295,7 +296,7 @@ export const pushTokenMutations = {
     }
 
     incrementApnsMetric('tokensRegistered');
-    console.info(`[APNs] Registered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
+    logger.info(`[APNs] Registered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
     trackLiveActivityStarted({
       userId: ctx.userId,
       sessionId,
@@ -316,7 +317,7 @@ export const pushTokenMutations = {
         try {
           await sendLiveActivityUpdateToTokens(sessionId, [token], state, { source: 'registration' });
         } catch (error) {
-          console.warn(
+          logger.warn(
             `[APNs] Failed initial Live Activity send for session ${sessionId} (${describeTokenForLog(token)}):`,
             error,
           );
@@ -339,35 +340,35 @@ export const pushTokenMutations = {
     ctx: ConnectionContext,
   ) => {
     if (!ctx.isAuthenticated || !ctx.userId) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token unregister for session ${describeSessionForLog(sessionId)}: unauthenticated`,
       );
       throw new Error('Authentication required to perform this operation');
     }
 
     if (!sessionId || !token) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token unregister for session ${describeSessionForLog(sessionId)}: missing sessionId or token`,
       );
       throw new Error('sessionId and token are required');
     }
 
     if (!APNS_TOKEN_PATTERN.test(token)) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token unregister for session ${sessionId}: invalid token format (length ${String(token.length)})`,
       );
       throw new Error('Invalid APNs token format');
     }
 
     if (!checkTokenMutationRateLimit(ctx.userId, sessionId)) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token unregister for session ${sessionId}: rate limited user ${ctx.userId}`,
       );
       throw new Error('Too many push-token requests, please retry later');
     }
 
     if (!(await isParticipant(ctx.userId, sessionId))) {
-      console.warn(
+      logger.warn(
         `[APNs] Rejected Live Activity token unregister for session ${sessionId}: user ${ctx.userId} is not a participant`,
       );
       throw new Error('Unauthorized: not a participant in this session');
@@ -378,14 +379,14 @@ export const pushTokenMutations = {
         .delete(activityPushTokens)
         .where(and(eq(activityPushTokens.token, token), eq(activityPushTokens.sessionId, sessionId)));
     } catch (error) {
-      console.error(
+      logger.error(
         `[APNs] Failed to unregister Live Activity token for session ${sessionId} (${describeTokenForLog(token)}):`,
         error,
       );
       throw error;
     }
 
-    console.info(`[APNs] Unregistered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
+    logger.info(`[APNs] Unregistered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
     trackLiveActivityEnded({
       userId: ctx.userId,
       sessionId,

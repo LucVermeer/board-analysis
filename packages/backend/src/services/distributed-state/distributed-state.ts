@@ -25,6 +25,7 @@ import {
   removeParticipant,
   removeParticipantConnection,
 } from './session-ops';
+import { logger } from '../../utils/logger';
 import {
   updateHeartbeat,
   discoverDeadInstances,
@@ -81,17 +82,17 @@ export class DistributedStateManager {
 
     // Clean up connections from dead instances asynchronously on startup
     this.cleanupDeadInstanceConnections().catch((err) => {
-      console.error('[DistributedState] Startup dead instance cleanup failed:', err);
+      logger.error('[DistributedState] Startup dead instance cleanup failed:', err);
     });
 
-    console.info(`[DistributedState] Started with instance ID: ${this.instanceId.slice(0, 8)}`);
+    logger.info(`[DistributedState] Started with instance ID: ${this.instanceId.slice(0, 8)}`);
   }
 
   /** Stop background tasks and clean up instance state. */
   async stop(): Promise<void> {
     this.stopHeartbeat();
     await cleanupInstanceConnections(this.redis, this.instanceId);
-    console.info(`[DistributedState] Stopped instance: ${this.instanceId.slice(0, 8)}`);
+    logger.info(`[DistributedState] Stopped instance: ${this.instanceId.slice(0, 8)}`);
   }
 
   /** Stop only the heartbeat interval synchronously. */
@@ -289,11 +290,11 @@ export class DistributedStateManager {
 
       // Heartbeat succeeded - reset failure counter and restore health
       if (this.consecutiveHeartbeatFailures > 0) {
-        console.info(`[DistributedState] Heartbeat recovered after ${this.consecutiveHeartbeatFailures} failures`);
+        logger.info(`[DistributedState] Heartbeat recovered after ${this.consecutiveHeartbeatFailures} failures`);
         this.consecutiveHeartbeatFailures = 0;
       }
       if (!this.isHealthy) {
-        console.info('[DistributedState] Redis connection restored, marking as healthy');
+        logger.info('[DistributedState] Redis connection restored, marking as healthy');
         this.isHealthy = true;
       }
 
@@ -302,11 +303,11 @@ export class DistributedStateManager {
       if (this.heartbeatCount % this.cleanupEveryNHeartbeats === 0) {
         // Clean up connections from dead backend instances
         this.cleanupDeadInstanceConnections().catch((err) => {
-          console.error('[DistributedState] Periodic dead instance cleanup failed:', err);
+          logger.error('[DistributedState] Periodic dead instance cleanup failed:', err);
         });
         // Clean up stale members from sessions this instance participates in
         this.cleanupActiveSessionMembers().catch((err) => {
-          console.error('[DistributedState] Periodic active session cleanup failed:', err);
+          logger.error('[DistributedState] Periodic active session cleanup failed:', err);
         });
       }
     } catch (err) {
@@ -315,14 +316,14 @@ export class DistributedStateManager {
 
       if (this.consecutiveHeartbeatFailures >= this.maxHeartbeatFailures) {
         if (this.isHealthy) {
-          console.error(
+          logger.error(
             `[DistributedState] Heartbeat failed ${this.consecutiveHeartbeatFailures} times, ` +
               `marking as unhealthy: ${errorMessage}`,
           );
           this.isHealthy = false;
         }
       } else {
-        console.warn(
+        logger.warn(
           `[DistributedState] Heartbeat failed (${this.consecutiveHeartbeatFailures}/${this.maxHeartbeatFailures}): ${errorMessage}`,
         );
       }

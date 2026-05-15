@@ -9,6 +9,7 @@ import {
   QueueArraySchema,
 } from '../../../validation/schemas';
 import { logMutationMetrics } from './mutation-metrics';
+import { logger } from '../../../utils/logger';
 
 // Debug logging flag - only log in development
 const DEBUG = process.env.NODE_ENV === 'development';
@@ -34,7 +35,7 @@ export const queueMutations = {
     }
 
     if (DEBUG)
-      console.info(
+      logger.info(
         '[addQueueItem] Adding item:',
         item.climb?.name,
         'by client:',
@@ -54,7 +55,7 @@ export const queueMutations = {
       // Get current state and update
       const currentState = await roomManager.getQueueState(sessionId);
       if (DEBUG)
-        console.info(
+        logger.info(
           '[addQueueItem] Current state - queue size:',
           currentState.queue.length,
           'version:',
@@ -66,7 +67,7 @@ export const queueMutations = {
       // Only add if not already in queue
       if (queue.some((i) => i.uuid === item.uuid)) {
         // Item already in queue - return without publishing event
-        if (DEBUG) console.info('[addQueueItem] Item already in queue, skipping');
+        if (DEBUG) logger.info('[addQueueItem] Item already in queue, skipping');
         return item;
       }
 
@@ -85,7 +86,7 @@ export const queueMutations = {
         break; // Success, exit retry loop
       } catch (error) {
         if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
-          if (DEBUG) console.info(`[addQueueItem] Version conflict, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          if (DEBUG) logger.info(`[addQueueItem] Version conflict, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
           continue; // Retry
         }
         throw error; // Re-throw if not a version conflict or max retries exceeded
@@ -225,14 +226,14 @@ export const queueMutations = {
     // Debug: track who's setting null
     if (DEBUG) {
       if (item === null) {
-        console.info(
+        logger.info(
           '[setCurrentClimb] Setting current climb to NULL by client:',
           ctx.connectionId,
           'session:',
           sessionId,
         );
       } else {
-        console.info(
+        logger.info(
           '[setCurrentClimb] Setting current climb to:',
           item.climb?.name,
           'by client:',
@@ -269,7 +270,7 @@ export const queueMutations = {
       } catch (error) {
         if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
           if (DEBUG)
-            console.info(`[setCurrentClimb] Version conflict, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            logger.info(`[setCurrentClimb] Version conflict, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
           continue; // Retry
         }
         throw error; // Re-throw if not a version conflict or max retries exceeded
@@ -424,7 +425,7 @@ export const queueMutations = {
     );
 
     if (previousStateHash !== null && previousStateHash === stateHash) {
-      console.warn(
+      logger.warn(
         `[setQueue] No-op resync for session ${sessionId} (hash=${stateHash}, queueSize=${queue.length}). Client state already matched server — investigate hash-drift on the publisher.`,
       );
     }

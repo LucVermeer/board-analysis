@@ -10,6 +10,7 @@ import {
   tickCommentCountExpr,
 } from '../shared/sql-expressions';
 import { FollowingAscentsFeedInputSchema, FollowingClimbAscentsInputSchema } from '../../../validation/schemas';
+import { logger } from '../../../utils/logger';
 
 export const socialFeedQueries = {
   /**
@@ -315,7 +316,7 @@ export const socialFeedQueries = {
 
       return { items };
     } catch (err) {
-      console.error('[followingClimbAscents] DB error:', err);
+      logger.error('[followingClimbAscents] DB error:', err);
       throw err;
     }
   },

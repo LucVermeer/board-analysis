@@ -6,6 +6,7 @@ import { requireAuthenticated, applyRateLimit, validateInput } from '../shared/h
 import { FollowInputSchema, FollowListInputSchema } from '../../../validation/schemas';
 import { batchEnrichUserProfiles } from './helpers';
 import { publishSocialEvent } from '../../../events/index';
+import { logger } from '../../../utils/logger';
 
 export const socialFollowQueries = {
   /**
@@ -238,7 +239,7 @@ export const socialFollowMutations = {
         entityId: targetUserId,
         timestamp: Date.now(),
         metadata: { followedUserId: targetUserId },
-      }).catch((err) => console.error('[Follows] Failed to publish social event:', err));
+      }).catch((err) => logger.error('[Follows] Failed to publish social event:', err));
     }
 
     return true;

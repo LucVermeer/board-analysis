@@ -6,6 +6,7 @@ import { getDistributedState } from '../../../services/distributed-state';
 import { db } from '../../../db/client';
 import { esp32Controllers } from '@boardsesh/db/schema/app';
 import { eq } from 'drizzle-orm';
+import { logger } from '../../../utils/logger';
 
 // Re-export validateInput from validation schemas
 export { validateInput } from '../../../validation/schemas';
@@ -34,7 +35,7 @@ export const SESSION_MEMBER_RETRY_CONFIG = {
  */
 export function requireSession(ctx: ConnectionContext): string {
   if (!ctx.sessionId) {
-    console.error(`[Auth] requireSession failed: connectionId=${ctx.connectionId}, sessionId=${ctx.sessionId}`);
+    logger.error(`[Auth] requireSession failed: connectionId=${ctx.connectionId}, sessionId=${ctx.sessionId}`);
     throw new Error(`Must be in a session to perform this operation (connectionId: ${ctx.connectionId})`);
   }
   return ctx.sessionId;
@@ -108,13 +109,13 @@ export async function requireSessionMember(
   }
 
   if (!finalCtx?.sessionId) {
-    console.error(
+    logger.error(
       `[Auth] requireSessionMember failed after ${maxRetries} retries: not in any session. connectionId=${ctx.connectionId}, requested=${sessionId}`,
     );
     throw new Error(`Unauthorized: not in any session (connectionId: ${ctx.connectionId}, requested: ${sessionId})`);
   }
   if (finalCtx.sessionId !== sessionId) {
-    console.error(
+    logger.error(
       `[Auth] requireSessionMember failed: session mismatch. connectionId=${ctx.connectionId}, have=${finalCtx.sessionId}, requested=${sessionId}`,
     );
     throw new Error(`Unauthorized: session mismatch (have: ${finalCtx.sessionId}, requested: ${sessionId})`);

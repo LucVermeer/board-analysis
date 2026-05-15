@@ -1,3 +1,4 @@
+import { logger } from '../../../utils/logger';
 // Maximum queue size for subscriptions to prevent memory issues with slow clients
 const MAX_SUBSCRIPTION_QUEUE_SIZE = 1000;
 
@@ -25,7 +26,7 @@ export async function createAsyncIterator<T>(
       // Bounded queue: drop oldest events if queue is full
       if (queue.length >= MAX_SUBSCRIPTION_QUEUE_SIZE) {
         queue.shift(); // Drop oldest
-        console.warn('[Subscription] Queue full, dropping oldest event');
+        logger.warn('[Subscription] Queue full, dropping oldest event');
       }
       queue.push(value);
     }
@@ -79,7 +80,7 @@ export async function createEagerAsyncIterator<T>(
       // Bounded queue: drop oldest events if queue is full
       if (queue.length >= MAX_SUBSCRIPTION_QUEUE_SIZE) {
         queue.shift(); // Drop oldest
-        console.warn('[Subscription] Queue full, dropping oldest event');
+        logger.warn('[Subscription] Queue full, dropping oldest event');
       }
       queue.push(value);
     }

@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 /**
  * Backend → web cache-invalidation helper.
  *
@@ -20,7 +21,7 @@ let warned = false;
 export async function notifyClimbRevalidated(climbUuid: string): Promise<void> {
   if (!REVALIDATE_SECRET) {
     if (!warned) {
-      console.warn(
+      logger.warn(
         '[web-revalidate] REVALIDATE_SECRET not set; climb-cache invalidation disabled. Cached climb pages will refresh on the configured TTL.',
       );
       warned = true;
@@ -45,10 +46,10 @@ export async function notifyClimbRevalidated(climbUuid: string): Promise<void> {
     });
 
     if (!response.ok) {
-      console.warn(`[web-revalidate] climb-cache invalidation failed for ${climbUuid}: HTTP ${response.status}`);
+      logger.warn(`[web-revalidate] climb-cache invalidation failed for ${climbUuid}: HTTP ${response.status}`);
     }
   } catch (error) {
-    console.warn(`[web-revalidate] climb-cache invalidation network error for ${climbUuid}:`, error);
+    logger.warn(`[web-revalidate] climb-cache invalidation network error for ${climbUuid}:`, error);
   } finally {
     clearTimeout(timeout);
   }

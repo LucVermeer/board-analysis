@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { SearchCacheService, DEFAULT_SEARCH_CACHE_TTL } from '../search-cache';
 import { redisClientManager } from '../../redis/client';
 import type { ClimbSearchParams, ParsedBoardRouteParameters } from '../../db/queries/climbs/index';
+import { logger } from '../../utils/logger';
 
 vi.mock('../../redis/client', () => ({
   redisClientManager: {
@@ -152,7 +153,7 @@ describe('SearchCacheService', () => {
     });
 
     it('returns null and logs error when Redis throws', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
       const mockGet = vi.fn().mockRejectedValue(new Error('connection lost'));
       mockedRedis.isRedisConnected.mockReturnValue(true);
       mockedRedis.getClients.mockReturnValue({
@@ -207,7 +208,7 @@ describe('SearchCacheService', () => {
     });
 
     it('catches and logs errors from publisher.set', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
       const setError = new Error('write failed');
       const mockSet = vi.fn().mockRejectedValue(setError);
       mockedRedis.isRedisConnected.mockReturnValue(true);

@@ -16,6 +16,20 @@ export default defineConfig({
       typeAware: true,
       typeCheck: true,
     },
+    overrides: [
+      {
+        files: ['packages/backend/src/**/*.ts'],
+        rules: {
+          'no-console': 'error',
+        },
+      },
+      {
+        files: ['packages/backend/src/__tests__/**/*.ts', 'packages/backend/src/**/*.test.ts'],
+        rules: {
+          'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
+        },
+      },
+    ],
   },
   test: {
     projects: [
@@ -31,6 +45,8 @@ export default defineConfig({
       const lintableFileNames = stagedFileNames.filter((fileName) => !isGeneratedFile(fileName));
       return lintableFileNames.length > 0 ? `vp check --fix ${lintableFileNames.map(shellQuote).join(' ')}` : [];
     },
+    'packages/web/app/**/*.{ts,tsx}': () => ['vp run check:i18n', 'vp run check:i18n:orphans'],
+    'packages/web/i18n/locales/**/*.json': () => 'vp run check:i18n:orphans',
   },
   run: {
     tasks: {

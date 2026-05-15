@@ -6,21 +6,24 @@ const posthogMocks = vi.hoisted(() => ({
   on: vi.fn(),
   shutdown: vi.fn(),
 }));
+const loggerMock = vi.hoisted(() => ({
+  warn: vi.fn(),
+}));
 
 vi.mock('posthog-node', () => ({
   PostHog: posthogMocks.PostHog,
 }));
 
+vi.mock('../utils/logger', () => ({
+  logger: loggerMock,
+}));
+
 async function loadPosthogModule(): Promise<typeof import('../services/analytics/posthog')> {
   vi.resetModules();
-  const posthogModule = await import('../services/analytics/posthog');
-  posthogModule.__resetPosthogForTests();
-  return posthogModule;
+  return import('../services/analytics/posthog');
 }
 
 describe('backend PostHog analytics helper', () => {
-  const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
@@ -34,7 +37,7 @@ describe('backend PostHog analytics helper', () => {
   });
 
   afterAll(() => {
-    consoleWarnSpy.mockRestore();
+    vi.restoreAllMocks();
   });
 
   it('does not initialize or capture without POSTHOG_PROJECT_KEY', async () => {
@@ -118,7 +121,7 @@ describe('backend PostHog analytics helper', () => {
     });
 
     expect(captured).toBe(false);
-    expect(consoleWarnSpy).toHaveBeenCalledWith('[PostHog] Capture failed:', expect.any(Error));
+    expect(loggerMock.warn).toHaveBeenCalledWith('[PostHog] Capture failed:', expect.any(Error));
   });
 
   it('flushes the client on shutdown', async () => {

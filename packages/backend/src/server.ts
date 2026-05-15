@@ -25,6 +25,7 @@ import { initializeApns, shutdownApns, sendLiveActivityUpdate, isApnsConfigured 
 import { startApnsHeartbeat, stopApnsHeartbeat } from './services/apns/heartbeat';
 import { startApnsStaleTokenCleanup, stopApnsStaleTokenCleanup } from './services/apns/cleanup';
 import { buildContentStateFromQueueState } from './services/apns/content-state';
+import { logger, setInstanceIdProvider } from './utils/logger';
 import type { QueueEvent } from '@boardsesh/shared-schema';
 
 /**
@@ -41,65 +42,16 @@ export type ServerResources = {
   shutdownServices: () => Promise<void>;
 };
 
-// Idempotency guard: re-running `startServer()` (which tests do) must not
-// stack the console wrapper — otherwise each call prepends another copy
-// of the instance tag and we get `[i:abc] [i:abc] message`.
-let instanceLogTagInstalled = false;
-
-/**
- * Prefix every console line with the pubsub instance ID so multi-instance
- * logs can be untangled. Without this, debugging cross-instance pub/sub
- * requires triangulating via connection-registration logs to figure out
- * which instance emitted any given line — see
- * gist.github.com/marcodejongh/90a125720ad48bf0355ec176f9ebc0df for an
- * example session where this cost hours of analysis time.
- *
- * TRADE-OFFS:
- * - This patches the GLOBAL `console.*`, so any third-party library that
- *   logs to console also picks up the prefix. That's fine today: we
- *   don't use a structured logger (Pino/Winston) anywhere — every log
- *   is raw `console.*` and is consumed by Railway as plain text. If we
- *   move to a structured logger later, swap this for a logger wrapper
- *   and remove the patch.
- * - When the first arg is non-string (e.g. `console.error(err)`), we
- *   pass the tag as a separate leading arg so util.format / inspect()
- *   on the trailing arg is preserved. Output stays one line per call.
- * - When Redis is not configured the instance ID is null and we skip
- *   the patch entirely (local-only dev mode — no need to disambiguate).
- * - Module-level `instanceLogTagInstalled` flag prevents double-wrapping
- *   if `startServer()` is invoked more than once (e.g. in tests).
- */
-function installInstanceLogTag(): void {
-  if (instanceLogTagInstalled) return;
-
-  const instanceId = pubsub.getInstanceId();
-  if (!instanceId) return;
-
-  const instanceTag = `[i:${instanceId.slice(0, 8)}] `;
-  const trimmedTag = instanceTag.trim();
-
-  for (const method of ['debug', 'info', 'warn', 'error', 'log'] as const) {
-    const original = console[method].bind(console);
-    console[method] = (...args: unknown[]) => {
-      if (args.length === 0) {
-        original(trimmedTag);
-      } else if (typeof args[0] === 'string') {
-        original(`${instanceTag}${args[0]}`, ...args.slice(1));
-      } else {
-        original(trimmedTag, ...args);
-      }
-    };
-  }
-
-  instanceLogTagInstalled = true;
-}
-
 export async function startServer(): Promise<ServerResources> {
   // Initialize PubSub (connects to Redis if configured)
   // This must happen before we start accepting connections
   await pubsub.initialize();
 
-  installInstanceLogTag();
+  // Wire the logger to the pubsub instance id. The format step in the
+  // logger reads this provider at log time, so we get the `[i:abcd1234]`
+  // tag (dev) / `instanceId` field (prod) once Redis is connected, and
+  // an untagged line when running without Redis.
+  setInstanceIdProvider(() => pubsub.getInstanceId());
 
   // Initialize RoomManager with Redis for session persistence
   if (redisClientManager.isRedisConfigured() && redisClientManager.isRedisConnected()) {
@@ -111,13 +63,13 @@ export async function startServer(): Promise<ServerResources> {
       await eventBroker.initialize(publisher, streamConsumer);
       const notificationWorker = new NotificationWorker(eventBroker);
       notificationWorker.start();
-      console.info('[Server] EventBroker and NotificationWorker started');
+      logger.info('[Server] EventBroker and NotificationWorker started');
     } catch (error) {
-      console.error('[Server] Failed to initialize EventBroker:', error);
+      logger.error('[Server] Failed to initialize EventBroker:', error);
     }
   } else {
     await roomManager.initialize(); // Postgres-only mode
-    console.info('[Server] No Redis - EventBroker disabled, inline notification fallback active');
+    logger.info('[Server] No Redis - EventBroker disabled, inline notification fallback active');
   }
 
   // Holds the F10 multi-instance APNs config marker interval. Set when Redis
@@ -136,7 +88,7 @@ export async function startServer(): Promise<ServerResources> {
   // skip the Live Activity push.
   const instanceId = process.env.HOSTNAME || process.env.FLY_MACHINE_ID || 'local';
   if (isApnsConfigured()) {
-    console.info(`[Server] APNs configured for instance ${instanceId}`);
+    logger.info(`[Server] APNs configured for instance ${instanceId}`);
     // Heartbeat keeps the lock-screen Live Activity alive during long idle
     // periods. The 90-s tick re-sends the latest content state for every
     // session with at least one registered push token. Only one instance in
@@ -146,7 +98,7 @@ export async function startServer(): Promise<ServerResources> {
     // bounce back as stale via a real send.
     startApnsStaleTokenCleanup();
   } else {
-    console.warn(
+    logger.warn(
       `[Server] APNs NOT configured on instance ${instanceId}. ` +
         'Live Activity push notifications will be silently dropped for queue ' +
         'events that originate on this instance. Set APNS_KEY_ID, APNS_TEAM_ID, ' +
@@ -198,31 +150,31 @@ export async function startServer(): Promise<ServerResources> {
         }
 
         if (isApnsConfigured() && unconfiguredPeers > 0) {
-          console.error(
+          logger.error(
             `[APNs] Mixed cluster configuration detected: ${String(unconfiguredPeers)} peer(s) lack APNs env vars. ` +
               'Queue events originating on those instances will silently skip Live Activity pushes.',
           );
         } else if (!isApnsConfigured() && configuredPeers > 0) {
-          console.error(
+          logger.error(
             `[APNs] This instance (${instanceId}) is missing APNs env vars while ${String(configuredPeers)} peer(s) ` +
               'are configured. Push notifications will be silently dropped for queue events originating here.',
           );
         }
       } catch (error) {
-        console.warn('[APNs] Failed to refresh multi-instance config marker:', error);
+        logger.warn('[APNs] Failed to refresh multi-instance config marker:', error);
       }
     }
 
     const initialApnsConfigDelay = setTimeout(() => {
       refreshApnsInstanceConfigMarker().catch((err) => {
-        console.warn('[APNs] Initial config marker refresh failed:', err);
+        logger.warn('[APNs] Initial config marker refresh failed:', err);
       });
     }, 5_000);
     if (typeof initialApnsConfigDelay.unref === 'function') initialApnsConfigDelay.unref();
 
     apnsInstanceConfigInterval = setInterval(() => {
       refreshApnsInstanceConfigMarker().catch((err) => {
-        console.warn('[APNs] Config marker refresh failed:', err);
+        logger.warn('[APNs] Config marker refresh failed:', err);
       });
     }, APNS_INSTANCE_REFRESH_MS);
     if (typeof apnsInstanceConfigInterval.unref === 'function') apnsInstanceConfigInterval.unref();
@@ -256,7 +208,7 @@ export async function startServer(): Promise<ServerResources> {
         if (!contentState) return;
         sendLiveActivityUpdate(sessionId, contentState);
       } catch (error) {
-        console.error(`[APNs Hook] Failed to send Live Activity update for session ${sessionId}:`, error);
+        logger.error(`[APNs Hook] Failed to send Live Activity update for session ${sessionId}:`, error);
       }
     })();
   });
@@ -382,7 +334,7 @@ export async function startServer(): Promise<ServerResources> {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
     } catch (error) {
-      console.error('Request handler error:', error);
+      logger.error('Request handler error:', error);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Internal server error' }));
@@ -409,48 +361,48 @@ export async function startServer(): Promise<ServerResources> {
   // Track intervals for cleanup
   const intervals: NodeJS.Timeout[] = [pingInterval];
 
-  console.info(`Boardsesh Backend starting on port ${PORT}...`);
+  logger.info(`Boardsesh Backend starting on port ${PORT}...`);
 
   // Start HTTP server (WebSocket server is attached to it)
   const httpScheme = tlsEnabled ? 'https' : 'http';
   const wsScheme = tlsEnabled ? 'wss' : 'ws';
   httpServer.listen(PORT, () => {
-    console.info(`Boardsesh Backend is running on port ${PORT}${tlsEnabled ? ' (TLS)' : ''}`);
-    console.info(`  GraphQL HTTP: ${httpScheme}://0.0.0.0:${PORT}/graphql`);
-    console.info(`  GraphQL WS: ${wsScheme}://0.0.0.0:${PORT}/graphql`);
-    console.info(`  Health check: ${httpScheme}://0.0.0.0:${PORT}/health`);
-    console.info(`  Join session: ${httpScheme}://0.0.0.0:${PORT}/join/:sessionId`);
-    console.info(`  Avatar upload: ${httpScheme}://0.0.0.0:${PORT}/api/avatars`);
-    console.info(`  Avatar files: ${httpScheme}://0.0.0.0:${PORT}/static/avatars/`);
-    console.info(`  OCR test data: ${httpScheme}://0.0.0.0:${PORT}/api/ocr-test-data`);
-    console.info(`  PostHog proxy: ${httpScheme}://0.0.0.0:${PORT}/api/posthog/*`);
-    console.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
-    console.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
-    console.info(`  Sync cron: ${httpScheme}://0.0.0.0:${PORT}/sync-cron`);
+    logger.info(`Boardsesh Backend is running on port ${PORT}${tlsEnabled ? ' (TLS)' : ''}`);
+    logger.info(`  GraphQL HTTP: ${httpScheme}://0.0.0.0:${PORT}/graphql`);
+    logger.info(`  GraphQL WS: ${wsScheme}://0.0.0.0:${PORT}/graphql`);
+    logger.info(`  Health check: ${httpScheme}://0.0.0.0:${PORT}/health`);
+    logger.info(`  Join session: ${httpScheme}://0.0.0.0:${PORT}/join/:sessionId`);
+    logger.info(`  Avatar upload: ${httpScheme}://0.0.0.0:${PORT}/api/avatars`);
+    logger.info(`  Avatar files: ${httpScheme}://0.0.0.0:${PORT}/static/avatars/`);
+    logger.info(`  OCR test data: ${httpScheme}://0.0.0.0:${PORT}/api/ocr-test-data`);
+    logger.info(`  PostHog proxy: ${httpScheme}://0.0.0.0:${PORT}/api/posthog/*`);
+    logger.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
+    logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
+    logger.info(`  Sync cron: ${httpScheme}://0.0.0.0:${PORT}/sync-cron`);
 
     // Warm up popular board configs cache in the background.
     // Uses a Redis lock so only one node across the cluster runs the query.
     warmPopularConfigsCache().catch((err) => {
-      console.error('[Server] Popular configs cache warm-up failed:', err);
+      logger.error('[Server] Popular configs cache warm-up failed:', err);
     });
 
     // Warm the recent-beta-links cache the same way. The underlying CTE was
     // slow enough in production to starve the DB pool — caching it in Redis
     // moves the cost off the request path.
     warmRecentBetaLinksCache().catch((err) => {
-      console.error('[Server] Recent beta links cache warm-up failed:', err);
+      logger.error('[Server] Recent beta links cache warm-up failed:', err);
     });
   });
 
   httpServer.on('error', (error) => {
-    console.error('HTTP server error:', error);
+    logger.error('HTTP server error:', error);
   });
 
   /**
    * Clean up intervals and timers on shutdown
    */
   function cleanupIntervals(): void {
-    console.info(`[Server] Cleaning up ${intervals.length} intervals`);
+    logger.info(`[Server] Cleaning up ${intervals.length} intervals`);
     intervals.forEach((interval) => clearInterval(interval));
     intervals.length = 0;
   }
@@ -470,27 +422,27 @@ export async function startServer(): Promise<ServerResources> {
     try {
       stopApnsHeartbeat();
     } catch (error) {
-      console.error('[Server] Error stopping APNs heartbeat:', error);
+      logger.error('[Server] Error stopping APNs heartbeat:', error);
     }
 
     try {
       stopApnsStaleTokenCleanup();
     } catch (error) {
-      console.error('[Server] Error stopping APNs cleanup:', error);
+      logger.error('[Server] Error stopping APNs cleanup:', error);
     }
 
     try {
       await shutdownApns();
-      console.log('[Server] APNs shutdown complete');
+      logger.info('[Server] APNs shutdown complete');
     } catch (error) {
-      console.error('[Server] Error during APNs shutdown:', error);
+      logger.error('[Server] Error during APNs shutdown:', error);
     }
 
     try {
       await roomManager.shutdown();
-      console.info('[Server] RoomManager shutdown complete');
+      logger.info('[Server] RoomManager shutdown complete');
     } catch (error) {
-      console.error('[Server] Error during RoomManager shutdown:', error);
+      logger.error('[Server] Error during RoomManager shutdown:', error);
     }
   }
 
@@ -499,7 +451,7 @@ export async function startServer(): Promise<ServerResources> {
     try {
       await roomManager.flushPendingWrites();
     } catch (error) {
-      console.error('[Server] Error in periodic flush:', error);
+      logger.error('[Server] Error in periodic flush:', error);
     }
   }, 60000);
   intervals.push(flushInterval);
@@ -511,7 +463,7 @@ export async function startServer(): Promise<ServerResources> {
         await roomManager.refreshActiveSessionTTLs();
       }
     } catch (error) {
-      console.error('[Server] Error in periodic TTL refresh:', error);
+      logger.error('[Server] Error in periodic TTL refresh:', error);
     }
   }, 120000); // 2 minutes
   intervals.push(ttlRefreshInterval);

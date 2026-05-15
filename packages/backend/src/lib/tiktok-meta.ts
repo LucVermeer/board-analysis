@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { getTikTokVideoId, isTikTokUrl, TIKTOK_URL_REGEX } from '@boardsesh/shared-schema';
 import { createCircuitBreaker } from './circuit-breaker';
+import { logger } from '../utils/logger';
 
 export { TIKTOK_URL_REGEX, isTikTokUrl };
 
@@ -52,7 +53,7 @@ const circuit = createCircuitBreaker({
   threshold: CIRCUIT_THRESHOLD,
   cooldownMs: CIRCUIT_COOLDOWN_MS,
   onOpen: (count, cooldownMs) => {
-    console.warn(
+    logger.warn(
       `[tiktok-meta] circuit breaker open for ${cooldownMs / 1000}s after ${count} transient errors in ${CIRCUIT_WINDOW_MS / 1000}s`,
     );
   },

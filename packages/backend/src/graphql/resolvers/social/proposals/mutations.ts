@@ -11,6 +11,7 @@ import {
   ResolveProposalInputSchema,
   DeleteProposalInputSchema,
 } from '../../../../validation/schemas';
+import { logger } from '../../../../utils/logger';
 import { publishSocialEvent } from '../../../../events/index';
 import { notifyClimbRevalidated } from '../../../../lib/web-revalidate';
 import { requireAdminOrLeader, getUserVoteWeight } from '../roles';
@@ -177,7 +178,7 @@ export const socialProposalMutations = {
           entityId: uuid,
           timestamp: Date.now(),
           metadata: { climbUuid, boardType, proposalType: type },
-        }).catch((err) => console.error('[Proposals] Failed to publish proposal.approved:', err));
+        }).catch((err) => logger.error('[Proposals] Failed to publish proposal.approved:', err));
       }
     }
 
@@ -189,7 +190,7 @@ export const socialProposalMutations = {
       entityId: uuid,
       timestamp: Date.now(),
       metadata: { climbUuid, boardType, proposalType: type },
-    }).catch((err) => console.error('[Proposals] Failed to publish proposal.created:', err));
+    }).catch((err) => logger.error('[Proposals] Failed to publish proposal.created:', err));
 
     return enrichProposal(proposal, proposerId);
   },
@@ -268,7 +269,7 @@ export const socialProposalMutations = {
             boardType: proposal.boardType,
             proposalType: proposal.type,
           },
-        }).catch((err) => console.error('[Proposals] Failed to publish proposal.approved:', err));
+        }).catch((err) => logger.error('[Proposals] Failed to publish proposal.approved:', err));
       }
     }
 
@@ -284,7 +285,7 @@ export const socialProposalMutations = {
         climbUuid: proposal.climbUuid,
         boardType: proposal.boardType,
       },
-    }).catch((err) => console.error('[Proposals] Failed to publish proposal.voted:', err));
+    }).catch((err) => logger.error('[Proposals] Failed to publish proposal.voted:', err));
 
     return enrichProposal(proposal, userId);
   },
@@ -338,7 +339,7 @@ export const socialProposalMutations = {
         boardType: proposal.boardType,
         proposalType: proposal.type,
       },
-    }).catch((err) => console.error(`[Proposals] Failed to publish ${eventType}:`, err));
+    }).catch((err) => logger.error(`[Proposals] Failed to publish ${eventType}:`, err));
 
     return enrichProposal(proposal, userId);
   },
@@ -379,7 +380,7 @@ export const socialProposalMutations = {
         boardType: proposal.boardType,
         proposalType: proposal.type,
       },
-    }).catch((err) => console.error('[Proposals] Failed to publish proposal.deleted:', err));
+    }).catch((err) => logger.error('[Proposals] Failed to publish proposal.deleted:', err));
 
     return true;
   },

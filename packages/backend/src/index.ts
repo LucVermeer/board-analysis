@@ -6,6 +6,7 @@ import { startServer } from './server';
 import { redisClientManager } from './redis/client';
 import { closePool, closeReadPool } from '@boardsesh/db/client';
 import { shutdownPosthog } from './services/analytics/posthog';
+import { logger } from './utils/logger';
 
 async function main() {
   const { wss, httpServer, cleanupIntervals, shutdownServices } = await startServer();
@@ -16,11 +17,11 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
 
-    console.info('\nShutting down Boardsesh Daemon...');
+    logger.info('\nShutting down Boardsesh Daemon...');
 
     // Force exit after 10 seconds if graceful shutdown stalls
     const forceTimer = setTimeout(() => {
-      console.info('Forcing shutdown...');
+      logger.info('Forcing shutdown...');
       void Sentry.flush(2000).finally(() => process.exit(1));
     }, 10000);
     forceTimer.unref();
@@ -39,14 +40,14 @@ async function main() {
     // Wait for WS and HTTP servers to close before touching the DB pool
     await new Promise<void>((resolve) => {
       wss.close(() => {
-        console.info('WebSocket server closed');
+        logger.info('WebSocket server closed');
         resolve();
       });
     });
 
     await new Promise<void>((resolve) => {
       httpServer.close(() => {
-        console.info('HTTP server closed');
+        logger.info('HTTP server closed');
         resolve();
       });
     });
@@ -58,14 +59,14 @@ async function main() {
     try {
       await closeReadPool();
       await closePool();
-      console.info('Database pools closed');
+      logger.info('Database pools closed');
     } catch (error) {
-      console.warn('Error closing database pools:', error);
+      logger.warn('Error closing database pools:', error);
     }
 
     await shutdownPosthog();
     await Sentry.flush(2000);
-    console.info('Shutdown complete');
+    logger.info('Shutdown complete');
     process.exit(0);
   }
 
@@ -74,7 +75,7 @@ async function main() {
 }
 
 main().catch(async (error) => {
-  console.error('Failed to start server:', error);
+  logger.error('Failed to start server:', error);
   Sentry.captureException(error);
   await Sentry.flush(2000);
   process.exit(1);

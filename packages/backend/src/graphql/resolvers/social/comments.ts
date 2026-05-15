@@ -10,6 +10,7 @@ import {
   CommentsInputSchema,
   GlobalCommentFeedInputSchema,
 } from '../../../validation/schemas';
+import { logger } from '../../../utils/logger';
 import { encodeOffsetCursor, decodeOffsetCursor } from '../../../utils/feed-cursor';
 import { validateEntityExists } from './entity-validation';
 import { publishSocialEvent } from '../../../events/index';
@@ -424,7 +425,7 @@ export const socialCommentMutations = {
         commentUuid: uuid,
         ...(parentCommentUuid ? { parentCommentId: parentCommentUuid } : {}),
       },
-    }).catch((err) => console.error('[Comments] Failed to publish social event:', err));
+    }).catch((err) => logger.error('[Comments] Failed to publish social event:', err));
 
     return commentResult;
   },

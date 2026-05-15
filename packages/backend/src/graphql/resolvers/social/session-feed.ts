@@ -13,6 +13,7 @@ import type {
   SessionFeedParticipant,
   SessionDetailTick,
 } from '@boardsesh/shared-schema';
+import { logger } from '../../../utils/logger';
 import { buildGradeDistributionFromTicks, computeSessionAggregates } from './session-feed-utils';
 
 type SessionFeedFilterOptions = {
@@ -151,7 +152,7 @@ export const sessionFeedQueries = {
         LIMIT ${limit + 1}
       `);
     } catch (err) {
-      console.error('[sessionGroupedFeed] SQL error:', err);
+      logger.error('[sessionGroupedFeed] SQL error:', err);
       throw err;
     }
 

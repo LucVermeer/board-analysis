@@ -17,6 +17,7 @@ import {
   resolveClimbCreatedFollowerRecipients,
   resolveClimbCreatedSubscriptionRecipients,
 } from './recipient-resolution';
+import { logger } from '../utils/logger';
 import { fanoutFeedItems, fanoutNewClimbFeedItems } from './feed-fanout';
 import { isNoMatchClimb } from '../graphql/resolvers/shared/helpers';
 import crypto from 'crypto';
@@ -30,7 +31,7 @@ export class NotificationWorker {
 
   start(): void {
     this.eventBroker.startConsumer(this.processEvent.bind(this));
-    console.info('[NotificationWorker] Started');
+    logger.info('[NotificationWorker] Started');
   }
 
   private async processEvent(event: SocialEvent): Promise<void> {
@@ -70,7 +71,7 @@ export class NotificationWorker {
           break;
       }
     } catch (error) {
-      console.error(`[NotificationWorker] Error processing event ${event.type}:`, error);
+      logger.error(`[NotificationWorker] Error processing event ${event.type}:`, error);
     }
   }
 

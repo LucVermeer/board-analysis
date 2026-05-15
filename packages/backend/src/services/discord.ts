@@ -10,6 +10,7 @@
  */
 
 import type { AppFeedbackPlatform, AppFeedbackSource, FeedbackContextInput } from '@boardsesh/shared-schema';
+import { logger } from '../utils/logger';
 
 const BUG_SOURCES: ReadonlySet<AppFeedbackSource> = new Set(['shake-bug', 'drawer-bug']);
 
@@ -118,9 +119,9 @@ export async function postFeedbackToDiscord(payload: FeedbackDiscordPayload): Pr
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '<unreadable>');
-      console.error(`[Discord] Webhook POST failed: ${response.status} ${errorText}`);
+      logger.error(`[Discord] Webhook POST failed: ${response.status} ${errorText}`);
     }
   } catch (error) {
-    console.error('[Discord] Webhook POST error:', error);
+    logger.error('[Discord] Webhook POST error:', error);
   }
 }

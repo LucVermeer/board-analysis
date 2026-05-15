@@ -13,6 +13,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vite-plus/test';
 import type { QueueState } from '../services/room-manager';
+import { logger } from '../utils/logger';
 
 // ---------------------------------------------------------------------------
 // Mocks (hoisted before importing the heartbeat module)
@@ -61,12 +62,12 @@ vi.mock('../redis/client', () => ({
 
 const { __runHeartbeatTickForTests } = await import('../services/apns/heartbeat');
 
-const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
 afterAll(() => {
-  consoleWarnSpy.mockRestore();
-  consoleErrorSpy.mockRestore();
+  loggerWarnSpy.mockRestore();
+  loggerErrorSpy.mockRestore();
 });
 
 // ---------------------------------------------------------------------------
@@ -193,7 +194,7 @@ describe('runHeartbeatTick', () => {
 
     expect(sendLiveActivityUpdateMock).toHaveBeenCalledTimes(1);
     expect(sendLiveActivityUpdateMock).toHaveBeenCalledWith('b', expect.anything());
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
       expect.stringContaining('[APNs Heartbeat] Failed to build heartbeat state for session a:'),
       expect.any(Error),
     );

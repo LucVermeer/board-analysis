@@ -13,6 +13,7 @@ import { eq } from 'drizzle-orm';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { db } from '../../db/client';
 import { trackLiveActivityEnded, trackLiveActivityPushDelivery } from '../analytics/live-activity';
+import { logger } from '../../utils/logger';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -144,7 +145,7 @@ export function initializeApns(): void {
   const production = process.env.APNS_PRODUCTION === 'true';
 
   if (!keyId || !teamId || !keyContentsBase64) {
-    console.warn(
+    logger.warn(
       '[APNs] Missing one or more required env vars (APNS_KEY_ID, APNS_TEAM_ID, APNS_KEY_CONTENTS). ' +
         'Live Activity push notifications are disabled.',
     );
@@ -167,7 +168,7 @@ export function initializeApns(): void {
   });
 
   configured = true;
-  console.log(`[APNs] Initialized (production=${String(production)}, bundleId=${bundleId})`);
+  logger.info(`[APNs] Initialized (production=${String(production)}, bundleId=${bundleId})`);
 }
 
 /**
@@ -187,7 +188,7 @@ export async function shutdownApns(): Promise<void> {
     await provider.shutdown();
     provider = null;
     configured = false;
-    console.log('[APNs] Provider shut down');
+    logger.info('[APNs] Provider shut down');
   }
 }
 
@@ -216,9 +217,9 @@ async function deleteStaleToken(token: string): Promise<void> {
   try {
     await db.delete(activityPushTokens).where(eq(activityPushTokens.token, token));
     metrics.tokensRemovedOn410++;
-    console.log(`[APNs] Deleted stale token ${token.slice(0, 8)}...`);
+    logger.info(`[APNs] Deleted stale token ${token.slice(0, 8)}...`);
   } catch (error) {
-    console.error('[APNs] Failed to delete stale token:', error);
+    logger.error('[APNs] Failed to delete stale token:', error);
   }
 }
 
@@ -275,7 +276,7 @@ async function sendNotification(
           stale++;
           staleTokenDeletions.push(deleteStaleToken(failure.device));
         } else {
-          console.error(
+          logger.error(
             `[APNs] Send failed for session ${sessionId}, token ${failure.device.slice(0, 8)}...: ` +
               `status=${String(status)} reason=${reason ?? 'unknown'}`,
           );
@@ -287,7 +288,7 @@ async function sendNotification(
       }
     }
 
-    console.info(
+    logger.info(
       `[APNs] session=${sessionId} event=${event} source=${options.source ?? 'event'} ` +
         `tokens=${String(tokens.length)} sent=${String(sent)} failed=${String(failed)} stale=${String(stale)} ` +
         `elapsedMs=${String(Date.now() - startedAt)}`,
@@ -306,7 +307,7 @@ async function sendNotification(
     return { sent, failed, stale };
   } catch (error) {
     metrics.sendsFailed += tokens.length;
-    console.error(`[APNs] Send error for session ${sessionId}:`, error);
+    logger.error(`[APNs] Send error for session ${sessionId}:`, error);
     trackLiveActivityPushDelivery({
       sessionId,
       event,
@@ -360,7 +361,7 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
   } catch (error) {
     if (entry.dbRetryAttempt < DB_RETRY_DELAYS_MS.length) {
       const delay = DB_RETRY_DELAYS_MS[entry.dbRetryAttempt];
-      console.error(
+      logger.error(
         `[APNs] getTokensForSession failed for session ${sessionId} ` +
           `(retry ${String(entry.dbRetryAttempt + 1)}/${String(DB_RETRY_DELAYS_MS.length)} in ${String(delay)}ms):`,
         error,
@@ -369,12 +370,12 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
       metrics.dbRetriesUsed++;
       entry.timeout = setTimeout(() => {
         executeDebouncedSend(sessionId).catch((retryError) => {
-          console.error(`[APNs] Retried debounced send failed for session ${sessionId}:`, retryError);
+          logger.error(`[APNs] Retried debounced send failed for session ${sessionId}:`, retryError);
         });
       }, delay);
       return;
     }
-    console.error(
+    logger.error(
       `[APNs] Giving up on session ${sessionId} after ${String(DB_RETRY_DELAYS_MS.length)} DB retry(ies):`,
       error,
     );
@@ -396,7 +397,7 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
     // Demoted to debug because every queue event on a party session without an
     // iOS Live Activity device produces one of these. Multiplied by N backend
     // instances and M queue events/min, the info-level version was unreadable.
-    console.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping update`);
+    logger.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping update`);
     return;
   }
 
@@ -437,7 +438,7 @@ export function sendLiveActivityUpdate(
 
   const timeout = setTimeout(() => {
     executeDebouncedSend(sessionId).catch((error) => {
-      console.error(`[APNs] Debounced send failed for session ${sessionId}:`, error);
+      logger.error(`[APNs] Debounced send failed for session ${sessionId}:`, error);
     });
   }, DEBOUNCE_MS);
 
@@ -482,7 +483,7 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
   try {
     registrations = await getTokenRegistrationsForSession(sessionId);
   } catch (error) {
-    console.error(`[APNs] endLiveActivity: token lookup failed for session ${sessionId}:`, error);
+    logger.error(`[APNs] endLiveActivity: token lookup failed for session ${sessionId}:`, error);
   }
   const tokens = registrations.map((registration) => registration.token);
 
@@ -490,7 +491,7 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
     await sendNotification(sessionId, tokens, 'end');
     trackSessionEndedForRegistrations(sessionId, registrations);
   } else {
-    console.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);
+    logger.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);
   }
 
   await cleanupTokensForSession(sessionId);
@@ -499,9 +500,9 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
 export async function cleanupTokensForSession(sessionId: string): Promise<void> {
   try {
     await db.delete(activityPushTokens).where(eq(activityPushTokens.sessionId, sessionId));
-    console.log(`[APNs] Cleaned up tokens for session ${sessionId}`);
+    logger.info(`[APNs] Cleaned up tokens for session ${sessionId}`);
   } catch (error) {
-    console.error(`[APNs] Failed to clean up tokens for session ${sessionId}:`, error);
+    logger.error(`[APNs] Failed to clean up tokens for session ${sessionId}:`, error);
   }
 }
 

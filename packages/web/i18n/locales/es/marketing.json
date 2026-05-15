@@ -105,9 +105,7 @@
   },
   "privacy": {
     "title": "Política de Privacidad",
-    "lastUpdated": "Última actualización: abril de 2026",
     "intro1": "Boardsesh es una app de código abierto para controlar tablas de entrenamiento de escalada (Kilter, Tension, MoonBoard) por Bluetooth. Esta política explica qué datos recogemos, por qué y qué hacemos con ellos.",
-    "intro2": "La versión corta: solo recogemos lo necesario para que la app funcione. No vendemos tus datos, no mostramos anuncios y no usamos rastreo de terceros.",
     "collect": {
       "title": "Qué recogemos",
       "accountLabel": "Información de cuenta.",
@@ -115,9 +113,7 @@
       "activityLabel": "Actividad de escalada.",
       "activityBody": "Cuando registras un envío o un intento guardamos los detalles del problema, el grado, la fecha y las notas que añadas. Esto alimenta tu logbook y el seguimiento de progresión.",
       "locationLabel": "Ubicación.",
-      "locationBody": "Si concedes permiso de ubicación, usamos tu ubicación aproximada para ayudarte a descubrir sesiones de Modo Fiesta cercanas. No rastreamos tu ubicación en segundo plano ni guardamos historial.",
-      "analyticsLabel": "Analítica.",
-      "analyticsBody": "Usamos Vercel Analytics para recoger datos anónimos de páginas vistas y rendimiento. Esto nos ayuda a entender qué funciones se usan y dónde la app va lenta. Estos datos no están vinculados a tu cuenta."
+      "locationBody": "Si concedes permiso de ubicación, usamos tu ubicación aproximada para ayudarte a descubrir sesiones de Modo Fiesta cercanas. No rastreamos tu ubicación en segundo plano ni guardamos historial."
     },
     "bluetooth": {
       "title": "Bluetooth",
@@ -140,7 +136,6 @@
     },
     "sharing": {
       "title": "Compartir de datos",
-      "body1": "No vendemos tus datos. No mostramos anuncios. No compartimos tu información con empresas de terceros ni con brokers de datos. Lo único que se comparte externamente es lo descrito arriba (alojamiento/analítica de Vercel, sincronización de Aurora Climbing si la activas).",
       "body2": "Otros usuarios de Boardsesh pueden ver tu nombre de usuario, tu perfil y tus problemas registrados si participas en funciones sociales como el Modo Fiesta. Esto se ve en la app y forma parte de cómo funciona el producto."
     },
     "retention": {

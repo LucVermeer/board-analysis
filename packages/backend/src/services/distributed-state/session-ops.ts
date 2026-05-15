@@ -18,6 +18,7 @@ import {
   REMOVE_PARTICIPANT_CONNECTION_SCRIPT,
   REMOVE_PARTICIPANT_SCRIPT,
 } from './lua-scripts';
+import { logger } from '../../utils/logger';
 
 /**
  * Join a session. Handles leader election for first member.
@@ -69,7 +70,7 @@ export async function joinSession(
   }
 
   if (becameLeader === 1) {
-    console.info(
+    logger.info(
       `[DistributedState] Connection ${connectionId.slice(0, 8)} became leader of session ${sessionId.slice(0, 8)}`,
     );
   }
@@ -115,14 +116,14 @@ export async function leaveSession(
     }
 
     if (result === '') {
-      console.info(`[DistributedState] Session ${sessionId.slice(0, 8)} has no remaining members after leader left`);
+      logger.info(`[DistributedState] Session ${sessionId.slice(0, 8)} has no remaining members after leader left`);
       return { newLeaderId: null };
     }
 
-    console.info(`[DistributedState] Elected new leader: ${result.slice(0, 8)} for session ${sessionId.slice(0, 8)}`);
+    logger.info(`[DistributedState] Elected new leader: ${result.slice(0, 8)} for session ${sessionId.slice(0, 8)}`);
     return { newLeaderId: result };
   } catch (err) {
-    console.error(`[DistributedState] Failed to leave session ${sessionId.slice(0, 8)}:`, err);
+    logger.error(`[DistributedState] Failed to leave session ${sessionId.slice(0, 8)}:`, err);
     return leaveSessionFallback(redis, connectionId, sessionId);
   }
 }
@@ -154,7 +155,7 @@ async function leaveSessionFallback(
       const execResult = await multi.exec();
 
       if (execResult === null) {
-        console.info(
+        logger.info(
           `[DistributedState] Fallback aborted: leader changed during cleanup for session ${sessionId.slice(0, 8)}`,
         );
         return { newLeaderId: null };
@@ -173,13 +174,13 @@ async function leaveSessionFallback(
           )) as string | null;
 
           if (newLeaderId) {
-            console.info(
+            logger.info(
               `[DistributedState] Fallback: elected new leader ${newLeaderId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
             );
             return { newLeaderId };
           }
         } catch (electionErr) {
-          console.error(`[DistributedState] Fallback leader election failed:`, electionErr);
+          logger.error(`[DistributedState] Fallback leader election failed:`, electionErr);
           await redis.del(KEYS.sessionLeader(sessionId)).catch(() => {});
         }
       }
@@ -199,7 +200,7 @@ async function leaveSessionFallback(
 export async function getSessionMembers(redis: Redis, sessionId: string): Promise<SessionUser[]> {
   validateSessionId(sessionId);
   const memberCleanup = cleanupStaleSessionMembers(redis, sessionId).catch((err) => {
-    console.error(`[DistributedState] Failed to prune stale session members for ${sessionId.slice(0, 8)}:`, err);
+    logger.error(`[DistributedState] Failed to prune stale session members for ${sessionId.slice(0, 8)}:`, err);
   });
 
   const participantIds = await redis.smembers(KEYS.sessionParticipants(sessionId));
@@ -251,7 +252,7 @@ export async function getSessionMembers(redis: Redis, sessionId: string): Promis
       cleanupPipeline.srem(KEYS.sessionMembers(sessionId), id);
     }
     cleanupPipeline.exec().catch((err) => {
-      console.error(
+      logger.error(
         `[DistributedState] Failed to prune ${staleMemberIds.length} stale members from session ${sessionId.slice(0, 8)}:`,
         err,
       );
@@ -586,7 +587,7 @@ export async function cleanupStaleSessionMembers(redis: Redis, sessionId: string
   )) as number;
 
   if (removed > 0) {
-    console.info(`[DistributedState] Pruned ${removed} stale members from session ${sessionId.slice(0, 8)}`);
+    logger.info(`[DistributedState] Pruned ${removed} stale members from session ${sessionId.slice(0, 8)}`);
   }
   return removed;
 }
@@ -601,5 +602,5 @@ export async function cleanupEmptySession(redis: Redis, sessionId: string): Prom
   multi.del(KEYS.sessionLeader(sessionId));
   await multi.exec();
 
-  console.info(`[DistributedState] Cleaned up empty session: ${sessionId.slice(0, 8)}`);
+  logger.info(`[DistributedState] Cleaned up empty session: ${sessionId.slice(0, 8)}`);
 }

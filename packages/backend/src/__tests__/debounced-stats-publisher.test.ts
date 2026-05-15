@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { publishDebouncedSessionStats } from '../graphql/resolvers/sessions/debounced-stats-publisher';
+import { logger } from '../utils/logger';
 
 // --- Hoisted mocks ---
 const { buildSessionStatsUpdatedEventMock, publishSessionEventMock, redisSetMock, redisGetMock, redisDelMock } =
@@ -140,7 +141,7 @@ describe('publishDebouncedSessionStats', () => {
   });
 
   it('logs error when buildSessionStatsUpdatedEvent throws', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
     buildSessionStatsUpdatedEventMock.mockRejectedValue(new Error('DB connection lost'));
     redisGetMock.mockImplementation(async () => {
       const setCall = redisSetMock.mock.calls[0];

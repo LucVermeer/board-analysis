@@ -4,6 +4,7 @@ import * as dbSchema from '@boardsesh/db/schema';
 import { eq, and, inArray, sql, count, desc, isNotNull } from 'drizzle-orm';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import { rowsFromResult } from '@boardsesh/db/client';
+import { logger } from '../../../utils/logger';
 
 /**
  * Generate a summary for a session including grade distribution,
@@ -139,7 +140,7 @@ export async function generateSessionSummary(sessionId: string): Promise<Session
   if (session.startedAt && session.endedAt) {
     durationMinutes = Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 60000);
   } else if (session.endedAt && !session.startedAt) {
-    console.warn(`[sessionSummary] Session ${sessionId} has endedAt but no startedAt; durationMinutes will be null.`);
+    logger.warn(`[sessionSummary] Session ${sessionId} has endedAt but no startedAt; durationMinutes will be null.`);
   }
 
   return {
