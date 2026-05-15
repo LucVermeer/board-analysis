@@ -72,6 +72,8 @@ export type BluetoothAdapter = {
     boardName: string;
     layoutId: number;
     sizeId: number;
+    apiLevel?: number;
+    deviceName?: string;
     colorOverrides?: Record<string, string>;
   }): Promise<void>;
 };

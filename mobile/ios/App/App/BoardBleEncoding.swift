@@ -4,6 +4,8 @@ struct BoardBleConfiguration: Codable, Equatable {
     let boardName: String
     let layoutId: Int
     let sizeId: Int
+    let apiLevel: Int?
+    let deviceName: String?
     let colorOverrides: [String: String]
 }
 

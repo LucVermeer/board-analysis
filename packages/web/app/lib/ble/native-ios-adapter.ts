@@ -14,10 +14,13 @@ type NativeBoardBlePlugin = {
   connect(options: { deviceId: string }): Promise<void>;
   disconnect(): Promise<void>;
   write(options: { value: string }): Promise<void>;
+  cancelWrites?(): Promise<void>;
   configureBoard(options: {
     boardName: string;
     layoutId: number;
     sizeId: number;
+    apiLevel?: number;
+    deviceName?: string;
     colorOverrides?: Record<string, string>;
   }): Promise<void>;
   addListener(
@@ -44,6 +47,15 @@ function toHexString(data: Uint8Array): string {
   return Array.from(data)
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
+}
+
+function createAbortError(): DOMException | Error {
+  if (typeof DOMException === 'function') {
+    return new DOMException('Write aborted', 'AbortError');
+  }
+  const error = new Error('Write aborted');
+  error.name = 'AbortError';
+  return error;
 }
 
 async function normalizeListenerHandle(
@@ -194,9 +206,33 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       throw new Error('Not connected');
     }
     if (signal?.aborted) {
-      throw new DOMException('Write aborted', 'AbortError');
+      throw createAbortError();
     }
-    await getNativeBoardBlePlugin().write({ value: toHexString(data) });
+
+    const plugin = getNativeBoardBlePlugin();
+    const writePromise = plugin.write({ value: toHexString(data) });
+
+    if (!signal) {
+      await writePromise;
+      return;
+    }
+
+    let abortHandler: (() => void) | null = null;
+    const abortPromise = new Promise<never>((_, reject) => {
+      abortHandler = () => {
+        void plugin.cancelWrites?.().catch(() => {});
+        reject(createAbortError());
+      };
+      signal.addEventListener('abort', abortHandler, { once: true });
+    });
+
+    try {
+      await Promise.race([writePromise, abortPromise]);
+    } finally {
+      if (abortHandler) {
+        signal.removeEventListener('abort', abortHandler);
+      }
+    }
   }
 
   onDisconnect(callback: () => void): () => void {
@@ -210,6 +246,8 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     boardName: string;
     layoutId: number;
     sizeId: number;
+    apiLevel?: number;
+    deviceName?: string;
     colorOverrides?: Record<string, string>;
   }): Promise<void> {
     if (this.boardName === 'moonboard') return;

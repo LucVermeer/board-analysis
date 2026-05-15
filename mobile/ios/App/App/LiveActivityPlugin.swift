@@ -17,7 +17,6 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityPlugin")
     private var observingDarwinNotification = false
-    private var observingBoardBleDisplayNotification = false
     private var observingPushRegistrationStale = false
     private var observingForegroundNotification = false
 
@@ -73,7 +72,6 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     deinit {
         stopDarwinObservation()
-        stopBoardBleDisplayObservation()
         stopPushRegistrationStaleObservation()
         stopForegroundObservation()
     }
@@ -89,48 +87,6 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let observer = Unmanaged.passUnretained(self).toOpaque()
         let name = CFNotificationName(SharedConstants.queueNavigateNotification as CFString)
         CFNotificationCenterRemoveObserver(center, observer, name, nil)
-    }
-
-    // MARK: - Board BLE Display (Widget → native BLE bridge)
-
-    /// Observe widget navigation that already succeeded optimistically and
-    /// repaint the connected board without sending another queue mutation.
-    private func startBoardBleDisplayObservation() {
-        guard !observingBoardBleDisplayNotification else { return }
-        observingBoardBleDisplayNotification = true
-
-        let center = CFNotificationCenterGetDarwinNotifyCenter()
-        let name = CFNotificationName(SharedConstants.boardBleDisplayNotification as CFString)
-        let observer = Unmanaged.passUnretained(self).toOpaque()
-
-        CFNotificationCenterAddObserver(
-            center,
-            observer,
-            { (_, observer, _, _, _) in
-                guard let observer = observer else { return }
-                let plugin = Unmanaged<LiveActivityPlugin>.fromOpaque(observer).takeUnretainedValue()
-                plugin.handleBoardBleDisplayFromWidget()
-            },
-            name.rawValue,
-            nil,
-            .deliverImmediately
-        )
-    }
-
-    private func stopBoardBleDisplayObservation() {
-        guard observingBoardBleDisplayNotification else { return }
-        observingBoardBleDisplayNotification = false
-
-        let center = CFNotificationCenterGetDarwinNotifyCenter()
-        let observer = Unmanaged.passUnretained(self).toOpaque()
-        let name = CFNotificationName(SharedConstants.boardBleDisplayNotification as CFString)
-        CFNotificationCenterRemoveObserver(center, observer, name, nil)
-    }
-
-    private func handleBoardBleDisplayFromWidget() {
-        guard let defaults = SharedConstants.sharedDefaults else { return }
-        let (items, currentIndex) = SharedQueueState.load(from: defaults)
-        BoardBleManager.shared.displayCurrentItem(items: items, currentIndex: currentIndex)
     }
 
     // MARK: - Push registration stale (widget 410)
@@ -650,10 +606,6 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
         // Observe widget navigation intents and forward to JS.
         startDarwinObservation()
-        // Observe widget navigation for native BLE repainting. This is separate
-        // from queueNavigate so successful widget HTTP requests do not cause a
-        // duplicate WebSocket mutation.
-        startBoardBleDisplayObservation()
         // Observe widget 410 hints and app foreground transitions so we can
         // retry push-token registration in both directions.
         startPushRegistrationStaleObservation()
@@ -722,7 +674,6 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func endSession(_ call: CAPPluginCall) {
         stopDarwinObservation()
-        stopBoardBleDisplayObservation()
         stopPushRegistrationStaleObservation()
         stopForegroundObservation()
 

@@ -105,6 +105,7 @@ export function useBoardBluetooth({
   // Store the BLE adapter and API level across renders
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
+  const deviceNameRef = useRef<string | undefined>(undefined);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
   // Timestamp of the most recent successful BLE connect — drives the
   // duration_connected_ms property on Bluetooth Disconnected events.
@@ -330,11 +331,14 @@ export function useBoardBluetooth({
 
         // Connect via the adapter and parse API level from device name
         const connection = await adapter.requestAndConnect(targetSerial);
+        deviceNameRef.current = connection.deviceName;
         apiLevelRef.current = parseApiLevel(connection.deviceName);
         await adapter.configureBoard?.({
           boardName: boardDetails.board_name,
           layoutId: boardDetails.layout_id,
           sizeId: boardDetails.size_id,
+          apiLevel: apiLevelRef.current,
+          deviceName: deviceNameRef.current,
           colorOverrides: ledColorOverrides,
         });
 
@@ -394,6 +398,8 @@ export function useBoardBluetooth({
       boardName: boardDetails.board_name,
       layoutId: boardDetails.layout_id,
       sizeId: boardDetails.size_id,
+      apiLevel: apiLevelRef.current,
+      deviceName: deviceNameRef.current,
       colorOverrides: ledColorOverrides,
     });
   }, [isConnected, boardDetails, ledColorOverrides]);
@@ -407,6 +413,7 @@ export function useBoardBluetooth({
     unsubDisconnectRef.current = null;
     const adapter = adapterRef.current;
     adapterRef.current = null;
+    deviceNameRef.current = undefined;
     setIsConnected(false);
     onConnectionChange?.(false);
     if (connectedAt !== null) {

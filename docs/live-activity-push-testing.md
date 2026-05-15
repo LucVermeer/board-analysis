@@ -358,7 +358,7 @@ The APNs hook fired for a queue change, but `activity_push_tokens` has no rows f
 [APNs] No registered Live Activity tokens for session ...; skipping update
 ```
 
-For a session you *expect* to have an iOS device, this means ActivityKit emitted a push token but native registration failed before the backend stored it. Check iOS console logs for keychain write failures, missing auth-token warnings, GraphQL registration errors, or backend reachability errors. A common past failure mode: the plugin was POSTing the mutation to the web origin (`https://www.boardsesh.com/graphql`) instead of the backend host (`https://ws.boardsesh.com/graphql`) — every request 404'd silently. Verify `graphqlUrl` is passed in to `startSession` from JS and stored in `_currentGraphqlUrl`.
+For a session you _expect_ to have an iOS device, this means ActivityKit emitted a push token but native registration failed before the backend stored it. Check iOS console logs for keychain write failures, missing auth-token warnings, GraphQL registration errors, or backend reachability errors. A common past failure mode: the plugin was POSTing the mutation to the web origin (`https://www.boardsesh.com/graphql`) instead of the backend host (`https://ws.boardsesh.com/graphql`) — every request 404'd silently. Verify `graphqlUrl` is passed in to `startSession` from JS and stored in `_currentGraphqlUrl`.
 
 ### "BadDeviceToken" in APNs results
 

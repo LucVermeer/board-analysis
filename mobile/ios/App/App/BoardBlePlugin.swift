@@ -13,6 +13,7 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "connect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "disconnect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "write", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cancelWrites", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "configureBoard", returnType: CAPPluginReturnPromise),
     ]
 
@@ -97,6 +98,11 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    @objc func cancelWrites(_ call: CAPPluginCall) {
+        BoardBleManager.shared.cancelWrites()
+        call.resolve()
+    }
+
     @objc func configureBoard(_ call: CAPPluginCall) {
         guard let boardName = call.getString("boardName"), !boardName.isEmpty else {
             call.reject("Missing required parameter: boardName")
@@ -105,6 +111,8 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
 
         let layoutId = call.getInt("layoutId") ?? 0
         let sizeId = call.getInt("sizeId") ?? 0
+        let apiLevel = call.getInt("apiLevel")
+        let deviceName = call.getString("deviceName")
         let rawColorOverrides = call.getObject("colorOverrides") ?? [:]
         let colorOverrides = rawColorOverrides.reduce(into: [String: String]()) { result, entry in
             if let color = entry.value as? String {
@@ -117,6 +125,8 @@ public class BoardBlePlugin: CAPPlugin, CAPBridgedPlugin {
                 boardName: boardName,
                 layoutId: layoutId,
                 sizeId: sizeId,
+                apiLevel: apiLevel,
+                deviceName: deviceName,
                 colorOverrides: colorOverrides
             )
         )

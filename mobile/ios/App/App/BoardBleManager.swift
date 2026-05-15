@@ -16,6 +16,7 @@ enum BoardBleError: LocalizedError {
     case writeCharacteristicMissing
     case notConnected
     case invalidHex
+    case writeCancelled
 
     var errorDescription: String? {
         switch self {
@@ -33,6 +34,8 @@ enum BoardBleError: LocalizedError {
             return "No board is connected"
         case .invalidHex:
             return "Invalid hex payload"
+        case .writeCancelled:
+            return "BLE write cancelled"
         }
     }
 }
@@ -42,6 +45,8 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
     private struct WriteRequest {
         let chunks: [Data]
+        let connectionGeneration: UInt64
+        let writeGeneration: UInt64
         let completion: (Error?) -> Void
     }
 
@@ -68,122 +73,76 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var connectTimeoutWorkItem: DispatchWorkItem?
     private var scanRequested = false
     private var scanServices: [CBUUID] = []
-    private var intentionalDisconnect = false
+    private var intentionalDisconnectGenerations: [UUID: UInt64] = [:]
+    private var peripheralGenerations: [UUID: UInt64] = [:]
+    private var connectionGeneration: UInt64 = 0
     private var reconnectAttempt = 0
     private var writeQueue: [WriteRequest] = []
+    private var writeGeneration: UInt64 = 0
     private var isWriting = false
     private var pendingWriteResume: (() -> Void)?
     private var configuration: BoardBleConfiguration?
+    private var observingBoardBleDisplayNotification = false
 
     var onScanResult: ((BoardBleScanResult) -> Void)?
     var onDisconnect: ((String) -> Void)?
 
     override private init() {
         super.init()
-        configuration = readConfiguration()
-        _ = centralManager
+        runOnMainSync {
+            configuration = readConfiguration()
+            startBoardBleDisplayObservation()
+            _ = centralManager
+        }
+    }
+
+    deinit {
+        stopBoardBleDisplayObservation()
     }
 
     var isAvailable: Bool {
-        switch centralManager.state {
-        case .poweredOn, .unknown, .resetting:
-            return true
-        case .poweredOff, .unsupported, .unauthorized:
-            return false
-        @unknown default:
-            return false
+        runOnMainSync {
+            isAvailableOnMain
         }
     }
 
     var connectedDeviceId: String? {
-        connectedPeripheral?.identifier.uuidString
+        runOnMainSync {
+            connectedPeripheral?.identifier.uuidString
+        }
     }
 
     func configure(_ configuration: BoardBleConfiguration) {
-        self.configuration = configuration
-        writeConfiguration(configuration)
-        displaySharedCurrentItem()
+        runOnMain { [weak self] in
+            guard let self else { return }
+            self.configuration = configuration
+            self.writeConfiguration(configuration)
+            self.displaySharedCurrentItemOnMain()
+        }
     }
 
     func startScan(serviceUuids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
-        let uuids = serviceUuids.compactMap { CBUUID(string: $0) }
-        scanServices = uuids.isEmpty ? [auroraServiceUuid] : uuids
-        scanRequested = true
-
-        guard centralManager.state == .poweredOn else {
-            if isAvailable {
-                completion(.success(()))
-            } else {
-                completion(.failure(BoardBleError.bluetoothUnavailable))
-            }
-            return
+        runOnMain { [weak self] in
+            self?.startScanOnMain(serviceUuids: serviceUuids, completion: completion)
         }
-
-        centralManager.scanForPeripherals(withServices: scanServices, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
-        completion(.success(()))
     }
 
     func stopScan() {
-        scanRequested = false
-        if centralManager.isScanning {
-            centralManager.stopScan()
+        runOnMain { [weak self] in
+            self?.stopScanOnMain()
         }
     }
 
     func connect(deviceId: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        guard centralManager.state == .poweredOn else {
-            completion(.failure(BoardBleError.bluetoothUnavailable))
-            return
+        runOnMain { [weak self] in
+            self?.connectOnMain(deviceId: deviceId, completion: completion)
         }
-
-        if connectedPeripheral?.identifier.uuidString == deviceId, writeCharacteristic != nil {
-            completion(.success(()))
-            displaySharedCurrentItem()
-            return
-        }
-
-        guard let peripheral = discoveredPeripherals[deviceId] else {
-            completion(.failure(BoardBleError.deviceNotFound))
-            return
-        }
-
-        stopScan()
-        intentionalDisconnect = false
-        pendingConnectCompletion = completion
-        connectedPeripheral = peripheral
-        writeCharacteristic = nil
-        peripheral.delegate = self
-
-        let timeoutWorkItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            guard self.pendingConnectCompletion != nil else { return }
-            self.centralManager.cancelPeripheralConnection(peripheral)
-            self.completePendingConnect(.failure(BoardBleError.connectTimedOut))
-        }
-        connectTimeoutWorkItem = timeoutWorkItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + connectTimeout, execute: timeoutWorkItem)
-
-        centralManager.connect(peripheral, options: [
-            CBConnectPeripheralOptionNotifyOnDisconnectionKey: true,
-        ])
     }
 
     func disconnect(completion: (() -> Void)? = nil) {
-        intentionalDisconnect = true
-        reconnectAttempt = 0
-        stopScan()
-        failQueuedWrites(BoardBleError.notConnected)
-
-        guard let peripheral = connectedPeripheral else {
-            writeCharacteristic = nil
-            completion?()
-            return
+        runOnMain { [weak self] in
+            self?.disconnectOnMain(completion: completion)
         }
-
-        centralManager.cancelPeripheralConnection(peripheral)
-        writeCharacteristic = nil
-        connectedPeripheral = nil
-        completion?()
     }
 
     func write(hex: String, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -201,6 +160,135 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     func write(data: Data, completion: ((Error?) -> Void)? = nil) {
+        runOnMain { [weak self] in
+            self?.writeOnMain(data: data, completion: completion)
+        }
+    }
+
+    func cancelWrites() {
+        runOnMain { [weak self] in
+            self?.failQueuedWrites(BoardBleError.writeCancelled)
+        }
+    }
+
+    func displaySharedCurrentItem() {
+        runOnMain { [weak self] in
+            self?.displaySharedCurrentItemOnMain()
+        }
+    }
+
+    func displayCurrentItem(items: [SharedQueueItem], currentIndex: Int) {
+        runOnMain { [weak self] in
+            self?.displayCurrentItemOnMain(items: items, currentIndex: currentIndex)
+        }
+    }
+
+    func display(item: SharedQueueItem) {
+        runOnMain { [weak self] in
+            self?.displayItemOnMain(item)
+        }
+    }
+
+    private var isAvailableOnMain: Bool {
+        switch centralManager.state {
+        case .poweredOn, .unknown, .resetting:
+            return true
+        case .poweredOff, .unsupported, .unauthorized:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private func startScanOnMain(serviceUuids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
+        let uuids = serviceUuids.compactMap { CBUUID(string: $0) }
+        scanServices = uuids.isEmpty ? [auroraServiceUuid] : uuids
+        scanRequested = true
+
+        guard centralManager.state == .poweredOn else {
+            if isAvailableOnMain {
+                completion(.success(()))
+            } else {
+                completion(.failure(BoardBleError.bluetoothUnavailable))
+            }
+            return
+        }
+
+        centralManager.scanForPeripherals(withServices: scanServices, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+        completion(.success(()))
+    }
+
+    private func stopScanOnMain() {
+        scanRequested = false
+        if centralManager.isScanning {
+            centralManager.stopScan()
+        }
+    }
+
+    private func connectOnMain(deviceId: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard centralManager.state == .poweredOn else {
+            completion(.failure(BoardBleError.bluetoothUnavailable))
+            return
+        }
+
+        if connectedPeripheral?.identifier.uuidString == deviceId, writeCharacteristic != nil {
+            completion(.success(()))
+            displaySharedCurrentItemOnMain()
+            return
+        }
+
+        guard let peripheral = discoveredPeripherals[deviceId] else {
+            completion(.failure(BoardBleError.deviceNotFound))
+            return
+        }
+
+        stopScanOnMain()
+        failQueuedWrites(BoardBleError.writeCancelled)
+        connectionGeneration += 1
+        let generation = connectionGeneration
+        pendingConnectCompletion = completion
+        connectedPeripheral = peripheral
+        writeCharacteristic = nil
+        peripheralGenerations[peripheral.identifier] = generation
+        peripheral.delegate = self
+
+        let timeoutWorkItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.pendingConnectCompletion != nil else { return }
+            guard self.peripheralGenerations[peripheral.identifier] == generation else { return }
+            self.centralManager.cancelPeripheralConnection(peripheral)
+            self.completePendingConnect(.failure(BoardBleError.connectTimedOut))
+        }
+        connectTimeoutWorkItem = timeoutWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + connectTimeout, execute: timeoutWorkItem)
+
+        centralManager.connect(peripheral, options: [
+            CBConnectPeripheralOptionNotifyOnDisconnectionKey: true,
+        ])
+    }
+
+    private func disconnectOnMain(completion: (() -> Void)? = nil) {
+        connectionGeneration += 1
+        reconnectAttempt = 0
+        stopScanOnMain()
+        failQueuedWrites(BoardBleError.notConnected)
+        completePendingConnect(.failure(BoardBleError.notConnected))
+
+        guard let peripheral = connectedPeripheral else {
+            writeCharacteristic = nil
+            completion?()
+            return
+        }
+
+        intentionalDisconnectGenerations[peripheral.identifier] = connectionGeneration
+        peripheralGenerations[peripheral.identifier] = connectionGeneration
+        centralManager.cancelPeripheralConnection(peripheral)
+        writeCharacteristic = nil
+        connectedPeripheral = nil
+        completion?()
+    }
+
+    private func writeOnMain(data: Data, completion: ((Error?) -> Void)? = nil) {
         guard connectedPeripheral != nil, writeCharacteristic != nil else {
             completion?(BoardBleError.notConnected)
             return
@@ -210,22 +298,29 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             data.subdata(in: offset..<min(offset + chunkSize, data.count))
         }
 
-        writeQueue.append(WriteRequest(chunks: chunks, completion: completion ?? { _ in }))
+        writeQueue.append(
+            WriteRequest(
+                chunks: chunks,
+                connectionGeneration: connectionGeneration,
+                writeGeneration: writeGeneration,
+                completion: completion ?? { _ in }
+            )
+        )
         processWriteQueue()
     }
 
-    func displaySharedCurrentItem() {
+    private func displaySharedCurrentItemOnMain() {
         guard let defaults = SharedConstants.sharedDefaults else { return }
         let (items, currentIndex) = SharedQueueState.load(from: defaults)
-        displayCurrentItem(items: items, currentIndex: currentIndex)
+        displayCurrentItemOnMain(items: items, currentIndex: currentIndex)
     }
 
-    func displayCurrentItem(items: [SharedQueueItem], currentIndex: Int) {
+    private func displayCurrentItemOnMain(items: [SharedQueueItem], currentIndex: Int) {
         guard currentIndex >= 0, currentIndex < items.count else { return }
-        display(item: items[currentIndex])
+        displayItemOnMain(items[currentIndex])
     }
 
-    func display(item: SharedQueueItem) {
+    private func displayItemOnMain(_ item: SharedQueueItem) {
         guard let configuration else { return }
         guard connectedPeripheral != nil, writeCharacteristic != nil else { return }
 
@@ -260,7 +355,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         } else {
             connectedDeviceName = nil
         }
-        let apiLevel = BoardBleEncoding.parseApiLevel(deviceName: connectedDeviceName)
+        let apiLevel = configuration.apiLevel ?? BoardBleEncoding.parseApiLevel(
+            deviceName: connectedDeviceName ?? configuration.deviceName
+        )
         let result = BoardBleEncoding.makeAuroraPacket(
             frames: framesToSend,
             placementPositions: ledPlacements,
@@ -274,7 +371,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        write(data: result.packet) { [weak self] error in
+        writeOnMain(data: result.packet) { [weak self] error in
             if let error {
                 self?.logger.error("BLE write failed: \(error.localizedDescription, privacy: .public)")
             }
@@ -299,6 +396,8 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         }
 
         let deviceId = peripheral.identifier.uuidString
+        connectionGeneration += 1
+        peripheralGenerations[peripheral.identifier] = connectionGeneration
         discoveredPeripherals[deviceId] = peripheral
         connectedPeripheral = peripheral
         peripheral.delegate = self
@@ -323,31 +422,49 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        guard peripheralGenerations[peripheral.identifier] == connectionGeneration else {
+            central.cancelPeripheralConnection(peripheral)
+            return
+        }
         reconnectAttempt = 0
         peripheral.delegate = self
         peripheral.discoverServices([uartServiceUuid])
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        guard peripheralGenerations[peripheral.identifier] == connectionGeneration else { return }
         completePendingConnect(.failure(error ?? BoardBleError.notConnected))
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         let deviceId = peripheral.identifier.uuidString
-        if connectedPeripheral?.identifier == peripheral.identifier {
-            connectedPeripheral = nil
-            writeCharacteristic = nil
+        let wasCurrentPeripheral = connectedPeripheral?.identifier == peripheral.identifier
+        let intentionalDisconnectGeneration = intentionalDisconnectGenerations.removeValue(forKey: peripheral.identifier)
+
+        if let intentionalDisconnectGeneration {
+            if peripheralGenerations[peripheral.identifier] == intentionalDisconnectGeneration {
+                peripheralGenerations.removeValue(forKey: peripheral.identifier)
+            }
+            return
         }
+
+        guard wasCurrentPeripheral else {
+            peripheralGenerations.removeValue(forKey: peripheral.identifier)
+            return
+        }
+
+        connectedPeripheral = nil
+        writeCharacteristic = nil
         failQueuedWrites(error ?? BoardBleError.notConnected)
         onDisconnect?(deviceId)
 
-        guard !intentionalDisconnect else { return }
-        scheduleReconnect(peripheral)
+        scheduleReconnect(peripheral, generation: connectionGeneration)
     }
 
     // MARK: - CBPeripheralDelegate
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        guard connectedPeripheral?.identifier == peripheral.identifier else { return }
         if let error {
             completePendingConnect(.failure(error))
             return
@@ -362,6 +479,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        guard connectedPeripheral?.identifier == peripheral.identifier else { return }
         if let error {
             completePendingConnect(.failure(error))
             return
@@ -376,7 +494,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         writeCharacteristic = characteristic
         completePendingConnect(.success(()))
         logger.info("Connected to board BLE peripheral \(peripheral.identifier.uuidString, privacy: .public)")
-        displaySharedCurrentItem()
+        displaySharedCurrentItemOnMain()
     }
 
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
@@ -387,6 +505,55 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
     // MARK: - Private
 
+    private func runOnMain(_ operation: @escaping () -> Void) {
+        if Thread.isMainThread {
+            operation()
+        } else {
+            DispatchQueue.main.async {
+                operation()
+            }
+        }
+    }
+
+    private func runOnMainSync<T>(_ operation: () -> T) -> T {
+        if Thread.isMainThread {
+            return operation()
+        }
+        return DispatchQueue.main.sync(execute: operation)
+    }
+
+    private func startBoardBleDisplayObservation() {
+        guard !observingBoardBleDisplayNotification else { return }
+        observingBoardBleDisplayNotification = true
+
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        let name = CFNotificationName(SharedConstants.boardBleDisplayNotification as CFString)
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+
+        CFNotificationCenterAddObserver(
+            center,
+            observer,
+            { (_, observer, _, _, _) in
+                guard let observer = observer else { return }
+                let manager = Unmanaged<BoardBleManager>.fromOpaque(observer).takeUnretainedValue()
+                manager.displaySharedCurrentItem()
+            },
+            name.rawValue,
+            nil,
+            .deliverImmediately
+        )
+    }
+
+    private func stopBoardBleDisplayObservation() {
+        guard observingBoardBleDisplayNotification else { return }
+        observingBoardBleDisplayNotification = false
+
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        let name = CFNotificationName(SharedConstants.boardBleDisplayNotification as CFString)
+        CFNotificationCenterRemoveObserver(center, observer, name, nil)
+    }
+
     private func completePendingConnect(_ result: Result<Void, Error>) {
         connectTimeoutWorkItem?.cancel()
         connectTimeoutWorkItem = nil
@@ -395,14 +562,15 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         completion?(result)
     }
 
-    private func scheduleReconnect(_ peripheral: CBPeripheral) {
+    private func scheduleReconnect(_ peripheral: CBPeripheral, generation: UInt64) {
         guard reconnectAttempt < reconnectDelays.count else { return }
         let delay = reconnectDelays[reconnectAttempt]
         reconnectAttempt += 1
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak peripheral] in
-            guard let self, let peripheral, !self.intentionalDisconnect else { return }
+            guard let self, let peripheral, self.connectionGeneration == generation else { return }
             self.connectedPeripheral = peripheral
             peripheral.delegate = self
+            self.peripheralGenerations[peripheral.identifier] = generation
             self.centralManager.connect(peripheral, options: [
                 CBConnectPeripheralOptionNotifyOnDisconnectionKey: true,
             ])
@@ -412,14 +580,29 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private func processWriteQueue() {
         guard !isWriting, !writeQueue.isEmpty else { return }
         isWriting = true
-        writeChunk(requestIndex: 0, chunkIndex: 0)
+        let request = writeQueue[0]
+        writeChunk(
+            requestIndex: 0,
+            chunkIndex: 0,
+            connectionGeneration: request.connectionGeneration,
+            writeGeneration: request.writeGeneration
+        )
     }
 
-    private func writeChunk(requestIndex: Int, chunkIndex: Int) {
+    private func writeChunk(
+        requestIndex: Int,
+        chunkIndex: Int,
+        connectionGeneration: UInt64,
+        writeGeneration: UInt64
+    ) {
+        guard connectionGeneration == self.connectionGeneration, writeGeneration == self.writeGeneration else { return }
         guard requestIndex < writeQueue.count else {
             isWriting = false
             return
         }
+        let request = writeQueue[requestIndex]
+        guard request.connectionGeneration == connectionGeneration, request.writeGeneration == writeGeneration else { return }
+
         guard let peripheral = connectedPeripheral, let characteristic = writeCharacteristic else {
             let request = writeQueue.removeFirst()
             request.completion(BoardBleError.notConnected)
@@ -428,7 +611,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        let request = writeQueue[requestIndex]
         guard chunkIndex < request.chunks.count else {
             _ = writeQueue.removeFirst()
             request.completion(nil)
@@ -439,18 +621,29 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
         guard peripheral.canSendWriteWithoutResponse else {
             pendingWriteResume = { [weak self] in
-                self?.writeChunk(requestIndex: requestIndex, chunkIndex: chunkIndex)
+                self?.writeChunk(
+                    requestIndex: requestIndex,
+                    chunkIndex: chunkIndex,
+                    connectionGeneration: connectionGeneration,
+                    writeGeneration: writeGeneration
+                )
             }
             return
         }
 
         peripheral.writeValue(request.chunks[chunkIndex], for: characteristic, type: .withoutResponse)
         DispatchQueue.main.asyncAfter(deadline: .now() + chunkDelay) { [weak self] in
-            self?.writeChunk(requestIndex: requestIndex, chunkIndex: chunkIndex + 1)
+            self?.writeChunk(
+                requestIndex: requestIndex,
+                chunkIndex: chunkIndex + 1,
+                connectionGeneration: connectionGeneration,
+                writeGeneration: writeGeneration
+            )
         }
     }
 
     private func failQueuedWrites(_ error: Error) {
+        writeGeneration += 1
         let queuedWrites = writeQueue
         writeQueue = []
         isWriting = false

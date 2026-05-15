@@ -75,10 +75,13 @@ type CapacitorGlobal = {
       connect(options: { deviceId: string }): Promise<void>;
       disconnect(): Promise<void>;
       write(options: { value: string }): Promise<void>;
+      cancelWrites?(): Promise<void>;
       configureBoard(options: {
         boardName: string;
         layoutId: number;
         sizeId: number;
+        apiLevel?: number;
+        deviceName?: string;
         colorOverrides?: Record<string, string>;
       }): Promise<void>;
       addListener(
