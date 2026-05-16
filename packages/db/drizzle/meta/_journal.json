@@ -701,6 +701,13 @@
       "when": 1778892409830,
       "tag": "0099_split_ascensionist_count",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1778933722490,
+      "tag": "0100_backfill_boardsesh_climb_averages",
+      "breakpoints": true
     }
   ]
 }

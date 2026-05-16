@@ -151,4 +151,44 @@ describe('recomputeClimbStats', () => {
     expect(sql).toContain('agg.first_user');
     expect(sql).toContain('agg.first_at');
   });
+
+  // Same FRAGILE TEST WARNING as the case above — see the long comment for
+  // why we live with the queryChunks introspection. If drizzle's AST shifts,
+  // replace this case with a real-DB integration test instead of chasing it.
+  it('emits ownership-aware writes for quality_average / difficulty_average / display_difficulty', async () => {
+    let capturedQuery: unknown = null;
+    mockDb.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<void>) => {
+      const tx = {
+        insert: vi.fn(() => ({
+          values: vi.fn(() => ({ onConflictDoNothing: vi.fn() })),
+        })),
+        execute: vi.fn(async (query: unknown) => {
+          capturedQuery = query;
+          return [];
+        }),
+      };
+      await callback(tx);
+    });
+
+    await recomputeClimbStats('kilter', 'CLIMB-1', 40);
+
+    type DrizzleSql = { queryChunks?: Array<unknown> };
+    const chunks = (capturedQuery as DrizzleSql).queryChunks ?? [];
+    const sql = chunks
+      .filter((c): c is { value?: string[] } => typeof c === 'object' && c !== null)
+      .flatMap((c) => c.value ?? [])
+      .join('');
+
+    // The agg CTE must compute the averages — Postgres AVG skips NULL inputs,
+    // so a single rated tick is enough to populate the column.
+    expect(sql).toMatch(/AVG\(bt\.quality\)\s+AS avg_quality/);
+    expect(sql).toMatch(/AVG\(bt\.difficulty\)\s+AS avg_difficulty/);
+
+    // Each rating column must be guarded by the same boardsesh_owned CASE
+    // expression used for FA, so Aurora's averages survive untouched on
+    // Aurora-synced climbs.
+    expect(sql).toMatch(/quality_average\s*=\s*CASE[\s\S]+?agg\.avg_quality[\s\S]+?s\.quality_average/);
+    expect(sql).toMatch(/difficulty_average\s*=\s*CASE[\s\S]+?agg\.avg_difficulty[\s\S]+?s\.difficulty_average/);
+    expect(sql).toMatch(/display_difficulty\s*=\s*CASE[\s\S]+?agg\.avg_difficulty[\s\S]+?s\.display_difficulty/);
+  });
 });
