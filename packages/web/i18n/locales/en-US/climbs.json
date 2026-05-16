@@ -335,7 +335,6 @@
     "emptyOnLayout": "No similar climbs on this layout.",
     "emptyIdentical": "No identical climbs found right now.",
     "untitledClimb": "Untitled climb",
-    "matchPercent": "{{percent}}% match",
     "openActions": "More actions"
   },
   "multiboardList": {

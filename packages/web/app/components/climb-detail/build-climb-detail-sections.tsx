@@ -183,6 +183,7 @@ export function useBuildClimbDetailSections({
           boardType={boardType as BoardName}
           layoutId={layoutId}
           climbUuid={climbUuid}
+          angle={angle}
           threshold={0.5}
           limit={10}
           emptyMessage={t('similarClimbs.emptyOnLayout')}

@@ -73,6 +73,7 @@ export type SimilarClimbsInput = {
   threshold?: number | null;
   limit?: number | null;
   excludeClimbUuid?: string | null;
+  angle?: number | null;
   climbUuid?: string | null;
   frames?: string | null;
 };

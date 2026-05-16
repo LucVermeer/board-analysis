@@ -144,6 +144,14 @@ export const newClimbFeedTypeDefs = /* GraphQL */ `
     limit: Int
     "Exclude this climb's uuid from results (e.g. when looking up similars for an existing climb)."
     excludeClimbUuid: ID
+    """
+    Viewer angle. When provided, grade/quality/ascent stats and the displayed
+    difficulty name are resolved against this angle on each candidate climb.
+    When omitted, falls back to each candidate's own saved angle — useful for
+    contexts that don't have a viewer angle (e.g. the create-climb duplicate
+    drawer where the candidate's angle is the right reference).
+    """
+    angle: Int
     "Existing climb to compare against. Reads its holds from the database."
     climbUuid: ID
     "Raw frames string for an in-progress climb that hasn't been saved yet."

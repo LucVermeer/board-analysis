@@ -4,11 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
 import MoreVertOutlined from '@mui/icons-material/MoreVertOutlined';
 import type { SimilarClimb } from '@boardsesh/shared-schema';
 import BoardImageLayers from '@/app/components/board-renderer/board-image-layers';
@@ -20,6 +18,8 @@ import LocaleLink from '@/app/components/i18n/locale-link';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { formatSends } from '@/app/lib/format-climb-stats';
+import { getSoftGradeColor } from '@/app/lib/grade-colors';
+import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getDefaultBoardConfig, getDefaultClimbViewPath } from '@/app/lib/default-board-configs';
 import {
@@ -37,6 +37,10 @@ type SimilarClimbsListProps = {
   threshold?: number;
   limit?: number;
   emptyMessage?: string;
+  /** Viewer angle. Passed through to the resolver so each candidate's
+   *  grade/quality/ascents reflect the angle the viewer is currently on
+   *  rather than the candidate's own saved angle. */
+  angle?: number;
   /** When true, the underlying query is run. Defaults to true; the playview
    *  drawer wires this to the collapsible-section's lazy/open state. */
   enabled?: boolean;
@@ -48,6 +52,7 @@ export default function SimilarClimbsList({
   threshold = 0.5,
   limit = 10,
   emptyMessage,
+  angle,
   enabled = true,
   climbUuid,
   frames,
@@ -60,15 +65,16 @@ export default function SimilarClimbsList({
         layoutId,
         threshold,
         limit,
+        ...(angle != null ? { angle } : {}),
         ...(climbUuid ? { climbUuid } : { frames }),
       },
     }),
-    [boardType, layoutId, threshold, limit, climbUuid, frames],
+    [boardType, layoutId, threshold, limit, angle, climbUuid, frames],
   );
 
   const queryKey = useMemo(
-    () => ['similarClimbs', boardType, layoutId, threshold, limit, climbUuid ?? '', frames ?? ''],
-    [boardType, layoutId, threshold, limit, climbUuid, frames],
+    () => ['similarClimbs', boardType, layoutId, threshold, limit, angle ?? null, climbUuid ?? '', frames ?? ''],
+    [boardType, layoutId, threshold, limit, angle, climbUuid, frames],
   );
 
   const { data, isLoading, isError } = useQuery<SimilarClimb[]>({
@@ -154,7 +160,9 @@ type SimilarClimbCardProps = {
 function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: SimilarClimbCardProps) {
   const { t } = useTranslation('climbs');
   const canvasReady = useCanvasRendererReady();
+  const isDark = useIsDarkMode();
   const angle = climb.angle ?? 0;
+  const gradeColor = getSoftGradeColor(climb.difficultyName ?? undefined, isDark);
 
   const boardDetails = useMemo<BoardDetails | null>(() => {
     const config = getDefaultBoardConfig(boardType, climb.layoutId);
@@ -188,8 +196,6 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: Simi
     }
     return getDefaultClimbViewPath(boardType, climb.layoutId, angle, climb.uuid, climb.name || undefined);
   }, [boardType, climb.layoutId, angle, climb.uuid, climb.name, boardDetails]);
-
-  const similarityPct = Math.round((climb.similarity ?? 0) * 100);
 
   const thumbnail = boardDetails ? (
     <div className={styles.boardSquare}>
@@ -251,20 +257,17 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: Simi
           <MoreVertOutlined fontSize="small" />
         </IconButton>
       </Box>
-      <div className={styles.name} title={climb.name || undefined}>
-        {climb.name || t('similarClimbs.untitledClimb')}
+      <div className={styles.nameRow}>
+        <div className={styles.name} title={climb.name || undefined}>
+          {climb.name || t('similarClimbs.untitledClimb')}
+        </div>
+        {climb.difficultyName ? (
+          <span className={styles.grade} style={gradeColor ? { color: gradeColor } : undefined}>
+            {climb.difficultyName}
+          </span>
+        ) : null}
       </div>
       <div className={styles.byline}>{formatByline(climb)}</div>
-      <div className={styles.meta}>
-        <Chip
-          label={t('similarClimbs.matchPercent', { percent: similarityPct })}
-          size="small"
-          color={similarityPct === 100 ? 'error' : 'primary'}
-          variant={similarityPct === 100 ? 'filled' : 'outlined'}
-        />
-        {climb.difficultyName ? <Chip label={climb.difficultyName} size="small" color="default" /> : null}
-        {climb.angle != null && <Chip icon={<LocationOnOutlined />} label={`${climb.angle}°`} size="small" />}
-      </div>
     </>
   );
 

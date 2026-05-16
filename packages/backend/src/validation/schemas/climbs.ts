@@ -223,6 +223,7 @@ export const SimilarClimbsInputSchema = z
     threshold: z.number().min(0).max(1).optional(),
     limit: z.number().int().min(1).max(200).optional(),
     excludeClimbUuid: z.string().min(1).max(100).optional(),
+    angle: z.number().int().min(0).max(90).optional(),
     climbUuid: z.string().min(1).max(100).optional(),
     frames: z.string().min(1).max(10000).optional(),
   })

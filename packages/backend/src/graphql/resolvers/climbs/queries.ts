@@ -99,6 +99,7 @@ export const climbQueries = {
       threshold: validated.threshold ?? 0.5,
       limit: validated.limit ?? 25,
       excludeUuid,
+      statsAngle: validated.angle ?? undefined,
     });
   },
 

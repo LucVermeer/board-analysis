@@ -63,7 +63,17 @@
   max-height: none;
 }
 
+.nameRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 2px;
+  min-width: 0;
+}
+
 .name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--neutral-900);
@@ -71,15 +81,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: left;
-  padding: 0 2px;
 }
 
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  padding: 0 2px;
+.grade {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  /* color is set inline via getSoftGradeColor */
+  white-space: nowrap;
 }
 
 .byline {

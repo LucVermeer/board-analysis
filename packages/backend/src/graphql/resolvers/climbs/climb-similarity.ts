@@ -183,6 +183,10 @@ type FindSimilarClimbsArgs = {
   threshold: number;
   excludeUuid?: string;
   limit?: number;
+  /** Viewer angle. When set, joins board_climb_stats on this angle so each
+   *  candidate's grade/quality/ascents reflect the angle the viewer is on.
+   *  When omitted, falls back to each candidate's own saved angle. */
+  statsAngle?: number;
 };
 
 /**
@@ -211,6 +215,7 @@ export async function findSimilarClimbs({
   threshold,
   excludeUuid,
   limit = 25,
+  statsAngle,
 }: FindSimilarClimbsArgs): Promise<SimilarClimbResult[]> {
   // Reduce to unique hold positions on the target. State is intentionally
   // dropped — see the docblock above.
@@ -295,7 +300,7 @@ export async function findSimilarClimbs({
       LEFT JOIN ${dbSchema.boardClimbStats}
         ON ${dbSchema.boardClimbStats.boardType} = c.board_type
        AND ${dbSchema.boardClimbStats.climbUuid} = c.uuid
-       AND ${dbSchema.boardClimbStats.angle} = c.angle
+       AND ${dbSchema.boardClimbStats.angle} = ${statsAngle != null ? sql`${statsAngle}` : sql`c.angle`}
       LEFT JOIN ${dbSchema.boardDifficultyGrades} bdg
         ON bdg.board_type = c.board_type
        AND bdg.difficulty = ROUND(${dbSchema.boardClimbStats.displayDifficulty})
