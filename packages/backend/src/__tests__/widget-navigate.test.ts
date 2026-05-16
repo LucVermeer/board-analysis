@@ -89,6 +89,8 @@ vi.mock('../services/queue-navigation', () => ({
 }));
 
 const { handleWidgetNavigate, __resetWidgetRateLimitForTests } = await import('../handlers/widget-navigate');
+const { roomManager: mockedRoomManager } = await import('../services/room-manager');
+const { pubsub: mockedPubsub } = await import('../pubsub/index');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -271,6 +273,38 @@ describe('handleWidgetNavigate', () => {
       serverCurrentIndex: 0,
       targetIndex: 1,
       reason: 'missing_user_id',
+    });
+  });
+
+  it('wraps previous navigation from the first queue item to the last item', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'previous', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(200);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      SESSION_ID,
+      1,
+      mockedRoomManager,
+      mockedPubsub,
+      undefined,
+      'widget-navigate',
+    );
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'previous',
+      outcome: 'success',
+      statusCode: 200,
+      queueLength: 2,
+      serverCurrentIndex: 0,
+      targetIndex: 1,
     });
   });
 

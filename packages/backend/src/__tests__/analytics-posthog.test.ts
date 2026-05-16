@@ -56,7 +56,7 @@ describe('backend PostHog analytics helper', () => {
   it('captures sanitized events with backend metadata', async () => {
     vi.stubEnv('POSTHOG_PROJECT_KEY', 'ph_project');
     vi.stubEnv('POSTHOG_HOST', 'https://posthog.example');
-    vi.stubEnv('SENTRY_ENVIRONMENT', 'production');
+    vi.stubEnv('POSTHOG_ENVIRONMENT', 'production');
     const { captureBackendEvent } = await loadPosthogModule();
 
     const captured = captureBackendEvent('Live Activity Widget Navigation', {
@@ -87,6 +87,16 @@ describe('backend PostHog analytics helper', () => {
         environment: 'production',
       },
     });
+  });
+
+  it('can initialize if the project key appears after an earlier no-op capture', async () => {
+    const { captureBackendEvent } = await loadPosthogModule();
+
+    expect(captureBackendEvent('Live Activity Started', { distinctId: 'user-1' })).toBe(false);
+
+    vi.stubEnv('POSTHOG_PROJECT_KEY', 'ph_project');
+    expect(captureBackendEvent('Live Activity Started', { distinctId: 'user-1' })).toBe(true);
+    expect(posthogMocks.PostHog).toHaveBeenCalledOnce();
   });
 
   it('can disable PostHog person profiles for aggregate events', async () => {

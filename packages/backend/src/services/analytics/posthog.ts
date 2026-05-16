@@ -39,11 +39,11 @@ function sanitizeProperties(properties: AnalyticsProperties | undefined): Saniti
 
 function getPosthogClient(): PostHog | null {
   if (posthogClient) return posthogClient;
-  if (initAttempted) return null;
-  initAttempted = true;
 
   const projectKey = process.env.POSTHOG_PROJECT_KEY;
   if (!projectKey) return null;
+  if (initAttempted) return null;
+  initAttempted = true;
 
   const host = process.env.POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST;
   const client = new PostHog(projectKey, {
@@ -61,13 +61,17 @@ function getPosthogClient(): PostHog | null {
   return client;
 }
 
+function getAnalyticsEnvironment(): string {
+  return process.env.POSTHOG_ENVIRONMENT ?? process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development';
+}
+
 export function captureBackendEvent(eventName: BackendAnalyticsEvent, options: CaptureBackendEventOptions): boolean {
   const posthog = getPosthogClient();
   if (!posthog) return false;
 
   const properties = sanitizeProperties(options.properties);
   properties.service = 'boardsesh-backend';
-  properties.environment = process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development';
+  properties.environment = getAnalyticsEnvironment();
   if (options.processPersonProfile === false) {
     properties.$process_person_profile = false;
   }

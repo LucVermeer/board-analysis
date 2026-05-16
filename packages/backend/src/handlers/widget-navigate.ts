@@ -259,6 +259,9 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       res.end(JSON.stringify({ success: false, error: 'Token bound to a different session; re-register' }));
       return;
     }
+    // Missing or unknown bearer tokens are unauthenticated requests, not
+    // successful Live Activity usage. Keep 401s out of analytics so arbitrary
+    // callers cannot create PostHog events by guessing tokens or session IDs.
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
     return;

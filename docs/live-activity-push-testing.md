@@ -108,6 +108,11 @@ APNS_TEAM_ID=9A2B3C4D5E             # Your Team ID from step 2
 APNS_KEY_CONTENTS=LS0tLS1CRUdJT...  # Base64-encoded .p8 key from step 4
 APNS_BUNDLE_ID=com.boardsesh.app    # Must match your iOS app's bundle ID
 APNS_PRODUCTION=true                 # true = production APNs (matches the app's aps-environment=production entitlement)
+
+# Optional server-side product analytics for Live Activity usage
+POSTHOG_PROJECT_KEY=phc_...          # Backend PostHog project key
+POSTHOG_HOST=https://us.i.posthog.com
+POSTHOG_ENVIRONMENT=production       # Defaults to SENTRY_ENVIRONMENT, then NODE_ENV, then development
 ```
 
 When the backend starts, you should see:
@@ -117,6 +122,8 @@ When the backend starts, you should see:
 ```
 
 If you see `[APNs] Missing one or more required env vars...`, double-check the values.
+
+If `POSTHOG_PROJECT_KEY` is unset, Live Activity product analytics are skipped and APNs delivery still works.
 
 ## iOS Build Configuration
 
