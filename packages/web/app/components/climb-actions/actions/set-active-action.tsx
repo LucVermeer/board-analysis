@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
 import { track } from '@/app/lib/analytics';
 import type { ClimbActionProps, ClimbActionResult } from '../types';
@@ -18,6 +19,7 @@ export function SetActiveAction({
   className,
   onComplete,
 }: ClimbActionProps): ClimbActionResult {
+  const { t } = useTranslation('climbs');
   const queueActions = useOptionalQueueActions();
   const queueData = useOptionalQueueData();
   const { iconSize } = computeActionDisplay(viewMode, size, showLabel);
@@ -33,6 +35,10 @@ export function SetActiveAction({
 
       void queueActions.setCurrentClimb(climb);
 
+      // PostHog event name stays "Set Active Climb" for analytics continuity
+      // — the time series spans the rename and we don't want to break it.
+      // The user-facing label changes to "Send to board" per the
+      // queue-control-bar pivot (Phase 2 PR3).
       track('Set Active Climb', {
         boardLayout: boardDetails.layout_name || '',
         climbUuid: climb.uuid,
@@ -43,7 +49,8 @@ export function SetActiveAction({
     [queueActions, isCurrentClimb, climb, boardDetails.layout_name, onComplete],
   );
 
-  const label = isCurrentClimb ? 'Active' : 'Set Active';
+  const label = isCurrentClimb ? t('actions.sendToBoard.active') : t('actions.sendToBoard.label');
+  const tooltip = isCurrentClimb ? t('actions.sendToBoard.activeTooltip') : t('actions.sendToBoard.tooltip');
   const iconStyle = isCurrentClimb ? { color: themeTokens.colors.primary, fontSize: iconSize } : { fontSize: iconSize };
   const icon = <PlayCircleOutlineOutlined sx={iconStyle} />;
 
@@ -59,11 +66,7 @@ export function SetActiveAction({
     className,
     available: !!queueActions,
     iconElementOverride: (
-      <ActionIconElement
-        tooltip={isCurrentClimb ? 'Currently active' : 'Set as active climb'}
-        onClick={handleClick}
-        className={className}
-      >
+      <ActionIconElement tooltip={tooltip} onClick={handleClick} className={className}>
         <span style={{ cursor: isCurrentClimb ? 'default' : 'pointer' }}>{icon}</span>
       </ActionIconElement>
     ),

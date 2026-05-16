@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import LocaleLink from '@/app/components/i18n/locale-link';
@@ -11,6 +11,8 @@ import { useResolvedBoardDetails } from '@/app/hooks/use-resolved-board-details'
 import { track } from '@/app/lib/analytics';
 import FastRewindOutlined from '@mui/icons-material/FastRewindOutlined';
 import IconButton, { type IconButtonProps } from '@mui/material/IconButton';
+import { useHoldToConfirm } from '@/app/lib/hooks/use-hold-to-confirm';
+import { useSnackbar } from '../providers/snackbar-provider';
 
 type PreviousClimbButtonProps = {
   navigate: boolean;
@@ -27,7 +29,8 @@ export default function PreviousClimbButton({ navigate, boardDetails }: Previous
   const { t } = useTranslation('climbs');
   const ariaLabel = t('actions.navigation.previousClimb');
   const { getPreviousClimbQueueItem, setCurrentClimbQueueItem } = useQueueActions();
-  const { viewOnlyMode } = useSessionData();
+  const { viewOnlyMode, isPersistentSessionActive, isDriver } = useSessionData();
+  const { showMessage } = useSnackbar();
   const { rawParams, angle, pathname, searchParams, isPlayPage, resolvedDetails } =
     useResolvedBoardDetails(boardDetails);
 
@@ -70,32 +73,49 @@ export default function PreviousClimbButton({ navigate, boardDetails }: Previous
     return climbUrl;
   };
 
-  const handleClick = () => {
+  // Mirrors NextClimbButton — see that file for the rule-6 hold-to-confirm
+  // rationale.
+  const requiresHold = isPersistentSessionActive && !isDriver;
+
+  const fireAdvance = useCallback(() => {
     if (!previousClimb) return;
     setCurrentClimbQueueItem(previousClimb);
     track('Queue Navigation', {
       direction: 'previous',
-      method: 'button',
+      method: requiresHold ? 'button_held' : 'button',
       boardLayout: boardDetails?.layout_name || '',
     });
-
     if (navigate && isPlayPage) {
       const url = buildClimbUrl();
       if (url) window.history.pushState(null, '', url);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previousClimb, requiresHold, navigate, isPlayPage, setCurrentClimbQueueItem, boardDetails?.layout_name]);
+
+  const { handlers, isHolding, secondsRemaining } = useHoldToConfirm({
+    enabled: requiresHold,
+    onConfirm: fireAdvance,
+  });
+
+  useEffect(() => {
+    if (isHolding && secondsRemaining != null && secondsRemaining > 0) {
+      showMessage(`Advancing in ${secondsRemaining}…`, 'info', undefined, 1100);
+    }
+  }, [isHolding, secondsRemaining, showMessage]);
 
   if (!viewOnlyMode && navigate && previousClimb) {
     if (isPlayPage) {
-      return <PreviousButton ariaLabel={ariaLabel} onClick={handleClick} />;
+      return <PreviousButton ariaLabel={ariaLabel} {...handlers} />;
     }
-
     const climbUrl = buildClimbUrl();
+    if (requiresHold) {
+      return <PreviousButton ariaLabel={ariaLabel} {...handlers} />;
+    }
     return (
-      <LocaleLink href={climbUrl} prefetch={false} onClick={handleClick}>
+      <LocaleLink href={climbUrl} prefetch={false} onClick={handlers.onClick}>
         <PreviousButton ariaLabel={ariaLabel} />
       </LocaleLink>
     );
   }
-  return <PreviousButton ariaLabel={ariaLabel} onClick={handleClick} disabled={!previousClimb || viewOnlyMode} />;
+  return <PreviousButton ariaLabel={ariaLabel} {...handlers} disabled={!previousClimb || viewOnlyMode} />;
 }

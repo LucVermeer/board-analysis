@@ -26,7 +26,13 @@ export type UserPreferenceKeyMap = {
   'swipeHint:climbListSeen': boolean;
   'swipeHint:queueBarSeen': boolean;
   'swipeHint:logbookSeen': boolean;
-  'swipeHint:playViewSeen': boolean;
+  /**
+   * Queue-control-bar pivot Phase 3 first-run coachmark: pulses the lightbulb
+   * in the Play View Drawer once, with the tooltip "Send to the wall."
+   * Replaces the deleted `swipeHint:playViewSeen` peek animation (the bar's
+   * role is now self-evident from its content + driver avatar).
+   */
+  'swipeHint:lightbulbSeen': boolean;
   tickBarExpanded: boolean;
   'shakeToReport:dismissed': boolean;
   esp32Connections: Esp32Connection[];

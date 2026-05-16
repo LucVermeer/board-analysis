@@ -9,6 +9,23 @@ vi.mock('@/app/lib/analytics', () => ({
   track: vi.fn(),
 }));
 
+// Stub i18n so the test asserts against the English string the user sees,
+// not the bare key. Tests live outside the i18next provider tree; the real
+// label comes from `packages/web/i18n/locales/en-US/climbs.json:actions.sendToBoard`.
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => {
+      const map: Record<string, string> = {
+        'actions.sendToBoard.label': 'Send to board',
+        'actions.sendToBoard.active': 'On the wall',
+        'actions.sendToBoard.tooltip': 'Send to the board',
+        'actions.sendToBoard.activeTooltip': 'Currently on the wall',
+      };
+      return map[key] ?? key;
+    },
+  }),
+}));
+
 const mockSetCurrentClimb = vi.fn();
 let mockCurrentClimb: { uuid: string } | null = null;
 
@@ -130,10 +147,10 @@ describe('SetActiveAction', () => {
       mockCurrentClimb = { uuid: 'test-uuid-789' };
     });
 
-    it('menuItem label is Active', () => {
+    it('menuItem label is "On the wall" when this climb is currently on the wall', () => {
       const props = createTestProps();
       const { result } = renderHook(() => SetActiveAction(props));
-      expect(result.current.menuItem.label).toBe('Active');
+      expect(result.current.menuItem.label).toBe('On the wall');
     });
 
     it('menuItem is disabled', () => {
@@ -148,10 +165,10 @@ describe('SetActiveAction', () => {
       mockCurrentClimb = { uuid: 'different-uuid' };
     });
 
-    it('menuItem label is Set Active', () => {
+    it('menuItem label is "Send to board" when this climb is not currently on the wall', () => {
       const props = createTestProps();
       const { result } = renderHook(() => SetActiveAction(props));
-      expect(result.current.menuItem.label).toBe('Set Active');
+      expect(result.current.menuItem.label).toBe('Send to board');
     });
 
     it('menuItem is not disabled', () => {
@@ -166,10 +183,10 @@ describe('SetActiveAction', () => {
       mockCurrentClimb = null;
     });
 
-    it('menuItem label is Set Active', () => {
+    it('menuItem label is "Send to board" when this climb is not currently on the wall', () => {
       const props = createTestProps();
       const { result } = renderHook(() => SetActiveAction(props));
-      expect(result.current.menuItem.label).toBe('Set Active');
+      expect(result.current.menuItem.label).toBe('Send to board');
     });
 
     it('menuItem is not disabled', () => {

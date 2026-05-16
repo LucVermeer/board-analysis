@@ -193,9 +193,9 @@
     }
   },
   "queueDrawer": {
-    "title": "Queue",
-    "clearTitle": "Clear queue",
-    "clearDescription": "Are you sure you want to clear all items from the queue?",
+    "title": "Up next",
+    "clearTitle": "Clear up next",
+    "clearDescription": "Are you sure you want to clear everything in up next?",
     "clearConfirm": "Clear",
     "clear": "Clear",
     "removeItems_one": "Remove {{count}} item",
@@ -208,9 +208,10 @@
     "endMessage": "That's all for now"
   },
   "queueProvider": {
-    "offlineLimitReached": "You've hit the offline queue limit. Reconnect to sync your climbs."
+    "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs."
   },
   "playView": {
+    "wallViewHeader": "Currently on the wall",
     "yourAscents_one": "Your Ascent ({{count}})",
     "yourAscents_other": "Your Ascents ({{count}})",
     "triesCount_one": "{{count}} try",
@@ -221,7 +222,7 @@
     "browseClimbs": "Browse Climbs",
     "actionBar": {
       "climbActionsAria": "Climb actions",
-      "openQueueAria": "Open queue"
+      "openQueueAria": "Open up next"
     },
     "tickFab": {
       "logAscentAria": "Log ascent"

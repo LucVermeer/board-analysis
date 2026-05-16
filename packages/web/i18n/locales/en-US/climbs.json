@@ -257,6 +257,12 @@
         "submit": "Create"
       }
     },
+    "sendToBoard": {
+      "label": "Send to board",
+      "active": "On the wall",
+      "tooltip": "Send to the board",
+      "activeTooltip": "Currently on the wall"
+    },
     "tick": {
       "drawer": {
         "signInRequired": "Sign in required",
@@ -360,12 +366,12 @@
     "signInRequired": "Sign In Required",
     "signInBody": "Please sign in to view your liked climbs.",
     "actionsAriaLabel": "Actions",
-    "queueAll": "Queue All",
+    "queueAll": "Add all to up next",
     "adding": "Adding...",
     "noClimbsToAdd": "No climbs to add",
-    "addedToQueue_one": "Added {{count}} climb to queue",
-    "addedToQueue_other": "Added {{count}} climbs to queue",
-    "addToQueueFailed": "Failed to add climbs to queue",
+    "addedToQueue_one": "Added {{count}} climb to up next",
+    "addedToQueue_other": "Added {{count}} climbs to up next",
+    "addToQueueFailed": "Failed to add climbs to up next",
     "loadFailed": "Failed to load liked climbs",
     "emptyState": "No liked climbs yet. Heart some climbs to see them here!"
   },

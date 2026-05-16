@@ -84,7 +84,7 @@ function buildProps(
 describe('PlayViewActionBar', () => {
   it('renders prev and next buttons', () => {
     render(<PlayViewActionBar {...buildProps()} />);
-    expect(screen.getByLabelText('Open queue')).toBeTruthy();
+    expect(screen.getByLabelText('Open up next')).toBeTruthy();
     expect(screen.getByTestId('icon-skip-prev')).toBeTruthy();
     expect(screen.getByTestId('icon-skip-next')).toBeTruthy();
   });
@@ -162,7 +162,7 @@ describe('PlayViewActionBar', () => {
   it('calls onOpenQueue when queue button clicked', () => {
     const onOpenQueue = vi.fn();
     render(<PlayViewActionBar {...buildProps({ onOpenQueue })} />);
-    fireEvent.click(screen.getByLabelText('Open queue'));
+    fireEvent.click(screen.getByLabelText('Open up next'));
     expect(onOpenQueue).toHaveBeenCalledOnce();
   });
 

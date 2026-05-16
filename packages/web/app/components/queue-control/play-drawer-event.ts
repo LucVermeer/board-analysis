@@ -19,11 +19,21 @@ export const PLAY_DRAWER_EVENT = 'boardsesh:open-play-drawer';
 
 export type PlayDrawerEventDetail = {
   climb?: Climb;
+  /**
+   * When true, the drawer opens in "wall-view mode" (queue-control-bar pivot,
+   * Phase 3): renders a "Currently on the wall" header with the driver avatar
+   * inline, hides prev/next, disables swipe. The lightbulb and standard
+   * climb actions remain. Set by the bar's body-tap handler so users can
+   * inspect the wall climb in detail without the normal browsing affordances.
+   */
+  wallView?: boolean;
 };
 
-export const dispatchOpenPlayDrawer = (climb?: Climb): void => {
+export const dispatchOpenPlayDrawer = (climb?: Climb, options?: { wallView?: boolean }): void => {
   if (typeof window === 'undefined') return;
-  const detail: PlayDrawerEventDetail = climb ? { climb } : {};
+  const detail: PlayDrawerEventDetail = {};
+  if (climb) detail.climb = climb;
+  if (options?.wallView) detail.wallView = true;
   window.dispatchEvent(new CustomEvent<PlayDrawerEventDetail>(PLAY_DRAWER_EVENT, { detail }));
 };
 
@@ -31,4 +41,9 @@ export const readPlayDrawerEventClimb = (event: Event): Climb | undefined => {
   if (!(event instanceof CustomEvent)) return undefined;
   const detail = event.detail as PlayDrawerEventDetail | undefined;
   return detail?.climb;
+};
+
+export const readPlayDrawerEventDetail = (event: Event): PlayDrawerEventDetail | undefined => {
+  if (!(event instanceof CustomEvent)) return undefined;
+  return event.detail as PlayDrawerEventDetail | undefined;
 };

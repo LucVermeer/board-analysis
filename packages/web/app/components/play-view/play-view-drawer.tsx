@@ -111,6 +111,10 @@ type PlayViewActionBarProps = {
    *  preview-only in party (drawer-local state, no broadcast), so non-drivers
    *  can still scrub through nearby climbs without yanking the wall. */
   isDriver: boolean;
+  /** Wall-view mode: drawer opened from the bar body to inspect the wall
+   *  climb. Hide prev/next entirely (controls live on the bar; this view is
+   *  anchored to the wall). The lightbulb stays. */
+  wallView?: boolean;
   /** Name of the currently displayed climb. Used in the lightbulb's aria
    *  label so screen-reader users hear what they're sending. */
   displayedClimbName: string | null;
@@ -137,6 +141,7 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   isDriver,
   displayedClimbName,
   onLightbulb,
+  wallView = false,
   angleSelector,
 }: PlayViewActionBarProps) {
   const { t } = useTranslation('session');
@@ -151,9 +156,11 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
       : 'Take wall control';
   return (
     <div className={styles.actionBar}>
-      <IconButton disabled={!canSwipePrevious} onClick={onPrevClick}>
-        <SkipPreviousOutlined />
-      </IconButton>
+      {!wallView && (
+        <IconButton disabled={!canSwipePrevious} onClick={onPrevClick}>
+          <SkipPreviousOutlined />
+        </IconButton>
+      )}
       {supportsMirroring && (
         <IconButton
           color={isMirrored ? 'primary' : 'default'}
@@ -200,9 +207,11 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
           <FormatListBulletedOutlined />
         </IconButton>
       </MuiBadge>
-      <IconButton disabled={!canSwipeNext} onClick={onNextClick}>
-        <SkipNextOutlined />
-      </IconButton>
+      {!wallView && (
+        <IconButton disabled={!canSwipeNext} onClick={onNextClick}>
+          <SkipNextOutlined />
+        </IconButton>
+      )}
     </div>
   );
 });
@@ -461,6 +470,11 @@ type PlayViewDrawerProps = {
    *  the drawer displays the wall climb directly). */
   drawerDisplayedItem?: ClimbQueueItem | null;
   setDrawerDisplayedItem?: (item: ClimbQueueItem | null) => void;
+  /** Wall-view mode (queue-control-bar pivot Phase 3). When true the drawer
+   *  was opened from the bar body and renders in a read-only navigation
+   *  state: hides prev/next, disables swipe, shows the "Currently on the
+   *  wall" header. The lightbulb and standard climb actions remain. */
+  wallView?: boolean;
 };
 
 const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
@@ -471,6 +485,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   onPaperRef,
   drawerDisplayedItem = null,
   setDrawerDisplayedItem,
+  wallView = false,
 }) => {
   const { t } = useTranslation('session');
   const isOpen = activeDrawer === 'play';
@@ -630,8 +645,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     advanceTo(prev, 'swipePlayViewDrawer', 'previous');
   }, [getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, viewOnlyMode, advanceTo]);
 
-  const canSwipeNext = !viewOnlyMode && !!nextItem;
-  const canSwipePrevious = !viewOnlyMode && !!prevItem;
+  // Wall-view mode is a read-only display of the wall climb — disable swipe
+  // navigation entirely. The drawer is anchored to whatever is on the wall;
+  // to browse other climbs the user closes the drawer and uses the list.
+  const canSwipeNext = !viewOnlyMode && !wallView && !!nextItem;
+  const canSwipePrevious = !viewOnlyMode && !wallView && !!prevItem;
 
   // Tick FAB → inline tick bar
   const handleTickFabClick = useCallback(() => {
@@ -863,6 +881,23 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     if (!currentClimb) return null;
     return (
       <>
+        {wallView && (
+          // Wall-view banner (pivot Phase 3): makes the mode unambiguous when
+          // the user tapped the bar body. PR 3 keeps this minimal — just a
+          // one-line label. Driver avatar inline + roster tap-through can
+          // land as polish.
+          <div
+            style={{
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 500,
+              color: themeTokens.colors.primary,
+              textAlign: 'center',
+            }}
+          >
+            {t('playView.wallViewHeader')}
+          </div>
+        )}
         {/* Header: Grade | Name */}
         <div className={styles.headerSection}>
           <ClimbDetailHeader climb={currentClimb} />
@@ -946,6 +981,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             isDriver={isDriver}
             displayedClimbName={currentClimb?.name ?? null}
             onLightbulb={handleLightbulbClick}
+            wallView={wallView}
             angleSelector={
               <AngleSelector
                 boardName={boardDetails.board_name}
@@ -988,6 +1024,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     handleOpenQueueDrawer,
     isDriver,
     handleLightbulbClick,
+    wallView,
     angle,
     handleTickBarClose,
     handleTickBarError,
