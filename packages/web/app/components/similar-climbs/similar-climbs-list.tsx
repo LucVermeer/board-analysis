@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import Box from '@mui/material/Box';
@@ -19,7 +19,7 @@ import { useOptionalQueueActions } from '@/app/components/graphql-queue';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { formatCount, formatSends } from '@/app/lib/format-climb-stats';
+import { formatSends } from '@/app/lib/format-climb-stats';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getDefaultBoardConfig, getDefaultClimbViewPath } from '@/app/lib/default-board-configs';
 import {
@@ -314,12 +314,15 @@ function SimilarClimbActionsDrawer({ climb, boardType, onClose }: SimilarClimbAc
     }
   }, [boardType, climb.layoutId]);
 
-  // No boardDetails means we can't compute URLs for the actions either,
-  // so the drawer would be useless. Close immediately.
-  if (!boardDetails) {
-    onClose();
-    return null;
-  }
+  // No boardDetails means we can't compute URLs for the actions either, so
+  // close the drawer. Effect rather than calling onClose() inline — calling
+  // a parent state setter during render triggers React's render-time update
+  // warning and risks an infinite loop.
+  useEffect(() => {
+    if (!boardDetails) onClose();
+  }, [boardDetails, onClose]);
+
+  if (!boardDetails) return null;
 
   const stub = buildClimbStub(climb, boardType);
 
@@ -351,8 +354,6 @@ function formatByline(climb: SimilarClimb): string {
   }
   if (typeof climb.ascensionistCount === 'number' && climb.ascensionistCount > 0) {
     parts.push(formatSends(climb.ascensionistCount));
-  } else if (typeof climb.ascensionistCount === 'number') {
-    parts.push(`${formatCount(0)} sends`);
   }
   return parts.join(' · ');
 }
