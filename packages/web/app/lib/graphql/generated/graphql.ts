@@ -4281,6 +4281,14 @@ export type SimilarClimb = {
  * frames (compare against a not-yet-saved hold set).
  */
 export type SimilarClimbsInput = {
+  /**
+   * Viewer angle. When provided, grade/quality/ascent stats and the displayed
+   * difficulty name are resolved against this angle on each candidate climb.
+   * When omitted, falls back to each candidate's own saved angle — useful for
+   * contexts that don't have a viewer angle (e.g. the create-climb duplicate
+   * drawer where the candidate's angle is the right reference).
+   */
+  angle?: InputMaybe<Scalars['Int']['input']>;
   boardType: Scalars['String']['input'];
   /** Existing climb to compare against. Reads its holds from the database. */
   climbUuid?: InputMaybe<Scalars['ID']['input']>;
