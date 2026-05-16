@@ -360,7 +360,7 @@ describe('registerActivityPushToken', () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(sendLiveActivityUpdateToTokensMock).toHaveBeenCalledWith(
       SESSION_ID,
-      [VALID_TOKEN],
+      [{ token: VALID_TOKEN, userId: USER_ID }],
       expect.objectContaining({ climbUuid: 'c1' }),
       { source: 'registration' },
     );

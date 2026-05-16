@@ -174,6 +174,7 @@ export const pushTokenMutations = {
       );
       throw new Error('Authentication required to perform this operation');
     }
+    const userId = ctx.userId;
 
     if (!sessionId || !token) {
       logger.warn(
@@ -189,16 +190,16 @@ export const pushTokenMutations = {
       throw new Error('Invalid APNs token format');
     }
 
-    if (!checkTokenMutationRateLimit(ctx.userId, sessionId)) {
+    if (!checkTokenMutationRateLimit(userId, sessionId)) {
       logger.warn(
-        `[APNs] Rejected Live Activity token registration for session ${sessionId}: rate limited user ${ctx.userId}`,
+        `[APNs] Rejected Live Activity token registration for session ${sessionId}: rate limited user ${userId}`,
       );
       throw new Error('Too many push-token requests, please retry later');
     }
 
-    if (!(await isParticipant(ctx.userId, sessionId))) {
+    if (!(await isParticipant(userId, sessionId))) {
       logger.warn(
-        `[APNs] Rejected Live Activity token registration for session ${sessionId}: user ${ctx.userId} is not a participant`,
+        `[APNs] Rejected Live Activity token registration for session ${sessionId}: user ${userId} is not a participant`,
       );
       throw new Error('Unauthorized: not a participant in this session');
     }
@@ -229,7 +230,7 @@ export const pushTokenMutations = {
         if (previousTokenSessionId && previousTokenSessionId !== sessionId) {
           incrementApnsMetric('tokensRebound');
           logger.warn(
-            `[APNs] Rebound token ${describeTokenForLog(token)} from session ${previousTokenSessionId} → ${sessionId} (user ${ctx.userId})`,
+            `[APNs] Rebound token ${describeTokenForLog(token)} from session ${previousTokenSessionId} → ${sessionId} (user ${userId})`,
           );
         }
 
@@ -276,13 +277,13 @@ export const pushTokenMutations = {
           .values({
             token,
             sessionId,
-            userId: ctx.userId,
+            userId,
           })
           .onConflictDoUpdate({
             target: activityPushTokens.token,
             set: {
               sessionId,
-              userId: ctx.userId,
+              userId,
               updatedAt: new Date(),
             },
           });
@@ -298,7 +299,7 @@ export const pushTokenMutations = {
     incrementApnsMetric('tokensRegistered');
     logger.info(`[APNs] Registered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
     trackLiveActivityStarted({
-      userId: ctx.userId,
+      userId,
       sessionId,
       tokenLength: token.length,
       apnsConfigured: isApnsConfigured(),
@@ -315,7 +316,9 @@ export const pushTokenMutations = {
         const state = await buildContentStateForSession(sessionId);
         if (!state) return;
         try {
-          await sendLiveActivityUpdateToTokens(sessionId, [token], state, { source: 'registration' });
+          await sendLiveActivityUpdateToTokens(sessionId, [{ token, userId }], state, {
+            source: 'registration',
+          });
         } catch (error) {
           logger.warn(
             `[APNs] Failed initial Live Activity send for session ${sessionId} (${describeTokenForLog(token)}):`,
