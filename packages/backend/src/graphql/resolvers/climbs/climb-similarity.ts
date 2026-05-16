@@ -222,6 +222,10 @@ export async function findSimilarClimbs({
           entry->>'holdState' AS hold_state
         FROM jsonb_array_elements(${targetHoldsJson}::jsonb) AS entry
       ),
+      -- The (h.hold_id, h.hold_state) join below is index-supported by
+      -- board_climb_holds_search_idx on (board_type, hold_id, hold_state)
+      -- (see unified.ts:396). Without that covering index Postgres would
+      -- have to scan every row in board_climb_holds per target hold.
       candidate_overlaps AS (
         SELECT h.climb_uuid AS uuid, COUNT(*) AS shared
         FROM ${dbSchema.boardClimbHolds} h

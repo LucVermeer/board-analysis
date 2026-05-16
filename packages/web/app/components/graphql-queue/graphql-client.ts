@@ -31,6 +31,11 @@ export type ExtendedClient = {
  * Error subclass that preserves GraphQL error extensions. Callers can inspect
  * `extensions.code` (or any other extension keys) to branch on a typed error
  * — e.g. CLIMB_IS_DUPLICATE — without resorting to message-string matching.
+ *
+ * `extensions` resolves to the first error that actually carries a `code`,
+ * falling back to the first error's extensions otherwise. This matters when
+ * the server emits multiple errors and the typed one isn't first — picking
+ * blindly by index would silently drop the gate's CLIMB_IS_DUPLICATE code.
  */
 export class GraphQLOperationError extends Error {
   readonly extensions: Record<string, unknown> | null;
@@ -41,7 +46,8 @@ export class GraphQLOperationError extends Error {
     super(message);
     this.name = 'GraphQLOperationError';
     this.graphqlErrors = graphqlErrors;
-    this.extensions = graphqlErrors[0]?.extensions ?? null;
+    const coded = graphqlErrors.find((err) => err.extensions && typeof err.extensions.code === 'string');
+    this.extensions = coded?.extensions ?? graphqlErrors[0]?.extensions ?? null;
   }
 }
 
