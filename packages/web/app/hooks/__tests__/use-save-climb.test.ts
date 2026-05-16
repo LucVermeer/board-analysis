@@ -19,12 +19,17 @@ vi.mock('@/app/components/providers/snackbar-provider', () => ({
 }));
 
 const { mockExecute, mockDispose, FakeGraphQLOperationError } = vi.hoisted(() => {
+  // Mirrors the real GraphQLOperationError: pick the first error that
+  // carries a `code`, fall back to the first error's extensions. Keeping
+  // the fake in sync prevents tests from quietly passing while the real
+  // class's multi-error pickup logic regresses.
   class FakeGraphQLOperationError extends Error {
     readonly extensions: Record<string, unknown> | null;
     constructor(errors: ReadonlyArray<{ message: string; extensions?: Record<string, unknown> }>) {
       super(errors.map((err) => err.message).join(', '));
       this.name = 'GraphQLOperationError';
-      this.extensions = errors[0]?.extensions ?? null;
+      const coded = errors.find((err) => err.extensions && typeof err.extensions.code === 'string');
+      this.extensions = coded?.extensions ?? errors[0]?.extensions ?? null;
     }
   }
   return { mockExecute: vi.fn(), mockDispose: vi.fn(), FakeGraphQLOperationError };

@@ -243,9 +243,9 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: Simi
             position: 'absolute',
             top: 4,
             right: 4,
-            backgroundColor: 'rgba(255,255,255,0.85)',
+            backgroundColor: 'var(--semantic-surface-overlay)',
             backdropFilter: 'blur(4px)',
-            '&:hover': { backgroundColor: 'rgba(255,255,255,1)' },
+            '&:hover': { backgroundColor: 'var(--semantic-surface)' },
           }}
         >
           <MoreVertOutlined fontSize="small" />
