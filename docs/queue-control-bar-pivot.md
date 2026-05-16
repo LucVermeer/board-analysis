@@ -60,6 +60,19 @@ The expanded queue list view (`packages/web/app/components/queue-control/queue-l
 
 **Open behavior:** when the list is opened (drawer or full-screen view), scroll so the current item is vertically centered in the visible area. Existing `scrollToCurrentClimb` API at `queue-list.tsx:50` is the right hook — its scroll target needs to be the center of the viewport, not the top. If there aren't enough history items to push the current item to true center (e.g. session just started), let it sit at its natural position rather than padding artificially.
 
+## Wall-view drawer (tap the bar)
+
+Tapping the Queue Control Bar itself opens a **wall-view drawer** showing the climb currently lit on the wall. This is a distinct drawer mode from the normal "I tapped a climb in the list" drawer:
+
+- **No prev/next buttons** inside this drawer (the controls live on the bar itself; this view is anchored to the wall climb).
+- **No swipe gesture** inside this drawer. The view is locked to whatever is currently lit. To browse other climbs, the user closes the drawer and uses the list or search.
+- **"Currently on the wall" label** at the top of the drawer so the mode is unambiguous.
+- **Driver's avatar inline near the label** — same avatar that carries the lit lightbulb badge in the bar's `AvatarGroup`. Tap-through behaviour mirrors the bar avatar (opens roster).
+- **Lightbulb stays available** with the same semantics as everywhere else (driver presses to release, non-driver presses to take). Gives the user a take-control path from this view without backing out.
+- **Standard climb actions remain** — Add to Queue, Open in Aurora, Mirror, Fork, tick logging, etc. The restriction is navigation-only.
+
+Contrast with the normal drawer (opened by tapping a climb in the list): that one shows the *tapped* climb (not the wall climb), supports swipe-as-preview for non-drivers / swipe-as-broadcast for drivers, and shows prev/next for drivers. The two drawers share most of the underlying component; the differences are state-driven from how the drawer was opened.
+
 ## User flows after the pivot
 
 ### Solo, BLE quickstart from Home
@@ -81,8 +94,8 @@ The expanded queue list view (`packages/web/app/components/queue-control/queue-l
 ### Party member, joining an existing session, not driving
 
 1. User joins party. Lightbulb is off (someone else is driving).
-2. Queue Control Bar mirrors the current driver's climb live via party WS.
-3. **Prev/next buttons in the drawer are hidden.** They only appear for the driver. The Queue Control Bar's prev/next *and* the Live Activity widget's prev/next remain visible — pressing either takes control + advances + broadcasts as a single action.
+2. Queue Control Bar mirrors the current driver's climb live via party WS. Tapping the bar itself opens the wall-view drawer ("Currently on the wall" label + driver avatar; no prev/next, no swipe; lightbulb available to take control).
+3. **Prev/next buttons in the normal drawer are hidden.** They only appear for the driver. The Queue Control Bar's prev/next *and* the Live Activity widget's prev/next remain visible — pressing either takes control + advances + broadcasts as a single action.
 4. User browses freely — tap list rows, open drawer, search, filter. Swipe in the drawer walks the suggested-climbs feed (preview only, does not broadcast, does not navigate the shared queue). No wall-side consequences from drawer interaction.
 5. User finds a climb they want to suggest → press "Add to Queue". Appends to the shared session queue; visible to everyone but does not change the wall and does not take control.
 6. User wants to take a turn → press lightbulb on the climb in the drawer. Yanks control from current driver, broadcasts new climb, party WS pushes update to every member's bar.
@@ -136,6 +149,7 @@ Files: `queue-control-bar.tsx`, `graphql-queue/QueueContext.tsx`, possibly `pack
 - **Driver = leader. Collapse with the existing leader concept; do not add new state.** The schema already has `isLeader: Boolean!` on `SessionUser` / `SessionParticipant` (`packages/shared-schema/src/schema/session.ts:18, 43` — currently marked "presentation/backward compatibility only") plus `leaderId` / `leaderConnectionId` and a `LeaderChanged` session event (`packages/shared-schema/src/types/events.ts:99`). The pivot loads meaning onto these fields: **the driver IS the leader**. Take-control sends a "request leader" mutation that fires `LeaderChanged`. Release / disconnect demote the leader the same way. Update the schema comments to drop the "presentation/backward compatibility only" qualifier — leader is now load-bearing wall-control authority. The existing leader-only auth checks in `packages/backend/src/graphql/resolvers/sessions/mutations.ts:408-409` already enforce the right shape; they continue to apply (the leader is the one whose phone broadcasts to the board). Throughout the doc and code, **engineering term: `leader`; user-facing / design term: `driver`** — they're synonymous, the words just signal layer.
 - **Driver-only prev/next in the drawer:** `next-climb-button.tsx` and `previous-climb-button.tsx`, *when used inside the Play View Drawer*, render only when the local user holds the lightbulb. Navigating prev/next here walks the shared session queue first, then falls through to `suggestedClimbs` once the queue is exhausted, broadcasting each step. The existing `getNextClimbQueueItem` logic in `QueueContext.tsx:576-580` already implements this fall-through; the change is gating the broadcast on driver status.
 - **Always-visible prev/next on the Queue Control Bar and in the Live Activity widget:** these render for everyone. For the driver they behave identically to the drawer buttons. For a non-driver, pressing one is a single combined action — take control, advance from the current wall climb (queue → suggestions fall-through), broadcast. Implement as: handler checks driver status, if not driving issues a `TakeControl` first (server-side ordering: take-control then advance), then runs the standard advance + broadcast. No separate user gesture required.
+- **Wall-view drawer mode.** Tapping the body of the Queue Control Bar (not its prev/next buttons or lightbulb) opens the existing Play View Drawer in a new wall-view mode: hides prev/next, disables swipe-to-navigate, shows a "Currently on the wall" header with the driver's avatar inline, keeps the lightbulb and standard climb actions. The drawer component shouldn't fork — pass an `openedFromBar: boolean` prop (or equivalent) that toggles the read-only nav state and the header treatment. The climb shown is always `state.wallClimb`, never `state.currentClimbQueueItem`.
 - **Non-driver swipe handler:** drawer swipe stays available for non-drivers but walks `suggestedClimbs` only (skips `state.queue`) and does not broadcast. This is a different code path from the driver swipe — extract a shared helper or split the navigation hook so the driver/non-driver split is explicit.
 - **Rename `Set Active Climb` → "Send to board"** in `set-active-action.tsx` and the i18n catalog (`packages/web/i18n/locales/en-US/common.json`). The PostHog event name stays `Set Active Climb` for analytics continuity — only the user-facing label changes.
 
@@ -197,8 +211,8 @@ Update `packages/web/app/lib/queue-metrics.ts` if the operation sampling logic n
 Standard project flow per CLAUDE.md:
 
 - Write `.boardsesh/qa-notes.md` with the QA plan before starting `vp run dev`.
-- Cover: solo BLE quickstart → tap → press lightbulb path; solo no-BLE state; party join → browse without consequence → take control → driver's drawer prev/next appear → released-and-yanked flows; non-driver pressing bar prev/next yanks-and-advances in one gesture; non-driver pressing Live Activity prev/next yanks-and-advances in one gesture; offline-and-back-online in a party; BLE-holder drop with 5s grace and claim-wall handoff.
-- Confirm drawer prev/next buttons disappear for non-drivers, but bar prev/next and Live Activity prev/next remain visible.
+- Cover: solo BLE quickstart → tap → press lightbulb path; solo no-BLE state; party join → browse without consequence → take control → driver's drawer prev/next appear → released-and-yanked flows; non-driver pressing bar prev/next yanks-and-advances in one gesture; non-driver pressing Live Activity prev/next yanks-and-advances in one gesture; offline-and-back-online in a party; BLE-holder drop with 5s grace and claim-wall handoff; tapping the bar body opens the wall-view drawer (no prev/next, no swipe, "Currently on the wall" header, driver avatar inline, lightbulb still works).
+- Confirm normal drawer prev/next buttons disappear for non-drivers, but bar prev/next and Live Activity prev/next remain visible.
 - Confirm "Send to board" label appears wherever "Set Active Climb" did.
 - Run `vp check` and `vp run typecheck` before pushing.
 - Open a PR with screenshots / screen recordings of the new lightbulb states and the driver-vs-non-driver UI difference.
