@@ -112,7 +112,7 @@
       "minRatingOption_one": "{{count}} star and up",
       "minRatingOption_other": "{{count}} stars and up",
       "tallClimbsOnly": "Tall Climbs Only",
-      "tallClimbsTooltip": "Show only climbs that use holds in the bottom 8 rows (only available on 10x12 boards)",
+      "tallClimbsTooltip": "Show only climbs that use holds in the bottom 8 rows (only available on 8x12 and 10x12 boards)",
       "wideClimbsOnly": "Wide Climbs Only",
       "wideClimbsTooltip": "Show only climbs that use the 10x10 side expansion holds",
       "gradeAccuracy": "Grade Accuracy",

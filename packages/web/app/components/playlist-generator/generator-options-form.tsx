@@ -79,8 +79,7 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
     label: t(`generator.climbBiasOptions.${opt.value}`),
   }));
 
-  // Check if we should show the tall climbs filter
-  // Only show for Kilter Homewall on the largest size (10x12)
+  // Check if we should show the tall climbs filter.
   const isKilterHomewall = boardDetails.board_name === 'kilter' && boardDetails.layout_id === KILTER_HOMEWALL_LAYOUT_ID;
   const showTallClimbsFilter = isKilterHomewall && isKilterHomewallTallSizeId(boardDetails.size_id);
 
@@ -244,7 +243,7 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
           updateOption('climbBias', v),
         )}
 
-        {/* Tall Climbs Only - only for Kilter Homewall large size */}
+        {/* Tall Climbs Only */}
         {showTallClimbsFilter && (
           <div className={styles.formRow}>
             <MuiTooltip title={t('generator.options.tallClimbsTooltip')}>

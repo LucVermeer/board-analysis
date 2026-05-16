@@ -189,6 +189,17 @@ describe('AccordionSearchForm — quality filter controls', () => {
     expect(screen.getByText('Wide Climbs Only')).toBeDefined();
   });
 
+  it('shows tall but not wide climbs filter for 8x12 Kilter Homewall', () => {
+    render(
+      <AccordionSearchForm
+        boardDetails={makeBoardDetails({ board_name: 'kilter', layout_id: 8, size_id: 23, size_name: '8x12' })}
+      />,
+    );
+
+    expect(screen.getByText('Tall Climbs Only')).toBeDefined();
+    expect(screen.queryByText('Wide Climbs Only')).toBeNull();
+  });
+
   it('uses the size id, not size name text, for tall-climbs availability', () => {
     render(
       <AccordionSearchForm

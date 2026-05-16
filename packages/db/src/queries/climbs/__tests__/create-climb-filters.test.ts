@@ -219,6 +219,15 @@ void describe('createClimbFilters: tall climbs', () => {
     assert.match(rendered, /product_id/);
   });
 
+  void it('supports tall climbs on 8x12 Kilter Homewall sizes', () => {
+    for (const sizeId of [23, 24]) {
+      const filters = createClimbFilters({ ...homewallTallParams, size_id: sizeId }, { onlyTallClimbs: true });
+      assert.equal(filters.tallClimbsConditions.length, 1);
+      assert.notEqual(sqlToString(filters.tallClimbsConditions[0]), 'false');
+      assert.match(sqlToString(filters.tallClimbsConditions[0]), /edge_bottom/);
+    }
+  });
+
   void it('returns no results for tall climbs requests on unsupported boards or sizes', () => {
     const unsupportedCases = [
       { ...homewallTallParams, size_id: 21 },
