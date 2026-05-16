@@ -19,6 +19,7 @@ import FilterListOutlined from '@mui/icons-material/FilterListOutlined';
 import ClearOutlined from '@mui/icons-material/ClearOutlined';
 import { BOULDER_GRADES } from '@/app/lib/board-data';
 import { InlineGradePicker } from '@/app/components/logbook/tick-controls';
+import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import {
   DEFAULT_ANGLE_RANGE,
   DEFAULT_FILTERS,
@@ -129,6 +130,7 @@ const LogbookSearchForm: React.FC<LogbookSearchFormProps> = ({
   const { t } = useTranslation('profile');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const { lastUsedGrade, rememberGrade } = useLastUsedGrade();
 
   const activeFilterCount = countActiveFilters(filters, minGrade, maxGrade, sortState);
 
@@ -418,7 +420,11 @@ const LogbookSearchForm: React.FC<LogbookSearchFormProps> = ({
                 <InlineGradePicker
                   grades={BOULDER_GRADES}
                   currentGradeId={typeof minGrade === 'number' ? minGrade : undefined}
-                  onSelect={(value) => onMinGradeChange(value ?? '')}
+                  focusGradeId={lastUsedGrade}
+                  onSelect={(value) => {
+                    onMinGradeChange(value ?? '');
+                    rememberGrade(value);
+                  }}
                   ariaLabel={t('logbook.search.minGrade')}
                   clearLabel={t('logbook.search.any')}
                 />
@@ -429,7 +435,11 @@ const LogbookSearchForm: React.FC<LogbookSearchFormProps> = ({
                 <InlineGradePicker
                   grades={BOULDER_GRADES}
                   currentGradeId={typeof maxGrade === 'number' ? maxGrade : undefined}
-                  onSelect={(value) => onMaxGradeChange(value ?? '')}
+                  focusGradeId={lastUsedGrade}
+                  onSelect={(value) => {
+                    onMaxGradeChange(value ?? '');
+                    rememberGrade(value);
+                  }}
                   ariaLabel={t('logbook.search.maxGrade')}
                   clearLabel={t('logbook.search.any')}
                 />

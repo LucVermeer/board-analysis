@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { ANGLES, getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
 import { InlineGradePicker, InlineStarPicker } from '@/app/components/logbook/tick-controls';
+import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import type { BoardDetails } from '@/app/lib/types';
 import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
 import {
@@ -69,6 +70,7 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   const { t } = useTranslation('playlists');
   const grades = getGradesForBoard(boardDetails.board_name);
   const angles = ANGLES[boardDetails.board_name] ?? [];
+  const { rememberGrade } = useLastUsedGrade();
 
   const warmUpOptions = WARM_UP_OPTIONS.map((opt) => ({
     value: opt.value,
@@ -190,7 +192,10 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
           grades={grades}
           currentGradeId={options.targetGrade}
           onSelect={(value) => {
-            if (value !== undefined) updateOption('targetGrade', value);
+            if (value !== undefined) {
+              updateOption('targetGrade', value);
+              rememberGrade(value);
+            }
           }}
           ariaLabel={t('generator.options.targetGrade')}
           hideClear

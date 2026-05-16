@@ -16,6 +16,7 @@ import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
 import { InlineGradePicker, InlineStarPicker } from '@/app/components/logbook/tick-controls';
+import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
 import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
@@ -73,8 +74,11 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     statusValue = 'established';
   }
 
+  const { lastUsedGrade, rememberGrade } = useLastUsedGrade();
+
   const handleGradeChange = (type: 'min' | 'max', value: number | undefined) => {
     updateFilters(buildGradeRangeUpdate(type, value, uiSearchParams.minGrade, uiSearchParams.maxGrade));
+    rememberGrade(value);
   };
 
   const climbContent = (
@@ -89,6 +93,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         <InlineGradePicker
           grades={grades}
           currentGradeId={uiSearchParams.minGrade || undefined}
+          focusGradeId={lastUsedGrade}
           onSelect={(value) => handleGradeChange('min', value)}
           ariaLabel={t('search.fields.minGrade')}
           clearLabel={t('search.fields.any')}
@@ -100,6 +105,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         <InlineGradePicker
           grades={grades}
           currentGradeId={uiSearchParams.maxGrade || undefined}
+          focusGradeId={lastUsedGrade}
           onSelect={(value) => handleGradeChange('max', value)}
           ariaLabel={t('search.fields.maxGrade')}
           clearLabel={t('search.fields.any')}
