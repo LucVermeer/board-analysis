@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import {
   buildDuplicateClimbErrorMessage,
   buildHoldSignature,
@@ -157,38 +159,16 @@ describe('findExactDuplicateMatch', () => {
       layoutId: 1,
       signature: '1:STARTING',
     });
-    // Pull only the literal string fragments out of Drizzle's SQL AST and
-    // concatenate them. We can't JSON.stringify the whole thing — it carries
-    // circular Table refs — and we don't need parameter values; the canonical
-    // state names are inlined as SQL literals so they live in the chunk text.
-    // Without this filter, an existing climb with one extra row in an
-    // unmapped state would produce a longer signature and slip past the gate.
+    // Render the SQL through Drizzle's public PgDialect rather than walking
+    // its internal AST. Without this filter, an existing climb with one extra
+    // row in a hold_state HOLD_STATE_MAP doesn't know yet would produce a
+    // longer signature, miss the candidate's, and slip past the gate.
     const [query] = mockDb.execute.mock.calls[0];
-    const chunks: string[] = [];
-    const visit = (node: unknown) => {
-      if (typeof node === 'string') {
-        chunks.push(node);
-      } else if (Array.isArray(node)) {
-        for (const child of node) visit(child);
-      } else if (node && typeof node === 'object') {
-        // Drizzle's StringChunk stores raw SQL fragments under `value: string[]`.
-        // Other nodes (params, nested SQL) carry `queryChunks: SQL[]`.
-        const value = (node as { value?: unknown; queryChunks?: unknown[] }).value;
-        if (typeof value === 'string') chunks.push(value);
-        else if (Array.isArray(value)) {
-          for (const child of value) if (typeof child === 'string') chunks.push(child);
-        }
-        if (Array.isArray((node as { queryChunks?: unknown[] }).queryChunks)) {
-          visit((node as { queryChunks?: unknown[] }).queryChunks);
-        }
-      }
-    };
-    visit((query as { queryChunks?: unknown[] }).queryChunks ?? []);
-    const queryText = chunks.join(' ');
-    expect(queryText).toContain("'STARTING'");
-    expect(queryText).toContain("'HAND'");
-    expect(queryText).toContain("'FINISH'");
-    expect(queryText).toContain("'FOOT'");
+    const { sql: rendered } = new PgDialect().sqlToQuery(query as SQL);
+    expect(rendered).toContain("'STARTING'");
+    expect(rendered).toContain("'HAND'");
+    expect(rendered).toContain("'FINISH'");
+    expect(rendered).toContain("'FOOT'");
   });
 });
 

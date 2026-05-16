@@ -317,10 +317,16 @@ export default function CreateClimbForm({
   // that shows the matching climb via the SimilarClimbsList component.
   // `target` says how to drive the list — by frames (Aurora) or by the
   // existing climb's uuid (MoonBoard, where we don't compose frames locally).
+  // `target` is what drives the SimilarClimbsList drawer. It's optional —
+  // if the backend's CLIMB_IS_DUPLICATE error didn't carry an existing-climb
+  // uuid AND we can't compose a frames string on the client (today: MoonBoard
+  // without a uuid in the extension), the inline error still renders but the
+  // "View matching climb" button hides. Avoids sending an empty `frames` to
+  // the server, which would fail SimilarClimbsInputSchema's min(1) check.
   const [publishDuplicateError, setPublishDuplicateError] = useState<{
     existingClimbUuid: string | null;
     existingClimbName: string | null;
-    target: { kind: 'frames'; frames: string } | { kind: 'climbUuid'; climbUuid: string };
+    target: { kind: 'frames'; frames: string } | { kind: 'climbUuid'; climbUuid: string } | null;
   } | null>(null);
   const [showDuplicateMatchDrawer, setShowDuplicateMatchDrawer] = useState(false);
 
@@ -1070,9 +1076,7 @@ export default function CreateClimbForm({
             typeof error.extensions.existingClimbName === 'string' ? error.extensions.existingClimbName : null,
           // MoonBoard doesn't expose a canonical frames string on the client,
           // so drive the SimilarClimbsList off the existing climb's uuid.
-          target: existingClimbUuid
-            ? { kind: 'climbUuid', climbUuid: existingClimbUuid }
-            : { kind: 'frames', frames: '' },
+          target: existingClimbUuid ? { kind: 'climbUuid', climbUuid: existingClimbUuid } : null,
         });
       } else {
         if (error instanceof Error && isMoonBoardDuplicateError(error.message)) {
@@ -1515,9 +1519,11 @@ export default function CreateClimbForm({
             severity="error"
             className={styles.alertBanner}
             action={
-              <MuiButton color="inherit" size="small" onClick={() => setShowDuplicateMatchDrawer(true)}>
-                {t('createClimbForm.alerts.viewMatchingClimb')}
-              </MuiButton>
+              publishDuplicateError.target ? (
+                <MuiButton color="inherit" size="small" onClick={() => setShowDuplicateMatchDrawer(true)}>
+                  {t('createClimbForm.alerts.viewMatchingClimb')}
+                </MuiButton>
+              ) : undefined
             }
           >
             {publishDuplicateError.existingClimbName
@@ -1722,7 +1728,7 @@ export default function CreateClimbForm({
           user can decide whether to drop their candidate, save as draft, or
           shift a hold. SimilarClimbsList runs the same query as the playview
           drawer's similar-climbs section, just pinned at threshold 1.0. */}
-      {publishDuplicateError && (
+      {publishDuplicateError?.target && (
         <SwipeableDrawer
           title={t('createClimbForm.alerts.identicalClimbDrawerTitle')}
           placement="bottom"
