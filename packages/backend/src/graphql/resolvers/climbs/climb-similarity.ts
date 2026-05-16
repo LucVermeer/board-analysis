@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import * as dbSchema from '@boardsesh/db/schema';
-import { convertLitUpHoldsStringToMap } from '@boardsesh/board-constants/hold-states';
+import { STATE_TO_PRIMARY_CODE, convertLitUpHoldsStringToMap } from '@boardsesh/board-constants/hold-states';
 import type { BoardName } from '@boardsesh/board-constants';
 import { executeRows } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
@@ -41,10 +41,16 @@ export type SimilarClimbResult = {
 // HOLD_STATE_MAP doesn't know about yet. Without filtering the SQL to the
 // same canonical set, an existing climb with one extra unknown-state row
 // would produce a longer signature, miss the candidate's, and silently let
-// a real duplicate through. Inlined as a SQL literal because the set is a
-// static invariant of the hold-state model; keep in sync with
-// `STATE_TO_PRIMARY_CODE` in `@boardsesh/board-constants/hold-states`.
-const KNOWN_HOLD_STATES_SQL = sql`('STARTING', 'HAND', 'FINISH', 'FOOT')`;
+// a real duplicate through. We derive the set at module load from
+// STATE_TO_PRIMARY_CODE rather than hand-coding it so that adding a new
+// canonical climb state to board-constants automatically widens the gate.
+const KNOWN_HOLD_STATES: ReadonlyArray<string> = Array.from(
+  new Set(Object.values(STATE_TO_PRIMARY_CODE).flatMap((perBoard) => Object.keys(perBoard))),
+).sort();
+const KNOWN_HOLD_STATES_SQL = sql`(${sql.join(
+  KNOWN_HOLD_STATES.map((state) => sql`${state}`),
+  sql`, `,
+)})`;
 
 /**
  * Parse the Aurora-style frame string ("p<id>r<role>p<id>r<role>...,p<id>r<role>...")
@@ -178,7 +184,19 @@ type FindSimilarClimbsArgs = {
 
 /**
  * Find published climbs on the same board+layout that share at least
- * `threshold` Jaccard similarity over (hold_id, hold_state) tuples.
+ * `threshold` Jaccard similarity over hold positions (hold_id only).
+ *
+ * Why position-only rather than (hold_id, hold_state)?
+ * An extended-start variant re-roles the original's start/foot holds into
+ * mid-route hand moves (e.g. cucumber ↔ pickled cucumbers: 9 positions
+ * shared, 3 of those flip STARTING/FOOT → HAND). Under state-aware Jaccard
+ * those climbs scored 0.40 — below the discovery threshold and unintuitive
+ * to anyone looking at the wall. Position-only scoring catches extended
+ * variants, foot-only edits, and other re-rolings while staying simple.
+ *
+ * The duplicate gate (`findExactDuplicateMatch`) is unchanged — there the
+ * state-aware signature is correct: a climb with the same positions but
+ * different roles is a *different* climb, not a duplicate.
  *
  * Single-frame only — multi-frame Aurora climbs are excluded to keep the
  * definition simple and the result set meaningful.
@@ -191,17 +209,15 @@ export async function findSimilarClimbs({
   excludeUuid,
   limit = 25,
 }: FindSimilarClimbsArgs): Promise<SimilarClimbResult[]> {
-  const dedupedByHoldId = new Map<number, string>();
-  for (const { holdId, holdState } of holds) {
-    dedupedByHoldId.set(holdId, holdState);
-  }
-  const targetEntries = Array.from(dedupedByHoldId.entries()).map(([holdId, holdState]) => ({ holdId, holdState }));
-  if (targetEntries.length === 0) return [];
+  // Reduce to unique hold positions on the target. State is intentionally
+  // dropped — see the docblock above.
+  const targetHoldIds = Array.from(new Set(holds.map(({ holdId }) => holdId)));
+  if (targetHoldIds.length === 0) return [];
 
-  const targetSize = targetEntries.length;
+  const targetSize = targetHoldIds.length;
   const safeThreshold = Math.max(0, Math.min(1, threshold));
   const safeLimit = Math.max(1, Math.min(200, limit));
-  const targetHoldsJson = JSON.stringify(targetEntries);
+  const targetHoldIdsJson = JSON.stringify(targetHoldIds);
 
   const rows = await executeRows<{
     uuid: string;
@@ -217,21 +233,18 @@ export async function findSimilarClimbs({
     db,
     sql`
       WITH target_holds AS (
-        SELECT
-          (entry->>'holdId')::int AS hold_id,
-          entry->>'holdState' AS hold_state
-        FROM jsonb_array_elements(${targetHoldsJson}::jsonb) AS entry
+        SELECT (value)::int AS hold_id
+        FROM jsonb_array_elements(${targetHoldIdsJson}::jsonb) AS value
       ),
-      -- The (h.hold_id, h.hold_state) join below is index-supported by
-      -- board_climb_holds_search_idx on (board_type, hold_id, hold_state)
-      -- (see unified.ts:396). Without that covering index Postgres would
-      -- have to scan every row in board_climb_holds per target hold.
+      -- The (board_type, hold_id) join below is index-supported by the
+      -- leading two columns of board_climb_holds_search_idx
+      -- (board_type, hold_id, hold_state) — see unified.ts:396. Postgres
+      -- treats the (hold_state IN …) filter as a residual on the index
+      -- entries and never falls back to a full table scan.
       candidate_overlaps AS (
-        SELECT h.climb_uuid AS uuid, COUNT(*) AS shared
+        SELECT h.climb_uuid AS uuid, COUNT(DISTINCT h.hold_id) AS shared
         FROM ${dbSchema.boardClimbHolds} h
-        INNER JOIN target_holds t
-          ON t.hold_id = h.hold_id
-         AND t.hold_state = h.hold_state
+        INNER JOIN target_holds t ON t.hold_id = h.hold_id
         INNER JOIN ${dbSchema.boardClimbs} c
           ON c.uuid = h.climb_uuid
          AND c.board_type = h.board_type
@@ -245,9 +258,10 @@ export async function findSimilarClimbs({
         GROUP BY h.climb_uuid
       ),
       candidate_sizes AS (
-        -- Restrict to the same canonical set as the target so an existing climb
-        -- with rows in unknown states doesn't inflate its size and depress Jaccard.
-        SELECT climb_uuid AS uuid, COUNT(*) AS n
+        -- Count distinct hold positions on each candidate (state irrelevant).
+        -- Restricted to the canonical hold-state set so unknown-state rows
+        -- from a future Aurora schema don't depress Jaccard.
+        SELECT climb_uuid AS uuid, COUNT(DISTINCT hold_id) AS n
         FROM ${dbSchema.boardClimbHolds}
         WHERE board_type = ${boardType}
           AND hold_state IN ${KNOWN_HOLD_STATES_SQL}

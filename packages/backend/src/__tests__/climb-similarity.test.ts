@@ -164,11 +164,12 @@ describe('findExactDuplicateMatch', () => {
     // row in a hold_state HOLD_STATE_MAP doesn't know yet would produce a
     // longer signature, miss the candidate's, and slip past the gate.
     const [query] = mockDb.execute.mock.calls[0];
-    const { sql: rendered } = new PgDialect().sqlToQuery(query as SQL);
-    expect(rendered).toContain("'STARTING'");
-    expect(rendered).toContain("'HAND'");
-    expect(rendered).toContain("'FINISH'");
-    expect(rendered).toContain("'FOOT'");
+    const { sql: rendered, params } = new PgDialect().sqlToQuery(query as SQL);
+    expect(rendered).toContain('hold_state" IN (');
+    // Drizzle parameterises the inlined state names; check the param values.
+    for (const state of ['STARTING', 'HAND', 'FINISH', 'FOOT']) {
+      expect(params).toContain(state);
+    }
   });
 });
 
@@ -225,5 +226,39 @@ describe('findSimilarClimbs', () => {
         targetHoldCount: 2,
       },
     ]);
+  });
+
+  it('dedupes the target by hold position before sizing', async () => {
+    // Discovery similarity is position-only — see the docblock on
+    // findSimilarClimbs. Verify the target side dedupes by hold_id so an
+    // extended-start variant which re-roles the same physical hold
+    // (e.g. STARTING → HAND) counts as one position, not two. Without the
+    // dedupe, the targetSize denominator would double-count and depress
+    // Jaccard below the threshold for legitimate extended-version matches.
+    mockDb.execute.mockResolvedValueOnce([
+      {
+        uuid: 'pickled',
+        name: 'pickled cucumbers',
+        setter_username: 'Shanks',
+        angle: 40,
+        layout_id: 8,
+        frames: '',
+        shared: 9,
+        candidate_hold_count: 12,
+        jaccard: 0.75,
+      },
+    ]);
+    const result = await findSimilarClimbs({
+      boardType: 'kilter',
+      layoutId: 8,
+      holds: [
+        { holdId: 4122, holdState: 'STARTING' },
+        { holdId: 4122, holdState: 'HAND' },
+        { holdId: 4182, holdState: 'HAND' },
+      ],
+      threshold: 0.5,
+    });
+    // Two distinct positions despite three input tuples.
+    expect(result[0]?.targetHoldCount).toBe(2);
   });
 });

@@ -326,7 +326,7 @@
     "sections": {
       "beta": "Beta",
       "similarClimbs": "Similar climbs",
-      "similarClimbsSummary": "Climbs sharing 90%+ of these holds"
+      "similarClimbsSummary": "Climbs sharing 50%+ of these holds"
     }
   },
   "similarClimbs": {
@@ -335,9 +335,7 @@
     "emptyOnLayout": "No similar climbs on this layout.",
     "emptyIdentical": "No identical climbs found right now.",
     "untitledClimb": "Untitled climb",
-    "unknownSetter": "Unknown setter",
-    "matchPercent": "{{percent}}% match",
-    "holdsRatio": "{{shared}}/{{total}} holds"
+    "matchPercent": "{{percent}}% match"
   },
   "multiboardList": {
     "noClimbsFound": "No climbs found",

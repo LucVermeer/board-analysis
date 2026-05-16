@@ -26,6 +26,10 @@ type BuildClimbDetailSectionsProps = {
   climbUuid: string;
   boardType: string;
   angle: number;
+  /** Route-supplied layout id. In single-board contexts `climb.layoutId` is
+   *  intentionally absent (it's only populated in multi-board listings), so the
+   *  section relies on the caller passing the layout from the URL params. */
+  layoutId: number;
   currentClimbDifficulty?: string;
   boardName?: string;
   /** When false, returns empty sections immediately. Used to defer below-fold
@@ -38,6 +42,7 @@ export function useBuildClimbDetailSections({
   climbUuid,
   boardType,
   angle,
+  layoutId,
   currentClimbDifficulty,
   boardName,
   enabled: enabledProp = true,
@@ -167,26 +172,22 @@ export function useBuildClimbDetailSections({
       lazy: true,
       content: <ClimbAnalytics climbUuid={climbUuid} boardType={boardType} />,
     },
-    ...(climb.layoutId != null
-      ? [
-          {
-            key: 'similar-climbs',
-            label: t('detail.sections.similarClimbs'),
-            title: t('detail.sections.similarClimbs'),
-            defaultSummary: t('detail.sections.similarClimbsSummary'),
-            lazy: true,
-            content: (
-              <SimilarClimbsList
-                boardType={boardType as BoardName}
-                layoutId={climb.layoutId}
-                climbUuid={climbUuid}
-                threshold={0.9}
-                limit={10}
-                emptyMessage={t('similarClimbs.emptyOnLayout')}
-              />
-            ),
-          } satisfies CollapsibleSectionConfig,
-        ]
-      : []),
+    {
+      key: 'similar-climbs',
+      label: t('detail.sections.similarClimbs'),
+      title: t('detail.sections.similarClimbs'),
+      defaultSummary: t('detail.sections.similarClimbsSummary'),
+      lazy: true,
+      content: (
+        <SimilarClimbsList
+          boardType={boardType as BoardName}
+          layoutId={layoutId}
+          climbUuid={climbUuid}
+          threshold={0.5}
+          limit={10}
+          emptyMessage={t('similarClimbs.emptyOnLayout')}
+        />
+      ),
+    },
   ];
 }

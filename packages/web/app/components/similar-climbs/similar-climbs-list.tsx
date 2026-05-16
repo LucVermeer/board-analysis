@@ -4,15 +4,14 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
-import PersonOutlined from '@mui/icons-material/PersonOutlined';
 import type { SimilarClimb } from '@boardsesh/shared-schema';
-import AscentThumbnail from '@/app/components/activity-feed/ascent-thumbnail';
+import BoardImageLayers from '@/app/components/board-renderer/board-image-layers';
+import BoardCanvasRenderer from '@/app/components/board-renderer/board-canvas-renderer';
+import { useCanvasRendererReady } from '@/app/lib/board-render-worker/worker-manager';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
@@ -22,8 +21,9 @@ import {
   type SimilarClimbsResponse,
   type SimilarClimbsVariables,
 } from '@/app/lib/graphql/operations/new-climb-feed';
-import type { BoardName } from '@/app/lib/types';
+import type { BoardDetails, BoardName } from '@/app/lib/types';
 import { constructClimbViewUrlWithSlugs } from '@/app/lib/url-utils';
+import styles from './similar-climbs-list.module.css';
 
 type SimilarClimbsListProps = {
   boardType: BoardName;
@@ -39,7 +39,7 @@ type SimilarClimbsListProps = {
 export default function SimilarClimbsList({
   boardType,
   layoutId,
-  threshold = 0.9,
+  threshold = 0.5,
   limit = 10,
   emptyMessage,
   enabled = true,
@@ -107,107 +107,113 @@ export default function SimilarClimbsList({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <div className={styles.scroller}>
       {climbs.map((climb) => (
-        <SimilarClimbRow key={climb.uuid} climb={climb} boardType={boardType} />
+        <SimilarClimbCard key={climb.uuid} climb={climb} boardType={boardType} />
       ))}
-    </Box>
+    </div>
   );
 }
 
-type SimilarClimbRowProps = {
+type SimilarClimbCardProps = {
   climb: SimilarClimb;
   boardType: BoardName;
 };
 
-function SimilarClimbRow({ climb, boardType }: SimilarClimbRowProps) {
+function SimilarClimbCard({ climb, boardType }: SimilarClimbCardProps) {
   const { t } = useTranslation('climbs');
+  const canvasReady = useCanvasRendererReady();
   const angle = climb.angle ?? 0;
-  const climbViewPath = useMemo(() => {
-    const defaultConfig = getDefaultBoardConfig(boardType, climb.layoutId);
-    if (defaultConfig) {
-      const details = getBoardDetailsForBoard({
+
+  // Resolve board details from the default config for this layout. This is
+  // what BoardRenderer / BoardImageLayers need to draw the wall + holds. When
+  // the layout isn't in DEFAULT_CONFIGS (decoy, grasshopper, soill, touchstone
+  // and a handful of unhandled Kilter/Tension layouts) boardDetails is null
+  // and we render the card without a thumbnail, still linking when possible.
+  const boardDetails = useMemo<BoardDetails | null>(() => {
+    const config = getDefaultBoardConfig(boardType, climb.layoutId);
+    if (!config) return null;
+    try {
+      return getBoardDetailsForBoard({
         board_name: boardType,
         layout_id: climb.layoutId,
-        size_id: defaultConfig.sizeId,
-        set_ids: defaultConfig.setIds,
+        size_id: config.sizeId,
+        set_ids: config.setIds,
       });
-      if (details?.layout_name && details.size_name && details.set_names) {
-        return constructClimbViewUrlWithSlugs(
-          boardType,
-          details.layout_name,
-          details.size_name,
-          details.size_description,
-          details.set_names,
-          angle,
-          climb.uuid,
-          climb.name || undefined,
-        );
-      }
+    } catch {
+      return null;
+    }
+  }, [boardType, climb.layoutId]);
+
+  const climbViewPath = useMemo(() => {
+    if (boardDetails?.layout_name && boardDetails.size_name && boardDetails.set_names) {
+      return constructClimbViewUrlWithSlugs(
+        boardType,
+        boardDetails.layout_name,
+        boardDetails.size_name,
+        boardDetails.size_description,
+        boardDetails.set_names,
+        angle,
+        climb.uuid,
+        climb.name || undefined,
+      );
     }
     return getDefaultClimbViewPath(boardType, climb.layoutId, angle, climb.uuid, climb.name || undefined);
-  }, [boardType, climb.layoutId, angle, climb.uuid, climb.name]);
+  }, [boardType, climb.layoutId, angle, climb.uuid, climb.name, boardDetails]);
 
   const similarityPct = Math.round((climb.similarity ?? 0) * 100);
 
-  const innerContent = (
-    <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
-      {climb.frames ? (
-        <AscentThumbnail
-          boardType={boardType}
-          layoutId={climb.layoutId}
-          angle={angle}
-          climbUuid={climb.uuid}
-          climbName={climb.name || ''}
+  const thumbnail = boardDetails ? (
+    <div className={styles.boardSquare}>
+      {canvasReady && climb.frames ? (
+        <BoardCanvasRenderer
+          boardDetails={boardDetails}
           frames={climb.frames}
-          isMirror={false}
+          mirrored={false}
+          thumbnail
+          style={{ width: '100%', height: '100%' }}
         />
-      ) : null}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1, minWidth: 0 }}>
-        <Typography variant="subtitle2" fontWeight={700} noWrap>
-          {climb.name || t('similarClimbs.untitledClimb')}
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-          <PersonOutlined sx={{ fontSize: 14 }} />
-          <Typography variant="caption" noWrap>
-            {climb.setterUsername || t('similarClimbs.unknownSetter')}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Chip
-            label={t('similarClimbs.matchPercent', { percent: similarityPct })}
-            size="small"
-            color={similarityPct === 100 ? 'error' : 'primary'}
-            variant={similarityPct === 100 ? 'filled' : 'outlined'}
-          />
-          {climb.angle != null && <Chip icon={<LocationOnOutlined />} label={`${climb.angle}°`} size="small" />}
-          <Typography variant="caption" color="text.secondary">
-            {t('similarClimbs.holdsRatio', { shared: climb.sharedHoldCount, total: climb.candidateHoldCount })}
-          </Typography>
-        </Box>
-      </Box>
-    </Box>
+      ) : (
+        <BoardImageLayers
+          boardDetails={boardDetails}
+          frames={climb.frames ?? undefined}
+          mirrored={false}
+          thumbnail
+          style={{ width: '100%', height: '100%' }}
+        />
+      )}
+    </div>
+  ) : (
+    // No thumbnail available for this layout — show a neutral placeholder so
+    // the card still has the homepage-sized footprint.
+    <div className={styles.boardSquare} />
   );
 
-  // Only wrap with LocaleLink when we can build a real view URL. Layouts not
-  // listed in DEFAULT_CONFIGS (e.g. decoy, grasshopper, soill, touchstone)
-  // resolve to null — render the row as static info rather than emitting a
-  // broken `href="#"` that does nothing on click.
+  const body = (
+    <>
+      {thumbnail}
+      <div className={styles.name} title={climb.name || undefined}>
+        {climb.name || t('similarClimbs.untitledClimb')}
+      </div>
+      <div className={styles.meta}>
+        <Chip
+          label={t('similarClimbs.matchPercent', { percent: similarityPct })}
+          size="small"
+          color={similarityPct === 100 ? 'error' : 'primary'}
+          variant={similarityPct === 100 ? 'filled' : 'outlined'}
+        />
+        {climb.angle != null && <Chip icon={<LocationOnOutlined />} label={`${climb.angle}°`} size="small" />}
+      </div>
+    </>
+  );
+
+  if (!climbViewPath) {
+    return <div className={`${styles.card} ${styles.cardDisabled}`}>{body}</div>;
+  }
+
   return (
-    <Card variant="outlined">
-      <CardContent sx={{ p: 1.25, '&:last-child': { pb: 1.25 } }}>
-        {climbViewPath ? (
-          <Box
-            component={LocaleLink}
-            href={climbViewPath}
-            sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-          >
-            {innerContent}
-          </Box>
-        ) : (
-          innerContent
-        )}
-      </CardContent>
-    </Card>
+    <LocaleLink href={climbViewPath} className={styles.card}>
+      {body}
+    </LocaleLink>
   );
 }
