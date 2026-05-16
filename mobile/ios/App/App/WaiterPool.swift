@@ -10,7 +10,11 @@ import Foundation
 ///
 /// Extracted from `BoardBleManager` so the waiter timing logic can be unit
 /// tested without standing up a real `CBCentralManager`.
-final class WaiterPool {
+///
+/// `@unchecked Sendable`: every mutation of `waiters` happens on `queue`,
+/// which is a serial `DispatchQueue`. There's no shared concurrent access
+/// to the array, but the compiler can't see that — hence unchecked.
+final class WaiterPool: @unchecked Sendable {
     private struct Waiter {
         let id: UUID
         let continuation: CheckedContinuation<Void, Never>
