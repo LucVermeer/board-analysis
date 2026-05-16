@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, index } from 'drizzle-orm/pg-core';
 import { boardSessions } from './sessions';
+import { users } from '../auth/users';
 
 // APNs device tokens for ActivityKit Live Activity push updates
 export const activityPushTokens = pgTable(
@@ -9,11 +10,13 @@ export const activityPushTokens = pgTable(
     sessionId: text('session_id')
       .references(() => boardSessions.id, { onDelete: 'cascade' })
       .notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
     sessionIdx: index('activity_push_tokens_session_idx').on(table.sessionId),
+    userIdx: index('activity_push_tokens_user_idx').on(table.userId),
     // Supports the cluster-wide stale-token sweep in `apns/cleanup.ts`
     // (`DELETE WHERE updated_at < cutoff`). The per-session eviction in
     // `registerActivityPushToken` is served by the existing

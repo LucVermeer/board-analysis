@@ -20,7 +20,21 @@ import { EventEmitter } from 'node:events';
 // returned row's `sessionId` can distinguish "no row at all → 401" from
 // "row exists but bound to a different session → 410". The mock returns
 // `{sessionId}` rows accordingly.
-const tokenLookupRows = vi.fn<() => Array<{ sessionId: string }>>(() => []);
+type MockQueueState = {
+  queue: Array<{ uuid: string; climb: { uuid: string } }>;
+  currentClimbQueueItem: { uuid: string; climb: { uuid: string } } | null;
+};
+
+const tokenLookupRows = vi.fn<() => Array<{ sessionId: string; userId: string | null }>>(() => []);
+const trackLiveActivityWidgetNavigationMock = vi.fn();
+const trackLiveActivityWidgetNavigationAttributionGapMock = vi.fn();
+const getQueueStateMock = vi.fn<() => Promise<MockQueueState>>(async () => ({
+  queue: [
+    { uuid: 'q1', climb: { uuid: 'c1' } },
+    { uuid: 'q2', climb: { uuid: 'c2' } },
+  ],
+  currentClimbQueueItem: { uuid: 'q1', climb: { uuid: 'c1' } },
+}));
 
 vi.mock('../db/client', () => {
   function makeChain() {
@@ -43,14 +57,13 @@ vi.mock('../handlers/cors', () => ({
 
 vi.mock('../services/room-manager', () => ({
   roomManager: {
-    getQueueState: vi.fn(async () => ({
-      queue: [
-        { uuid: 'q1', climb: { uuid: 'c1' } },
-        { uuid: 'q2', climb: { uuid: 'c2' } },
-      ],
-      currentClimbQueueItem: { uuid: 'q1', climb: { uuid: 'c1' } },
-    })),
+    getQueueState: getQueueStateMock,
   },
+}));
+
+vi.mock('../services/analytics/live-activity', () => ({
+  trackLiveActivityWidgetNavigation: trackLiveActivityWidgetNavigationMock,
+  trackLiveActivityWidgetNavigationAttributionGap: trackLiveActivityWidgetNavigationAttributionGapMock,
 }));
 
 vi.mock('../pubsub/index', () => ({
@@ -76,12 +89,15 @@ vi.mock('../services/queue-navigation', () => ({
 }));
 
 const { handleWidgetNavigate, __resetWidgetRateLimitForTests } = await import('../handlers/widget-navigate');
+const { roomManager: mockedRoomManager } = await import('../services/room-manager');
+const { pubsub: mockedPubsub } = await import('../pubsub/index');
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const SESSION_ID = 'session-widget-test';
+const USER_ID = 'user-widget-test';
 const REGISTERED_TOKEN = 'b'.repeat(64);
 const STRANGER_TOKEN = 'c'.repeat(64);
 
@@ -147,6 +163,13 @@ describe('handleWidgetNavigate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tokenLookupRows.mockReturnValue([]);
+    getQueueStateMock.mockResolvedValue({
+      queue: [
+        { uuid: 'q1', climb: { uuid: 'c1' } },
+        { uuid: 'q2', climb: { uuid: 'c2' } },
+      ],
+      currentClimbQueueItem: { uuid: 'q1', climb: { uuid: 'c1' } },
+    });
     __resetWidgetRateLimitForTests();
   });
 
@@ -179,7 +202,7 @@ describe('handleWidgetNavigate', () => {
   it('returns 410 when bearer token is bound to a different sessionId', async () => {
     // Token exists in the DB but is bound to a different session — signal
     // the widget to re-register rather than silently 401.
-    tokenLookupRows.mockReturnValue([{ sessionId: 'session-other' }]);
+    tokenLookupRows.mockReturnValue([{ sessionId: 'session-other', userId: USER_ID }]);
     const req = makeRequest({
       method: 'POST',
       authHeader: `Bearer ${REGISTERED_TOKEN}`,
@@ -193,10 +216,18 @@ describe('handleWidgetNavigate', () => {
     expect(parsed.success).toBe(false);
     expect(parsed.error).toContain('re-register');
     expect(mockNavigate).not.toHaveBeenCalled();
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'next',
+      outcome: 'wrong_session',
+      statusCode: 410,
+      boundSessionId: 'session-other',
+    });
   });
 
   it('returns 200 when bearer token is registered for sessionId', async () => {
-    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID }]);
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
     const req = makeRequest({
       method: 'POST',
       authHeader: `Bearer ${REGISTERED_TOKEN}`,
@@ -209,10 +240,76 @@ describe('handleWidgetNavigate', () => {
     const parsed = JSON.parse(res.body) as { success: boolean };
     expect(parsed.success).toBe(true);
     expect(mockNavigate).toHaveBeenCalledOnce();
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'next',
+      outcome: 'success',
+      statusCode: 200,
+      queueLength: 2,
+      serverCurrentIndex: 0,
+      targetIndex: 1,
+    });
+  });
+
+  it('tracks an aggregate attribution-gap event when the registered token has no userId', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: null }]);
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'next', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(200);
+    expect(trackLiveActivityWidgetNavigationMock).not.toHaveBeenCalled();
+    expect(trackLiveActivityWidgetNavigationAttributionGapMock).toHaveBeenCalledWith({
+      sessionId: SESSION_ID,
+      action: 'next',
+      outcome: 'success',
+      statusCode: 200,
+      queueLength: 2,
+      serverCurrentIndex: 0,
+      targetIndex: 1,
+      reason: 'missing_user_id',
+    });
+  });
+
+  it('wraps previous navigation from the first queue item to the last item', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'previous', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(200);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      SESSION_ID,
+      1,
+      mockedRoomManager,
+      mockedPubsub,
+      undefined,
+      'widget-navigate',
+    );
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'previous',
+      outcome: 'success',
+      statusCode: 200,
+      queueLength: 2,
+      serverCurrentIndex: 0,
+      targetIndex: 1,
+    });
   });
 
   it('returns 429 once the per-session token bucket is exhausted', async () => {
-    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID }]);
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
 
     // Bucket capacity is 2 — first two requests allowed, third returns 429.
     for (let i = 0; i < 2; i++) {
@@ -235,6 +332,93 @@ describe('handleWidgetNavigate', () => {
     await handleWidgetNavigate(req3 as unknown as IncomingMessage, res3 as unknown as ServerResponse);
 
     expect(res3.statusCode).toBe(429);
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenLastCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'next',
+      outcome: 'rate_limited',
+      statusCode: 429,
+    });
+  });
+
+  it('returns 409 and tracks when the registered widget navigates an empty queue', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    getQueueStateMock.mockResolvedValue({
+      queue: [],
+      currentClimbQueueItem: null,
+    });
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'previous', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(409);
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'previous',
+      outcome: 'queue_empty',
+      statusCode: 409,
+      queueLength: 0,
+    });
+  });
+
+  it('returns 409 and tracks target_out_of_bounds when navigation returns null', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    mockNavigate.mockResolvedValueOnce(null);
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'previous', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(409);
+    const parsed = JSON.parse(res.body) as { success: boolean; error: string };
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Target index out of bounds');
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'previous',
+      outcome: 'target_out_of_bounds',
+      statusCode: 409,
+      queueLength: 2,
+      serverCurrentIndex: 0,
+      targetIndex: 1,
+    });
+  });
+
+  it('returns 500 and tracks error when queue navigation throws', async () => {
+    tokenLookupRows.mockReturnValue([{ sessionId: SESSION_ID, userId: USER_ID }]);
+    mockNavigate.mockRejectedValueOnce(new Error('navigation exploded'));
+
+    const req = makeRequest({
+      method: 'POST',
+      authHeader: `Bearer ${REGISTERED_TOKEN}`,
+      body: { sessionId: SESSION_ID, action: 'next', currentIndex: 0 },
+    });
+    const res = makeResponse();
+    await handleWidgetNavigate(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(500);
+    const parsed = JSON.parse(res.body) as { success: boolean; error: string };
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toBe('navigation exploded');
+    expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      action: 'next',
+      outcome: 'error',
+      statusCode: 500,
+    });
   });
 
   it('returns 405 for non-POST methods', async () => {

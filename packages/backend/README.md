@@ -42,10 +42,13 @@ bun start
 
 Environment variables:
 
-| Variable       | Default                                                           | Description                  |
-| -------------- | ----------------------------------------------------------------- | ---------------------------- |
-| `PORT`         | `8080`                                                            | WebSocket server port        |
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/boardsesh_backend` | PostgreSQL connection string |
+| Variable              | Default                                                           | Description                                              |
+| --------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
+| `PORT`                | `8080`                                                            | WebSocket server port                                    |
+| `DATABASE_URL`        | `postgresql://postgres:postgres@localhost:5432/boardsesh_backend` | PostgreSQL connection string                             |
+| `POSTHOG_PROJECT_KEY` | unset                                                             | Enables backend PostHog events for Live Activity usage   |
+| `POSTHOG_HOST`        | `https://us.i.posthog.com`                                        | PostHog ingestion host                                   |
+| `POSTHOG_ENVIRONMENT` | `SENTRY_ENVIRONMENT`, then `NODE_ENV`, then `development`         | Event environment property for backend PostHog analytics |
 
 ## Network Setup
 

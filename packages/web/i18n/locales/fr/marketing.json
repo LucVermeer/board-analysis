@@ -484,9 +484,9 @@
   },
   "privacy": {
     "title": "Politique de confidentialité",
-    "lastUpdated": "Dernière mise à jour : avril 2026",
+    "lastUpdatedProductAnalytics": "Dernière mise à jour : mai 2026",
     "intro1": "Boardsesh est une app open source pour piloter les boards d'entraînement (Kilter, Tension, MoonBoard) en Bluetooth. Cette politique explique quelles données nous collectons, pourquoi, et ce que nous en faisons.",
-    "intro2": "La version courte : nous collectons uniquement ce qui est nécessaire au fonctionnement de l'app. Nous ne vendons pas vos données, nous n'affichons pas de publicités, et nous n'utilisons pas de pisteurs tiers.",
+    "intro2ProductAnalytics": "La version courte : nous collectons uniquement ce qui est nécessaire au fonctionnement de l'app. Nous ne vendons pas vos données, nous n'affichons pas de publicités, et nous ne partageons pas vos données avec des marketeurs tiers ou des courtiers en données.",
     "collect": {
       "title": "Ce que nous collectons",
       "accountLabel": "Informations de compte.",
@@ -495,8 +495,8 @@
       "activityBody": "Quand vous enregistrez un send ou une tentative, nous stockons les détails du bloc, la cotation, la date et les notes que vous ajoutez. Cela alimente votre carnet et le suivi de progression.",
       "locationLabel": "Localisation.",
       "locationBody": "Si vous accordez la permission de localisation, nous utilisons votre position approximative pour vous aider à découvrir des sessions Mode Party à proximité. Nous ne suivons pas votre position en arrière-plan et ne stockons pas d'historique de localisation.",
-      "analyticsLabel": "Analytique.",
-      "analyticsBody": "Nous utilisons Vercel Analytics pour collecter des données anonymes de pages vues et de performance. Cela nous aide à comprendre quelles fonctionnalités sont utilisées et où l'app est lente. Ces données ne sont pas liées à votre compte."
+      "productAnalyticsLabel": "Analytique produit.",
+      "productAnalyticsBody": "Nous utilisons PostHog et Vercel Analytics pour comprendre l'utilisation des fonctionnalités, les pages vues, les performances et les endroits où l'app est lente. Certains événements produit des utilisateurs connectés sont liés à votre compte Boardsesh afin de comprendre quelles fonctionnalités sont utiles. Nous n'utilisons pas ces données pour la publicité."
     },
     "bluetooth": {
       "title": "Bluetooth",
@@ -512,6 +512,9 @@
       "vercelLabel": "Vercel.",
       "vercelBody": "Nous utilisons Vercel pour l'hébergement et l'analytique. Vercel traite les requêtes pour servir l'app et collecte des métriques d'utilisation anonymes. Voir ",
       "vercelLink": "la politique de confidentialité de Vercel",
+      "posthogLabel": "PostHog.",
+      "posthogBody": "Nous utilisons PostHog pour l'analytique produit, y compris des événements côté serveur pour des fonctionnalités natives comme les Live Activities iOS. Voir ",
+      "posthogLink": "la politique de confidentialité de PostHog",
       "auroraLabel": "API Aurora Climbing.",
       "auroraBody": "Si vous liez votre compte Aurora Climbing (utilisé par les boards Kilter et Tension), nous synchronisons vos données de blocs avec les serveurs d'Aurora afin que votre carnet reste cohérent entre les apps. Cette synchronisation n'a lieu que lorsque vous la déclenchez. Voir ",
       "auroraLink": "Aurora Climbing",
@@ -519,7 +522,7 @@
     },
     "sharing": {
       "title": "Partage de données",
-      "body1": "Nous ne vendons pas vos données. Nous n'affichons pas de publicités. Nous ne partageons pas vos informations avec des marketeurs tiers ou des courtiers en données. Les seules données partagées en externe sont celles décrites ci-dessus (hébergement/analytique Vercel, sync Aurora Climbing si vous l'activez).",
+      "body1ProductAnalytics": "Nous ne vendons pas vos données. Nous n'affichons pas de publicités. Nous ne partageons pas vos informations avec des marketeurs tiers ou des courtiers en données. Les seules données partagées en externe sont celles décrites ci-dessus (hébergement/analytique Vercel, analytique produit PostHog, sync Aurora Climbing si vous l'activez).",
       "body2": "Les autres utilisateurs de Boardsesh peuvent voir votre nom d'utilisateur, votre profil et vos blocs enregistrés si vous participez à des fonctionnalités sociales comme le Mode Party. C'est visible dans l'app et fait partie du fonctionnement du produit."
     },
     "retention": {

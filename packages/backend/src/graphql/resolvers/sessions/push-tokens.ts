@@ -11,6 +11,7 @@ import {
 } from '../../../services/apns';
 import { buildContentStateFromQueueState } from '../../../services/apns/content-state';
 import { roomManager } from '../../../services/room-manager';
+import { trackLiveActivityEnded, trackLiveActivityStarted } from '../../../services/analytics/live-activity';
 import { logger } from '../../../utils/logger';
 
 /**
@@ -211,6 +212,8 @@ export const pushTokenMutations = {
     // insert, ending up at cap + 1. The advisory lock auto-releases at
     // transaction end (`_xact_` variant) so we don't have to clean up on
     // error paths.
+    let previousTokenSessionId: string | null = null;
+
     try {
       await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(${PUSH_TOKEN_LOCK_NAMESPACE}, hashtext(${sessionId}))`);
@@ -222,11 +225,11 @@ export const pushTokenMutations = {
           .from(activityPushTokens)
           .where(eq(activityPushTokens.token, token))
           .limit(1);
-        const previousSessionId = existingRows[0]?.sessionId ?? null;
-        if (previousSessionId && previousSessionId !== sessionId) {
+        previousTokenSessionId = existingRows[0]?.sessionId ?? null;
+        if (previousTokenSessionId && previousTokenSessionId !== sessionId) {
           incrementApnsMetric('tokensRebound');
           logger.warn(
-            `[APNs] Rebound token ${describeTokenForLog(token)} from session ${previousSessionId} → ${sessionId} (user ${ctx.userId})`,
+            `[APNs] Rebound token ${describeTokenForLog(token)} from session ${previousTokenSessionId} → ${sessionId} (user ${ctx.userId})`,
           );
         }
 
@@ -238,7 +241,7 @@ export const pushTokenMutations = {
         // Only enforce the cap if this is a *new* registration for the
         // session. A rebind/upsert of an existing token doesn't grow the row
         // count, so it should never be blocked by the cap.
-        const isNewRegistration = previousSessionId !== sessionId;
+        const isNewRegistration = previousTokenSessionId !== sessionId;
         if (isNewRegistration && currentCount >= MAX_TOKENS_PER_SESSION) {
           const evictionCount = currentCount - MAX_TOKENS_PER_SESSION + 1;
           const freshnessCutoff = new Date(Date.now() - EVICTION_FRESHNESS_WINDOW_MS);
@@ -273,11 +276,13 @@ export const pushTokenMutations = {
           .values({
             token,
             sessionId,
+            userId: ctx.userId,
           })
           .onConflictDoUpdate({
             target: activityPushTokens.token,
             set: {
               sessionId,
+              userId: ctx.userId,
               updatedAt: new Date(),
             },
           });
@@ -292,6 +297,14 @@ export const pushTokenMutations = {
 
     incrementApnsMetric('tokensRegistered');
     logger.info(`[APNs] Registered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
+    trackLiveActivityStarted({
+      userId: ctx.userId,
+      sessionId,
+      tokenLength: token.length,
+      apnsConfigured: isApnsConfigured(),
+      tokenPreviouslyRegistered: previousTokenSessionId !== null,
+      tokenRebound: previousTokenSessionId !== null && previousTokenSessionId !== sessionId,
+    });
 
     // F3: fire a single, debounce-bypassing APNs push to the newly registered
     // token so the widget exits "Loading…" right away. Fire-and-forget — the
@@ -374,6 +387,11 @@ export const pushTokenMutations = {
     }
 
     logger.info(`[APNs] Unregistered Live Activity token for session ${sessionId}: ${describeTokenForLog(token)}`);
+    trackLiveActivityEnded({
+      userId: ctx.userId,
+      sessionId,
+      reason: 'unregister',
+    });
 
     return true;
   },

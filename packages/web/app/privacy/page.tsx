@@ -43,12 +43,12 @@ export default async function PrivacyPolicyPage() {
         {t('privacy.title')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        {t('privacy.lastUpdated')}
+        {t('privacy.lastUpdatedProductAnalytics')}
       </Typography>
       <Divider sx={{ mb: 4 }} />
 
       <Paragraph>{t('privacy.intro1')}</Paragraph>
-      <Paragraph>{t('privacy.intro2')}</Paragraph>
+      <Paragraph>{t('privacy.intro2ProductAnalytics')}</Paragraph>
 
       <Section title={t('privacy.collect.title')}>
         <Paragraph>
@@ -61,7 +61,7 @@ export default async function PrivacyPolicyPage() {
           <strong>{t('privacy.collect.locationLabel')}</strong> {t('privacy.collect.locationBody')}
         </Paragraph>
         <Paragraph>
-          <strong>{t('privacy.collect.analyticsLabel')}</strong> {t('privacy.collect.analyticsBody')}
+          <strong>{t('privacy.collect.productAnalyticsLabel')}</strong> {t('privacy.collect.productAnalyticsBody')}
         </Paragraph>
       </Section>
 
@@ -83,6 +83,13 @@ export default async function PrivacyPolicyPage() {
           .
         </Paragraph>
         <Paragraph>
+          <strong>{t('privacy.thirdParty.posthogLabel')}</strong> {t('privacy.thirdParty.posthogBody')}
+          <Link href="https://posthog.com/privacy" target="_blank" rel="noopener">
+            {t('privacy.thirdParty.posthogLink')}
+          </Link>
+          .
+        </Paragraph>
+        <Paragraph>
           <strong>{t('privacy.thirdParty.auroraLabel')}</strong> {t('privacy.thirdParty.auroraBody')}
           <Link href="https://auroraclimbing.com" target="_blank" rel="noopener">
             {t('privacy.thirdParty.auroraLink')}
@@ -92,7 +99,7 @@ export default async function PrivacyPolicyPage() {
       </Section>
 
       <Section title={t('privacy.sharing.title')}>
-        <Paragraph>{t('privacy.sharing.body1')}</Paragraph>
+        <Paragraph>{t('privacy.sharing.body1ProductAnalytics')}</Paragraph>
         <Paragraph>{t('privacy.sharing.body2')}</Paragraph>
       </Section>
 

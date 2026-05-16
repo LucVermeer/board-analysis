@@ -96,11 +96,18 @@ vi.mock('../db/client', () => {
 const sendLiveActivityUpdateToTokensMock = vi.fn(async () => undefined);
 const isApnsConfiguredMock = vi.fn(() => false);
 const incrementApnsMetricMock = vi.fn();
+const trackLiveActivityStartedMock = vi.fn();
+const trackLiveActivityEndedMock = vi.fn();
 
 vi.mock('../services/apns', () => ({
   isApnsConfigured: () => isApnsConfiguredMock(),
   sendLiveActivityUpdateToTokens: sendLiveActivityUpdateToTokensMock,
   incrementApnsMetric: incrementApnsMetricMock,
+}));
+
+vi.mock('../services/analytics/live-activity', () => ({
+  trackLiveActivityStarted: trackLiveActivityStartedMock,
+  trackLiveActivityEnded: trackLiveActivityEndedMock,
 }));
 
 vi.mock('../services/room-manager', () => ({
@@ -224,11 +231,19 @@ describe('registerActivityPushToken', () => {
 
     expect(result).toBe(true);
     expect(insertReturn.values).toHaveBeenCalledWith(
-      expect.objectContaining({ token: VALID_TOKEN, sessionId: SESSION_ID }),
+      expect.objectContaining({ token: VALID_TOKEN, sessionId: SESSION_ID, userId: USER_ID }),
     );
     expect(insertOnConflictDoUpdate).toHaveBeenCalled();
     expect(incrementApnsMetricMock).toHaveBeenCalledTimes(1);
     expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensRegistered');
+    expect(trackLiveActivityStartedMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      tokenLength: VALID_TOKEN.length,
+      apnsConfigured: false,
+      tokenPreviouslyRegistered: false,
+      tokenRebound: false,
+    });
     expect(loggerInfoSpy).toHaveBeenCalledWith(
       `[APNs] Registered Live Activity token for session ${SESSION_ID}: ${VALID_TOKEN.slice(0, 8)}...`,
     );
@@ -264,6 +279,14 @@ describe('registerActivityPushToken', () => {
       `[APNs] Rebound token ${VALID_TOKEN.slice(0, 8)}... from session ${OTHER_SESSION_ID} → ${SESSION_ID} (user ${USER_ID})`,
     );
     expect(incrementApnsMetricMock).toHaveBeenCalledWith('tokensRebound');
+    expect(trackLiveActivityStartedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER_ID,
+        sessionId: SESSION_ID,
+        tokenPreviouslyRegistered: true,
+        tokenRebound: true,
+      }),
+    );
   });
 
   it('does not evict when at cap but oldest token is fresh (within 1h)', async () => {
@@ -400,6 +423,11 @@ describe('unregisterActivityPushToken', () => {
 
     expect(result).toBe(true);
     expect(deleteWhere).toHaveBeenCalledTimes(1);
+    expect(trackLiveActivityEndedMock).toHaveBeenCalledWith({
+      userId: USER_ID,
+      sessionId: SESSION_ID,
+      reason: 'unregister',
+    });
     expect(loggerInfoSpy).toHaveBeenCalledWith(
       `[APNs] Unregistered Live Activity token for session ${SESSION_ID}: ${VALID_TOKEN.slice(0, 8)}...`,
     );
