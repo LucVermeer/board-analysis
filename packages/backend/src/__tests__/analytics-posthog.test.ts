@@ -7,6 +7,7 @@ const posthogMocks = vi.hoisted(() => ({
   shutdown: vi.fn(),
 }));
 const loggerMock = vi.hoisted(() => ({
+  info: vi.fn(),
   warn: vi.fn(),
 }));
 
@@ -51,6 +52,9 @@ describe('backend PostHog analytics helper', () => {
     expect(captured).toBe(false);
     expect(posthogMocks.PostHog).not.toHaveBeenCalled();
     expect(posthogMocks.capture).not.toHaveBeenCalled();
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[PostHog] POSTHOG_PROJECT_KEY is not set; backend analytics disabled',
+    );
   });
 
   it('captures sanitized events with backend metadata', async () => {
@@ -87,6 +91,12 @@ describe('backend PostHog analytics helper', () => {
         environment: 'production',
       },
     });
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      '[PostHog] Backend analytics initialized (host=https://posthog.example, environment=production)',
+    );
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      '[PostHog] Queued backend analytics event: Live Activity Widget Navigation',
+    );
   });
 
   it('can initialize if the project key appears after an earlier no-op capture', async () => {

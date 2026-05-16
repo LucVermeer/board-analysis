@@ -23,6 +23,8 @@ const POSTHOG_FLUSH_INTERVAL_MS = 10_000;
 
 let posthogClient: PostHog | null = null;
 let initAttempted = false;
+let missingProjectKeyLogged = false;
+const loggedQueuedEvents = new Set<BackendAnalyticsEvent>();
 
 function sanitizeProperties(properties: AnalyticsProperties | undefined): SanitizedAnalyticsProperties {
   const sanitized: SanitizedAnalyticsProperties = {};
@@ -41,7 +43,13 @@ function getPosthogClient(): PostHog | null {
   if (posthogClient) return posthogClient;
 
   const projectKey = process.env.POSTHOG_PROJECT_KEY;
-  if (!projectKey) return null;
+  if (!projectKey) {
+    if (!missingProjectKeyLogged) {
+      missingProjectKeyLogged = true;
+      logger.warn('[PostHog] POSTHOG_PROJECT_KEY is not set; backend analytics disabled');
+    }
+    return null;
+  }
   if (initAttempted) return null;
   initAttempted = true;
 
@@ -58,6 +66,7 @@ function getPosthogClient(): PostHog | null {
   });
 
   posthogClient = client;
+  logger.info(`[PostHog] Backend analytics initialized (host=${host}, environment=${getAnalyticsEnvironment()})`);
   return client;
 }
 
@@ -82,6 +91,10 @@ export function captureBackendEvent(eventName: BackendAnalyticsEvent, options: C
       event: eventName,
       properties,
     });
+    if (!loggedQueuedEvents.has(eventName)) {
+      loggedQueuedEvents.add(eventName);
+      logger.info(`[PostHog] Queued backend analytics event: ${eventName}`);
+    }
     return true;
   } catch (error) {
     logger.warn('[PostHog] Capture failed:', error);
@@ -95,6 +108,8 @@ export async function shutdownPosthog(): Promise<void> {
 
   posthogClient = null;
   initAttempted = false;
+  missingProjectKeyLogged = false;
+  loggedQueuedEvents.clear();
 
   try {
     await posthog.shutdown();
