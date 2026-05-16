@@ -402,27 +402,7 @@ const ClimbsList = ({
     isFetching,
   });
 
-  // Row click: activates the climb but does NOT open the play drawer.
-  // Only the thumbnail (list mode) or card cover (grid mode) opens the drawer.
-  const handleClimbClickByIndex = useCallback(
-    (index: number) => {
-      const climb = climbs[index];
-      if (climb) {
-        onClimbSelectRef.current?.(climb);
-        // Explicit user-pick signal for the onboarding tour. Fires only while
-        // the tour is on the climb-list step so it can advance without
-        // relying on a currentClimb-change observer (which async queue
-        // hydration can trip).
-        if (tourStepRef.current === 'climb-list') {
-          dispatchTourClimbListPick();
-        }
-        track('Climb List Row Clicked', { climbUuid: climb.uuid });
-      }
-    },
-    [climbs],
-  );
-
-  // Thumbnail / card-cover click: activates the climb and opens the play drawer.
+  // Row / thumbnail / card-cover click: activates the climb and opens the play drawer.
   const handleClimbThumbnailClickByIndex = useCallback(
     (index: number) => {
       const climb = climbs[index];
@@ -436,7 +416,7 @@ const ClimbsList = ({
         } else {
           dispatchOpenPlayDrawer();
         }
-        track('Climb List Cover Clicked', { climbUuid: climb.uuid });
+        track('Climb List Row Clicked', { climbUuid: climb.uuid });
       }
     },
     [climbs],
@@ -680,7 +660,7 @@ const ClimbsList = ({
                           isDark={isDark}
                           preferImageLayers={index < initialImageCount}
                           fetchPriority={index === 0 ? 'high' : undefined}
-                          onSelect={() => handleClimbClickByIndex(index)}
+                          onSelect={() => handleClimbThumbnailClickByIndex(index)}
                           onThumbnailClick={() => handleClimbThumbnailClickByIndex(index)}
                           unsupported={unsupportedClimbs?.has(climb.uuid)}
                           needsBiggerBoard={upsizedClimbs?.has(climb.uuid)}
