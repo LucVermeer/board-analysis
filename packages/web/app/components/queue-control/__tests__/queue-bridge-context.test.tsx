@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
 import React from 'react';
 import { QueueBridgeProvider, QueueBridgeInjector, useQueueBridgeBoardInfo } from '../queue-bridge-context';
+import { createPlaylistSuggestionSource } from '../playlist-suggestions';
 import {
   QueueContext,
   QueueActionsContext,
@@ -58,6 +59,10 @@ vi.mock('@/app/lib/board-compatibility', () => ({
 
 vi.mock('../../board-lock/queue-add-error-messages', () => ({
   queueAddErrorMessage: () => 'Climb is not compatible with this board',
+}));
+
+vi.mock('@/app/lib/live-activity/live-activity-bridge', () => ({
+  default: () => null,
 }));
 
 vi.mock('../../graphql-queue/QueueContext', () => {
@@ -496,6 +501,7 @@ describe('queue-bridge-context', () => {
       const bd = createTestBoardDetails();
       const climb1 = createTestClimb({ uuid: 'c1', name: 'Climb 1' });
       const climb2 = createTestClimb({ uuid: 'c2', name: 'Climb 2' });
+      const climb3 = createTestClimb({ uuid: 'c3', name: 'Climb 3' });
 
       function renderWithLocalQueue(queue: ClimbQueueItem[], current: ClimbQueueItem | null) {
         mockPersistentSession = createDefaultPersistentSession({
@@ -574,6 +580,26 @@ describe('queue-bridge-context', () => {
         expect(next).toBeNull();
       });
 
+      it('getNextClimbQueueItem falls back to playlist suggestions when at end of queue', () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([item1], item1);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const next = result.current!.getNextClimbQueueItem();
+        expect(next?.climb.uuid).toBe('c2');
+        expect(next?.suggested).toBe(true);
+        expect(next?.uuid).toBe('test-uuid-1');
+      });
+
       it('getPreviousClimbQueueItem returns null when at beginning', () => {
         const item1 = createTestQueueItem(climb1, 'u1');
         const { result } = renderWithLocalQueue([item1], item1);
@@ -634,6 +660,74 @@ describe('queue-bridge-context', () => {
         expect(newQueue[1].climb.uuid).toBe('c2');
         // New item becomes current
         expect(newCurrent.climb.uuid).toBe('c2');
+      });
+
+      it('setCurrentClimb with a playlist source prunes future suggested items in local mode', async () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const staleSuggestedItem = {
+          ...createTestQueueItem(createTestClimb({ uuid: 'stale-suggestion' }), 'stale-suggestion-item'),
+          suggested: true,
+        };
+        const manualFutureItem = createTestQueueItem(climb3, 'manual-future-item');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([item1, staleSuggestedItem, manualFutureItem], item1);
+
+        await act(async () => {
+          await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: source });
+        });
+
+        expect(mockSetLocalQueueState).toHaveBeenCalled();
+        const [newQueue, newCurrent] = mockSetLocalQueueState.mock.calls[0];
+        expect(newQueue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c1', 'c2', 'c3']);
+        expect(newQueue.map((item: ClimbQueueItem) => item.uuid)).toEqual(['u1', 'test-uuid-1', 'manual-future-item']);
+        expect(newCurrent.climb.uuid).toBe('c2');
+      });
+
+      it('sets and refreshes playlist suggestion source only when activation identity matches', () => {
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2],
+          boardDetails: bd,
+        });
+        const staleRefresh = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb2, climb3],
+          boardDetails: bd,
+        });
+        const refreshedSource = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([], null);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+        expect(result.current!.playlistSuggestionSource).toEqual(source);
+
+        act(() => {
+          result.current!.refreshPlaylistSuggestionSource(staleRefresh);
+        });
+        expect(result.current!.playlistSuggestionSource).toEqual(source);
+
+        act(() => {
+          result.current!.refreshPlaylistSuggestionSource(refreshedSource);
+        });
+        expect(result.current!.playlistSuggestionSource).toEqual(refreshedSource);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(null);
+        });
+        expect(result.current!.playlistSuggestionSource).toBeNull();
       });
     });
 
@@ -726,6 +820,7 @@ describe('queue-bridge-context', () => {
       const bd = createTestBoardDetails();
       const climb1 = createTestClimb({ uuid: 'c1', name: 'Climb 1' });
       const climb2 = createTestClimb({ uuid: 'c2', name: 'Climb 2' });
+      const climb3 = createTestClimb({ uuid: 'c3', name: 'Climb 3' });
       const activeSession = {
         sessionId: 'party-1',
         boardPath: '/kilter/1/10/1,2/40/list',
@@ -777,6 +872,63 @@ describe('queue-bridge-context', () => {
         expect(setCurrentCall[1]).toBe(false);
         // correlationId derived from clientId
         expect(setCurrentCall[2]).toMatch(/^client-abc-/);
+      });
+
+      it('setCurrentClimb with a playlist source replaces the party queue for a new item', async () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const staleSuggestedItem = {
+          ...createTestQueueItem(createTestClimb({ uuid: 'stale-suggestion' }), 'stale-suggestion-item'),
+          suggested: true,
+        };
+        const manualFutureItem = createTestQueueItem(climb3, 'manual-future-item');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithPartySession([item1, staleSuggestedItem, manualFutureItem], item1);
+
+        await act(async () => {
+          await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: source });
+        });
+
+        expect(mockPersistentSession.addQueueItem).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setCurrentClimb).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setQueue).toHaveBeenCalledTimes(1);
+        const [newQueue, newCurrent] = (mockPersistentSession.setQueue as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(newQueue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c1', 'c2', 'c3']);
+        expect(newQueue.map((item: ClimbQueueItem) => item.uuid)).toEqual(['u1', 'test-uuid-1', 'manual-future-item']);
+        expect(newCurrent.climb.uuid).toBe('c2');
+      });
+
+      it('setCurrentClimb with a playlist source replaces the party queue for an existing item', async () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const existingItem = createTestQueueItem(climb2, 'u2');
+        const staleSuggestedItem = {
+          ...createTestQueueItem(createTestClimb({ uuid: 'stale-suggestion' }), 'stale-suggestion-item'),
+          suggested: true,
+        };
+        const manualFutureItem = createTestQueueItem(climb3, 'manual-future-item');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithPartySession([item1, existingItem, staleSuggestedItem, manualFutureItem], item1);
+
+        await act(async () => {
+          await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: source });
+        });
+
+        expect(mockPersistentSession.addQueueItem).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setCurrentClimb).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setQueue).toHaveBeenCalledTimes(1);
+        const [newQueue, newCurrent] = (mockPersistentSession.setQueue as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(newQueue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c1', 'c2', 'c3']);
+        expect(newQueue.map((item: ClimbQueueItem) => item.uuid)).toEqual(['u1', 'u2', 'manual-future-item']);
+        expect(newCurrent.uuid).toBe('u2');
       });
 
       it('setCurrentClimb passes undefined position when no current is set', async () => {

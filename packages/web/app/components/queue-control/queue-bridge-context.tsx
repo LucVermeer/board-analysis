@@ -215,16 +215,22 @@ function usePersistentSessionQueueAdapter(): {
     return false;
   }, []);
 
-  // Bridge-mode nav is queue-only (no search results plumbed through here),
-  // so suggestionsOnly is a no-op in this adapter — return null instead of
-  // a queue item. The drawer is the only caller passing suggestionsOnly today.
+  // Bridge-mode nav is queue-only for the swipe path (no search results plumbed
+  // through here), so suggestionsOnly is a no-op in this adapter — return null
+  // instead of a queue item. The drawer is the only caller passing
+  // suggestionsOnly today. When the queue is exhausted, fall through to the
+  // playlist suggestion feed so the user can keep walking through climbs.
   const getNextClimbQueueItem = useCallback(
     (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }): ClimbQueueItem | null => {
       if (options?.suggestionsOnly) return null;
-      const { queue, currentClimbQueueItem: current } = latestRef.current;
+      const { queue, currentClimbQueueItem: current, playlistSuggestionSource } = latestRef.current;
       const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
       const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
-      return idx >= 0 && idx < queue.length - 1 ? queue[idx + 1] : null;
+      if (idx >= 0 && idx < queue.length - 1) return queue[idx + 1];
+      const nextClimb = getPlaylistSuggestedClimbs(playlistSuggestionSource, queue)[0];
+      // This is a transient peek item. It gets a stable queue UUID only after a
+      // caller promotes it with setCurrentClimbQueueItem/setCurrentClimb.
+      return nextClimb ? { climb: nextClimb, addedBy: null, uuid: uuidv4(), suggested: true } : null;
     },
     [],
   );

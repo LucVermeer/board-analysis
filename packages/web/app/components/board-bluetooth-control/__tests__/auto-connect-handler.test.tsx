@@ -74,7 +74,9 @@ describe('AutoConnectHandler', () => {
     });
 
     // Should select the first search result
-    expect(mockSetCurrentClimb).toHaveBeenCalledWith(mockSearchData.climbSearchResults![0]);
+    expect(mockSetCurrentClimb).toHaveBeenCalledWith(mockSearchData.climbSearchResults![0], {
+      playlistSuggestionSource: null,
+    });
 
     // Should call connect with the first climb's frames, mirrored flag, and the serial
     expect(mockConnect).toHaveBeenCalledWith('p1r12p2r13', false, '751737');
