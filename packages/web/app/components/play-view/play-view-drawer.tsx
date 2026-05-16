@@ -12,6 +12,8 @@ import FavoriteBorderOutlined from '@mui/icons-material/FavoriteBorderOutlined';
 import Favorite from '@mui/icons-material/Favorite';
 import SkipPreviousOutlined from '@mui/icons-material/SkipPreviousOutlined';
 import SkipNextOutlined from '@mui/icons-material/SkipNextOutlined';
+import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
+import Lightbulb from '@mui/icons-material/Lightbulb';
 import MoreHorizOutlined from '@mui/icons-material/MoreHorizOutlined';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import KeyboardArrowUpOutlined from '@mui/icons-material/KeyboardArrowUpOutlined';
@@ -103,6 +105,19 @@ type PlayViewActionBarProps = {
   onToggleFavorite: () => void;
   onOpenActions: () => void;
   onOpenQueue: () => void;
+  /** Whether the local user currently drives the wall. Drives the lightbulb
+   *  visual (filled vs outlined). True in solo regardless. Prev/next stay
+   *  visible to everyone in the drawer — Phase 1 already makes them
+   *  preview-only in party (drawer-local state, no broadcast), so non-drivers
+   *  can still scrub through nearby climbs without yanking the wall. */
+  isDriver: boolean;
+  /** Name of the currently displayed climb. Used in the lightbulb's aria
+   *  label so screen-reader users hear what they're sending. */
+  displayedClimbName: string | null;
+  /** Pivot's lightbulb gesture: in solo it sends the climb to the wall via
+   *  the existing BLE auto-sender path; in party it claims driver and
+   *  broadcasts the climb. */
+  onLightbulb: () => void;
   angleSelector?: React.ReactNode;
 };
 
@@ -119,9 +134,21 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   onToggleFavorite,
   onOpenActions,
   onOpenQueue,
+  isDriver,
+  displayedClimbName,
+  onLightbulb,
   angleSelector,
 }: PlayViewActionBarProps) {
   const { t } = useTranslation('session');
+  // Lightbulb aria label per spec — driver vs non-driver framing makes the
+  // action's destructive-vs-additive nature explicit for screen readers.
+  const lightbulbLabel = displayedClimbName
+    ? isDriver
+      ? `Send '${displayedClimbName}' to the wall`
+      : `Take wall control and send '${displayedClimbName}'`
+    : isDriver
+      ? 'Send to the wall'
+      : 'Take wall control';
   return (
     <div className={styles.actionBar}>
       <IconButton disabled={!canSwipePrevious} onClick={onPrevClick}>
@@ -147,6 +174,12 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
       )}
       <IconButton onClick={onToggleFavorite}>
         {isFavorited ? <Favorite sx={{ color: themeTokens.colors.error }} /> : <FavoriteBorderOutlined />}
+      </IconButton>
+      {/* Lightbulb: the queue-control-bar pivot's primary "send/take" gesture.
+          Filled when the local user is driving (in solo this is always true);
+          outlined when someone else holds the wall (party non-driver). */}
+      <IconButton onClick={onLightbulb} aria-label={lightbulbLabel} color={isDriver ? 'primary' : 'default'}>
+        {isDriver ? <Lightbulb /> : <LightbulbOutlined />}
       </IconButton>
       <ShareBoardButton />
       {angleSelector}
@@ -494,8 +527,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
   const { currentClimbQueueItem } = isOpen ? currentClimbData : deferredCurrentClimb;
   const { queue } = isOpen ? queueListData : deferredQueue;
-  const { viewOnlyMode, isPersistentSessionActive } = isOpen ? sessionData : deferredSession;
-  const { mirrorClimb, getNextClimbQueueItem, getPreviousClimbQueueItem, setCurrentClimbQueueItem } = useQueueActions();
+  const { viewOnlyMode, isPersistentSessionActive, isDriver } = isOpen ? sessionData : deferredSession;
+  const { mirrorClimb, getNextClimbQueueItem, getPreviousClimbQueueItem, setCurrentClimbQueueItem, takeControl } =
+    useQueueActions();
 
   // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
   // callers via the open-drawer event payload) takes precedence over the wall
@@ -560,9 +594,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // Card-swipe navigation. In an active party session, prev/next walks the
   // drawer-local preview state without broadcasting (browse-doesn't-yank). In
   // solo, it mutates the wall climb like today so BLE keeps sending.
+  //
+  // Non-driver swipe (party + isDriver===false): walks the suggested-climbs
+  // feed only — skip the shared queue, which is "the climbs the driver
+  // committed to" and not a non-driver's preview surface (pivot rule 5).
+  // Drivers (and solo, where isDriver is always true) get the existing
+  // queue → suggestions fall-through.
   const navigateFromItem = effectiveItem ?? null;
-  const nextItem = getNextClimbQueueItem({ from: navigateFromItem });
-  const prevItem = getPreviousClimbQueueItem({ from: navigateFromItem });
+  const swipeSuggestionsOnly = isPersistentSessionActive && !isDriver;
+  const nextItem = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
+  const prevItem = getPreviousClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
 
   const advanceTo = useCallback(
     (item: ClimbQueueItem, method: string, direction: 'next' | 'previous') => {
@@ -578,16 +619,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   );
 
   const handleSwipeNext = useCallback(() => {
-    const next = getNextClimbQueueItem({ from: navigateFromItem });
+    const next = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
     if (!next || viewOnlyMode) return;
     advanceTo(next, 'swipePlayViewDrawer', 'next');
-  }, [getNextClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo]);
+  }, [getNextClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, viewOnlyMode, advanceTo]);
 
   const handleSwipePrevious = useCallback(() => {
-    const prev = getPreviousClimbQueueItem({ from: navigateFromItem });
+    const prev = getPreviousClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
     if (!prev || viewOnlyMode) return;
     advanceTo(prev, 'swipePlayViewDrawer', 'previous');
-  }, [getPreviousClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo]);
+  }, [getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, viewOnlyMode, advanceTo]);
 
   const canSwipeNext = !viewOnlyMode && !!nextItem;
   const canSwipePrevious = !viewOnlyMode && !!prevItem;
@@ -612,15 +653,36 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   }, [showMessage, t]);
 
   const handlePrevNavClick = useCallback(() => {
-    const prev = getPreviousClimbQueueItem({ from: navigateFromItem });
+    const prev = getPreviousClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
     if (!prev) return;
     advanceTo(prev, 'playViewDrawer', 'previous');
-  }, [getPreviousClimbQueueItem, navigateFromItem, advanceTo]);
+  }, [getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, advanceTo]);
+  /**
+   * Lightbulb press: the queue-control-bar pivot's primary "send/take" gesture.
+   * Routes through `queueActions.takeControl(climb)`, which:
+   *  - In solo: degrades to the existing setCurrentClimb path (the BLE
+   *    auto-sender picks up the climb-change and sends frames).
+   *  - In party + non-driver: claims driver via the new takeControl mutation
+   *    AND broadcasts the climb as the new wall climb. Yanks any prior driver.
+   *  - In party + driver: re-broadcasts the climb (the resolver's atomic-swap
+   *    suppresses the redundant DriverChanged event; CurrentClimbChanged still
+   *    fires so peers see the new wall climb).
+   */
+  const handleLightbulbClick = useCallback(() => {
+    if (!currentClimb) return;
+    void takeControl(currentClimb);
+    track('Wall Control Taken', {
+      source: 'lightbulb_drawer',
+      previousDriver: isDriver ? 'self' : 'other',
+      mode: isPersistentSessionActive ? 'party' : 'solo',
+      climbUuid: currentClimb.uuid,
+    });
+  }, [currentClimb, takeControl, isDriver, isPersistentSessionActive]);
   const handleNextNavClick = useCallback(() => {
-    const next = getNextClimbQueueItem({ from: navigateFromItem });
+    const next = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
     if (!next) return;
     advanceTo(next, 'playViewDrawer', 'next');
-  }, [getNextClimbQueueItem, navigateFromItem, advanceTo]);
+  }, [getNextClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, advanceTo]);
   const handleOpenActionsMenu = useCallback(() => {
     setIsQueueOpen(false);
     setIsPlaylistSelectorOpen(false);
@@ -881,6 +943,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             onToggleFavorite={toggleFavorite}
             onOpenActions={handleOpenActionsMenu}
             onOpenQueue={handleOpenQueueDrawer}
+            isDriver={isDriver}
+            displayedClimbName={currentClimb?.name ?? null}
+            onLightbulb={handleLightbulbClick}
             angleSelector={
               <AngleSelector
                 boardName={boardDetails.board_name}
@@ -921,6 +986,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     toggleFavorite,
     handleOpenActionsMenu,
     handleOpenQueueDrawer,
+    isDriver,
+    handleLightbulbClick,
     angle,
     handleTickBarClose,
     handleTickBarError,

@@ -205,19 +205,30 @@ function usePersistentSessionQueueAdapter(): {
     return false;
   }, []);
 
-  const getNextClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }): ClimbQueueItem | null => {
-    const { queue, currentClimbQueueItem: current } = latestRef.current;
-    const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
-    const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
-    return idx >= 0 && idx < queue.length - 1 ? queue[idx + 1] : null;
-  }, []);
+  // Bridge-mode nav is queue-only (no search results plumbed through here),
+  // so suggestionsOnly is a no-op in this adapter — return null instead of
+  // a queue item. The drawer is the only caller passing suggestionsOnly today.
+  const getNextClimbQueueItem = useCallback(
+    (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }): ClimbQueueItem | null => {
+      if (options?.suggestionsOnly) return null;
+      const { queue, currentClimbQueueItem: current } = latestRef.current;
+      const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
+      const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
+      return idx >= 0 && idx < queue.length - 1 ? queue[idx + 1] : null;
+    },
+    [],
+  );
 
-  const getPreviousClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }): ClimbQueueItem | null => {
-    const { queue, currentClimbQueueItem: current } = latestRef.current;
-    const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
-    const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
-    return idx > 0 ? queue[idx - 1] : null;
-  }, []);
+  const getPreviousClimbQueueItem = useCallback(
+    (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }): ClimbQueueItem | null => {
+      if (options?.suggestionsOnly) return null;
+      const { queue, currentClimbQueueItem: current } = latestRef.current;
+      const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
+      const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
+      return idx > 0 ? queue[idx - 1] : null;
+    },
+    [],
+  );
 
   const setCurrentClimbQueueItem = useCallback((item: ClimbQueueItem) => {
     const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;

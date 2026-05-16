@@ -70,6 +70,9 @@ function buildProps(
     onToggleFavorite: vi.fn(),
     onOpenActions: vi.fn(),
     onOpenQueue: vi.fn(),
+    isDriver: true,
+    displayedClimbName: 'Test Climb',
+    onLightbulb: vi.fn(),
     ...overrides,
   };
 }

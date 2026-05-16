@@ -679,19 +679,31 @@ export const GraphQLQueueProvider = ({
     latestRef.current.fetchMoreClimbs();
   }, []);
 
-  const getNextClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }) => {
+  const getNextClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }) => {
     const r = latestRef.current;
     // `from` lets the drawer walk preview navigation from its locally-
     // displayed climb without first writing to state.currentClimbQueueItem.
     // Default anchor is the current wall climb, preserving existing callers.
+    //
+    // `suggestionsOnly` (queue-control-bar pivot, rule 5) is the non-driver
+    // swipe path: skip the shared queue entirely and walk only the
+    // suggested-climbs feed. The shared queue represents "climbs the driver
+    // is committed to," so a non-driver browsing it would scrub through
+    // someone else's plan; suggestedClimbs is the catalogue the user is
+    // already looking at and is the cleaner preview surface.
     const anchorUuid = options?.from ? options.from.uuid : r.state.currentClimbQueueItem?.uuid;
+    const anchorClimbUuid = options?.from ? options.from.climb?.uuid : r.state.currentClimbQueueItem?.climb?.uuid;
+    if (options?.suggestionsOnly) {
+      if (!r.suggestedClimbs || r.suggestedClimbs.length === 0) return null;
+      const nextClimb = r.suggestedClimbs.find((climb: Climb) => climb.uuid !== anchorClimbUuid);
+      return nextClimb ? createClimbQueueItem(nextClimb, r.clientId, r.currentUserInfo, true) : null;
+    }
     const queueItemIndex = r.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
     if (
       (r.state.queue.length === 0 || r.state.queue.length <= queueItemIndex + 1) &&
       r.climbSearchResults &&
       r.climbSearchResults.length > 0
     ) {
-      const anchorClimbUuid = options?.from ? options.from.climb?.uuid : r.state.currentClimbQueueItem?.climb?.uuid;
       const nextClimb = r.suggestedClimbs.find(
         (climb: Climb) =>
           climb.uuid !== anchorClimbUuid &&
@@ -702,12 +714,28 @@ export const GraphQLQueueProvider = ({
     return queueItemIndex >= r.state.queue.length - 1 ? null : r.state.queue[queueItemIndex + 1];
   }, []);
 
-  const getPreviousClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }) => {
-    const r = latestRef.current;
-    const anchorUuid = options?.from ? options.from.uuid : r.state.currentClimbQueueItem?.uuid;
-    const queueItemIndex = r.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
-    return queueItemIndex > 0 ? r.state.queue[queueItemIndex - 1] : null;
-  }, []);
+  const getPreviousClimbQueueItem = useCallback(
+    (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }) => {
+      const r = latestRef.current;
+      const anchorUuid = options?.from ? options.from.uuid : r.state.currentClimbQueueItem?.uuid;
+      const anchorClimbUuid = options?.from ? options.from.climb?.uuid : r.state.currentClimbQueueItem?.climb?.uuid;
+      if (options?.suggestionsOnly) {
+        // Non-driver previous: walk the suggestedClimbs array backwards.
+        // No fall-through into the queue — that would let a non-driver scrub
+        // backwards through someone else's committed plan.
+        if (!r.suggestedClimbs || r.suggestedClimbs.length === 0) return null;
+        const anchorIdx = r.suggestedClimbs.findIndex((climb: Climb) => climb.uuid === anchorClimbUuid);
+        // If the anchor isn't in suggestedClimbs (e.g. anchor is a queue
+        // item, not a suggestion), there's no meaningful "previous suggestion."
+        if (anchorIdx <= 0) return null;
+        const prevClimb = r.suggestedClimbs[anchorIdx - 1];
+        return prevClimb ? createClimbQueueItem(prevClimb, r.clientId, r.currentUserInfo, true) : null;
+      }
+      const queueItemIndex = r.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
+      return queueItemIndex > 0 ? r.state.queue[queueItemIndex - 1] : null;
+    },
+    [],
+  );
 
   // Optimistic dispatch for widget navigation (Next/Previous from Live Activity).
   // The native WebSocket already sent the server mutation, so we only need to
