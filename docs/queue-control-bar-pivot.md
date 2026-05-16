@@ -1,9 +1,10 @@
 # Queue Control Bar Pivot — Bar Mirrors the Wall, Lightbulb Controls the Driver
 
-**Status:** Plan, ready for implementation
+**Status:** Plan, ready for implementation (Phase 1 shipped; Phase 2 in progress)
 **Decision date:** 2026-05-16
 **Driven by:** Observed user-testing pain in large-group party sessions, supported by 3 months of Vercel Analytics + 1 week of PostHog
 **Owner (assign on pickup):** TBD
+**Supersedes:** [`docs/collaborative-picks-spec.md`](./collaborative-picks-spec.md). The collab-picks spec proposed per-user `picks[userId]` rows + new DB tables / mutations to solve the same "mixed-ability group, everyone wants their own line" problem; this pivot solves it with a shared-queue + explicit-driver model instead. The collab-picks spec was never implemented; an implementing agent should follow this doc, not the older spec.
 
 ---
 
@@ -33,7 +34,7 @@ Four rules:
 5. **Swipe in the drawer is preview-only for non-drivers, broadcast for drivers.** The swipe gesture stays available for everyone (the dominant interaction in the data — 4,753 next-swipes per week). For non-drivers it walks the suggested-climbs feed only (skips the queue, since the queue represents what the driver is committed to climbing — not a non-driver's browsing surface) and does not broadcast. For drivers it walks queue → suggestions and broadcasts each step, identical to driver-side prev/next buttons.
 6. **Bar prev/next advance the wall without transferring leadership; non-drivers must press-and-hold for 3 seconds.** Any party member can press bar prev/next, driver or not. For the driver, the press is instant. For a non-driver, the button requires a 3-second press-and-hold to fire — releasing early cancels. The presser sees a snackbar counting down during the hold ("Advancing in 3... 2... 1..."); release dismisses it. The hold is the climber-on-wall safety gate (in lieu of the modal-confirmation lock the reviewers flagged as needed; the hold is cheaper and gives the presser a visible cancel window). Once the hold completes, the wall advances along the shared queue (then falls through to suggestions) and broadcasts to every member. The driver stays the driver — pressing prev/next here is "advance what we've agreed on", not "take over the session." This narrows the lightbulb's purpose: the lightbulb is the driver-transfer gesture (commit a specific climb / claim the wall); the bar prev/next is the shared queue-navigation gesture that doesn't change who's driving.
 
-A seventh, already-implemented rule worth naming: **BLE is transport, not scope.** If any party member has an active BLE connection to the board, anyone in the party can drive the wall — the lightbulb-press travels via WebSocket to whichever member holds BLE and they relay to the board. The lightbulb controls session state, not the current phone's pairing.
+A seventh rule worth naming: **BLE is transport, not scope.** If any party member has an active BLE connection to the board, anyone in the party can drive the wall — the lightbulb-press travels via WebSocket to whichever member holds BLE and they relay to the board. The lightbulb controls session state, not the current phone's pairing. **This relay needs to be built — it is not yet implemented today.** The current BLE send is implicit: every phone with BLE reacts to `currentClimbQueueItem` events independently (multiple connected phones would all try to send). The pivot's driver concept makes this explicit: only the BLE-holder (or one of them, if several are paired) should react to wall-mutating events. Phase 4 builds the BLE-holder presence tracking already required for no-BLE / wall-offline handling; the same machinery is what makes the relay routing explicit. Until Phase 4 lands, the legacy "everyone reacts" behavior continues.
 
 ## The queue and suggestions model
 
@@ -105,7 +106,7 @@ Contrast with the normal drawer (opened by tapping a climb in the list): that on
 
 ### Party host with no BLE, while another member has BLE
 
-Same as above except every wall-mutating action (lightbulb-press, prev/next) routes over WS to the BLE-holding member, which relays to the board. From the user's perspective, identical — with a small "via Alice" microcopy on the bar so the user understands the path.
+Same as above except every wall-mutating action (lightbulb-press, prev/next) routes over WS to the BLE-holding member, which relays to the board. From the user's perspective, identical. A "via {BLE-holder name}" microcopy on the bar is a Phase 4 follow-up — it depends on the BLE-holder presence tracking that Phase 4 already needs to build for no-BLE / wall-offline handling, and is omitted until then. Until Phase 4, the host without BLE sees no surfaced attribution; the wall changes just appear to land.
 
 ### BLE-holder drops mid-session in party
 
@@ -211,6 +212,7 @@ Update analytics so we can verify the pivot works in production. **Critical: do 
 
 - **Primary:** within 4 weeks of rollout, `Wall Control Taken` events per active party-mode user should exceed today's `Set Active Climb` event rate per active party-mode user.
 - **Primary:** party-cohort retention (sessions per user over a 30-day window) should not decline relative to the 4 weeks before launch.
+- **Counter-metric (solo-mode regression):** solo-cohort retention (sessions per user over a 30-day window, restricted to users who never joined a party in the measurement window) should not decline relative to the 4 weeks before launch. Solo is the larger cohort by far — 2,419 board-senders vs ~1,400 party users over 3 months — and the pivot's main behavior change (tap-to-set-active no longer broadcasts in party; in solo, the Phase 3 "Send to board" rename touches the same path) lands on solo users too. Catch a solo regression early; do not let a party-only metric mask it.
 - **Counter-metric (anti-griefing / anti-confusion):** the rate of `Wall Control Released` within 30s of `Wall Control Taken` should not exceed 15% of takes. A high rapid-release rate would indicate users are fighting for or accidentally claiming control — the new model would look "active" in the primary metric but actually be confusing. Record the baseline rate (close to zero today since the lightbulb concept doesn't exist) and define the kill threshold at 15%.
 
 If any of the three misses, the pivot is reverted or revised. Record all baselines before phase-2 ships.
@@ -249,7 +251,7 @@ Queue Operation breakdown (3-month, sampled at max 5 per op-type per session; vi
 - `addToQueue` — 6%, 425 visitors.
 - Long tail: `replaceQueueItem` 2%, `setQueue` 2%, `mirrorClimb` 1%.
 
-`Add to Queue` UI events (3 months) by source: `swipe` 240, `climbActions` 183. The dedicated `queueButton` source fires zero events — likely an instrumentation gap or invisible affordance.
+`Add to Queue` UI events (3 months) by source: `swipe` 240, `climbActions` 183. The dedicated `queueButton` source fires zero events because the component (`packages/web/app/components/climb-actions/queue-button.tsx`) is exported from the climb-actions index but **never rendered on any route** — verified via grep for `<QueueButton` JSX. The `track('Add to Queue', { source: 'queueButton' })` call inside it is wired correctly; it simply has no caller. Treat as dead UI: either delete the component in a Phase 6 cleanup or re-mount it intentionally as part of the "Add to Up next" rename in PR 3 if we want a third entry point. The zero-event signal is therefore "no surface", not "instrumentation gap".
 
 `Queue Navigation` UI events (PostHog week — directionally stable): 4,753 next-swipes + 1,085 previous-swipes inside the Play View drawer. 20 events combined on the Queue Control Bar arrows/swipe. 8 events on the bar's button arrows. The persistent control bar is structurally unused as an interaction surface.
 
