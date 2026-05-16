@@ -18,11 +18,21 @@ vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: mockShowMessage }),
 }));
 
-const mockExecute = vi.fn();
-const mockDispose = vi.fn();
+const { mockExecute, mockDispose, FakeGraphQLOperationError } = vi.hoisted(() => {
+  class FakeGraphQLOperationError extends Error {
+    readonly extensions: Record<string, unknown> | null;
+    constructor(errors: ReadonlyArray<{ message: string; extensions?: Record<string, unknown> }>) {
+      super(errors.map((err) => err.message).join(', '));
+      this.name = 'GraphQLOperationError';
+      this.extensions = errors[0]?.extensions ?? null;
+    }
+  }
+  return { mockExecute: vi.fn(), mockDispose: vi.fn(), FakeGraphQLOperationError };
+});
 vi.mock('@/app/components/graphql-queue/graphql-client', () => ({
   createGraphQLClient: () => ({ dispose: mockDispose }),
   execute: (...args: unknown[]) => mockExecute(...args),
+  GraphQLOperationError: FakeGraphQLOperationError,
 }));
 
 vi.mock('@/app/lib/graphql/operations/new-climb-feed', () => ({

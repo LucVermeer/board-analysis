@@ -3,9 +3,12 @@ import {
   type CheckMoonBoardClimbDuplicatesInput,
   type ClimbSearchInput,
   type ConnectionContext,
+  type SimilarClimb,
+  type SimilarClimbsInput,
   SUPPORTED_BOARDS,
   USER_SPECIFIC_SEARCH_PARAMS,
 } from '@boardsesh/shared-schema';
+import type { BoardName } from '@boardsesh/board-constants';
 import { logger } from '../../../utils/logger';
 import {
   type ClimbSearchParams,
@@ -15,11 +18,13 @@ import {
 import { isValidBoardName } from '../../../db/queries/util/table-select';
 import { applyRateLimit, validateInput } from '../shared/helpers';
 import { findMoonBoardDuplicateMatches } from './moonboard-duplicates';
+import { findSimilarClimbs, parseFramesToHoldEntries, type NormalizedHold } from './climb-similarity';
 import {
   BoardNameSchema,
   CheckMoonBoardClimbDuplicatesInputSchema,
   ClimbSearchInputSchema,
   ExternalUUIDSchema,
+  SimilarClimbsInputSchema,
 } from '../../../validation/schemas';
 import type { ClimbSearchContext } from '../shared/types';
 import { db } from '../../../db/client';
@@ -37,6 +42,63 @@ export const climbQueries = {
     await applyRateLimit(ctx, 60, 'moonboard-duplicate-check');
     const validated = validateInput(CheckMoonBoardClimbDuplicatesInputSchema, input, 'input');
     return findMoonBoardDuplicateMatches(validated.layoutId, validated.angle, validated.climbs);
+  },
+
+  /**
+   * Find climbs on the same board+layout that share at least `threshold`
+   * (default 0.9) Jaccard similarity with the target's holds. Used by the
+   * playview drawer's similar-climbs panel and by the create-climb form to
+   * preview the exact duplicate when a publish is blocked.
+   */
+  similarClimbs: async (
+    _: unknown,
+    { input }: { input: SimilarClimbsInput },
+    ctx: ConnectionContext,
+  ): Promise<SimilarClimb[]> => {
+    await applyRateLimit(ctx, 60, 'similar-climbs');
+    const validated = validateInput(SimilarClimbsInputSchema, input, 'input');
+
+    if (!isValidBoardName(validated.boardType)) {
+      throw new Error(`Invalid board name: ${validated.boardType}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
+    }
+    const boardType = validated.boardType as BoardName;
+
+    let holds: NormalizedHold[];
+    let excludeUuid = validated.excludeClimbUuid ?? undefined;
+
+    if (validated.climbUuid) {
+      const targetHoldRows = await db
+        .select({
+          holdId: dbSchema.boardClimbHolds.holdId,
+          holdState: dbSchema.boardClimbHolds.holdState,
+        })
+        .from(dbSchema.boardClimbHolds)
+        .where(
+          and(
+            eq(dbSchema.boardClimbHolds.boardType, boardType),
+            eq(dbSchema.boardClimbHolds.climbUuid, validated.climbUuid),
+          ),
+        );
+      holds = targetHoldRows.map((row) => ({ holdId: row.holdId, holdState: row.holdState }));
+      // Always exclude the target climb itself from its own similar list.
+      excludeUuid = validated.climbUuid;
+    } else {
+      holds = parseFramesToHoldEntries(boardType, validated.frames ?? '').map(({ holdId, holdState }) => ({
+        holdId,
+        holdState,
+      }));
+    }
+
+    if (holds.length === 0) return [];
+
+    return findSimilarClimbs({
+      boardType,
+      layoutId: validated.layoutId,
+      holds,
+      threshold: validated.threshold ?? 0.9,
+      limit: validated.limit ?? 25,
+      excludeUuid,
+    });
   },
 
   /**

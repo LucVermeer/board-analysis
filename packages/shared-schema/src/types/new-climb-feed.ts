@@ -66,3 +66,26 @@ export type MoonBoardClimbDuplicateMatch = {
   existingClimbUuid?: string | null;
   existingClimbName?: string | null;
 };
+
+export type SimilarClimbsInput = {
+  boardType: string;
+  layoutId: number;
+  threshold?: number | null;
+  limit?: number | null;
+  excludeClimbUuid?: string | null;
+  climbUuid?: string | null;
+  frames?: string | null;
+};
+
+export type SimilarClimb = {
+  uuid: string;
+  name?: string | null;
+  setterUsername?: string | null;
+  angle?: number | null;
+  layoutId: number;
+  frames?: string | null;
+  similarity: number;
+  sharedHoldCount: number;
+  candidateHoldCount: number;
+  targetHoldCount: number;
+};

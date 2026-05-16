@@ -12,7 +12,7 @@ import {
   type UpdateClimbMutationVariables,
   type UpdateClimbMutationResponse,
 } from '@/app/lib/graphql/operations/new-climb-feed';
-import { createGraphQLClient, execute } from '@/app/components/graphql-queue/graphql-client';
+import { createGraphQLClient, execute, GraphQLOperationError } from '@/app/components/graphql-queue/graphql-client';
 import { getBackendWsUrl } from '@/app/lib/backend-url';
 import type { BoardName } from '@/app/lib/types';
 import type { SaveClimbOptions } from '@/app/lib/api-wrappers/aurora/types';
@@ -77,7 +77,13 @@ export function useSaveClimb(boardName: BoardName) {
         void client.dispose();
       }
     },
-    onError: () => {
+    onError: (err) => {
+      // Duplicate-publish rejections render a richer inline UX in the form
+      // (see create-climb-form), so suppress the generic snackbar for that
+      // case and let the caller handle it explicitly.
+      if (err instanceof GraphQLOperationError && err.extensions?.code === 'CLIMB_IS_DUPLICATE') {
+        return;
+      }
       showMessage('Failed to save climb', 'error');
     },
   });

@@ -215,3 +215,17 @@ export const CheckMoonBoardClimbDuplicatesInputSchema = z.object({
     .min(1)
     .max(100),
 });
+
+export const SimilarClimbsInputSchema = z
+  .object({
+    boardType: BoardNameSchema,
+    layoutId: z.number().int().positive('Layout ID must be positive'),
+    threshold: z.number().min(0).max(1).optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+    excludeClimbUuid: z.string().min(1).max(100).optional(),
+    climbUuid: z.string().min(1).max(100).optional(),
+    frames: z.string().min(1).max(10000).optional(),
+  })
+  .refine((input) => Boolean(input.climbUuid) !== Boolean(input.frames), {
+    message: 'Provide exactly one of climbUuid or frames',
+  });

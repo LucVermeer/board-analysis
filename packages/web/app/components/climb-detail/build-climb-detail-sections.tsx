@@ -14,11 +14,12 @@ import ClimbAnalytics from '@/app/components/charts/climb-analytics';
 import BoardseshBetaList from '@/app/components/beta-videos/boardsesh-beta-list';
 import BoardseshBetaAddPanel from '@/app/components/beta-videos/boardsesh-beta-add-panel';
 import BoardseshBetaAddButton from '@/app/components/beta-videos/boardsesh-beta-add-button';
+import SimilarClimbsList from '@/app/components/similar-climbs/similar-climbs-list';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
 import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
-import type { Climb } from '@/app/lib/types';
+import type { BoardName, Climb } from '@/app/lib/types';
 
 type BuildClimbDetailSectionsProps = {
   climb: Climb;
@@ -166,5 +167,26 @@ export function useBuildClimbDetailSections({
       lazy: true,
       content: <ClimbAnalytics climbUuid={climbUuid} boardType={boardType} />,
     },
+    ...(climb.layoutId != null
+      ? [
+          {
+            key: 'similar-climbs',
+            label: 'Similar climbs',
+            title: 'Similar climbs',
+            defaultSummary: 'Climbs sharing 90%+ of these holds',
+            lazy: true,
+            content: (
+              <SimilarClimbsList
+                boardType={boardType as BoardName}
+                layoutId={climb.layoutId}
+                climbUuid={climbUuid}
+                threshold={0.9}
+                limit={10}
+                emptyMessage="No similar climbs on this layout."
+              />
+            ),
+          } satisfies CollapsibleSectionConfig,
+        ]
+      : []),
   ];
 }

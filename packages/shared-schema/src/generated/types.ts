@@ -3047,6 +3047,13 @@ export type Query = {
   /** Get a setter profile by username. */
   setterProfile?: Maybe<SetterProfile>;
   /**
+   * Find climbs on the same board+layout with at least `threshold` Jaccard
+   * similarity over (hold_id, hold_state) tuples. Used both by the playview
+   * drawer's "Similar climbs" section (threshold ~0.9) and by the create-climb
+   * duplicate UX (threshold 1.0).
+   */
+  similarClimbs: Array<SimilarClimb>;
+  /**
    * Get a smart (computed) playlist for a user — five-stars, most-repeated, or projects.
    * Public — no authentication required.
    */
@@ -3453,6 +3460,11 @@ export type QuerySetterClimbsFullArgs = {
 /** Root query type for all read operations. */
 export type QuerySetterProfileArgs = {
   input: SetterProfileInput;
+};
+
+/** Root query type for all read operations. */
+export type QuerySimilarClimbsArgs = {
+  input: SimilarClimbsInput;
 };
 
 /** Root query type for all read operations. */
@@ -4234,6 +4246,45 @@ export type SetterSearchResult = {
   isFollowedByMe: Scalars['Boolean']['output'];
   /** The setter's Aurora username */
   username: Scalars['String']['output'];
+};
+
+export type SimilarClimb = {
+  __typename?: 'SimilarClimb';
+  angle?: Maybe<Scalars['Int']['output']>;
+  /** Number of (hold_id, hold_state) tuples on the candidate climb. */
+  candidateHoldCount: Scalars['Int']['output'];
+  /** Aurora-style frame string for rendering the climb thumbnail. */
+  frames?: Maybe<Scalars['String']['output']>;
+  layoutId: Scalars['Int']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  setterUsername?: Maybe<Scalars['String']['output']>;
+  /** Number of (hold_id, hold_state) tuples present in both climbs. */
+  sharedHoldCount: Scalars['Int']['output'];
+  /** Jaccard similarity (0..1) over (hold_id, hold_state) tuples. */
+  similarity: Scalars['Float']['output'];
+  /** Number of (hold_id, hold_state) tuples on the target climb (input). */
+  targetHoldCount: Scalars['Int']['output'];
+  uuid: Scalars['ID']['output'];
+};
+
+/**
+ * Input for finding climbs similar to a target on the same board+layout.
+ * Provide either climbUuid (compare against an existing climb's holds) or
+ * frames (compare against a not-yet-saved hold set).
+ */
+export type SimilarClimbsInput = {
+  boardType: Scalars['String']['input'];
+  /** Existing climb to compare against. Reads its holds from the database. */
+  climbUuid?: InputMaybe<Scalars['ID']['input']>;
+  /** Exclude this climb's uuid from results (e.g. when looking up similars for an existing climb). */
+  excludeClimbUuid?: InputMaybe<Scalars['ID']['input']>;
+  /** Raw frames string for an in-progress climb that hasn't been saved yet. */
+  frames?: InputMaybe<Scalars['String']['input']>;
+  layoutId: Scalars['Int']['input'];
+  /** Max number of results to return. Defaults to 25, capped at 200 server-side. */
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  /** Jaccard threshold (0..1). Returns climbs at or above this similarity. */
+  threshold?: InputMaybe<Scalars['Float']['input']>;
 };
 
 /** Climb count for a single smart playlist type (used to render library cards). */
@@ -5143,6 +5194,8 @@ export type ResolversTypes = ResolversObject<{
   SetterProfile: ResolverTypeWrapper<SetterProfile>;
   SetterProfileInput: SetterProfileInput;
   SetterSearchResult: ResolverTypeWrapper<SetterSearchResult>;
+  SimilarClimb: ResolverTypeWrapper<SimilarClimb>;
+  SimilarClimbsInput: SimilarClimbsInput;
   SmartPlaylistCount: ResolverTypeWrapper<SmartPlaylistCount>;
   SmartPlaylistMeta: ResolverTypeWrapper<SmartPlaylistMeta>;
   SmartPlaylistResult: ResolverTypeWrapper<SmartPlaylistResult>;
@@ -5386,6 +5439,8 @@ export type ResolversParentTypes = ResolversObject<{
   SetterProfile: SetterProfile;
   SetterProfileInput: SetterProfileInput;
   SetterSearchResult: SetterSearchResult;
+  SimilarClimb: SimilarClimb;
+  SimilarClimbsInput: SimilarClimbsInput;
   SmartPlaylistCount: SmartPlaylistCount;
   SmartPlaylistMeta: SmartPlaylistMeta;
   SmartPlaylistResult: SmartPlaylistResult;
@@ -7397,6 +7452,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QuerySetterProfileArgs, 'input'>
   >;
+  similarClimbs?: Resolver<
+    Array<ResolversTypes['SimilarClimb']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySimilarClimbsArgs, 'input'>
+  >;
   smartPlaylist?: Resolver<
     ResolversTypes['SmartPlaylistResult'],
     ParentType,
@@ -7892,6 +7953,23 @@ export type SetterSearchResultResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type SimilarClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SimilarClimb'] = ResolversParentTypes['SimilarClimb'],
+> = ResolversObject<{
+  angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  candidateHoldCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  name?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  setterUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  sharedHoldCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  similarity?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
+  targetHoldCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  uuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SmartPlaylistCountResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SmartPlaylistCount'] = ResolversParentTypes['SmartPlaylistCount'],
@@ -8290,6 +8368,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SetterClimbsConnection?: SetterClimbsConnectionResolvers<ContextType>;
   SetterProfile?: SetterProfileResolvers<ContextType>;
   SetterSearchResult?: SetterSearchResultResolvers<ContextType>;
+  SimilarClimb?: SimilarClimbResolvers<ContextType>;
   SmartPlaylistCount?: SmartPlaylistCountResolvers<ContextType>;
   SmartPlaylistMeta?: SmartPlaylistMetaResolvers<ContextType>;
   SmartPlaylistResult?: SmartPlaylistResultResolvers<ContextType>;

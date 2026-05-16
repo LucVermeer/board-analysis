@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { GraphQLError } from 'graphql';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   type ConnectionContext,
@@ -6,6 +7,7 @@ import {
   type UpdateClimbResult,
   SUPPORTED_BOARDS,
 } from '@boardsesh/shared-schema';
+import type { BoardName } from '@boardsesh/board-constants';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 import { UNIFIED_TABLES, isValidBoardName } from '../../../db/queries/util/table-select';
@@ -19,6 +21,13 @@ import {
   encodeMoonBoardHoldsToFrames,
   findMoonBoardDuplicateMatch,
 } from './moonboard-duplicates';
+import {
+  CLIMB_DUPLICATE_ERROR_CODE,
+  buildDuplicateClimbErrorMessage,
+  buildHoldSignature,
+  findExactDuplicateMatch,
+  parseFramesToHoldEntries,
+} from './climb-similarity';
 import {
   BoardNameSchema,
   ExternalUUIDSchema,
@@ -105,6 +114,30 @@ export const climbMutations = {
     const { displayName, name, avatarUrl } = await getUserProfile(ctx.userId!);
     const preferredSetter = displayName || name || null;
 
+    const framesCount = validated.framesCount ?? 1;
+    const holdEntries = parseFramesToHoldEntries(validated.boardType as BoardName, validated.frames);
+
+    // Only gate single-frame climbs. The similarity index defines duplicates
+    // by hold set; multi-frame climbs (dynos with intermediate frames) need a
+    // richer comparison than this PR ships.
+    if (!validated.isDraft && framesCount === 1) {
+      const signature = buildHoldSignature(holdEntries);
+      const existing = await findExactDuplicateMatch({
+        boardType: validated.boardType as BoardName,
+        layoutId: validated.layoutId,
+        signature,
+      });
+      if (existing) {
+        throw new GraphQLError(buildDuplicateClimbErrorMessage(existing.name), {
+          extensions: {
+            code: CLIMB_DUPLICATE_ERROR_CODE,
+            existingClimbUuid: existing.uuid,
+            existingClimbName: existing.name,
+          },
+        });
+      }
+    }
+
     const uuid = generateClimbUuid();
 
     await db.insert(UNIFIED_TABLES.climbs).values({
@@ -117,7 +150,7 @@ export const climbMutations = {
       name: validated.name,
       description: validated.description ?? '',
       angle: validated.angle,
-      framesCount: validated.framesCount ?? 1,
+      framesCount,
       framesPace: validated.framesPace ?? 0,
       frames: validated.frames,
       isDraft: validated.isDraft,
@@ -127,6 +160,26 @@ export const climbMutations = {
       synced: false,
       syncError: null,
     });
+
+    // Aurora's sync-back round-trip eventually populates board_climb_holds for
+    // these climbs (via aurora-board-import-helpers), but the latency is
+    // open-ended. Seed the rows ourselves so the next call's duplicate gate
+    // can see this climb immediately. Aurora's later re-import is idempotent
+    // via onConflictDoNothing on the PK (board_type, climb_uuid, hold_id).
+    if (holdEntries.length > 0) {
+      await db
+        .insert(dbSchema.boardClimbHolds)
+        .values(
+          holdEntries.map((entry) => ({
+            boardType: validated.boardType,
+            climbUuid: uuid,
+            holdId: entry.holdId,
+            frameNumber: entry.frameNumber,
+            holdState: entry.holdState,
+          })),
+        )
+        .onConflictDoNothing();
+    }
 
     // Populate denormalized required_set_ids and compatible_size_ids
     await populateDenormalizedColumns(db, validated.boardType, [uuid]);
@@ -208,9 +261,23 @@ export const climbMutations = {
     const { displayName, name, avatarUrl } = await getUserProfile(ctx.userId!);
     const preferredSetter = validated.setter || displayName || name || null;
 
-    const duplicateMatch = await findMoonBoardDuplicateMatch(validated.layoutId, validated.angle, validated.holds);
-    if (duplicateMatch) {
-      throw new Error(buildMoonBoardDuplicateError(duplicateMatch.existingClimbName));
+    // The legacy MoonBoard-specific lookup also covers climbs that have no
+    // rows in board_climb_holds and live only as a `frames` text blob (Aurora
+    // imports from before the holds table was the authoritative store), so
+    // keep it as the gate for this board. Wrap the result in a GraphQLError
+    // with the unified CLIMB_IS_DUPLICATE extension so the frontend's
+    // duplicate-UX handler can react the same way across boards.
+    if (!isDraft) {
+      const duplicateMatch = await findMoonBoardDuplicateMatch(validated.layoutId, validated.angle, validated.holds);
+      if (duplicateMatch) {
+        throw new GraphQLError(buildMoonBoardDuplicateError(duplicateMatch.existingClimbName), {
+          extensions: {
+            code: CLIMB_DUPLICATE_ERROR_CODE,
+            existingClimbUuid: duplicateMatch.existingClimbUuid,
+            existingClimbName: duplicateMatch.existingClimbName,
+          },
+        });
+      }
     }
 
     const frames = encodeMoonBoardHoldsToFrames(validated.holds);
@@ -354,6 +421,9 @@ export const climbMutations = {
         publishedAt: dbSchema.boardClimbs.publishedAt,
         createdAt: dbSchema.boardClimbs.createdAt,
         angle: dbSchema.boardClimbs.angle,
+        layoutId: dbSchema.boardClimbs.layoutId,
+        frames: dbSchema.boardClimbs.frames,
+        framesCount: dbSchema.boardClimbs.framesCount,
         setterUsername: dbSchema.boardClimbs.setterUsername,
       })
       .from(dbSchema.boardClimbs)
@@ -415,6 +485,34 @@ export const climbMutations = {
       throw new Error('Cannot publish climb without an angle');
     }
 
+    // Run the duplicate gate before the UPDATE so a duplicate publish attempt
+    // fails cleanly without flipping isDraft / publishedAt and leaving the
+    // row in a half-state. Gate fires on draft→publish, or on a published
+    // climb whose holds are being changed via the 24h edit window.
+    const framesChanged = validated.frames !== undefined && validated.frames !== existing.frames;
+    const nextFrames = validated.frames ?? existing.frames ?? '';
+    const nextFramesCount = validated.framesCount ?? existing.framesCount ?? 1;
+    const shouldGate = !nextIsDraft && (transitioningToPublished || framesChanged) && nextFramesCount === 1;
+    if (shouldGate) {
+      const holdEntries = parseFramesToHoldEntries(validated.boardType as BoardName, nextFrames);
+      const signature = buildHoldSignature(holdEntries);
+      const existingMatch = await findExactDuplicateMatch({
+        boardType: validated.boardType as BoardName,
+        layoutId: existing.layoutId,
+        signature,
+        excludeUuid: validated.uuid,
+      });
+      if (existingMatch) {
+        throw new GraphQLError(buildDuplicateClimbErrorMessage(existingMatch.name), {
+          extensions: {
+            code: CLIMB_DUPLICATE_ERROR_CODE,
+            existingClimbUuid: existingMatch.uuid,
+            existingClimbName: existingMatch.name,
+          },
+        });
+      }
+    }
+
     // Build the update set from provided fields only.
     const updateSet: Record<string, unknown> = {
       isDraft: nextIsDraft,
@@ -436,9 +534,36 @@ export const climbMutations = {
       );
 
     // If frames changed we need to refresh the denormalized edge/set columns
-    // so search filters still match.
+    // so search filters still match, and resync board_climb_holds (which the
+    // duplicate gate and similarity queries read from).
     if (validated.frames !== undefined) {
       await populateDenormalizedColumns(db, validated.boardType, [validated.uuid]);
+
+      if (framesChanged) {
+        await db
+          .delete(dbSchema.boardClimbHolds)
+          .where(
+            and(
+              eq(dbSchema.boardClimbHolds.boardType, validated.boardType),
+              eq(dbSchema.boardClimbHolds.climbUuid, validated.uuid),
+            ),
+          );
+        const refreshedHolds = parseFramesToHoldEntries(validated.boardType as BoardName, nextFrames);
+        if (refreshedHolds.length > 0) {
+          await db
+            .insert(dbSchema.boardClimbHolds)
+            .values(
+              refreshedHolds.map((entry) => ({
+                boardType: validated.boardType,
+                climbUuid: validated.uuid,
+                holdId: entry.holdId,
+                frameNumber: entry.frameNumber,
+                holdState: entry.holdState,
+              })),
+            )
+            .onConflictDoNothing();
+        }
+      }
     }
 
     // The search hot path INNER JOINs board_climb_stats by (boardType, climbUuid, angle).

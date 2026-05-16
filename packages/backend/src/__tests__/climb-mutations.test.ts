@@ -80,6 +80,11 @@ function createMockChain(resolveValue: unknown = [], onValues?: (values: unknown
 describe('climb mutations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks resets call history but NOT the mockResolvedValueOnce queue.
+    // Reset execute specifically so leftover queued values from a prior test
+    // (e.g. tests that no longer hit the duplicate-check path because the gate
+    // skips drafts) don't leak into the next test's findMoonBoardDuplicateMatch.
+    mockDb.execute.mockReset();
     insertCalls.length = 0;
     mockDb.transaction.mockImplementation(async (callback: (tx: typeof mockDb) => Promise<unknown>) =>
       callback(mockDb),
@@ -87,6 +92,8 @@ describe('climb mutations', () => {
   });
 
   it('stores non-draft Aurora climbs as listed', async () => {
+    // No exact-match duplicate found — findExactDuplicateMatch on a non-draft save.
+    mockDb.execute.mockResolvedValueOnce([]);
     mockDb.select.mockReturnValueOnce(
       createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
     );
@@ -110,12 +117,20 @@ describe('climb mutations', () => {
       makeCtx(),
     );
 
-    expect(insertCalls).toHaveLength(2);
+    // INSERTs: board_climbs, board_climb_holds, board_climb_stats
+    expect(insertCalls).toHaveLength(3);
     expect(insertCalls[0].values).toMatchObject({
       isDraft: false,
       isListed: true,
     });
-    expect(insertCalls[1].values).toMatchObject({
+    expect(insertCalls[1].values).toEqual([
+      expect.objectContaining({
+        boardType: 'kilter',
+        holdId: 1,
+        holdState: 'HAND',
+      }),
+    ]);
+    expect(insertCalls[2].values).toMatchObject({
       boardType: 'kilter',
       angle: 40,
       ascensionistCount: 0,
@@ -146,11 +161,20 @@ describe('climb mutations', () => {
       makeCtx(),
     );
 
-    expect(insertCalls).toHaveLength(1);
+    // Draft skips the duplicate-gate query AND the stats seed, but still
+    // writes board_climb_holds so the next save's gate has authoritative data.
+    expect(insertCalls).toHaveLength(2);
     expect(insertCalls[0].values).toMatchObject({
       isDraft: true,
       isListed: false,
     });
+    expect(insertCalls[1].values).toEqual([
+      expect.objectContaining({
+        boardType: 'kilter',
+        holdId: 1,
+        holdState: 'HAND',
+      }),
+    ]);
   });
 
   it('stores non-draft MoonBoard climbs as listed', async () => {

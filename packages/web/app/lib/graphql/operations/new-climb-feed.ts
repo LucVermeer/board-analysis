@@ -10,6 +10,8 @@ import type {
   SaveClimbInput,
   SaveClimbResult,
   SaveMoonBoardClimbInput,
+  SimilarClimb,
+  SimilarClimbsInput,
   UpdateClimbInput,
   UpdateClimbResult,
 } from '@boardsesh/shared-schema';
@@ -86,6 +88,23 @@ export const CHECK_MOONBOARD_CLIMB_DUPLICATES_QUERY = gql`
       exists
       existingClimbUuid
       existingClimbName
+    }
+  }
+`;
+
+export const SIMILAR_CLIMBS_QUERY = gql`
+  query SimilarClimbs($input: SimilarClimbsInput!) {
+    similarClimbs(input: $input) {
+      uuid
+      name
+      setterUsername
+      angle
+      layoutId
+      frames
+      similarity
+      sharedHoldCount
+      candidateHoldCount
+      targetHoldCount
     }
   }
 `;
@@ -200,4 +219,12 @@ export type DeleteDraftClimbMutationVariables = {
 
 export type DeleteDraftClimbMutationResponse = {
   deleteDraftClimb: boolean;
+};
+
+export type SimilarClimbsVariables = {
+  input: SimilarClimbsInput;
+};
+
+export type SimilarClimbsResponse = {
+  similarClimbs: SimilarClimb[];
 };

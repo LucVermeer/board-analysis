@@ -3044,6 +3044,13 @@ export type Query = {
   /** Get a setter profile by username. */
   setterProfile?: Maybe<SetterProfile>;
   /**
+   * Find climbs on the same board+layout with at least `threshold` Jaccard
+   * similarity over (hold_id, hold_state) tuples. Used both by the playview
+   * drawer's "Similar climbs" section (threshold ~0.9) and by the create-climb
+   * duplicate UX (threshold 1.0).
+   */
+  similarClimbs: Array<SimilarClimb>;
+  /**
    * Get a smart (computed) playlist for a user — five-stars, most-repeated, or projects.
    * Public — no authentication required.
    */
@@ -3450,6 +3457,11 @@ export type QuerySetterClimbsFullArgs = {
 /** Root query type for all read operations. */
 export type QuerySetterProfileArgs = {
   input: SetterProfileInput;
+};
+
+/** Root query type for all read operations. */
+export type QuerySimilarClimbsArgs = {
+  input: SimilarClimbsInput;
 };
 
 /** Root query type for all read operations. */
@@ -4231,6 +4243,45 @@ export type SetterSearchResult = {
   isFollowedByMe: Scalars['Boolean']['output'];
   /** The setter's Aurora username */
   username: Scalars['String']['output'];
+};
+
+export type SimilarClimb = {
+  __typename?: 'SimilarClimb';
+  angle?: Maybe<Scalars['Int']['output']>;
+  /** Number of (hold_id, hold_state) tuples on the candidate climb. */
+  candidateHoldCount: Scalars['Int']['output'];
+  /** Aurora-style frame string for rendering the climb thumbnail. */
+  frames?: Maybe<Scalars['String']['output']>;
+  layoutId: Scalars['Int']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  setterUsername?: Maybe<Scalars['String']['output']>;
+  /** Number of (hold_id, hold_state) tuples present in both climbs. */
+  sharedHoldCount: Scalars['Int']['output'];
+  /** Jaccard similarity (0..1) over (hold_id, hold_state) tuples. */
+  similarity: Scalars['Float']['output'];
+  /** Number of (hold_id, hold_state) tuples on the target climb (input). */
+  targetHoldCount: Scalars['Int']['output'];
+  uuid: Scalars['ID']['output'];
+};
+
+/**
+ * Input for finding climbs similar to a target on the same board+layout.
+ * Provide either climbUuid (compare against an existing climb's holds) or
+ * frames (compare against a not-yet-saved hold set).
+ */
+export type SimilarClimbsInput = {
+  boardType: Scalars['String']['input'];
+  /** Existing climb to compare against. Reads its holds from the database. */
+  climbUuid?: InputMaybe<Scalars['ID']['input']>;
+  /** Exclude this climb's uuid from results (e.g. when looking up similars for an existing climb). */
+  excludeClimbUuid?: InputMaybe<Scalars['ID']['input']>;
+  /** Raw frames string for an in-progress climb that hasn't been saved yet. */
+  frames?: InputMaybe<Scalars['String']['input']>;
+  layoutId: Scalars['Int']['input'];
+  /** Max number of results to return. Defaults to 25, capped at 200 server-side. */
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  /** Jaccard threshold (0..1). Returns climbs at or above this similarity. */
+  threshold?: InputMaybe<Scalars['Float']['input']>;
 };
 
 /** Climb count for a single smart playlist type (used to render library cards). */
@@ -5296,6 +5347,27 @@ export type CheckMoonBoardClimbDuplicatesQuery = {
     exists: boolean;
     existingClimbUuid?: string | null;
     existingClimbName?: string | null;
+  }>;
+};
+
+export type SimilarClimbsQueryVariables = Exact<{
+  input: SimilarClimbsInput;
+}>;
+
+export type SimilarClimbsQuery = {
+  __typename?: 'Query';
+  similarClimbs: Array<{
+    __typename?: 'SimilarClimb';
+    uuid: string;
+    name?: string | null;
+    setterUsername?: string | null;
+    angle?: number | null;
+    layoutId: number;
+    frames?: string | null;
+    similarity: number;
+    sharedHoldCount: number;
+    candidateHoldCount: number;
+    targetHoldCount: number;
   }>;
 };
 
@@ -8272,6 +8344,57 @@ export const CheckMoonBoardClimbDuplicatesDocument = {
     },
   ],
 } as unknown as DocumentNode<CheckMoonBoardClimbDuplicatesQuery, CheckMoonBoardClimbDuplicatesQueryVariables>;
+export const SimilarClimbsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'SimilarClimbs' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'SimilarClimbsInput' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'similarClimbs' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'setterUsername' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'similarity' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'sharedHoldCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'candidateHoldCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'targetHoldCount' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<SimilarClimbsQuery, SimilarClimbsQueryVariables>;
 export const SaveClimbDocument = {
   kind: 'Document',
   definitions: [

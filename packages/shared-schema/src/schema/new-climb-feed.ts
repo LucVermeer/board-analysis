@@ -129,4 +129,42 @@ export const newClimbFeedTypeDefs = /* GraphQL */ `
     publishedAt: String
     isDraft: Boolean!
   }
+
+  """
+  Input for finding climbs similar to a target on the same board+layout.
+  Provide either climbUuid (compare against an existing climb's holds) or
+  frames (compare against a not-yet-saved hold set).
+  """
+  input SimilarClimbsInput {
+    boardType: String!
+    layoutId: Int!
+    "Jaccard threshold (0..1). Returns climbs at or above this similarity."
+    threshold: Float
+    "Max number of results to return. Defaults to 25, capped at 200 server-side."
+    limit: Int
+    "Exclude this climb's uuid from results (e.g. when looking up similars for an existing climb)."
+    excludeClimbUuid: ID
+    "Existing climb to compare against. Reads its holds from the database."
+    climbUuid: ID
+    "Raw frames string for an in-progress climb that hasn't been saved yet."
+    frames: String
+  }
+
+  type SimilarClimb {
+    uuid: ID!
+    name: String
+    setterUsername: String
+    angle: Int
+    layoutId: Int!
+    "Aurora-style frame string for rendering the climb thumbnail."
+    frames: String
+    "Jaccard similarity (0..1) over (hold_id, hold_state) tuples."
+    similarity: Float!
+    "Number of (hold_id, hold_state) tuples present in both climbs."
+    sharedHoldCount: Int!
+    "Number of (hold_id, hold_state) tuples on the candidate climb."
+    candidateHoldCount: Int!
+    "Number of (hold_id, hold_state) tuples on the target climb (input)."
+    targetHoldCount: Int!
+  }
 `;
