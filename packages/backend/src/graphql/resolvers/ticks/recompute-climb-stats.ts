@@ -36,6 +36,10 @@ import * as dbSchema from '@boardsesh/db/schema';
  */
 export async function recomputeClimbStats(boardType: string, climbUuid: string, angle: number): Promise<void> {
   await db.transaction(async (tx) => {
+    // Defensive seed: set aurora_ascensionist_count to 0 explicitly so the
+    // subsequent sum (COALESCE(aurora,0) + COALESCE(boardsesh,0)) and any
+    // later Aurora upsert both see a sensible baseline. Without it, freshly
+    // seeded rows would carry NULL aurora_count until Aurora first synced.
     await tx
       .insert(dbSchema.boardClimbStats)
       .values({
@@ -43,6 +47,8 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
         climbUuid,
         angle,
         ascensionistCount: 0,
+        auroraAscensionistCount: 0,
+        boardseshAscensionistCount: 0,
       })
       .onConflictDoNothing({
         target: [

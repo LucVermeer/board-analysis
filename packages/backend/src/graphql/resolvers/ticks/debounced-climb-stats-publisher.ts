@@ -39,17 +39,10 @@ export function queueClimbStatsRecompute(boardType: string, climbUuid: string, a
 
   const nonce = randomUUID();
   const redisKey = `${REDIS_KEY_PREFIX}${key}`;
-  // Track whether the SET landed. If it didn't, we MUST run the recompute
-  // ourselves at fire time — skipping the nonce check would otherwise drop
-  // the recompute silently (GET would see nothing or a stale nonce, mismatch,
-  // and return). Better to risk a duplicate recompute on another instance
-  // than to lose this one.
-  let setFailed = false;
 
   if (redisClientManager.isRedisConnected()) {
     const { publisher } = redisClientManager.getClients();
     publisher.set(redisKey, nonce, 'PX', DEBOUNCE_MS + 500).catch((err) => {
-      setFailed = true;
       logger.error(`[debouncedClimbStats] Redis SET failed for ${key}:`, err);
     });
   }
@@ -59,14 +52,19 @@ export function queueClimbStatsRecompute(boardType: string, climbUuid: string, a
     setTimeout(async () => {
       pending.delete(key);
 
-      if (redisClientManager.isRedisConnected() && !setFailed) {
+      // Best-effort multi-instance dedup: if we can confirm via Redis that
+      // we still own the latest nonce, clean up the key. If GET throws, the
+      // nonce doesn't match (another instance won OR our SET never landed),
+      // or Redis went away — fall through to the recompute anyway.
+      // recomputeClimbStats is idempotent, so duplicate runs across
+      // instances are harmless; a silent drop is not.
+      if (redisClientManager.isRedisConnected()) {
         try {
           const { publisher } = redisClientManager.getClients();
           const current = await publisher.get(redisKey);
-          if (current !== nonce) {
-            return;
+          if (current === nonce) {
+            await publisher.del(redisKey);
           }
-          await publisher.del(redisKey);
         } catch (err) {
           logger.error(`[debouncedClimbStats] Redis GET failed for ${key}, recomputing anyway:`, err);
         }

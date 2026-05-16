@@ -91,13 +91,20 @@ describe('queueClimbStatsRecompute', () => {
     expect(recomputeClimbStatsMock).toHaveBeenCalledWith('tension', 'CLIMB-2', 35);
   });
 
-  it('skips the recompute when the Redis nonce does not match', async () => {
+  it('recomputes even when the Redis nonce does not match (idempotent fall-through)', async () => {
+    // Nonce mismatch means another instance also queued this climb. Both
+    // instances recompute — that's safe because recomputeClimbStats is
+    // idempotent, and dropping the recompute outright (the previous
+    // behavior) would be unsafe in the SET-failed-but-Redis-reachable
+    // race window. See debounced-climb-stats-publisher.ts comment.
     redisGetMock.mockResolvedValue('different-nonce');
 
     queueClimbStatsRecompute('kilter', 'CLIMB-1', 40);
     await vi.advanceTimersByTimeAsync(2100);
 
-    expect(recomputeClimbStatsMock).not.toHaveBeenCalled();
+    expect(recomputeClimbStatsMock).toHaveBeenCalledWith('kilter', 'CLIMB-1', 40);
+    // We don't own the key, so we don't DEL it.
+    expect(redisDelMock).not.toHaveBeenCalled();
   });
 
   it('writes the nonce to Redis with SET PX on each call', () => {
@@ -127,15 +134,16 @@ describe('queueClimbStatsRecompute', () => {
   });
 
   it('runs the recompute anyway when Redis SET fails (fail-open)', async () => {
-    // SET fails but isRedisConnected stays true. Without the setFailed flag
-    // the timer would consult Redis, see no nonce match, and silently skip
-    // the recompute — the bug the flag exists to prevent.
+    // SET fails fire-and-forget — GET will then see no matching nonce and
+    // the timer falls through to recompute. The earlier setFailed-flag
+    // approach raced because SET could reject AFTER the timer fired; the
+    // current design sidesteps that entirely by never depending on SET's
+    // outcome to decide whether to recompute.
     redisSetMock.mockRejectedValue(new Error('Redis SET timed out'));
 
     queueClimbStatsRecompute('kilter', 'CLIMB-1', 40);
     await vi.advanceTimersByTimeAsync(2100);
 
-    expect(redisGetMock).not.toHaveBeenCalled();
     expect(recomputeClimbStatsMock).toHaveBeenCalledWith('kilter', 'CLIMB-1', 40);
   });
 
