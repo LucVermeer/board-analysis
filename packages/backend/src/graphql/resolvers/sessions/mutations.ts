@@ -427,9 +427,11 @@ export const sessionMutations = {
     // Send APNs `end` push to dismiss every device's Live Activity. Without
     // this, other participants' lock-screen tiles linger with stale data
     // until ActivityKit's stale date elapses.
-    endLiveActivity(sessionId).catch((err) => {
+    try {
+      await endLiveActivity(sessionId);
+    } catch (err) {
       logger.error(`[APNs] endLiveActivity failed for session ${sessionId}:`, err);
-    });
+    }
 
     // Generate and return summary
     const summary = await generateSessionSummary(sessionId);

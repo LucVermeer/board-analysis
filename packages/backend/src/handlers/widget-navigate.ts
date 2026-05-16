@@ -18,6 +18,18 @@ interface WidgetNavigateBody {
   currentIndex: number;
 }
 
+/**
+ * Validate the widget request body.
+ *
+ * `currentIndex` is required and shape-checked but the handler does not use
+ * its value — once the request passes auth + rate-limit, the server resolves
+ * the authoritative index from `roomManager.getQueueState` (see the call site
+ * around the `_ignoredClientIndex` destructuring below for the full rationale).
+ * The field is still validated here so malformed payloads from a future widget
+ * regression get rejected at the door rather than coercing into a no-op.
+ * Dropping the field from the schema would break wire-compat with the already-
+ * shipped iOS widget, which always sends it.
+ */
 function isValidBody(body: unknown): body is WidgetNavigateBody {
   if (typeof body !== 'object' || body === null) return false;
   const candidate = body as Record<string, unknown>;
@@ -224,6 +236,10 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
     return;
   }
 
+  // currentIndex is intentionally aliased to `_ignoredClientIndex` — see the
+  // server-authoritative index lookup further down and the doc comment on
+  // `isValidBody` above. The widget sends it, we validate it, but we never use
+  // its value.
   const { sessionId, action, currentIndex: _ignoredClientIndex } = body;
 
   // Auth: bearer token must be registered to this sessionId
@@ -357,6 +373,9 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       res.end(JSON.stringify({ success: false, error: 'Target index out of bounds' }));
     }
   } catch (error) {
+    // Detail (DB connection strings, stack traces, schema hints) stays in
+    // server logs; the iOS widget receives only a generic message so we don't
+    // leak internals to a remote client.
     logger.error('[WidgetNavigate] Error:', error);
     trackWidgetNavigation(authResult.userId, {
       sessionId,
@@ -365,12 +384,7 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       statusCode: 500,
     });
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      }),
-    );
+    res.end(JSON.stringify({ success: false, error: 'Internal server error' }));
   }
 }
 
