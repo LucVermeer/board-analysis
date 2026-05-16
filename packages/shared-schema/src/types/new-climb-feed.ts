@@ -84,6 +84,9 @@ export type SimilarClimb = {
   angle?: number | null;
   layoutId: number;
   frames?: string | null;
+  difficultyName?: string | null;
+  qualityAverage?: number | null;
+  ascensionistCount?: number | null;
   similarity: number;
   sharedHoldCount: number;
   candidateHoldCount: number;

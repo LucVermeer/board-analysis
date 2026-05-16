@@ -101,6 +101,9 @@ export const SIMILAR_CLIMBS_QUERY = gql`
       angle
       layoutId
       frames
+      difficultyName
+      qualityAverage
+      ascensionistCount
       similarity
       sharedHoldCount
       candidateHoldCount

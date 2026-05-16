@@ -4248,18 +4248,24 @@ export type SetterSearchResult = {
 export type SimilarClimb = {
   __typename?: 'SimilarClimb';
   angle?: Maybe<Scalars['Int']['output']>;
-  /** Number of (hold_id, hold_state) tuples on the candidate climb. */
+  /** Number of recorded ascents at this angle. */
+  ascensionistCount?: Maybe<Scalars['Int']['output']>;
+  /** Number of hold positions on the candidate climb. */
   candidateHoldCount: Scalars['Int']['output'];
+  /** Difficulty grade name at this climb's angle (e.g. 6c+, V5). */
+  difficultyName?: Maybe<Scalars['String']['output']>;
   /** Aurora-style frame string for rendering the climb thumbnail. */
   frames?: Maybe<Scalars['String']['output']>;
   layoutId: Scalars['Int']['output'];
   name?: Maybe<Scalars['String']['output']>;
+  /** Average quality (0..3 in MoonBoard convention, 0..5 elsewhere) at this angle. */
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
   setterUsername?: Maybe<Scalars['String']['output']>;
-  /** Number of (hold_id, hold_state) tuples present in both climbs. */
+  /** Number of hold positions present in both climbs. */
   sharedHoldCount: Scalars['Int']['output'];
-  /** Jaccard similarity (0..1) over (hold_id, hold_state) tuples. */
+  /** Jaccard similarity (0..1) over hold positions. */
   similarity: Scalars['Float']['output'];
-  /** Number of (hold_id, hold_state) tuples on the target climb (input). */
+  /** Number of hold positions on the target climb (input). */
   targetHoldCount: Scalars['Int']['output'];
   uuid: Scalars['ID']['output'];
 };
@@ -5364,6 +5370,9 @@ export type SimilarClimbsQuery = {
     angle?: number | null;
     layoutId: number;
     frames?: string | null;
+    difficultyName?: string | null;
+    qualityAverage?: number | null;
+    ascensionistCount?: number | null;
     similarity: number;
     sharedHoldCount: number;
     candidateHoldCount: number;
@@ -8383,6 +8392,9 @@ export const SimilarClimbsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'ascensionistCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'similarity' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'sharedHoldCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'candidateHoldCount' } },

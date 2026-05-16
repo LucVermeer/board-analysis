@@ -3375,13 +3375,19 @@ type SimilarClimb {
   layoutId: Int!
   "Aurora-style frame string for rendering the climb thumbnail."
   frames: String
-  "Jaccard similarity (0..1) over (hold_id, hold_state) tuples."
+  "Difficulty grade name at this climb's angle (e.g. 6c+, V5)."
+  difficultyName: String
+  "Average quality (0..3 in MoonBoard convention, 0..5 elsewhere) at this angle."
+  qualityAverage: Float
+  "Number of recorded ascents at this angle."
+  ascensionistCount: Int
+  "Jaccard similarity (0..1) over hold positions."
   similarity: Float!
-  "Number of (hold_id, hold_state) tuples present in both climbs."
+  "Number of hold positions present in both climbs."
   sharedHoldCount: Int!
-  "Number of (hold_id, hold_state) tuples on the candidate climb."
+  "Number of hold positions on the candidate climb."
   candidateHoldCount: Int!
-  "Number of (hold_id, hold_state) tuples on the target climb (input)."
+  "Number of hold positions on the target climb (input)."
   targetHoldCount: Int!
 }
 

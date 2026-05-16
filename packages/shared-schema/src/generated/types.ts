@@ -4251,18 +4251,24 @@ export type SetterSearchResult = {
 export type SimilarClimb = {
   __typename?: 'SimilarClimb';
   angle?: Maybe<Scalars['Int']['output']>;
-  /** Number of (hold_id, hold_state) tuples on the candidate climb. */
+  /** Number of recorded ascents at this angle. */
+  ascensionistCount?: Maybe<Scalars['Int']['output']>;
+  /** Number of hold positions on the candidate climb. */
   candidateHoldCount: Scalars['Int']['output'];
+  /** Difficulty grade name at this climb's angle (e.g. 6c+, V5). */
+  difficultyName?: Maybe<Scalars['String']['output']>;
   /** Aurora-style frame string for rendering the climb thumbnail. */
   frames?: Maybe<Scalars['String']['output']>;
   layoutId: Scalars['Int']['output'];
   name?: Maybe<Scalars['String']['output']>;
+  /** Average quality (0..3 in MoonBoard convention, 0..5 elsewhere) at this angle. */
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
   setterUsername?: Maybe<Scalars['String']['output']>;
-  /** Number of (hold_id, hold_state) tuples present in both climbs. */
+  /** Number of hold positions present in both climbs. */
   sharedHoldCount: Scalars['Int']['output'];
-  /** Jaccard similarity (0..1) over (hold_id, hold_state) tuples. */
+  /** Jaccard similarity (0..1) over hold positions. */
   similarity: Scalars['Float']['output'];
-  /** Number of (hold_id, hold_state) tuples on the target climb (input). */
+  /** Number of hold positions on the target climb (input). */
   targetHoldCount: Scalars['Int']['output'];
   uuid: Scalars['ID']['output'];
 };
@@ -7958,10 +7964,13 @@ export type SimilarClimbResolvers<
   ParentType extends ResolversParentTypes['SimilarClimb'] = ResolversParentTypes['SimilarClimb'],
 > = ResolversObject<{
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  ascensionistCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   candidateHoldCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  difficultyName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   name?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  qualityAverage?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
   setterUsername?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   sharedHoldCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
   similarity?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;

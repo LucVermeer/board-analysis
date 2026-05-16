@@ -28,6 +28,9 @@ export type SimilarClimbResult = {
   angle: number | null;
   layoutId: number;
   frames: string | null;
+  difficultyName: string | null;
+  qualityAverage: number | null;
+  ascensionistCount: number | null;
   similarity: number;
   sharedHoldCount: number;
   candidateHoldCount: number;
@@ -226,6 +229,9 @@ export async function findSimilarClimbs({
     angle: number | null;
     layout_id: number;
     frames: string | null;
+    difficulty_name: string | null;
+    quality_average: number | null;
+    ascensionist_count: number | null;
     shared: number;
     candidate_hold_count: number;
     jaccard: number;
@@ -275,6 +281,9 @@ export async function findSimilarClimbs({
         c.angle AS angle,
         c.layout_id AS layout_id,
         c.frames AS frames,
+        bdg.boulder_name AS difficulty_name,
+        ${dbSchema.boardClimbStats.qualityAverage} AS quality_average,
+        ${dbSchema.boardClimbStats.ascensionistCount} AS ascensionist_count,
         o.shared::int AS shared,
         cs.n::int AS candidate_hold_count,
         (o.shared::float / (${targetSize} + cs.n - o.shared)) AS jaccard
@@ -287,6 +296,9 @@ export async function findSimilarClimbs({
         ON ${dbSchema.boardClimbStats.boardType} = c.board_type
        AND ${dbSchema.boardClimbStats.climbUuid} = c.uuid
        AND ${dbSchema.boardClimbStats.angle} = c.angle
+      LEFT JOIN ${dbSchema.boardDifficultyGrades} bdg
+        ON bdg.board_type = c.board_type
+       AND bdg.difficulty = ROUND(${dbSchema.boardClimbStats.displayDifficulty})
       WHERE (o.shared::float / (${targetSize} + cs.n - o.shared)) >= ${safeThreshold}
       ORDER BY jaccard DESC, COALESCE(${dbSchema.boardClimbStats.ascensionistCount}, 0) DESC, c.uuid ASC
       LIMIT ${safeLimit}
@@ -300,6 +312,9 @@ export async function findSimilarClimbs({
     angle: row.angle,
     layoutId: row.layout_id,
     frames: row.frames,
+    difficultyName: row.difficulty_name,
+    qualityAverage: row.quality_average == null ? null : Number(row.quality_average),
+    ascensionistCount: row.ascensionist_count == null ? null : Number(row.ascensionist_count),
     similarity: Number(row.jaccard),
     sharedHoldCount: Number(row.shared),
     candidateHoldCount: Number(row.candidate_hold_count),
