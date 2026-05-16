@@ -171,9 +171,9 @@ export function useBuildClimbDetailSections({
       ? [
           {
             key: 'similar-climbs',
-            label: 'Similar climbs',
-            title: 'Similar climbs',
-            defaultSummary: 'Climbs sharing 90%+ of these holds',
+            label: t('detail.sections.similarClimbs'),
+            title: t('detail.sections.similarClimbs'),
+            defaultSummary: t('detail.sections.similarClimbsSummary'),
             lazy: true,
             content: (
               <SimilarClimbsList
@@ -182,7 +182,7 @@ export function useBuildClimbDetailSections({
                 climbUuid={climbUuid}
                 threshold={0.9}
                 limit={10}
-                emptyMessage="No similar climbs on this layout."
+                emptyMessage={t('similarClimbs.emptyOnLayout')}
               />
             ),
           } satisfies CollapsibleSectionConfig,

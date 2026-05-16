@@ -93,6 +93,16 @@ describe('CLIMB_DUPLICATE_ERROR_CODE', () => {
   });
 });
 
+/**
+ * These tests mock the DB and exercise the query-construction + result-mapping
+ * paths. They do NOT cover concurrent-publish races: two clients submitting
+ * identical holds within a few millisecond window can both pass the gate
+ * because there's no unique constraint on the hold-set signature — the gate
+ * is best-effort against the snapshot the query sees. Catching the race would
+ * require either a partial unique index on a materialized signature column or
+ * an advisory lock per (board_type, layout_id, signature). Out of scope here;
+ * tracked in the follow-up backfill issue.
+ */
 describe('findExactDuplicateMatch', () => {
   beforeEach(() => {
     vi.clearAllMocks();

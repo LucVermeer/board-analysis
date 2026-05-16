@@ -540,29 +540,35 @@ export const climbMutations = {
       await populateDenormalizedColumns(db, validated.boardType, [validated.uuid]);
 
       if (framesChanged) {
-        await db
-          .delete(dbSchema.boardClimbHolds)
-          .where(
-            and(
-              eq(dbSchema.boardClimbHolds.boardType, validated.boardType),
-              eq(dbSchema.boardClimbHolds.climbUuid, validated.uuid),
-            ),
-          );
+        // Replace the hold rows atomically: between the DELETE and the
+        // INSERT a concurrent findExactDuplicateMatch / findSimilarClimbs
+        // would otherwise see this climb as having zero holds and silently
+        // mis-rank it (or pass a near-duplicate through).
         const refreshedHolds = parseFramesToHoldEntries(validated.boardType as BoardName, nextFrames);
-        if (refreshedHolds.length > 0) {
-          await db
-            .insert(dbSchema.boardClimbHolds)
-            .values(
-              refreshedHolds.map((entry) => ({
-                boardType: validated.boardType,
-                climbUuid: validated.uuid,
-                holdId: entry.holdId,
-                frameNumber: entry.frameNumber,
-                holdState: entry.holdState,
-              })),
-            )
-            .onConflictDoNothing();
-        }
+        await db.transaction(async (tx) => {
+          await tx
+            .delete(dbSchema.boardClimbHolds)
+            .where(
+              and(
+                eq(dbSchema.boardClimbHolds.boardType, validated.boardType),
+                eq(dbSchema.boardClimbHolds.climbUuid, validated.uuid),
+              ),
+            );
+          if (refreshedHolds.length > 0) {
+            await tx
+              .insert(dbSchema.boardClimbHolds)
+              .values(
+                refreshedHolds.map((entry) => ({
+                  boardType: validated.boardType,
+                  climbUuid: validated.uuid,
+                  holdId: entry.holdId,
+                  frameNumber: entry.frameNumber,
+                  holdState: entry.holdState,
+                })),
+              )
+              .onConflictDoNothing();
+          }
+        });
       }
     }
 

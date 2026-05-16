@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -45,6 +46,7 @@ export default function SimilarClimbsList({
   climbUuid,
   frames,
 }: SimilarClimbsListProps) {
+  const { t } = useTranslation('climbs');
   const variables = useMemo<SimilarClimbsVariables>(
     () => ({
       input: {
@@ -90,7 +92,7 @@ export default function SimilarClimbsList({
   if (isError) {
     return (
       <Typography variant="body2" color="error" sx={{ py: 2 }}>
-        Couldn&apos;t load similar climbs.
+        {t('similarClimbs.loadError')}
       </Typography>
     );
   }
@@ -99,7 +101,7 @@ export default function SimilarClimbsList({
   if (climbs.length === 0) {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-        {emptyMessage ?? 'No similar climbs yet.'}
+        {emptyMessage ?? t('similarClimbs.emptyDefault')}
       </Typography>
     );
   }
@@ -119,6 +121,7 @@ type SimilarClimbRowProps = {
 };
 
 function SimilarClimbRow({ climb, boardType }: SimilarClimbRowProps) {
+  const { t } = useTranslation('climbs');
   const angle = climb.angle ?? 0;
   const climbViewPath = useMemo(() => {
     const defaultConfig = getDefaultBoardConfig(boardType, climb.layoutId);
@@ -165,24 +168,24 @@ function SimilarClimbRow({ climb, boardType }: SimilarClimbRowProps) {
             ) : null}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1, minWidth: 0 }}>
               <Typography variant="subtitle2" fontWeight={700} noWrap>
-                {climb.name || 'Untitled climb'}
+                {climb.name || t('similarClimbs.untitledClimb')}
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
                 <PersonOutlined sx={{ fontSize: 14 }} />
                 <Typography variant="caption" noWrap>
-                  {climb.setterUsername || 'Unknown setter'}
+                  {climb.setterUsername || t('similarClimbs.unknownSetter')}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
                 <Chip
-                  label={`${similarityPct}% match`}
+                  label={t('similarClimbs.matchPercent', { percent: similarityPct })}
                   size="small"
                   color={similarityPct === 100 ? 'error' : 'primary'}
                   variant={similarityPct === 100 ? 'filled' : 'outlined'}
                 />
                 {climb.angle != null && <Chip icon={<LocationOnOutlined />} label={`${climb.angle}°`} size="small" />}
                 <Typography variant="caption" color="text.secondary">
-                  {climb.sharedHoldCount}/{climb.candidateHoldCount} holds
+                  {t('similarClimbs.holdsRatio', { shared: climb.sharedHoldCount, total: climb.candidateHoldCount })}
                 </Typography>
               </Box>
             </Box>

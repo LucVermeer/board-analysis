@@ -324,8 +324,20 @@
   },
   "detail": {
     "sections": {
-      "beta": "Beta"
+      "beta": "Beta",
+      "similarClimbs": "Similar climbs",
+      "similarClimbsSummary": "Climbs sharing 90%+ of these holds"
     }
+  },
+  "similarClimbs": {
+    "loadError": "Couldn't load similar climbs.",
+    "emptyDefault": "No similar climbs yet.",
+    "emptyOnLayout": "No similar climbs on this layout.",
+    "emptyIdentical": "No identical climbs found right now.",
+    "untitledClimb": "Untitled climb",
+    "unknownSetter": "Unknown setter",
+    "matchPercent": "{{percent}}% match",
+    "holdsRatio": "{{shared}}/{{total}} holds"
   },
   "multiboardList": {
     "noClimbsFound": "No climbs found",
@@ -384,7 +396,11 @@
     "alerts": {
       "importFailed": "Import Failed: {{error}}",
       "importWarnings": "Import Warnings:",
-      "checkingMoonBoardDuplicate": "Checking whether this MoonBoard climb already exists..."
+      "checkingMoonBoardDuplicate": "Checking whether this MoonBoard climb already exists...",
+      "publishDuplicateNamed": "This hold pattern matches \"{{name}}\". Toggle Draft to save it without publishing, or change a hold.",
+      "publishDuplicateUnnamed": "This hold pattern matches an existing climb. Toggle Draft to save it without publishing, or change a hold.",
+      "viewMatchingClimb": "View matching climb",
+      "identicalClimbDrawerTitle": "Identical climb"
     },
     "settings": {
       "tooltip": "Climb settings",

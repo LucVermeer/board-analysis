@@ -1516,13 +1516,15 @@ export default function CreateClimbForm({
             className={styles.alertBanner}
             action={
               <MuiButton color="inherit" size="small" onClick={() => setShowDuplicateMatchDrawer(true)}>
-                View matching climb
+                {t('createClimbForm.alerts.viewMatchingClimb')}
               </MuiButton>
             }
           >
             {publishDuplicateError.existingClimbName
-              ? `This hold pattern matches "${publishDuplicateError.existingClimbName}". Toggle Draft to save it without publishing, or change a hold.`
-              : 'This hold pattern matches an existing climb. Toggle Draft to save it without publishing, or change a hold.'}
+              ? t('createClimbForm.alerts.publishDuplicateNamed', {
+                  name: publishDuplicateError.existingClimbName,
+                })
+              : t('createClimbForm.alerts.publishDuplicateUnnamed')}
           </MuiAlert>
         )}
 
@@ -1722,7 +1724,7 @@ export default function CreateClimbForm({
           drawer's similar-climbs section, just pinned at threshold 1.0. */}
       {publishDuplicateError && (
         <SwipeableDrawer
-          title="Identical climb"
+          title={t('createClimbForm.alerts.identicalClimbDrawerTitle')}
           placement="bottom"
           open={showDuplicateMatchDrawer}
           onClose={() => setShowDuplicateMatchDrawer(false)}
@@ -1736,7 +1738,7 @@ export default function CreateClimbForm({
                 frames={publishDuplicateError.target.frames}
                 threshold={1.0}
                 limit={20}
-                emptyMessage="No identical climbs found right now."
+                emptyMessage={t('similarClimbs.emptyIdentical')}
               />
             ) : (
               <SimilarClimbsList
@@ -1745,7 +1747,7 @@ export default function CreateClimbForm({
                 climbUuid={publishDuplicateError.target.climbUuid}
                 threshold={1.0}
                 limit={20}
-                emptyMessage="No identical climbs found right now."
+                emptyMessage={t('similarClimbs.emptyIdentical')}
               />
             )}
           </Box>
