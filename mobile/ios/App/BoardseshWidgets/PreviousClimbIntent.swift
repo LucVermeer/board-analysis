@@ -46,12 +46,9 @@ struct PreviousClimbIntent: LiveActivityIntent {
             await activity.update(content)
         }
 
+        // See NextClimbIntent: BLE write and HTTP POST run concurrently.
         #if !WIDGET_EXTENSION
-        // See NextClimbIntent for the rationale: when this intent runs in the
-        // main app's background process, drive the BLE write through the
-        // shared bridge so the readiness wait + background-task wrapping
-        // stay in one place.
-        await LiveActivityBleBridge.writeBoardForIntent(items: items, currentIndex: prevIndex)
+        async let bleWrite: Void = LiveActivityBleBridge.writeBoardForIntent(items: items, currentIndex: prevIndex)
         #endif
 
         let httpSuccess = await WidgetNetworking.sendNavigation(action: "previous", currentIndex: prevIndex)
@@ -59,6 +56,10 @@ struct PreviousClimbIntent: LiveActivityIntent {
             defaults.set("previous", forKey: SharedConstants.pendingActionKey)
             postQueueNavigateDarwinNotification()
         }
+
+        #if !WIDGET_EXTENSION
+        await bleWrite
+        #endif
 
         return .result()
     }

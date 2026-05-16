@@ -85,12 +85,16 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var isWriting = false
     private var pendingWriteResume: (() -> Void)?
     private var configuration: BoardBleConfiguration?
-    private var pendingReadyWaiters: [ReadyWaiter] = []
+    private var pendingReadyWaiters: [Waiter] = []
+    private var pendingDrainWaiters: [Waiter] = []
 
     private var onScanResult: ((BoardBleScanResult) -> Void)?
     private var onDisconnect: ((String) -> Void)?
 
-    private struct ReadyWaiter {
+    /// Reused for both `waitUntilReady` and `waitForWriteDrain`: each waiter
+    /// owns a continuation and a per-waiter timeout `DispatchWorkItem`,
+    /// identified by a unique id so the resolve path can find and remove it.
+    private struct Waiter {
         let id: UUID
         let continuation: CheckedContinuation<Void, Never>
         let timeoutWorkItem: DispatchWorkItem
@@ -631,7 +635,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
                     }
                 }
                 self.pendingReadyWaiters.append(
-                    ReadyWaiter(id: waiterId, continuation: continuation, timeoutWorkItem: workItem)
+                    Waiter(id: waiterId, continuation: continuation, timeoutWorkItem: workItem)
                 )
                 self.bleQueue.asyncAfter(deadline: .now() + timeout, execute: workItem)
             }
@@ -648,19 +652,43 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     private func waitForWriteDrain(timeout: TimeInterval) async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            let drained = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-                runOnBleQueue { [weak self] in
-                    guard let self else {
-                        continuation.resume(returning: true)
-                        return
-                    }
-                    continuation.resume(returning: self.writeQueue.isEmpty && !self.isWriting)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            runOnBleQueue { [weak self] in
+                guard let self else {
+                    continuation.resume()
+                    return
                 }
+                if self.writeQueue.isEmpty, !self.isWriting {
+                    continuation.resume()
+                    return
+                }
+                let waiterId = UUID()
+                let workItem = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    if let index = self.pendingDrainWaiters.firstIndex(where: { $0.id == waiterId }) {
+                        let waiter = self.pendingDrainWaiters.remove(at: index)
+                        waiter.continuation.resume()
+                    }
+                }
+                self.pendingDrainWaiters.append(
+                    Waiter(id: waiterId, continuation: continuation, timeoutWorkItem: workItem)
+                )
+                self.bleQueue.asyncAfter(deadline: .now() + timeout, execute: workItem)
             }
-            if drained { return }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+    }
+
+    /// Called from `processWriteQueue` and `failQueuedWrites` whenever the
+    /// write queue could plausibly have become empty. The `Waiter` pattern
+    /// mirrors `resumePendingReadyWaitersOnBleQueue` — see that helper for
+    /// the resume contract.
+    private func notifyDrainWaitersIfDrainedOnBleQueue() {
+        guard writeQueue.isEmpty, !isWriting else { return }
+        let waiters = pendingDrainWaiters
+        pendingDrainWaiters = []
+        for waiter in waiters {
+            waiter.timeoutWorkItem.cancel()
+            waiter.continuation.resume()
         }
     }
 
@@ -701,7 +729,13 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     private func processWriteQueue() {
-        guard !isWriting, !writeQueue.isEmpty else { return }
+        guard !isWriting, !writeQueue.isEmpty else {
+            // Drained (or already mid-write). Notify any drain waiters — the
+            // helper double-checks `writeQueue.isEmpty && !isWriting`, so a
+            // call while we're still writing is a no-op.
+            notifyDrainWaitersIfDrainedOnBleQueue()
+            return
+        }
         isWriting = true
         let request = writeQueue[0]
         writeChunk(
@@ -718,13 +752,27 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         connectionGeneration: UInt64,
         writeGeneration: UInt64
     ) {
-        guard connectionGeneration == self.connectionGeneration, writeGeneration == self.writeGeneration else { return }
+        guard connectionGeneration == self.connectionGeneration, writeGeneration == self.writeGeneration else {
+            // The connection or write generation flipped under us (disconnect,
+            // reconnect, state restoration, or write cancellation). Bail out
+            // and re-arm so `isWriting` can't get stranded `true` — without
+            // this, the next time processWriteQueue is called from outside
+            // the write loop, the guard at its top would short-circuit.
+            isWriting = false
+            processWriteQueue()
+            return
+        }
         guard requestIndex < writeQueue.count else {
             isWriting = false
+            processWriteQueue()
             return
         }
         let request = writeQueue[requestIndex]
-        guard request.connectionGeneration == connectionGeneration, request.writeGeneration == writeGeneration else { return }
+        guard request.connectionGeneration == connectionGeneration, request.writeGeneration == writeGeneration else {
+            isWriting = false
+            processWriteQueue()
+            return
+        }
 
         guard let peripheral = connectedPeripheral, let characteristic = writeCharacteristic else {
             let request = writeQueue.removeFirst()
@@ -774,6 +822,7 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         for request in queuedWrites {
             request.completion(error)
         }
+        notifyDrainWaitersIfDrainedOnBleQueue()
     }
 
     private func readConfiguration() -> BoardBleConfiguration? {

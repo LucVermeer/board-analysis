@@ -48,13 +48,11 @@ struct NextClimbIntent: LiveActivityIntent {
             await activity.update(content)
         }
 
+        // BLE write (main app process only) and HTTP POST to the backend are
+        // independent — run them concurrently so a slow CoreBluetooth state
+        // restoration doesn't delay the backend / other party clients.
         #if !WIDGET_EXTENSION
-        // Running in the main app process — write directly to the connected
-        // board. iOS background-launches the app to perform the intent when
-        // the intent type is registered in the main-app target, even when
-        // the app was suspended. See `LiveActivityBleBridge` for the
-        // readiness wait + background-task wrapping.
-        await LiveActivityBleBridge.writeBoardForIntent(items: items, currentIndex: nextIndex)
+        async let bleWrite: Void = LiveActivityBleBridge.writeBoardForIntent(items: items, currentIndex: nextIndex)
         #endif
 
         let httpSuccess = await WidgetNetworking.sendNavigation(action: "next", currentIndex: nextIndex)
@@ -62,6 +60,10 @@ struct NextClimbIntent: LiveActivityIntent {
             defaults.set("next", forKey: SharedConstants.pendingActionKey)
             postQueueNavigateDarwinNotification()
         }
+
+        #if !WIDGET_EXTENSION
+        await bleWrite
+        #endif
 
         return .result()
     }
