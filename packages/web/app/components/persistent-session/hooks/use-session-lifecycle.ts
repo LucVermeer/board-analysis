@@ -484,7 +484,17 @@ export function useSessionLifecycle({
 
         const lastSeq = lastReceivedSequenceRef.current;
         const sessionData = await joinSession(clientForReconnect);
-        if (!sessionData || !mountedRef.current) return;
+        if (!mountedRef.current) return;
+        if (!sessionData) {
+          // joinSession failed (network hiccup, server down, mutation rejected).
+          // Don't bail silently — schedule another attempt so the user isn't
+          // stranded "Offline" until they refresh. The recovery counter caps
+          // total retries, so we won't loop forever on a permanent failure.
+          // The finally block resets isReconnectingRef so the scheduled
+          // handleReconnect can run.
+          scheduleSubscriptionRecovery('joinSession returned no session payload');
+          return;
+        }
 
         // Match the initial `connect()` success path: reset both retry
         // counters now that we know the rejoin succeeded. Otherwise a
@@ -583,6 +593,17 @@ export function useSessionLifecycle({
         queueUnsubscribeRef.current = null;
         sessionUnsubscribeRef.current?.();
         sessionUnsubscribeRef.current = null;
+        // Tearing down all subs leaves graphql-ws with zero "locks", which
+        // makes its retry loop deny the next reconnect attempt with
+        // "All Subscriptions Gone". Without an active operation, graphql-ws
+        // will not re-open the WebSocket on its own, so the `connected`
+        // event that normally drives `handleReconnect` never fires and the
+        // user is stranded showing the offline banner.
+        // Schedule recovery ourselves: handleReconnect will call joinSession
+        // (which adds a fresh subscription via execute → triggers a new WS
+        // connection) and then resubscribe to queue + session updates on the
+        // now-registered connectionId.
+        scheduleSubscriptionRecovery('socket closed');
       }
     }
 

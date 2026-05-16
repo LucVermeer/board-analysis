@@ -779,6 +779,8 @@ sequenceDiagram
 - Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
 - Up to 10 retry attempts
 - On `closed`: the lifecycle hook unsubscribes both queue and session subscriptions before graphql-ws begins reconnecting. Without this, graphql-ws would auto-replay the old subscriptions on the new socket before `joinSession` registers the new `connectionId`, and the backend `requireSessionMember` check would fail with `Unauthorized: not in any session`.
+- Tearing down all subscriptions drops graphql-ws's internal `locks` count to zero, which makes its retry loop deny the next connect with `"All Subscriptions Gone"` (verified against `graphql-ws/dist/client.js` retry guard). The lifecycle hook therefore drives recovery itself by calling `scheduleSubscriptionRecovery` from `handleDisconnect` — `handleReconnect` runs `joinSession`, which registers a fresh subscription via `execute` and triggers a new WS connection on the now-registered `connectionId`.
+- If `joinSession` returns no payload (transient mutation failure), `handleReconnect` schedules another recovery attempt instead of bailing silently. Without this, a single transient failure on the rejoin would leave the user stuck showing the offline banner until a manual refresh, even after the network came back.
 - On reconnection: re-join session with the same `participantId`, then create fresh subscriptions on the now-registered connection
 - Delta sync attempted if gap ≤ 100 events and the replay buffer has contiguous coverage
 - Falls back to full sync if the gap is too large, replay is incomplete, or the local hash disagrees despite no sequence gap

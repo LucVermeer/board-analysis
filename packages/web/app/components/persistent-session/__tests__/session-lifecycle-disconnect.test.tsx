@@ -150,6 +150,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -188,4 +189,114 @@ describe('useSessionLifecycle onDisconnect teardown', () => {
     expect(queueUnsubscribe).toHaveBeenCalledTimes(1);
     expect(sessionUnsubscribe).toHaveBeenCalledTimes(1);
   });
+
+  it('schedules a fresh joinSession after handleDisconnect tears down subscriptions', async () => {
+    // Regression test for the offline-error bug: tearing down both
+    // subscriptions leaves graphql-ws with zero "locks", so it refuses to
+    // auto-reconnect ("All Subscriptions Gone"). Without an explicit
+    // recovery trigger from handleDisconnect, the session is stranded
+    // showing the offline banner until the user refreshes.
+    await setPreference(ACTIVE_SESSION_KEY, {
+      sessionId: 'session-disconnect-test',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    });
+
+    renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    // Initial connect: joinSession mutation + queue/session subscriptions.
+    await waitFor(() => {
+      expect(subscribeSpy).toHaveBeenCalledTimes(2);
+    });
+    const joinCallsBeforeDisconnect = executeSpy.mock.calls.length;
+
+    // Hand out fresh unsubscribe spies for the post-recovery resubscribe
+    // BEFORE driving the disconnect — the recovery path runs on the next
+    // microtask after `onDisconnect` schedules its timer.
+    const queueUnsubscribeAfterRecovery = vi.fn();
+    const sessionUnsubscribeAfterRecovery = vi.fn();
+    subscribeSpy
+      .mockReturnValueOnce(queueUnsubscribeAfterRecovery)
+      .mockReturnValueOnce(sessionUnsubscribeAfterRecovery);
+
+    // Simulate graphql-ws firing `closed`.
+    capturedOptions.current?.onDisconnect?.();
+
+    // handleDisconnect schedules scheduleSubscriptionRecovery, which fires
+    // handleReconnect after INITIAL_RETRY_DELAY_MS (1000ms). Wait long
+    // enough for that to land + the joinSession mutation to resolve.
+    await waitFor(
+      () => {
+        expect(executeSpy.mock.calls.length).toBeGreaterThan(joinCallsBeforeDisconnect);
+      },
+      { timeout: 4000 },
+    );
+
+    // ...and re-created both subscriptions on the recovered connection.
+    await waitFor(() => {
+      expect(subscribeSpy).toHaveBeenCalledTimes(4);
+    });
+  }, 10_000);
+
+  it('schedules another recovery attempt when joinSession fails during reconnect', async () => {
+    // Without this, a single transient joinSession failure (network blip,
+    // 5xx, mutation timeout) silently strands the session: handleReconnect
+    // returns and nothing else triggers another attempt.
+    await setPreference(ACTIVE_SESSION_KEY, {
+      sessionId: 'session-disconnect-test',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    });
+
+    renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(subscribeSpy).toHaveBeenCalledTimes(2);
+    });
+    const joinCallsBeforeDisconnect = executeSpy.mock.calls.length;
+
+    // Make the FIRST recovery joinSession fail (transient failure — null payload).
+    // The next call falls through to the default beforeEach mock (success).
+    executeSpy.mockResolvedValueOnce({ joinSession: null });
+
+    capturedOptions.current?.onDisconnect?.();
+
+    // First handleReconnect attempt — joinSession returns null payload.
+    await waitFor(
+      () => {
+        expect(executeSpy.mock.calls.length).toBeGreaterThan(joinCallsBeforeDisconnect);
+      },
+      { timeout: 4000 },
+    );
+    const callsAfterFirstAttempt = executeSpy.mock.calls.length;
+
+    // Hand out fresh unsubscribe spies for the eventual successful resubscribe.
+    const queueUnsubscribeAfterRecovery = vi.fn();
+    const sessionUnsubscribeAfterRecovery = vi.fn();
+    subscribeSpy
+      .mockReturnValueOnce(queueUnsubscribeAfterRecovery)
+      .mockReturnValueOnce(sessionUnsubscribeAfterRecovery);
+
+    // Second attempt has 2x backoff (subscriptionRetryCount=2 → 2000ms).
+    await waitFor(
+      () => {
+        expect(executeSpy.mock.calls.length).toBeGreaterThan(callsAfterFirstAttempt);
+      },
+      { timeout: 6000 },
+    );
+  }, 15_000);
 });
