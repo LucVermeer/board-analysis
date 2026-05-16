@@ -2,10 +2,6 @@ import ActivityKit
 import AppIntents
 import os.log
 
-#if !WIDGET_EXTENSION
-import UIKit
-#endif
-
 @available(iOS 17.0, *)
 struct PreviousClimbIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Previous Climb"
@@ -52,10 +48,10 @@ struct PreviousClimbIntent: LiveActivityIntent {
 
         #if !WIDGET_EXTENSION
         // See NextClimbIntent for the rationale: when this intent runs in the
-        // main app's background process, drive the BLE write directly through
-        // the singleton, awaiting state restoration with a short timeout and
-        // a background task so the write actually flushes.
-        await writePreviousBoardOnMainApp(items: items, currentIndex: prevIndex)
+        // main app's background process, drive the BLE write through the
+        // shared bridge so the readiness wait + background-task wrapping
+        // stay in one place.
+        await LiveActivityBleBridge.writeBoardForIntent(items: items, currentIndex: prevIndex)
         #endif
 
         let httpSuccess = await WidgetNetworking.sendNavigation(action: "previous", currentIndex: prevIndex)
@@ -76,18 +72,3 @@ struct PreviousClimbIntent: LiveActivityIntent {
         )
     }
 }
-
-#if !WIDGET_EXTENSION
-@available(iOS 17.0, *)
-private func writePreviousBoardOnMainApp(items: [SharedQueueItem], currentIndex: Int) async {
-    let task = await MainActor.run {
-        UIApplication.shared.beginBackgroundTask(withName: "ble-display-intent")
-    }
-    await BoardBleManager.shared.displayCurrentItemAwaitingReady(
-        items: items, currentIndex: currentIndex, timeout: 3.0
-    )
-    await MainActor.run {
-        UIApplication.shared.endBackgroundTask(task)
-    }
-}
-#endif

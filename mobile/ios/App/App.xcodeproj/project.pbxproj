@@ -41,6 +41,7 @@
 		LA100090 /* NextClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200012 /* NextClimbIntent.swift */; };
 		LA100091 /* PreviousClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200013 /* PreviousClimbIntent.swift */; };
 		LA100092 /* WidgetNetworking.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200070 /* WidgetNetworking.swift */; };
+		LA100100 /* LiveActivityBleBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200100 /* LiveActivityBleBridge.swift */; };
 		LA100020 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200001 /* SharedConstants.swift */; };
 		LA100021 /* ClimbSessionAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200002 /* ClimbSessionAttributes.swift */; };
 		LA100080 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200080 /* SharedKeychain.swift */; };
@@ -125,6 +126,7 @@
 		LA200013 /* PreviousClimbIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviousClimbIntent.swift; sourceTree = "<group>"; };
 		LA200070 /* WidgetNetworking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetNetworking.swift; sourceTree = "<group>"; };
 		LA200080 /* SharedKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedKeychain.swift; sourceTree = "<group>"; };
+		LA200100 /* LiveActivityBleBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityBleBridge.swift; sourceTree = "<group>"; };
 		LA200014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		LA200015 /* BoardseshWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoardseshWidgets.entitlements; sourceTree = "<group>"; };
 		LA200030 /* SessionWebSocketManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWebSocketManagerTests.swift; sourceTree = "<group>"; };
@@ -203,6 +205,7 @@
 				C1A2B3D4E5F60719 /* BoardseshViewController.swift */,
 				LA200001 /* SharedConstants.swift */,
 				LA200080 /* SharedKeychain.swift */,
+				LA200100 /* LiveActivityBleBridge.swift */,
 				BB200001 /* BoardPlacementData.swift */,
 				BB200002 /* BoardBleEncoding.swift */,
 				BB200003 /* BoardBleManager.swift */,
@@ -483,6 +486,7 @@
 				LA100090 /* NextClimbIntent.swift in Sources */,
 				LA100091 /* PreviousClimbIntent.swift in Sources */,
 				LA100092 /* WidgetNetworking.swift in Sources */,
+				LA100100 /* LiveActivityBleBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -199,19 +199,23 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     /// Awaits BLE readiness (peripheral + write characteristic discovered) up to
-    /// `timeout` seconds, then enqueues the display write and waits for the
-    /// write queue to drain. Designed for Live Activity intents that wake the
-    /// main app in the background: CoreBluetooth state restoration is
-    /// asynchronous, so a write issued immediately after wake would silently
-    /// no-op against the `connectedPeripheral == nil` guard. If the timeout
-    /// elapses before readiness, the write is still attempted; the existing
-    /// `notConnected` guard in `writeOnBleQueue` will no-op cleanly.
+    /// `readyTimeout`, enqueues the display write, then waits up to
+    /// `drainTimeout` for the UART chunks to flush. Designed for Live Activity
+    /// intents that wake the main app in the background: CoreBluetooth state
+    /// restoration is asynchronous, so a write issued immediately after wake
+    /// would silently no-op against the `connectedPeripheral == nil` guard.
+    /// If `readyTimeout` elapses before readiness, the write is still
+    /// attempted; the existing `notConnected` guard in `writeOnBleQueue` will
+    /// no-op cleanly.
     func displayCurrentItemAwaitingReady(
-        items: [SharedQueueItem], currentIndex: Int, timeout: TimeInterval
+        items: [SharedQueueItem],
+        currentIndex: Int,
+        readyTimeout: TimeInterval,
+        drainTimeout: TimeInterval = 1.5
     ) async {
-        await waitUntilReady(timeout: timeout)
+        await waitUntilReady(timeout: readyTimeout)
         displayCurrentItem(items: items, currentIndex: currentIndex)
-        await waitForWriteDrain(timeout: 1.5)
+        await waitForWriteDrain(timeout: drainTimeout)
     }
 
     private var isAvailableOnBleQueue: Bool {
