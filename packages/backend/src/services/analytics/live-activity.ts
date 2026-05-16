@@ -36,6 +36,18 @@ interface LiveActivityWidgetNavigationEvent {
   boundSessionId?: string;
 }
 
+interface LiveActivityWidgetNavigationAttributionGapEvent {
+  sessionId: string;
+  action: 'next' | 'previous';
+  outcome: WidgetNavigationOutcome;
+  statusCode: number;
+  reason: 'missing_user_id';
+  queueLength?: number;
+  serverCurrentIndex?: number;
+  targetIndex?: number;
+  boundSessionId?: string;
+}
+
 interface LiveActivityPushDeliveryEvent {
   sessionId: string;
   event: 'update' | 'end';
@@ -79,6 +91,26 @@ export function trackLiveActivityWidgetNavigation(event: LiveActivityWidgetNavig
       action: event.action,
       outcome: event.outcome,
       statusCode: event.statusCode,
+      queueLength: event.queueLength,
+      serverCurrentIndex: event.serverCurrentIndex,
+      targetIndex: event.targetIndex,
+      boundSessionId: event.boundSessionId,
+    },
+  });
+}
+
+export function trackLiveActivityWidgetNavigationAttributionGap(
+  event: LiveActivityWidgetNavigationAttributionGapEvent,
+): void {
+  captureBackendEvent('Live Activity Widget Navigation Attribution Gap', {
+    distinctId: `live-activity-session:${event.sessionId}`,
+    processPersonProfile: false,
+    properties: {
+      sessionId: event.sessionId,
+      action: event.action,
+      outcome: event.outcome,
+      statusCode: event.statusCode,
+      reason: event.reason,
       queueLength: event.queueLength,
       serverCurrentIndex: event.serverCurrentIndex,
       targetIndex: event.targetIndex,

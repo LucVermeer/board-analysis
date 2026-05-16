@@ -6,7 +6,10 @@ import { applyCorsHeaders } from './cors';
 import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
 import { navigateToQueueItem } from '../services/queue-navigation';
-import { trackLiveActivityWidgetNavigation } from '../services/analytics/live-activity';
+import {
+  trackLiveActivityWidgetNavigation,
+  trackLiveActivityWidgetNavigationAttributionGap,
+} from '../services/analytics/live-activity';
 import { logger } from '../utils/logger';
 
 interface WidgetNavigateBody {
@@ -123,6 +126,21 @@ type AuthResult =
   | { kind: 'unknown' } // Bearer present but no row matches the token → 401
   | { kind: 'wrong-session'; boundSessionId: string; userId: string | null }; // Token exists but bound to a different session → 410
 
+type WidgetNavigationAnalyticsEvent = Parameters<typeof trackLiveActivityWidgetNavigation>[0];
+type WidgetNavigationAnalyticsPayload = Omit<WidgetNavigationAnalyticsEvent, 'userId'>;
+
+function trackWidgetNavigation(userId: string | null, event: WidgetNavigationAnalyticsPayload): void {
+  if (userId) {
+    trackLiveActivityWidgetNavigation({ userId, ...event });
+    return;
+  }
+
+  trackLiveActivityWidgetNavigationAttributionGap({
+    ...event,
+    reason: 'missing_user_id',
+  });
+}
+
 /**
  * Verify that the bearer token in the Authorization header is registered to
  * `sessionId` in `activity_push_tokens`. This is the auth contract the iOS
@@ -230,16 +248,13 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
       logger.info(
         `[WidgetNavigate] Token bound to session ${authResult.boundSessionId}, request was for ${sessionId}; signaling re-register`,
       );
-      if (authResult.userId) {
-        trackLiveActivityWidgetNavigation({
-          userId: authResult.userId,
-          sessionId,
-          action,
-          outcome: 'wrong_session',
-          statusCode: 410,
-          boundSessionId: authResult.boundSessionId,
-        });
-      }
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: 'wrong_session',
+        statusCode: 410,
+        boundSessionId: authResult.boundSessionId,
+      });
       res.writeHead(410, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Token bound to a different session; re-register' }));
       return;
@@ -251,15 +266,12 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
 
   // Rate limit (per session) — apply *after* auth so unauth requests can't poison the bucket
   if (!checkRateLimit(sessionId)) {
-    if (authResult.userId) {
-      trackLiveActivityWidgetNavigation({
-        userId: authResult.userId,
-        sessionId,
-        action,
-        outcome: 'rate_limited',
-        statusCode: 429,
-      });
-    }
+    trackWidgetNavigation(authResult.userId, {
+      sessionId,
+      action,
+      outcome: 'rate_limited',
+      statusCode: 429,
+    });
     res.writeHead(429, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: false, error: 'Too many requests' }));
     return;
@@ -273,16 +285,13 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
     if (queueLength === 0) {
       // Return 4xx so the widget's status-code check fires its Darwin-notification
       // fallback and the user sees a real error path rather than a silent no-op.
-      if (authResult.userId) {
-        trackLiveActivityWidgetNavigation({
-          userId: authResult.userId,
-          sessionId,
-          action,
-          outcome: 'queue_empty',
-          statusCode: 409,
-          queueLength,
-        });
-      }
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: 'queue_empty',
+        statusCode: 409,
+        queueLength,
+      });
       res.writeHead(409, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Queue is empty' }));
       return;
@@ -318,49 +327,40 @@ export async function handleWidgetNavigate(req: IncomingMessage, res: ServerResp
     );
 
     if (result) {
-      if (authResult.userId) {
-        trackLiveActivityWidgetNavigation({
-          userId: authResult.userId,
-          sessionId,
-          action,
-          outcome: 'success',
-          statusCode: 200,
-          queueLength,
-          serverCurrentIndex,
-          targetIndex,
-        });
-      }
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: 'success',
+        statusCode: 200,
+        queueLength,
+        serverCurrentIndex,
+        targetIndex,
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, currentIndex: targetIndex }));
     } else {
       // Same reasoning as the queue-empty branch: 4xx surfaces the failure
       // to the widget's HTTP fallback path.
-      if (authResult.userId) {
-        trackLiveActivityWidgetNavigation({
-          userId: authResult.userId,
-          sessionId,
-          action,
-          outcome: 'target_out_of_bounds',
-          statusCode: 409,
-          queueLength,
-          serverCurrentIndex,
-          targetIndex,
-        });
-      }
+      trackWidgetNavigation(authResult.userId, {
+        sessionId,
+        action,
+        outcome: 'target_out_of_bounds',
+        statusCode: 409,
+        queueLength,
+        serverCurrentIndex,
+        targetIndex,
+      });
       res.writeHead(409, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: 'Target index out of bounds' }));
     }
   } catch (error) {
     logger.error('[WidgetNavigate] Error:', error);
-    if (authResult.userId) {
-      trackLiveActivityWidgetNavigation({
-        userId: authResult.userId,
-        sessionId,
-        action,
-        outcome: 'error',
-        statusCode: 500,
-      });
-    }
+    trackWidgetNavigation(authResult.userId, {
+      sessionId,
+      action,
+      outcome: 'error',
+      statusCode: 500,
+    });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({

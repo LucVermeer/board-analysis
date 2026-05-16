@@ -196,11 +196,6 @@ export async function shutdownApns(): Promise<void> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-async function getTokensForSession(sessionId: string): Promise<string[]> {
-  const registrations = await getTokenRegistrationsForSession(sessionId);
-  return registrations.map((registration) => registration.token);
-}
-
 async function getTokenRegistrationsForSession(sessionId: string): Promise<TokenRegistration[]> {
   const rows = await db
     .select({ token: activityPushTokens.token, userId: activityPushTokens.userId })
@@ -355,14 +350,14 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
   const entry = pendingSends.get(sessionId);
   if (!entry) return;
 
-  let tokens: string[];
+  let registrations: TokenRegistration[];
   try {
-    tokens = await getTokensForSession(sessionId);
+    registrations = await getTokenRegistrationsForSession(sessionId);
   } catch (error) {
     if (entry.dbRetryAttempt < DB_RETRY_DELAYS_MS.length) {
       const delay = DB_RETRY_DELAYS_MS[entry.dbRetryAttempt];
       logger.error(
-        `[APNs] getTokensForSession failed for session ${sessionId} ` +
+        `[APNs] getTokenRegistrationsForSession failed for session ${sessionId} ` +
           `(retry ${String(entry.dbRetryAttempt + 1)}/${String(DB_RETRY_DELAYS_MS.length)} in ${String(delay)}ms):`,
         error,
       );
@@ -393,6 +388,7 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
 
   const source = entry.source;
   pendingSends.delete(sessionId);
+  const tokens = registrations.map((registration) => registration.token);
   if (tokens.length === 0) {
     // Demoted to debug because every queue event on a party session without an
     // iOS Live Activity device produces one of these. Multiplied by N backend

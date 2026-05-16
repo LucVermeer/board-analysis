@@ -2,8 +2,14 @@ import { PostHog } from 'posthog-node';
 import { logger } from '../../utils/logger';
 
 type AnalyticsPropertyValue = string | number | boolean | null | undefined;
-export type AnalyticsProperties = Record<string, AnalyticsPropertyValue>;
+type AnalyticsProperties = Record<string, AnalyticsPropertyValue>;
 type SanitizedAnalyticsProperties = Record<string, string | number | boolean | null>;
+export type BackendAnalyticsEvent =
+  | 'Live Activity Ended'
+  | 'Live Activity Push Delivery'
+  | 'Live Activity Started'
+  | 'Live Activity Widget Navigation'
+  | 'Live Activity Widget Navigation Attribution Gap';
 
 interface CaptureBackendEventOptions {
   distinctId: string;
@@ -55,7 +61,7 @@ function getPosthogClient(): PostHog | null {
   return client;
 }
 
-export function captureBackendEvent(eventName: string, options: CaptureBackendEventOptions): boolean {
+export function captureBackendEvent(eventName: BackendAnalyticsEvent, options: CaptureBackendEventOptions): boolean {
   const posthog = getPosthogClient();
   if (!posthog) return false;
 
