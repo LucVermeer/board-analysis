@@ -236,6 +236,10 @@ export const tickMutations = {
       throw new Error('You can only delete your own ticks');
     }
 
+    logger.info(
+      `[deleteTick] user=${userId} tick=${uuid} ${tick.boardType}/${tick.climbUuid.slice(0, 8)}/${tick.angle}`,
+    );
+
     await db.transaction(async (tx) => {
       // Collect comment IDs on this tick so we can clean up their notifications
       const tickComments = await tx
@@ -277,6 +281,8 @@ export const tickMutations = {
     // inflated or the FA pinned to a now-vanished tick.
     queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
 
+    logger.info(`[deleteTick] deleted tick=${uuid} user=${userId}`);
+
     return true;
   },
 
@@ -290,6 +296,11 @@ export const tickMutations = {
     const validatedInput = validateInput(SaveTickInputSchema, input, 'input');
 
     const userId = ctx.userId!;
+    logger.info(
+      `[saveTick] user=${userId} ${validatedInput.boardType}/${validatedInput.climbUuid.slice(0, 8)}/${validatedInput.angle} ` +
+        `status=${validatedInput.status}` +
+        (validatedInput.sessionId ? ` session=${validatedInput.sessionId}` : ''),
+    );
     const uuid = uuidv4();
     const now = new Date().toISOString();
     const climbedAt = new Date(validatedInput.climbedAt).toISOString();
@@ -451,6 +462,11 @@ export const tickMutations = {
     // on the same climb collapses into one recompute.
     queueClimbStatsRecompute(tick.boardType, tick.climbUuid, tick.angle);
 
+    logger.info(
+      `[saveTick] saved tick=${tick.uuid} user=${userId} ` +
+        `${tick.boardType}/${tick.climbUuid.slice(0, 8)}/${tick.angle} status=${tick.status}`,
+    );
+
     return result;
   },
 
@@ -547,6 +563,9 @@ export const tickMutations = {
       throw new Error('Not authorized to update this tick');
     }
 
+    const changedFields = Object.keys(validatedInput);
+    logger.info(`[updateTick] user=${userId} tick=${uuid} fields=[${changedFields.join(',')}]`);
+
     const updates: Record<string, unknown> = {
       updatedAt: new Date().toISOString(),
     };
@@ -568,6 +587,11 @@ export const tickMutations = {
     // toward ascensionist_count, and a quality/difficulty/comment edit can
     // also change downstream derived stats once we aggregate those. Recompute.
     queueClimbStatsRecompute(updated.boardType, updated.climbUuid, updated.angle);
+
+    logger.info(
+      `[updateTick] updated tick=${updated.uuid} user=${userId} ` +
+        `${updated.boardType}/${updated.climbUuid.slice(0, 8)}/${updated.angle} status=${updated.status}`,
+    );
 
     return {
       uuid: updated.uuid,
