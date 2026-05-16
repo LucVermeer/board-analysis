@@ -101,7 +101,6 @@
     },
     "fields": {
       "climbName": "Nombre del bloque",
-      "gradeRange": "Rango de grados",
       "minGrade": "Mín",
       "maxGrade": "Máx",
       "setter": "Aperturista",

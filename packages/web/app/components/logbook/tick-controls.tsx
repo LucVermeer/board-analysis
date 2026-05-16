@@ -321,7 +321,13 @@ export const InlineGradePicker: React.FC<{
   onSelect: (value: number | undefined) => void;
   /** Ref to the grade button for scroll alignment positioning. */
   gradeButtonRef?: React.RefObject<HTMLButtonElement | null>;
-}> = ({ grades, currentGradeId, focusGradeId, onSelect, gradeButtonRef }) => {
+  /** Listbox aria-label; defaults to the tick-flow "grade override" label. */
+  ariaLabel?: string;
+  /** Clear-chip aria-label; defaults to the tick-flow "clear grade override" label. */
+  clearLabel?: string;
+  /** Omit the leading "—" clear chip; for call sites where a grade is always required. */
+  hideClear?: boolean;
+}> = ({ grades, currentGradeId, focusGradeId, onSelect, gradeButtonRef, ariaLabel, clearLabel, hideClear }) => {
   const { t } = useTranslation('climbs');
   const { formatGrade, getGradeColor } = useGradeFormat();
   const isDark = useIsDarkMode();
@@ -360,18 +366,20 @@ export const InlineGradePicker: React.FC<{
         ref={containerRef}
         className={styles.pickerRowScrollable}
         role="listbox"
-        aria-label={t('tick.controls.gradeOverride')}
+        aria-label={ariaLabel ?? t('tick.controls.gradeOverride')}
         data-scrollable-picker
       >
-        <ButtonBase
-          onClick={() => onSelect(undefined)}
-          className={`${styles.pickerItem} ${currentGradeId === undefined ? styles.pickerItemSelected : ''}`}
-          aria-label={t('tick.controls.clearGradeOverride')}
-          aria-selected={currentGradeId === undefined}
-          role="option"
-        >
-          <span className={styles.pickerClear}>—</span>
-        </ButtonBase>
+        {!hideClear && (
+          <ButtonBase
+            onClick={() => onSelect(undefined)}
+            className={`${styles.pickerItem} ${currentGradeId === undefined ? styles.pickerItemSelected : ''}`}
+            aria-label={clearLabel ?? t('tick.controls.clearGradeOverride')}
+            aria-selected={currentGradeId === undefined}
+            role="option"
+          >
+            <span className={styles.pickerClear}>—</span>
+          </ButtonBase>
+        )}
         {grades.map((grade) => {
           const formatted = formatGrade(grade.difficulty_name) ?? grade.v_grade;
           const color = getGradeColor(grade.difficulty_name, isDark);

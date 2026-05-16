@@ -14,7 +14,7 @@ import { RemoveOutlined, AddOutlined, RefreshOutlined } from '@mui/icons-materia
 import { useTranslation } from 'react-i18next';
 import { ANGLES, getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
-import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
+import { InlineGradePicker, InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import type { BoardDetails } from '@/app/lib/types';
 import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
 import {
@@ -182,24 +182,20 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
       )}
 
       {/* Target Grade */}
-      <div className={styles.formRow}>
+      <MuiBox sx={qualityBucketRowSx}>
         <Typography variant="body2" component="span" className={styles.label}>
           {t('generator.options.targetGrade')}
         </Typography>
-        <MuiSelect
-          value={options.targetGrade}
-          onChange={(e) => updateOption('targetGrade', e.target.value)}
-          className={styles.select}
-          size="small"
-          MenuProps={{ sx: { width: 'auto' } }}
-        >
-          {grades.map((grade) => (
-            <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
-              {grade.difficulty_name}
-            </MenuItem>
-          ))}
-        </MuiSelect>
-      </div>
+        <InlineGradePicker
+          grades={grades}
+          currentGradeId={options.targetGrade}
+          onSelect={(value) => {
+            if (value !== undefined) updateOption('targetGrade', value);
+          }}
+          ariaLabel={t('generator.options.targetGrade')}
+          hideClear
+        />
+      </MuiBox>
     </>
   );
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import type { BoardDetails, SearchRequestPagination } from '@/app/lib/types';
@@ -135,7 +135,8 @@ describe('AccordionSearchForm — quality filter controls', () => {
   it('Min Rating clear option emits the 0 sentinel', () => {
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minRating: 3 };
     render(<AccordionSearchForm boardDetails={boardDetails} />);
-    const anyRatingOption = screen.getByRole('option', { name: 'Any' });
+    const ratingListbox = screen.getByRole('listbox', { name: 'Min Rating' });
+    const anyRatingOption = within(ratingListbox).getByRole('option', { name: 'Any' });
     expect(anyRatingOption.textContent).toBe('Any');
     fireEvent.click(anyRatingOption);
     const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];

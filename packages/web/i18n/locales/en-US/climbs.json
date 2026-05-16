@@ -101,7 +101,6 @@
     },
     "fields": {
       "climbName": "Climb Name",
-      "gradeRange": "Grade Range",
       "minGrade": "Min",
       "maxGrade": "Max",
       "setter": "Setter",

@@ -101,7 +101,6 @@
     },
     "fields": {
       "climbName": "Nom du bloc",
-      "gradeRange": "Plage de cotation",
       "minGrade": "Min",
       "maxGrade": "Max",
       "setter": "Ouvreur",

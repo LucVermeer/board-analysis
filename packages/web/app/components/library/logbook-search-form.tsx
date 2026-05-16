@@ -18,6 +18,7 @@ import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import FilterListOutlined from '@mui/icons-material/FilterListOutlined';
 import ClearOutlined from '@mui/icons-material/ClearOutlined';
 import { BOULDER_GRADES } from '@/app/lib/board-data';
+import { InlineGradePicker } from '@/app/components/logbook/tick-controls';
 import {
   DEFAULT_ANGLE_RANGE,
   DEFAULT_FILTERS,
@@ -413,45 +414,25 @@ const LogbookSearchForm: React.FC<LogbookSearchFormProps> = ({
               </div>
 
               <div className={styles.inputGroup}>
-                <span className={styles.fieldLabel}>{t('logbook.search.gradeRange')}</span>
-                <div className={styles.gradeRow}>
-                  <MuiSelect
-                    value={minGrade === '' ? '' : minGrade}
-                    onChange={(e: SelectChangeEvent<number | ''>) => {
-                      const val = e.target.value;
-                      onMinGradeChange(val === '' ? '' : val);
-                    }}
-                    className={styles.fullWidth}
-                    size="small"
-                    displayEmpty
-                    MenuProps={{ disableScrollLock: true }}
-                  >
-                    <MenuItem value="">Min</MenuItem>
-                    {BOULDER_GRADES.map((grade) => (
-                      <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
-                        {grade.difficulty_name}
-                      </MenuItem>
-                    ))}
-                  </MuiSelect>
-                  <MuiSelect
-                    value={maxGrade === '' ? '' : maxGrade}
-                    onChange={(e: SelectChangeEvent<number | ''>) => {
-                      const val = e.target.value;
-                      onMaxGradeChange(val === '' ? '' : val);
-                    }}
-                    className={styles.fullWidth}
-                    size="small"
-                    displayEmpty
-                    MenuProps={{ disableScrollLock: true }}
-                  >
-                    <MenuItem value="">Max</MenuItem>
-                    {BOULDER_GRADES.map((grade) => (
-                      <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
-                        {grade.difficulty_name}
-                      </MenuItem>
-                    ))}
-                  </MuiSelect>
-                </div>
+                <span className={styles.fieldLabel}>{t('logbook.search.minGrade')}</span>
+                <InlineGradePicker
+                  grades={BOULDER_GRADES}
+                  currentGradeId={typeof minGrade === 'number' ? minGrade : undefined}
+                  onSelect={(value) => onMinGradeChange(value ?? '')}
+                  ariaLabel={t('logbook.search.minGrade')}
+                  clearLabel={t('logbook.search.any')}
+                />
+              </div>
+
+              <div className={styles.inputGroup}>
+                <span className={styles.fieldLabel}>{t('logbook.search.maxGrade')}</span>
+                <InlineGradePicker
+                  grades={BOULDER_GRADES}
+                  currentGradeId={typeof maxGrade === 'number' ? maxGrade : undefined}
+                  onSelect={(value) => onMaxGradeChange(value ?? '')}
+                  ariaLabel={t('logbook.search.maxGrade')}
+                  clearLabel={t('logbook.search.any')}
+                />
               </div>
 
               <MuiButton
