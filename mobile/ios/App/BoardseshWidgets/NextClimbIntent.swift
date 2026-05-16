@@ -10,12 +10,14 @@ struct NextClimbIntent: LiveActivityIntent {
     private static let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityIntent")
 
     func perform() async throws -> some IntentResult {
-        // Logged so we can confirm in Console.app which process iOS chose to
-        // perform the intent in. If this logs from `BoardseshWidgets` while
-        // the app is suspended, the main-app-only BLE path below is dead and
-        // we need a different architecture. If it logs from `App`, the fix
-        // is working as designed.
-        Self.logger.info("NextClimbIntent.perform() running in bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public)")
+        #if DEBUG
+        // Lets us confirm in Console.app which process iOS chose to perform
+        // the intent in. Empirically verified that iOS routes to the `App`
+        // process when the intent is registered there (see commit history);
+        // kept under DEBUG so production builds don't log on every tap, but
+        // dev builds surface immediately if Apple ever changes the routing.
+        Self.logger.debug("NextClimbIntent.perform() running in bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public)")
+        #endif
 
         guard let defaults = SharedConstants.sharedDefaults else {
             return .result()

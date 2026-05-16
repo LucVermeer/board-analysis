@@ -10,10 +10,11 @@ struct PreviousClimbIntent: LiveActivityIntent {
     private static let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityIntent")
 
     func perform() async throws -> some IntentResult {
-        // See NextClimbIntent: this log line lets us verify whether iOS runs
-        // the intent in the App process (fix works) or the BoardseshWidgets
-        // extension (fix dead, need different architecture).
-        Self.logger.info("PreviousClimbIntent.perform() running in bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public)")
+        #if DEBUG
+        // See NextClimbIntent: kept under DEBUG so production builds don't
+        // log on every tap, but dev builds still surface the routing fact.
+        Self.logger.debug("PreviousClimbIntent.perform() running in bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public)")
+        #endif
 
         guard let defaults = SharedConstants.sharedDefaults else {
             return .result()

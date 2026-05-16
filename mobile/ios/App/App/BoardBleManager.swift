@@ -85,20 +85,11 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var isWriting = false
     private var pendingWriteResume: (() -> Void)?
     private var configuration: BoardBleConfiguration?
-    private var pendingReadyWaiters: [Waiter] = []
-    private var pendingDrainWaiters: [Waiter] = []
+    private lazy var readyWaiters = WaiterPool(queue: bleQueue)
+    private lazy var drainWaiters = WaiterPool(queue: bleQueue)
 
     private var onScanResult: ((BoardBleScanResult) -> Void)?
     private var onDisconnect: ((String) -> Void)?
-
-    /// Reused for both `waitUntilReady` and `waitForWriteDrain`: each waiter
-    /// owns a continuation and a per-waiter timeout `DispatchWorkItem`,
-    /// identified by a unique id so the resolve path can find and remove it.
-    private struct Waiter {
-        let id: UUID
-        let continuation: CheckedContinuation<Void, Never>
-        let timeoutWorkItem: DispatchWorkItem
-    }
 
     override private init() {
         super.init()
@@ -573,8 +564,8 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         writeCharacteristic = characteristic
         completePendingConnect(.success(()))
         logger.info("Connected to board BLE peripheral \(peripheral.identifier.uuidString, privacy: .public)")
-        let hadPendingReadyWaiters = !pendingReadyWaiters.isEmpty
-        resumePendingReadyWaitersOnBleQueue()
+        let hadPendingReadyWaiters = readyWaiters.hasPendingWaiters
+        readyWaiters.signalAll()
         // Skip the implicit shared-state write when an intent is waiting on
         // readiness — the intent's awaited code will issue its own
         // displayCurrentItem with the same shared state, and we'd otherwise
@@ -616,80 +607,24 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     private func waitUntilReady(timeout: TimeInterval) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            runOnBleQueue { [weak self] in
-                guard let self else {
-                    continuation.resume()
-                    return
-                }
-                if self.isReadyForWrite {
-                    continuation.resume()
-                    return
-                }
-                let waiterId = UUID()
-                let workItem = DispatchWorkItem { [weak self] in
-                    guard let self else { return }
-                    if let index = self.pendingReadyWaiters.firstIndex(where: { $0.id == waiterId }) {
-                        let waiter = self.pendingReadyWaiters.remove(at: index)
-                        waiter.continuation.resume()
-                    }
-                }
-                self.pendingReadyWaiters.append(
-                    Waiter(id: waiterId, continuation: continuation, timeoutWorkItem: workItem)
-                )
-                self.bleQueue.asyncAfter(deadline: .now() + timeout, execute: workItem)
-            }
-        }
-    }
-
-    private func resumePendingReadyWaitersOnBleQueue() {
-        let waiters = pendingReadyWaiters
-        pendingReadyWaiters = []
-        for waiter in waiters {
-            waiter.timeoutWorkItem.cancel()
-            waiter.continuation.resume()
+        await readyWaiters.wait(timeout: timeout) { [weak self] in
+            self?.isReadyForWrite ?? true
         }
     }
 
     private func waitForWriteDrain(timeout: TimeInterval) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            runOnBleQueue { [weak self] in
-                guard let self else {
-                    continuation.resume()
-                    return
-                }
-                if self.writeQueue.isEmpty, !self.isWriting {
-                    continuation.resume()
-                    return
-                }
-                let waiterId = UUID()
-                let workItem = DispatchWorkItem { [weak self] in
-                    guard let self else { return }
-                    if let index = self.pendingDrainWaiters.firstIndex(where: { $0.id == waiterId }) {
-                        let waiter = self.pendingDrainWaiters.remove(at: index)
-                        waiter.continuation.resume()
-                    }
-                }
-                self.pendingDrainWaiters.append(
-                    Waiter(id: waiterId, continuation: continuation, timeoutWorkItem: workItem)
-                )
-                self.bleQueue.asyncAfter(deadline: .now() + timeout, execute: workItem)
-            }
+        await drainWaiters.wait(timeout: timeout) { [weak self] in
+            guard let self else { return true }
+            return self.writeQueue.isEmpty && !self.isWriting
         }
     }
 
-    /// Called from `processWriteQueue` and `failQueuedWrites` whenever the
-    /// write queue could plausibly have become empty. The `Waiter` pattern
-    /// mirrors `resumePendingReadyWaitersOnBleQueue` — see that helper for
-    /// the resume contract.
+    /// Resume any drain waiters now that the write queue may have emptied.
+    /// Called from `processWriteQueue` (when its top-of-function guard
+    /// indicates we're drained) and `failQueuedWrites`.
     private func notifyDrainWaitersIfDrainedOnBleQueue() {
         guard writeQueue.isEmpty, !isWriting else { return }
-        let waiters = pendingDrainWaiters
-        pendingDrainWaiters = []
-        for waiter in waiters {
-            waiter.timeoutWorkItem.cancel()
-            waiter.continuation.resume()
-        }
+        drainWaiters.signalAll()
     }
 
     private func apiLevelOnBleQueue(configuration: BoardBleConfiguration) -> Int {
@@ -729,10 +664,13 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     private func processWriteQueue() {
-        guard !isWriting, !writeQueue.isEmpty else {
-            // Drained (or already mid-write). Notify any drain waiters — the
-            // helper double-checks `writeQueue.isEmpty && !isWriting`, so a
-            // call while we're still writing is a no-op.
+        if isWriting {
+            // A chunk is already in flight; the post-chunk path will call us
+            // again. Nothing to do here.
+            return
+        }
+        if writeQueue.isEmpty {
+            // Drained. Resume any tasks awaiting `waitForWriteDrain`.
             notifyDrainWaitersIfDrainedOnBleQueue()
             return
         }
