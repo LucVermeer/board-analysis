@@ -311,13 +311,13 @@ describe('ClimbsList virtualization', () => {
   });
 });
 
-describe('ClimbsList thumbnail vs row click', () => {
+describe('ClimbsList thumbnail and row click both open the play drawer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     lastVirtualizerOpts = null;
   });
 
-  it('row click activates the climb but does NOT open the play drawer', () => {
+  it('row click activates the climb AND opens the play drawer', () => {
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     const onClimbSelect = vi.fn();
     render(
@@ -337,7 +337,7 @@ describe('ClimbsList thumbnail vs row click', () => {
     const dispatched = dispatchSpy.mock.calls.some(
       ([event]) => event instanceof CustomEvent && event.type === 'boardsesh:open-play-drawer',
     );
-    expect(dispatched).toBe(false);
+    expect(dispatched).toBe(true);
     dispatchSpy.mockRestore();
   });
 
