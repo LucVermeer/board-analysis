@@ -413,18 +413,32 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
   const climbStatHistorySchema = UNIFIED_TABLES.climbStatsHistory;
 
   await processBatches(data, async (batch) => {
-    const values = batch.map((item) => ({
-      boardType: board,
-      climbUuid: item.climb_uuid,
-      angle: Number(item.angle),
-      displayDifficulty: Number(item.display_difficulty || item.difficulty_average),
-      benchmarkDifficulty: item.benchmark_difficulty != null ? Number(item.benchmark_difficulty) : null,
-      ascensionistCount: Number(item.ascensionist_count),
-      difficultyAverage: Number(item.difficulty_average),
-      qualityAverage: Number(item.quality_average),
-      faUsername: item.fa_username,
-      faAt: item.fa_at,
-    }));
+    // Two cooperating writers feed this row: Aurora sync (here) and the
+    // Boardsesh tick recompute (recomputeClimbStats). Each owns its own count
+    // column; ascensionist_count is the materialized sum kept in lockstep.
+    //
+    // FA fields are written verbatim from Aurora's payload — including null,
+    // which is how Aurora signals a correction (revoked / re-attributed FA).
+    // Boardsesh-created climbs are never synced through this path, so a
+    // Boardsesh-supplied FA on those climbs cannot be clobbered here.
+    // recomputeClimbStats is the one that handles the ownership branch
+    // explicitly for ticks-driven updates.
+    const values = batch.map((item) => {
+      const auroraCount = Number(item.ascensionist_count);
+      return {
+        boardType: board,
+        climbUuid: item.climb_uuid,
+        angle: Number(item.angle),
+        displayDifficulty: Number(item.display_difficulty || item.difficulty_average),
+        benchmarkDifficulty: item.benchmark_difficulty != null ? Number(item.benchmark_difficulty) : null,
+        ascensionistCount: auroraCount,
+        auroraAscensionistCount: auroraCount,
+        difficultyAverage: Number(item.difficulty_average),
+        qualityAverage: Number(item.quality_average),
+        faUsername: item.fa_username,
+        faAt: item.fa_at,
+      };
+    });
 
     await db
       .insert(climbStatsSchema)
@@ -434,7 +448,8 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
         set: {
           displayDifficulty: sql`excluded.display_difficulty`,
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
-          ascensionistCount: sql`excluded.ascensionist_count`,
+          auroraAscensionistCount: sql`excluded.aurora_ascensionist_count`,
+          ascensionistCount: sql`COALESCE(excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
           faUsername: sql`excluded.fa_username`,
