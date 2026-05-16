@@ -220,7 +220,7 @@ describe('findSimilarClimbs', () => {
         angle: 40,
         layoutId: 1,
         frames: 'p1117r12',
-        difficultyName: undefined,
+        difficultyName: null,
         qualityAverage: null,
         ascensionistCount: null,
         similarity: 0.9,

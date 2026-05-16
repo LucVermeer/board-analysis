@@ -46,9 +46,10 @@ export const climbQueries = {
 
   /**
    * Find climbs on the same board+layout that share at least `threshold`
-   * (default 0.9) Jaccard similarity with the target's holds. Used by the
-   * playview drawer's similar-climbs panel and by the create-climb form to
-   * preview the exact duplicate when a publish is blocked.
+   * (default 0.5) position-only Jaccard similarity with the target's holds.
+   * Used by the playview drawer's similar-climbs panel (0.5) and by the
+   * create-climb form to preview the exact duplicate when a publish is
+   * blocked (1.0).
    */
   similarClimbs: async (
     _: unknown,
@@ -95,7 +96,7 @@ export const climbQueries = {
       boardType,
       layoutId: validated.layoutId,
       holds,
-      threshold: validated.threshold ?? 0.9,
+      threshold: validated.threshold ?? 0.5,
       limit: validated.limit ?? 25,
       excludeUuid,
     });

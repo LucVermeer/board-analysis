@@ -312,7 +312,7 @@ export async function findSimilarClimbs({
     angle: row.angle,
     layoutId: row.layout_id,
     frames: row.frames,
-    difficultyName: row.difficulty_name,
+    difficultyName: row.difficulty_name ?? null,
     qualityAverage: row.quality_average == null ? null : Number(row.quality_average),
     ascensionistCount: row.ascensionist_count == null ? null : Number(row.ascensionist_count),
     similarity: Number(row.jaccard),
