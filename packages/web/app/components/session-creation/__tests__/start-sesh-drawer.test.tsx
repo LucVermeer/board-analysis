@@ -667,6 +667,9 @@ describe('StartSeshDrawer', () => {
         );
       });
     }
+    // The real generator drawer calls onClose() immediately after onComplete,
+    // so wrap both in a single act block — React flushes both state updates
+    // together, matching production's commit boundary.
     await act(async () => {
       lastGeneratorProps!.onComplete?.({
         added: climbs.length,
@@ -674,11 +677,6 @@ describe('StartSeshDrawer', () => {
         total: climbs.length,
         workoutType,
       });
-    });
-    // The real generator drawer calls onClose() immediately after onComplete.
-    // Mirror that here so the simulation matches production's call sequence
-    // (and exercises the consumer's onClose handler).
-    await act(async () => {
       lastGeneratorProps!.onClose();
     });
   }
