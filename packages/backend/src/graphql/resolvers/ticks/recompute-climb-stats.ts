@@ -25,6 +25,16 @@ import * as dbSchema from '@boardsesh/db/schema';
  *       If we can't determine ownership (no matching board_climbs row, which
  *       can happen during sync), default to the conservative branch and
  *       preserve any existing FA.
+ *   - quality_average / difficulty_average / display_difficulty:
+ *       Same ownership rule as FA. For Boardsesh-originated climbs we
+ *       recompute the averages from the current set of flash/send ticks
+ *       (Postgres AVG skips NULL inputs, so a single rated tick is enough
+ *       to populate a column; deleting every rated tick reverts the column
+ *       to NULL). For Aurora-synced climbs we leave the columns alone —
+ *       Aurora's upsertClimbStats clobbers them on every sync, and Aurora's
+ *       population averages are far better than a handful of Boardsesh
+ *       ticks. display_difficulty mirrors difficulty_average, matching
+ *       Aurora's own derivation in upsertClimbStats.
  *
  * INSERT + UPDATE are wrapped in a single transaction so a row never exists
  * in the half-state where ascensionist_count = 0 is visible.
@@ -63,6 +73,8 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
         SELECT
           COUNT(DISTINCT bt.user_id) AS distinct_senders,
           MIN(bt.climbed_at)         AS first_at,
+          AVG(bt.quality)            AS avg_quality,
+          AVG(bt.difficulty)         AS avg_difficulty,
           (SELECT COALESCE(up.display_name, u.name)
              FROM boardsesh_ticks bt2
              JOIN users            u  ON u.id      = bt2.user_id
@@ -98,6 +110,21 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
                WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
                  THEN agg.first_at
                ELSE COALESCE(s.fa_at, agg.first_at)
+             END,
+             quality_average = CASE
+               WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
+                 THEN agg.avg_quality
+               ELSE s.quality_average
+             END,
+             difficulty_average = CASE
+               WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
+                 THEN agg.avg_difficulty
+               ELSE s.difficulty_average
+             END,
+             display_difficulty = CASE
+               WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
+                 THEN agg.avg_difficulty
+               ELSE s.display_difficulty
              END
         FROM agg
        WHERE s.board_type = ${boardType}
