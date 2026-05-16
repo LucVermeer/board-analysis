@@ -150,51 +150,63 @@ function SimilarClimbRow({ climb, boardType }: SimilarClimbRowProps) {
 
   const similarityPct = Math.round((climb.similarity ?? 0) * 100);
 
+  const innerContent = (
+    <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
+      {climb.frames ? (
+        <AscentThumbnail
+          boardType={boardType}
+          layoutId={climb.layoutId}
+          angle={angle}
+          climbUuid={climb.uuid}
+          climbName={climb.name || ''}
+          frames={climb.frames}
+          isMirror={false}
+        />
+      ) : null}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1, minWidth: 0 }}>
+        <Typography variant="subtitle2" fontWeight={700} noWrap>
+          {climb.name || t('similarClimbs.untitledClimb')}
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+          <PersonOutlined sx={{ fontSize: 14 }} />
+          <Typography variant="caption" noWrap>
+            {climb.setterUsername || t('similarClimbs.unknownSetter')}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Chip
+            label={t('similarClimbs.matchPercent', { percent: similarityPct })}
+            size="small"
+            color={similarityPct === 100 ? 'error' : 'primary'}
+            variant={similarityPct === 100 ? 'filled' : 'outlined'}
+          />
+          {climb.angle != null && <Chip icon={<LocationOnOutlined />} label={`${climb.angle}°`} size="small" />}
+          <Typography variant="caption" color="text.secondary">
+            {t('similarClimbs.holdsRatio', { shared: climb.sharedHoldCount, total: climb.candidateHoldCount })}
+          </Typography>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  // Only wrap with LocaleLink when we can build a real view URL. Layouts not
+  // listed in DEFAULT_CONFIGS (e.g. decoy, grasshopper, soill, touchstone)
+  // resolve to null — render the row as static info rather than emitting a
+  // broken `href="#"` that does nothing on click.
   return (
     <Card variant="outlined">
       <CardContent sx={{ p: 1.25, '&:last-child': { pb: 1.25 } }}>
-        <Box
-          component={LocaleLink}
-          href={climbViewPath ?? '#'}
-          sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-        >
-          <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
-            {climb.frames ? (
-              <AscentThumbnail
-                boardType={boardType}
-                layoutId={climb.layoutId}
-                angle={angle}
-                climbUuid={climb.uuid}
-                climbName={climb.name || ''}
-                frames={climb.frames}
-                isMirror={false}
-              />
-            ) : null}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1, minWidth: 0 }}>
-              <Typography variant="subtitle2" fontWeight={700} noWrap>
-                {climb.name || t('similarClimbs.untitledClimb')}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-                <PersonOutlined sx={{ fontSize: 14 }} />
-                <Typography variant="caption" noWrap>
-                  {climb.setterUsername || t('similarClimbs.unknownSetter')}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Chip
-                  label={t('similarClimbs.matchPercent', { percent: similarityPct })}
-                  size="small"
-                  color={similarityPct === 100 ? 'error' : 'primary'}
-                  variant={similarityPct === 100 ? 'filled' : 'outlined'}
-                />
-                {climb.angle != null && <Chip icon={<LocationOnOutlined />} label={`${climb.angle}°`} size="small" />}
-                <Typography variant="caption" color="text.secondary">
-                  {t('similarClimbs.holdsRatio', { shared: climb.sharedHoldCount, total: climb.candidateHoldCount })}
-                </Typography>
-              </Box>
-            </Box>
+        {climbViewPath ? (
+          <Box
+            component={LocaleLink}
+            href={climbViewPath}
+            sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+          >
+            {innerContent}
           </Box>
-        </Box>
+        ) : (
+          innerContent
+        )}
       </CardContent>
     </Card>
   );
