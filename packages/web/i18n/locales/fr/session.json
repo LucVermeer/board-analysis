@@ -216,7 +216,7 @@
   "queueList": {
     "editClimb": "Modifier ce bloc",
     "addedViaBluetooth": "Ajouté via Bluetooth",
-    "suggestionsHeader": "Suggestions",
+    "nextUpHeader": "À suivre",
     "endMessage": "C'est tout pour l'instant"
   },
   "queueProvider": {

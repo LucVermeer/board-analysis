@@ -253,7 +253,7 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
         rows.push({ type: 'future-item', item: futureItems[i], queueIndex: originalIndex });
       }
 
-      // Suggestions section (only when active and not viewOnlyMode)
+      // Next up section (only when active and not viewOnlyMode)
       if (active && !viewOnlyMode) {
         rows.push({ type: 'suggestion-header' });
         for (let i = 0; i < suggestedClimbs.length; i++) {
@@ -444,7 +444,7 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
                 {row.type === 'suggestion-header' && (
                   <div className={styles.suggestedSectionHeader}>
                     <Typography variant="overline" color="text.secondary">
-                      {t('session:queueList.suggestionsHeader')}
+                      {t('session:queueList.nextUpHeader')}
                     </Typography>
                   </div>
                 )}

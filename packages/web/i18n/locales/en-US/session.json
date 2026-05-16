@@ -216,7 +216,7 @@
   "queueList": {
     "editClimb": "Edit this climb",
     "addedViaBluetooth": "Added via Bluetooth",
-    "suggestionsHeader": "Suggestions",
+    "nextUpHeader": "Next up",
     "endMessage": "That's all for now"
   },
   "queueProvider": {

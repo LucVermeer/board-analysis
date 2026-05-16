@@ -268,19 +268,19 @@ describe('QueueList active prop', () => {
     mockClimbListItem.mockClear();
   });
 
-  it('renders the "Suggestions" section header when active is true (default)', () => {
+  it('renders the "Next up" section header when active is true (default)', () => {
     render(<QueueList boardDetails={makeBoardDetails()} />);
-    expect(screen.getByText('Suggestions')).toBeTruthy();
+    expect(screen.getByText('Next up')).toBeTruthy();
   });
 
-  it('renders the "Suggestions" section header when active is explicitly true', () => {
+  it('renders the "Next up" section header when active is explicitly true', () => {
     render(<QueueList boardDetails={makeBoardDetails()} active />);
-    expect(screen.getByText('Suggestions')).toBeTruthy();
+    expect(screen.getByText('Next up')).toBeTruthy();
   });
 
-  it('does NOT render the "Suggestions" section header when active is false', () => {
+  it('does NOT render the "Next up" section header when active is false', () => {
     render(<QueueList boardDetails={makeBoardDetails()} active={false} />);
-    expect(screen.queryByText('Suggestions')).toBeNull();
+    expect(screen.queryByText('Next up')).toBeNull();
   });
 
   it('does NOT render suggested ClimbListItems when active is false', () => {
@@ -304,7 +304,7 @@ describe('QueueList active prop', () => {
     propsList.forEach((props) => {
       expect(typeof props.addToQueue).toBe('function');
       expect(props.swipeRightAction).toBeUndefined();
-      // Suggestions should no longer use the legacy onNavigate fallback
+      // Next up items should no longer use the legacy onNavigate fallback
       expect(props.onNavigate).toBeUndefined();
       expect(typeof props.onThumbnailClick).toBe('function');
     });
