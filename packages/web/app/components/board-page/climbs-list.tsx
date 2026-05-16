@@ -416,7 +416,7 @@ const ClimbsList = ({
         } else {
           dispatchOpenPlayDrawer();
         }
-        track('Climb List Cover Clicked', { climbUuid: climb.uuid });
+        track('Climb List Row Clicked', { climbUuid: climb.uuid });
       }
     },
     [climbs],
