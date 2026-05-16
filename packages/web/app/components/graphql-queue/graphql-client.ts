@@ -31,6 +31,7 @@ export type GraphQLClientOptions = {
   url: string;
   authToken?: string | null;
   onReconnect?: () => void;
+  onDisconnect?: () => void;
   connectionName?: string;
 };
 
@@ -51,7 +52,13 @@ export function createGraphQLClient(
   const options: GraphQLClientOptions =
     typeof urlOrOptions === 'string' ? { url: urlOrOptions, onReconnect } : urlOrOptions;
 
-  const { url, authToken, onReconnect: onReconnectCallback, connectionName } = options;
+  const {
+    url,
+    authToken,
+    onReconnect: onReconnectCallback,
+    onDisconnect: onDisconnectCallback,
+    connectionName,
+  } = options;
   const managerConnectionName = connectionName ?? 'primary';
 
   const clientId = ++clientCounter;
@@ -102,6 +109,9 @@ export function createGraphQLClient(
       },
       closed: (event) => {
         if (DEBUG) console.info(`[GraphQL] Client #${clientId} closed`, event);
+        // Let consumers drop subscription handles before graphql-ws auto-replays
+        // them on the next socket — replay races joinSession on the new connectionId.
+        onDisconnectCallback?.();
       },
       error: (error) => {
         if (DEBUG) console.info(`[GraphQL] Client #${clientId} error`, error);

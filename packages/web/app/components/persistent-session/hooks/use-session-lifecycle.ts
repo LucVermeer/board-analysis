@@ -571,6 +571,21 @@ export function useSessionLifecycle({
 
     triggerResyncRef.current = handleReconnect;
 
+    function handleDisconnect() {
+      if (isCleaningUp || !mountedRef.current) return;
+      if (connectionGenerationRef.current !== connectionGeneration) return;
+      // Drop subscription handles on socket close so graphql-ws has nothing to
+      // auto-replay on the next connection. handleReconnect will recreate them
+      // after joinSession registers the new connectionId server-side.
+      if (queueUnsubscribeRef.current || sessionUnsubscribeRef.current) {
+        if (DEBUG) console.info('[PersistentSession] Socket closed, tearing down subscriptions');
+        queueUnsubscribeRef.current?.();
+        queueUnsubscribeRef.current = null;
+        sessionUnsubscribeRef.current?.();
+        sessionUnsubscribeRef.current = null;
+      }
+    }
+
     function applyFullSync(sessionData: Session) {
       if (sessionData.queueState) {
         handleQueueEvent({
@@ -746,6 +761,7 @@ export function useSessionLifecycle({
           url: backendUrl!,
           authToken: wsAuthTokenRef.current,
           onReconnect: () => void handleReconnect(),
+          onDisconnect: handleDisconnect,
           connectionName: 'session',
         });
 
