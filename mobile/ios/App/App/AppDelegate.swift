@@ -5,9 +5,11 @@ import Capacitor
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        if launchOptions?[.bluetoothCentrals] != nil {
-            _ = BoardBleManager.shared
-        }
+        // Initialize unconditionally so CoreBluetooth state restoration can
+        // deliver willRestoreState during this launch — required when iOS
+        // background-launches us for a Live Activity intent (the
+        // `.bluetoothCentrals` launch option is not set in that case).
+        _ = BoardBleManager.shared
         return true
     }
 

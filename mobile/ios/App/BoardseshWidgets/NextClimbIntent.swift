@@ -1,5 +1,6 @@
 import ActivityKit
 import AppIntents
+import os.log
 
 #if !WIDGET_EXTENSION
 import UIKit
@@ -10,7 +11,16 @@ struct NextClimbIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Next Climb"
     static var description = IntentDescription("Navigate to the next climb in the queue")
 
+    private static let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityIntent")
+
     func perform() async throws -> some IntentResult {
+        // Logged so we can confirm in Console.app which process iOS chose to
+        // perform the intent in. If this logs from `BoardseshWidgets` while
+        // the app is suspended, the main-app-only BLE path below is dead and
+        // we need a different architecture. If it logs from `App`, the fix
+        // is working as designed.
+        Self.logger.info("NextClimbIntent.perform() running in bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public)")
+
         guard let defaults = SharedConstants.sharedDefaults else {
             return .result()
         }

@@ -1,5 +1,6 @@
 import ActivityKit
 import AppIntents
+import os.log
 
 #if !WIDGET_EXTENSION
 import UIKit
@@ -10,7 +11,14 @@ struct PreviousClimbIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Previous Climb"
     static var description = IntentDescription("Navigate to the previous climb in the queue")
 
+    private static let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityIntent")
+
     func perform() async throws -> some IntentResult {
+        // See NextClimbIntent: this log line lets us verify whether iOS runs
+        // the intent in the App process (fix works) or the BoardseshWidgets
+        // extension (fix dead, need different architecture).
+        Self.logger.info("PreviousClimbIntent.perform() running in bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public)")
+
         guard let defaults = SharedConstants.sharedDefaults else {
             return .result()
         }
