@@ -29,15 +29,24 @@ Four rules:
 1. **The Queue Control Bar mirrors the wall.** It always shows what is physically lit, regardless of who put it there. In solo it's whatever the user last sent. In party it's whatever the current driver has on the wall, streamed in over the existing party WS subscription.
 2. **The lightbulb means "I am driving."** Press to take control. Press again to release. Yank-on-press with no negotiation — strictly better than today, where any list-tap from anyone yanks the wall with no affordance at all. A climber-on-wall safety lock (cooldown / "wall in use" modal) is explicitly v2; the v1 model is already a large improvement over the status quo.
 3. **Browsing is consequence-free.** Tapping a climb in the list, swiping through the Play View drawer, opening climb details — none of it touches the wall or the wall mirror. Only an explicit lightbulb-press broadcasts.
-4. **Prev/next controls exist only for the driver.** Drawer prev/next, Queue Control Bar prev/next, and the Live Activity widget prev/next are all visible only while you hold the lightbulb. When you're not driving, those controls disappear entirely — there is no meaningful action they could take (broadcasting from a non-driver would be a silent yank, the worst possible UX). The driver's prev/next walks the shared session queue and broadcasts to the wall.
+4. **Prev/next controls exist only for the driver.** Drawer prev/next buttons, Queue Control Bar prev/next, and the Live Activity widget prev/next are all visible only while you hold the lightbulb. When you're not driving, those controls disappear entirely — there is no meaningful action they could take (broadcasting from a non-driver would be a silent yank, the worst possible UX). The driver's prev/next walks the shared session queue first, then falls through to the suggested-climbs feed once the queue is exhausted, broadcasting each step.
+5. **Swipe in the drawer is preview-only for non-drivers, broadcast for drivers.** The swipe gesture stays available for everyone (the dominant interaction in the data — 4,753 next-swipes per week). For non-drivers it walks the suggested-climbs feed only (skips the queue entirely, since the queue represents what the driver is committed to climbing — not a non-driver's browsing surface) and does not broadcast. For drivers it walks queue → suggestions and broadcasts each step, identical to prev/next.
 
-A fifth, already-implemented rule worth naming: **BLE is transport, not scope.** If any party member has an active BLE connection to the board, anyone in the party can drive the wall — the lightbulb-press travels via WebSocket to whichever member holds BLE and they relay to the board. The lightbulb controls session state, not the current phone's pairing.
+A sixth, already-implemented rule worth naming: **BLE is transport, not scope.** If any party member has an active BLE connection to the board, anyone in the party can drive the wall — the lightbulb-press travels via WebSocket to whichever member holds BLE and they relay to the board. The lightbulb controls session state, not the current phone's pairing.
 
-## The queue model
+## The queue and suggestions model
 
-**One shared session queue per party.** Anyone in the session can append to it via Add to Queue. The driver navigates through it with prev/next. Lightbulb-press on a specific climb also appends to the shared queue. The queue is per-session — it persists for the life of the session and becomes the session history on close.
+Two distinct lists, both already represented in code (`QueueContext.tsx`):
 
-A separate "personal saved climbs" library (cross-session, private) is a future concept and **out of scope for this PR**. The single shared session queue is the only thing this work encodes.
+- **Shared session queue (`state.queue`).** One per party. Anyone in the session can append to it via Add to Queue. Lightbulb-press on a specific climb also appends. The queue is per-session — it persists for the life of the session and becomes the session history on close. Represents "the climbs we agreed on."
+- **Suggested climbs (`suggestedClimbs`).** Derived from the user's current browse context (filter, search results, list view) — see `use-queue-data-fetching.tsx:234`. Updates as the user navigates the catalogue. Represents "what else is interesting right now." Filtered to exclude items already in the queue.
+
+Navigation rules layer on top:
+
+- **Driver prev/next (buttons + swipe + Live Activity widget):** walks `queue` first, falls through to `suggestedClimbs` when the queue is exhausted. Each step broadcasts. This is exactly the existing `getNextClimbQueueItem` logic in `QueueContext.tsx:576-580` — the pivot keeps it and gates the broadcast on driver status.
+- **Non-driver swipe (drawer only — no buttons):** walks `suggestedClimbs` only. Does not touch the queue. Does not broadcast. Pure preview.
+
+A separate "personal saved climbs" library (cross-session, private) is a future concept and **out of scope for this PR**.
 
 ## User flows after the pivot
 
@@ -61,8 +70,8 @@ A separate "personal saved climbs" library (cross-session, private) is a future 
 
 1. User joins party. Lightbulb is off (someone else is driving).
 2. Queue Control Bar mirrors the current driver's climb live via party WS.
-3. **Prev/next controls in the drawer are hidden.** They only appear for the driver.
-4. User browses freely — tap list rows, open drawer, swipe through climbs in the drawer (preview only, does not broadcast), search, filter. No wall-side consequences.
+3. **Prev/next buttons in the drawer are hidden.** They only appear for the driver.
+4. User browses freely — tap list rows, open drawer, search, filter. Swipe in the drawer walks the suggested-climbs feed (preview only, does not broadcast, does not navigate the shared queue). No wall-side consequences.
 5. User finds a climb they want to suggest → press "Add to Queue". Appends to the shared session queue; visible to everyone but does not change the wall and does not take control.
 6. User wants to take a turn → press lightbulb on the climb in the drawer. Yanks control from current driver, broadcasts new climb, party WS pushes update to every member's bar.
 7. New driver's prev/next controls appear in their drawer + bar; Live Activity widget activates. Previous driver's lightbulb releases automatically; their drawer prev/next disappears.
@@ -112,7 +121,8 @@ Files: `queue-control-bar.tsx`, `graphql-queue/QueueContext.tsx`, possibly `pack
 - Solo default: lightbulb auto-engages once BLE is connected (so quickstart-from-home → first tap → first lightbulb press feels like the old tap-to-send flow).
 - Party default: lightbulb is off on join; user presses to take a turn.
 - Yank-on-press in party: pressing lightbulb sends a `TakeControl` message; server broadcasts new driver to all members. Previous driver's lightbulb releases.
-- **Driver-only prev/next:** `next-climb-button.tsx` and `previous-climb-button.tsx` render only when the local user holds the lightbulb. Same on the Queue Control Bar and in the Live Activity widget (which is already conceptually a remote-control for the driver). Navigating prev/next walks the shared session queue and broadcasts.
+- **Driver-only prev/next:** `next-climb-button.tsx` and `previous-climb-button.tsx` render only when the local user holds the lightbulb. Same on the Queue Control Bar and in the Live Activity widget (which is already conceptually a remote-control for the driver). Navigating prev/next walks the shared session queue first, then falls through to `suggestedClimbs` once the queue is exhausted, broadcasting each step. The existing `getNextClimbQueueItem` logic in `QueueContext.tsx:576-580` already implements this fall-through; the change is gating the broadcast on driver status.
+- **Non-driver swipe handler:** drawer swipe stays available for non-drivers but walks `suggestedClimbs` only (skips `state.queue`) and does not broadcast. This is a different code path from the driver swipe — extract a shared helper or split the navigation hook so the driver/non-driver split is explicit.
 - **Rename `Set Active Climb` → "Send to board"** in `set-active-action.tsx` and the i18n catalog (`packages/web/i18n/locales/en-US/common.json`). The PostHog event name stays `Set Active Climb` for analytics continuity — only the user-facing label changes.
 
 Files: `play-view-drawer.tsx`, `queue-control-bar.tsx`, `QueueContext.tsx`, `set-active-action.tsx`, `next-climb-button.tsx`, `previous-climb-button.tsx`, backend `queue-navigation.ts`, `room-manager.ts`, possibly new `take-control` message type in `packages/shared-schema`, i18n `common.json`.
@@ -209,7 +219,8 @@ The 1,650-visitor gap between "queue-touching" (4,071) and "board-sending" (2,41
 
 ## Code pointers (verified, may drift)
 
-- Queue state machine + context: `packages/web/app/components/graphql-queue/QueueContext.tsx`. `setCurrentClimb` is the function at line 383; the `shouldAddToQueue: true, insertAfterCurrent: true` payload at line 397 is what makes the implicit queue an auto-history of every tap.
+- Queue state machine + context: `packages/web/app/components/graphql-queue/QueueContext.tsx`. `setCurrentClimb` is the function at line 383; the `shouldAddToQueue: true, insertAfterCurrent: true` payload at line 397 is what makes the implicit queue an auto-history of every tap. The queue → suggestions fall-through lives in `getNextClimbQueueItem` at line ~570-583.
+- Suggestions derivation: `packages/web/app/components/queue-control/hooks/use-queue-data-fetching.tsx:234` (`suggestedClimbs` memo, derived from `climbSearchResults`).
 - Queue Control Bar UI: `packages/web/app/components/queue-control/queue-control-bar.tsx`.
 - Play View Drawer (where the lightbulb action will live): `packages/web/app/components/play-view/play-view-drawer.tsx`.
 - Prev/next button components: `packages/web/app/components/queue-control/next-climb-button.tsx`, `previous-climb-button.tsx`.
@@ -227,7 +238,7 @@ Not blockers. The implementing engineer should make the call in code review with
 2. **Hand-off notification UX.** When someone yanks control from you, what does your phone do? Recommend: a quiet toast ("Alice took the wall"), no haptic, no sound — climbing flow shouldn't have negotiation friction.
 3. **Lightbulb position on the bar when someone else holds it.** Driver's avatar inline with the lightbulb; tapping the avatar opens the party roster.
 4. **Add to Queue placement under the new model.** The action stays, but its UX placement may want revisiting (still swipe-on-list-row? still a menu item? both?). No change in this PR; flag for the design pass that follows.
-5. **Swipe-in-drawer for non-drivers.** Today swipe navigates queue. After the pivot, prev/next buttons are hidden for non-drivers. Recommend swipe-as-preview stays (climbs flip, no broadcast) so browsing-the-drawer continues to feel fluid.
+5. **Swipe-in-drawer for non-drivers.** Resolved: swipe stays available and walks `suggestedClimbs` only (preview, no broadcast, skips the shared queue). See "The queue and suggestions model" above.
 
 ## Non-goals / explicit nos
 
