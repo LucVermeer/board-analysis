@@ -26,7 +26,7 @@ export type ExpandedControl = 'grade' | 'stars' | 'tries' | null;
  * Both are needed because `useSwipeable` intercepts events before the
  * browser can apply `touch-action` constraints.
  */
-function useStopHorizontalTouchPropagation(ref: React.RefObject<HTMLElement | null>) {
+export function useStopHorizontalTouchPropagation(ref: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -73,7 +73,7 @@ function useStopHorizontalTouchPropagation(ref: React.RefObject<HTMLElement | nu
  * Tracks whether a scrollable container can scroll left/right.
  * Updates on scroll, resize, and content changes.
  */
-function useScrollIndicators(ref: React.RefObject<HTMLElement | null>) {
+export function useScrollIndicators(ref: React.RefObject<HTMLElement | null>) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
@@ -107,7 +107,7 @@ function useScrollIndicators(ref: React.RefObject<HTMLElement | null>) {
 }
 
 /** Wraps a scrollable picker row with fade+arrow indicators on overflowing edges. */
-const ScrollIndicatorWrapper: React.FC<{
+export const ScrollIndicatorWrapper: React.FC<{
   canScrollLeft: boolean;
   canScrollRight: boolean;
   children: React.ReactNode;
@@ -313,101 +313,8 @@ export const InlineStarPicker: React.FC<{
   );
 };
 
-export const InlineGradePicker: React.FC<{
-  grades: readonly { difficulty_id: number; difficulty_name: string; v_grade: string }[];
-  currentGradeId: number | undefined;
-  /** Grade to scroll to on mount when no grade is selected (e.g. consensus grade). */
-  focusGradeId?: number;
-  onSelect: (value: number | undefined) => void;
-  /** Ref to the grade button for scroll alignment positioning. */
-  gradeButtonRef?: React.RefObject<HTMLButtonElement | null>;
-  /** Listbox aria-label; defaults to the tick-flow "grade override" label. */
-  ariaLabel?: string;
-  /** Clear-chip aria-label; defaults to the tick-flow "clear grade override" label. */
-  clearLabel?: string;
-  /** Omit the leading "—" clear chip; for call sites where a grade is always required. */
-  hideClear?: boolean;
-}> = ({ grades, currentGradeId, focusGradeId, onSelect, gradeButtonRef, ariaLabel, clearLabel, hideClear }) => {
-  const { t } = useTranslation('climbs');
-  const { formatGrade, getGradeColor } = useGradeFormat();
-  const isDark = useIsDarkMode();
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useStopHorizontalTouchPropagation(containerRef);
-  const { canScrollLeft, canScrollRight } = useScrollIndicators(containerRef);
-
-  // On mount, scroll so the selected (or focus) grade is visible.
-  // When a gradeButtonRef is available (compact mode), align above the button.
-  // Otherwise (expanded mode), center the grade in the container.
-  const scrollTargetId = currentGradeId ?? focusGradeId;
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container || scrollTargetId === undefined) return;
-
-    const targetEl = container.querySelector(`[data-grade-id="${scrollTargetId}"]`) as HTMLElement | null;
-    if (!targetEl) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const gradeButton = gradeButtonRef?.current;
-
-    const alignCenter = gradeButton
-      ? gradeButton.getBoundingClientRect().left + gradeButton.getBoundingClientRect().width / 2 - containerRect.left
-      : container.clientWidth / 2;
-
-    const targetItemCenter = targetEl.offsetLeft + targetEl.offsetWidth / 2;
-    const targetScrollLeft = targetItemCenter - alignCenter;
-    const maxScroll = container.scrollWidth - container.clientWidth;
-    container.scrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScroll));
-  }, [scrollTargetId, gradeButtonRef]);
-
-  return (
-    <ScrollIndicatorWrapper canScrollLeft={canScrollLeft} canScrollRight={canScrollRight}>
-      <div
-        ref={containerRef}
-        className={styles.pickerRowScrollable}
-        role="listbox"
-        aria-label={ariaLabel ?? t('tick.controls.gradeOverride')}
-        data-scrollable-picker
-      >
-        {!hideClear && (
-          <ButtonBase
-            onClick={() => onSelect(undefined)}
-            className={`${styles.pickerItem} ${currentGradeId === undefined ? styles.pickerItemSelected : ''}`}
-            aria-label={clearLabel ?? t('tick.controls.clearGradeOverride')}
-            aria-selected={currentGradeId === undefined}
-            role="option"
-          >
-            <span className={styles.pickerClear}>—</span>
-          </ButtonBase>
-        )}
-        {grades.map((grade) => {
-          const formatted = formatGrade(grade.difficulty_name) ?? grade.v_grade;
-          const color = getGradeColor(grade.difficulty_name, isDark);
-          const isSelected = grade.difficulty_id === currentGradeId;
-          const isFocused = !isSelected && currentGradeId === undefined && grade.difficulty_id === focusGradeId;
-          return (
-            <ButtonBase
-              key={grade.difficulty_id}
-              data-grade-id={grade.difficulty_id}
-              onClick={() => onSelect(isSelected && !hideClear ? undefined : grade.difficulty_id)}
-              className={`${styles.pickerItem} ${isSelected ? styles.pickerItemSelected : ''} ${isFocused ? styles.pickerItemFocused : ''}`}
-              aria-label={isFocused ? `${formatted} (consensus)` : formatted}
-              aria-selected={isSelected}
-              role="option"
-            >
-              <span
-                className={styles.pickerGrade}
-                {...(color ? { style: { '--grade-color': color } as React.CSSProperties } : {})}
-              >
-                {formatted}
-              </span>
-            </ButtonBase>
-          );
-        })}
-      </div>
-    </ScrollIndicatorWrapper>
-  );
-};
+export { InlineGradePicker } from '@/app/components/grade-picker/inline-grade-picker';
+export type { InlineGradePickerProps } from '@/app/components/grade-picker/inline-grade-picker';
 
 /** Options: 1–99. */
 const ATTEMPT_OPTIONS: readonly number[] = Array.from({ length: 99 }, (_, i) => i + 1);

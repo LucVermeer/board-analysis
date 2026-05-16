@@ -18,7 +18,7 @@ import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import FilterListOutlined from '@mui/icons-material/FilterListOutlined';
 import ClearOutlined from '@mui/icons-material/ClearOutlined';
 import { BOULDER_GRADES } from '@/app/lib/board-data';
-import { InlineGradePicker } from '@/app/components/logbook/tick-controls';
+import { InlineGradePicker } from '@/app/components/grade-picker/inline-grade-picker';
 import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import {
   DEFAULT_ANGLE_RANGE,
@@ -420,7 +420,7 @@ const LogbookSearchForm: React.FC<LogbookSearchFormProps> = ({
                 <InlineGradePicker
                   grades={BOULDER_GRADES}
                   currentGradeId={typeof minGrade === 'number' ? minGrade : undefined}
-                  focusGradeId={lastUsedGrade}
+                  scrollToGradeId={lastUsedGrade}
                   onSelect={(value) => {
                     onMinGradeChange(value ?? '');
                     rememberGrade(value);
@@ -435,7 +435,7 @@ const LogbookSearchForm: React.FC<LogbookSearchFormProps> = ({
                 <InlineGradePicker
                   grades={BOULDER_GRADES}
                   currentGradeId={typeof maxGrade === 'number' ? maxGrade : undefined}
-                  focusGradeId={lastUsedGrade}
+                  scrollToGradeId={lastUsedGrade}
                   onSelect={(value) => {
                     onMaxGradeChange(value ?? '');
                     rememberGrade(value);

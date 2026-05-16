@@ -14,8 +14,9 @@ import { RemoveOutlined, AddOutlined, RefreshOutlined } from '@mui/icons-materia
 import { useTranslation } from 'react-i18next';
 import { ANGLES, getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
-import { InlineGradePicker, InlineStarPicker } from '@/app/components/logbook/tick-controls';
-import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
+import { InlineGradePicker } from '@/app/components/grade-picker/inline-grade-picker';
+import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
+import { setLastUsedGrade } from '@/app/lib/user-preferences-db';
 import type { BoardDetails } from '@/app/lib/types';
 import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
 import {
@@ -70,7 +71,6 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   const { t } = useTranslation('playlists');
   const grades = getGradesForBoard(boardDetails.board_name);
   const angles = ANGLES[boardDetails.board_name] ?? [];
-  const { rememberGrade } = useLastUsedGrade();
 
   const warmUpOptions = WARM_UP_OPTIONS.map((opt) => ({
     value: opt.value,
@@ -194,7 +194,7 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
           onSelect={(value) => {
             if (value !== undefined) {
               updateOption('targetGrade', value);
-              rememberGrade(value);
+              void setLastUsedGrade(value);
             }
           }}
           ariaLabel={t('generator.options.targetGrade')}

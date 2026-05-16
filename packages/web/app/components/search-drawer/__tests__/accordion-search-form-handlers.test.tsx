@@ -13,6 +13,25 @@ vi.mock('react-i18next', () => ({
   Trans: ({ children }: { children?: React.ReactNode }) => children ?? null,
 }));
 
+// Stub IndexedDB-backed preferences so the form's `useLastUsedGrade` hook
+// (and the grade-format hook it transitively triggers) doesn't try to open a
+// real database in the test environment.
+const mockGetLastUsedGrade = vi.fn();
+const mockSetLastUsedGrade = vi.fn();
+vi.mock('@/app/lib/user-preferences-db', () => ({
+  getLastUsedGrade: () => mockGetLastUsedGrade(),
+  setLastUsedGrade: (value: number) => mockSetLastUsedGrade(value),
+  getPreference: () => Promise.resolve(null),
+  setPreference: () => Promise.resolve(undefined),
+  removePreference: () => Promise.resolve(undefined),
+  getAlwaysTickInApp: () => Promise.resolve(false),
+  setAlwaysTickInApp: () => Promise.resolve(undefined),
+  getShakeToReportDismissed: () => Promise.resolve(false),
+  setShakeToReportDismissed: () => Promise.resolve(undefined),
+  getGradeDisplayFormat: () => Promise.resolve('v-grade'),
+  setGradeDisplayFormat: () => Promise.resolve(undefined),
+}));
+
 const mockUpdateFilters = vi.fn();
 let mockUISearchParams: SearchRequestPagination = { ...DEFAULT_SEARCH_PARAMS };
 
@@ -93,6 +112,8 @@ const makeBoardDetails = (overrides: Partial<BoardDetails>): BoardDetails =>
 describe('AccordionSearchForm — quality filter controls', () => {
   beforeEach(() => {
     mockUpdateFilters.mockClear();
+    mockGetLastUsedGrade.mockReset().mockResolvedValue(undefined);
+    mockSetLastUsedGrade.mockReset().mockResolvedValue(undefined);
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
   });
 
@@ -234,5 +255,70 @@ describe('AccordionSearchForm — quality filter controls', () => {
       expect(screen.queryByText('Wide Climbs Only')).toBeNull();
       unmount();
     }
+  });
+
+  describe('grade range picker', () => {
+    // V6 = difficulty_id 22 (7a) and V11 = 28 (8a) are the easiest grades to
+    // target unambiguously because both v_grade labels are unique across the
+    // Kilter grade table.
+
+    it('selecting a grade in the Min picker emits the difficulty_id', () => {
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      const minListbox = screen.getByRole('listbox', { name: 'Min' });
+      fireEvent.click(within(minListbox).getByRole('option', { name: 'V6' }));
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 22 });
+    });
+
+    it('tapping the "Any" clear chip emits the 0 sentinel (not undefined)', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      const minListbox = screen.getByRole('listbox', { name: 'Min' });
+      fireEvent.click(within(minListbox).getByRole('option', { name: 'Any' }));
+      const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual({ minGrade: 0 });
+      // Regression guard: updateFilters strips undefined fields, so emitting
+      // undefined here would silently no-op the clear. The handler must coerce
+      // to the 0 sentinel.
+      expect(lastCall?.minGrade).not.toBeUndefined();
+    });
+
+    it('tapping the already-selected grade chip deselects (emits the 0 sentinel)', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      const minListbox = screen.getByRole('listbox', { name: 'Min' });
+      fireEvent.click(within(minListbox).getByRole('option', { name: 'V6' }));
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 0 });
+    });
+
+    it('picking a min grade higher than the current max swaps both', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 0, maxGrade: 22 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      const minListbox = screen.getByRole('listbox', { name: 'Min' });
+      fireEvent.click(within(minListbox).getByRole('option', { name: 'V11' }));
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 28, maxGrade: 28 });
+    });
+
+    it('picking a max grade lower than the current min swaps both', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 28, maxGrade: 33 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      const maxListbox = screen.getByRole('listbox', { name: 'Max' });
+      fireEvent.click(within(maxListbox).getByRole('option', { name: 'V6' }));
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 22, maxGrade: 22 });
+    });
+
+    it('persists the picked grade via setLastUsedGrade', () => {
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      const minListbox = screen.getByRole('listbox', { name: 'Min' });
+      fireEvent.click(within(minListbox).getByRole('option', { name: 'V6' }));
+      expect(mockSetLastUsedGrade).toHaveBeenCalledWith(22);
+    });
+
+    it('does not persist when clearing the grade', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      const minListbox = screen.getByRole('listbox', { name: 'Min' });
+      fireEvent.click(within(minListbox).getByRole('option', { name: 'Any' }));
+      expect(mockSetLastUsedGrade).not.toHaveBeenCalled();
+    });
   });
 });

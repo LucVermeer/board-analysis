@@ -7,6 +7,8 @@ import {
   removePreference,
   getShakeToReportDismissed,
   setShakeToReportDismissed,
+  getLastUsedGrade,
+  setLastUsedGrade,
 } from '../user-preferences-db';
 import { DEFAULT_LOGBOOK_PREFERENCES } from '../logbook-preferences';
 
@@ -187,6 +189,29 @@ describe('user-preferences-db', () => {
       // Simulate a legacy or corrupted value that isn't strictly boolean true.
       await setPreference('shakeToReport:dismissed', 'yes' as unknown as boolean);
       await expect(getShakeToReportDismissed()).resolves.toBe(false);
+    });
+  });
+
+  describe('lastUsedGrade', () => {
+    it('returns undefined when the preference has never been set', async () => {
+      await expect(getLastUsedGrade()).resolves.toBeUndefined();
+    });
+
+    it('round-trips a difficulty_id through IndexedDB', async () => {
+      await setLastUsedGrade(22);
+      await expect(getLastUsedGrade()).resolves.toBe(22);
+    });
+
+    it('overwrites the previous value', async () => {
+      await setLastUsedGrade(15);
+      await setLastUsedGrade(28);
+      await expect(getLastUsedGrade()).resolves.toBe(28);
+    });
+
+    it('returns undefined when a non-numeric value is stored (defensive)', async () => {
+      // Simulate corruption — getLastUsedGrade only trusts number values.
+      await setPreference('lastUsedGrade', 'not-a-number' as unknown as number);
+      await expect(getLastUsedGrade()).resolves.toBeUndefined();
     });
   });
 

@@ -15,7 +15,8 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
-import { InlineGradePicker, InlineStarPicker } from '@/app/components/logbook/tick-controls';
+import { InlineGradePicker } from '@/app/components/grade-picker/inline-grade-picker';
+import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
@@ -76,10 +77,16 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
 
   const { lastUsedGrade, rememberGrade } = useLastUsedGrade();
 
+  // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips
+  // `undefined` from updates, so we must explicitly pass `0` (not `undefined`)
+  // when the user clears a grade — otherwise the clear action is a silent no-op.
   const handleGradeChange = (type: 'min' | 'max', value: number | undefined) => {
-    updateFilters(buildGradeRangeUpdate(type, value, uiSearchParams.minGrade, uiSearchParams.maxGrade));
+    updateFilters(buildGradeRangeUpdate(type, value ?? 0, uiSearchParams.minGrade, uiSearchParams.maxGrade));
     rememberGrade(value);
   };
+
+  const minGradeForPicker = uiSearchParams.minGrade > 0 ? uiSearchParams.minGrade : undefined;
+  const maxGradeForPicker = uiSearchParams.maxGrade > 0 ? uiSearchParams.maxGrade : undefined;
 
   const climbContent = (
     <div className={styles.panelContent}>
@@ -92,8 +99,8 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         <span className={styles.fieldLabel}>{t('search.fields.minGrade')}</span>
         <InlineGradePicker
           grades={grades}
-          currentGradeId={uiSearchParams.minGrade || undefined}
-          focusGradeId={lastUsedGrade}
+          currentGradeId={minGradeForPicker}
+          scrollToGradeId={lastUsedGrade}
           onSelect={(value) => handleGradeChange('min', value)}
           ariaLabel={t('search.fields.minGrade')}
           clearLabel={t('search.fields.any')}
@@ -104,8 +111,8 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         <span className={styles.fieldLabel}>{t('search.fields.maxGrade')}</span>
         <InlineGradePicker
           grades={grades}
-          currentGradeId={uiSearchParams.maxGrade || undefined}
-          focusGradeId={lastUsedGrade}
+          currentGradeId={maxGradeForPicker}
+          scrollToGradeId={lastUsedGrade}
           onSelect={(value) => handleGradeChange('max', value)}
           ariaLabel={t('search.fields.maxGrade')}
           clearLabel={t('search.fields.any')}
