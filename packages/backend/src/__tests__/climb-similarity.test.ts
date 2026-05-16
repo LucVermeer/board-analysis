@@ -65,12 +65,17 @@ describe('buildHoldSignature', () => {
     expect(buildHoldSignature([])).toBe('');
   });
 
-  it('keeps the most recent state when a hold id appears twice (last write wins)', () => {
+  it('first-write-wins when a hold id appears twice (matches DB onConflictDoNothing)', () => {
+    // board_climb_holds has a PK on (board_type, climb_uuid, hold_id). When
+    // saveClimb does INSERT ... ON CONFLICT DO NOTHING with a parsed frames
+    // string that names the same hold_id twice (e.g. "p5r12p5r13"), only
+    // the FIRST row persists. The JS signature must mirror that behaviour
+    // or the gate's equality check would mismatch for malformed input.
     const signature = buildHoldSignature([
       { holdId: 5, holdState: 'STARTING' },
       { holdId: 5, holdState: 'HAND' },
     ]);
-    expect(signature).toBe('5:HAND');
+    expect(signature).toBe('5:STARTING');
   });
 });
 

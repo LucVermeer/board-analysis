@@ -137,6 +137,49 @@ describe('climb mutations', () => {
     });
   });
 
+  it('skips the duplicate gate for multi-frame Aurora climbs', async () => {
+    // Multi-frame climbs (Aurora dynos with intermediate frames) are out of
+    // scope for the gate. We don't queue any "found a match" execute
+    // response — if the gate fired regardless it would either error on the
+    // missing mock or come back with no result and proceed; either way the
+    // climb should save successfully (no rejection).
+    //
+    // populateDenormalizedColumns runs raw SQL via execute too, so we
+    // can't assert "execute never called" — instead verify the save
+    // completes end-to-end with framesCount=2 preserved on the row.
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
+    );
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.saveClimb(
+      {},
+      {
+        input: {
+          boardType: 'kilter',
+          layoutId: 1,
+          name: 'Multi-frame Dyno',
+          description: '',
+          isDraft: false,
+          frames: 'p1r43,p2r43',
+          framesCount: 2,
+          angle: 40,
+        },
+      },
+      makeCtx(),
+    );
+
+    // board_climbs INSERT + holds INSERT + stats INSERT.
+    expect(insertCalls).toHaveLength(3);
+    expect(insertCalls[0].values).toMatchObject({
+      framesCount: 2,
+      isDraft: false,
+      isListed: true,
+    });
+  });
+
   it('skips the stats seed for draft Aurora climbs', async () => {
     mockDb.select.mockReturnValueOnce(
       createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),

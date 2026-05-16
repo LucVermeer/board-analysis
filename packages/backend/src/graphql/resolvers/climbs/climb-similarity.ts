@@ -91,9 +91,18 @@ export function parseFramesToHoldEntries(boardType: BoardName, frames: string | 
  */
 export function buildHoldSignature(entries: ReadonlyArray<NormalizedHold>): string {
   if (entries.length === 0) return '';
+  // First-write-wins to match what the DB persists. board_climb_holds has a
+  // PK on (board_type, climb_uuid, hold_id) and saveClimb/saveMoonBoardClimb
+  // both INSERT ... ON CONFLICT DO NOTHING — so when malformed frames text
+  // (e.g. "p1r12p1r13") presents the same hold_id twice in a single frame,
+  // the FIRST occurrence is the one that lands. If the JS signature used
+  // last-write-wins it would compute "1:HAND" while the DB row reads
+  // "1:STARTING", silently breaking the gate's hold-set equality check.
   const dedupedByHoldId = new Map<number, string>();
   for (const { holdId, holdState } of entries) {
-    dedupedByHoldId.set(holdId, holdState);
+    if (!dedupedByHoldId.has(holdId)) {
+      dedupedByHoldId.set(holdId, holdState);
+    }
   }
   return Array.from(dedupedByHoldId.entries())
     .sort(([a], [b]) => a - b)
@@ -253,6 +262,13 @@ export async function findSimilarClimbs({
       -- treats the (hold_state IN …) filter as a residual on the index
       -- entries and never falls back to a full table scan.
       candidate_overlaps AS (
+        -- Early prune: a candidate climb's Jaccard with the target can't
+        -- exceed (shared / target_size). So any candidate sharing fewer
+        -- than ceil(targetSize * threshold) holds with the target is
+        -- guaranteed below threshold no matter how many holds it has. We
+        -- can drop it here, before candidate_sizes runs, and skip the
+        -- size-counting work on roughly an order of magnitude of
+        -- unrelated climbs at scale (100k+ Kilter climbs).
         SELECT h.climb_uuid AS uuid, COUNT(DISTINCT h.hold_id) AS shared
         FROM ${dbSchema.boardClimbHolds} h
         INNER JOIN target_holds t ON t.hold_id = h.hold_id
@@ -267,6 +283,7 @@ export async function findSimilarClimbs({
           AND c.frames_count = 1
           ${excludeUuid ? sql`AND h.climb_uuid <> ${excludeUuid}` : sql``}
         GROUP BY h.climb_uuid
+        HAVING COUNT(DISTINCT h.hold_id) >= CEIL(${targetSize}::float * ${safeThreshold})::int
       ),
       candidate_sizes AS (
         -- Count distinct hold positions on each candidate (state irrelevant).

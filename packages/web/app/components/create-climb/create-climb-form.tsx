@@ -461,10 +461,15 @@ export default function CreateClimbForm({
   }, [litUpHoldsMap, isDraft]);
 
   // The SimilarClimbsList needs the active board+layout to scope its query.
-  // Aurora carries them via boardDetails; MoonBoard uses the layoutId prop.
-  const duplicateMatchBoardName: BoardName =
-    boardType === 'aurora' ? ((boardDetails?.board_name as BoardName | undefined) ?? 'kilter') : 'moonboard';
-  const duplicateMatchLayoutId = boardType === 'aurora' ? (boardDetails?.layout_id ?? 0) : (layoutId ?? 0);
+  // Aurora reads from boardDetails; MoonBoard reads from the layoutId prop.
+  // Both stay null when their source isn't ready — render path below hides
+  // the drawer rather than silently defaulting to a wrong board (a Tension
+  // user shouldn't see Kilter results because boardDetails hadn't loaded
+  // by the time the publish attempt threw).
+  const duplicateMatchBoardName: BoardName | null =
+    boardType === 'aurora' ? ((boardDetails?.board_name as BoardName | undefined) ?? null) : 'moonboard';
+  const duplicateMatchLayoutId: number | null =
+    boardType === 'aurora' ? (boardDetails?.layout_id ?? null) : (layoutId ?? null);
 
   // Hold-type picker: tracks which hold the user just tapped, anchors the
   // popover against its DOM element, and routes selections back to setHoldState.
@@ -775,10 +780,13 @@ export default function CreateClimbForm({
 
     setIsSaving(true);
 
-    try {
-      const frames = generateFramesString();
+    // Captured before the try/catch so the catch block can drive the
+    // duplicate-resolution drawer off the exact frames we attempted to
+    // save, rather than re-reading the form state (which the user may
+    // have edited between the failure and the catch).
+    const frames = generateFramesString();
 
-      // Invalidation keys used in both branches.
+    try {
       const invalidateDraftCaches = () =>
         Promise.all([
           queryClient.invalidateQueries({
@@ -906,7 +914,7 @@ export default function CreateClimbForm({
             typeof error.extensions.existingClimbUuid === 'string' ? error.extensions.existingClimbUuid : null,
           existingClimbName:
             typeof error.extensions.existingClimbName === 'string' ? error.extensions.existingClimbName : null,
-          target: { kind: 'frames', frames: generateFramesString() },
+          target: { kind: 'frames', frames },
         });
       } else {
         showMessage(error instanceof Error ? error.message : 'Failed to save climb. Please try again.', 'error');
@@ -1724,7 +1732,7 @@ export default function CreateClimbForm({
           user can decide whether to drop their candidate, save as draft, or
           shift a hold. SimilarClimbsList runs the same query as the playview
           drawer's similar-climbs section, just pinned at threshold 1.0. */}
-      {publishDuplicateError?.target && (
+      {publishDuplicateError?.target && duplicateMatchBoardName && duplicateMatchLayoutId != null && (
         <SwipeableDrawer
           title={t('createClimbForm.alerts.identicalClimbDrawerTitle')}
           placement="bottom"

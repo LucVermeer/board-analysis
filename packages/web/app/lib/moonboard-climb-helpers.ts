@@ -2,8 +2,6 @@ import type { MoonBoardHoldsInput } from '@boardsesh/shared-schema';
 import type { LitUpHoldsMap } from '@/app/components/board-renderer/types';
 import { holdIdToCoordinate } from './moonboard-config';
 
-export const MOONBOARD_DUPLICATE_ERROR_PREFIX = 'A MoonBoard climb with the same holds already exists';
-
 export function convertLitUpHoldsMapToMoonBoardHolds(litUpHoldsMap: LitUpHoldsMap): MoonBoardHoldsInput {
   const holds: MoonBoardHoldsInput = {
     start: [],
@@ -26,8 +24,4 @@ export function convertLitUpHoldsMapToMoonBoardHolds(litUpHoldsMap: LitUpHoldsMa
   }
 
   return holds;
-}
-
-export function isMoonBoardDuplicateError(message: string): boolean {
-  return message.includes(MOONBOARD_DUPLICATE_ERROR_PREFIX);
 }
