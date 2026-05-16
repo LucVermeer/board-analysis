@@ -149,6 +149,47 @@ describe('findExactDuplicateMatch', () => {
     });
     expect(match).toBeNull();
   });
+
+  it('emits SQL that restricts the join to the canonical hold states', async () => {
+    mockDb.execute.mockResolvedValueOnce([]);
+    await findExactDuplicateMatch({
+      boardType: 'kilter',
+      layoutId: 1,
+      signature: '1:STARTING',
+    });
+    // Pull only the literal string fragments out of Drizzle's SQL AST and
+    // concatenate them. We can't JSON.stringify the whole thing — it carries
+    // circular Table refs — and we don't need parameter values; the canonical
+    // state names are inlined as SQL literals so they live in the chunk text.
+    // Without this filter, an existing climb with one extra row in an
+    // unmapped state would produce a longer signature and slip past the gate.
+    const [query] = mockDb.execute.mock.calls[0];
+    const chunks: string[] = [];
+    const visit = (node: unknown) => {
+      if (typeof node === 'string') {
+        chunks.push(node);
+      } else if (Array.isArray(node)) {
+        for (const child of node) visit(child);
+      } else if (node && typeof node === 'object') {
+        // Drizzle's StringChunk stores raw SQL fragments under `value: string[]`.
+        // Other nodes (params, nested SQL) carry `queryChunks: SQL[]`.
+        const value = (node as { value?: unknown; queryChunks?: unknown[] }).value;
+        if (typeof value === 'string') chunks.push(value);
+        else if (Array.isArray(value)) {
+          for (const child of value) if (typeof child === 'string') chunks.push(child);
+        }
+        if (Array.isArray((node as { queryChunks?: unknown[] }).queryChunks)) {
+          visit((node as { queryChunks?: unknown[] }).queryChunks);
+        }
+      }
+    };
+    visit((query as { queryChunks?: unknown[] }).queryChunks ?? []);
+    const queryText = chunks.join(' ');
+    expect(queryText).toContain("'STARTING'");
+    expect(queryText).toContain("'HAND'");
+    expect(queryText).toContain("'FINISH'");
+    expect(queryText).toContain("'FOOT'");
+  });
 });
 
 describe('findSimilarClimbs', () => {

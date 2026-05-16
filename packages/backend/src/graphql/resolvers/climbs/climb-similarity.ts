@@ -34,6 +34,18 @@ export type SimilarClimbResult = {
   targetHoldCount: number;
 };
 
+// `parseFramesToHoldEntries` drops the synthetic "<holdId>=<code>" sentinel
+// produced by `convertLitUpHoldsStringToMap` for unmapped role codes, so the
+// candidate signature never carries those. The DB, on the other hand, can
+// persist any hold_state value Aurora emits — including future codes that
+// HOLD_STATE_MAP doesn't know about yet. Without filtering the SQL to the
+// same canonical set, an existing climb with one extra unknown-state row
+// would produce a longer signature, miss the candidate's, and silently let
+// a real duplicate through. Inlined as a SQL literal because the set is a
+// static invariant of the hold-state model; keep in sync with
+// `STATE_TO_PRIMARY_CODE` in `@boardsesh/board-constants/hold-states`.
+const KNOWN_HOLD_STATES_SQL = sql`('STARTING', 'HAND', 'FINISH', 'FOOT')`;
+
 /**
  * Parse the Aurora-style frame string ("p<id>r<role>p<id>r<role>...,p<id>r<role>...")
  * into a flat list of holds with their state name. Multi-frame strings (comma
@@ -119,6 +131,7 @@ export async function findExactDuplicateMatch({
       INNER JOIN ${dbSchema.boardClimbHolds}
         ON ${dbSchema.boardClimbHolds.climbUuid} = ${dbSchema.boardClimbs.uuid}
        AND ${dbSchema.boardClimbHolds.boardType} = ${dbSchema.boardClimbs.boardType}
+       AND ${dbSchema.boardClimbHolds.holdState} IN ${KNOWN_HOLD_STATES_SQL}
       LEFT JOIN ${dbSchema.boardClimbStats}
         ON ${dbSchema.boardClimbStats.boardType} = ${dbSchema.boardClimbs.boardType}
        AND ${dbSchema.boardClimbStats.climbUuid} = ${dbSchema.boardClimbs.uuid}
@@ -219,6 +232,7 @@ export async function findSimilarClimbs({
           ON c.uuid = h.climb_uuid
          AND c.board_type = h.board_type
         WHERE h.board_type = ${boardType}
+          AND h.hold_state IN ${KNOWN_HOLD_STATES_SQL}
           AND c.layout_id = ${layoutId}
           AND c.is_draft = FALSE
           AND c.is_listed IS NOT FALSE
@@ -227,9 +241,12 @@ export async function findSimilarClimbs({
         GROUP BY h.climb_uuid
       ),
       candidate_sizes AS (
+        -- Restrict to the same canonical set as the target so an existing climb
+        -- with rows in unknown states doesn't inflate its size and depress Jaccard.
         SELECT climb_uuid AS uuid, COUNT(*) AS n
         FROM ${dbSchema.boardClimbHolds}
         WHERE board_type = ${boardType}
+          AND hold_state IN ${KNOWN_HOLD_STATES_SQL}
           AND climb_uuid IN (SELECT uuid FROM candidate_overlaps)
         GROUP BY climb_uuid
       )
