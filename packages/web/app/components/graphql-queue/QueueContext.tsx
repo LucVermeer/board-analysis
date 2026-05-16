@@ -21,6 +21,7 @@ import { trackQueueOperation, trackQueueOperationError, type QueueOperationMode 
 
 import { dispatchOpenPlayDrawer } from '../queue-control/play-drawer-event';
 import { useSessionIdManagement } from './hooks/use-session-id-management';
+import { deriveIsDriver } from './driver-state';
 import { useQueueRestoration } from './hooks/use-queue-restoration';
 import { useQueueEventSubscription } from './hooks/use-queue-event-subscription';
 import { usePendingUpdateCleanup } from './hooks/use-pending-update-cleanup';
@@ -122,7 +123,13 @@ export const GraphQLQueueProvider = ({
 
   // --- Session & connection derived state ---
   const clientId = isPersistentSessionActive ? persistentSession.clientId : null;
+  const participantId = isPersistentSessionActive ? persistentSession.participantId : null;
   const isLeader = isPersistentSessionActive ? persistentSession.isLeader : false;
+  // Wall driver — distinct from leader. The current driver's participant id,
+  // or null when the wall is unclaimed (party only; solo has no driver
+  // concept so we report null and treat `isDriver` as true).
+  const driverParticipantId = isPersistentSessionActive ? persistentSession.driverParticipantId : null;
+  const isDriver = deriveIsDriver({ isPersistentSessionActive, participantId, driverParticipantId });
   const hasConnected = isPersistentSessionActive ? persistentSession.hasConnected : false;
   const users = useMemo(
     () => (isPersistentSessionActive ? persistentSession.users : []),
@@ -440,6 +447,94 @@ export const GraphQLQueueProvider = ({
     [setCurrentClimb],
   );
 
+  // Wall-control claim. Drives the queue-control-bar pivot's lightbulb action.
+  //
+  // Solo (no party): degrades to `setCurrentClimb(climb)` — the backend
+  //   takeControl mutation is a no-op without a session, and the local-only
+  //   BLE send path is identical.
+  // Party + climb: calls the server takeControl mutation with the climb,
+  //   which yanks driver and broadcasts the climb in one round trip. The
+  //   local reducer is pre-mutated so the UI updates optimistically, mirroring
+  //   setCurrentClimb's pattern.
+  // Party + no climb: just claims driver (no wall change).
+  const takeControl = useCallback(
+    async (climb?: Climb | null): Promise<ClimbQueueItem | null> => {
+      const r = latestRef.current;
+      if (r.guardMutation()) return null;
+
+      // Solo: there's no party server-side driver concept. Fall through to the
+      // existing setCurrentClimb path so BLE still gets the climb.
+      if (!r.isPersistentSessionActive) {
+        if (!climb) return null;
+        return setCurrentClimb(climb);
+      }
+
+      const startTime = performance.now();
+      const mode: QueueOperationMode = r.isDisconnected ? 'party-offline' : 'party';
+
+      if (!climb) {
+        // Driver-only claim, no wall change.
+        try {
+          if (r.hasConnected) {
+            await r.persistentSession.takeControl(null);
+          }
+          trackQueueOperation('takeControl', performance.now() - startTime, mode);
+        } catch (error: unknown) {
+          console.error('Failed to take control:', error);
+          trackQueueOperationError('takeControl', mode);
+        }
+        return null;
+      }
+
+      if (!r.validateQueueAdd(climb)) return null;
+
+      const newItem = createClimbQueueItem(climb, r.clientId, r.currentUserInfo);
+      const correlationId = r.clientId ? `${r.clientId}-${++r.correlationCounterRef.current}` : undefined;
+
+      // Optimistic local update so the bar/drawer reflect the new wall climb
+      // before the server round-trip completes. Matches `setCurrentClimb`'s
+      // payload (insertAfterCurrent so the queue-history reads naturally).
+      r.dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: { item: newItem, shouldAddToQueue: true, insertAfterCurrent: true, correlationId },
+      });
+
+      if (r.isDisconnected) {
+        r.offlineBuffer.bufferAddition(newItem);
+        trackQueueOperation('takeControl', performance.now() - startTime, mode);
+        return newItem;
+      }
+
+      if (r.hasConnected) {
+        try {
+          await r.persistentSession.takeControl(newItem);
+          trackQueueOperation('takeControl', performance.now() - startTime, mode);
+        } catch (error: unknown) {
+          console.error('Failed to take control with climb:', error);
+          if (correlationId) r.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
+          trackQueueOperationError('takeControl', mode);
+        }
+      } else {
+        trackQueueOperation('takeControl', performance.now() - startTime, mode);
+      }
+
+      return newItem;
+    },
+    [setCurrentClimb],
+  );
+
+  const releaseControl = useCallback(async (): Promise<void> => {
+    const r = latestRef.current;
+    if (!r.isPersistentSessionActive) return;
+    if (r.guardMutation()) return;
+    if (!r.hasConnected) return;
+    try {
+      await r.persistentSession.releaseControl();
+    } catch (error: unknown) {
+      console.error('Failed to release control:', error);
+    }
+  }, []);
+
   // Replace an existing queue item in place with a new climb, preserving the
   // queue-item uuid and the existing addedBy attribution. Used by the create
   // form on subsequent saves so the queue item stays in the same slot instead
@@ -663,6 +758,8 @@ export const GraphQLQueueProvider = ({
       getPreviousClimbQueueItem,
       disconnect: stableDisconnect,
       dispatchWidgetNavigation,
+      takeControl,
+      releaseControl,
       startSession: stableStartSession,
       joinSession: stableJoinSession,
       endSession: stableEndSession,
@@ -683,6 +780,8 @@ export const GraphQLQueueProvider = ({
       getNextClimbQueueItem,
       getPreviousClimbQueueItem,
       dispatchWidgetNavigation,
+      takeControl,
+      releaseControl,
       stableDisconnect,
       stableStartSession,
       stableJoinSession,
@@ -717,7 +816,10 @@ export const GraphQLQueueProvider = ({
       isDisconnected,
       users,
       clientId,
+      participantId,
       isLeader,
+      driverParticipantId,
+      isDriver,
       isBackendMode: !!backendUrl,
       hasConnected,
       connectionError,
@@ -745,7 +847,10 @@ export const GraphQLQueueProvider = ({
       isDisconnected,
       users,
       clientId,
+      participantId,
       isLeader,
+      driverParticipantId,
+      isDriver,
       backendUrl,
       hasConnected,
       connectionError,
@@ -813,7 +918,10 @@ export const GraphQLQueueProvider = ({
       isDisconnected,
       users,
       clientId,
+      participantId,
       isLeader,
+      driverParticipantId,
+      isDriver,
       isBackendMode: !!backendUrl,
       hasConnected,
       connectionError,
@@ -830,7 +938,10 @@ export const GraphQLQueueProvider = ({
       isDisconnected,
       users,
       clientId,
+      participantId,
       isLeader,
+      driverParticipantId,
+      isDriver,
       backendUrl,
       hasConnected,
       connectionError,

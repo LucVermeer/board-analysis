@@ -7,12 +7,13 @@ export type QueueOperation =
   | 'removeFromQueue'
   | 'mirrorClimb'
   | 'setQueue'
-  | 'replaceQueueItem';
+  | 'replaceQueueItem'
+  | 'takeControl';
 
 export type QueueOperationMode = 'local' | 'party' | 'party-offline';
 
 // Per-operation caps to ensure coverage of all operation types.
-// With 6 operations, worst case is 30 events per session.
+// With 8 operations, worst case is 40 events per session.
 const MAX_EVENTS_PER_OPERATION = 5;
 const operationEventCounts = new Map<QueueOperation, number>();
 

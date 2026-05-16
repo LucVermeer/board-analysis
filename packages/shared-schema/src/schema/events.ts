@@ -2,7 +2,14 @@ export const eventsTypeDefs = /* GraphQL */ `
   """
   Union of possible session events.
   """
-  union SessionEvent = UserJoined | UserLeft | UserPresenceChanged | LeaderChanged | SessionEnded | SessionStatsUpdated
+  union SessionEvent =
+    | UserJoined
+    | UserLeft
+    | UserPresenceChanged
+    | LeaderChanged
+    | DriverChanged
+    | SessionEnded
+    | SessionStatsUpdated
 
   """
   Event when a user joins the session.
@@ -36,6 +43,14 @@ export const eventsTypeDefs = /* GraphQL */ `
     leaderId: ID!
     "Connection ID of the new leader, for current-client leadership checks"
     leaderConnectionId: ID
+  }
+
+  """
+  Event when the wall driver changes (the participant authorized to drive the wall via the queue-control-bar pivot's lightbulb). Null when no member is currently driving.
+  """
+  type DriverChanged {
+    "Stable participant id of the new driver, or null when control was released"
+    driverParticipantId: ID
   }
 
   """

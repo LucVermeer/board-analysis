@@ -41,6 +41,8 @@ export const sessionTypeDefs = /* GraphQL */ `
     queueState: QueueState!
     "Whether the current client is the session leader (presentation/backward compatibility only)"
     isLeader: Boolean!
+    "Stable participant id of the user currently driving the wall. Set via takeControl, cleared via releaseControl or driver disconnect. Distinct from isLeader, which is presentation/legacy only."
+    driverParticipantId: ID
     "Unique identifier for this client's connection"
     clientId: ID!
     "Optional session goal text"

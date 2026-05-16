@@ -702,6 +702,12 @@ export function useSessionLifecycle({
                           })),
                         };
                       }
+                      case 'DriverChanged':
+                        // Driver is a separate concept from leader (the
+                        // queue-control-bar pivot's lightbulb gesture). Keep
+                        // `isLeader` untouched here — leader semantics are
+                        // presentation/legacy and ride on `LeaderChanged`.
+                        return { ...prev, driverParticipantId: event.driverParticipantId };
                       case 'SessionEnded':
                         if (DEBUG) console.info('[PersistentSession] Session ended:', event.reason);
                         removePreference(ACTIVE_SESSION_KEY).catch(() => {});

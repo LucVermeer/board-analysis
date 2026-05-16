@@ -20,6 +20,13 @@ export type Session = {
   users: SessionUser[];
   queueState: QueueState;
   isLeader: boolean;
+  /**
+   * Stable participant id of the user currently driving the wall, or null
+   * when the wall is unclaimed. Set via the takeControl mutation; cleared via
+   * releaseControl or driver disconnect. Distinct from `isLeader`, which is
+   * presentation/legacy.
+   */
+  driverParticipantId: string | null;
   clientId: string;
   goal?: string | null;
   isPublic?: boolean;
@@ -76,6 +83,12 @@ export type PersistentSessionActionsType = {
   setQueue: (queue: LocalClimbQueueItem[], currentClimbQueueItem?: LocalClimbQueueItem | null) => Promise<void>;
   replaceQueueItem: (uuid: string, item: LocalClimbQueueItem) => Promise<void>;
 
+  // Wall-control mutations — the queue-control-bar pivot's lightbulb plumbing.
+  // Solo (no party) is a backend no-op; the helper resolves so callers can
+  // treat takeControl(climb) as a drop-in for setCurrentClimb(climb).
+  takeControl: (climb?: LocalClimbQueueItem | null) => Promise<void>;
+  releaseControl: () => Promise<void>;
+
   // Event subscription for board-level components
   subscribeToQueueEvents: (callback: (event: SubscriptionQueueEvent) => void) => () => void;
   subscribeToSessionEvents: (callback: (event: SessionEvent) => void) => () => void;
@@ -105,7 +118,21 @@ export type PersistentSessionStateType = {
 
   // Session data
   clientId: string | null;
+  /**
+   * The local user's stable participant id for the current session, or null
+   * when not in a session. Distinct from `clientId`, which is a connection id
+   * (anonymous users have `participantId === clientId`; authenticated users
+   * have a different participantId per their database user UUID). Use this
+   * to compare against `driverParticipantId` or any `SessionUser.id`.
+   */
+  participantId: string | null;
   isLeader: boolean;
+  /**
+   * Stable participant id of the wall driver, or null when unclaimed. Surfaced
+   * here so QueueContext can derive `isDriver` without reaching into the raw
+   * Session object.
+   */
+  driverParticipantId: string | null;
   users: SessionUser[];
 
   // Queue state synced from backend

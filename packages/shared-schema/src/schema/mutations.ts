@@ -76,6 +76,20 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     setQueue(queue: [ClimbQueueItemInput!]!, currentClimbQueueItem: ClimbQueueItemInput): QueueState!
 
+    """
+    Claim wall-control authority in the current session and optionally broadcast a climb.
+    Any session participant may call — yank-on-press by design. If \`climb\` is provided, also
+    appends it to the queue (when not already present) and sets it as the current climb,
+    mirroring \`setCurrentClimb\`'s side effects. Publishes \`DriverChanged\`.
+    """
+    takeControl(climb: ClimbQueueItemInput): Session!
+
+    """
+    Release wall-control authority. Clears the driver only when the caller is the current
+    driver (idempotent otherwise). Publishes \`DriverChanged { driverParticipantId: null }\`.
+    """
+    releaseControl: Session!
+
     # ============================================
     # User Management Mutations (require auth)
     # ============================================

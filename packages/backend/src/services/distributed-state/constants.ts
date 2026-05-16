@@ -41,6 +41,12 @@ export const KEYS = {
     `boardsesh:participant:${sessionId}:${participantId}:connections`,
   // String: sessionId -> connectionId of leader
   sessionLeader: (sessionId: string) => `boardsesh:session:${sessionId}:leader`,
+  // String: sessionId -> participantId of the wall driver. Distinct from
+  // sessionLeader: driver is stable across reconnects (keyed by participantId)
+  // and is the wall-control authority introduced by the queue-control-bar
+  // pivot's lightbulb gesture. Empty / missing key means "no driver" — the
+  // wall is unclaimed.
+  sessionDriver: (sessionId: string) => `boardsesh:session:${sessionId}:driver`,
   // Set: instanceId -> set of connectionIds owned by this instance
   instanceConnections: (instanceId: string) => `boardsesh:instance:${instanceId}:conns`,
   // String: instanceId -> heartbeat timestamp

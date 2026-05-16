@@ -3,7 +3,13 @@ import type { ConnectionContext, SessionEvent, ClimbQueueItem } from '@boardsesh
 import { roomManager } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
 import { updateContext } from '../../context';
-import { requireAuthenticated, requireSessionMember, applyRateLimit, validateInput } from '../shared/helpers';
+import {
+  requireAuthenticated,
+  requireSession,
+  requireSessionMember,
+  applyRateLimit,
+  validateInput,
+} from '../shared/helpers';
 import {
   SessionIdSchema,
   ParticipantIdSchema,
@@ -24,6 +30,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { generateSessionSummary } from './session-summary';
 import { adoptRecentTicksForSession, extractBoardType } from '../../../jobs/inferred-session-builder';
 import { endLiveActivity } from '../../../services/apns';
+import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
 
 /**
  * Auto-authorize all controllers owned by a user for a session.
@@ -149,6 +156,7 @@ export const sessionMutations = {
 
     // Fetch session data for new fields
     const sessionData = await roomManager.getSessionById(sessionId);
+    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
 
     return {
       id: sessionId,
@@ -162,6 +170,7 @@ export const sessionMutations = {
         currentClimbQueueItem: result.currentClimbQueueItem,
       },
       isLeader: result.isLeader,
+      driverParticipantId,
       clientId: result.clientId,
       goal: sessionData?.goal || null,
       isPublic: sessionData?.isPublic ?? true,
@@ -278,6 +287,10 @@ export const sessionMutations = {
           currentClimbQueueItem: result.currentClimbQueueItem,
         },
         isLeader: result.isLeader,
+        // Newly created sessions start with no driver — the creator must press
+        // the lightbulb to claim the wall. Null here lets the bar render the
+        // empty/outlined state in PR 2 onward.
+        driverParticipantId: null,
         clientId: result.clientId,
         goal: input.goal || null,
         isPublic: true,
@@ -301,6 +314,7 @@ export const sessionMutations = {
       users: [],
       queueState: null,
       isLeader: false,
+      driverParticipantId: null,
       clientId: null,
       goal: input.goal || null,
       isPublic: true,
@@ -354,6 +368,134 @@ export const sessionMutations = {
     }
 
     return true;
+  },
+
+  /**
+   * Claim wall-control authority and optionally broadcast a climb to the wall.
+   *
+   * Mediates the queue-control-bar pivot's lightbulb gesture. Any session
+   * participant may call — yank-on-press by design (the previous driver's
+   * lightbulb releases automatically when the new driver claims). When `climb`
+   * is provided, the climb is also appended to the queue (if not already
+   * present) and broadcast as the current climb, matching `setCurrentClimb`'s
+   * side effects. Publishes `DriverChanged` regardless of whether a climb was
+   * provided.
+   */
+  takeControl: async (_: unknown, { climb }: { climb?: ClimbQueueItem | null }, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx);
+    const sessionId = requireSession(ctx);
+    await requireSessionMember(ctx, sessionId);
+    if (climb !== null && climb !== undefined) {
+      validateInput(ClimbQueueItemSchema, climb, 'climb');
+    }
+
+    const participantId = ctx.participantId || ctx.connectionId;
+    // Atomic swap so the previous-vs-new comparison can't race a concurrent
+    // takeControl from another participant. The room manager returns the
+    // previous driver from a single Redis GETSET in multi-instance mode (and
+    // the in-memory shadow in single-instance), which we use to decide
+    // whether to publish DriverChanged.
+    const previousDriverParticipantId = await roomManager.setSessionDriverAndReturnPrevious(sessionId, participantId);
+
+    // Broadcast DriverChanged only on transitions. Self-claim while already
+    // driving is a no-op for the wire (avoids redundant subscriber work and
+    // keeps the time series clean for the Phase 5 instrumentation).
+    if (previousDriverParticipantId !== participantId) {
+      pubsub.publishSessionEvent(sessionId, {
+        __typename: 'DriverChanged',
+        driverParticipantId: participantId,
+      });
+    }
+
+    if (climb) {
+      await setCurrentClimbAndPublish(
+        sessionId,
+        climb,
+        true, // takeControl always treats the climb as a queue-add candidate (matches the old setCurrentClimb+shouldAddToQueue:true path)
+        roomManager,
+        pubsub,
+        ctx.connectionId || null,
+        null,
+      );
+    }
+
+    // Build the Session payload. The fields mirror joinSession's return so
+    // clients can apply the response without a refetch.
+    const users = await roomManager.getSessionUsers(sessionId);
+    const sessionData = await roomManager.getSessionById(sessionId);
+    const queueState = await roomManager.getQueueState(sessionId);
+
+    return {
+      id: sessionId,
+      name: sessionData?.name || null,
+      boardPath: sessionData?.boardPath || '',
+      users,
+      queueState: {
+        sequence: queueState.sequence,
+        stateHash: queueState.stateHash,
+        queue: queueState.queue,
+        currentClimbQueueItem: queueState.currentClimbQueueItem,
+      },
+      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      driverParticipantId: participantId,
+      clientId: ctx.connectionId,
+      goal: sessionData?.goal || null,
+      isPublic: sessionData?.isPublic ?? true,
+      startedAt: sessionData?.startedAt?.toISOString() || null,
+      endedAt: sessionData?.endedAt?.toISOString() || null,
+      isPermanent: sessionData?.isPermanent ?? false,
+      color: sessionData?.color || null,
+    };
+  },
+
+  /**
+   * Release wall-control authority. Idempotent — when the caller is not the
+   * current driver, the mutation is a no-op (returns the current session state
+   * with `driverParticipantId` unchanged). Publishes `DriverChanged { null }`
+   * only when the clear actually happened.
+   */
+  releaseControl: async (_: unknown, __: unknown, ctx: ConnectionContext) => {
+    await applyRateLimit(ctx);
+    const sessionId = requireSession(ctx);
+    await requireSessionMember(ctx, sessionId);
+
+    const participantId = ctx.participantId || ctx.connectionId;
+    const cleared = await roomManager.clearSessionDriverIf(sessionId, participantId);
+
+    if (cleared) {
+      pubsub.publishSessionEvent(sessionId, {
+        __typename: 'DriverChanged',
+        driverParticipantId: null,
+      });
+    }
+
+    const users = await roomManager.getSessionUsers(sessionId);
+    const sessionData = await roomManager.getSessionById(sessionId);
+    const queueState = await roomManager.getQueueState(sessionId);
+    // Skip the re-read when we just cleared — we already know the answer.
+    const driverParticipantId = cleared ? null : await roomManager.getSessionDriverParticipantId(sessionId);
+
+    return {
+      id: sessionId,
+      name: sessionData?.name || null,
+      boardPath: sessionData?.boardPath || '',
+      users,
+      queueState: {
+        sequence: queueState.sequence,
+        stateHash: queueState.stateHash,
+        queue: queueState.queue,
+        currentClimbQueueItem: queueState.currentClimbQueueItem,
+      },
+      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      driverParticipantId,
+      clientId: ctx.connectionId,
+      goal: sessionData?.goal || null,
+      isPublic: sessionData?.isPublic ?? true,
+      startedAt: sessionData?.startedAt?.toISOString() || null,
+      endedAt: sessionData?.endedAt?.toISOString() || null,
+      isPermanent: sessionData?.isPermanent ?? false,
+      color: sessionData?.color || null,
+    };
   },
 
   /**

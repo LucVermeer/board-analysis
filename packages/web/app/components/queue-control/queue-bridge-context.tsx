@@ -38,6 +38,7 @@ import { useSnackbar } from '../providers/snackbar-provider';
 import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
+import { deriveIsDriver } from '../graphql-queue/driver-state';
 
 const LiveActivityBridge = dynamic(() => import('@/app/lib/live-activity/live-activity-bridge'), {
   ssr: false,
@@ -399,6 +400,54 @@ function usePersistentSessionQueueAdapter(): {
     [setCurrentClimb],
   );
 
+  // Bridge-mode wall-control claim. Mirrors GraphQLQueueProvider.takeControl
+  // semantics but uses the bridge's queue plumbing (which writes through the
+  // persistent session for party mode and local state for solo).
+  //
+  // Guards on `hasConnected` so a tap during WS reconnection doesn't throw
+  // — use-queue-mutations.ts asserts `Not connected to session` when the
+  // client ref is null. Matches the QueueContext version's `hasConnected`
+  // short-circuit.
+  const takeControl = useCallback(
+    async (climb?: Climb | null): Promise<ClimbQueueItem | null> => {
+      const { ps } = latestRef.current;
+      if (!ps.activeSession) {
+        if (!climb) return null;
+        return setCurrentClimb(climb);
+      }
+      if (!ps.hasConnected) return null;
+      if (!climb) {
+        try {
+          await ps.takeControl(null);
+        } catch (err: unknown) {
+          console.error('Failed to take control:', err);
+        }
+        return null;
+      }
+      if (!validateClimbForQueue(climb)) return null;
+      const newItem = buildQueueItem(climb);
+      try {
+        await ps.takeControl(newItem);
+        return newItem;
+      } catch (err: unknown) {
+        console.error('Failed to take control with climb:', err);
+        return null;
+      }
+    },
+    [setCurrentClimb, validateClimbForQueue, buildQueueItem],
+  );
+
+  const releaseControl = useCallback(async (): Promise<void> => {
+    const { ps } = latestRef.current;
+    if (!ps.activeSession) return;
+    if (!ps.hasConnected) return;
+    try {
+      await ps.releaseControl();
+    } catch (err: unknown) {
+      console.error('Failed to release control:', err);
+    }
+  }, []);
+
   // Bridge-mode replace: in party mode, delegate to the persistent session's
   // WebSocket-backed replaceQueueItem; otherwise mirror the local-state update
   // with a new climb while preserving the queue-item uuid and existing
@@ -449,6 +498,8 @@ function usePersistentSessionQueueAdapter(): {
       getNextClimbQueueItem,
       getPreviousClimbQueueItem,
       setQueue,
+      takeControl,
+      releaseControl,
       startSession: noopStartSession,
       joinSession: noopJoinSession,
       endSession: stableDeactivateSession,
@@ -468,6 +519,8 @@ function usePersistentSessionQueueAdapter(): {
       getNextClimbQueueItem,
       getPreviousClimbQueueItem,
       setQueue,
+      takeControl,
+      releaseControl,
       stableDeactivateSession,
       noopStartSession,
       noopJoinSession,
@@ -498,7 +551,14 @@ function usePersistentSessionQueueAdapter(): {
       sessionGoal: ps.session?.goal ?? null,
       users: isParty ? ps.users : [],
       clientId: ps.clientId,
+      participantId: ps.participantId,
       isLeader: ps.isLeader,
+      driverParticipantId: isParty ? ps.driverParticipantId : null,
+      isDriver: deriveIsDriver({
+        isPersistentSessionActive: isParty,
+        participantId: ps.participantId,
+        driverParticipantId: isParty ? ps.driverParticipantId : null,
+      }),
       isBackendMode: true,
       hasConnected: ps.hasConnected,
       connectionError: ps.error,
@@ -514,7 +574,9 @@ function usePersistentSessionQueueAdapter(): {
       ps.session?.goal,
       ps.users,
       ps.clientId,
+      ps.participantId,
       ps.isLeader,
+      ps.driverParticipantId,
       ps.error,
     ],
   );
@@ -743,7 +805,10 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       isDisconnected: effectiveData.isDisconnected,
       users: effectiveData.users ?? [],
       clientId: effectiveData.clientId ?? null,
+      participantId: effectiveData.participantId ?? null,
       isLeader: effectiveData.isLeader ?? false,
+      driverParticipantId: effectiveData.driverParticipantId ?? null,
+      isDriver: effectiveData.isDriver ?? false,
       isBackendMode: effectiveData.isBackendMode ?? false,
       hasConnected: effectiveData.hasConnected ?? false,
       connectionError: effectiveData.connectionError ?? null,
@@ -760,7 +825,10 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       effectiveData.isDisconnected,
       effectiveData.users,
       effectiveData.clientId,
+      effectiveData.participantId,
       effectiveData.isLeader,
+      effectiveData.driverParticipantId,
+      effectiveData.isDriver,
       effectiveData.isBackendMode,
       effectiveData.hasConnected,
       effectiveData.connectionError,

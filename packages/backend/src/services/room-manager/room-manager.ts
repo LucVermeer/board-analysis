@@ -47,6 +47,10 @@ class RoomManager {
   private sessionParticipants = new Map<string, Map<string, LocalSessionParticipant>>();
   private redisStore: RedisSessionStore | null = null;
   private distributedState: DistributedStateManager | null = null;
+  // In-memory driver shadow: keeps single-instance / non-distributed deploys
+  // consistent with the Redis-backed path. Always written alongside Redis so
+  // `getSessionDriverParticipantId` returns the same answer either way.
+  private localDriverBySession = new Map<string, string>();
   private sessionGraceTimers = new Map<string, NodeJS.Timeout>();
   private readonly SESSION_GRACE_PERIOD_MS = 60_000;
   private pendingJoinPersists = new Map<string, Promise<void>>();
@@ -68,6 +72,7 @@ class RoomManager {
     this.clients.clear();
     this.sessions.clear();
     this.sessionParticipants.clear();
+    this.localDriverBySession.clear();
     this.redisStore = null;
     this.distributedState = null;
 
@@ -221,7 +226,7 @@ class RoomManager {
   }
 
   async leaveSession(connectionId: string): Promise<SessionLeaveResult | null> {
-    return leaveSessionFn(
+    const result = await leaveSessionFn(
       connectionId,
       this.clients,
       this.sessions,
@@ -233,6 +238,13 @@ class RoomManager {
       this.pendingJoinPersists,
       this.SESSION_GRACE_PERIOD_MS,
     );
+    if (result?.participantFullyLeft && result.participantId) {
+      // Explicit leave (vs. transient disconnect) drains the participant
+      // immediately, so the driver role must follow. The disconnect path
+      // handles its own cleanup via the grace-timer eviction callback.
+      void this.releaseDriverIfMatches(result.sessionId, result.participantId);
+    }
+    return result;
   }
 
   async disconnectClient(connectionId: string): Promise<SessionDisconnectResult | null> {
@@ -252,8 +264,39 @@ class RoomManager {
           __typename: 'UserLeft',
           userId: participantId,
         });
+        // If the evicted participant was the wall driver, clear and broadcast
+        // so peers' Queue Control Bar UI flips out of the "{name} is driving"
+        // state. Done after UserLeft so single-instance subscribers process
+        // them in order. Across instances the two events flow through Redis
+        // pub/sub independently and their relative arrival order at a remote
+        // subscriber is not guaranteed — the spec tolerates this because
+        // driver and presence are independent state machines.
+        void this.releaseDriverIfMatches(sessionId, participantId);
       },
     );
+  }
+
+  /**
+   * If the named participant currently holds the wall driver role, clear it
+   * and publish `DriverChanged { driverParticipantId: null }`. No-op when the
+   * participant is not the driver. Used on disconnect and explicit-leave
+   * cleanup paths so the wall doesn't stay assigned to a vanished member.
+   */
+  private async releaseDriverIfMatches(sessionId: string, participantId: string): Promise<void> {
+    try {
+      const cleared = await this.clearSessionDriverIf(sessionId, participantId);
+      if (cleared) {
+        pubsub.publishSessionEvent(sessionId, {
+          __typename: 'DriverChanged',
+          driverParticipantId: null,
+        });
+      }
+    } catch (error) {
+      logger.error(
+        `[RoomManager] Failed to release driver for departing participant ${participantId.slice(0, 8)} in session ${sessionId.slice(0, 8)}:`,
+        error,
+      );
+    }
   }
 
   async removeClient(connectionId: string): Promise<{ distributedStateCleanedUp: boolean }> {
@@ -330,6 +373,73 @@ class RoomManager {
       if (client?.isLeader) return clientId;
     }
     return null;
+  }
+
+  /**
+   * Get the current wall driver's participantId for a session, or null when
+   * the wall is unclaimed. Driver is the wall-control authority introduced
+   * by the queue-control-bar pivot's lightbulb gesture; distinct from leader
+   * (which is presentation/legacy). Falls back to in-memory when running
+   * without distributed state.
+   */
+  async getSessionDriverParticipantId(sessionId: string): Promise<string | null> {
+    if (this.distributedState) {
+      return this.distributedState.getSessionDriver(sessionId);
+    }
+    return this.localDriverBySession.get(sessionId) ?? null;
+  }
+
+  /**
+   * Set the current wall driver atomically and return the previous driver
+   * (or null when unclaimed). Yank-on-press: overwrites any prior driver.
+   *
+   * Atomicity matters: the `takeControl` resolver decides whether to publish
+   * `DriverChanged` based on whether this was a transition. Without atomicity,
+   * two concurrent yanks could each read the same previous driver and both
+   * publish DriverChanged in arbitrary order — leaving subscribers' state
+   * divergent from Redis. Both the distributed (Redis GETSET) and in-memory
+   * paths return the previous value to keep callers consistent across modes.
+   */
+  async setSessionDriverAndReturnPrevious(sessionId: string, participantId: string): Promise<string | null> {
+    const previousLocal = this.localDriverBySession.get(sessionId) ?? null;
+    this.localDriverBySession.set(sessionId, participantId);
+    if (this.distributedState) {
+      // The Redis GETSET is the authoritative previous value across instances;
+      // the local shadow's previous reading may be stale in multi-instance
+      // mode, so prefer the distributed result.
+      return this.distributedState.setSessionDriverAndReturnPrevious(sessionId, participantId);
+    }
+    return previousLocal;
+  }
+
+  /**
+   * Conditionally clear the driver — only when the current driver matches
+   * `expectedParticipantId`. Returns true when the clear happened (caller was
+   * the driver). Used by releaseControl mutation.
+   */
+  async clearSessionDriverIf(sessionId: string, expectedParticipantId: string): Promise<boolean> {
+    if (this.distributedState) {
+      const cleared = await this.distributedState.clearSessionDriverIf(sessionId, expectedParticipantId);
+      if (cleared && this.localDriverBySession.get(sessionId) === expectedParticipantId) {
+        this.localDriverBySession.delete(sessionId);
+      }
+      return cleared;
+    }
+    if (this.localDriverBySession.get(sessionId) === expectedParticipantId) {
+      this.localDriverBySession.delete(sessionId);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Unconditionally clear the driver. Used on driver-disconnect cleanup.
+   */
+  async clearSessionDriver(sessionId: string): Promise<void> {
+    this.localDriverBySession.delete(sessionId);
+    if (this.distributedState) {
+      await this.distributedState.clearSessionDriver(sessionId);
+    }
   }
 
   /**

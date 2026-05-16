@@ -498,6 +498,85 @@ export async function getSessionLeader(redis: Redis, sessionId: string): Promise
 }
 
 /**
+ * Get the current driver (wall-control holder) of a session.
+ * Returns the driver's participantId, or null when no member is currently driving.
+ */
+export async function getSessionDriver(redis: Redis, sessionId: string): Promise<string | null> {
+  validateSessionId(sessionId);
+  return redis.get(KEYS.sessionDriver(sessionId));
+}
+
+/**
+ * Set the current driver of a session and return the previous driver atomically.
+ * Yank-on-press: overwrites any prior driver. The key expires with the
+ * session-membership TTL so it doesn't outlive the session.
+ *
+ * Returns the previous driver's participantId (or null when unclaimed). The
+ * atomicity matters for the `takeControl` resolver: it decides whether to
+ * publish `DriverChanged` based on a transition. Reading the previous driver
+ * with a separate GET would let two concurrent yanks both observe the same
+ * value and both broadcast DriverChanged in arbitrary order, leaving
+ * subscribers' state divergent from Redis. Using GETSET + a follow-up EXPIRE
+ * keeps the read+write fused (GETSET doesn't accept an inline TTL).
+ */
+export async function setSessionDriverAndReturnPrevious(
+  redis: Redis,
+  sessionId: string,
+  participantId: string,
+): Promise<string | null> {
+  validateSessionId(sessionId);
+  validateParticipantId(participantId);
+  const key = KEYS.sessionDriver(sessionId);
+  // ioredis's `set(key, value, 'GET')` returns the previous value while
+  // setting the new one. Followed by EXPIRE (pipelined) so the TTL stays in
+  // lockstep with the session-membership TTL.
+  const pipeline = redis.multi();
+  pipeline.set(key, participantId, 'GET');
+  pipeline.expire(key, TTL.sessionMembership);
+  const result = await pipeline.exec();
+  if (!result || result.length === 0) return null;
+  const [setErr, prev] = result[0] as [Error | null, string | null];
+  if (setErr) throw setErr;
+  return prev ?? null;
+}
+
+/**
+ * Clear the current driver, but only if the caller is the current driver.
+ * Returns true when the key was actually deleted (caller was the driver), false otherwise.
+ * Uses WATCH + transaction to avoid racing a concurrent take-control.
+ */
+export async function clearSessionDriverIf(
+  redis: Redis,
+  sessionId: string,
+  expectedParticipantId: string,
+): Promise<boolean> {
+  validateSessionId(sessionId);
+  validateParticipantId(expectedParticipantId);
+  const key = KEYS.sessionDriver(sessionId);
+  try {
+    await redis.watch(key);
+    const current = await redis.get(key);
+    if (current !== expectedParticipantId) {
+      await redis.unwatch();
+      return false;
+    }
+    const result = await redis.multi().del(key).exec();
+    return result !== null && result.length > 0;
+  } catch {
+    await redis.unwatch().catch(() => {});
+    return false;
+  }
+}
+
+/**
+ * Clear the driver unconditionally. Used on driver disconnect cleanup.
+ */
+export async function clearSessionDriver(redis: Redis, sessionId: string): Promise<void> {
+  validateSessionId(sessionId);
+  await redis.del(KEYS.sessionDriver(sessionId));
+}
+
+/**
  * Get count of live members in a session.
  * Filters out stale entries whose connection hashes have expired.
  */
@@ -600,6 +679,7 @@ export async function cleanupEmptySession(redis: Redis, sessionId: string): Prom
   const multi = redis.multi();
   multi.del(KEYS.sessionMembers(sessionId));
   multi.del(KEYS.sessionLeader(sessionId));
+  multi.del(KEYS.sessionDriver(sessionId));
   await multi.exec();
 
   logger.info(`[DistributedState] Cleaned up empty session: ${sessionId.slice(0, 8)}`);

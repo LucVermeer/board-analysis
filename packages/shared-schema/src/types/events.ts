@@ -97,6 +97,7 @@ export type SessionEvent =
   | { __typename: 'UserLeft'; userId: string }
   | { __typename: 'UserPresenceChanged'; user: SessionUser }
   | { __typename: 'LeaderChanged'; leaderId: string; leaderConnectionId?: string | null }
+  | { __typename: 'DriverChanged'; driverParticipantId: string | null }
   | { __typename: 'SessionEnded'; reason: string; newPath?: string }
   | {
       __typename: 'SessionStatsUpdated';

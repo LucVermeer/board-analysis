@@ -48,6 +48,11 @@ vi.mock('../services/room-manager', () => ({
     endSession: vi.fn().mockResolvedValue(undefined),
     getSessionUsers: vi.fn().mockResolvedValue([]),
     getSessionLeaderConnectionId: vi.fn().mockResolvedValue(null),
+    // Driver-state plumbing (Phase 2 of the queue-control-bar pivot).
+    // New session-returning resolvers (joinSession/createSession) now read
+    // the current driver via the room manager; mock it to "no driver" so
+    // these tests don't need to care about the new field.
+    getSessionDriverParticipantId: vi.fn().mockResolvedValue(null),
   },
 }));
 

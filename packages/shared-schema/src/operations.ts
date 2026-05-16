@@ -46,6 +46,7 @@ export const JOIN_SESSION = `
       boardPath
       clientId
       isLeader
+      driverParticipantId
       goal
       isPublic
       startedAt
@@ -154,6 +155,37 @@ export const REPLACE_QUEUE_ITEM = `
   }
 `;
 
+// Driver mutations — claim or release the wall in a party session.
+// In solo (no party), the web client short-circuits these without hitting the
+// backend; the server-side mutations require an active session connection.
+export const TAKE_CONTROL = `
+  mutation TakeControl($climb: ClimbQueueItemInput) {
+    takeControl(climb: $climb) {
+      id
+      driverParticipantId
+      queueState {
+        sequence
+        stateHash
+        queue {
+          ${QUEUE_ITEM_FIELDS}
+        }
+        currentClimbQueueItem {
+          ${QUEUE_ITEM_FIELDS}
+        }
+      }
+    }
+  }
+`;
+
+export const RELEASE_CONTROL = `
+  mutation ReleaseControl {
+    releaseControl {
+      id
+      driverParticipantId
+    }
+  }
+`;
+
 export const SET_QUEUE = `
   mutation SetQueue($queue: [ClimbQueueItemInput!]!, $currentClimbQueueItem: ClimbQueueItemInput) {
     setQueue(queue: $queue, currentClimbQueueItem: $currentClimbQueueItem) {
@@ -177,6 +209,7 @@ export const CREATE_SESSION = `
       boardPath
       clientId
       isLeader
+      driverParticipantId
       goal
       isPublic
       startedAt
@@ -236,6 +269,9 @@ export const SESSION_UPDATES = `
       ... on LeaderChanged {
         leaderId
         leaderConnectionId
+      }
+      ... on DriverChanged {
+        driverParticipantId
       }
       ... on SessionEnded {
         reason

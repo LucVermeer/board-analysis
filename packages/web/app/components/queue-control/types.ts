@@ -119,6 +119,18 @@ export type QueueActionsType = {
    *  The native WebSocket already sent the server mutation, so this only updates
    *  the local reducer state and registers the correlationId for echo suppression. */
   dispatchWidgetNavigation?: (item: ClimbQueueItem, correlationId: string) => void;
+  /** Claim wall-control authority and optionally broadcast the given climb.
+   *  Resolves to the persisted `ClimbQueueItem` when a climb was provided
+   *  (matching the `setCurrentClimb` return shape), or `null` otherwise. In
+   *  solo (no party) this degrades to the existing `setCurrentClimb` path. In
+   *  party it sets `driverParticipantId` on the server, yanks control from
+   *  whoever held it, and — when a climb is provided — also appends-and-sets
+   *  it as the wall climb. The drawer's lightbulb (PR 2) and the bar's
+   *  lightbulb (PR 3) call this. */
+  takeControl: (climb?: Climb | null) => Promise<ClimbQueueItem | null>;
+  /** Release wall-control authority. Idempotent — no-op when the local user
+   *  isn't currently the driver. In solo, a no-op. */
+  releaseControl: () => Promise<void>;
 };
 
 // Frequently-changing state data
@@ -140,7 +152,17 @@ export type QueueDataType = {
   canMutate?: boolean;
   users?: SessionUser[];
   clientId?: string | null;
+  /** Local user's stable participant id for the current session, or null
+   *  outside a session. Use this for comparisons against `driverParticipantId`
+   *  or `SessionUser.id`. */
+  participantId?: string | null;
   isLeader?: boolean;
+  /** Participant id of the wall driver, or null when unclaimed (party only;
+   *  always null in solo). */
+  driverParticipantId?: string | null;
+  /** Whether the local user currently drives the wall (true in solo; in party,
+   *  true when local participant id matches `driverParticipantId`). */
+  isDriver?: boolean;
   isBackendMode?: boolean;
   hasConnected?: boolean;
   connectionError?: Error | null;

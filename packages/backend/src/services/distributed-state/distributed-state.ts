@@ -14,6 +14,10 @@ import {
   leaveSession,
   getSessionMembers,
   getSessionLeader,
+  getSessionDriver,
+  setSessionDriverAndReturnPrevious,
+  clearSessionDriverIf,
+  clearSessionDriver,
   getSessionMemberCount,
   isConnectionInSession,
   refreshConnection,
@@ -166,6 +170,34 @@ export class DistributedStateManager {
   /** Get the current leader of a session. */
   async getSessionLeader(sessionId: string): Promise<string | null> {
     return getSessionLeader(this.redis, sessionId);
+  }
+
+  /** Get the current wall driver (participantId) of a session, or null when unclaimed. */
+  async getSessionDriver(sessionId: string): Promise<string | null> {
+    return getSessionDriver(this.redis, sessionId);
+  }
+
+  /**
+   * Set the current wall driver atomically and return the previous driver.
+   * Yank-on-press: overwrites any prior driver. Returns the participantId of
+   * the previous driver (or null when unclaimed) so callers can decide
+   * whether to broadcast DriverChanged without a second round trip.
+   */
+  async setSessionDriverAndReturnPrevious(sessionId: string, participantId: string): Promise<string | null> {
+    return setSessionDriverAndReturnPrevious(this.redis, sessionId, participantId);
+  }
+
+  /**
+   * Conditionally clear the driver — only deletes the key when the current
+   * driver matches `expectedParticipantId`. Returns true on deletion.
+   */
+  async clearSessionDriverIf(sessionId: string, expectedParticipantId: string): Promise<boolean> {
+    return clearSessionDriverIf(this.redis, sessionId, expectedParticipantId);
+  }
+
+  /** Unconditionally clear the driver. Used on cleanup paths. */
+  async clearSessionDriver(sessionId: string): Promise<void> {
+    return clearSessionDriver(this.redis, sessionId);
   }
 
   /** Get count of live members in a session. */

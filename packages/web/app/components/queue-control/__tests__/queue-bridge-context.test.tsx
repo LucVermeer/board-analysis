@@ -226,7 +226,11 @@ function createDefaultPersistentSession(overrides?: Record<string, unknown>) {
     setQueue: vi.fn(() => Promise.resolve()),
     mirrorCurrentClimb: vi.fn(() => Promise.resolve()),
     replaceQueueItem: vi.fn(() => Promise.resolve()),
+    takeControl: vi.fn(() => Promise.resolve()),
+    releaseControl: vi.fn(() => Promise.resolve()),
     triggerResync: vi.fn(),
+    participantId: null,
+    driverParticipantId: null,
     ...overrides,
   };
 }
@@ -340,6 +344,8 @@ function extractActions(ctx: GraphQLQueueContextType): GraphQLQueueActionsType {
     endSession: ctx.endSession,
     dismissSessionSummary: ctx.dismissSessionSummary,
     disconnect: ctx.disconnect,
+    takeControl: ctx.takeControl,
+    releaseControl: ctx.releaseControl,
   };
 }
 
@@ -1069,6 +1075,118 @@ describe('queue-bridge-context', () => {
         expect(mockSetLocalQueueState).not.toHaveBeenCalled();
       });
     });
+
+    // -------------------------------------------------------------------
+    // Driver-state plumbing — the queue-control-bar pivot's lightbulb path.
+    // The bridge is the off-board surface PR 2's drawer lightbulb will rely
+    // on, so the takeControl / releaseControl wiring and isDriver derivation
+    // need parity with the on-board QueueContext.
+    // -------------------------------------------------------------------
+    describe('adapter driver-state plumbing (party mode)', () => {
+      const bd = createTestBoardDetails();
+      const climb1 = createTestClimb({ uuid: 'c1', name: 'Climb 1' });
+      const activeSession = {
+        sessionId: 'party-driver-1',
+        boardPath: '/kilter/1/10/1,2/40/list',
+        boardDetails: bd,
+        parsedParams: {
+          board_name: 'kilter' as const,
+          layout_id: 1,
+          size_id: 10,
+          set_ids: [1, 2],
+          angle: 40 as Angle,
+        },
+        participantId: 'participant-self',
+      };
+
+      function renderWithDriverState(psOverrides?: Record<string, unknown>) {
+        mockPersistentSession = createDefaultPersistentSession({
+          activeSession,
+          queue: [],
+          currentClimbQueueItem: null,
+          isLocalQueueLoaded: true,
+          hasConnected: true,
+          clientId: 'client-self-ws',
+          participantId: 'participant-self',
+          ...psOverrides,
+        });
+        const wrapper = ({ children }: { children: React.ReactNode }) => (
+          <QueueBridgeProvider>{children}</QueueBridgeProvider>
+        );
+        return renderHook(() => useTestQueueContext(), { wrapper });
+      }
+
+      it('takeControl(climb) delegates to ps.takeControl with a freshly built queue item', async () => {
+        const { result } = renderWithDriverState();
+        await act(async () => {
+          await result.current!.takeControl(climb1);
+        });
+        expect(mockPersistentSession.takeControl).toHaveBeenCalledTimes(1);
+        const arg = (mockPersistentSession.takeControl as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(arg).not.toBeNull();
+        expect(arg.climb.uuid).toBe('c1');
+      });
+
+      it('takeControl() without a climb delegates to ps.takeControl(null) to claim the driver only', async () => {
+        const { result } = renderWithDriverState();
+        await act(async () => {
+          await result.current!.takeControl();
+        });
+        expect(mockPersistentSession.takeControl).toHaveBeenCalledTimes(1);
+        expect((mockPersistentSession.takeControl as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeNull();
+      });
+
+      it('releaseControl delegates to ps.releaseControl', async () => {
+        const { result } = renderWithDriverState();
+        await act(async () => {
+          await result.current!.releaseControl();
+        });
+        expect(mockPersistentSession.releaseControl).toHaveBeenCalledTimes(1);
+      });
+
+      it('takeControl is a no-op (no ps call) while the WS is reconnecting', async () => {
+        const { result } = renderWithDriverState({ hasConnected: false });
+        await act(async () => {
+          await result.current!.takeControl(climb1);
+        });
+        // Guarded by hasConnected to avoid the throw from use-queue-mutations
+        // when the WS client ref is null mid-reconnect.
+        expect(mockPersistentSession.takeControl).not.toHaveBeenCalled();
+      });
+
+      it('exposes isDriver=true when the local participantId matches driverParticipantId', () => {
+        const { result } = renderWithDriverState({ driverParticipantId: 'participant-self' });
+        expect(result.current!.isDriver).toBe(true);
+        expect(result.current!.driverParticipantId).toBe('participant-self');
+      });
+
+      it('exposes isDriver=false when another participant holds the driver role', () => {
+        const { result } = renderWithDriverState({ driverParticipantId: 'participant-other' });
+        expect(result.current!.isDriver).toBe(false);
+        expect(result.current!.driverParticipantId).toBe('participant-other');
+      });
+
+      it('exposes isDriver=false when the wall is unclaimed in party mode', () => {
+        const { result } = renderWithDriverState({ driverParticipantId: null });
+        expect(result.current!.isDriver).toBe(false);
+        expect(result.current!.driverParticipantId).toBeNull();
+      });
+    });
+
+    it('exposes isDriver=true in solo (no active party session) regardless of other state', () => {
+      // Solo has no driver concept; the bridge degrades to "local user drives"
+      // so the drawer lightbulb in PR 2 can render the lit state when BLE is up.
+      mockPersistentSession = createDefaultPersistentSession({
+        activeSession: null,
+        localBoardDetails: createTestBoardDetails(),
+      });
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueueBridgeProvider>{children}</QueueBridgeProvider>
+      );
+      const { result } = renderHook(() => useTestQueueContext(), { wrapper });
+      expect(result.current!.isDriver).toBe(true);
+      expect(result.current!.driverParticipantId).toBeNull();
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -1286,6 +1404,8 @@ describe('queue-bridge-context', () => {
         endSession: vi.fn(),
         dismissSessionSummary: vi.fn(),
         disconnect: vi.fn(),
+        takeControl: vi.fn(async () => null),
+        releaseControl: vi.fn(async () => {}),
       };
 
       const fakeCtx1 = createFakeQueueContext({ queue: [], ...stableActions });

@@ -308,6 +308,8 @@ type Session {
   queueState: QueueState!
   "Whether the current client is the session leader (presentation/backward compatibility only)"
   isLeader: Boolean!
+  "Stable participant id of the user currently driving the wall. Set via takeControl, cleared via releaseControl or driver disconnect. Distinct from isLeader, which is presentation/legacy only."
+  driverParticipantId: ID
   "Unique identifier for this client's connection"
   clientId: ID!
   "Optional session goal text"
@@ -4012,6 +4014,20 @@ type Mutation {
   """
   setQueue(queue: [ClimbQueueItemInput!]!, currentClimbQueueItem: ClimbQueueItemInput): QueueState!
 
+  """
+  Claim wall-control authority in the current session and optionally broadcast a climb.
+  Any session participant may call — yank-on-press by design. If `climb` is provided, also
+  appends it to the queue (when not already present) and sets it as the current climb,
+  mirroring `setCurrentClimb`'s side effects. Publishes `DriverChanged`.
+  """
+  takeControl(climb: ClimbQueueItemInput): Session!
+
+  """
+  Release wall-control authority. Clears the driver only when the caller is the current
+  driver (idempotent otherwise). Publishes `DriverChanged { driverParticipantId: null }`.
+  """
+  releaseControl: Session!
+
   # ============================================
   # User Management Mutations (require auth)
   # ============================================
@@ -4486,7 +4502,14 @@ type Subscription {
 """
 Union of possible session events.
 """
-union SessionEvent = UserJoined | UserLeft | UserPresenceChanged | LeaderChanged | SessionEnded | SessionStatsUpdated
+union SessionEvent =
+  | UserJoined
+  | UserLeft
+  | UserPresenceChanged
+  | LeaderChanged
+  | DriverChanged
+  | SessionEnded
+  | SessionStatsUpdated
 
 """
 Event when a user joins the session.
@@ -4520,6 +4543,14 @@ type LeaderChanged {
   leaderId: ID!
   "Connection ID of the new leader, for current-client leadership checks"
   leaderConnectionId: ID
+}
+
+"""
+Event when the wall driver changes (the participant authorized to drive the wall via the queue-control-bar pivot's lightbulb). Null when no member is currently driving.
+"""
+type DriverChanged {
+  "Stable participant id of the new driver, or null when control was released"
+  driverParticipantId: ID
 }
 
 """

@@ -7,6 +7,8 @@ import {
   MIRROR_CURRENT_CLIMB,
   SET_QUEUE,
   REPLACE_QUEUE_ITEM,
+  TAKE_CONTROL,
+  RELEASE_CONTROL,
 } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import { type Session, toClimbQueueItemInput } from '../types';
@@ -27,6 +29,18 @@ export type QueueMutationsActions = {
   mirrorCurrentClimb: (mirrored: boolean) => Promise<void>;
   setQueue: (queue: LocalClimbQueueItem[], currentClimbQueueItem?: LocalClimbQueueItem | null) => Promise<void>;
   replaceQueueItem: (uuid: string, item: LocalClimbQueueItem) => Promise<void>;
+  /**
+   * Claim wall-control authority in the current party session, optionally
+   * broadcasting a climb. Yank-on-press server-side. In solo (no active party
+   * session) the call is a backend no-op — the helper still resolves so callers
+   * can use `takeControl(climb)` as a drop-in for `setCurrentClimb(climb)`.
+   */
+  takeControl: (climb?: LocalClimbQueueItem | null) => Promise<void>;
+  /**
+   * Release wall-control authority. Idempotent — no-op when the local user
+   * isn't currently the driver. In solo, also a backend no-op.
+   */
+  releaseControl: () => Promise<void>;
 };
 
 /**
@@ -166,6 +180,27 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     });
   }, []);
 
+  const takeControl = useCallback(async (climb?: LocalClimbQueueItem | null) => {
+    if (!clientRef.current || !sessionRef.current) {
+      // Solo (no active party session). The backend has nothing to track —
+      // resolve silently so the QueueContext takeControl helper can degrade
+      // cleanly to setCurrentClimb's local-only path.
+      return;
+    }
+    await execute(clientRef.current, {
+      query: TAKE_CONTROL,
+      variables: { climb: climb ? toClimbQueueItemInput(climb) : null },
+    });
+  }, []);
+
+  const releaseControl = useCallback(async () => {
+    if (!clientRef.current || !sessionRef.current) return;
+    await execute(clientRef.current, {
+      query: RELEASE_CONTROL,
+      variables: {},
+    });
+  }, []);
+
   return {
     addQueueItem,
     removeQueueItem,
@@ -173,5 +208,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     mirrorCurrentClimb,
     setQueue,
     replaceQueueItem,
+    takeControl,
+    releaseControl,
   };
 }
