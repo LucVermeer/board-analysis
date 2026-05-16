@@ -389,7 +389,7 @@ export const InlineGradePicker: React.FC<{
             <ButtonBase
               key={grade.difficulty_id}
               data-grade-id={grade.difficulty_id}
-              onClick={() => onSelect(grade.difficulty_id)}
+              onClick={() => onSelect(isSelected && !hideClear ? undefined : grade.difficulty_id)}
               className={`${styles.pickerItem} ${isSelected ? styles.pickerItemSelected : ''} ${isFocused ? styles.pickerItemFocused : ''}`}
               aria-label={isFocused ? `${formatted} (consensus)` : formatted}
               aria-selected={isSelected}
