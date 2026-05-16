@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import MuiButton from '@mui/material/Button';
@@ -33,15 +33,12 @@ import MultiboardClimbList from '@/app/components/climb-list/multiboard-climb-li
 import { PlaylistActivationProvider } from '@/app/components/climb-actions/playlist-activation-context';
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
 import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
-import { createPlaylistSuggestionSource } from '@/app/components/queue-control/playlist-suggestions';
-import {
-  fetchPlaylistSuggestionClimbs,
-  isAbortError,
-} from '@/app/components/queue-control/playlist-suggestion-refresh';
+import { fetchPlaylistSuggestionClimbs } from '@/app/components/queue-control/playlist-suggestion-refresh';
 import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
+import { usePlaylistClimbActivation } from '@/app/components/queue-control/use-playlist-climb-activation';
 import BackButton from '@/app/components/back-button';
 import LocaleLink from '@/app/components/i18n/locale-link';
-import { getBoardDetailsForPlaylist, getUserBoardDetails } from '@/app/lib/board-config-for-playlist';
+import { getUserBoardDetails } from '@/app/lib/board-config-for-playlist';
 import styles from '@/app/components/library/playlist-view.module.css';
 
 type Props = {
@@ -68,7 +65,6 @@ export default function SmartPlaylistContent({
   const preset = smartPlaylistByType(smartPlaylistType);
 
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(() => findMatchingBoard(initialMyBoards));
-  const smartPlaylistSuggestionsRefreshAbortRef = useRef<AbortController | null>(null);
   useClearPlaylistSuggestionSourceOnUnmount(queueActions);
   const { boards: myBoards, isLoading: boardsLoading } = useMyBoards(true, 50, initialMyBoards);
   // Mark SSR data fresh so react-query honours staleTime instead of triggering
@@ -154,14 +150,17 @@ export default function SmartPlaylistContent({
     [selectedBoard],
   );
 
-  useEffect(() => {
-    return () => {
-      smartPlaylistSuggestionsRefreshAbortRef.current?.abort();
-    };
-  }, []);
-
   const fetchSmartPlaylistClimbsForBoard = useCallback(
-    async (boardDetails: BoardDetails, activatedClimbUuid: string, signal: AbortSignal): Promise<Climb[]> => {
+    async ({
+      boardDetails,
+      activatedClimbUuid,
+      signal,
+    }: {
+      boardDetails: BoardDetails;
+      angle: number;
+      activatedClimbUuid: string;
+      signal: AbortSignal;
+    }): Promise<Climb[]> => {
       const client = createGraphQLHttpClient(token);
 
       return fetchPlaylistSuggestionClimbs({
@@ -192,76 +191,18 @@ export default function SmartPlaylistContent({
     [smartPlaylistType, token, userId],
   );
 
-  const activateSmartPlaylistClimb = useCallback(
-    async (climb: Climb): Promise<void> => {
-      if (!queueActions) return;
-
-      const activeBoardDetails = activeQueueBoardInfo.boardDetails;
-      const targetBoardDetails =
-        activeBoardDetails ??
-        selectedBoardDetails ??
-        getBoardDetailsForPlaylist(
-          climb.boardType ?? selectedBoard?.boardType ?? '',
-          climb.layoutId ?? selectedBoard?.layoutId,
-        );
-
-      if (!targetBoardDetails) {
-        await queueActions.setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
-        return;
-      }
-
-      const sourceId = `smart:${smartPlaylistType}:${userId}`;
-      const initialSource = createPlaylistSuggestionSource({
-        playlistUuid: sourceId,
-        activatedClimb: climb,
-        climbs: allClimbs,
-        boardDetails: targetBoardDetails,
-      });
-
-      const activeItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: initialSource });
-      if (!activeItem) return;
-
-      smartPlaylistSuggestionsRefreshAbortRef.current?.abort();
-      const abortController = new AbortController();
-      smartPlaylistSuggestionsRefreshAbortRef.current = abortController;
-
-      void (async () => {
-        try {
-          const fetchedClimbs = await fetchSmartPlaylistClimbsForBoard(
-            targetBoardDetails,
-            climb.uuid,
-            abortController.signal,
-          );
-          if (abortController.signal.aborted) return;
-          const refreshedSource = createPlaylistSuggestionSource({
-            playlistUuid: sourceId,
-            activatedClimb: climb,
-            climbs: fetchedClimbs,
-            boardDetails: targetBoardDetails,
-          });
-          queueActions.refreshPlaylistSuggestionSource(refreshedSource);
-        } catch (err: unknown) {
-          if (isAbortError(err)) return;
-          console.error('Failed to refresh smart playlist suggestions:', err);
-        } finally {
-          if (smartPlaylistSuggestionsRefreshAbortRef.current === abortController) {
-            smartPlaylistSuggestionsRefreshAbortRef.current = null;
-          }
-        }
-      })();
-    },
-    [
-      queueActions,
-      activeQueueBoardInfo.boardDetails,
-      selectedBoardDetails,
-      selectedBoard?.boardType,
-      selectedBoard?.layoutId,
-      smartPlaylistType,
-      userId,
-      allClimbs,
-      fetchSmartPlaylistClimbsForBoard,
-    ],
-  );
+  const activateSmartPlaylistClimb = usePlaylistClimbActivation({
+    queueActions,
+    activeQueueBoardInfo,
+    selectedBoardDetails,
+    selectedBoard,
+    fallbackBoardType: selectedBoard?.boardType,
+    fallbackLayoutId: selectedBoard?.layoutId,
+    sourceId: `smart:${smartPlaylistType}:${userId}`,
+    allClimbs,
+    fetchClimbsForBoard: fetchSmartPlaylistClimbsForBoard,
+    refreshErrorMessage: 'Failed to refresh smart playlist suggestions:',
+  });
 
   const playlistActivationValue = useMemo(
     () => ({ activatePlaylistClimb: activateSmartPlaylistClimb }),

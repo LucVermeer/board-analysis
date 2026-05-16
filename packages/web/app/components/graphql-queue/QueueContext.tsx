@@ -19,6 +19,7 @@ import {
   getPlaylistSuggestionSourceOverride,
   getPlaylistSuggestedClimbs,
   insertQueueItemAfterCurrent,
+  isPlaylistPeekQueueItemUuid,
   pruneSuggestedQueueItemsAfterCurrent,
 } from '../queue-control/playlist-suggestions';
 import { urlParamsToSearchParams, searchParamsToUrlParams } from '@/app/lib/url-utils';
@@ -532,6 +533,7 @@ export const GraphQLQueueProvider = ({
       if (latest.guardMutation()) return null;
       if (!latest.validateQueueAdd(climb)) return null;
       const playlistSuggestionSource = getPlaylistSuggestionSourceOverride(options);
+      const previousPlaylistSuggestionSource = latest.state.playlistSuggestionSource;
       const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
       const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
       const correlationId = nextCorrelationId();
@@ -571,6 +573,9 @@ export const GraphQLQueueProvider = ({
         } catch (error: unknown) {
           console.error('Failed to set current climb:', error);
           if (correlationId) latest.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
+          if (playlistSuggestionSource !== undefined) {
+            latest.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: previousPlaylistSuggestionSource });
+          }
           trackQueueOperationError('setCurrentClimb', mode);
         }
       } else {
@@ -780,16 +785,23 @@ export const GraphQLQueueProvider = ({
     const startTime = performance.now();
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
+    // Playlist "peek" items use a deterministic synthetic uuid so repeated
+    // peeks of the same suggestion produce a stable queue uuid. Once a peek
+    // is promoted to the actual current climb, mint a fresh queue-item uuid
+    // so it lives as a regular queue entry rather than a transient peek.
+    const queueItem = isPlaylistPeekQueueItemUuid(item.uuid)
+      ? createClimbQueueItem(item.climb, latest.clientId, latest.currentUserInfo, item.suggested)
+      : item;
     const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     const correlationId = nextCorrelationId();
     latest.dispatch({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
-      payload: { item, shouldAddToQueue: item.suggested, correlationId },
+      payload: { item: queueItem, shouldAddToQueue: queueItem.suggested, correlationId },
     });
     if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
     if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
       latest.persistentSession
-        .setCurrentClimb(item, item.suggested, correlationId)
+        .setCurrentClimb(queueItem, queueItem.suggested, correlationId)
         .then(() => trackQueueOperation('setCurrentClimbQueueItem', performance.now() - startTime, mode))
         .catch((error: unknown) => {
           console.error('Failed to set current climb:', error);

@@ -116,3 +116,7 @@ export function insertQueueItemAfterCurrent(
 export function getPlaylistPeekQueueItemUuid(climbUuid: string): string {
   return `playlist-peek:${climbUuid}`;
 }
+
+export function isPlaylistPeekQueueItemUuid(queueItemUuid: string): boolean {
+  return queueItemUuid.startsWith('playlist-peek:');
+}

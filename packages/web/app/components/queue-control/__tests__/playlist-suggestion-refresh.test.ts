@@ -43,6 +43,28 @@ describe('playlist suggestion refresh', () => {
     expect(climbs.map((climb) => climb.uuid)).toEqual(['before', 'activated', 'after-1', 'after-2', 'after-3']);
   });
 
+  it('does not count the activated climb when it is at a page boundary', async () => {
+    const calls: number[] = [];
+    const pages = [
+      { climbs: [makeClimb('activated')], hasMore: true },
+      { climbs: [makeClimb('after-1')], hasMore: true },
+      { climbs: [makeClimb('after-2')], hasMore: false },
+    ];
+
+    const climbs = await fetchPlaylistSuggestionClimbs({
+      activatedClimbUuid: 'activated',
+      signal: new AbortController().signal,
+      maxClimbsAfterActivated: 1,
+      fetchPage: async ({ page }) => {
+        calls.push(page);
+        return pages[page] ?? { climbs: [], hasMore: false };
+      },
+    });
+
+    expect(calls).toEqual([0, 1]);
+    expect(climbs.map((climb) => climb.uuid)).toEqual(['activated', 'after-1']);
+  });
+
   it('does not fetch when the signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();

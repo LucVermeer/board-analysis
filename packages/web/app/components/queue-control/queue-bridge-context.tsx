@@ -44,6 +44,7 @@ import {
   getPlaylistSuggestedClimbs,
   getPlaylistPeekQueueItemUuid,
   insertQueueItemAfterCurrent,
+  isPlaylistPeekQueueItemUuid,
   playlistSuggestionSourceMatches,
   pruneSuggestedQueueItemsAfterCurrent,
 } from './playlist-suggestions';
@@ -250,24 +251,30 @@ function usePersistentSessionQueueAdapter(): {
     [],
   );
 
-  const setCurrentClimbQueueItem = useCallback((item: ClimbQueueItem) => {
-    const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
-    const alreadyInQueue = queue.some((q) => q.uuid === item.uuid);
-    if (ps.activeSession) {
-      // Don't bail on the "already current" optimistic state in party mode —
-      // a peer may have moved the current climb away and our local view
-      // hasn't caught up yet. Always re-send so the server reconciles.
-      const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
-      ps.setCurrentClimb(item, item.suggested, correlationId).catch((err: unknown) => {
-        console.error('Failed to set current climb queue item:', err);
-      });
-      return;
-    }
-    if (alreadyInQueue && current?.uuid === item.uuid) return;
-    if (!boardDetails) return;
-    const newQueue = alreadyInQueue ? queue : [...queue, item];
-    ps.setLocalQueueState(newQueue, item, baseBoardPath, boardDetails);
-  }, []);
+  const setCurrentClimbQueueItem = useCallback(
+    (item: ClimbQueueItem) => {
+      const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
+      const queueItem = isPlaylistPeekQueueItemUuid(item.uuid)
+        ? { ...buildQueueItem(item.climb), suggested: item.suggested }
+        : item;
+      const alreadyInQueue = queue.some((q) => q.uuid === item.uuid);
+      if (ps.activeSession) {
+        // Don't bail on the "already current" optimistic state in party mode —
+        // a peer may have moved the current climb away and our local view
+        // hasn't caught up yet. Always re-send so the server reconciles.
+        const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
+        ps.setCurrentClimb(queueItem, queueItem.suggested, correlationId).catch((err: unknown) => {
+          console.error('Failed to set current climb queue item:', err);
+        });
+        return;
+      }
+      if (alreadyInQueue && current?.uuid === queueItem.uuid) return;
+      if (!boardDetails) return;
+      const newQueue = alreadyInQueue ? queue : [...queue, queueItem];
+      ps.setLocalQueueState(newQueue, queueItem, baseBoardPath, boardDetails);
+    },
+    [buildQueueItem],
+  );
 
   const addToQueue = useCallback(
     (climb: Climb) => {
@@ -347,9 +354,21 @@ function usePersistentSessionQueueAdapter(): {
 
   const setCurrentClimb = useCallback(
     async (climb: Climb, options?: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
-      const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
+      const {
+        queue,
+        currentClimbQueueItem: current,
+        ps,
+        boardDetails,
+        baseBoardPath,
+        playlistSuggestionSource: previousPlaylistSuggestionSource,
+      } = latestRef.current;
       if (!validateClimbForQueue(climb)) return null;
       const nextPlaylistSuggestionSource = getPlaylistSuggestionSourceOverride(options);
+      const rollbackPlaylistSuggestionSource = () => {
+        if (nextPlaylistSuggestionSource !== undefined) {
+          setPlaylistSuggestionSourceState(previousPlaylistSuggestionSource);
+        }
+      };
       if (nextPlaylistSuggestionSource !== undefined) {
         setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
       }
@@ -370,6 +389,7 @@ function usePersistentSessionQueueAdapter(): {
             return existing;
           } catch (err: unknown) {
             console.error('Failed to set current climb:', err);
+            rollbackPlaylistSuggestionSource();
             return null;
           }
         }
@@ -384,6 +404,7 @@ function usePersistentSessionQueueAdapter(): {
             return newItem;
           } catch (err: unknown) {
             console.error('Failed to replace queue before setting playlist current:', err);
+            rollbackPlaylistSuggestionSource();
             return null;
           }
         }
@@ -398,6 +419,7 @@ function usePersistentSessionQueueAdapter(): {
           await ps.addQueueItem(newItem, position);
         } catch (err: unknown) {
           console.error('Failed to add queue item before setting current:', err);
+          rollbackPlaylistSuggestionSource();
           return null;
         }
         try {
@@ -409,6 +431,7 @@ function usePersistentSessionQueueAdapter(): {
           return newItem;
         } catch (err: unknown) {
           console.error('Failed to set current climb after queue add:', err);
+          rollbackPlaylistSuggestionSource();
           return null;
         }
       }
@@ -417,7 +440,10 @@ function usePersistentSessionQueueAdapter(): {
         // Cold-start path: no active board yet. Seed local state from the
         // climb's own board config so the queue bar begins showing.
         const seed = deriveSeedStateFromClimb(climb);
-        if (!seed) return null;
+        if (!seed) {
+          rollbackPlaylistSuggestionSource();
+          return null;
+        }
         ps.setLocalQueueState([newItem], newItem, seed.baseBoardPath, seed.boardDetails);
         return newItem;
       }

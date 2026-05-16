@@ -956,6 +956,78 @@ describe('queue-bridge-context', () => {
         expect(call[1]).toBe(false);
       });
 
+      it('setCurrentClimbQueueItem promotes playlist peek items before sending to party mode', () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2],
+          boardDetails: bd,
+        });
+        const { result } = renderWithPartySession([item1], item1);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const nextItem = result.current!.getNextClimbQueueItem();
+        expect(nextItem?.uuid).toBe('playlist-peek:c2');
+
+        act(() => {
+          result.current!.setCurrentClimbQueueItem(nextItem!);
+        });
+
+        expect(mockSetLocalQueueState).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setCurrentClimb).toHaveBeenCalledTimes(1);
+        const call = (mockPersistentSession.setCurrentClimb as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(call[0].uuid).toBe('test-uuid-1');
+        expect(call[0].uuid).not.toBe('playlist-peek:c2');
+        expect(call[0].climb.uuid).toBe('c2');
+        expect(call[0].suggested).toBe(true);
+        expect(call[1]).toBe(true);
+      });
+
+      it('setCurrentClimb rolls back playlist source when party queue replacement fails', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+          const item1 = createTestQueueItem(climb1, 'u1');
+          const previousSource = createPlaylistSuggestionSource({
+            playlistUuid: 'playlist-1',
+            activatedClimb: climb1,
+            climbs: [climb1, climb2],
+            boardDetails: bd,
+          });
+          const nextSource = createPlaylistSuggestionSource({
+            playlistUuid: 'playlist-1',
+            activatedClimb: climb2,
+            climbs: [climb2, climb3],
+            boardDetails: bd,
+          });
+          const { result } = renderWithPartySession([item1], item1, {
+            setQueue: vi.fn(() => Promise.reject(new Error('ws queue failed'))),
+          });
+
+          act(() => {
+            result.current!.setPlaylistSuggestionSource(previousSource);
+          });
+          expect(result.current!.playlistSuggestionSource).toEqual(previousSource);
+
+          let returnValue: ClimbQueueItem | null | undefined;
+          await act(async () => {
+            returnValue = await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: nextSource });
+          });
+
+          expect(returnValue).toBeNull();
+          expect(result.current!.playlistSuggestionSource).toEqual(previousSource);
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Failed to replace queue before setting playlist current:',
+            expect.any(Error),
+          );
+        } finally {
+          consoleErrorSpy.mockRestore();
+        }
+      });
+
       it('addToQueue delegates to ps.addQueueItem in party mode', () => {
         const { result } = renderWithPartySession([], null);
         act(() => {

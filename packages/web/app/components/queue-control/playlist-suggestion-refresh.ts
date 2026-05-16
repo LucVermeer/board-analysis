@@ -46,11 +46,12 @@ export async function fetchPlaylistSuggestionClimbs({
     const pageResult = await fetchPage({ page, pageSize, signal });
 
     for (const pageClimb of pageResult.climbs) {
-      if (activatedClimbSeen) {
-        loadedClimbsAfterActivated += 1;
-      }
       if (pageClimb.uuid === activatedClimbUuid) {
         activatedClimbSeen = true;
+        continue;
+      }
+      if (activatedClimbSeen) {
+        loadedClimbsAfterActivated += 1;
       }
     }
 

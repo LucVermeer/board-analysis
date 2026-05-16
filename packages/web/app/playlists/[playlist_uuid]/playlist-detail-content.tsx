@@ -77,12 +77,9 @@ import MultiboardClimbList from '@/app/components/climb-list/multiboard-climb-li
 import { PlaylistActivationProvider } from '@/app/components/climb-actions/playlist-activation-context';
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
 import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
-import { createPlaylistSuggestionSource } from '@/app/components/queue-control/playlist-suggestions';
-import {
-  fetchPlaylistSuggestionClimbs,
-  isAbortError,
-} from '@/app/components/queue-control/playlist-suggestion-refresh';
+import { fetchPlaylistSuggestionClimbs } from '@/app/components/queue-control/playlist-suggestion-refresh';
 import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
+import { usePlaylistClimbActivation } from '@/app/components/queue-control/use-playlist-climb-activation';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard, type BoardConfig } from '@/app/lib/find-matching-board';
 import { ssrSeedMatchesQueryKey } from '@/app/lib/graphql/ssr-query-seed';
@@ -163,7 +160,6 @@ export default function PlaylistDetailContent({
     boardUuid: selectedBoard?.uuid ?? null,
     refreshKey: 0,
   });
-  const playlistSuggestionsRefreshAbortRef = useRef<AbortController | null>(null);
   const { token, isLoading: tokenLoading } = useWsAuthToken();
   const queueActions = useOptionalQueueActions();
   const activeQueueBoardInfo = useQueueBridgeBoardInfo();
@@ -348,19 +344,18 @@ export default function PlaylistDetailContent({
     [selectedBoard],
   );
 
-  useEffect(() => {
-    return () => {
-      playlistSuggestionsRefreshAbortRef.current?.abort();
-    };
-  }, []);
-
   const fetchPlaylistClimbsForBoard = useCallback(
-    async (
-      boardDetails: BoardDetails,
-      angle: number,
-      activatedClimbUuid: string,
-      signal: AbortSignal,
-    ): Promise<Climb[]> => {
+    async ({
+      boardDetails,
+      angle,
+      activatedClimbUuid,
+      signal,
+    }: {
+      boardDetails: BoardDetails;
+      angle: number;
+      activatedClimbUuid: string;
+      signal: AbortSignal;
+    }): Promise<Climb[]> => {
       const client = createGraphQLHttpClient(token);
       const setIds = Array.isArray(boardDetails.set_ids)
         ? boardDetails.set_ids.join(',')
@@ -397,78 +392,18 @@ export default function PlaylistDetailContent({
     [playlistUuid, token],
   );
 
-  const activatePlaylistClimb = useCallback(
-    async (climb: Climb): Promise<void> => {
-      if (!queueActions) return;
-
-      const activeBoardDetails = activeQueueBoardInfo.boardDetails;
-      const targetBoardDetails =
-        activeBoardDetails ??
-        selectedBoardDetails ??
-        getBoardDetailsForPlaylist(climb.boardType ?? playlist?.boardType ?? '', climb.layoutId ?? playlist?.layoutId);
-
-      if (!targetBoardDetails) {
-        await queueActions.setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
-        return;
-      }
-
-      const targetAngle = activeBoardDetails
-        ? activeQueueBoardInfo.angle
-        : (selectedBoard?.angle ?? climb.angle ?? getDefaultAngleForBoard(targetBoardDetails.board_name));
-
-      const initialSource = createPlaylistSuggestionSource({
-        playlistUuid,
-        activatedClimb: climb,
-        climbs: allClimbs,
-        boardDetails: targetBoardDetails,
-      });
-
-      const activeItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: initialSource });
-      if (!activeItem) return;
-
-      playlistSuggestionsRefreshAbortRef.current?.abort();
-      const abortController = new AbortController();
-      playlistSuggestionsRefreshAbortRef.current = abortController;
-
-      void (async () => {
-        try {
-          const fetchedClimbs = await fetchPlaylistClimbsForBoard(
-            targetBoardDetails,
-            targetAngle,
-            climb.uuid,
-            abortController.signal,
-          );
-          if (abortController.signal.aborted) return;
-          const refreshedSource = createPlaylistSuggestionSource({
-            playlistUuid,
-            activatedClimb: climb,
-            climbs: fetchedClimbs,
-            boardDetails: targetBoardDetails,
-          });
-          queueActions.refreshPlaylistSuggestionSource(refreshedSource);
-        } catch (err: unknown) {
-          if (isAbortError(err)) return;
-          console.error('Failed to refresh playlist suggestions:', err);
-        } finally {
-          if (playlistSuggestionsRefreshAbortRef.current === abortController) {
-            playlistSuggestionsRefreshAbortRef.current = null;
-          }
-        }
-      })();
-    },
-    [
-      queueActions,
-      activeQueueBoardInfo.boardDetails,
-      activeQueueBoardInfo.angle,
-      selectedBoardDetails,
-      playlist?.boardType,
-      playlist?.layoutId,
-      selectedBoard?.angle,
-      playlistUuid,
-      allClimbs,
-      fetchPlaylistClimbsForBoard,
-    ],
-  );
+  const activatePlaylistClimb = usePlaylistClimbActivation({
+    queueActions,
+    activeQueueBoardInfo,
+    selectedBoardDetails,
+    selectedBoard,
+    fallbackBoardType: playlist?.boardType,
+    fallbackLayoutId: playlist?.layoutId,
+    sourceId: playlistUuid,
+    allClimbs,
+    fetchClimbsForBoard: fetchPlaylistClimbsForBoard,
+    refreshErrorMessage: 'Failed to refresh playlist suggestions:',
+  });
 
   const playlistActivationValue = useMemo(() => ({ activatePlaylistClimb }), [activatePlaylistClimb]);
 
