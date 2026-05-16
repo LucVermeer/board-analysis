@@ -163,6 +163,12 @@ There are exactly three production code paths that insert into `boardsesh_ticks`
 - Fires `assignInferredSession` (fire-and-forget) for non-party ticks.
 - Publishes `ascent.logged` event for the feed (only for `flash`/`send`, not `attempt`).
 - If `videoUrl` was attached, also inserts a `board_beta_links` row.
+- Calls `queueClimbStatsRecompute(boardType, climbUuid, angle)`. The debounced job
+  (2 s window, `packages/backend/src/graphql/resolvers/ticks/debounced-climb-stats-publisher.ts`)
+  recomputes `board_climb_stats.boardsesh_ascensionist_count` from the
+  current ticks for that `(board_type, climb_uuid, angle)` triplet — see
+  [`aurora-sync.md`](aurora-sync.md) for the two-writer model that the
+  recompute coordinates with.
 
 Two client hooks call it:
 
@@ -178,6 +184,17 @@ Two client hooks call it:
 `packages/aurora-sync/src/sync/user-sync.ts:214`. Bulk inserts attempts. Status is hardcoded to `'attempt'`. Quality and difficulty are always null.
 
 **No other code path may insert into `boardsesh_ticks`.** If you need to bulk-create ticks (a test, an import script), route through the same code or write a script in `packages/aurora-sync` that mirrors this shape.
+
+### Stats recompute on edits and deletes
+
+`updateTick` and `deleteTick` (same `mutations.ts` file) don't insert new
+ticks but they do change the answer to "how many distinct users sent this
+climb at this angle, and who was first." Both call
+`queueClimbStatsRecompute` after their write commits, so a deleted ascent
+correctly demotes `board_climb_stats.fa_*` to the next earliest sender (or
+to `NULL` if no senders remain) and a status edit from `attempt` → `send`
+bumps the count. If you add a new mutation that touches ticks, queue a
+recompute too.
 
 ---
 

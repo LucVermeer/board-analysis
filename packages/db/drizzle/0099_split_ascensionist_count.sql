@@ -23,17 +23,14 @@
 --     NULL, so re-running is a no-op after the first apply.
 --   - The recompute pass uses ON CONFLICT semantics implicitly: the WHERE
 --     clause restricts to rows that actually exist.
---   - The two backfill UPDATEs run inside an explicit BEGIN/COMMIT block.
---     Drizzle's migrator already wraps each migration in a transaction, so
---     this is belt-and-suspenders against the failure mode where one
---     UPDATE succeeds and the next aborts mid-migration: either both
---     UPDATEs commit or neither does.
+--   - Atomicity across the two backfill UPDATEs is provided by Drizzle's
+--     migrator, which wraps every migration in an outer transaction. We
+--     don't add an explicit BEGIN/COMMIT here — Postgres treats a nested
+--     BEGIN as a NOTICE-only no-op, so the inner block would buy nothing
+--     and just mislead a reader into thinking it provides protection.
 
 ALTER TABLE "board_climb_stats" ADD COLUMN "aurora_ascensionist_count" bigint;--> statement-breakpoint
 ALTER TABLE "board_climb_stats" ADD COLUMN "boardsesh_ascensionist_count" bigint;--> statement-breakpoint
-
-BEGIN;
---> statement-breakpoint
 
 -- Seed: every count in the table today was written by the Aurora sync.
 -- Migrate that into the new aurora-owned column.
@@ -110,6 +107,3 @@ UPDATE board_climb_stats s
  WHERE s.board_type = agg.board_type
    AND s.climb_uuid = agg.climb_uuid
    AND s.angle      = agg.angle;
---> statement-breakpoint
-
-COMMIT;

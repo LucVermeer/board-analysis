@@ -95,6 +95,25 @@ describe('recomputeClimbStats', () => {
     expect(executeCount).toBe(1);
   });
 
+  // FRAGILE TEST WARNING — read before changing:
+  //
+  // This test introspects drizzle's internal `queryChunks` representation of
+  // the `sql\`...\`` template result, stitches the raw string fragments back
+  // together, and greps for the SQL clauses the runtime depends on. It will
+  // break if drizzle changes how `sql\`...\`` returns its AST (rename of
+  // `queryChunks`, restructure of the chunk objects, etc.).
+  //
+  // We accept that fragility because the alternative — a real-DB integration
+  // test that seeds a user + climb + ticks, calls recompute, asserts row
+  // state, and cleans up — adds significant scaffolding that no other test
+  // in this repo establishes. The end-to-end behavior IS covered: the
+  // migration backfill in 0099_split_ascensionist_count.sql runs the same
+  // logic against ~4,668 ticks-having climbs in the dev DB and the post-run
+  // invariants are checked manually via the SQL spot-checks in the PR.
+  //
+  // If drizzle's internals shift and these assertions break, the right fix
+  // is to add a real-DB integration test for recomputeClimbStats (using the
+  // postgres test infra) rather than chase drizzle's AST shape.
   it('emits the SQL that COALESCEs distinct_senders to 0 (delete-last-tick path)', async () => {
     let capturedQuery: unknown = null;
     mockDb.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<void>) => {
@@ -112,9 +131,6 @@ describe('recomputeClimbStats', () => {
 
     await recomputeClimbStats('kilter', 'CLIMB-1', 40);
 
-    // Drizzle's `sql` template returns an object with `queryChunks` (the
-    // alternating raw fragments and parameter sentinels). Stitch the string
-    // chunks together so we can grep the structure.
     type DrizzleSql = { queryChunks?: Array<unknown> };
     const chunks = (capturedQuery as DrizzleSql).queryChunks ?? [];
     const sql = chunks
