@@ -45,7 +45,7 @@ final class WaiterPoolTests: XCTestCase {
         await pool.wait(timeout: timeout) { false }
         let elapsed = Date().timeIntervalSince(start)
         XCTAssertGreaterThanOrEqual(elapsed, timeout * 0.5, "Resumed before timeout (\(elapsed)s, expected at least \(timeout * 0.5)s)")
-        XCTAssertLessThan(elapsed, 5.0, "Resumed long after timeout (\(elapsed)s) — possibly hung")
+        XCTAssertLessThan(elapsed, 2.0, "Resumed long after timeout (\(elapsed)s) — possibly hung")
     }
 
     // MARK: - Concurrent waiters
