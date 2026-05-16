@@ -44,6 +44,7 @@
 		LA100100 /* LiveActivityBleBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200100 /* LiveActivityBleBridge.swift */; };
 		LA100110 /* WaiterPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200110 /* WaiterPool.swift */; };
 		LA100111 /* WaiterPoolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200111 /* WaiterPoolTests.swift */; };
+		LA100130 /* BleIntentBackgroundTaskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200130 /* BleIntentBackgroundTaskTests.swift */; };
 		LA100120 /* ClimbNavigationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200120 /* ClimbNavigationIntent.swift */; };
 		LA100121 /* ClimbNavigationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200120 /* ClimbNavigationIntent.swift */; };
 		LA100020 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200001 /* SharedConstants.swift */; };
@@ -133,6 +134,7 @@
 		LA200100 /* LiveActivityBleBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityBleBridge.swift; sourceTree = "<group>"; };
 		LA200110 /* WaiterPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaiterPool.swift; sourceTree = "<group>"; };
 		LA200111 /* WaiterPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaiterPoolTests.swift; sourceTree = "<group>"; };
+		LA200130 /* BleIntentBackgroundTaskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleIntentBackgroundTaskTests.swift; sourceTree = "<group>"; };
 		LA200120 /* ClimbNavigationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClimbNavigationIntent.swift; sourceTree = "<group>"; };
 		LA200014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		LA200015 /* BoardseshWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoardseshWidgets.entitlements; sourceTree = "<group>"; };
@@ -258,6 +260,7 @@
 				LA200033 /* AppIntentNavigationTests.swift */,
 				LA200034 /* VGradeFormatterTests.swift */,
 				LA200111 /* WaiterPoolTests.swift */,
+				LA200130 /* BleIntentBackgroundTaskTests.swift */,
 				BB200030 /* BoardBleEncodingTests.swift */,
 			);
 			path = AppTests;
@@ -512,6 +515,7 @@
 				LA100033 /* AppIntentNavigationTests.swift in Sources */,
 				LA100034 /* VGradeFormatterTests.swift in Sources */,
 				LA100111 /* WaiterPoolTests.swift in Sources */,
+				LA100130 /* BleIntentBackgroundTaskTests.swift in Sources */,
 				BB100030 /* BoardBleEncodingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

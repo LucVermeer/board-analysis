@@ -28,19 +28,35 @@ enum LiveActivityBleBridge {
     }
 }
 
-/// Owns a single `UIBackgroundTaskIdentifier`. `@MainActor`-isolated so
-/// `UIApplication.shared` (also `@MainActor`-isolated under Swift 6 strict
-/// concurrency) can be accessed without locks. The expiration-handler
-/// closure runs on the main thread per Apple, so `self?.end()` is a
-/// same-actor invocation.
+/// Owns a single `UIBackgroundTaskIdentifier`.
+///
+/// **Designed for short-lived stack use** — pair `begin(name:)` with an
+/// explicit `end()`, typically via `defer { task.end() }` (as
+/// `LiveActivityBleBridge.writeBoardForIntent` does). The class deliberately
+/// has **no `deinit`-based cleanup**: `deinit` can't run `@MainActor` methods
+/// in Swift 5, so a property-stored instance whose owner is released without
+/// calling `end()` will leak the task identifier (the expiration handler
+/// eventually fires and ends it, but iOS may have already begun reclaiming
+/// budget). The type is non-`private` purely so `BleIntentBackgroundTaskTests`
+/// can verify the idempotency contract — production callers should treat it
+/// as an implementation detail of `LiveActivityBleBridge`.
+///
+/// `@MainActor`-isolated so `UIApplication.shared` (also `@MainActor`-isolated
+/// under Swift 6 strict concurrency) can be accessed without locks. The
+/// expiration-handler closure passed to `beginBackgroundTask` is documented
+/// to run on the main thread, which we assert via `MainActor.assumeIsolated`
+/// — without that hop the strict-concurrency compile fails because the
+/// closure itself isn't actor-isolated.
 @MainActor
-private final class BleIntentBackgroundTask {
+final class BleIntentBackgroundTask {
     private var taskId: UIBackgroundTaskIdentifier = .invalid
 
     func begin(name: String) {
         guard taskId == .invalid else { return }
         taskId = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
-            self?.end()
+            MainActor.assumeIsolated {
+                self?.end()
+            }
         }
     }
 

@@ -34,17 +34,18 @@ final class WaiterPoolTests: XCTestCase {
     // MARK: - Timeout
 
     func testWaitResumesViaTimeoutWhenSignalNeverCalled() async {
-        // Verifies the timeout path resumes at all — we don't try to assert
-        // tight bounds on *when* it resumes, because a loaded CI runner can
-        // delay the work item arbitrarily. Lower bound proves the waiter
-        // actually suspended (rather than returning immediately on a stale
-        // ready signal); upper bound is a hang detector.
+        // Lower bound at 0.8× catches a regression where the waiter resumes
+        // early (e.g., a stale `isReady` signal slips through). `asyncAfter`
+        // does not fire before its deadline, so this side is not flake-prone.
+        // Upper bound is generous (and intentionally not tied to `timeout`)
+        // so a loaded CI runner can delay the work item without failing the
+        // assertion — the assertion is a hang detector, not a tightness check.
         let pool = makePool()
         let timeout: TimeInterval = 0.15
         let start = Date()
         await pool.wait(timeout: timeout) { false }
         let elapsed = Date().timeIntervalSince(start)
-        XCTAssertGreaterThanOrEqual(elapsed, timeout * 0.5, "Resumed before timeout (\(elapsed)s, expected at least \(timeout * 0.5)s)")
+        XCTAssertGreaterThanOrEqual(elapsed, timeout * 0.8, "Resumed before timeout (\(elapsed)s, expected at least \(timeout * 0.8)s)")
         XCTAssertLessThan(elapsed, 2.0, "Resumed long after timeout (\(elapsed)s) — possibly hung")
     }
 
@@ -163,6 +164,41 @@ final class WaiterPoolTests: XCTestCase {
 
         let isPending = await Self.readHasPendingWaiters(pool: pool, queue: queue)
         XCTAssertFalse(isPending, "Pool should be empty after timeout-then-signalAll")
+    }
+
+    func testSignalAllAfterPriorEmptySignalResumesNewWaiters() async {
+        // Mirrors the race that motivates `BoardBleManager`'s defensive
+        // `readyWaiters.signalAll()` in `centralManagerDidUpdateState`:
+        // an earlier `signalAll` fires when the pool is empty (the BLE
+        // peripheral's `didDiscoverCharacteristicsFor` callback landed
+        // before any intent enqueued a waiter), then a waiter is enqueued
+        // (intent's `waitUntilReady` runs and finds `isReadyForWrite`
+        // false because `.poweredOn` hasn't transitioned yet), then a
+        // second `signalAll` (the defensive call from
+        // `centralManagerDidUpdateState(.poweredOn)`) resumes the waiter.
+        let (pool, queue) = makePoolAndQueue()
+
+        await Self.runOnQueue(queue) {
+            pool.signalAll()
+        }
+
+        let waitTask = Task {
+            await pool.wait(timeout: 2.0) { false }
+        }
+
+        let pendingObserved = await Self.pollUntil(timeout: 2.0) {
+            await Self.readHasPendingWaiters(pool: pool, queue: queue)
+        }
+        XCTAssertTrue(pendingObserved, "Waiter should have enqueued before the defensive signalAll")
+
+        await Self.runOnQueue(queue) {
+            pool.signalAll()
+        }
+
+        await waitTask.value
+
+        let isPending = await Self.readHasPendingWaiters(pool: pool, queue: queue)
+        XCTAssertFalse(isPending, "Waiter should have resumed via the second signalAll")
     }
 
     func testSignalAllOnEmptyPoolIsNoop() async {
