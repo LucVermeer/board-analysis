@@ -68,7 +68,7 @@ Tapping the Queue Control Bar itself opens a **wall-view drawer** showing the cl
 - **No swipe gesture** inside this drawer. The view is locked to whatever is currently lit. To browse other climbs, the user closes the drawer and uses the list or search.
 - **"Currently on the wall" label** at the top of the drawer so the mode is unambiguous.
 - **Driver's avatar inline near the label** — same avatar that carries the lit lightbulb badge in the bar's `AvatarGroup`. Tap-through behaviour mirrors the bar avatar (opens roster).
-- **Lightbulb stays available** with the same semantics as everywhere else (driver presses to release, non-driver presses to take). Gives the user a take-control path from this view without backing out.
+- **Lightbulb stays available** with the same semantics and visual rules as everywhere else: filled/lit when the local user is the driver (press to release), empty/outlined when someone else is driving (press to take). Gives the user a take-control path from this view without backing out.
 - **Standard climb actions remain** — Add to Queue, Open in Aurora, Mirror, Fork, tick logging, etc. The restriction is navigation-only.
 
 Contrast with the normal drawer (opened by tapping a climb in the list): that one shows the *tapped* climb (not the wall climb), supports swipe-as-preview for non-drivers / swipe-as-broadcast for drivers, and shows prev/next for drivers. The two drawers share most of the underlying component; the differences are state-driven from how the drawer was opened.
