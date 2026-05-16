@@ -158,7 +158,7 @@
       "minRating": "Valoración mínima",
       "climbBias": "Sesgo de bloques",
       "tallClimbsLabel": "Solo bloques altos",
-      "tallClimbsTooltip": "Muestra solo bloques que usan presas en las 8 filas inferiores (solo disponible en tableros 10x12)",
+      "tallClimbsTooltip": "Muestra solo bloques que usan presas en las 8 filas inferiores (solo disponible en tableros 8x12 y 10x12)",
       "mainSetClimbs": "Bloques de la serie principal",
       "mainSetVariability": "Variabilidad de la serie principal",
       "numberOfSteps": "Número de pasos",

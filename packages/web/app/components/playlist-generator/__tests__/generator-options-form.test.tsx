@@ -63,4 +63,30 @@ describe('GeneratorOptionsForm quality filters', () => {
 
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ minRating: 4 }));
   });
+
+  it('shows tall climbs option for 8x12 Kilter Homewall and updates options', () => {
+    const onChange = vi.fn();
+    render(
+      <GeneratorOptionsForm
+        workoutType="volume"
+        options={getDefaultOptions('volume', 18)}
+        onChange={onChange}
+        onReset={vi.fn()}
+        boardDetails={{
+          ...boardDetails,
+          board_name: 'kilter',
+          layout_id: 8,
+          size_id: 23,
+          size_name: '8x12',
+        }}
+        targetAngle={40}
+        onTargetAngleChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Tall Climbs Only')).toBeDefined();
+    fireEvent.click(screen.getByRole('switch'));
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ onlyTallClimbs: true }));
+  });
 });

@@ -162,7 +162,7 @@
       "minRatingOption_other": "{{count}} étoiles et plus",
       "climbBias": "Préférence de blocs",
       "tallClimbsLabel": "Blocs hauts uniquement",
-      "tallClimbsTooltip": "Affiche uniquement les blocs qui utilisent les prises des 8 rangées du bas (uniquement sur les boards 10x12)",
+      "tallClimbsTooltip": "Affiche uniquement les blocs qui utilisent les prises des 8 rangées du bas (uniquement sur les boards 8x12 et 10x12)",
       "mainSetClimbs": "Blocs de la série principale",
       "mainSetVariability": "Variabilité de la série principale",
       "numberOfSteps": "Nombre de paliers",
