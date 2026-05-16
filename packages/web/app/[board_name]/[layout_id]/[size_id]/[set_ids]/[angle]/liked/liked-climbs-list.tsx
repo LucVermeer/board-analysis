@@ -19,7 +19,6 @@ import {
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useQueueActions } from '@/app/components/graphql-queue';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
-import { dispatchOpenPlayDrawer } from '@/app/components/queue-control/play-drawer-event';
 import ClimbCard from '@/app/components/climb-card/climb-card';
 import ClimbListItem from '@/app/components/climb-card/climb-list-item';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
@@ -172,7 +171,7 @@ export default function LikedClimbsList({ boardDetails, angle }: LikedClimbsList
   const pathname = usePathname();
   const isDark = useIsDarkMode();
   const { token, isLoading: tokenLoading } = useWsAuthToken();
-  const { setCurrentClimb, addToQueue } = useQueueActions();
+  const { previewClimbFromBrowse, addToQueue } = useQueueActions();
   const { showMessage } = useSnackbar();
   const [selectedClimbUuid, setSelectedClimbUuid] = useState<string | null>(null);
   const selectionStore = useSelectionStore(selectedClimbUuid);
@@ -249,28 +248,28 @@ export default function LikedClimbsList({ boardDetails, angle }: LikedClimbsList
     isFetching: isFetchingNextPage,
   });
 
-  // Row click: activates the climb but does NOT open the play drawer.
-  // Only the thumbnail (list mode) or card cover (grid mode) opens the drawer.
+  // Row + thumbnail / card-cover click: opens the play drawer for the tapped
+  // climb. In solo this also sends to the wall (same as today). In a party
+  // session, the climb is shown locally in the drawer without yanking the
+  // wall — see previewClimbFromBrowse in QueueContext.
   const handleClimbSelect = useCallback(
     (climb: Climb) => {
       setSelectedClimbUuid(climb.uuid);
-      void setCurrentClimb(climb);
+      previewClimbFromBrowse(climb);
     },
-    [setCurrentClimb],
+    [previewClimbFromBrowse],
   );
 
-  // Thumbnail / card-cover click: activates the climb and opens the play drawer.
   const handleClimbOpenDrawer = useCallback(
     (climb: Climb) => {
       setSelectedClimbUuid(climb.uuid);
-      void setCurrentClimb(climb);
-      dispatchOpenPlayDrawer();
+      previewClimbFromBrowse(climb);
       track('Liked Climb Card Clicked', {
         climbUuid: climb.uuid,
         angle: climb.angle,
       });
     },
-    [setCurrentClimb],
+    [previewClimbFromBrowse],
   );
 
   const selectHandlersMap = useMemo(() => {

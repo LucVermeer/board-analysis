@@ -21,7 +21,6 @@ import { useSession } from 'next-auth/react';
 import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import { useDrawerDragResize } from '@/app/hooks/use-drawer-drag-resize';
 import QueueClimbListItem from './queue-climb-list-item';
-import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import ClimbListItem from '../climb-card/climb-list-item';
 import DrawerClimbHeader from '../climb-card/drawer-climb-header';
 import { ClimbActions } from '../climb-actions';
@@ -80,7 +79,7 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
     const { queue, suggestedClimbs } = useQueueList();
     const { hasMoreResults, isFetchingClimbs, isFetchingNextPage } = useSearchData();
     const { viewOnlyMode } = useSessionData();
-    const { setCurrentClimb, setCurrentClimbQueueItem, setQueue, addToQueue } = useQueueActions();
+    const { setCurrentClimbQueueItem, setQueue, addToQueue, previewClimbFromBrowse } = useQueueActions();
     const pathname = usePathname();
     const router = useLocaleRouter();
     const routeParams = useParams<{ board_slug?: string; angle?: string }>();
@@ -143,15 +142,15 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
       handleCloseActions();
     }, [handleCloseActions]);
 
-    // Suggested climbs: clicking the thumbnail promotes the climb to current
-    // (which also adds it to the queue) and opens the play drawer, matching
-    // the behavior of queue items and board list items.
+    // Suggested climbs: clicking the thumbnail opens the play drawer for that
+    // climb. In solo it also sends to the wall (today's behavior). In a party
+    // session, the climb is shown locally in the drawer without yanking the
+    // wall — see previewClimbFromBrowse in QueueContext.
     const handleSuggestionThumbnailClick = useCallback(
       (climb: Climb) => {
-        void setCurrentClimb(climb);
-        dispatchOpenPlayDrawer();
+        previewClimbFromBrowse(climb);
       },
-      [setCurrentClimb],
+      [previewClimbFromBrowse],
     );
 
     const excludeActions = useMemo(

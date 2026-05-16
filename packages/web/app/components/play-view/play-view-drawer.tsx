@@ -20,6 +20,7 @@ import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOu
 import CheckOutlined from '@mui/icons-material/CheckOutlined';
 import ChatBubbleOutlineOutlined from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import { TickIcon, TickButtonWithLabel } from '../logbook/tick-icon';
+import type { ClimbQueueItem } from '../queue-control/types';
 import { PersonFallingIcon } from '@/app/components/icons/person-falling-icon';
 import { usePathname } from 'next/navigation';
 import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
@@ -421,6 +422,12 @@ type PlayViewDrawerProps = {
   angle: Angle;
   /** Callback to expose the MUI Paper element for external animation (e.g., peek hint). */
   onPaperRef?: (el: HTMLDivElement | null) => void;
+  /** Drawer-local "displayed climb" — set by browse callers in a party
+   *  session so the drawer can preview a climb without mutating the wall
+   *  climb. Null in solo or when the drawer was opened from the bar (then
+   *  the drawer displays the wall climb directly). */
+  drawerDisplayedItem?: ClimbQueueItem | null;
+  setDrawerDisplayedItem?: (item: ClimbQueueItem | null) => void;
 };
 
 const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
@@ -429,6 +436,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   boardDetails,
   angle,
   onPaperRef,
+  drawerDisplayedItem = null,
+  setDrawerDisplayedItem,
 }) => {
   const { t } = useTranslation('session');
   const isOpen = activeDrawer === 'play';
@@ -483,15 +492,26 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const deferredQueue = useDeferredValue(queueListData);
   const deferredSession = useDeferredValue(sessionData);
 
-  const { currentClimb, currentClimbQueueItem } = isOpen ? currentClimbData : deferredCurrentClimb;
+  const { currentClimbQueueItem } = isOpen ? currentClimbData : deferredCurrentClimb;
   const { queue } = isOpen ? queueListData : deferredQueue;
-  const { viewOnlyMode } = isOpen ? sessionData : deferredSession;
+  const { viewOnlyMode, isPersistentSessionActive } = isOpen ? sessionData : deferredSession;
   const { mirrorClimb, getNextClimbQueueItem, getPreviousClimbQueueItem, setCurrentClimbQueueItem } = useQueueActions();
+
+  // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
+  // callers via the open-drawer event payload) takes precedence over the wall
+  // climb, so browsing previews without yanking the wall. In solo (or when
+  // opened from the bar with no payload), drawerDisplayedItem is null and the
+  // drawer displays the wall climb directly — matching today's behavior.
+  const effectiveItem = drawerDisplayedItem ?? currentClimbQueueItem;
+  const currentClimb = effectiveItem?.climb ?? null;
 
   const { handleDoubleTap, showHeart, dismissHeart, isFavorited, toggleFavorite } = useDoubleTapFavorite({
     climbUuid: currentClimb?.uuid ?? '',
   });
 
+  // currentQueueIndex / remainingQueueCount stay anchored on the wall climb
+  // (currentClimbQueueItem). The drawer-local preview doesn't represent
+  // progress through the shared queue — the wall climb does.
   const currentQueueIndex = currentClimbQueueItem
     ? queue.findIndex((item) => item.uuid === currentClimbQueueItem.uuid)
     : -1;
@@ -537,23 +557,37 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const hasSuccessfulAscent = filteredLogbook.some((asc) => asc.is_ascent);
   const ascentCount = filteredLogbook.length;
 
-  // Card-swipe navigation
-  const nextItem = getNextClimbQueueItem();
-  const prevItem = getPreviousClimbQueueItem();
+  // Card-swipe navigation. In an active party session, prev/next walks the
+  // drawer-local preview state without broadcasting (browse-doesn't-yank). In
+  // solo, it mutates the wall climb like today so BLE keeps sending.
+  const navigateFromItem = effectiveItem ?? null;
+  const nextItem = getNextClimbQueueItem({ from: navigateFromItem });
+  const prevItem = getPreviousClimbQueueItem({ from: navigateFromItem });
+
+  const advanceTo = useCallback(
+    (item: ClimbQueueItem, method: string, direction: 'next' | 'previous') => {
+      if (isPersistentSessionActive) {
+        setDrawerDisplayedItem?.(item);
+        track('Queue Navigation', { direction, method, mode: 'preview' });
+      } else {
+        setCurrentClimbQueueItem(item);
+        track('Queue Navigation', { direction, method, mode: 'broadcast' });
+      }
+    },
+    [isPersistentSessionActive, setCurrentClimbQueueItem, setDrawerDisplayedItem],
+  );
 
   const handleSwipeNext = useCallback(() => {
-    const next = getNextClimbQueueItem();
+    const next = getNextClimbQueueItem({ from: navigateFromItem });
     if (!next || viewOnlyMode) return;
-    setCurrentClimbQueueItem(next);
-    track('Queue Navigation', { direction: 'next', method: 'swipePlayViewDrawer' });
-  }, [getNextClimbQueueItem, setCurrentClimbQueueItem, viewOnlyMode]);
+    advanceTo(next, 'swipePlayViewDrawer', 'next');
+  }, [getNextClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo]);
 
   const handleSwipePrevious = useCallback(() => {
-    const prev = getPreviousClimbQueueItem();
+    const prev = getPreviousClimbQueueItem({ from: navigateFromItem });
     if (!prev || viewOnlyMode) return;
-    setCurrentClimbQueueItem(prev);
-    track('Queue Navigation', { direction: 'previous', method: 'swipePlayViewDrawer' });
-  }, [getPreviousClimbQueueItem, setCurrentClimbQueueItem, viewOnlyMode]);
+    advanceTo(prev, 'swipePlayViewDrawer', 'previous');
+  }, [getPreviousClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo]);
 
   const canSwipeNext = !viewOnlyMode && !!nextItem;
   const canSwipePrevious = !viewOnlyMode && !!prevItem;
@@ -578,17 +612,15 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   }, [showMessage, t]);
 
   const handlePrevNavClick = useCallback(() => {
-    const prev = getPreviousClimbQueueItem();
+    const prev = getPreviousClimbQueueItem({ from: navigateFromItem });
     if (!prev) return;
-    setCurrentClimbQueueItem(prev);
-    track('Queue Navigation', { direction: 'previous', method: 'playViewDrawer' });
-  }, [getPreviousClimbQueueItem, setCurrentClimbQueueItem]);
+    advanceTo(prev, 'playViewDrawer', 'previous');
+  }, [getPreviousClimbQueueItem, navigateFromItem, advanceTo]);
   const handleNextNavClick = useCallback(() => {
-    const next = getNextClimbQueueItem();
+    const next = getNextClimbQueueItem({ from: navigateFromItem });
     if (!next) return;
-    setCurrentClimbQueueItem(next);
-    track('Queue Navigation', { direction: 'next', method: 'playViewDrawer' });
-  }, [getNextClimbQueueItem, setCurrentClimbQueueItem]);
+    advanceTo(next, 'playViewDrawer', 'next');
+  }, [getNextClimbQueueItem, navigateFromItem, advanceTo]);
   const handleOpenActionsMenu = useCallback(() => {
     setIsQueueOpen(false);
     setIsPlaylistSelectorOpen(false);

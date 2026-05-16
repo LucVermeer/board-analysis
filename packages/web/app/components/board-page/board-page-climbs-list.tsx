@@ -25,7 +25,7 @@ const BoardPageClimbsList = ({
 }: BoardPageClimbsListProps) => {
   const { currentClimb } = useCurrentClimb();
   const { climbSearchResults, hasMoreResults, hasDoneFirstFetch, isFetchingClimbs } = useSearchData();
-  const { setCurrentClimb, addToQueue, fetchMoreClimbs } = useQueueActions();
+  const { addToQueue, fetchMoreClimbs } = useQueueActions();
 
   // Queue Context provider uses React Query infinite to fetch results, which can only happen clientside.
   // That data equals null at the start, so when its null we use the initialClimbs array which we
@@ -73,7 +73,6 @@ const BoardPageClimbsList = ({
       selectedClimbUuid={currentClimb?.uuid}
       isFetching={isFetchingClimbs}
       hasMore={!hasDoneFirstFetch ? initialHasMore : hasMoreResults}
-      onClimbSelect={setCurrentClimb}
       addToQueue={addToQueue}
       onLoadMore={fetchMoreClimbs}
       headerInline={headerInline}

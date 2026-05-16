@@ -19,6 +19,7 @@ import { useSnackbar } from '../providers/snackbar-provider';
 import SessionSummaryDialog from '../session-summary/session-summary-dialog';
 import { trackQueueOperation, trackQueueOperationError, type QueueOperationMode } from '@/app/lib/queue-metrics';
 
+import { dispatchOpenPlayDrawer } from '../queue-control/play-drawer-event';
 import { useSessionIdManagement } from './hooks/use-session-id-management';
 import { useQueueRestoration } from './hooks/use-queue-restoration';
 import { useQueueEventSubscription } from './hooks/use-queue-event-subscription';
@@ -419,6 +420,26 @@ export const GraphQLQueueProvider = ({
     return newItem;
   }, []);
 
+  // Browse-initiated drawer open. The fork between "send to wall" (solo) and
+  // "preview only" (party) lives here so list rows, list covers, suggestion
+  // thumbnails, and logbook rows can share one call site.
+  const previewClimbFromBrowse = useCallback(
+    (climb: Climb) => {
+      const r = latestRef.current;
+      if (r.isPersistentSessionActive) {
+        // Party: leave state.currentClimbQueueItem alone (it mirrors the wall);
+        // ship the climb to the bar's drawer-display state via the existing
+        // open-drawer event.
+        dispatchOpenPlayDrawer(climb);
+        return;
+      }
+      // Solo: same behavior as today — pre-mutate state then open the drawer.
+      void setCurrentClimb(climb);
+      dispatchOpenPlayDrawer();
+    },
+    [setCurrentClimb],
+  );
+
   // Replace an existing queue item in place with a new climb, preserving the
   // queue-item uuid and the existing addedBy attribution. Used by the create
   // form on subsequent saves so the queue item stays in the same slot instead
@@ -563,29 +584,33 @@ export const GraphQLQueueProvider = ({
     latestRef.current.fetchMoreClimbs();
   }, []);
 
-  const getNextClimbQueueItem = useCallback(() => {
+  const getNextClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }) => {
     const r = latestRef.current;
-    const queueItemIndex = r.state.queue.findIndex(
-      (queueItem: ClimbQueueItem) => queueItem.uuid === r.state.currentClimbQueueItem?.uuid,
-    );
+    // `from` lets the drawer walk preview navigation from its locally-
+    // displayed climb without first writing to state.currentClimbQueueItem.
+    // Default anchor is the current wall climb, preserving existing callers.
+    const anchorUuid = options?.from ? options.from.uuid : r.state.currentClimbQueueItem?.uuid;
+    const queueItemIndex = r.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
     if (
       (r.state.queue.length === 0 || r.state.queue.length <= queueItemIndex + 1) &&
       r.climbSearchResults &&
       r.climbSearchResults.length > 0
     ) {
+      const anchorClimbUuid = options?.from ? options.from.climb?.uuid : r.state.currentClimbQueueItem?.climb?.uuid;
       const nextClimb = r.suggestedClimbs.find(
-        (climb: Climb) => !r.state.queue.some((qItem: ClimbQueueItem) => qItem.climb?.uuid === climb.uuid),
+        (climb: Climb) =>
+          climb.uuid !== anchorClimbUuid &&
+          !r.state.queue.some((qItem: ClimbQueueItem) => qItem.climb?.uuid === climb.uuid),
       );
       return nextClimb ? createClimbQueueItem(nextClimb, r.clientId, r.currentUserInfo, true) : null;
     }
     return queueItemIndex >= r.state.queue.length - 1 ? null : r.state.queue[queueItemIndex + 1];
   }, []);
 
-  const getPreviousClimbQueueItem = useCallback(() => {
+  const getPreviousClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }) => {
     const r = latestRef.current;
-    const queueItemIndex = r.state.queue.findIndex(
-      (queueItem: ClimbQueueItem) => queueItem.uuid === r.state.currentClimbQueueItem?.uuid,
-    );
+    const anchorUuid = options?.from ? options.from.uuid : r.state.currentClimbQueueItem?.uuid;
+    const queueItemIndex = r.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
     return queueItemIndex > 0 ? r.state.queue[queueItemIndex - 1] : null;
   }, []);
 
@@ -626,6 +651,7 @@ export const GraphQLQueueProvider = ({
       addToQueue,
       removeFromQueue,
       setCurrentClimb,
+      previewClimbFromBrowse,
       setQueue,
       setCurrentClimbQueueItem,
       replaceQueueItem,
@@ -646,6 +672,7 @@ export const GraphQLQueueProvider = ({
       addToQueue,
       removeFromQueue,
       setCurrentClimb,
+      previewClimbFromBrowse,
       setQueue,
       setCurrentClimbQueueItem,
       replaceQueueItem,
@@ -681,6 +708,7 @@ export const GraphQLQueueProvider = ({
       viewOnlyMode,
       parsedParams,
       isSessionActive,
+      isPersistentSessionActive,
       sessionId,
       sessionSummary,
       sessionGoal: isPersistentSessionActive ? (persistentSession.session?.goal ?? null) : null,
@@ -776,6 +804,7 @@ export const GraphQLQueueProvider = ({
     () => ({
       viewOnlyMode,
       isSessionActive,
+      isPersistentSessionActive,
       sessionId,
       sessionSummary,
       sessionGoal: isPersistentSessionActive ? (persistentSession.session?.goal ?? null) : null,

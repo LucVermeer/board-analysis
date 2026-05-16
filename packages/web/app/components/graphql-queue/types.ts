@@ -15,6 +15,9 @@ export type GraphQLQueueActionsType = {
 // Frequently-changing state data extended with session state
 export type GraphQLQueueDataType = {
   isSessionActive: boolean;
+  /** See SessionDataType.isPersistentSessionActive. Mirrored here so consumers
+   *  reading the combined queue context don't need a second hook. */
+  isPersistentSessionActive: boolean;
   sessionId: string | null;
   sessionSummary: SessionSummary | null;
   sessionGoal: string | null;
@@ -55,6 +58,11 @@ export type SearchDataType = {
 export type SessionDataType = {
   viewOnlyMode: boolean;
   isSessionActive: boolean;
+  /** True whenever a persistent party session exists (even before the WS has
+   *  connected). The pivot's solo-vs-party fork keys on this: in a party
+   *  session, browse interactions do not mutate the wall climb; in solo, they
+   *  still drive the BLE send as today. */
+  isPersistentSessionActive: boolean;
   sessionId: string | null;
   sessionSummary: SessionSummary | null;
   sessionGoal: string | null;

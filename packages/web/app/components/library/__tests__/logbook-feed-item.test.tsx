@@ -26,6 +26,7 @@ type SwipeOptions = {
 let capturedSwipeOptions: SwipeOptions | null = null;
 const updateTickAsyncMock = vi.fn();
 const setCurrentClimbMock = vi.fn();
+const previewClimbFromBrowseMock = vi.fn();
 const dispatchOpenPlayDrawerMock = vi.fn();
 const boardDataMocks = vi.hoisted(() => ({
   getGradesForBoard: vi.fn((boardName: string) =>
@@ -35,8 +36,13 @@ const boardDataMocks = vi.hoisted(() => ({
   ),
 }));
 // Holder so tests can swap queue-actions availability without remounting.
-const queueActionsState: { value: { setCurrentClimb: typeof setCurrentClimbMock } | null } = {
-  value: { setCurrentClimb: setCurrentClimbMock },
+const queueActionsState: {
+  value: {
+    setCurrentClimb: typeof setCurrentClimbMock;
+    previewClimbFromBrowse: typeof previewClimbFromBrowseMock;
+  } | null;
+} = {
+  value: { setCurrentClimb: setCurrentClimbMock, previewClimbFromBrowse: previewClimbFromBrowseMock },
 };
 // Holder object so tests can mutate isPending and the mock reads the
 // current value on every render (avoids the stale-by-value closure
@@ -210,9 +216,13 @@ beforeEach(() => {
   capturedSwipeOptions = null;
   updateTickAsyncMock.mockReset();
   setCurrentClimbMock.mockReset();
+  previewClimbFromBrowseMock.mockReset();
   dispatchOpenPlayDrawerMock.mockReset();
   boardDataMocks.getGradesForBoard.mockClear();
-  queueActionsState.value = { setCurrentClimb: setCurrentClimbMock };
+  queueActionsState.value = {
+    setCurrentClimb: setCurrentClimbMock,
+    previewClimbFromBrowse: previewClimbFromBrowseMock,
+  };
   updateTickState.isPending = false;
 });
 
@@ -377,20 +387,23 @@ describe('LogbookFeedItem', () => {
     expect(saveBtn2.disabled).toBe(false);
   });
 
-  it('row tap calls setCurrentClimb without opening the play drawer', () => {
+  it('row tap calls previewClimbFromBrowse with the row climb', () => {
     const { container } = render(<LogbookFeedItem item={makeItem()} />);
     const row = container.querySelector('.swipeableContent') as HTMLElement;
     fireEvent.click(row);
-    expect(setCurrentClimbMock).toHaveBeenCalledTimes(1);
-    expect(setCurrentClimbMock).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-1', name: 'Test Climb' }));
-    expect(dispatchOpenPlayDrawerMock).not.toHaveBeenCalled();
+    // previewClimbFromBrowse handles the solo/party fork internally — solo
+    // calls setCurrentClimb + opens the drawer; party only opens the drawer.
+    expect(previewClimbFromBrowseMock).toHaveBeenCalledTimes(1);
+    expect(previewClimbFromBrowseMock).toHaveBeenCalledWith(
+      expect.objectContaining({ uuid: 'climb-1', name: 'Test Climb' }),
+    );
   });
 
   it('row tap is a no-op in edit mode', () => {
     const { container } = render(<LogbookFeedItem item={makeItem()} isEditing />);
     const row = container.querySelector('.swipeableContent') as HTMLElement;
     fireEvent.click(row);
-    expect(setCurrentClimbMock).not.toHaveBeenCalled();
+    expect(previewClimbFromBrowseMock).not.toHaveBeenCalled();
   });
 
   it('row tap is a no-op when queue actions are unavailable', () => {
@@ -398,7 +411,7 @@ describe('LogbookFeedItem', () => {
     const { container } = render(<LogbookFeedItem item={makeItem()} />);
     const row = container.querySelector('.swipeableContent') as HTMLElement;
     fireEvent.click(row);
-    expect(setCurrentClimbMock).not.toHaveBeenCalled();
+    expect(previewClimbFromBrowseMock).not.toHaveBeenCalled();
   });
 
   it('row is keyboard-accessible with role/tabIndex/aria-label', () => {
@@ -416,55 +429,43 @@ describe('LogbookFeedItem', () => {
     expect(row.getAttribute('tabIndex')).toBeNull();
   });
 
-  it('Enter/Space on the row fires setCurrentClimb', () => {
+  it('Enter/Space on the row fires previewClimbFromBrowse', () => {
     const { container } = render(<LogbookFeedItem item={makeItem()} />);
     const row = container.querySelector('.swipeableContent') as HTMLElement;
     fireEvent.keyDown(row, { key: 'Enter', target: row, currentTarget: row });
     fireEvent.keyDown(row, { key: ' ', target: row, currentTarget: row });
-    expect(setCurrentClimbMock).toHaveBeenCalledTimes(2);
+    expect(previewClimbFromBrowseMock).toHaveBeenCalledTimes(2);
   });
 
-  it('other keys on the row do not fire setCurrentClimb', () => {
+  it('other keys on the row do not fire previewClimbFromBrowse', () => {
     const { container } = render(<LogbookFeedItem item={makeItem()} />);
     const row = container.querySelector('.swipeableContent') as HTMLElement;
     fireEvent.keyDown(row, { key: 'Tab', target: row, currentTarget: row });
     fireEvent.keyDown(row, { key: 'a', target: row, currentTarget: row });
-    expect(setCurrentClimbMock).not.toHaveBeenCalled();
+    expect(previewClimbFromBrowseMock).not.toHaveBeenCalled();
   });
 
-  it('thumbnail tap sets active then opens the play drawer after the promise settles', async () => {
-    // Make the mock actually return a Promise so we can assert ordering.
-    let resolveSet: (() => void) | undefined;
-    setCurrentClimbMock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveSet = () => resolve();
-        }),
-    );
+  it('thumbnail tap calls previewClimbFromBrowse with the climb', () => {
     render(<LogbookFeedItem item={makeItem()} />);
     fireEvent.click(screen.getByTestId('ascent-thumbnail'));
-    // setCurrentClimb called synchronously; drawer NOT opened yet (still awaiting).
-    expect(setCurrentClimbMock).toHaveBeenCalledTimes(1);
-    expect(dispatchOpenPlayDrawerMock).not.toHaveBeenCalled();
-    // Resolve and flush microtasks.
-    await act(async () => {
-      resolveSet?.();
-    });
-    expect(dispatchOpenPlayDrawerMock).toHaveBeenCalledTimes(1);
+    expect(previewClimbFromBrowseMock).toHaveBeenCalledTimes(1);
+    expect(previewClimbFromBrowseMock).toHaveBeenCalledWith(
+      expect.objectContaining({ uuid: 'climb-1', name: 'Test Climb' }),
+    );
   });
 
   it('thumbnail tap does not bubble to the row handler', () => {
     render(<LogbookFeedItem item={makeItem()} />);
     fireEvent.click(screen.getByTestId('ascent-thumbnail'));
-    // Thumbnail fires setCurrentClimb once; the row handler would fire it a
-    // second time if propagation wasn't stopped.
-    expect(setCurrentClimbMock).toHaveBeenCalledTimes(1);
+    // Thumbnail fires previewClimbFromBrowse once; the row handler would fire
+    // it a second time if propagation wasn't stopped.
+    expect(previewClimbFromBrowseMock).toHaveBeenCalledTimes(1);
   });
 
   it('3-dot menu click opens the actions drawer without setting active', () => {
     render(<LogbookFeedItem item={makeItem()} />);
     fireEvent.click(screen.getByLabelText('More actions'));
-    expect(setCurrentClimbMock).not.toHaveBeenCalled();
+    expect(previewClimbFromBrowseMock).not.toHaveBeenCalled();
   });
 
   it('keeps the comment row container mounted in both modes (U8)', () => {

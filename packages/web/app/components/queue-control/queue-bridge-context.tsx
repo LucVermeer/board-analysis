@@ -37,6 +37,7 @@ import { getBoardDetailsForPlaylist } from '@/app/lib/board-config-for-playlist'
 import { useSnackbar } from '../providers/snackbar-provider';
 import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
+import { dispatchOpenPlayDrawer } from './play-drawer-event';
 
 const LiveActivityBridge = dynamic(() => import('@/app/lib/live-activity/live-activity-bridge'), {
   ssr: false,
@@ -203,15 +204,17 @@ function usePersistentSessionQueueAdapter(): {
     return false;
   }, []);
 
-  const getNextClimbQueueItem = useCallback((): ClimbQueueItem | null => {
+  const getNextClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }): ClimbQueueItem | null => {
     const { queue, currentClimbQueueItem: current } = latestRef.current;
-    const idx = queue.findIndex(({ uuid }) => uuid === current?.uuid);
+    const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
+    const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
     return idx >= 0 && idx < queue.length - 1 ? queue[idx + 1] : null;
   }, []);
 
-  const getPreviousClimbQueueItem = useCallback((): ClimbQueueItem | null => {
+  const getPreviousClimbQueueItem = useCallback((options?: { from?: ClimbQueueItem | null }): ClimbQueueItem | null => {
     const { queue, currentClimbQueueItem: current } = latestRef.current;
-    const idx = queue.findIndex(({ uuid }) => uuid === current?.uuid);
+    const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
+    const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
     return idx > 0 ? queue[idx - 1] : null;
   }, []);
 
@@ -380,6 +383,22 @@ function usePersistentSessionQueueAdapter(): {
     [validateClimbForQueue, buildQueueItem],
   );
 
+  // Bridge-mode browse helper: party path dispatches the drawer-open event
+  // with the climb payload so the bar's drawer-display state picks it up
+  // without mutating the wall climb. Solo path delegates to setCurrentClimb.
+  const previewClimbFromBrowse = useCallback(
+    (climb: Climb) => {
+      const { ps } = latestRef.current;
+      if (ps.activeSession) {
+        dispatchOpenPlayDrawer(climb);
+        return;
+      }
+      void setCurrentClimb(climb);
+      dispatchOpenPlayDrawer();
+    },
+    [setCurrentClimb],
+  );
+
   // Bridge-mode replace: in party mode, delegate to the persistent session's
   // WebSocket-backed replaceQueueItem; otherwise mirror the local-state update
   // with a new climb while preserving the queue-item uuid and existing
@@ -420,6 +439,7 @@ function usePersistentSessionQueueAdapter(): {
       addToQueue,
       removeFromQueue,
       setCurrentClimb,
+      previewClimbFromBrowse,
       setCurrentClimbQueueItem,
       replaceQueueItem,
       setClimbSearchParams: noopSetClimbSearchParams,
@@ -439,6 +459,7 @@ function usePersistentSessionQueueAdapter(): {
       addToQueue,
       removeFromQueue,
       setCurrentClimb,
+      previewClimbFromBrowse,
       setCurrentClimbQueueItem,
       replaceQueueItem,
       noopSetClimbSearchParams,
@@ -471,6 +492,7 @@ function usePersistentSessionQueueAdapter(): {
       canMutate: true,
       parsedParams,
       isSessionActive: isParty && ps.hasConnected,
+      isPersistentSessionActive: isParty,
       sessionId: ps.activeSession?.sessionId ?? null,
       sessionSummary: null,
       sessionGoal: ps.session?.goal ?? null,
@@ -712,6 +734,7 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     () => ({
       viewOnlyMode: effectiveData.viewOnlyMode,
       isSessionActive: effectiveData.isSessionActive,
+      isPersistentSessionActive: effectiveData.isPersistentSessionActive,
       sessionId: effectiveData.sessionId,
       sessionSummary: effectiveData.sessionSummary,
       sessionGoal: effectiveData.sessionGoal,
@@ -728,6 +751,7 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     [
       effectiveData.viewOnlyMode,
       effectiveData.isSessionActive,
+      effectiveData.isPersistentSessionActive,
       effectiveData.sessionId,
       effectiveData.sessionSummary,
       effectiveData.sessionGoal,

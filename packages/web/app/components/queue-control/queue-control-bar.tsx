@@ -27,6 +27,9 @@ import {
   tryConstructSlugPlayUrl,
 } from '@/app/lib/url-utils';
 import type { BoardRouteParameters, BoardDetails, Angle, Climb } from '@/app/lib/types';
+import type { ClimbQueueItem } from './types';
+import { v4 as uuidv4 } from 'uuid';
+import { readPlayDrawerEventClimb } from './play-drawer-event';
 import PreviousClimbButton from './previous-climb-button';
 import QueueDrawer from '../play-view/queue-drawer';
 import { useSwipeable } from 'react-swipeable';
@@ -161,22 +164,46 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     return () => window.removeEventListener(TOUR_CLOSE_PLAY_VIEW_EVENT, handler);
   }, []);
 
-  // Listen for play drawer open requests from climb list items that live
-  // outside this component's React tree (board page, liked list, queue
-  // suggestions, queue items). Callers set the active climb before dispatching.
-  useEffect(() => {
-    const handler = () => setActiveDrawer('play');
-    window.addEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
-    return () => window.removeEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
-  }, []);
-
-  const handleCloseDrawer = useCallback(() => setActiveDrawer('none'), []);
-
   const isViewPage = pathname.includes('/view/');
   const isPlayPage = pathname.includes('/play/');
   const { currentClimb } = useCurrentClimb();
   const { queue } = useQueueList();
-  const { viewOnlyMode, connectionState, sessionId, isDisconnected, users, clientId } = useSessionData();
+  const { viewOnlyMode, connectionState, sessionId, isDisconnected, users, clientId, isPersistentSessionActive } =
+    useSessionData();
+
+  // Drawer-local "displayed climb" — populated when a browse caller (list
+  // row, suggestion thumbnail, logbook row) opens the drawer with a climb
+  // payload while a party session is active. Null in solo (drawer reads the
+  // wall climb directly), and null in party when the bar's body/thumbnail is
+  // tapped (drawer also reads the wall climb in that case). Reset to null on
+  // drawer close.
+  const [drawerDisplayedItem, setDrawerDisplayedItem] = useState<ClimbQueueItem | null>(null);
+
+  // Listen for play drawer open requests from climb list items that live
+  // outside this component's React tree (board page, liked list, queue
+  // suggestions, queue items). In an active party session, the event's
+  // `detail.climb` payload becomes the drawer's locally-displayed item so
+  // browse does not yank the wall away from other party members. In solo, the
+  // caller pre-mutated state.currentClimbQueueItem via setCurrentClimb (the
+  // previewClimbFromBrowse helper handles the fork).
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const climb = readPlayDrawerEventClimb(event);
+      if (climb && isPersistentSessionActive) {
+        setDrawerDisplayedItem({ climb, uuid: uuidv4(), suggested: true });
+      } else {
+        setDrawerDisplayedItem(null);
+      }
+      setActiveDrawer('play');
+    };
+    window.addEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
+    return () => window.removeEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
+  }, [isPersistentSessionActive]);
+
+  const handleCloseDrawer = useCallback(() => {
+    setActiveDrawer('none');
+    setDrawerDisplayedItem(null);
+  }, []);
   const { activeSession, session: persistentSession, users: sessionUsers } = usePersistentSessionState();
   const {
     mirrorClimb,
@@ -188,15 +215,13 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   } = useQueueActions();
   const handleThumbnailClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
-    const currentQueueItem = queue.find((item) => item.climb.uuid === currentClimb.uuid);
-    if (currentQueueItem) {
-      setCurrentClimbQueueItem(currentQueueItem);
-    }
+    // No-payload dispatch: drawer falls back to the wall climb (the bar's
+    // own thumbnail mirrors the wall, so there is no other climb to display).
     // Dispatch the window event so external listeners (e.g. the onboarding tour
     // provider) observe the play drawer opening. The internal listener in this
     // component also toggles activeDrawer to 'play'.
     dispatchOpenPlayDrawer();
-  }, [currentClimb, viewOnlyMode, queue, setCurrentClimbQueueItem]);
+  }, [currentClimb, viewOnlyMode]);
 
   const { showMessage } = useSnackbar();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -1426,6 +1451,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         boardDetails={boardDetails}
         angle={angle}
         onPaperRef={handlePlayViewPaperRef}
+        drawerDisplayedItem={drawerDisplayedItem}
+        setDrawerDisplayedItem={setDrawerDisplayedItem}
       />
 
       <StartSeshDrawer open={startSeshOpen} onClose={() => setStartSeshOpen(false)} />

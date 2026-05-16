@@ -88,6 +88,7 @@ vi.mock('../../graphql-queue', () => ({
   useQueueActions: () => ({
     fetchMoreClimbs: vi.fn(),
     setCurrentClimb: mockSetCurrentClimb,
+    previewClimbFromBrowse: mockSetCurrentClimb,
     setCurrentClimbQueueItem: vi.fn(),
     setQueue: vi.fn(),
     addToQueue: vi.fn(),
@@ -309,19 +310,17 @@ describe('QueueList active prop', () => {
     });
   });
 
-  it('activates the suggested climb and opens the play drawer on thumbnail click', () => {
-    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+  it('routes suggested climb thumbnail clicks through previewClimbFromBrowse', () => {
     render(<QueueList boardDetails={makeBoardDetails()} active />);
 
     const items = screen.getAllByTestId('climb-list-item');
     fireEvent.click(items[0]);
 
+    // mockSetCurrentClimb is wired as the previewClimbFromBrowse mock so it
+    // doubles as the call-site assertion. The actual fork (solo vs party)
+    // lives inside QueueContext's previewClimbFromBrowse and is covered by
+    // the QueueContext-level integration tests.
     expect(mockSetCurrentClimb).toHaveBeenCalledWith(mockSuggestedClimbs[0]);
-    const dispatched = dispatchSpy.mock.calls.some(
-      ([event]) => event instanceof CustomEvent && event.type === 'boardsesh:open-play-drawer',
-    );
-    expect(dispatched).toBe(true);
-    dispatchSpy.mockRestore();
   });
 
   it('renders queue items (QueueClimbListItem) when active is true', () => {

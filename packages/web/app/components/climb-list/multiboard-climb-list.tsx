@@ -157,15 +157,16 @@ export default function MultiboardClimbList({
   const [internalSelectedUuid, setInternalSelectedUuid] = useState<string | null>(null);
   const effectiveSelectedUuid = selectedClimbUuid ?? internalSelectedUuid;
 
-  // Row click: activate the climb (visual highlight + set as queue's current climb).
-  // Thumbnail click reuses this via ClimbsList and additionally dispatches the
-  // PLAY_DRAWER_EVENT so the play view drawer opens. Mirrors the pattern in
-  // liked-climbs-list.tsx and board-page-climbs-list.tsx.
+  // Row click: opens the play drawer for the tapped climb. In solo, also
+  // sends to the wall (via previewClimbFromBrowse → setCurrentClimb). In a
+  // party session, the drawer shows the climb locally without yanking the
+  // wall. When no queue context is mounted (e.g. cross-board feed outside a
+  // board page), fall back to navigating to the climb's own board page.
   const handleClimbSelect = useCallback(
     (climb: Climb) => {
       setInternalSelectedUuid(climb.uuid);
-      if (queueActions?.setCurrentClimb) {
-        void queueActions.setCurrentClimb(climb);
+      if (queueActions?.previewClimbFromBrowse) {
+        queueActions.previewClimbFromBrowse(climb);
       } else {
         void navigateToClimb(climb);
       }

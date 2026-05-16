@@ -90,6 +90,14 @@ export type QueueActionsType = {
    *  null when validation fails or the mutation is guarded. */
   setCurrentClimb: (climb: Climb) => Promise<ClimbQueueItem | null>;
   setCurrentClimbQueueItem: (item: ClimbQueueItem) => void;
+  /** Browse-initiated drawer open. In solo (no active party session) this is
+   *  equivalent to setCurrentClimb + opening the play drawer — the climb is
+   *  sent to the wall as today. In an active party session, this only opens
+   *  the drawer locally with the tapped climb as a preview; it does not
+   *  mutate state.currentClimbQueueItem and does not broadcast, so other
+   *  party members are not yanked off the wall. The Set Active Climb menu
+   *  action is the only browse-initiated path that broadcasts in party. */
+  previewClimbFromBrowse: (climb: Climb) => void;
   /** Replace an existing queue item (by its queue-item uuid) with a new climb,
    *  preserving addedBy attribution. Used by the create form to keep the
    *  tracked queue item in sync as the user keeps editing a climb. */
@@ -98,8 +106,13 @@ export type QueueActionsType = {
   setCountSearchParams: (params: SearchRequestPagination) => void;
   mirrorClimb: () => void;
   fetchMoreClimbs: () => void;
-  getNextClimbQueueItem: () => ClimbQueueItem | null;
-  getPreviousClimbQueueItem: () => ClimbQueueItem | null;
+  /** Returns the next ClimbQueueItem after `from` (defaults to the current
+   *  wall climb). Walks the shared queue first, then falls through to
+   *  suggested climbs once the queue is exhausted. */
+  getNextClimbQueueItem: (options?: { from?: ClimbQueueItem | null }) => ClimbQueueItem | null;
+  /** Returns the previous ClimbQueueItem before `from` (defaults to the
+   *  current wall climb). Does not walk into suggestions. */
+  getPreviousClimbQueueItem: (options?: { from?: ClimbQueueItem | null }) => ClimbQueueItem | null;
   setQueue: (queue: ClimbQueueItem[]) => void;
   disconnect?: () => void;
   /** Dispatch an optimistic current-climb update from a native widget navigation.
