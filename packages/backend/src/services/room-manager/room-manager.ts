@@ -433,16 +433,6 @@ class RoomManager {
   }
 
   /**
-   * Unconditionally clear the driver. Used on driver-disconnect cleanup.
-   */
-  async clearSessionDriver(sessionId: string): Promise<void> {
-    this.localDriverBySession.delete(sessionId);
-    if (this.distributedState) {
-      await this.distributedState.clearSessionDriver(sessionId);
-    }
-  }
-
-  /**
    * Check if a session is active (has connected users across all instances OR exists in Redis within TTL)
    */
   async isSessionActive(sessionId: string): Promise<boolean> {

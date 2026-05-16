@@ -17,7 +17,6 @@ import {
   getSessionDriver,
   setSessionDriverAndReturnPrevious,
   clearSessionDriverIf,
-  clearSessionDriver,
   getSessionMemberCount,
   isConnectionInSession,
   refreshConnection,
@@ -193,11 +192,6 @@ export class DistributedStateManager {
    */
   async clearSessionDriverIf(sessionId: string, expectedParticipantId: string): Promise<boolean> {
     return clearSessionDriverIf(this.redis, sessionId, expectedParticipantId);
-  }
-
-  /** Unconditionally clear the driver. Used on cleanup paths. */
-  async clearSessionDriver(sessionId: string): Promise<void> {
-    return clearSessionDriver(this.redis, sessionId);
   }
 
   /** Get count of live members in a session. */

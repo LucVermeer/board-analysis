@@ -569,14 +569,6 @@ export async function clearSessionDriverIf(
 }
 
 /**
- * Clear the driver unconditionally. Used on driver disconnect cleanup.
- */
-export async function clearSessionDriver(redis: Redis, sessionId: string): Promise<void> {
-  validateSessionId(sessionId);
-  await redis.del(KEYS.sessionDriver(sessionId));
-}
-
-/**
  * Get count of live members in a session.
  * Filters out stale entries whose connection hashes have expired.
  */
