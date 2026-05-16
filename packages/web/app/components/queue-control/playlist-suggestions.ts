@@ -65,7 +65,9 @@ export function playlistSuggestionSourceMatches(
 export function getPlaylistSuggestionSourceOverride(
   options?: SetCurrentClimbOptions,
 ): PlaylistSuggestionSource | null | undefined {
-  return options?.playlistSuggestionSource;
+  if (!options) return undefined;
+  if ('clearPlaylistSuggestionSource' in options) return null;
+  return options.playlistSuggestionSource;
 }
 
 export function getPlaylistSuggestedClimbs(source: PlaylistSuggestionSource | null, queue: ClimbQueue): Climb[] {
@@ -90,7 +92,7 @@ export function getPlaylistSuggestedClimbs(source: PlaylistSuggestionSource | nu
 export function pruneSuggestedQueueItemsAfterCurrent(queue: ClimbQueue, currentItem: ClimbQueueItem): ClimbQueue {
   const currentIndex = queue.findIndex((queueItem) => queueItem.uuid === currentItem.uuid);
   if (currentIndex === -1) {
-    return queue.filter((queueItem) => !queueItem.suggested);
+    return queue;
   }
 
   return [
@@ -109,4 +111,8 @@ export function insertQueueItemAfterCurrent(
   const currentIndex = currentItem ? queue.findIndex((queueItem) => queueItem.uuid === currentItem.uuid) : -1;
   if (currentIndex === -1) return [...queue, item];
   return [...queue.slice(0, currentIndex + 1), item, ...queue.slice(currentIndex + 1)];
+}
+
+export function getPlaylistPeekQueueItemUuid(climbUuid: string): string {
+  return `playlist-peek:${climbUuid}`;
 }

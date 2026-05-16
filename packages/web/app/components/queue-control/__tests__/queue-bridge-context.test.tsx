@@ -597,7 +597,7 @@ describe('queue-bridge-context', () => {
         const next = result.current!.getNextClimbQueueItem();
         expect(next?.climb.uuid).toBe('c2');
         expect(next?.suggested).toBe(true);
-        expect(next?.uuid).toBe('test-uuid-1');
+        expect(next?.uuid).toBe('playlist-peek:c2');
       });
 
       it('getPreviousClimbQueueItem returns null when at beginning', () => {

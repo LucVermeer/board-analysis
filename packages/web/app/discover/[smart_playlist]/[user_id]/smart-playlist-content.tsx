@@ -34,6 +34,10 @@ import { PlaylistActivationProvider } from '@/app/components/climb-actions/playl
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
 import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
 import { createPlaylistSuggestionSource } from '@/app/components/queue-control/playlist-suggestions';
+import {
+  fetchPlaylistSuggestionClimbs,
+  isAbortError,
+} from '@/app/components/queue-control/playlist-suggestion-refresh';
 import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
 import BackButton from '@/app/components/back-button';
 import LocaleLink from '@/app/components/i18n/locale-link';
@@ -48,13 +52,6 @@ type Props = {
   /** SSR-fetched first page so the hero + climbs paint without a spinner. */
   initialSmartPlaylist?: SmartPlaylistResult | null;
 };
-
-const SMART_PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE = 100;
-const MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_PAGES = 10;
-const MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE = 250;
-
-const isAbortError = (err: unknown): boolean =>
-  typeof err === 'object' && err !== null && 'name' in err && err.name === 'AbortError';
 
 export default function SmartPlaylistContent({
   smartPlaylistType,
@@ -166,48 +163,31 @@ export default function SmartPlaylistContent({
   const fetchSmartPlaylistClimbsForBoard = useCallback(
     async (boardDetails: BoardDetails, activatedClimbUuid: string, signal: AbortSignal): Promise<Climb[]> => {
       const client = createGraphQLHttpClient(token);
-      const fetchedClimbs: Climb[] = [];
-      let page = 0;
-      let hasMore = true;
-      let activatedClimbSeen = false;
-      let loadedClimbsAfterActivated = 0;
 
-      while (
-        hasMore &&
-        page < MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_PAGES &&
-        loadedClimbsAfterActivated < MAX_SMART_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE &&
-        !signal.aborted
-      ) {
-        const response = await client.request<GetSmartPlaylistQueryResponse, GetSmartPlaylistQueryVariables>({
-          document: GET_SMART_PLAYLIST,
-          variables: {
-            input: {
-              type: smartPlaylistType,
-              userId,
-              boardName: boardDetails.board_name,
-              page,
-              pageSize: SMART_PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE,
+      return fetchPlaylistSuggestionClimbs({
+        activatedClimbUuid,
+        signal,
+        fetchPage: async ({ page, pageSize, signal: requestSignal }) => {
+          const response = await client.request<GetSmartPlaylistQueryResponse, GetSmartPlaylistQueryVariables>({
+            document: GET_SMART_PLAYLIST,
+            variables: {
+              input: {
+                type: smartPlaylistType,
+                userId,
+                boardName: boardDetails.board_name,
+                page,
+                pageSize,
+              },
             },
-          },
-          signal,
-        });
+            signal: requestSignal,
+          });
 
-        const pageClimbs = response.smartPlaylist.climbs as Climb[];
-        for (const pageClimb of pageClimbs) {
-          if (activatedClimbSeen) {
-            loadedClimbsAfterActivated += 1;
-          }
-          if (pageClimb.uuid === activatedClimbUuid) {
-            activatedClimbSeen = true;
-          }
-        }
-
-        fetchedClimbs.push(...pageClimbs);
-        hasMore = response.smartPlaylist.hasMore;
-        page += 1;
-      }
-
-      return fetchedClimbs;
+          return {
+            climbs: response.smartPlaylist.climbs as Climb[],
+            hasMore: response.smartPlaylist.hasMore,
+          };
+        },
+      });
     },
     [smartPlaylistType, token, userId],
   );
@@ -226,7 +206,7 @@ export default function SmartPlaylistContent({
         );
 
       if (!targetBoardDetails) {
-        await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
+        await queueActions.setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
         return;
       }
 

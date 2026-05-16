@@ -38,7 +38,7 @@ export function SetActiveAction({
       if (playlistActivation) {
         void playlistActivation.activatePlaylistClimb(climb);
       } else {
-        void queueActions?.setCurrentClimb(climb, { playlistSuggestionSource: null });
+        void queueActions?.setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
       }
 
       // PostHog event name stays "Set Active Climb" for analytics continuity

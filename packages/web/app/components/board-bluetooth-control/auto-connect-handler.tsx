@@ -53,7 +53,7 @@ export function AutoConnectHandler({ connect, isBluetoothSupported }: AutoConnec
 
     // Auto-select first climb and connect
     const firstClimb = climbSearchResults[0];
-    void setCurrentClimb(firstClimb, { playlistSuggestionSource: null });
+    void setCurrentClimb(firstClimb, { clearPlaylistSuggestionSource: true });
     void connect(firstClimb.frames, !!firstClimb.mirrored, autoConnectSerial);
   }, [
     autoConnectSerial,

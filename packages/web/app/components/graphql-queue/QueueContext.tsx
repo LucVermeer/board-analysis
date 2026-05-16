@@ -6,8 +6,16 @@ import { useSearchParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useQueueReducer } from '../queue-control/reducer';
 import { useQueueDataFetching } from '../queue-control/hooks/use-queue-data-fetching';
-import type { ClimbQueueItem, UserName, QueueItemUser, AddToQueueSource, SetCurrentClimbOptions } from '../queue-control/types';
+import type {
+  ClimbQueueItem,
+  UserName,
+  QueueItemUser,
+  AddToQueueSource,
+  PlaylistSuggestionSource,
+  SetCurrentClimbOptions,
+} from '../queue-control/types';
 import {
+  getPlaylistPeekQueueItemUuid,
   getPlaylistSuggestionSourceOverride,
   getPlaylistSuggestedClimbs,
   insertQueueItemAfterCurrent,
@@ -590,10 +598,10 @@ export const GraphQLQueueProvider = ({
         return;
       }
       // Solo, or driver in party: pre-mutate state (broadcasts when party
-      // active) then open the drawer. Pass an explicit null
-      // playlistSuggestionSource so activating a non-playlist climb clears
-      // any stale playlist source carried over from a prior activation.
-      void setCurrentClimb(climb, { playlistSuggestionSource: null });
+      // active) then open the drawer. Pass the clearPlaylistSuggestionSource
+      // marker so activating a non-playlist climb clears any stale playlist
+      // source carried over from a prior activation.
+      void setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
       dispatchOpenPlayDrawer();
     },
     [setCurrentClimb],
@@ -793,16 +801,13 @@ export const GraphQLQueueProvider = ({
     }
   }, []);
 
-  const setPlaylistSuggestionSource = useCallback((source: SetCurrentClimbOptions['playlistSuggestionSource']) => {
+  const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
     latestRef.current.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: source ?? null });
   }, []);
 
-  const refreshPlaylistSuggestionSource = useCallback(
-    (source: NonNullable<SetCurrentClimbOptions['playlistSuggestionSource']>) => {
-      latestRef.current.dispatch({ type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE', payload: source });
-    },
-    [],
-  );
+  const refreshPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource) => {
+    latestRef.current.dispatch({ type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE', payload: source });
+  }, []);
 
   const setClimbSearchParams = useCallback((params: SearchRequestPagination) => {
     const latest = latestRef.current;
@@ -864,6 +869,12 @@ export const GraphQLQueueProvider = ({
     // already looking at and is the cleaner preview surface.
     const anchorUuid = options?.from ? options.from.uuid : latest.state.currentClimbQueueItem?.uuid;
     const anchorClimbUuid = options?.from ? options.from.climb?.uuid : latest.state.currentClimbQueueItem?.climb?.uuid;
+    const buildSuggestedQueueItem = (climb: Climb): ClimbQueueItem => {
+      const suggestedItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo, true);
+      return latest.state.playlistSuggestionSource
+        ? { ...suggestedItem, uuid: getPlaylistPeekQueueItemUuid(climb.uuid) }
+        : suggestedItem;
+    };
     if (options?.suggestionsOnly) {
       // Non-driver swipe-forward: walk the suggestedClimbs array by index so
       // each tap advances one step. Mirrors the backward branch below — using
@@ -874,7 +885,7 @@ export const GraphQLQueueProvider = ({
       // If the anchor isn't in suggestedClimbs (e.g. anchor is a queue item or
       // the wall climb chosen by the driver), start from the top of the feed.
       const nextClimb = anchorIdx < 0 ? latest.suggestedClimbs[0] : (latest.suggestedClimbs[anchorIdx + 1] ?? null);
-      return nextClimb ? createClimbQueueItem(nextClimb, latest.clientId, latest.currentUserInfo, true) : null;
+      return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
     const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
     if (
@@ -887,7 +898,7 @@ export const GraphQLQueueProvider = ({
           climb.uuid !== anchorClimbUuid &&
           !latest.state.queue.some((qItem: ClimbQueueItem) => qItem.climb?.uuid === climb.uuid),
       );
-      return nextClimb ? createClimbQueueItem(nextClimb, latest.clientId, latest.currentUserInfo, true) : null;
+      return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
     return queueItemIndex >= latest.state.queue.length - 1 ? null : latest.state.queue[queueItemIndex + 1];
   }, []);

@@ -78,6 +78,10 @@ import { PlaylistActivationProvider } from '@/app/components/climb-actions/playl
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
 import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
 import { createPlaylistSuggestionSource } from '@/app/components/queue-control/playlist-suggestions';
+import {
+  fetchPlaylistSuggestionClimbs,
+  isAbortError,
+} from '@/app/components/queue-control/playlist-suggestion-refresh';
 import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard, type BoardConfig } from '@/app/lib/find-matching-board';
@@ -100,13 +104,6 @@ const PLAYLIST_COLORS = [
   themeTokens.colors.accentRose,
   themeTokens.colors.amber,
 ];
-
-const PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE = 100;
-const MAX_PLAYLIST_SUGGESTION_REFRESH_PAGES = 10;
-const MAX_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE = 250;
-
-const isAbortError = (err: unknown): boolean =>
-  typeof err === 'object' && err !== null && 'name' in err && err.name === 'AbortError';
 
 type PlaylistDetailContentProps = {
   playlistUuid: string;
@@ -368,51 +365,34 @@ export default function PlaylistDetailContent({
       const setIds = Array.isArray(boardDetails.set_ids)
         ? boardDetails.set_ids.join(',')
         : String(boardDetails.set_ids);
-      const fetchedClimbs: Climb[] = [];
-      let page = 0;
-      let hasMore = true;
-      let activatedClimbSeen = false;
-      let loadedClimbsAfterActivated = 0;
 
-      while (
-        hasMore &&
-        page < MAX_PLAYLIST_SUGGESTION_REFRESH_PAGES &&
-        loadedClimbsAfterActivated < MAX_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE &&
-        !signal.aborted
-      ) {
-        const response = await client.request<GetPlaylistClimbsQueryResponse, GetPlaylistClimbsQueryVariables>({
-          document: GET_PLAYLIST_CLIMBS,
-          variables: {
-            input: {
-              playlistId: playlistUuid,
-              boardName: boardDetails.board_name,
-              layoutId: boardDetails.layout_id,
-              sizeId: boardDetails.size_id,
-              setIds,
-              angle,
-              page,
-              pageSize: PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE,
+      return fetchPlaylistSuggestionClimbs({
+        activatedClimbUuid,
+        signal,
+        fetchPage: async ({ page, pageSize, signal: requestSignal }) => {
+          const response = await client.request<GetPlaylistClimbsQueryResponse, GetPlaylistClimbsQueryVariables>({
+            document: GET_PLAYLIST_CLIMBS,
+            variables: {
+              input: {
+                playlistId: playlistUuid,
+                boardName: boardDetails.board_name,
+                layoutId: boardDetails.layout_id,
+                sizeId: boardDetails.size_id,
+                setIds,
+                angle,
+                page,
+                pageSize,
+              },
             },
-          },
-          signal,
-        });
+            signal: requestSignal,
+          });
 
-        const pageClimbs = response.playlistClimbs.climbs as Climb[];
-        for (const pageClimb of pageClimbs) {
-          if (activatedClimbSeen) {
-            loadedClimbsAfterActivated += 1;
-          }
-          if (pageClimb.uuid === activatedClimbUuid) {
-            activatedClimbSeen = true;
-          }
-        }
-
-        fetchedClimbs.push(...pageClimbs);
-        hasMore = response.playlistClimbs.hasMore;
-        page += 1;
-      }
-
-      return fetchedClimbs;
+          return {
+            climbs: response.playlistClimbs.climbs as Climb[],
+            hasMore: response.playlistClimbs.hasMore,
+          };
+        },
+      });
     },
     [playlistUuid, token],
   );
@@ -428,7 +408,7 @@ export default function PlaylistDetailContent({
         getBoardDetailsForPlaylist(climb.boardType ?? playlist?.boardType ?? '', climb.layoutId ?? playlist?.layoutId);
 
       if (!targetBoardDetails) {
-        await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
+        await queueActions.setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
         return;
       }
 

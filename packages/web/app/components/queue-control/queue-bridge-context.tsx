@@ -42,6 +42,7 @@ import { deriveIsDriver } from '../graphql-queue/driver-state';
 import {
   getPlaylistSuggestionSourceOverride,
   getPlaylistSuggestedClimbs,
+  getPlaylistPeekQueueItemUuid,
   insertQueueItemAfterCurrent,
   playlistSuggestionSourceMatches,
   pruneSuggestedQueueItemsAfterCurrent,
@@ -228,9 +229,12 @@ function usePersistentSessionQueueAdapter(): {
       const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
       if (idx >= 0 && idx < queue.length - 1) return queue[idx + 1];
       const nextClimb = getPlaylistSuggestedClimbs(playlistSuggestionSource, queue)[0];
-      // This is a transient peek item. It gets a stable queue UUID only after a
-      // caller promotes it with setCurrentClimbQueueItem/setCurrentClimb.
-      return nextClimb ? { climb: nextClimb, addedBy: null, uuid: uuidv4(), suggested: true } : null;
+      // Transient peek item. Uses a deterministic uuid derived from the climb
+      // so repeated peeks of the same suggestion produce a stable queue uuid
+      // (see playlist-suggestions.getPlaylistPeekQueueItemUuid).
+      return nextClimb
+        ? { climb: nextClimb, addedBy: null, uuid: getPlaylistPeekQueueItemUuid(nextClimb.uuid), suggested: true }
+        : null;
     },
     [],
   );
@@ -451,7 +455,7 @@ function usePersistentSessionQueueAdapter(): {
         dispatchOpenPlayDrawer(climb);
         return;
       }
-      void setCurrentClimb(climb, { playlistSuggestionSource: null });
+      void setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
       dispatchOpenPlayDrawer();
     },
     [setCurrentClimb],

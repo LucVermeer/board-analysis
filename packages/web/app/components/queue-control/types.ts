@@ -31,9 +31,9 @@ export type PlaylistSuggestionSource = {
   climbs: Climb[];
 };
 
-export type SetCurrentClimbOptions = {
-  playlistSuggestionSource: PlaylistSuggestionSource | null;
-};
+export type SetCurrentClimbOptions =
+  | { playlistSuggestionSource: PlaylistSuggestionSource }
+  | { clearPlaylistSuggestionSource: true };
 
 export type QueueState = {
   queue: ClimbQueue;

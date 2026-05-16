@@ -4,6 +4,7 @@ import type { ClimbQueueItem, QueueState } from '../types';
 import { queueReducer } from '../reducer';
 import {
   createPlaylistSuggestionSource,
+  getPlaylistPeekQueueItemUuid,
   getPlaylistSuggestionSourceOverride,
   getPlaylistSuggestedClimbs,
   insertQueueItemAfterCurrent,
@@ -170,6 +171,19 @@ describe('playlist suggestions', () => {
     expect(prunedQueue.map((item) => item.uuid)).toEqual(['history', 'previous-current', 'activated', 'manual-future']);
   });
 
+  it('keeps the queue unchanged when the current item is missing during pruning', () => {
+    const historySuggested = makeQueueItem('history-suggested', makeClimb('history-suggested'), true);
+    const current = makeQueueItem('current', makeClimb('current'));
+    const futureSuggested = makeQueueItem('future-suggested', makeClimb('future-suggested'), true);
+    const queue = [historySuggested, current, futureSuggested];
+    const missingCurrent = makeQueueItem('missing-current', makeClimb('missing-current'));
+
+    const prunedQueue = pruneSuggestedQueueItemsAfterCurrent(queue, missingCurrent);
+
+    expect(prunedQueue).toBe(queue);
+    expect(prunedQueue.map((item) => item.uuid)).toEqual(['history-suggested', 'current', 'future-suggested']);
+  });
+
   it('inserts activated playlist climbs after the current item before pruning suggestions', () => {
     const current = makeQueueItem('current', makeClimb('current'));
     const manualFuture = makeQueueItem('manual-future', makeClimb('manual-future'));
@@ -208,7 +222,7 @@ describe('playlist suggestions', () => {
     expect(result.playlistSuggestionSource).toEqual(currentSource);
   });
 
-  it('treats omitted playlist source options as preserve and explicit null as clear', () => {
+  it('treats omitted playlist source options as preserve and explicit clear as clear', () => {
     const activated = makeClimb('activated');
     const source = createPlaylistSuggestionSource({
       playlistUuid: 'playlist-1',
@@ -218,8 +232,12 @@ describe('playlist suggestions', () => {
     });
 
     expect(getPlaylistSuggestionSourceOverride()).toBeUndefined();
-    expect(getPlaylistSuggestionSourceOverride({ playlistSuggestionSource: null })).toBeNull();
+    expect(getPlaylistSuggestionSourceOverride({ clearPlaylistSuggestionSource: true })).toBeNull();
     expect(getPlaylistSuggestionSourceOverride({ playlistSuggestionSource: source })).toEqual(source);
+  });
+
+  it('uses a deterministic playlist peek queue item id for repeated next peeks', () => {
+    expect(getPlaylistPeekQueueItemUuid('climb-1')).toBe('playlist-peek:climb-1');
   });
 
   it('keeps the active playlist source when current climb updates omit an override', () => {
