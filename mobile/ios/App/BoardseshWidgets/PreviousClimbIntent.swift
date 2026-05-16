@@ -1,6 +1,10 @@
 import ActivityKit
 import AppIntents
 
+#if !WIDGET_EXTENSION
+import UIKit
+#endif
+
 @available(iOS 17.0, *)
 struct PreviousClimbIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Previous Climb"
@@ -18,10 +22,8 @@ struct PreviousClimbIntent: LiveActivityIntent {
             return .result()
         }
 
-        // Persist the new index so the main app picks it up.
         SharedQueueState.saveCurrentIndex(prevIndex, to: defaults)
 
-        // Optimistically update every active Live Activity.
         let prevItem = items[prevIndex]
         let newState = ClimbSessionAttributes.ContentState(
             climbName: prevItem.climbName,
@@ -35,30 +37,29 @@ struct PreviousClimbIntent: LiveActivityIntent {
         )
 
         for activity in Activity<ClimbSessionAttributes>.activities {
-            // ActivityKit's update() is non-throwing, but only update active
-            // activities — calling update on ended/dismissed activities is a no-op
-            // but logs warnings in the system.
             guard activity.activityState == .active else { continue }
             let content = ActivityContent(state: newState, staleDate: Date().addingTimeInterval(180))
             await activity.update(content)
         }
 
-        postBoardBleDisplayNotification()
+        #if !WIDGET_EXTENSION
+        // See NextClimbIntent for the rationale: when this intent runs in the
+        // main app's background process, drive the BLE write directly through
+        // the singleton, awaiting state restoration with a short timeout and
+        // a background task so the write actually flushes.
+        await writePreviousBoardOnMainApp(items: items, currentIndex: prevIndex)
+        #endif
 
-        // Send navigation to the backend directly via HTTP. This works even
-        // when the main app is suspended. Only fall back to the Darwin
-        // notification path (which wakes the main app to send a WS mutation)
-        // if the HTTP request fails.
         let httpSuccess = await WidgetNetworking.sendNavigation(action: "previous", currentIndex: prevIndex)
         if !httpSuccess {
             defaults.set("previous", forKey: SharedConstants.pendingActionKey)
-            postDarwinNotification()
+            postQueueNavigateDarwinNotification()
         }
 
         return .result()
     }
 
-    private func postDarwinNotification() {
+    private func postQueueNavigateDarwinNotification() {
         let name = SharedConstants.queueNavigateNotification as CFString
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
@@ -66,13 +67,19 @@ struct PreviousClimbIntent: LiveActivityIntent {
             nil, nil, true
         )
     }
+}
 
-    private func postBoardBleDisplayNotification() {
-        let name = SharedConstants.boardBleDisplayNotification as CFString
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName(name),
-            nil, nil, true
-        )
+#if !WIDGET_EXTENSION
+@available(iOS 17.0, *)
+private func writePreviousBoardOnMainApp(items: [SharedQueueItem], currentIndex: Int) async {
+    let task = await MainActor.run {
+        UIApplication.shared.beginBackgroundTask(withName: "ble-display-intent")
+    }
+    await BoardBleManager.shared.displayCurrentItemAwaitingReady(
+        items: items, currentIndex: currentIndex, timeout: 3.0
+    )
+    await MainActor.run {
+        UIApplication.shared.endBackgroundTask(task)
     }
 }
+#endif

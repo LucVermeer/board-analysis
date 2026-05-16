@@ -85,23 +85,24 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var isWriting = false
     private var pendingWriteResume: (() -> Void)?
     private var configuration: BoardBleConfiguration?
-    private var observingBoardBleDisplayNotification = false
+    private var pendingReadyWaiters: [ReadyWaiter] = []
 
     private var onScanResult: ((BoardBleScanResult) -> Void)?
     private var onDisconnect: ((String) -> Void)?
+
+    private struct ReadyWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Never>
+        let timeoutWorkItem: DispatchWorkItem
+    }
 
     override private init() {
         super.init()
         bleQueue.setSpecific(key: bleQueueKey, value: ())
         runOnBleQueueSync {
             configuration = readConfiguration()
-            startBoardBleDisplayObservation()
             _ = centralManager
         }
-    }
-
-    deinit {
-        stopBoardBleDisplayObservation()
     }
 
     var isAvailable: Bool {
@@ -185,12 +186,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         }
     }
 
-    func displaySharedCurrentItem() {
-        runOnBleQueue { [weak self] in
-            self?.displaySharedCurrentItemOnBleQueue()
-        }
-    }
-
     func displayCurrentItem(items: [SharedQueueItem], currentIndex: Int) {
         runOnBleQueue { [weak self] in
             self?.displayCurrentItemOnBleQueue(items: items, currentIndex: currentIndex)
@@ -201,6 +196,22 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         runOnBleQueue { [weak self] in
             self?.displayItemOnBleQueue(item)
         }
+    }
+
+    /// Awaits BLE readiness (peripheral + write characteristic discovered) up to
+    /// `timeout` seconds, then enqueues the display write and waits for the
+    /// write queue to drain. Designed for Live Activity intents that wake the
+    /// main app in the background: CoreBluetooth state restoration is
+    /// asynchronous, so a write issued immediately after wake would silently
+    /// no-op against the `connectedPeripheral == nil` guard. If the timeout
+    /// elapses before readiness, the write is still attempted; the existing
+    /// `notConnected` guard in `writeOnBleQueue` will no-op cleanly.
+    func displayCurrentItemAwaitingReady(
+        items: [SharedQueueItem], currentIndex: Int, timeout: TimeInterval
+    ) async {
+        await waitUntilReady(timeout: timeout)
+        displayCurrentItem(items: items, currentIndex: currentIndex)
+        await waitForWriteDrain(timeout: 1.5)
     }
 
     private var isAvailableOnBleQueue: Bool {
@@ -554,7 +565,15 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         writeCharacteristic = characteristic
         completePendingConnect(.success(()))
         logger.info("Connected to board BLE peripheral \(peripheral.identifier.uuidString, privacy: .public)")
-        displaySharedCurrentItemOnBleQueue()
+        let hadPendingReadyWaiters = !pendingReadyWaiters.isEmpty
+        resumePendingReadyWaitersOnBleQueue()
+        // Skip the implicit shared-state write when an intent is waiting on
+        // readiness — the intent's awaited code will issue its own
+        // displayCurrentItem with the same shared state, and we'd otherwise
+        // write the identical packet twice.
+        if !hadPendingReadyWaiters {
+            displaySharedCurrentItemOnBleQueue()
+        }
     }
 
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
@@ -582,26 +601,63 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         return bleQueue.sync(execute: operation)
     }
 
-    private func startBoardBleDisplayObservation() {
-        guard !observingBoardBleDisplayNotification else { return }
-        observingBoardBleDisplayNotification = true
+    private var isReadyForWrite: Bool {
+        centralManager.state == .poweredOn
+            && connectedPeripheral != nil
+            && writeCharacteristic != nil
+    }
 
-        let center = CFNotificationCenterGetDarwinNotifyCenter()
-        let name = CFNotificationName(SharedConstants.boardBleDisplayNotification as CFString)
-        let observer = Unmanaged.passUnretained(self).toOpaque()
+    private func waitUntilReady(timeout: TimeInterval) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            runOnBleQueue { [weak self] in
+                guard let self else {
+                    continuation.resume()
+                    return
+                }
+                if self.isReadyForWrite {
+                    continuation.resume()
+                    return
+                }
+                let waiterId = UUID()
+                let workItem = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    if let index = self.pendingReadyWaiters.firstIndex(where: { $0.id == waiterId }) {
+                        let waiter = self.pendingReadyWaiters.remove(at: index)
+                        waiter.continuation.resume()
+                    }
+                }
+                self.pendingReadyWaiters.append(
+                    ReadyWaiter(id: waiterId, continuation: continuation, timeoutWorkItem: workItem)
+                )
+                self.bleQueue.asyncAfter(deadline: .now() + timeout, execute: workItem)
+            }
+        }
+    }
 
-        CFNotificationCenterAddObserver(
-            center,
-            observer,
-            { (_, observer, _, _, _) in
-                guard let observer = observer else { return }
-                let manager = Unmanaged<BoardBleManager>.fromOpaque(observer).takeUnretainedValue()
-                manager.displaySharedCurrentItem()
-            },
-            name.rawValue,
-            nil,
-            .deliverImmediately
-        )
+    private func resumePendingReadyWaitersOnBleQueue() {
+        let waiters = pendingReadyWaiters
+        pendingReadyWaiters = []
+        for waiter in waiters {
+            waiter.timeoutWorkItem.cancel()
+            waiter.continuation.resume()
+        }
+    }
+
+    private func waitForWriteDrain(timeout: TimeInterval) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let drained = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                runOnBleQueue { [weak self] in
+                    guard let self else {
+                        continuation.resume(returning: true)
+                        return
+                    }
+                    continuation.resume(returning: self.writeQueue.isEmpty && !self.isWriting)
+                }
+            }
+            if drained { return }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
     }
 
     private func apiLevelOnBleQueue(configuration: BoardBleConfiguration) -> Int {
@@ -614,16 +670,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         return configuration.apiLevel ?? BoardBleEncoding.parseApiLevel(
             deviceName: connectedDeviceName ?? configuration.deviceName
         )
-    }
-
-    private func stopBoardBleDisplayObservation() {
-        guard observingBoardBleDisplayNotification else { return }
-        observingBoardBleDisplayNotification = false
-
-        let center = CFNotificationCenterGetDarwinNotifyCenter()
-        let observer = Unmanaged.passUnretained(self).toOpaque()
-        let name = CFNotificationName(SharedConstants.boardBleDisplayNotification as CFString)
-        CFNotificationCenterRemoveObserver(center, observer, name, nil)
     }
 
     private func completePendingConnect(_ result: Result<Void, Error>) {

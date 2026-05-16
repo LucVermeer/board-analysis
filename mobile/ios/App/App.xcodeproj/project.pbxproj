@@ -38,6 +38,9 @@
 		LA100012 /* NextClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200012 /* NextClimbIntent.swift */; };
 		LA100013 /* PreviousClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200013 /* PreviousClimbIntent.swift */; };
 		LA100070 /* WidgetNetworking.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200070 /* WidgetNetworking.swift */; };
+		LA100090 /* NextClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200012 /* NextClimbIntent.swift */; };
+		LA100091 /* PreviousClimbIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200013 /* PreviousClimbIntent.swift */; };
+		LA100092 /* WidgetNetworking.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200070 /* WidgetNetworking.swift */; };
 		LA100020 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200001 /* SharedConstants.swift */; };
 		LA100021 /* ClimbSessionAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200002 /* ClimbSessionAttributes.swift */; };
 		LA100080 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200080 /* SharedKeychain.swift */; };
@@ -477,6 +480,9 @@
 				LA100009 /* HealthKitPlugin.m in Sources */,
 				LA100050 /* DevUrlPlugin.swift in Sources */,
 				LA100051 /* DevUrlPlugin.m in Sources */,
+				LA100090 /* NextClimbIntent.swift in Sources */,
+				LA100091 /* PreviousClimbIntent.swift in Sources */,
+				LA100092 /* WidgetNetworking.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -743,6 +749,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MARKETING_VERSION = 1.2;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D WIDGET_EXTENSION";
 				PRODUCT_BUNDLE_IDENTIFIER = com.boardsesh.app.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -764,6 +771,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				MARKETING_VERSION = 1.2;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D WIDGET_EXTENSION";
 				PRODUCT_BUNDLE_IDENTIFIER = com.boardsesh.app.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

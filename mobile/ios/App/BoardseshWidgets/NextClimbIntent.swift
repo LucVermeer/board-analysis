@@ -1,6 +1,10 @@
 import ActivityKit
 import AppIntents
 
+#if !WIDGET_EXTENSION
+import UIKit
+#endif
+
 @available(iOS 17.0, *)
 struct NextClimbIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Next Climb"
@@ -18,10 +22,8 @@ struct NextClimbIntent: LiveActivityIntent {
             return .result()
         }
 
-        // Persist the new index so the main app picks it up.
         SharedQueueState.saveCurrentIndex(nextIndex, to: defaults)
 
-        // Optimistically update every active Live Activity.
         let nextItem = items[nextIndex]
         let newState = ClimbSessionAttributes.ContentState(
             climbName: nextItem.climbName,
@@ -35,30 +37,33 @@ struct NextClimbIntent: LiveActivityIntent {
         )
 
         for activity in Activity<ClimbSessionAttributes>.activities {
-            // ActivityKit's update() is non-throwing, but only update active
-            // activities — calling update on ended/dismissed activities is a no-op
-            // but logs warnings in the system.
             guard activity.activityState == .active else { continue }
             let content = ActivityContent(state: newState, staleDate: Date().addingTimeInterval(180))
             await activity.update(content)
         }
 
-        postBoardBleDisplayNotification()
+        #if !WIDGET_EXTENSION
+        // Running in the main app process — write directly to the connected
+        // board. iOS launches the app in the background to perform the intent
+        // when the intent type is registered in the main-app target, even when
+        // the app was suspended. CoreBluetooth state restoration is
+        // asynchronous, so we await readiness (peripheral + write
+        // characteristic discovered) up to 3s before issuing the write, and
+        // wrap the whole thing in a background task so the OS doesn't suspend
+        // us mid-write.
+        await writeBoardOnMainApp(items: items, currentIndex: nextIndex)
+        #endif
 
-        // Send navigation to the backend directly via HTTP. This works even
-        // when the main app is suspended. Only fall back to the Darwin
-        // notification path (which wakes the main app to send a WS mutation)
-        // if the HTTP request fails.
         let httpSuccess = await WidgetNetworking.sendNavigation(action: "next", currentIndex: nextIndex)
         if !httpSuccess {
             defaults.set("next", forKey: SharedConstants.pendingActionKey)
-            postDarwinNotification()
+            postQueueNavigateDarwinNotification()
         }
 
         return .result()
     }
 
-    private func postDarwinNotification() {
+    private func postQueueNavigateDarwinNotification() {
         let name = SharedConstants.queueNavigateNotification as CFString
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
@@ -66,13 +71,19 @@ struct NextClimbIntent: LiveActivityIntent {
             nil, nil, true
         )
     }
+}
 
-    private func postBoardBleDisplayNotification() {
-        let name = SharedConstants.boardBleDisplayNotification as CFString
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName(name),
-            nil, nil, true
-        )
+#if !WIDGET_EXTENSION
+@available(iOS 17.0, *)
+private func writeBoardOnMainApp(items: [SharedQueueItem], currentIndex: Int) async {
+    let task = await MainActor.run {
+        UIApplication.shared.beginBackgroundTask(withName: "ble-display-intent")
+    }
+    await BoardBleManager.shared.displayCurrentItemAwaitingReady(
+        items: items, currentIndex: currentIndex, timeout: 3.0
+    )
+    await MainActor.run {
+        UIApplication.shared.endBackgroundTask(task)
     }
 }
+#endif
