@@ -1,6 +1,6 @@
 import React from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
-import type { BoardRouteParametersWithUuid } from '@/app/lib/types';
+import type { BoardRouteParametersWithUuid, SearchRequestPagination } from '@/app/lib/types';
 import { getClimb } from '@/app/lib/data/queries';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import {
@@ -12,12 +12,12 @@ import {
 import { parseRouteParams } from '@/app/lib/url-utils.server';
 
 import type { Metadata } from 'next';
-import { fetchClimbDetailData } from '@/app/lib/data/climb-detail-data.server';
-import ClimbDetailPageServer from '@/app/components/climb-detail/climb-detail-page.server';
-import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
+import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-list';
+import { fetchListPageData } from '@/app/lib/data/list-page-data.server';
 import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createPageMetadata } from '@/app/lib/seo/metadata';
+import ClimbViewSeoFragment from '@/app/components/climb-detail/climb-view-seo-fragment';
 
 export async function generateMetadata(props: { params: Promise<BoardRouteParametersWithUuid> }): Promise<Metadata> {
   const params = await props.params;
@@ -64,12 +64,16 @@ export async function generateMetadata(props: { params: Promise<BoardRouteParame
   }
 }
 
-export default async function DynamicResultsPage(props: { params: Promise<BoardRouteParametersWithUuid> }) {
-  const params = await props.params;
+export default async function ClimbViewPage(props: {
+  params: Promise<BoardRouteParametersWithUuid>;
+  searchParams: Promise<SearchRequestPagination>;
+}) {
+  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
 
   try {
     const { parsedParams, isNumericFormat } = await parseRouteParams(params);
 
+    // Redirect old numeric or uuid-only URLs to the canonical slug form.
     if (isNumericFormat || isUuidOnly(params.climb_uuid)) {
       const currentClimb = await getClimb(parsedParams);
       const layouts = await import('@/app/lib/data/queries').then((m) => m.getLayouts(parsedParams.board_name));
@@ -99,37 +103,27 @@ export default async function DynamicResultsPage(props: { params: Promise<BoardR
       }
     }
 
-    const boardDetails = getBoardDetailsForBoard(parsedParams);
-    const [currentClimb, detailData] = await Promise.all([
+    const [currentClimb, listData] = await Promise.all([
       getClimb(parsedParams),
-      fetchClimbDetailData({
-        boardName: parsedParams.board_name,
-        climbUuid: parsedParams.climb_uuid,
-        angle: parsedParams.angle,
-      }),
+      fetchListPageData(parsedParams, searchParams),
     ]);
 
-    if (!currentClimb) {
-      notFound();
-    }
-
-    scheduleOverlayWarming({ boardDetails, climbs: [currentClimb], variant: 'full' });
-
-    const climbWithProcessedData = {
-      ...currentClimb,
-      communityGrade: detailData.communityGrade,
-    };
+    if (!currentClimb) notFound();
+    if (!listData) notFound();
+    const { boardDetails, searchResponse, preloadUrl } = listData;
 
     return (
-      <ClimbDetailPageServer
-        climb={climbWithProcessedData}
-        boardDetails={boardDetails}
-        climbUuid={parsedParams.climb_uuid}
-        boardType={parsedParams.board_name}
-        angle={parsedParams.angle}
-        currentClimbDifficulty={currentClimb.difficulty ?? undefined}
-        boardName={parsedParams.board_name}
-      />
+      <>
+        {preloadUrl && <link rel="preload" as="image" href={preloadUrl} fetchPriority="high" />}
+        <ClimbViewSeoFragment climb={currentClimb} boardDetails={boardDetails} />
+        <BoardPageClimbsList
+          {...parsedParams}
+          boardDetails={boardDetails}
+          initialClimbs={searchResponse.climbs}
+          initialHasMore={searchResponse.hasMore}
+          initialOpenClimb={currentClimb}
+        />
+      </>
     );
   } catch (error) {
     // Re-throw Next.js internal errors (permanentRedirect, notFound, etc.) so they

@@ -1,18 +1,12 @@
 import React from 'react';
 
 import { notFound, permanentRedirect } from 'next/navigation';
-import type { BoardRouteParametersWithUuid, SearchRequestPagination, BoardDetails, Climb } from '@/app/lib/types';
-import { parsedRouteSearchParamsToSearchParams, constructClimbListWithSlugs } from '@/app/lib/url-utils';
+import type { BoardRouteParametersWithUuid, SearchRequestPagination } from '@/app/lib/types';
+import { constructClimbListWithSlugs } from '@/app/lib/url-utils';
 import { parseRouteParams } from '@/app/lib/url-utils.server';
 import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-list';
-import { cachedSearchClimbs } from '@/app/lib/db/queries/climbs/search-climbs';
-import { hasUserSpecificFilters } from '@/app/lib/list-page-cache';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
-import { resolveSsrInitialPageSize } from '@/app/components/board-page/constants';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/app/lib/auth/auth-options';
-import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
-import { buildOverlayUrl } from '@/app/components/board-renderer/util';
+import { fetchListPageData } from '@/app/lib/data/list-page-data.server';
 
 export default async function DynamicResultsPage(props: {
   params: Promise<BoardRouteParametersWithUuid>;
@@ -56,69 +50,9 @@ export default async function DynamicResultsPage(props: {
     }
   }
 
-  const searchParamsObject: SearchRequestPagination = parsedRouteSearchParamsToSearchParams(searchParams);
-
-  searchParamsObject.pageSize = resolveSsrInitialPageSize(
-    Number(searchParamsObject.page),
-    Number(searchParamsObject.pageSize),
-  );
-  searchParamsObject.page = 0;
-
-  const hasProgressFilters = hasUserSpecificFilters(searchParamsObject);
-
-  // Check if this is a default search (no custom filters applied)
-  const isDefaultSearch =
-    !searchParamsObject.gradeAccuracy &&
-    !searchParamsObject.minGrade &&
-    !searchParamsObject.maxGrade &&
-    !searchParamsObject.minAscents &&
-    !searchParamsObject.minRating &&
-    !searchParamsObject.name &&
-    (!searchParamsObject.settername || searchParamsObject.settername.length === 0) &&
-    (searchParamsObject.sortBy || 'ascents') === 'ascents' &&
-    (searchParamsObject.sortOrder || 'desc') === 'desc' &&
-    !searchParamsObject.onlyTallClimbs &&
-    !searchParamsObject.onlyWideClimbs &&
-    (!searchParamsObject.holdsFilter || Object.keys(searchParamsObject.holdsFilter).length === 0) &&
-    !hasProgressFilters;
-
-  let boardDetails: BoardDetails;
-
-  try {
-    boardDetails = getBoardDetailsForBoard(parsedParams);
-  } catch (error) {
-    console.error('Error resolving board details:', error);
-    return notFound();
-  }
-
-  // Resolve userId for personal progress filters
-  let userId: string | undefined;
-  if (hasProgressFilters) {
-    const session = await getServerSession(authOptions);
-    userId = session?.user?.id;
-  }
-
-  let searchResponse: { climbs: Climb[]; hasMore: boolean };
-
-  try {
-    searchResponse = await cachedSearchClimbs(parsedParams, searchParamsObject, isDefaultSearch, userId, {
-      cacheable: !hasProgressFilters,
-    });
-  } catch (error) {
-    console.error(
-      'Error fetching climb search results (degrading to empty results for SSR):',
-      { boardName: parsedParams.board_name },
-      error,
-    );
-    searchResponse = { climbs: [], hasMore: false };
-  }
-
-  scheduleOverlayWarming({ boardDetails, climbs: searchResponse.climbs, variant: 'thumbnail' });
-
-  // Preload the first climb's thumbnail so the browser can fetch it before JS hydration.
-  // The climb list is virtualized (client-only), so the LCP image isn't in the initial HTML.
-  const firstClimb = searchResponse.climbs[0];
-  const preloadUrl = firstClimb?.frames ? buildOverlayUrl(boardDetails, firstClimb.frames, true) : null;
+  const listData = await fetchListPageData(parsedParams, searchParams);
+  if (!listData) return notFound();
+  const { boardDetails, searchResponse, preloadUrl } = listData;
 
   return (
     <>

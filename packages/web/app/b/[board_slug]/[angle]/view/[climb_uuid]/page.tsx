@@ -1,23 +1,29 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
+import type { SearchRequestPagination } from '@/app/lib/types';
 import { resolveBoardBySlug, boardToRouteParams } from '@/app/lib/board-slug-utils';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getClimb } from '@/app/lib/data/queries';
-
-import ClimbDetailPageServer from '@/app/components/climb-detail/climb-detail-page.server';
-import { fetchClimbDetailData } from '@/app/lib/data/climb-detail-data.server';
-import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
+import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-list';
+import { fetchListPageData } from '@/app/lib/data/list-page-data.server';
 import { extractUuidFromSlug } from '@/app/lib/url-utils';
 import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createPageMetadata } from '@/app/lib/seo/metadata';
+import ClimbViewSeoFragment from '@/app/components/climb-detail/climb-view-seo-fragment';
 
-type BoardSlugViewPageProps = {
-  params: Promise<{ board_slug: string; angle: string; climb_uuid: string }>;
+type BoardSlugViewRouteParams = { board_slug: string; angle: string; climb_uuid: string };
+
+type BoardSlugViewMetadataProps = {
+  params: Promise<BoardSlugViewRouteParams>;
 };
 
-export async function generateMetadata(props: BoardSlugViewPageProps): Promise<Metadata> {
+type BoardSlugViewPageProps = BoardSlugViewMetadataProps & {
+  searchParams: Promise<SearchRequestPagination>;
+};
+
+export async function generateMetadata(props: BoardSlugViewMetadataProps): Promise<Metadata> {
   const params = await props.params;
   const { t, locale } = await getServerTranslation('climbs');
 
@@ -66,7 +72,7 @@ export async function generateMetadata(props: BoardSlugViewPageProps): Promise<M
 }
 
 export default async function BoardSlugViewPage(props: BoardSlugViewPageProps) {
-  const params = await props.params;
+  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
 
   const board = await resolveBoardBySlug(params.board_slug);
   if (!board) {
@@ -79,39 +85,32 @@ export default async function BoardSlugViewPage(props: BoardSlugViewPageProps) {
   };
 
   try {
-    const boardDetails = getBoardDetailsForBoard(parsedParams);
-    const [currentClimb, detailData] = await Promise.all([
+    const [currentClimb, listData] = await Promise.all([
       getClimb(parsedParams),
-      fetchClimbDetailData({
-        boardName: parsedParams.board_name,
-        climbUuid: parsedParams.climb_uuid,
-        angle: parsedParams.angle,
-      }),
+      fetchListPageData(parsedParams, searchParams),
     ]);
 
-    if (!currentClimb) {
-      notFound();
-    }
-
-    scheduleOverlayWarming({ boardDetails, climbs: [currentClimb], variant: 'full' });
-
-    const climbWithProcessedData = {
-      ...currentClimb,
-      communityGrade: detailData.communityGrade,
-    };
+    if (!currentClimb) notFound();
+    if (!listData) notFound();
+    const { boardDetails, searchResponse, preloadUrl } = listData;
 
     return (
-      <ClimbDetailPageServer
-        climb={climbWithProcessedData}
-        boardDetails={boardDetails}
-        climbUuid={parsedParams.climb_uuid}
-        boardType={parsedParams.board_name}
-        angle={parsedParams.angle}
-        currentClimbDifficulty={currentClimb.difficulty ?? undefined}
-        boardName={parsedParams.board_name}
-      />
+      <>
+        {preloadUrl && <link rel="preload" as="image" href={preloadUrl} fetchPriority="high" />}
+        <ClimbViewSeoFragment climb={currentClimb} boardDetails={boardDetails} />
+        <BoardPageClimbsList
+          {...parsedParams}
+          boardDetails={boardDetails}
+          initialClimbs={searchResponse.climbs}
+          initialHasMore={searchResponse.hasMore}
+          initialOpenClimb={currentClimb}
+        />
+      </>
     );
   } catch (error) {
+    if (error !== null && typeof error === 'object' && 'digest' in error) {
+      throw error;
+    }
     console.error('Error fetching climb view:', error);
     notFound();
   }

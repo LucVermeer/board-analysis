@@ -59,6 +59,7 @@ import { getGradeTintColor } from '@/app/lib/grade-colors';
 import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
 import QueueDrawer from './queue-drawer';
+import { useDrawerUrlSync } from './use-drawer-url-sync';
 
 /** Window with optional requestIdleCallback (not available in all browsers). */
 type WindowWithIdleCallback = Window & {
@@ -519,36 +520,33 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
   useWakeLock(isOpen);
 
-  // Hash-based back button support
-  useEffect(() => {
-    if (!isOpen) return;
-
-    window.history.pushState(null, '', '#playing');
-
-    const handlePopState = () => {
-      setActiveDrawer('none');
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      if (window.location.hash === '#playing') {
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      }
-    };
-  }, [isOpen, setActiveDrawer]);
-
   const handleClose = useCallback(() => {
     if (isActionsOpen || isQueueOpen || isPlaylistSelectorOpen) return;
     setDrawerOpen(false);
     setActiveDrawer('none');
-    if (window.location.hash === '#playing') {
-      window.history.back();
-    }
   }, [setActiveDrawer, isActionsOpen, isQueueOpen, isPlaylistSelectorOpen]);
 
   // Compute ascent info for tick FAB badge
   const currentAngle = typeof angle === 'string' ? parseInt(angle, 10) : angle;
+
+  // Sync the browser URL with the drawer's open state so the address bar
+  // reflects /view/{climb_uuid} while open, replaceState tracks the displayed
+  // climb on prev/next/swipe, and browser back closes the drawer.
+  // Browser back must close unconditionally (don't gate on nested drawers like
+  // handleClose does — back is a hardware affordance that shouldn't be
+  // swallowed silently).
+  const handleUrlSyncClose = useCallback(() => {
+    setDrawerOpen(false);
+    setActiveDrawer('none');
+  }, [setActiveDrawer]);
+  useDrawerUrlSync({
+    isOpen,
+    displayedClimb: currentClimb,
+    boardDetails,
+    angle: currentAngle,
+    onClose: handleUrlSyncClose,
+    enabled: !viewOnlyMode,
+  });
   const filteredLogbook = useMemo(() => {
     if (!logbook || !currentClimb) return [];
     return logbook.filter((asc) => asc.climb_uuid === currentClimb.uuid && Number(asc.angle) === currentAngle);
@@ -757,9 +755,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const handleBoardPullClose = useCallback(() => {
     setDrawerOpen(false);
     setActiveDrawer('none');
-    if (window.location.hash === '#playing') {
-      window.history.back();
-    }
   }, [setActiveDrawer]);
 
   const boardPull = usePullToClose({
