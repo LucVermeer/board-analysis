@@ -14,44 +14,42 @@ enum LiveActivityBleBridge {
     /// the system terminates the app on expiry instead of giving us a chance
     /// to release the identifier ourselves.
     static func writeBoardForIntent(items: [SharedQueueItem], currentIndex: Int) async {
-        let task = BleIntentBackgroundTask()
-        task.begin(name: "ble-display-intent")
-        defer { task.end() }
+        let task = await BleIntentBackgroundTask()
+        await task.begin(name: "ble-display-intent")
         await BoardBleManager.shared.displayCurrentItemAwaitingReady(
             items: items,
             currentIndex: currentIndex,
             readyTimeout: 3.0
         )
+        await task.end()
     }
 }
 
-/// Owns a single `UIBackgroundTaskIdentifier`. Begin and end are atomic and
-/// idempotent so the expiration handler, the `defer` cleanup, and (in pathological
-/// double-tap scenarios) a deinit can all race without crashing or leaking the
-/// identifier. `UIApplication.beginBackgroundTask` / `endBackgroundTask` are
-/// documented to be safe from any thread, so we don't hop to MainActor.
-private final class BleIntentBackgroundTask: @unchecked Sendable {
-    private let lock = NSLock()
+/// Owns a single `UIBackgroundTaskIdentifier`. `UIApplication.shared` is
+/// `@MainActor`-isolated under Swift 6 strict concurrency; pinning this
+/// class to `@MainActor` makes the begin/end accesses well-formed without
+/// needing an external lock — main-actor serialization replaces the prior
+/// `NSLock`. The expiration handler closure runs on the main thread per
+/// Apple, so the `self?.end()` call is a same-actor invocation.
+@available(iOS 17.0, *)
+@MainActor
+private final class BleIntentBackgroundTask {
     private var taskId: UIBackgroundTaskIdentifier = .invalid
 
     func begin(name: String) {
-        lock.lock()
-        defer { lock.unlock() }
         guard taskId == .invalid else { return }
         taskId = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
             self?.end()
         }
     }
 
+    /// Idempotent — safe to call from the expiration handler and from the
+    /// explicit `await task.end()` site at the end of `writeBoardForIntent`.
+    /// Whichever runs second observes `taskId == .invalid` and no-ops.
     func end() {
-        lock.lock()
-        defer { lock.unlock() }
         guard taskId != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(taskId)
+        let id = taskId
         taskId = .invalid
-    }
-
-    deinit {
-        end()
+        UIApplication.shared.endBackgroundTask(id)
     }
 }

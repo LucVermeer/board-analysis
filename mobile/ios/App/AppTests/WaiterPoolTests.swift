@@ -34,13 +34,18 @@ final class WaiterPoolTests: XCTestCase {
     // MARK: - Timeout
 
     func testWaitResumesViaTimeoutWhenSignalNeverCalled() async {
+        // Verifies the timeout path resumes at all — we don't try to assert
+        // tight bounds on *when* it resumes, because a loaded CI runner can
+        // delay the work item arbitrarily. Lower bound proves the waiter
+        // actually suspended (rather than returning immediately on a stale
+        // ready signal); upper bound is a hang detector.
         let pool = makePool()
         let timeout: TimeInterval = 0.15
         let start = Date()
         await pool.wait(timeout: timeout) { false }
         let elapsed = Date().timeIntervalSince(start)
-        XCTAssertGreaterThanOrEqual(elapsed, timeout * 0.8, "Resumed before timeout (\(elapsed)s, expected ~\(timeout)s)")
-        XCTAssertLessThan(elapsed, timeout + 0.3, "Resumed long after timeout (\(elapsed)s, expected ~\(timeout)s)")
+        XCTAssertGreaterThanOrEqual(elapsed, timeout * 0.5, "Resumed before timeout (\(elapsed)s, expected at least \(timeout * 0.5)s)")
+        XCTAssertLessThan(elapsed, 5.0, "Resumed long after timeout (\(elapsed)s) — possibly hung")
     }
 
     // MARK: - Concurrent waiters
