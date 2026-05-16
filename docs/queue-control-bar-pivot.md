@@ -50,6 +50,16 @@ Navigation rules layer on top:
 
 A separate "personal saved climbs" library (cross-session, private) is a future concept and **out of scope for this PR**.
 
+## Queue list rendering rules
+
+The expanded queue list view (`packages/web/app/components/queue-control/queue-list.tsx`) renders three regions in order:
+
+1. **History** — climbs already sent to the wall in this session. **Default: render the most recent 5 history items.** A "Show full history" button at the top of the history region expands to show every history item from the session. Today's `scrollToHistoryIndex = historyItems.length - 2` logic in `queue-list.tsx:230` should be reworked around this 5-item default.
+2. **Current item** — the climb currently lit on the wall.
+3. **Upcoming queue** — items added via Add to Queue that haven't been broadcast yet, followed by suggested-climbs once the queue is exhausted (same fall-through as navigation).
+
+**Open behavior:** when the list is opened (drawer or full-screen view), scroll so the current item is vertically centered in the visible area. Existing `scrollToCurrentClimb` API at `queue-list.tsx:50` is the right hook — its scroll target needs to be the center of the viewport, not the top. If there aren't enough history items to push the current item to true center (e.g. session just started), let it sit at its natural position rather than padding artificially.
+
 ## User flows after the pivot
 
 ### Solo, BLE quickstart from Home
@@ -227,6 +237,7 @@ The 1,650-visitor gap between "queue-touching" (4,071) and "board-sending" (2,41
 - Queue state machine + context: `packages/web/app/components/graphql-queue/QueueContext.tsx`. `setCurrentClimb` is the function at line 383; the `shouldAddToQueue: true, insertAfterCurrent: true` payload at line 397 is what makes the implicit queue an auto-history of every tap. The queue → suggestions fall-through lives in `getNextClimbQueueItem` at line ~570-583.
 - Suggestions derivation: `packages/web/app/components/queue-control/hooks/use-queue-data-fetching.tsx:234` (`suggestedClimbs` memo, derived from `climbSearchResults`).
 - Queue Control Bar UI: `packages/web/app/components/queue-control/queue-control-bar.tsx`. Party member `AvatarGroup` lives at `:1025-1045` (mini bar) and `:1112+` (expanded variant) — both need driver-first ordering and the lightbulb badge.
+- Queue list view: `packages/web/app/components/queue-control/queue-list.tsx`. History default count, "Show full history" button, and current-item-centered-on-open all land here. Existing `scrollToCurrentClimb` (`:50`), `history-item` / `history-divider` row types (`:40-41`), and `scrollTargetFlatIndex` logic (`:218+`) are the hooks to reuse.
 - Session participant schema: `packages/shared-schema/src/schema/session.ts:147` (`SessionParticipant` type) and `:175` (`participants` field on `Session`). Add `driverParticipantId` on the `Session` type here.
 - Play View Drawer (where the lightbulb action will live): `packages/web/app/components/play-view/play-view-drawer.tsx`.
 - Prev/next button components: `packages/web/app/components/queue-control/next-climb-button.tsx`, `previous-climb-button.tsx`.
