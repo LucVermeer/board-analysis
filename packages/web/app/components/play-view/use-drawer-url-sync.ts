@@ -120,9 +120,12 @@ export function useDrawerUrlSync({
         // Pop the entry we pushed when opening so back-button history stays clean.
         window.history.back();
       } else {
-        // Direct hit — no prior entry to pop. Push the list URL forward so the
-        // address bar matches what the user is now looking at.
-        window.history.pushState({ ...window.history.state }, '', listUrl);
+        // Direct hit — there is no entry we own to pop, and we must not push
+        // either: pushing /list forward traps the user (Back from /list would
+        // return them to /view/{uuid}, where the drawer is closed but the URL
+        // says open). Replace the current entry instead so Back leaves the
+        // tab/site cleanly.
+        window.history.replaceState({ ...window.history.state }, '', listUrl);
       }
       sourceRef.current = null;
     };
@@ -164,7 +167,7 @@ export function useDrawerUrlSync({
       },
     };
     window.history.replaceState(stampedState, '', viewUrl);
-  }, [displayedClimb?.uuid, enabled, isOpen, displayedClimb]);
+  }, [displayedClimb, enabled, isOpen]);
 }
 
 function withSearchParams(url: string, searchParams: URLSearchParams): string {
@@ -174,10 +177,12 @@ function withSearchParams(url: string, searchParams: URLSearchParams): string {
 
 function getListUrl(boardDetails: BoardDetails, angle: number, pathname: string): string {
   // Preserve the short /b/{slug}/{angle}/ route shape when the user came from there.
+  // The route tree has no index page under /b/{slug}/{angle}, so we must point
+  // at /list explicitly to avoid a 404.
   const boardSlugMatch = pathname.match(/^(\/[a-z]{2}(?:-[A-Z]{2})?)?\/b\/([^/]+)\/(\d+)/);
   if (boardSlugMatch) {
     const localePrefix = boardSlugMatch[1] ?? '';
-    return `${localePrefix}/b/${boardSlugMatch[2]}/${boardSlugMatch[3]}`;
+    return `${localePrefix}/b/${boardSlugMatch[2]}/${boardSlugMatch[3]}/list`;
   }
   const { board_name, layout_name, size_name, size_description, set_names } = boardDetails;
   if (layout_name && size_name && set_names) {

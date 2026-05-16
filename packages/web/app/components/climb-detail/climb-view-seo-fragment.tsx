@@ -1,5 +1,6 @@
 import React from 'react';
 import type { BoardDetails, Climb } from '@/app/lib/types';
+import { getServerTranslation } from '@/app/lib/i18n/server';
 
 type ClimbViewSeoFragmentProps = {
   climb: Climb;
@@ -14,12 +15,17 @@ type ClimbViewSeoFragmentProps = {
  * Visually hidden via the standard sr-only pattern so it doesn't double up
  * with the drawer's own header once the page is interactive.
  */
-export default function ClimbViewSeoFragment({ climb, boardDetails }: ClimbViewSeoFragmentProps) {
+export default async function ClimbViewSeoFragment({ climb, boardDetails }: ClimbViewSeoFragmentProps) {
+  const { t } = await getServerTranslation('climbs');
   const grade = climb.difficulty ?? '';
   const setter = climb.setter_username ?? '';
-  const boardName = boardDetails.board_name;
   const layoutName = boardDetails.layout_name ?? '';
   const ascents = climb.ascensionist_count ?? 0;
+
+  const heading = t('metadata.view.seoHeading', { climbName: climb.name, grade });
+  const summary = t('metadata.view.seoSummary', { boardName: boardDetails.board_name, layoutName });
+  const setterSuffix = setter ? t('metadata.view.seoSetterSuffix', { setter }) : '';
+  const ascentsSuffix = ascents > 0 ? t('metadata.view.seoAscentsSuffix', { ascents }) : '.';
 
   return (
     <section
@@ -35,14 +41,11 @@ export default function ClimbViewSeoFragment({ climb, boardDetails }: ClimbViewS
         border: 0,
       }}
     >
-      <h1>
-        {climb.name}
-        {grade ? ` — ${grade}` : ''}
-      </h1>
+      <h1>{heading}</h1>
       <p>
-        {boardName} {layoutName} climb
-        {setter ? ` set by ${setter}` : ''}
-        {ascents > 0 ? `. ${ascents} ascents logged.` : '.'}
+        {summary}
+        {setterSuffix}
+        {ascentsSuffix}
       </p>
     </section>
   );

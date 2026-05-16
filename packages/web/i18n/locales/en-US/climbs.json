@@ -11,7 +11,11 @@
       "description": "{{climbName}} - {{grade}} by {{setter}}. Quality: {{quality}}/5. Ascents: {{ascents}}",
       "imageAlt": "{{climbName}} - {{grade}} on {{boardName}} board",
       "fallbackTitle": "Climb",
-      "fallbackDescription": "View climb details and beta videos"
+      "fallbackDescription": "View climb details and beta videos",
+      "seoHeading": "{{climbName}} — {{grade}}",
+      "seoSummary": "{{boardName}} {{layoutName}} climb",
+      "seoSetterSuffix": " set by {{setter}}",
+      "seoAscentsSuffix": ". {{ascents}} ascents logged."
     },
     "play": {
       "title": "{{climbName}} - {{grade}} | Play Mode",

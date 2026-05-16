@@ -74,12 +74,6 @@ vi.mock('@/app/lib/data/queries', () => ({
   })),
 }));
 
-vi.mock('@/app/lib/data/climb-detail-data.server', () => ({
-  fetchClimbDetailData: vi.fn(async () => ({
-    communityGrade: null,
-  })),
-}));
-
 vi.mock('@/app/lib/warm-overlay-cache', () => ({
   scheduleOverlayWarming: vi.fn(),
 }));

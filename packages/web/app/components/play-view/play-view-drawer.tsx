@@ -534,7 +534,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // climb on prev/next/swipe, and browser back closes the drawer.
   // Browser back must close unconditionally (don't gate on nested drawers like
   // handleClose does — back is a hardware affordance that shouldn't be
-  // swallowed silently).
+  // swallowed silently). The hook also runs in viewOnlyMode — URL sync is a
+  // presentational concern, and read-only spectators should still be able to
+  // copy a shareable link from their address bar.
   const handleUrlSyncClose = useCallback(() => {
     setDrawerOpen(false);
     setActiveDrawer('none');
@@ -545,7 +547,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     boardDetails,
     angle: currentAngle,
     onClose: handleUrlSyncClose,
-    enabled: !viewOnlyMode,
   });
   const filteredLogbook = useMemo(() => {
     if (!logbook || !currentClimb) return [];

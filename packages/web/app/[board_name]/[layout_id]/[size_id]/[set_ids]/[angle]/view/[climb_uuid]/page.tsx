@@ -72,17 +72,21 @@ export default async function ClimbViewPage(props: {
 
   try {
     const { parsedParams, isNumericFormat } = await parseRouteParams(params);
+    const needsSlugRedirect = isNumericFormat || isUuidOnly(params.climb_uuid);
 
-    // Redirect old numeric or uuid-only URLs to the canonical slug form.
-    if (isNumericFormat || isUuidOnly(params.climb_uuid)) {
-      const currentClimb = await getClimb(parsedParams);
-      const layouts = await import('@/app/lib/data/queries').then((m) => m.getLayouts(parsedParams.board_name));
-      const sizes = await import('@/app/lib/data/queries').then((m) =>
-        m.getSizes(parsedParams.board_name, parsedParams.layout_id),
-      );
-      const sets = await import('@/app/lib/data/queries').then((m) =>
-        m.getSets(parsedParams.board_name, parsedParams.layout_id, parsedParams.size_id),
-      );
+    // Fetch the climb once. On the redirect path we use its name to build the
+    // slug URL; on the normal path we pass it through to the SEO fragment and
+    // the drawer.
+    const currentClimb = await getClimb(parsedParams);
+    if (!currentClimb) notFound();
+
+    if (needsSlugRedirect) {
+      const queries = await import('@/app/lib/data/queries');
+      const [layouts, sizes, sets] = await Promise.all([
+        queries.getLayouts(parsedParams.board_name),
+        queries.getSizes(parsedParams.board_name, parsedParams.layout_id),
+        queries.getSets(parsedParams.board_name, parsedParams.layout_id, parsedParams.size_id),
+      ]);
 
       const layout = layouts.find((l) => l.id === parsedParams.layout_id);
       const size = sizes.find((s) => s.id === parsedParams.size_id);
@@ -103,12 +107,7 @@ export default async function ClimbViewPage(props: {
       }
     }
 
-    const [currentClimb, listData] = await Promise.all([
-      getClimb(parsedParams),
-      fetchListPageData(parsedParams, searchParams),
-    ]);
-
-    if (!currentClimb) notFound();
+    const listData = await fetchListPageData(parsedParams, searchParams);
     if (!listData) notFound();
     const { boardDetails, searchResponse, preloadUrl } = listData;
 
