@@ -44,11 +44,25 @@ final class WaiterPool: @unchecked Sendable {
                 }
                 let waiterId = UUID()
                 let workItem = DispatchWorkItem { [weak self] in
-                    guard let self else { return }
+                    guard let self else {
+                        // Pool was deallocated between wait() enqueueing the
+                        // waiter and the timeout firing. The Waiter struct
+                        // (along with its continuation reference inside the
+                        // pool's array) is gone, so resume the captured
+                        // continuation directly — leaking a CheckedContinuation
+                        // traps in debug builds and hangs the awaiting Task.
+                        // In practice unreachable while BoardBleManager.shared
+                        // owns the pool, but the contract has to hold.
+                        continuation.resume()
+                        return
+                    }
                     if let index = self.waiters.firstIndex(where: { $0.id == waiterId }) {
                         let waiter = self.waiters.remove(at: index)
                         waiter.continuation.resume()
                     }
+                    // If no matching waiter is found, signalAll already
+                    // resumed this continuation and removed the entry — do
+                    // nothing (double-resume would trap).
                 }
                 self.waiters.append(
                     Waiter(id: waiterId, continuation: continuation, timeoutWorkItem: workItem)

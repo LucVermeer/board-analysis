@@ -44,6 +44,8 @@
 		LA100100 /* LiveActivityBleBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200100 /* LiveActivityBleBridge.swift */; };
 		LA100110 /* WaiterPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200110 /* WaiterPool.swift */; };
 		LA100111 /* WaiterPoolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200111 /* WaiterPoolTests.swift */; };
+		LA100120 /* ClimbNavigationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200120 /* ClimbNavigationIntent.swift */; };
+		LA100121 /* ClimbNavigationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200120 /* ClimbNavigationIntent.swift */; };
 		LA100020 /* SharedConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200001 /* SharedConstants.swift */; };
 		LA100021 /* ClimbSessionAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200002 /* ClimbSessionAttributes.swift */; };
 		LA100080 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA200080 /* SharedKeychain.swift */; };
@@ -131,6 +133,7 @@
 		LA200100 /* LiveActivityBleBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityBleBridge.swift; sourceTree = "<group>"; };
 		LA200110 /* WaiterPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaiterPool.swift; sourceTree = "<group>"; };
 		LA200111 /* WaiterPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaiterPoolTests.swift; sourceTree = "<group>"; };
+		LA200120 /* ClimbNavigationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClimbNavigationIntent.swift; sourceTree = "<group>"; };
 		LA200014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		LA200015 /* BoardseshWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BoardseshWidgets.entitlements; sourceTree = "<group>"; };
 		LA200030 /* SessionWebSocketManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWebSocketManagerTests.swift; sourceTree = "<group>"; };
@@ -267,6 +270,7 @@
 				LA200011 /* ClimbSessionLiveActivity.swift */,
 				LA200012 /* NextClimbIntent.swift */,
 				LA200013 /* PreviousClimbIntent.swift */,
+				LA200120 /* ClimbNavigationIntent.swift */,
 				LA200070 /* WidgetNetworking.swift */,
 				LA200014 /* Info.plist */,
 				LA200015 /* BoardseshWidgets.entitlements */,
@@ -491,6 +495,7 @@
 				LA100051 /* DevUrlPlugin.m in Sources */,
 				LA100090 /* NextClimbIntent.swift in Sources */,
 				LA100091 /* PreviousClimbIntent.swift in Sources */,
+				LA100120 /* ClimbNavigationIntent.swift in Sources */,
 				LA100092 /* WidgetNetworking.swift in Sources */,
 				LA100100 /* LiveActivityBleBridge.swift in Sources */,
 				LA100110 /* WaiterPool.swift in Sources */,
@@ -519,6 +524,7 @@
 				LA100011 /* ClimbSessionLiveActivity.swift in Sources */,
 				LA100012 /* NextClimbIntent.swift in Sources */,
 				LA100013 /* PreviousClimbIntent.swift in Sources */,
+				LA100121 /* ClimbNavigationIntent.swift in Sources */,
 				LA100070 /* WidgetNetworking.swift in Sources */,
 				LA100020 /* SharedConstants.swift in Sources */,
 				LA100081 /* SharedKeychain.swift in Sources */,

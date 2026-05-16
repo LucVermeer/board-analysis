@@ -101,11 +101,13 @@ final class WaiterPoolTests: XCTestCase {
             await pool.wait(timeout: 2.0) { false }
         }
 
-        // Give the wait a moment to enqueue on the pool's queue.
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        let isPendingDuring = await Self.readHasPendingWaiters(pool: pool, queue: queue)
-        XCTAssertTrue(isPendingDuring, "Pool should report a pending waiter while a wait is suspended")
+        // Poll until the waiter is observed enqueued on the pool's queue.
+        // A fixed sleep would race on a slow CI runner where the new Task
+        // hasn't been scheduled yet.
+        let pendingObserved = await Self.pollUntil(timeout: 2.0) {
+            await Self.readHasPendingWaiters(pool: pool, queue: queue)
+        }
+        XCTAssertTrue(pendingObserved, "Pool should report a pending waiter within 2s")
 
         await Self.runOnQueue(queue) {
             pool.signalAll()
@@ -115,6 +117,47 @@ final class WaiterPoolTests: XCTestCase {
 
         let isPendingAfter = await Self.readHasPendingWaiters(pool: pool, queue: queue)
         XCTAssertFalse(isPendingAfter, "Pool should be empty after signalAll")
+    }
+
+    // MARK: - Signal-cancels-timeout race
+
+    func testSignalAllRacingWithTimeoutDoesNotDoubleResume() async {
+        // signalAll is scheduled to fire ~25 ms after the wait starts; the
+        // wait's own timeout is 50 ms. The work item is queued at +50 ms but
+        // signalAll's `cancel()` at +25 ms removes it from the queue before
+        // it can run. If signalAll AND the timeout both managed to resume
+        // the same continuation, CheckedContinuation would trap. Reaching
+        // the end of the test without trapping locks the invariant in.
+        let (pool, queue) = makePoolAndQueue()
+
+        queue.asyncAfter(deadline: .now() + 0.025) {
+            pool.signalAll()
+        }
+
+        await pool.wait(timeout: 0.05) { false }
+
+        // Give any (cancelled) work item a chance to fire — it should not.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        let isPending = await Self.readHasPendingWaiters(pool: pool, queue: queue)
+        XCTAssertFalse(isPending, "Pool should be empty after signalAll cancelled the timeout")
+    }
+
+    func testTimeoutFiringFirstSkipsLaterSignalAll() async {
+        // The opposite ordering: let the timeout resume the continuation
+        // first, then call signalAll. The timeout's work item removes the
+        // waiter from the pool's array, so signalAll sees an empty array
+        // and does nothing. Locks in the remove-by-id semantics.
+        let (pool, queue) = makePoolAndQueue()
+
+        await pool.wait(timeout: 0.05) { false }
+
+        await Self.runOnQueue(queue) {
+            pool.signalAll()
+        }
+
+        let isPending = await Self.readHasPendingWaiters(pool: pool, queue: queue)
+        XCTAssertFalse(isPending, "Pool should be empty after timeout-then-signalAll")
     }
 
     func testSignalAllOnEmptyPoolIsNoop() async {
@@ -163,5 +206,20 @@ final class WaiterPoolTests: XCTestCase {
                 continuation.resume()
             }
         }
+    }
+
+    /// Polls `predicate` every 50ms for up to `timeout` seconds. Returns
+    /// `true` as soon as the predicate returns `true`; returns `false` if
+    /// the timeout elapses first. Replaces fixed-duration sleeps that race
+    /// on heavily loaded CI runners.
+    private static func pollUntil(timeout: TimeInterval, _ predicate: @Sendable () async -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await predicate() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return false
     }
 }

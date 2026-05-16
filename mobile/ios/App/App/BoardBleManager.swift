@@ -693,22 +693,24 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         guard connectionGeneration == self.connectionGeneration, writeGeneration == self.writeGeneration else {
             // The connection or write generation flipped under us (disconnect,
             // reconnect, state restoration, or write cancellation). Bail out
-            // and re-arm so `isWriting` can't get stranded `true` — without
-            // this, the next time processWriteQueue is called from outside
-            // the write loop, the guard at its top would short-circuit.
+            // and re-arm so `isWriting` can't get stranded `true`. Dispatched
+            // back through `bleQueue` rather than tail-called so the stack
+            // stays bounded even if the queue contains many stale-generation
+            // requests in a row (current code paths clear the queue on
+            // generation bumps so this is defensive).
             isWriting = false
-            processWriteQueue()
+            bleQueue.async { [weak self] in self?.processWriteQueue() }
             return
         }
         guard requestIndex < writeQueue.count else {
             isWriting = false
-            processWriteQueue()
+            bleQueue.async { [weak self] in self?.processWriteQueue() }
             return
         }
         let request = writeQueue[requestIndex]
         guard request.connectionGeneration == connectionGeneration, request.writeGeneration == writeGeneration else {
             isWriting = false
-            processWriteQueue()
+            bleQueue.async { [weak self] in self?.processWriteQueue() }
             return
         }
 
