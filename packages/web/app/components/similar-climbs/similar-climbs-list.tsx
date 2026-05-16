@@ -153,7 +153,11 @@ function SimilarClimbRow({ climb, boardType }: SimilarClimbRowProps) {
   return (
     <Card variant="outlined">
       <CardContent sx={{ p: 1.25, '&:last-child': { pb: 1.25 } }}>
-        <LocaleLink href={climbViewPath ?? '#'} style={{ textDecoration: 'none', color: 'inherit' }}>
+        <Box
+          component={LocaleLink}
+          href={climbViewPath ?? '#'}
+          sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+        >
           <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
             {climb.frames ? (
               <AscentThumbnail
@@ -190,7 +194,7 @@ function SimilarClimbRow({ climb, boardType }: SimilarClimbRowProps) {
               </Box>
             </Box>
           </Box>
-        </LocaleLink>
+        </Box>
       </CardContent>
     </Card>
   );

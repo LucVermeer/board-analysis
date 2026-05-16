@@ -73,7 +73,7 @@ import {
   type ClimbSearchCountResponse,
   type ClimbSearchInputVariables,
 } from '@/app/lib/graphql/operations/climb-search';
-import { convertLitUpHoldsMapToMoonBoardHolds, isMoonBoardDuplicateError } from '@/app/lib/moonboard-climb-helpers';
+import { convertLitUpHoldsMapToMoonBoardHolds } from '@/app/lib/moonboard-climb-helpers';
 import styles from './create-climb-form.module.css';
 import {
   CHECK_MOONBOARD_CLIMB_DUPLICATES_QUERY,
@@ -1079,9 +1079,6 @@ export default function CreateClimbForm({
           target: existingClimbUuid ? { kind: 'climbUuid', climbUuid: existingClimbUuid } : null,
         });
       } else {
-        if (error instanceof Error && isMoonBoardDuplicateError(error.message)) {
-          await runMoonBoardDuplicateCheck(moonBoardHolds);
-        }
         showMessage(error instanceof Error ? error.message : 'Failed to save climb. Please try again.', 'error');
       }
     } finally {
@@ -1101,7 +1098,6 @@ export default function CreateClimbForm({
     wsAuthToken,
     queryClient,
     showMessage,
-    runMoonBoardDuplicateCheck,
     markJustSaved,
     savedClimb,
     updateClimb,
