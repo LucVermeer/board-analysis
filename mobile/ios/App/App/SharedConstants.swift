@@ -37,11 +37,6 @@ enum SharedConstants {
 
     static let queueNavigateNotification = "com.boardsesh.app.queueNavigate"
 
-    /// Fired by the widget after an optimistic current-index update so the
-    /// backgrounded main app can repaint the connected board without sending a
-    /// duplicate queue mutation.
-    static let boardBleDisplayNotification = "com.boardsesh.app.boardBleDisplay"
-
     /// Fired by the widget extension when `/api/widget/navigate` responds 410
     /// Gone, signaling that the cached APNs push token is bound to a different
     /// session and the main app should re-register.

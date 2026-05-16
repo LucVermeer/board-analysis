@@ -18,34 +18,43 @@ Control the climbing board from the lock screen while the app is backgrounded. T
 **What's still missing for full lock-screen board control:**
 
 1. Widget can only do prev/next -- no add, remove, reorder, or mirror mutations from lock screen
-2. Widget extension runs in a separate process with no direct access to the main app's BLE connection; it only signals the main app process
-3. Rust board renderer has no Swift/iOS bindings -- only targets WASM today
-4. MoonBoard remains on the existing Capacitor BLE path; the native background BLE path currently targets Aurora boards only
+2. Rust board renderer has no Swift/iOS bindings -- only targets WASM today
+3. MoonBoard remains on the existing Capacitor BLE path; the native background BLE path currently targets Aurora boards only
+4. Cross-device repaint when *another* user navigates: if your phone is suspended, your board stays stale until you unlock the phone. Tracked in issue #2174 (presence/ack design) and ultimately solved by the planned WS-enabled board controller.
 
 ## Architecture Decision: Where Does BLE Live?
 
 The widget extension **cannot** hold a CoreBluetooth connection (extensions have strict memory/runtime limits and Apple kills them after ~30s). The main app process must own the BLE connection.
 
+`LiveActivityIntent` is the iOS 17+ mechanism that lets us drive the main app from a Live Activity button tap. When the intent type is compiled into **both** targets (widget extension + main app) and the user taps a button on the Live Activity, iOS performs the intent in the main app's process — background-launching the app if it was suspended or terminated. The widget acts as the UI host; the actual work runs where the BLE connection lives.
+
 The flow for lock-screen LED control:
 
 ```
 Widget (Next/Previous tap)
-  │ posts Darwin notification
+  │ system invokes LiveActivityIntent
   ▼
-Main app process (even if backgrounded)
-  │ LiveActivityPlugin receives Darwin notification
-  │ repaints the connected board from optimistic App Group queue state
-  │ sends setCurrentClimb via widget HTTP or native WS fallback
-  │ repaints again when CurrentClimbChanged confirms server state
-  ▼
-Native BLE manager (CoreBluetooth, main app process)
-  │ looks up hold positions for the new current climb
-  │ writes UART LED packet to the board
+Main app process (background-launched if needed)
+  │ LiveActivityIntent.perform() runs here, not in the widget
+  │ saves new currentIndex to App Group UserDefaults
+  │ optimistically updates ActivityKit content state
+  │ ┌─────────────────────────────────────────────────┐
+  │ │ BoardBleManager.displayCurrentItemAwaitingReady │
+  │ │   awaits CoreBluetooth state restoration        │
+  │ │   issues UART write inside beginBackgroundTask  │
+  │ │   awaits write-queue drain                      │
+  │ └─────────────────────────────────────────────────┘
+  │ POSTs to /api/widget/navigate so backend / other party clients see the change
   ▼
 Physical board LEDs update
 ```
 
-The main app process can maintain a CoreBluetooth connection in the background if it declares the `bluetooth-central` background mode. This is the critical enabler.
+Two critical enablers in `mobile/ios/App/App.xcodeproj/project.pbxproj`:
+
+- `NextClimbIntent.swift`, `PreviousClimbIntent.swift`, and `WidgetNetworking.swift` are members of **both** the `App` and `BoardseshWidgets` targets. Without `App`-target membership the intent type is not registered in the main app's `AppIntents` package and iOS has no candidate process to background-launch.
+- The widget target sets `OTHER_SWIFT_FLAGS = "$(inherited) -D WIDGET_EXTENSION"`. The intent files gate the main-app-only paths (BLE writes, `UIApplication.beginBackgroundTask`) behind `#if !WIDGET_EXTENSION` so the widget-extension compile excludes symbols it cannot link.
+
+The main app process can maintain a CoreBluetooth connection in the background if it declares the `bluetooth-central` background mode (already done in `Info.plist`). State restoration via `CBCentralManagerOptionRestoreIdentifierKey` makes the peripheral connection survive a process restart — but for the restore callback to actually fire, `CBCentralManager` must be constructed **during launch**, before the run loop services other events. `AppDelegate.didFinishLaunchingWithOptions` eagerly accesses `BoardBleManager.shared` whenever there's a saved BLE board configuration in the App Group, gated to avoid an early Bluetooth permission prompt on fresh installs.
 
 ## Phases
 
@@ -152,7 +161,7 @@ The workout state lives server-side and arrives via the same WebSocket subscript
 **Design constraints:**
 
 - iOS widget interaction is buttons only, no complex input
-- Each action follows the same pattern: optimistic App Group update → Darwin notification → main app sends mutation → server confirms → all clients update
+- Each action follows the same pattern: optimistic App Group update → `LiveActivityIntent.perform()` in main app → BLE write (if owner) + HTTP POST to backend → server confirms → all clients update
 - Lock Screen expanded view has ~160pt height -- plan layouts for queue mode and workout mode
 
 ### Phase 5: Android Parity (Future)
@@ -229,7 +238,7 @@ The board BLE communication uses a UART service. Key characteristics:
 iOS gives backgrounded apps limited execution time. For our use case:
 
 - **CoreBluetooth background mode**: unlimited for maintaining connections and responding to peripheral events
-- **Darwin notification handling**: runs briefly in the main app process, enough to send a WS mutation and a BLE write
+- **`LiveActivityIntent.perform()`**: iOS gives the intent a few seconds of background runtime to complete. `BoardBleManager.displayCurrentItemAwaitingReady` wraps the BLE write in `UIApplication.beginBackgroundTask` to extend that window through state restoration + UART chunk flushing
 - **URLSessionWebSocketTask**: continues receiving messages in the background for a limited time, then iOS may suspend it. The `isDisconnectedCallback` and reconnection logic handle this gracefully
 
 ### State Synchronization

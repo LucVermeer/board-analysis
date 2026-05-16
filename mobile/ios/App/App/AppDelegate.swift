@@ -5,7 +5,17 @@ import Capacitor
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        if launchOptions?[.bluetoothCentrals] != nil {
+        // Initialize during launch so CoreBluetooth state restoration can
+        // deliver willRestoreState — it only fires if CBCentralManager is
+        // constructed before the run loop services other events. Required
+        // when iOS background-launches us for a Live Activity intent.
+        //
+        // Gated on a saved BLE board config so fresh installs (no prior
+        // connection) don't see a Bluetooth permission prompt at first
+        // launch. If there's nothing to restore, the manager is created
+        // lazily later when the user explicitly connects.
+        let hasSavedBleConfig = SharedConstants.sharedDefaults?.data(forKey: SharedConstants.bleBoardConfigKey) != nil
+        if launchOptions?[.bluetoothCentrals] != nil || hasSavedBleConfig {
             _ = BoardBleManager.shared
         }
         return true

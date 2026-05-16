@@ -46,16 +46,32 @@ Device-to-server (widget buttons):
 
   User taps Next/Previous on lock screen
        |
-  NextClimbIntent / PreviousClimbIntent (widget extension process)
+  iOS performs the LiveActivityIntent in the MAIN APP process
+  (the intent type is registered in both the App and BoardseshWidgets
+   targets, so iOS background-launches the app when it's suspended
+   instead of running the intent in the widget extension)
        |
-  1. Optimistic: update Live Activity locally (instant)
-  2. HTTP POST /api/widget/navigate (background-safe)
-  3. Darwin notification (secondary, if main app is awake)
+  1. Save new currentIndex to App Group UserDefaults
+  2. Optimistically update Live Activity content state
+  3. In parallel (async let), both run concurrently:
+     a. BoardBleManager.displayCurrentItemAwaitingReady
+          - awaits CoreBluetooth state restoration
+            (peripheral + write characteristic discovered)
+          - issues the UART display write
+          - all inside a UIApplication beginBackgroundTask window
+            with an expiration handler
+     b. HTTP POST /api/widget/navigate
+          - propagates the new index to the backend so other party
+            clients see it via WebSocket / APNs broadcast
        |
   Backend publishes CurrentClimbChanged
        |
-  APNs push sent to all session tokens
+  APNs push sent to all session tokens (other devices)
 ```
+
+Latency on the BLE side from a suspended-app cold-launch is ~1.5–2.5 s: background-launch (~0.5–1 s) + CoreBluetooth state restoration (~0.5–1 s) + UART chunk flush (~0.2–0.5 s). Subsequent taps inside the same wake window are faster because the peripheral stays connected.
+
+Cross-device limitation: when *another* user navigates and your phone is suspended, your board does **not** repaint — the WS connection is dead and the APNs Live Activity push reaches the widget extension, which can't open the CoreBluetooth connection. Tracked in issue #2174; ultimately solved by the planned WS-enabled board controller.
 
 ## Prerequisites
 
@@ -248,11 +264,14 @@ Lock your iPhone. The Live Activity widget should update within a few seconds sh
 
 ### Test with App Suspended
 
-1. Lock your iPhone
-2. Wait 30+ seconds for iOS to suspend the app
-3. Tap Next/Previous on the widget
-4. The widget should still update (optimistic + HTTP fallback)
-5. Check backend logs for the POST request
+1. Connect to a board (so there's a saved BLE config — required for the eager `CBCentralManager` init that makes state restoration work)
+2. Lock your iPhone
+3. Wait 30+ seconds for iOS to suspend the app
+4. Tap Next/Previous on the widget
+5. The widget UI updates optimistically (instant)
+6. The board LEDs update within ~2–3 s — iOS background-launches the app, the intent runs in the main app process, BLE state restoration completes, and `BoardBleManager.displayCurrentItemAwaitingReady` issues the write
+7. The HTTP POST to `/api/widget/navigate` should appear in backend logs (independent of the BLE write — they run in parallel)
+8. Filter Console.app by subsystem `com.boardsesh.app`, category `LiveActivityIntent` to confirm the intent ran in the App process (DEBUG builds only)
 
 ### Test with App Force-Killed
 
@@ -261,6 +280,7 @@ Lock your iPhone. The Live Activity widget should update within a few seconds sh
 3. Tap Next/Previous — the widget updates optimistically
 4. The HTTP request to `/api/widget/navigate` should appear in backend logs
 5. Other connected clients should see the queue change
+6. **The board will NOT repaint in this case.** iOS does not background-launch a user-killed app for `LiveActivityIntent`, so the intent falls back to the widget extension process, which cannot reach `BoardBleManager`. Re-opening the app on this device will re-sync the board via the foreground WS path.
 
 ## Testing Background Updates
 
