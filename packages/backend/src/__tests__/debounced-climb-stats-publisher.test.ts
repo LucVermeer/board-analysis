@@ -126,6 +126,19 @@ describe('queueClimbStatsRecompute', () => {
     expect(recomputeClimbStatsMock).toHaveBeenCalledWith('kilter', 'CLIMB-1', 40);
   });
 
+  it('runs the recompute anyway when Redis SET fails (fail-open)', async () => {
+    // SET fails but isRedisConnected stays true. Without the setFailed flag
+    // the timer would consult Redis, see no nonce match, and silently skip
+    // the recompute — the bug the flag exists to prevent.
+    redisSetMock.mockRejectedValue(new Error('Redis SET timed out'));
+
+    queueClimbStatsRecompute('kilter', 'CLIMB-1', 40);
+    await vi.advanceTimersByTimeAsync(2100);
+
+    expect(redisGetMock).not.toHaveBeenCalled();
+    expect(recomputeClimbStatsMock).toHaveBeenCalledWith('kilter', 'CLIMB-1', 40);
+  });
+
   it('runs the recompute anyway when Redis GET fails (fail-open)', async () => {
     redisGetMock.mockRejectedValue(new Error('Redis connection lost'));
 

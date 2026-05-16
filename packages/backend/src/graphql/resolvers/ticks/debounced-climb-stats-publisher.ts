@@ -39,10 +39,17 @@ export function queueClimbStatsRecompute(boardType: string, climbUuid: string, a
 
   const nonce = randomUUID();
   const redisKey = `${REDIS_KEY_PREFIX}${key}`;
+  // Track whether the SET landed. If it didn't, we MUST run the recompute
+  // ourselves at fire time — skipping the nonce check would otherwise drop
+  // the recompute silently (GET would see nothing or a stale nonce, mismatch,
+  // and return). Better to risk a duplicate recompute on another instance
+  // than to lose this one.
+  let setFailed = false;
 
   if (redisClientManager.isRedisConnected()) {
     const { publisher } = redisClientManager.getClients();
     publisher.set(redisKey, nonce, 'PX', DEBOUNCE_MS + 500).catch((err) => {
+      setFailed = true;
       logger.error(`[debouncedClimbStats] Redis SET failed for ${key}:`, err);
     });
   }
@@ -52,7 +59,7 @@ export function queueClimbStatsRecompute(boardType: string, climbUuid: string, a
     setTimeout(async () => {
       pending.delete(key);
 
-      if (redisClientManager.isRedisConnected()) {
+      if (redisClientManager.isRedisConnected() && !setFailed) {
         try {
           const { publisher } = redisClientManager.getClients();
           const current = await publisher.get(redisKey);

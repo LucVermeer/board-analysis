@@ -416,9 +416,13 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
     // Two cooperating writers feed this row: Aurora sync (here) and the
     // Boardsesh tick recompute (recomputeClimbStats). Each owns its own count
     // column; ascensionist_count is the materialized sum kept in lockstep.
-    // Same idea protects fa_username / fa_at — Aurora COALESCEs onto an
-    // existing FA so a Boardsesh-side FA on a user-created climb survives
-    // subsequent syncs.
+    //
+    // FA fields are written verbatim from Aurora's payload — including null,
+    // which is how Aurora signals a correction (revoked / re-attributed FA).
+    // Boardsesh-created climbs are never synced through this path, so a
+    // Boardsesh-supplied FA on those climbs cannot be clobbered here.
+    // recomputeClimbStats is the one that handles the ownership branch
+    // explicitly for ticks-driven updates.
     const values = batch.map((item) => {
       const auroraCount = Number(item.ascensionist_count);
       return {
@@ -448,14 +452,8 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
           ascensionistCount: sql`COALESCE(excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
-          // Aurora is authoritative for FA on Aurora-synced climbs. Take the
-          // incoming value when it's set, otherwise preserve whatever's there
-          // (which protects a Boardsesh-supplied FA on the rare case where
-          // Aurora hasn't filled one in yet). Boardsesh climbs never go
-          // through this path — they're not synced — so we don't need to
-          // distinguish ownership here.
-          faUsername: sql`COALESCE(excluded.fa_username, ${climbStatsSchema.faUsername})`,
-          faAt: sql`COALESCE(excluded.fa_at, ${climbStatsSchema.faAt})`,
+          faUsername: sql`excluded.fa_username`,
+          faAt: sql`excluded.fa_at`,
         },
       });
 
