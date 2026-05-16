@@ -747,26 +747,21 @@ sequenceDiagram
     participant C as Client
     participant WS as WebSocket
     participant G as graphql-ws Client
-    participant L as useSessionLifecycle
 
-    Note over C,L: Connection Lost
+    Note over C,G: Connection Lost
 
     WS--xC: Connection closed
-    G->>G: Fire `closed` event
-    G->>L: onDisconnect callback
-    L->>L: Unsubscribe queueUpdates + sessionUpdates, clear refs
-    Note over L: graphql-ws now has no live subscriptions to auto-replay
+    G->>G: Detect disconnection
     G->>G: Start retry (attempt 1)
     G->>G: Wait 1s (exponential backoff)
     G->>WS: Reconnect attempt
 
     alt Reconnect succeeds
-        WS->>G: Connected (new connectionId assigned server-side)
-        G->>L: onReconnect callback
-        L->>WS: joinSession mutation
-        WS-->>L: Session state, new connectionId now a session member
-        L->>WS: Resubscribe queueUpdates + sessionUpdates
-        L->>L: Delta sync or full sync
+        WS->>G: Connected
+        G->>G: Call onReconnect callback
+        G->>WS: joinSession mutation
+        WS-->>G: Session state
+        G->>G: Delta sync or full sync
     else Reconnect fails
         G->>G: Retry with backoff
         Note over G: 1s → 2s → 4s → 8s → ... → 30s max
@@ -778,8 +773,7 @@ sequenceDiagram
 
 - Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
 - Up to 10 retry attempts
-- On `closed`: the lifecycle hook unsubscribes both queue and session subscriptions before graphql-ws begins reconnecting. Without this, graphql-ws would auto-replay the old subscriptions on the new socket before `joinSession` registers the new `connectionId`, and the backend `requireSessionMember` check would fail with `Unauthorized: not in any session`.
-- On reconnection: re-join session with the same `participantId`, then create fresh subscriptions on the now-registered connection
+- On reconnection: re-join session with the same `participantId` and sync state
 - Delta sync attempted if gap ≤ 100 events and the replay buffer has contiguous coverage
 - Falls back to full sync if the gap is too large, replay is incomplete, or the local hash disagrees despite no sequence gap
 - Queue and session subscription `error`/`complete` callbacks schedule a reconnect/resubscribe pass, so a completed subscription does not leave the client silently joined but deaf to future events
