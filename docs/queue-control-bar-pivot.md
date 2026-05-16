@@ -123,6 +123,7 @@ Files: `queue-control-bar.tsx`, `graphql-queue/QueueContext.tsx`, possibly `pack
 - Solo default: lightbulb auto-engages once BLE is connected (so quickstart-from-home → first tap → first lightbulb press feels like the old tap-to-send flow).
 - Party default: lightbulb is off on join; user presses to take a turn.
 - Yank-on-press in party: pressing lightbulb sends a `TakeControl` message; server broadcasts new driver to all members. Previous driver's lightbulb releases.
+- **Driver tracking on the session.** Add a `driverParticipantId: ID` field to the `Session` GraphQL type (`packages/shared-schema/src/schema/session.ts`, around the existing `participants` field at line ~175). Update `SessionParticipant` resolver / payload to be orderable by driver-first. Server is the source of truth; the field is broadcast over the existing party WS subscription on take-control, release, and disconnect.
 - **Driver-only prev/next in the drawer:** `next-climb-button.tsx` and `previous-climb-button.tsx`, *when used inside the Play View Drawer*, render only when the local user holds the lightbulb. Navigating prev/next here walks the shared session queue first, then falls through to `suggestedClimbs` once the queue is exhausted, broadcasting each step. The existing `getNextClimbQueueItem` logic in `QueueContext.tsx:576-580` already implements this fall-through; the change is gating the broadcast on driver status.
 - **Always-visible prev/next on the Queue Control Bar and in the Live Activity widget:** these render for everyone. For the driver they behave identically to the drawer buttons. For a non-driver, pressing one is a single combined action — take control, advance from the current wall climb (queue → suggestions fall-through), broadcast. Implement as: handler checks driver status, if not driving issues a `TakeControl` first (server-side ordering: take-control then advance), then runs the standard advance + broadcast. No separate user gesture required.
 - **Non-driver swipe handler:** drawer swipe stays available for non-drivers but walks `suggestedClimbs` only (skips `state.queue`) and does not broadcast. This is a different code path from the driver swipe — extract a shared helper or split the navigation hook so the driver/non-driver split is explicit.
@@ -136,6 +137,7 @@ The lightbulb appears in two places with two roles. They must be visually distin
 
 - **Drawer lightbulb:** "send/take this climb" — outlined, pressable. State depends on whether the user currently drives.
 - **Bar lightbulb:** "I am holding control" — filled / glowing when held by the local user; dimmed with the current driver's avatar inline when held by someone else.
+- **Driver-first avatar group on the session mini bar.** The party member `AvatarGroup` (currently in `queue-control-bar.tsx:1025-1045` and the expanded variant at `:1112+`) must order the current driver first. The driver's avatar carries a small lit-up lightbulb badge in the corner (overlay), matching the bar lightbulb's filled/glowing visual. Non-driver avatars render without a badge in their existing order. The expanded version of the avatar menu (the roster view) follows the same ordering and badging rules so the driver is unambiguous wherever members are listed.
 - **VoiceOver/TalkBack labels** must be role-and-state distinct:
   - Drawer + driving: "Send '{climbName}' to the wall."
   - Drawer + not driving: "Take wall control and send '{climbName}'."
@@ -224,7 +226,8 @@ The 1,650-visitor gap between "queue-touching" (4,071) and "board-sending" (2,41
 
 - Queue state machine + context: `packages/web/app/components/graphql-queue/QueueContext.tsx`. `setCurrentClimb` is the function at line 383; the `shouldAddToQueue: true, insertAfterCurrent: true` payload at line 397 is what makes the implicit queue an auto-history of every tap. The queue → suggestions fall-through lives in `getNextClimbQueueItem` at line ~570-583.
 - Suggestions derivation: `packages/web/app/components/queue-control/hooks/use-queue-data-fetching.tsx:234` (`suggestedClimbs` memo, derived from `climbSearchResults`).
-- Queue Control Bar UI: `packages/web/app/components/queue-control/queue-control-bar.tsx`.
+- Queue Control Bar UI: `packages/web/app/components/queue-control/queue-control-bar.tsx`. Party member `AvatarGroup` lives at `:1025-1045` (mini bar) and `:1112+` (expanded variant) — both need driver-first ordering and the lightbulb badge.
+- Session participant schema: `packages/shared-schema/src/schema/session.ts:147` (`SessionParticipant` type) and `:175` (`participants` field on `Session`). Add `driverParticipantId` on the `Session` type here.
 - Play View Drawer (where the lightbulb action will live): `packages/web/app/components/play-view/play-view-drawer.tsx`.
 - Prev/next button components: `packages/web/app/components/queue-control/next-climb-button.tsx`, `previous-climb-button.tsx`.
 - BLE send + connection: `packages/web/app/components/board-bluetooth-control/bluetooth-context.tsx`, `auto-connect-handler.tsx`, `use-board-bluetooth.ts`.
