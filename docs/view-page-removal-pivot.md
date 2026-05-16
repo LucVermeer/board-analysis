@@ -1,8 +1,8 @@
 # Remove the Climb View Page — Drawer Becomes the Surface, URL Becomes a Sync Channel
 
-**Status:** Plan, ready for implementation
+**Status:** Implemented in [PR #2194](https://github.com/boardsesh/boardsesh/pull/2194)
 **Decision date:** 2026-05-16
-**Owner (assign on pickup):** TBD
+**Owner:** Marco de Jongh
 **Builds on:** `docs/queue-control-bar-pivot.md` (Phase 1 already merged into this branch — the drawer is now a browsing surface that does not yank the wall in party sessions). This plan extends that direction by making the drawer the _only_ surface for climb detail and folding the standalone `/view/` page into it.
 
 ---

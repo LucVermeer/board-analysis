@@ -1,4 +1,6 @@
 import React from 'react';
+import Box from '@mui/material/Box';
+import { visuallyHidden } from '@mui/utils';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 
@@ -28,25 +30,13 @@ export default async function ClimbViewSeoFragment({ climb, boardDetails }: Clim
   const ascentsSuffix = ascents > 0 ? t('metadata.view.seoAscentsSuffix', { ascents }) : '.';
 
   return (
-    <section
-      style={{
-        position: 'absolute',
-        width: 1,
-        height: 1,
-        padding: 0,
-        margin: -1,
-        overflow: 'hidden',
-        clip: 'rect(0, 0, 0, 0)',
-        whiteSpace: 'nowrap',
-        border: 0,
-      }}
-    >
+    <Box component="section" sx={visuallyHidden}>
       <h1>{heading}</h1>
       <p>
         {summary}
         {setterSuffix}
         {ascentsSuffix}
       </p>
-    </section>
+    </Box>
   );
 }

@@ -129,11 +129,15 @@ export function useDrawerUrlSync({
       }
       sourceRef.current = null;
     };
-    // The open effect should run only on the open/close transition; pathname,
-    // searchParams, boardDetails and angle changes are picked up through refs
-    // so the listener doesn't churn on every keystroke in the search bar.
+    // The open effect should run only on the open/close transition. The
+    // climb-change case (swipe / row-tap while open) is handled by the replace
+    // effect below; if we included displayedClimb in this dep array the
+    // cleanup would fire mid-open and `history.back()` would close the drawer
+    // right after a row tap. pathname, searchParams, boardDetails and angle
+    // changes are picked up through refs so the listener doesn't churn on
+    // every keystroke in the search bar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, displayedClimb?.uuid, enabled]);
+  }, [isOpen, enabled]);
 
   // While open, replace the URL when the displayed climb changes (swipe / prev / next).
   const lastSyncedUuidRef = useRef<string | null>(null);
