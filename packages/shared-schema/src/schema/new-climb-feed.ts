@@ -172,6 +172,14 @@ export const newClimbFeedTypeDefs = /* GraphQL */ `
     qualityAverage: Float
     "Number of recorded ascents at this angle."
     ascensionistCount: Int
+    """
+    Product sizes this climb fits on (denormalised from edge bounds). Callers
+    on a smaller wall can use this to grey out climbs that extend beyond
+    their physical board — those climbs are still navigable in the actions
+    menu but can't be set as the active climb. Empty array means the
+    server has no compatibility data for this climb (legacy row).
+    """
+    compatibleSizeIds: [Int!]!
     "Jaccard similarity (0..1) over hold positions."
     similarity: Float!
     "Number of hold positions present in both climbs."

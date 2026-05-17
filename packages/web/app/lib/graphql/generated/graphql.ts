@@ -4257,6 +4257,14 @@ export type SimilarClimb = {
   ascensionistCount?: Maybe<Scalars['Int']['output']>;
   /** Number of hold positions on the candidate climb. */
   candidateHoldCount: Scalars['Int']['output'];
+  /**
+   * Product sizes this climb fits on (denormalised from edge bounds). Callers
+   * on a smaller wall can use this to grey out climbs that extend beyond
+   * their physical board — those climbs are still navigable in the actions
+   * menu but can't be set as the active climb. Empty array means the
+   * server has no compatibility data for this climb (legacy row).
+   */
+  compatibleSizeIds: Array<Scalars['Int']['output']>;
   /** Difficulty grade name at this climb's angle (e.g. 6c+, V5). */
   difficultyName?: Maybe<Scalars['String']['output']>;
   /** Aurora-style frame string for rendering the climb thumbnail. */
@@ -5386,6 +5394,7 @@ export type SimilarClimbsQuery = {
     difficultyName?: string | null;
     qualityAverage?: number | null;
     ascensionistCount?: number | null;
+    compatibleSizeIds: Array<number>;
     similarity: number;
     sharedHoldCount: number;
     candidateHoldCount: number;
@@ -8408,6 +8417,7 @@ export const SimilarClimbsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'ascensionistCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'compatibleSizeIds' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'similarity' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'sharedHoldCount' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'candidateHoldCount' } },

@@ -37,6 +37,14 @@
   cursor: default;
 }
 
+/* Applied to the inner content elements (thumbnail / name row / byline) of
+   a card whose climb's compatibleSizeIds doesn't include the viewer's
+   product size. The ellipsis button is a sibling and stays at full opacity
+   so the actions menu remains usable. */
+.dimmed {
+  opacity: 0.45;
+}
+
 .boardSquare {
   width: 180px;
   height: 180px;

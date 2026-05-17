@@ -30,6 +30,9 @@ type BuildClimbDetailSectionsProps = {
    *  intentionally absent (it's only populated in multi-board listings), so the
    *  section relies on the caller passing the layout from the URL params. */
   layoutId: number;
+  /** Route-supplied product size id. Threaded to the similar-climbs section
+   *  so it can grey out candidates that wouldn't fit on the viewer's wall. */
+  sizeId?: number;
   currentClimbDifficulty?: string;
   boardName?: string;
   /** When false, returns empty sections immediately. Used to defer below-fold
@@ -43,6 +46,7 @@ export function useBuildClimbDetailSections({
   boardType,
   angle,
   layoutId,
+  sizeId,
   currentClimbDifficulty,
   boardName,
   enabled: enabledProp = true,
@@ -182,6 +186,7 @@ export function useBuildClimbDetailSections({
         <SimilarClimbsList
           boardType={boardType as BoardName}
           layoutId={layoutId}
+          sizeId={sizeId}
           climbUuid={climbUuid}
           angle={angle}
           threshold={0.5}

@@ -41,6 +41,12 @@ type SimilarClimbsListProps = {
    *  grade/quality/ascents reflect the angle the viewer is currently on
    *  rather than the candidate's own saved angle. */
   angle?: number;
+  /** Viewer product size id. When set, cards whose `compatibleSizeIds`
+   *  doesn't include this id are rendered greyed-out and non-activating —
+   *  the climb's holds extend past the viewer's physical wall, so making
+   *  it active would only frustrate. The ellipsis stays interactive so
+   *  the user can still inspect / favourite / share the climb. */
+  sizeId?: number;
   /** When true, the underlying query is run. Defaults to true; the playview
    *  drawer wires this to the collapsible-section's lazy/open state. */
   enabled?: boolean;
@@ -53,6 +59,7 @@ export default function SimilarClimbsList({
   limit = 10,
   emptyMessage,
   angle,
+  sizeId,
   enabled = true,
   climbUuid,
   frames,
@@ -132,15 +139,28 @@ export default function SimilarClimbsList({
   return (
     <>
       <div className={styles.scroller}>
-        {climbs.map((climb) => (
-          <SimilarClimbCard
-            key={climb.uuid}
-            climb={climb}
-            boardType={boardType}
-            onSetActive={queueActions ? (c) => queueActions.setCurrentClimb(c) : null}
-            onOpenActions={() => setActionsClimb(climb)}
-          />
-        ))}
+        {climbs.map((climb) => {
+          // Compatibility = the viewer's product size is in this climb's
+          // `compatibleSizeIds`. When sizeId is undefined (no viewer size,
+          // e.g. legacy callers) every climb counts as compatible. When
+          // compatibleSizeIds is empty (legacy row without denormalised
+          // bounds) we also treat the climb as compatible — better to
+          // surface it tappable than to grey out incorrectly.
+          const compatible =
+            sizeId == null || climb.compatibleSizeIds.length === 0 || climb.compatibleSizeIds.includes(sizeId);
+          return (
+            <SimilarClimbCard
+              key={climb.uuid}
+              climb={climb}
+              boardType={boardType}
+              // Disable the card-tap-activates path when the climb won't fit
+              // on the viewer's wall. The ellipsis stays live below.
+              onSetActive={queueActions && compatible ? (c) => queueActions.setCurrentClimb(c) : null}
+              onOpenActions={() => setActionsClimb(climb)}
+              compatible={compatible}
+            />
+          );
+        })}
       </div>
       {actionsClimb ? (
         <SimilarClimbActionsDrawer climb={actionsClimb} boardType={boardType} onClose={closeActions} />
@@ -155,9 +175,12 @@ type SimilarClimbCardProps = {
   /** When set, card tap activates the climb in the queue instead of navigating. */
   onSetActive: ((climb: Climb) => Promise<unknown>) | null;
   onOpenActions: () => void;
+  /** When false, the card body is greyed out and the tap-to-activate path
+   *  is disabled. Driven by the parent's sizeId vs `climb.compatibleSizeIds`. */
+  compatible: boolean;
 };
 
-function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: SimilarClimbCardProps) {
+function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions, compatible }: SimilarClimbCardProps) {
   const { t } = useTranslation('climbs');
   const canvasReady = useCanvasRendererReady();
   const isDark = useIsDarkMode();
@@ -197,8 +220,14 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: Simi
     return getDefaultClimbViewPath(boardType, climb.layoutId, angle, climb.uuid, climb.name || undefined);
   }, [boardType, climb.layoutId, angle, climb.uuid, climb.name, boardDetails]);
 
+  // Wrap the thumbnail content in a dim layer when the climb is incompatible
+  // with the viewer's wall size. We dim the thumbnail / name / byline but
+  // leave the ellipsis at full opacity (it's a sibling of the dim wrapper)
+  // so the user can still open the actions menu — per the design, the climb
+  // is just not directly activatable on this board.
+  const dimClass = compatible ? '' : ` ${styles.dimmed}`;
   const thumbnail = boardDetails ? (
-    <div className={styles.boardSquare}>
+    <div className={`${styles.boardSquare}${dimClass}`}>
       {canvasReady && climb.frames ? (
         <BoardCanvasRenderer
           boardDetails={boardDetails}
@@ -218,7 +247,7 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: Simi
       )}
     </div>
   ) : (
-    <div className={styles.boardSquare} />
+    <div className={`${styles.boardSquare}${dimClass}`} />
   );
 
   const handleEllipsisClick = useCallback(
@@ -257,7 +286,7 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: Simi
           <MoreVertOutlined fontSize="small" />
         </IconButton>
       </Box>
-      <div className={styles.nameRow}>
+      <div className={`${styles.nameRow}${dimClass}`}>
         <div className={styles.name} title={climb.name || undefined}>
           {climb.name || t('similarClimbs.untitledClimb')}
         </div>
@@ -267,7 +296,7 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions }: Simi
           </span>
         ) : null}
       </div>
-      <div className={styles.byline}>{formatByline(climb)}</div>
+      <div className={`${styles.byline}${dimClass}`}>{formatByline(climb)}</div>
     </>
   );
 

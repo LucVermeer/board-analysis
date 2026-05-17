@@ -88,6 +88,7 @@ export type SimilarClimb = {
   difficultyName?: string | null;
   qualityAverage?: number | null;
   ascensionistCount?: number | null;
+  compatibleSizeIds: number[];
   similarity: number;
   sharedHoldCount: number;
   candidateHoldCount: number;

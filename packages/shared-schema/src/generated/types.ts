@@ -4260,6 +4260,14 @@ export type SimilarClimb = {
   ascensionistCount?: Maybe<Scalars['Int']['output']>;
   /** Number of hold positions on the candidate climb. */
   candidateHoldCount: Scalars['Int']['output'];
+  /**
+   * Product sizes this climb fits on (denormalised from edge bounds). Callers
+   * on a smaller wall can use this to grey out climbs that extend beyond
+   * their physical board — those climbs are still navigable in the actions
+   * menu but can't be set as the active climb. Empty array means the
+   * server has no compatibility data for this climb (legacy row).
+   */
+  compatibleSizeIds: Array<Scalars['Int']['output']>;
   /** Difficulty grade name at this climb's angle (e.g. 6c+, V5). */
   difficultyName?: Maybe<Scalars['String']['output']>;
   /** Aurora-style frame string for rendering the climb thumbnail. */
@@ -7979,6 +7987,7 @@ export type SimilarClimbResolvers<
   angle?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   ascensionistCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   candidateHoldCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  compatibleSizeIds?: Resolver<Array<ResolversTypes['Int']>, ParentType, ContextType>;
   difficultyName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   frames?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   layoutId?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
