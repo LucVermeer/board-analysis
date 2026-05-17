@@ -33,7 +33,7 @@ export default function ClimbDetailInfoShellClient({
     boardType,
     angle,
     layoutId: boardDetails.layout_id,
-    sizeId: boardDetails.size_id,
+    viewerBoardDetails: boardDetails,
     currentClimbDifficulty,
     boardName,
   });

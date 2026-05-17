@@ -19,7 +19,7 @@ import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
 import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
-import type { BoardName, Climb } from '@/app/lib/types';
+import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';
 
 type BuildClimbDetailSectionsProps = {
   climb: Climb;
@@ -30,9 +30,11 @@ type BuildClimbDetailSectionsProps = {
    *  intentionally absent (it's only populated in multi-board listings), so the
    *  section relies on the caller passing the layout from the URL params. */
   layoutId: number;
-  /** Route-supplied product size id. Threaded to the similar-climbs section
-   *  so it can grey out candidates that wouldn't fit on the viewer's wall. */
-  sizeId?: number;
+  /** Route-supplied board details (size + sets + layout). Drives the
+   *  similar-climbs section's thumbnail rendering — compatible candidates
+   *  render at the viewer's wall config, incompatible ones fall back to
+   *  the layout's default config. */
+  viewerBoardDetails?: BoardDetails;
   currentClimbDifficulty?: string;
   boardName?: string;
   /** When false, returns empty sections immediately. Used to defer below-fold
@@ -46,7 +48,7 @@ export function useBuildClimbDetailSections({
   boardType,
   angle,
   layoutId,
-  sizeId,
+  viewerBoardDetails,
   currentClimbDifficulty,
   boardName,
   enabled: enabledProp = true,
@@ -186,7 +188,7 @@ export function useBuildClimbDetailSections({
         <SimilarClimbsList
           boardType={boardType as BoardName}
           layoutId={layoutId}
-          sizeId={sizeId}
+          viewerBoardDetails={viewerBoardDetails}
           climbUuid={climbUuid}
           angle={angle}
           threshold={0.5}

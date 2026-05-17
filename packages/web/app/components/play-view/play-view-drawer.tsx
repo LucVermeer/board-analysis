@@ -69,20 +69,20 @@ type PlayDrawerContentProps = {
   boardType: string;
   angle: number;
   layoutId: number;
-  sizeId: number;
+  viewerBoardDetails: BoardDetails;
   aboveFold: React.ReactNode;
   sectionsEnabled: boolean;
 };
 
 const PlayDrawerContent = React.memo<PlayDrawerContentProps>(
-  ({ climb, boardType, angle, layoutId, sizeId, aboveFold, sectionsEnabled }) => {
+  ({ climb, boardType, angle, layoutId, viewerBoardDetails, aboveFold, sectionsEnabled }) => {
     const sections = useBuildClimbDetailSections({
       climb,
       climbUuid: climb.uuid,
       boardType,
       angle,
       layoutId,
-      sizeId,
+      viewerBoardDetails,
       currentClimbDifficulty: climb.difficulty ?? undefined,
       boardName: boardType,
       enabled: sectionsEnabled,
@@ -945,7 +945,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 boardType={boardDetails.board_name}
                 angle={currentAngle}
                 layoutId={boardDetails.layout_id}
-                sizeId={boardDetails.size_id}
+                viewerBoardDetails={boardDetails}
                 sectionsEnabled={sectionsEverEnabled && isOpen}
                 aboveFold={aboveFold}
               />

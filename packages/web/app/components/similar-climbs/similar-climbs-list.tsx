@@ -41,12 +41,16 @@ type SimilarClimbsListProps = {
    *  grade/quality/ascents reflect the angle the viewer is currently on
    *  rather than the candidate's own saved angle. */
   angle?: number;
-  /** Viewer product size id. When set, cards whose `compatibleSizeIds`
-   *  doesn't include this id are rendered greyed-out and non-activating —
-   *  the climb's holds extend past the viewer's physical wall, so making
-   *  it active would only frustrate. The ellipsis stays interactive so
-   *  the user can still inspect / favourite / share the climb. */
-  sizeId?: number;
+  /** Viewer board configuration (the wall the user is currently looking at).
+   *  Drives two things:
+   *  1. Compatibility check — a similar climb is greyed-out when its
+   *     `compatibleSizeIds` doesn't include `viewerBoardDetails.size_id`.
+   *  2. Thumbnail rendering — compatible climbs are drawn on the viewer's
+   *     exact wall (matches what they'll see when they activate it).
+   *     Incompatible climbs fall back to the layout's default config (the
+   *     biggest reasonable board for the layout) so the user can still see
+   *     where the climb's holds actually are. */
+  viewerBoardDetails?: BoardDetails;
   /** When true, the underlying query is run. Defaults to true; the playview
    *  drawer wires this to the collapsible-section's lazy/open state. */
   enabled?: boolean;
@@ -59,11 +63,12 @@ export default function SimilarClimbsList({
   limit = 10,
   emptyMessage,
   angle,
-  sizeId,
+  viewerBoardDetails,
   enabled = true,
   climbUuid,
   frames,
 }: SimilarClimbsListProps) {
+  const sizeId = viewerBoardDetails?.size_id;
   const { t } = useTranslation('climbs');
   const variables = useMemo<SimilarClimbsVariables>(
     () => ({
@@ -155,6 +160,14 @@ export default function SimilarClimbsList({
               key={climb.uuid}
               climb={climb}
               boardType={boardType}
+              // When the climb fits on the viewer's wall, render the
+              // thumbnail at the viewer's exact size + sets so the
+              // preview matches what they'll see on their board. When
+              // it doesn't fit, pass undefined and let the card fall
+              // back to getDefaultBoardConfig (biggest reasonable config
+              // for the layout) so the user can still see the climb's
+              // full footprint.
+              viewerBoardDetails={compatible ? viewerBoardDetails : undefined}
               // Disable the card-tap-activates path when the climb won't fit
               // on the viewer's wall. The ellipsis stays live below.
               onSetActive={queueActions && compatible ? (c) => queueActions.setCurrentClimb(c) : null}
@@ -174,6 +187,11 @@ export default function SimilarClimbsList({
 type SimilarClimbCardProps = {
   climb: SimilarClimb;
   boardType: BoardName;
+  /** When set, render the thumbnail on the viewer's exact wall config
+   *  (size + sets) rather than the layout's default. Only passed for
+   *  compatible climbs — incompatible climbs need the bigger default
+   *  config to show the holds that extend past the viewer's wall. */
+  viewerBoardDetails: BoardDetails | undefined;
   /** When set, card tap activates the climb in the queue instead of navigating. */
   onSetActive: ((climb: Climb) => Promise<unknown>) | null;
   onOpenActions: () => void;
@@ -182,14 +200,28 @@ type SimilarClimbCardProps = {
   compatible: boolean;
 };
 
-function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions, compatible }: SimilarClimbCardProps) {
+function SimilarClimbCard({
+  climb,
+  boardType,
+  viewerBoardDetails,
+  onSetActive,
+  onOpenActions,
+  compatible,
+}: SimilarClimbCardProps) {
   const { t } = useTranslation('climbs');
   const canvasReady = useCanvasRendererReady();
   const isDark = useIsDarkMode();
   const angle = climb.angle ?? 0;
   const gradeColor = getSoftGradeColor(climb.difficultyName ?? undefined, isDark);
 
+  // Compatible climb: render at the viewer's exact wall config so the
+  // thumbnail matches what they'll see on their board. Incompatible:
+  // fall back to the layout's default (biggest reasonable) config so the
+  // climb's full footprint is visible even though the user can't load it.
   const boardDetails = useMemo<BoardDetails | null>(() => {
+    if (viewerBoardDetails && viewerBoardDetails.layout_id === climb.layoutId) {
+      return viewerBoardDetails;
+    }
     const config = getDefaultBoardConfig(boardType, climb.layoutId);
     if (!config) return null;
     try {
@@ -202,7 +234,7 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions, compat
     } catch {
       return null;
     }
-  }, [boardType, climb.layoutId]);
+  }, [boardType, climb.layoutId, viewerBoardDetails]);
 
   // Fallback link path for when the queue isn't available — preserves the
   // original navigation behaviour for the duplicate-resolution drawer.
