@@ -136,18 +136,20 @@ export default function SimilarClimbsList({
     );
   }
 
+  // Partition the server-side similarity-ranked list into compatible-first,
+  // incompatible-last, preserving the similarity order within each group.
+  // Incompatible climbs stay visible (greyed) — surfacing them is useful
+  // for shared playlists / multi-board owners — but they shouldn't push
+  // tappable matches off the right edge of the horizontal scroll.
+  const isCompatible = (climb: SimilarClimb): boolean =>
+    sizeId == null || climb.compatibleSizeIds.length === 0 || climb.compatibleSizeIds.includes(sizeId);
+  const orderedClimbs = [...climbs.filter(isCompatible), ...climbs.filter((c) => !isCompatible(c))];
+
   return (
     <>
       <div className={styles.scroller}>
-        {climbs.map((climb) => {
-          // Compatibility = the viewer's product size is in this climb's
-          // `compatibleSizeIds`. When sizeId is undefined (no viewer size,
-          // e.g. legacy callers) every climb counts as compatible. When
-          // compatibleSizeIds is empty (legacy row without denormalised
-          // bounds) we also treat the climb as compatible — better to
-          // surface it tappable than to grey out incorrectly.
-          const compatible =
-            sizeId == null || climb.compatibleSizeIds.length === 0 || climb.compatibleSizeIds.includes(sizeId);
+        {orderedClimbs.map((climb) => {
+          const compatible = isCompatible(climb);
           return (
             <SimilarClimbCard
               key={climb.uuid}
