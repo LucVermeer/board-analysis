@@ -453,15 +453,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [queueMounted, setQueueMounted] = useState(false);
-  // Lock navigation (swipe + prev/next) when the drawer was opened from a
-  // direct hit on /view/{uuid}. In that case the user came in via a share
-  // link, the climbs list hasn't loaded yet, and there's no browsing context
-  // to nav through. Cleared when the drawer closes — a subsequent open from
-  // the list resumes normal nav.
-  const [lockedAsViewEntry, setLockedAsViewEntry] = useState(initialOpenWithoutAnimation);
-  useEffect(() => {
-    if (!isOpen) setLockedAsViewEntry(false);
-  }, [isOpen]);
   /**
    * True while the nested queue is being opened by the onboarding tour — read
    * at `QueueDrawer` mount time to seed `initialShowHistory`. Kept as a ref
@@ -577,14 +568,13 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // drawer-local preview state without broadcasting (browse-doesn't-yank). In
   // solo, it mutates the wall climb like today so BLE keeps sending.
   //
-  // When `lockedAsViewEntry` is true (drawer opened from a /view/ direct hit),
-  // navigation is disabled — the climbs list hasn't loaded yet and the user
-  // came in for a single climb, not to browse.
+  // When the user enters via a /view/{uuid} direct hit, the climbs list is
+  // empty until React Query resolves — in that window getNextClimbQueueItem
+  // returns null and the `!!nextItem` check below naturally disables nav.
+  // Once `suggestedClimbs` populate, swipe + prev/next light up against them.
   const navigateFromItem = effectiveItem ?? null;
-  const resolvedNextItem = getNextClimbQueueItem({ from: navigateFromItem });
-  const resolvedPrevItem = getPreviousClimbQueueItem({ from: navigateFromItem });
-  const nextItem = lockedAsViewEntry ? null : resolvedNextItem;
-  const prevItem = lockedAsViewEntry ? null : resolvedPrevItem;
+  const nextItem = getNextClimbQueueItem({ from: navigateFromItem });
+  const prevItem = getPreviousClimbQueueItem({ from: navigateFromItem });
 
   const advanceTo = useCallback(
     (item: ClimbQueueItem, method: string, direction: 'next' | 'previous') => {
@@ -600,21 +590,19 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   );
 
   const handleSwipeNext = useCallback(() => {
-    if (lockedAsViewEntry) return;
     const next = getNextClimbQueueItem({ from: navigateFromItem });
     if (!next || viewOnlyMode) return;
     advanceTo(next, 'swipePlayViewDrawer', 'next');
-  }, [getNextClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo, lockedAsViewEntry]);
+  }, [getNextClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo]);
 
   const handleSwipePrevious = useCallback(() => {
-    if (lockedAsViewEntry) return;
     const prev = getPreviousClimbQueueItem({ from: navigateFromItem });
     if (!prev || viewOnlyMode) return;
     advanceTo(prev, 'swipePlayViewDrawer', 'previous');
-  }, [getPreviousClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo, lockedAsViewEntry]);
+  }, [getPreviousClimbQueueItem, navigateFromItem, viewOnlyMode, advanceTo]);
 
-  const canSwipeNext = !viewOnlyMode && !lockedAsViewEntry && !!nextItem;
-  const canSwipePrevious = !viewOnlyMode && !lockedAsViewEntry && !!prevItem;
+  const canSwipeNext = !viewOnlyMode && !!nextItem;
+  const canSwipePrevious = !viewOnlyMode && !!prevItem;
 
   // Tick FAB → inline tick bar
   const handleTickFabClick = useCallback(() => {
@@ -636,17 +624,15 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   }, [showMessage, t]);
 
   const handlePrevNavClick = useCallback(() => {
-    if (lockedAsViewEntry) return;
     const prev = getPreviousClimbQueueItem({ from: navigateFromItem });
     if (!prev) return;
     advanceTo(prev, 'playViewDrawer', 'previous');
-  }, [getPreviousClimbQueueItem, navigateFromItem, advanceTo, lockedAsViewEntry]);
+  }, [getPreviousClimbQueueItem, navigateFromItem, advanceTo]);
   const handleNextNavClick = useCallback(() => {
-    if (lockedAsViewEntry) return;
     const next = getNextClimbQueueItem({ from: navigateFromItem });
     if (!next) return;
     advanceTo(next, 'playViewDrawer', 'next');
-  }, [getNextClimbQueueItem, navigateFromItem, advanceTo, lockedAsViewEntry]);
+  }, [getNextClimbQueueItem, navigateFromItem, advanceTo]);
   const handleOpenActionsMenu = useCallback(() => {
     setIsQueueOpen(false);
     setIsPlaylistSelectorOpen(false);
