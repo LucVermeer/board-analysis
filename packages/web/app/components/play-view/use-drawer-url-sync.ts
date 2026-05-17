@@ -60,6 +60,16 @@ export function useDrawerUrlSync({
 
   // Open: push the view URL onto history and listen for back.
   useEffect(() => {
+    // TEMP debug
+    // eslint-disable-next-line no-console
+    console.info('[urlSync open]', {
+      enabled,
+      isOpen,
+      hasClimb: !!displayedClimb,
+      uuid: displayedClimb?.uuid?.slice(0, 8),
+      hookPathname: pathnameRef.current,
+      windowPathname: typeof window !== 'undefined' ? window.location.pathname : '(ssr)',
+    });
     if (!enabled || !isOpen || !displayedClimb) {
       sourceRef.current = null;
       return;
@@ -81,6 +91,8 @@ export function useDrawerUrlSync({
       ),
       startSearchParams,
     );
+    // eslint-disable-next-line no-console
+    console.info('[urlSync push]', { source, viewUrl, willPush: !onViewRoute });
 
     const baseState = window.history.state ?? {};
     const stampedState = { ...baseState, boardseshDrawerUrlSync: { climbUuid: displayedClimb.uuid, source } };
@@ -142,6 +154,16 @@ export function useDrawerUrlSync({
   // While open, replace the URL when the displayed climb changes (swipe / prev / next).
   const lastSyncedUuidRef = useRef<string | null>(null);
   useEffect(() => {
+    // TEMP debug
+    // eslint-disable-next-line no-console
+    console.info('[urlSync replace]', {
+      enabled,
+      isOpen,
+      hasClimb: !!displayedClimb,
+      uuid: displayedClimb?.uuid?.slice(0, 8),
+      lastSynced: lastSyncedUuidRef.current?.slice(0, 8),
+      windowPathname: typeof window !== 'undefined' ? window.location.pathname : '(ssr)',
+    });
     if (!enabled || !isOpen || !displayedClimb) {
       lastSyncedUuidRef.current = null;
       return;
@@ -151,7 +173,11 @@ export function useDrawerUrlSync({
 
     // Only refresh the URL once we own the /view/ entry — the initial push is
     // handled by the open effect above.
-    if (!window.location.pathname.includes('/view/')) return;
+    if (!window.location.pathname.includes('/view/')) {
+      // eslint-disable-next-line no-console
+      console.info('[urlSync replace] skip — not on /view/');
+      return;
+    }
 
     const viewUrl = withSearchParams(
       getContextAwareClimbViewUrl(
@@ -170,6 +196,8 @@ export function useDrawerUrlSync({
         source: sourceRef.current ?? 'list-tap',
       },
     };
+    // eslint-disable-next-line no-console
+    console.info('[urlSync replace] doing replace', { viewUrl });
     window.history.replaceState(stampedState, '', viewUrl);
   }, [displayedClimb, enabled, isOpen]);
 }

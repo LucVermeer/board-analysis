@@ -151,6 +151,13 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // Reset activeDrawer on navigation. Skip the very first run — when we just
   // seeded the drawer open from the URL, this would slam it shut before paint.
   useEffect(() => {
+    // TEMP debug
+    // eslint-disable-next-line no-console
+    console.info('[bar pathReset]', {
+      pathname,
+      initialRef: initialPathnameRef.current,
+      willReset: pathname !== initialPathnameRef.current,
+    });
     if (pathname === initialPathnameRef.current) return;
     initialPathnameRef.current = pathname;
     setActiveDrawer('none');
