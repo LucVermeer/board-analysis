@@ -10,7 +10,7 @@ import {
   useScrollIndicators,
   useStopHorizontalTouchPropagation,
 } from '@/app/components/logbook/tick-controls';
-import styles from '@/app/components/logbook/tick-controls.module.css';
+import styles from './inline-grade-picker.module.css';
 
 export type InlineGradePickerProps = {
   grades: readonly { difficulty_id: number; difficulty_name: string; v_grade: string }[];
@@ -112,7 +112,7 @@ export const InlineGradePicker: React.FC<InlineGradePickerProps> = ({
               data-grade-id={grade.difficulty_id}
               onClick={() => onSelect(isSelected && !hideClear ? undefined : grade.difficulty_id)}
               className={`${styles.pickerItem} ${isSelected ? styles.pickerItemSelected : ''} ${isFocused ? styles.pickerItemFocused : ''}`}
-              aria-label={isFocused ? `${formatted} (consensus)` : formatted}
+              aria-label={isFocused ? `${formatted} (${t('tick.controls.consensusSuffix')})` : formatted}
               aria-selected={isSelected}
               role="option"
             >

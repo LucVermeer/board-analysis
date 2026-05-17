@@ -191,11 +191,11 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
         <InlineGradePicker
           grades={grades}
           currentGradeId={options.targetGrade}
+          // With `hideClear` the picker can never emit undefined, so the
+          // callback only ever sees a real difficulty_id.
           onSelect={(value) => {
-            if (value !== undefined) {
-              updateOption('targetGrade', value);
-              void setLastUsedGrade(value);
-            }
+            updateOption('targetGrade', value as number);
+            void setLastUsedGrade(value as number);
           }}
           ariaLabel={t('generator.options.targetGrade')}
           hideClear

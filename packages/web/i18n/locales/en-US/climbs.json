@@ -345,6 +345,7 @@
       "starOption_other": "{{count}} stars",
       "gradeOverride": "Grade override",
       "clearGradeOverride": "Clear grade override",
+      "consensusSuffix": "consensus",
       "attemptCount": "Attempt count"
     },
     "bar": {
