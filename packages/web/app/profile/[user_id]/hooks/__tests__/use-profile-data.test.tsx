@@ -43,7 +43,8 @@ function renderProfileDataHook<T>(callback: () => T, options?: { isRestoring?: b
       <IsRestoringProvider value={isRestoring}>{children}</IsRestoringProvider>
     </QueryClientProvider>
   );
-  return renderHook(callback, { wrapper });
+  const rendered = renderHook(callback, { wrapper });
+  return { ...rendered, queryClient };
 }
 
 describe('useProfileData', () => {
@@ -389,6 +390,55 @@ describe('useProfileData', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.loadingAggregated).toBe(false);
     expect(result.current.loadingProfileStats).toBe(false);
+  });
+
+  it('only flags queries for IDB persistence when viewing your own profile', () => {
+    const ssrSeed = {
+      initialProfile: {
+        id: 'user-1',
+        email: undefined,
+        name: 'Test',
+        image: null,
+        profile: null,
+        credentials: [],
+        followerCount: 0,
+        followingCount: 0,
+        isFollowedByMe: false,
+      },
+      initialProfileStats: { totalDistinctClimbs: 0, layoutStats: [] },
+      initialPercentile: null,
+      initialAllBoardsTicks: { kilter: [] },
+      initialLogbook: [],
+    };
+
+    const ownView = renderProfileDataHook(() => useProfileData('user-1', { ...ssrSeed, initialIsOwnProfile: true }));
+    const persistedOwnKeys = ownView.queryClient
+      .getQueryCache()
+      .getAll()
+      .filter((query) => query.meta?.persist === true)
+      .map((query) => query.queryKey);
+    expect(persistedOwnKeys).toEqual(
+      expect.arrayContaining([
+        ['userProfile', 'user-1'],
+        ['userTicks', 'user-1'],
+        ['userProfileStats', 'user-1'],
+        ['userClimbPercentile', 'user-1'],
+      ]),
+    );
+
+    mockUseSession.mockReturnValue({
+      status: 'authenticated',
+      data: { user: { id: 'viewer-id' }, expires: '' },
+      update: vi.fn(),
+    });
+    const otherView = renderProfileDataHook(() =>
+      useProfileData('other-user', { ...ssrSeed, initialIsOwnProfile: false }),
+    );
+    const persistedOtherKeys = otherView.queryClient
+      .getQueryCache()
+      .getAll()
+      .filter((query) => query.meta?.persist === true);
+    expect(persistedOtherKeys).toEqual([]);
   });
 
   it('logs ticks/stats/percentile query failures to the console', async () => {

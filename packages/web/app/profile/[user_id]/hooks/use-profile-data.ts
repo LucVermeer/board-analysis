@@ -58,7 +58,10 @@ class ProfileNotFoundError extends Error {
 
 // Brief freshness window so consumers with SSR-seeded `initialData` (tagged
 // with `initialDataUpdatedAt: Date.now()`) don't fire a redundant network
-// request the moment they mount. /you skips this with `refetchOnMount: 'always'`.
+// request the moment they mount — `refetchOnMount` defaults to `true` for
+// those queries, which means "refetch only if stale". The /you path has no
+// initial data and uses `refetchOnMount: 'always'`, so the staleTime is
+// irrelevant there: every visit triggers a background refetch.
 const PROFILE_STALE_TIME_MS = 30 * 1000;
 
 // Persisted IDB cache lifetime — aligned with the persister so a query never
@@ -80,6 +83,16 @@ export function useProfileData(userId: string, initialData?: InitialData) {
   // Drives both the UI's "own profile" branches and whether we persist the
   // four queries to IDB. Persisting other users' profile data would let it
   // accumulate unbounded across one-off visits (capped only by 24h maxAge).
+  //
+  // First-render correctness depends on the `initialIsOwnProfile` seed:
+  // /you passes `true`; /profile/[user_id] passes `viewerUserId === user_id`
+  // from server-side auth. Without that seed, the value flips false → true
+  // when NextAuth resolves on the next render, and queries created during
+  // the loading window get `meta.persist = false`. React Query reads `meta`
+  // from the latest options on every render, so the dehydrate predicate
+  // picks up the flipped flag on the next persist tick — but make sure any
+  // new caller passes `initialIsOwnProfile` to avoid a brief window where
+  // the cache wouldn't be persisted.
   const isOwnProfile = session?.user?.id ? session.user.id === userId : (initialData?.initialIsOwnProfile ?? false);
 
   const profileInitial = initialData?.initialProfile;
