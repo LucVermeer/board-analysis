@@ -46,6 +46,8 @@ export function useUpdateTick() {
       void queryClient.invalidateQueries({ queryKey: ['ascentsFeed'] });
       void queryClient.invalidateQueries({ queryKey: ['sessionDetail'] });
       void queryClient.invalidateQueries({ queryKey: ['userProfileStats'] });
+      void queryClient.invalidateQueries({ queryKey: ['userTicks'] });
+      void queryClient.invalidateQueries({ queryKey: ['userClimbPercentile'] });
       queryClient.removeQueries({ queryKey: ['logbook'] });
       showMessage('Tick updated', 'success');
     },

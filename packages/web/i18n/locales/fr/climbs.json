@@ -323,8 +323,19 @@
   },
   "detail": {
     "sections": {
-      "beta": "Beta"
+      "beta": "Beta",
+      "similarClimbs": "Blocs similaires",
+      "similarClimbsSummary": "Blocs partageant au moins 50 % de ces prises"
     }
+  },
+  "similarClimbs": {
+    "loadError": "Impossible de charger les blocs similaires.",
+    "emptyDefault": "Pas encore de blocs similaires.",
+    "emptyOnLayout": "Pas de blocs similaires sur cette configuration.",
+    "emptyIdentical": "Aucun bloc identique trouvé pour le moment.",
+    "untitledClimb": "Bloc sans nom",
+    "openActions": "Plus d'actions",
+    "actionsUnavailable": "Impossible d'ouvrir les actions pour ce bloc — configuration du panneau indisponible."
   },
   "multiboardList": {
     "noClimbsFound": "Aucun bloc trouvé",
@@ -384,7 +395,12 @@
     "alerts": {
       "importFailed": "Import échoué : {{error}}",
       "importWarnings": "Avertissements d'import :",
-      "checkingMoonBoardDuplicate": "On vérifie si ce bloc MoonBoard existe déjà..."
+      "checkingMoonBoardDuplicate": "On vérifie si ce bloc MoonBoard existe déjà...",
+      "publishDuplicateNamed": "Cette configuration de prises correspond à « {{name}} ». Activez Brouillon pour l'enregistrer sans la publier, ou changez une prise.",
+      "publishDuplicateUnnamed": "Cette configuration de prises correspond à un bloc existant. Activez Brouillon pour l'enregistrer sans le publier, ou changez une prise.",
+      "viewMatchingClimb": "Voir le bloc correspondant",
+      "identicalClimbDrawerTitle": "Bloc identique",
+      "saveFailedFallback": "Échec de l'enregistrement du bloc. Veuillez réessayer."
     },
     "settings": {
       "tooltip": "Paramètres du bloc",

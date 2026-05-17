@@ -134,6 +134,13 @@ export function useSaveTick(boardName: BoardName) {
       // Clear any IndexedDB draft for this climb (belt-and-suspenders with QuickTickBar's .then)
       void clearTickDraft(options.climbUuid, options.angle);
 
+      // Bust the You-page stats caches so the next visit reflects the new tick.
+      // React Query does prefix matching on queryKey arrays — the bare root
+      // string invalidates every variant (['userTicks', '<any-userId>']).
+      void queryClient.invalidateQueries({ queryKey: ['userTicks'] });
+      void queryClient.invalidateQueries({ queryKey: ['userProfileStats'] });
+      void queryClient.invalidateQueries({ queryKey: ['userClimbPercentile'] });
+
       // If the user attached an Instagram video, refresh the beta-videos section
       // so the new embed shows up without a page reload.
       if (options.videoUrl) {
