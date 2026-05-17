@@ -34,6 +34,7 @@ vi.mock('../../climb-actions', () => ({
     isAuthenticated: false,
   }),
   ClimbActions: () => <div data-testid="climb-actions" />,
+  ClimbActionsDrawer: () => <div data-testid="climb-actions-drawer" />,
 }));
 
 vi.mock('@/app/hooks/use-swipe-actions', () => ({
