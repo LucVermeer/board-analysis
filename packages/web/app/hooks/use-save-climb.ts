@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useWsAuthToken } from './use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
@@ -38,6 +39,7 @@ export function useSaveClimb(boardName: BoardName) {
   const { token } = useWsAuthToken();
   const { data: session, status: sessionStatus } = useSession();
   const { showMessage } = useSnackbar();
+  const { t } = useTranslation('climbs');
 
   return useMutation({
     mutationFn: async (options: Omit<SaveClimbOptions, 'setter_id' | 'user_id'>): Promise<SaveClimbResponse> => {
@@ -84,7 +86,7 @@ export function useSaveClimb(boardName: BoardName) {
       if (err instanceof GraphQLOperationError && err.extensions?.code === 'CLIMB_IS_DUPLICATE') {
         return;
       }
-      showMessage('Failed to save climb', 'error');
+      showMessage(t('createClimbForm.alerts.saveFailedFallback'), 'error');
     },
   });
 }

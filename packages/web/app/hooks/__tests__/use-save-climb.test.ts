@@ -13,6 +13,13 @@ vi.mock('next-auth/react', () => ({
   useSession: vi.fn(),
 }));
 
+vi.mock('react-i18next', () => ({
+  // The hook returns the key unchanged so tests can assert against the
+  // catalog identifier directly — keeps the test independent of locale
+  // file contents.
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
 const mockShowMessage = vi.fn();
 vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: mockShowMessage }),
@@ -217,7 +224,9 @@ describe('useSaveClimb', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(mockShowMessage).toHaveBeenCalledWith('Failed to save climb', 'error');
+    // useTranslation is mocked to return the key unchanged, so the test
+    // sees the catalog key rather than the rendered English string.
+    expect(mockShowMessage).toHaveBeenCalledWith('createClimbForm.alerts.saveFailedFallback', 'error');
   });
 
   it('disposes client even on error (finally block)', async () => {

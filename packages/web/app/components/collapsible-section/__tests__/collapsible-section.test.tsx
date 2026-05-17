@@ -264,4 +264,48 @@ describe('CollapsibleSection', () => {
       expect(screen.queryByText('Share link')).toBeNull();
     });
   });
+
+  describe('keepExpanded', () => {
+    function sectionsWithKeepExpanded(): CollapsibleSectionConfig[] {
+      const base = makeSections();
+      // 'activity' is the keep-expanded section. It should be visible from
+      // the first render and stay visible regardless of which other section
+      // the user opens or closes.
+      base[1] = { ...base[1], keepExpanded: true };
+      return base;
+    }
+
+    it('renders the keep-expanded section open on first paint', () => {
+      render(<CollapsibleSection sections={sectionsWithKeepExpanded()} />);
+      // Title (rather than label) is visible — that's the expanded state.
+      expect(screen.getByText('Recent activity')).toBeDefined();
+    });
+
+    it('coexists with the single-active accordion — opening another does not collapse it', () => {
+      render(<CollapsibleSection sections={sectionsWithKeepExpanded()} />);
+      expect(screen.getByText('Recent activity')).toBeDefined();
+
+      fireEvent.click(screen.getByText('Invite'));
+
+      expect(screen.getByText('Invite others')).toBeDefined();
+      // Activity stays expanded even after Invite opened.
+      expect(screen.getByText('Recent activity')).toBeDefined();
+    });
+
+    it('cannot be collapsed by clicking its own title', () => {
+      render(<CollapsibleSection sections={sectionsWithKeepExpanded()} />);
+      expect(screen.getByText('Recent activity')).toBeDefined();
+
+      fireEvent.click(screen.getByText('Recent activity'));
+
+      // Still expanded — header click is a no-op for keepExpanded sections.
+      expect(screen.getByText('Recent activity')).toBeDefined();
+    });
+
+    it('stays expanded even when forcedActiveKey points at a different section', () => {
+      render(<CollapsibleSection sections={sectionsWithKeepExpanded()} forcedActiveKey="analytics" />);
+      expect(screen.getByText('Grade breakdown')).toBeDefined();
+      expect(screen.getByText('Recent activity')).toBeDefined();
+    });
+  });
 });

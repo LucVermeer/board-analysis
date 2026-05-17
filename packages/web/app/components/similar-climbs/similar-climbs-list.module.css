@@ -1,10 +1,10 @@
 .scroller {
   display: flex;
-  gap: 12px;
+  gap: var(--spacing-3);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  padding: 4px 0 8px;
+  padding: var(--spacing-1) 0 var(--spacing-2);
 }
 
 .scroller::-webkit-scrollbar {
@@ -14,9 +14,13 @@
 .card {
   flex-shrink: 0;
   scroll-snap-align: start;
+  /* 180px is the canonical board-preview thumbnail size shared with the
+     homepage board card; no spacing-token analogue applies. */
   width: 180px;
   display: flex;
   flex-direction: column;
+  /* 6px sits between --spacing-1 (4) and --spacing-2 (8); used here to
+     keep the name row tight against the thumbnail without crowding. */
   gap: 6px;
   cursor: pointer;
   text-decoration: none;
@@ -40,7 +44,9 @@
 /* Applied to the inner content elements (thumbnail / name row / byline) of
    a card whose climb's compatibleSizeIds doesn't include the viewer's
    product size. The ellipsis button is a sibling and stays at full opacity
-   so the actions menu remains usable. */
+   so the actions menu remains usable. 0.45 is between --opacity-subtle
+   (0.7) and --opacity-disabled (0.5); the lower value reads as "not for
+   you" at a glance while keeping the climb name readable. */
 .dimmed {
   opacity: 0.45;
 }
@@ -49,7 +55,7 @@
   width: 180px;
   height: 180px;
   aspect-ratio: 1;
-  border-radius: 8px;
+  border-radius: var(--border-radius-md);
   overflow: hidden;
   box-shadow: var(--shadow-xs);
   background: var(--neutral-100);
@@ -60,6 +66,9 @@
   content: '';
   position: absolute;
   inset: 0;
+  /* Matches the press-feedback overlay used by .cardScroll on the homepage
+     board card (board-scroll.module.css:46). No --overlay-tap design token
+     exists yet; introducing one would touch every active-state surface. */
   background: rgba(0, 0, 0, 0.15);
   border-radius: inherit;
   pointer-events: none;
@@ -82,7 +91,7 @@
 .name {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--neutral-900);
   white-space: nowrap;
@@ -93,6 +102,8 @@
 
 .grade {
   flex: 0 0 auto;
+  /* 13px is the visually-balanced size for a numeric grade next to a 14px
+     name (--font-size-sm); design tokens jump from xs (12) to sm (14). */
   font-size: 13px;
   font-weight: 700;
   /* --grade-color is set as a CSS custom property on each instance from
@@ -103,7 +114,7 @@
 }
 
 .byline {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 1.3;
   color: var(--neutral-500);
   padding: 0 2px;

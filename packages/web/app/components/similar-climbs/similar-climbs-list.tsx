@@ -178,7 +178,12 @@ export default function SimilarClimbsList({
         })}
       </div>
       {actionsClimb ? (
-        <SimilarClimbActionsDrawer climb={actionsClimb} boardType={boardType} onClose={closeActions} />
+        <SimilarClimbActionsDrawer
+          climb={actionsClimb}
+          boardType={boardType}
+          viewerBoardDetails={viewerBoardDetails}
+          onClose={closeActions}
+        />
       ) : null}
     </>
   );
@@ -377,13 +382,32 @@ function SimilarClimbCard({
 type SimilarClimbActionsDrawerProps = {
   climb: SimilarClimb;
   boardType: BoardName;
+  /** The viewer's current wall config. When the similar climb fits on the
+   *  same layout the viewer is on, the drawer uses this so action URLs
+   *  (view, fork, open-in-app) point at the climb on the viewer's exact
+   *  size + sets — what they'll actually try to climb on. */
+  viewerBoardDetails: BoardDetails | undefined;
   onClose: () => void;
 };
 
-function SimilarClimbActionsDrawer({ climb, boardType, onClose }: SimilarClimbActionsDrawerProps) {
+function SimilarClimbActionsDrawer({ climb, boardType, viewerBoardDetails, onClose }: SimilarClimbActionsDrawerProps) {
   const { t } = useTranslation('climbs');
   const { showMessage } = useSnackbar();
   const boardDetails = useMemo<BoardDetails | null>(() => {
+    // Use the viewer's wall config when the similar climb fits on it —
+    // action URLs (view / fork / open-in-app) then point at the climb
+    // on the user's exact size + sets, matching what they'll actually
+    // try to climb. For incompatible climbs we keep the default config:
+    // sending the user to a URL on their size that physically can't
+    // render the holds would be confusing, so we route them to the
+    // biggest reasonable config for the climb's layout.
+    const compatible =
+      viewerBoardDetails != null &&
+      viewerBoardDetails.layout_id === climb.layoutId &&
+      climb.compatibleSizeIds.includes(viewerBoardDetails.size_id);
+    if (compatible) {
+      return viewerBoardDetails;
+    }
     const config = getDefaultBoardConfig(boardType, climb.layoutId);
     if (!config) return null;
     try {
@@ -396,7 +420,7 @@ function SimilarClimbActionsDrawer({ climb, boardType, onClose }: SimilarClimbAc
     } catch {
       return null;
     }
-  }, [boardType, climb.layoutId]);
+  }, [boardType, climb.layoutId, climb.compatibleSizeIds, viewerBoardDetails]);
 
   // No boardDetails means we can't compute URLs for the actions, so dismiss
   // the drawer and tell the user — otherwise tapping the ellipsis just makes
