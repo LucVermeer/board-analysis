@@ -19,7 +19,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { openDummySesh } from './helpers/dummy-sesh';
-import { waitForBoardListReady, waitForDrawerOpen } from './helpers/waits';
+import { clickUntilVisible, drawer, waitForBoardListReady, waitForDrawerOpen } from './helpers/waits';
 
 const SCREENSHOT_DIR = 'public/help';
 const boardUrl = '/kilter/original/12x12-square/screw_bolt/40/list';
@@ -79,8 +79,11 @@ test.describe('Help Page Screenshots', () => {
     // the open-play-drawer event, so the play view shows climb details.
     const thumbnail = page.locator('#onboarding-climb-card [data-testid="climb-thumbnail"]');
     await thumbnail.waitFor({ state: 'visible', timeout: 15_000 });
-    await thumbnail.click();
-    await waitForDrawerOpen(page, 0, 15_000);
+    await clickUntilVisible(page, thumbnail, drawer(page), {
+      clickTimeout: 3_000,
+      waitTimeout: 3_000,
+      maxAttempts: 6,
+    });
     await page.screenshot({ path: `${SCREENSHOT_DIR}/climb-detail.png` });
   });
 
@@ -91,24 +94,27 @@ test.describe('Help Page Screenshots', () => {
     // container's dead space and often missed the onClick handler.
     const row = page.locator('#onboarding-climb-card');
     await row.waitFor({ state: 'visible', timeout: 15_000 });
-    await row.click();
 
     const queueBar = page.locator('[data-testid="queue-control-bar"]');
-    await expect(queueBar).toBeVisible({ timeout: 10_000 });
+    const selectedQueueClimb = queueBar.locator('#onboarding-queue-toggle').filter({ hasNotText: 'No climb selected' });
+    await clickUntilVisible(page, row, selectedQueueClimb, { waitTimeout: 3_000 });
 
-    await queueBar.getByText('Start sesh').click();
-    await waitForDrawerOpen(page);
+    const startSeshButton = queueBar.locator('[role="button"]').filter({ hasText: 'Start sesh' }).first();
+    await clickUntilVisible(page, startSeshButton, drawer(page), {
+      clickTimeout: 3_000,
+      waitTimeout: 3_000,
+    });
     await page.screenshot({ path: `${SCREENSHOT_DIR}/party-mode.png` });
   });
 
   test('login modal', async ({ page }) => {
     // Open user drawer → Sign in → auth modal with email/password form.
     const userMenu = page.getByLabel('User menu');
+    const signInButton = page.getByRole('button', { name: 'Sign in' });
+    const loginEmailInput = page.locator('input#login_email');
     await userMenu.waitFor({ state: 'visible', timeout: 15_000 });
-    await userMenu.click();
-    await page.getByRole('button', { name: 'Sign in' }).waitFor({ state: 'visible', timeout: 15_000 });
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await page.waitForSelector('input#login_email', { state: 'visible' });
+    await clickUntilVisible(page, userMenu, signInButton);
+    await clickUntilVisible(page, signInButton, loginEmailInput);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/login-modal.png` });
   });
 });
@@ -133,13 +139,13 @@ test.describe('Help Page Screenshots - Authenticated', () => {
     // before this click; without it, the click can fire before the
     // header's onClick handler is mounted.
     const userMenu = page.getByLabel('User menu');
+    const signInButton = page.getByRole('button', { name: 'Sign in' });
+    const loginEmailInput = page.locator('input#login_email');
     await userMenu.waitFor({ state: 'visible', timeout: 15_000 });
-    await userMenu.click();
-    await page.getByRole('button', { name: 'Sign in' }).waitFor({ state: 'visible', timeout: 15_000 });
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await page.waitForSelector('input#login_email', { state: 'visible' });
+    await clickUntilVisible(page, userMenu, signInButton);
+    await clickUntilVisible(page, signInButton, loginEmailInput);
 
-    await page.locator('input#login_email').fill(testEmail);
+    await loginEmailInput.fill(testEmail);
     await page.locator('input#login_password').fill(testPassword);
     await page.locator('button[type="submit"]').filter({ hasText: 'Login' }).click();
 

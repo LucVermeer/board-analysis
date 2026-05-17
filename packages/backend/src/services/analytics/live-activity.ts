@@ -24,6 +24,12 @@ interface LiveActivityEndEvent {
   tokenCount?: number;
 }
 
+interface LiveActivityEndAttributionGapEvent {
+  sessionId: string;
+  reason: 'missing_user_id';
+  tokenCount: number;
+}
+
 interface LiveActivityWidgetNavigationEvent {
   userId: string;
   sessionId: string;
@@ -91,6 +97,18 @@ export function trackLiveActivityEnded(event: LiveActivityEndEvent): void {
     distinctId: event.userId,
     properties: {
       userId: event.userId,
+      sessionId: event.sessionId,
+      reason: event.reason,
+      tokenCount: event.tokenCount,
+    },
+  });
+}
+
+export function trackLiveActivityEndedAttributionGap(event: LiveActivityEndAttributionGapEvent): void {
+  captureBackendEvent('Live Activity Ended Attribution Gap', {
+    distinctId: `live-activity-session:${event.sessionId}`,
+    processPersonProfile: false,
+    properties: {
       sessionId: event.sessionId,
       reason: event.reason,
       tokenCount: event.tokenCount,

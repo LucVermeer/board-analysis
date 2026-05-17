@@ -6,6 +6,7 @@ type AnalyticsProperties = Record<string, AnalyticsPropertyValue>;
 type SanitizedAnalyticsProperties = Record<string, string | number | boolean | null>;
 export type BackendAnalyticsEvent =
   | 'Live Activity Ended'
+  | 'Live Activity Ended Attribution Gap'
   | 'Live Activity Push Delivery'
   | 'Live Activity Push Delivery Attribution Gap'
   | 'Live Activity Started'

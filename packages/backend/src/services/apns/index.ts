@@ -14,6 +14,7 @@ import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { db } from '../../db/client';
 import {
   trackLiveActivityEnded,
+  trackLiveActivityEndedAttributionGap,
   trackLiveActivityPushDelivery,
   trackLiveActivityPushDeliveryAttributionGap,
 } from '../analytics/live-activity';
@@ -435,8 +436,13 @@ async function sendNotification(
 
 function trackSessionEndedForRegistrations(sessionId: string, registrations: LiveActivityTokenRegistration[]): void {
   const tokenCountsByUserId = new Map<string, number>();
+  let unattributedTokenCount = 0;
+
   for (const registration of registrations) {
-    if (!registration.userId) continue;
+    if (!registration.userId) {
+      unattributedTokenCount++;
+      continue;
+    }
     tokenCountsByUserId.set(registration.userId, (tokenCountsByUserId.get(registration.userId) ?? 0) + 1);
   }
 
@@ -446,6 +452,14 @@ function trackSessionEndedForRegistrations(sessionId: string, registrations: Liv
       sessionId,
       reason: 'session-ended',
       tokenCount,
+    });
+  }
+
+  if (unattributedTokenCount > 0) {
+    trackLiveActivityEndedAttributionGap({
+      sessionId,
+      reason: 'missing_user_id',
+      tokenCount: unattributedTokenCount,
     });
   }
 }

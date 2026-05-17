@@ -14,6 +14,7 @@ const dbMocks = vi.hoisted(() => ({
 
 const analyticsMocks = vi.hoisted(() => ({
   trackLiveActivityEnded: vi.fn(),
+  trackLiveActivityEndedAttributionGap: vi.fn(),
   trackLiveActivityPushDelivery: vi.fn(),
   trackLiveActivityPushDeliveryAttributionGap: vi.fn(),
 }));
@@ -252,6 +253,11 @@ describe('APNs analytics instrumentation', () => {
       sessionId: SESSION_ID,
       reason: 'session-ended',
       tokenCount: 2,
+    });
+    expect(analyticsMocks.trackLiveActivityEndedAttributionGap).toHaveBeenCalledWith({
+      sessionId: SESSION_ID,
+      reason: 'missing_user_id',
+      tokenCount: 1,
     });
     expect(analyticsMocks.trackLiveActivityEnded).toHaveBeenCalledTimes(1);
   });
