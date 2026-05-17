@@ -43,7 +43,6 @@ import ClimbThumbnail from '../climb-card/climb-thumbnail';
 import ClimbTitle from '../climb-card/climb-title';
 import { themeTokens } from '@/app/theme/theme-config';
 import { TOUR_CLOSE_PLAY_VIEW_EVENT } from '../onboarding/onboarding-tour-events';
-import { ShareBoardButton } from '../board-page/share-button';
 import {
   useCardSwipeNavigation,
   EXIT_DURATION,
@@ -1408,7 +1407,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         </IconButton>
                       </TickButtonWithLabel>
                     )}
-                    {!tickBarActive && <ShareBoardButton />}
                     {/* Tick button — activates tick mode, or saves when already active */}
                     <TickButton
                       currentClimb={displayedClimb}

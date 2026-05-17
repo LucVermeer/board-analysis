@@ -31,7 +31,8 @@ import { useDoubleTapFavorite } from '../climb-actions/use-double-tap-favorite';
 import HeartAnimationOverlay from '../climb-card/heart-animation-overlay';
 import PlaylistSelectionContent from '../climb-actions/playlist-selection-content';
 import DrawerClimbHeader from '../climb-card/drawer-climb-header';
-import { ShareBoardButton } from '../board-page/share-button';
+import { LightControlDrawer } from '../board-page/light-control-drawer';
+import { useLongPress } from '@/app/lib/hooks/use-long-press';
 import { useBoardProvider } from '../board-provider/board-provider-context';
 import SwipeBoardCarousel from '../board-renderer/swipe-board-carousel';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
@@ -124,6 +125,10 @@ type PlayViewActionBarProps = {
    *  the existing BLE auto-sender path; in party it claims driver and
    *  broadcasts the climb. */
   onLightbulb: () => void;
+  /** Long-press the lightbulb to open the light-control drawer (disco, party
+   *  glyphs, palette, and the manual BLE disconnect). Optional — when the
+   *  parent doesn't supply it, long-press is a no-op. */
+  onLightbulbLongPress?: () => void;
   angleSelector?: React.ReactNode;
 };
 
@@ -143,19 +148,32 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   isDriver,
   displayedClimbName,
   onLightbulb,
+  onLightbulbLongPress,
   wallView = false,
   angleSelector,
 }: PlayViewActionBarProps) {
   const { t } = useTranslation('session');
   // Lightbulb aria label per spec — driver vs non-driver framing makes the
   // action's destructive-vs-additive nature explicit for screen readers.
+  // Toggle semantics: tap when driving releases control; tap when not driving
+  // takes control. Aria mirrors that — otherwise screen readers say "Send to
+  // the wall" but the action is actually "release", confusing AT users.
   const lightbulbLabel = displayedClimbName
     ? isDriver
-      ? `Send '${displayedClimbName}' to the wall`
+      ? `You're driving '${displayedClimbName}'. Tap to release control.`
       : `Take wall control and send '${displayedClimbName}'`
     : isDriver
-      ? 'Send to the wall'
+      ? "You're driving. Tap to release control."
       : 'Take wall control';
+  // Long-press the lightbulb to reach the light-control drawer (and the
+  // manual BLE disconnect that lives inside it). Tap stays the take-control
+  // gesture; consumeLongPress() in the click handler swallows the synthesized
+  // click that follows a long-press so we don't fire both.
+  const { ref: lightbulbLongPressRef, consumeLongPress } = useLongPress<HTMLButtonElement>(onLightbulbLongPress);
+  const handleLightbulbTap = useCallback(() => {
+    if (consumeLongPress()) return;
+    onLightbulb();
+  }, [consumeLongPress, onLightbulb]);
   return (
     <div className={styles.actionBar}>
       {!wallView && (
@@ -186,11 +204,18 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
       </IconButton>
       {/* Lightbulb: the queue-control-bar pivot's primary "send/take" gesture.
           Filled when the local user is driving (in solo this is always true);
-          outlined when someone else holds the wall (party non-driver). */}
-      <IconButton onClick={onLightbulb} aria-label={lightbulbLabel} color={isDriver ? 'primary' : 'default'}>
+          outlined when someone else holds the wall (party non-driver).
+          Long-press opens the light-control drawer (disco / glyphs / palette
+          / manual disconnect) — those used to live on the ShareBoardButton
+          that this drawer no longer renders. */}
+      <IconButton
+        ref={lightbulbLongPressRef}
+        onClick={handleLightbulbTap}
+        aria-label={lightbulbLabel}
+        color={isDriver ? 'primary' : 'default'}
+      >
         {isDriver ? <Lightbulb /> : <LightbulbOutlined />}
       </IconButton>
-      <ShareBoardButton />
       {angleSelector}
       <IconButton onClick={onOpenActions} aria-label={t('playView.actionBar.climbActionsAria')}>
         <MoreHorizOutlined />
@@ -504,6 +529,18 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const [isPlaylistSelectorOpen, setIsPlaylistSelectorOpen] = useState(false);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isBoardZoomed, setIsBoardZoomed] = useState(false);
+  // Light-control drawer (disco / glyphs / palette / manual BLE disconnect).
+  // Opened by long-pressing the action bar's lightbulb — the ShareBoardButton
+  // that used to host the long-press is gone (pivot simplification: one
+  // lightbulb in the drawer). Mount lazily — keeps the disco/glyph effects
+  // out of the initial render path for users who never use them.
+  const [lightDrawerOpen, setLightDrawerOpen] = useState(false);
+  const [hasOpenedLightDrawer, setHasOpenedLightDrawer] = useState(false);
+  const handleOpenLightDrawer = useCallback(() => {
+    setHasOpenedLightDrawer(true);
+    setLightDrawerOpen(true);
+  }, []);
+  const handleCloseLightDrawer = useCallback(() => setLightDrawerOpen(false), []);
 
   useEffect(() => {
     const scrollContainer = playPaperRef.current?.querySelector('[data-scroll-container]') as HTMLElement | null;
@@ -545,8 +582,14 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const { currentClimbQueueItem } = isOpen ? currentClimbData : deferredCurrentClimb;
   const { queue } = isOpen ? queueListData : deferredQueue;
   const { viewOnlyMode, isPersistentSessionActive, isDriver } = isOpen ? sessionData : deferredSession;
-  const { mirrorClimb, getNextClimbQueueItem, getPreviousClimbQueueItem, setCurrentClimbQueueItem, takeControl } =
-    useQueueActions();
+  const {
+    mirrorClimb,
+    getNextClimbQueueItem,
+    getPreviousClimbQueueItem,
+    setCurrentClimbQueueItem,
+    takeControl,
+    releaseControl,
+  } = useQueueActions();
   const { isConnected: isBluetoothConnected, isBluetoothSupported, connect: bluetoothConnect } = useBluetoothContext();
   const { lastConnectedBoardSerial } = isOpen ? sessionData : deferredSession;
 
@@ -701,27 +744,35 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   });
 
   /**
-   * Lightbulb press: the queue-control-bar pivot's primary "send/take" gesture.
-   * Routes through `queueActions.takeControl(climb)`, which:
-   *  - In solo: degrades to the existing setCurrentClimb path (the BLE
-   *    auto-sender picks up the climb-change and sends frames).
-   *  - In party + non-driver: claims driver via the new takeControl mutation
-   *    AND broadcasts the climb as the new wall climb. Yanks any prior driver.
-   *  - In party + driver: re-broadcasts the climb (the resolver's atomic-swap
-   *    suppresses the redundant DriverChanged event; CurrentClimbChanged still
-   *    fires so peers see the new wall climb).
+   * Lightbulb press: toggle the driver role.
    *
-   * In addition to the broadcast, arm a 2-second wall-confirm watcher: if no
-   * `WallConfirmedClimb` arrives in that window (via the local bus from
-   * BluetoothAutoSender or via the WS broadcast from a BLE-paired peer),
-   * run a fallback to get the climb onto the wall:
+   * - When the local user is NOT driving, press takes control via
+   *   `takeControl(currentClimb)` and arms the 2-second wall-confirm
+   *   watcher. While driving, every subsequent prev/next/swipe broadcasts
+   *   (per the advanceTo driver fork) and the AutoSender forwards each
+   *   climb change to the wall — so the lit lightbulb means "I'm driving;
+   *   the wall follows what I do."
+   *
+   * - When the local user IS already driving, press releases via
+   *   `releaseControl()`. The lightbulb darkens; subsequent prev/next/
+   *   swipe go back to preview-only.
+   *
+   * Watcher fallbacks (only on the take-control branch):
    *  - Already BLE-connected → trust the AutoSender's in-flight write.
-   *  - Have a stored session board serial + running in the native shell →
-   *    auto-connect to that serial without showing the picker.
-   *  - Otherwise → kick off connect() which opens the device picker dialog.
+   *  - Stored session board serial + native shell → auto-connect.
+   *  - Otherwise → connect() which opens the device picker dialog.
    */
   const handleLightbulbClick = useCallback(() => {
     if (!currentClimb) return;
+    if (isDriver) {
+      void releaseControl();
+      track('Wall Control Released', {
+        reason: 'manual',
+        mode: isPersistentSessionActive ? 'party' : 'solo',
+        boardLayout: boardDetails.layout_name ?? '',
+      });
+      return;
+    }
     void takeControl(currentClimb);
     // Once driver, subsequent prev/next/swipe broadcast (per the advanceTo
     // fork). Clear the drawer-local preview so the drawer reads from the
@@ -730,20 +781,19 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     setDrawerDisplayedItem?.(null);
     track('Wall Control Taken', {
       source: 'lightbulb_drawer',
-      previousDriver: isDriver ? 'self' : 'other',
+      previousDriver: 'other',
       mode: isPersistentSessionActive ? 'party' : 'solo',
       climbUuid: currentClimb.uuid,
     });
     armWallConfirmWatcher({
       climbUuid: currentClimb.uuid,
-      frames: currentClimb.frames,
-      mirrored: !!currentClimb.mirrored,
       mode: isPersistentSessionActive ? 'party' : 'solo',
       boardLayout: boardDetails.layout_name ?? '',
     });
   }, [
     currentClimb,
     takeControl,
+    releaseControl,
     setDrawerDisplayedItem,
     isDriver,
     isPersistentSessionActive,
@@ -1035,6 +1085,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             isDriver={isDriver}
             displayedClimbName={currentClimb?.name ?? null}
             onLightbulb={handleLightbulbClick}
+            onLightbulbLongPress={handleOpenLightDrawer}
             wallView={wallView}
             angleSelector={
               <AngleSelector
@@ -1078,6 +1129,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     handleOpenQueueDrawer,
     isDriver,
     handleLightbulbClick,
+    handleOpenLightDrawer,
     wallView,
     angle,
     handleTickBarClose,
@@ -1219,6 +1271,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
           initialShowHistory={queueOpenedByTourRef.current}
         />
       )}
+      {/* Light-control drawer — opened by long-pressing the action bar's
+          lightbulb. Hosts disco/glyph light shows, palette customisation,
+          and the manual BLE disconnect that the old ShareBoardButton
+          used to own. Mounted lazily on first open. */}
+      {hasOpenedLightDrawer && <LightControlDrawer open={lightDrawerOpen} onClose={handleCloseLightDrawer} />}
     </SwipeableDrawer>
   );
 };

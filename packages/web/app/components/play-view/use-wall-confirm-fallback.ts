@@ -17,8 +17,6 @@ export type WallConfirmFallback = 'auto_connect' | 'picker' | 'already_connected
 
 type ArmWatcherArgs = {
   climbUuid: string;
-  frames: string;
-  mirrored: boolean;
   /** 'party' or 'solo' — drives the analytics event property. */
   mode: 'party' | 'solo';
   /** Layout name for the analytics event property. */
@@ -82,7 +80,7 @@ export function useWallConfirmFallback(deps: Deps) {
   }, [cancelWatcher]);
 
   const armWatcher = useCallback(
-    ({ climbUuid, frames, mirrored, mode, boardLayout }: ArmWatcherArgs) => {
+    ({ climbUuid, mode, boardLayout }: ArmWatcherArgs) => {
       // Cancel any previous watcher (user re-pressed before the 2s elapsed).
       cancelWatcher();
 
@@ -97,14 +95,22 @@ export function useWallConfirmFallback(deps: Deps) {
           track('Wall Confirm Timeout', { mode, fallback: 'unsupported', boardLayout });
           return;
         }
+        // Do NOT pass `frames`/`mirrored` to `connect()` — the underlying
+        // hook writes them synchronously inside connect() and then flips
+        // `isConnected`, which mounts `BluetoothAutoSender`, whose mount-time
+        // effect immediately fires another write for the same climb. The
+        // two back-to-back writes trigger Android's "GATT operation already
+        // in progress". `takeControl()` already set the climb on
+        // `currentClimbQueueItem`, so the AutoSender will send it on its
+        // own as soon as the connect resolves.
         const detectNative = d.isNativeAppOverride ?? isNativeApp;
         if (d.lastConnectedBoardSerial && detectNative()) {
           track('Wall Confirm Timeout', { mode, fallback: 'auto_connect', boardLayout });
-          void d.bluetoothConnect(frames, mirrored, d.lastConnectedBoardSerial);
+          void d.bluetoothConnect(undefined, undefined, d.lastConnectedBoardSerial);
           return;
         }
         track('Wall Confirm Timeout', { mode, fallback: 'picker', boardLayout });
-        void d.bluetoothConnect(frames, mirrored);
+        void d.bluetoothConnect();
       };
 
       const unsubscribe = subscribeToWallConfirm((confirmedUuid) => {

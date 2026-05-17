@@ -19,6 +19,7 @@ import Celebration from '@mui/icons-material/Celebration';
 import StopCircleOutlined from '@mui/icons-material/StopCircleOutlined';
 import AutoAwesome from '@mui/icons-material/AutoAwesome';
 import Palette from '@mui/icons-material/Palette';
+import BluetoothDisabledOutlined from '@mui/icons-material/BluetoothDisabledOutlined';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
 import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
 import { useCurrentClimb } from '../graphql-queue';
@@ -76,6 +77,7 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
     isConnected,
     sendFramesToBoard,
     clearBoard,
+    disconnect,
     boardDetails,
     partyMode,
     setPartyMode,
@@ -220,6 +222,11 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
     setLedColorOverrides({});
   };
 
+  const handleDisconnect = () => {
+    disconnect();
+    onClose();
+  };
+
   return (
     <>
       <SwipeableDrawer placement="bottom" open={open} onClose={onClose} title={t('lightControl.title')} height="auto">
@@ -252,6 +259,12 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
               primary={t('lightControl.customizeColors')}
               secondary={isMoonboard ? t('lightControl.customizeColorsUnsupported') : undefined}
             />
+          </ListItemButton>
+          <ListItemButton onClick={handleDisconnect} disabled={!isConnected}>
+            <ListItemIcon>
+              <BluetoothDisabledOutlined />
+            </ListItemIcon>
+            <ListItemText primary={t('lightControl.disconnect')} />
           </ListItemButton>
         </List>
       </SwipeableDrawer>

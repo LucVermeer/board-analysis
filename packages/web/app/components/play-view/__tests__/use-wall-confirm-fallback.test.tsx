@@ -19,8 +19,6 @@ type Deps = Parameters<typeof useWallConfirmFallback>[0];
 
 const baseClimb = {
   climbUuid: 'climb-1',
-  frames: 'p1r12',
-  mirrored: false,
   mode: 'solo' as const,
   boardLayout: 'Original',
 };
@@ -88,7 +86,7 @@ describe('useWallConfirmFallback', () => {
     // The fallback should have run — by default no BLE connection, no stored
     // serial, BLE supported → picker fallback.
     expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
-    expect(deps.bluetoothConnect).toHaveBeenCalledWith('p1r12', false);
+    expect(deps.bluetoothConnect).toHaveBeenCalledWith();
     expect(mockTrack).toHaveBeenCalledWith('Wall Confirm Timeout', {
       mode: 'solo',
       fallback: 'picker',
@@ -110,7 +108,7 @@ describe('useWallConfirmFallback', () => {
 
     // Picker path: connect called with NO targetSerial arg.
     expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
-    expect(deps.bluetoothConnect).toHaveBeenCalledWith('p1r12', false);
+    expect(deps.bluetoothConnect).toHaveBeenCalledWith();
     expect(mockTrack).toHaveBeenCalledWith('Wall Confirm Timeout', {
       mode: 'party',
       fallback: 'picker',
@@ -132,7 +130,7 @@ describe('useWallConfirmFallback', () => {
     });
 
     expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
-    expect(deps.bluetoothConnect).toHaveBeenCalledWith('p1r12', false, 'serial-42');
+    expect(deps.bluetoothConnect).toHaveBeenCalledWith(undefined, undefined, 'serial-42');
     expect(mockTrack).toHaveBeenCalledWith('Wall Confirm Timeout', {
       mode: 'party',
       fallback: 'auto_connect',
@@ -157,7 +155,7 @@ describe('useWallConfirmFallback', () => {
     });
 
     expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
-    expect(deps.bluetoothConnect).toHaveBeenCalledWith('p1r12', false);
+    expect(deps.bluetoothConnect).toHaveBeenCalledWith();
     expect(mockTrack).toHaveBeenCalledWith('Wall Confirm Timeout', expect.objectContaining({ fallback: 'picker' }));
   });
 
@@ -213,7 +211,7 @@ describe('useWallConfirmFallback', () => {
       vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS / 2);
     });
     act(() => {
-      result.current.armWatcher({ ...baseClimb, climbUuid: 'climb-2', frames: 'p2r13' });
+      result.current.armWatcher({ ...baseClimb, climbUuid: 'climb-2' });
     });
 
     // Original would have fired now — should be cancelled.
@@ -227,7 +225,9 @@ describe('useWallConfirmFallback', () => {
       vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS / 2);
     });
     expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
-    expect(deps.bluetoothConnect).toHaveBeenCalledWith('p2r13', false);
+    // No frames/mirrored passed — the AutoSender handles the initial write
+    // once `isConnected` flips. See the GATT-race fix in the hook.
+    expect(deps.bluetoothConnect).toHaveBeenCalledWith();
   });
 
   it('cleans up the watcher on unmount', () => {
