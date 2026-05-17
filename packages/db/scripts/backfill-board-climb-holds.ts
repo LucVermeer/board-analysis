@@ -25,7 +25,22 @@ import { executeRows, executeCommandCount } from '../src/client/index.js';
 
 const args = process.argv.slice(2);
 const boardFilter = args.includes('--board') ? args[args.indexOf('--board') + 1] : undefined;
-const batchSize = args.includes('--batch-size') ? Number(args[args.indexOf('--batch-size') + 1]) : 500;
+
+// Parse --batch-size with explicit validation so `--batch-size foo` or a
+// trailing `--batch-size` doesn't silently produce NaN and stall the loop
+// (the SQL LIMIT clause would then ship with NaN, the runtime would
+// coerce, and progress reporting would be misleading either way).
+function parseBatchSize(): number {
+  if (!args.includes('--batch-size')) return 500;
+  const raw = args[args.indexOf('--batch-size') + 1];
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
+    console.error(`Invalid --batch-size value: ${raw ?? '(missing)'}. Expected a positive integer.`);
+    process.exit(2);
+  }
+  return parsed;
+}
+const batchSize = parseBatchSize();
 const dryRun = args.includes('--dry-run');
 
 type ParsedHold = {
