@@ -109,7 +109,13 @@ export function useBuildClimbDetailSections({
       title: betaTitle,
       defaultSummary: 'No videos yet',
       getSummary: () => (betaCount > 0 ? [`${betaCount} video${betaCount !== 1 ? 's' : ''}`] : []),
+      // Beta is the headline content the user opens the drawer for — keep
+      // it expanded alongside whatever single-active section they pick.
+      // defaultActive still fires (no proposalUuid → beta is the
+      // accordion's "active" section too, harmless and keeps fallback
+      // styling correct).
       defaultActive: !highlightProposalUuid,
+      keepExpanded: true,
       flush: true,
       lazy: true,
       action: <BoardseshBetaAddButton isAdding={isAddingBeta} onToggle={() => setIsAddingBeta((v) => !v)} />,
@@ -183,6 +189,10 @@ export function useBuildClimbDetailSections({
       label: t('detail.sections.similarClimbs'),
       title: t('detail.sections.similarClimbs'),
       defaultSummary: t('detail.sections.similarClimbsSummary'),
+      // Open by default — saves a tap to discover related climbs, and
+      // the empty-state copy keeps the section unobtrusive when nothing
+      // matches the threshold.
+      keepExpanded: true,
       lazy: true,
       content: (
         <SimilarClimbsList

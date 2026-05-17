@@ -18,7 +18,7 @@ import LocaleLink from '@/app/components/i18n/locale-link';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { formatSends } from '@/app/lib/format-climb-stats';
-import { getSoftGradeColor } from '@/app/lib/grade-colors';
+import { useGradeFormat } from '@/app/hooks/use-grade-format';
 import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getDefaultBoardConfig, getDefaultClimbViewPath } from '@/app/lib/default-board-configs';
@@ -211,8 +211,12 @@ function SimilarClimbCard({
   const { t } = useTranslation('climbs');
   const canvasReady = useCanvasRendererReady();
   const isDark = useIsDarkMode();
+  const { formatGrade, getGradeColor } = useGradeFormat();
   const angle = climb.angle ?? 0;
-  const gradeColor = getSoftGradeColor(climb.difficultyName ?? undefined, isDark);
+  // Format and colour the grade using the same hook the main climb-title
+  // uses, so the slider respects the user's Font vs V-grade preference.
+  const formattedGrade = formatGrade(climb.difficultyName ?? undefined);
+  const gradeColor = getGradeColor(climb.difficultyName ?? undefined, isDark);
 
   // Compatible climb: render at the viewer's exact wall config so the
   // thumbnail matches what they'll see on their board. Incompatible:
@@ -330,7 +334,7 @@ function SimilarClimbCard({
         <div className={styles.name} title={climb.name || undefined}>
           {climb.name || t('similarClimbs.untitledClimb')}
         </div>
-        {climb.difficultyName ? (
+        {formattedGrade ? (
           // Set the grade colour as a CSS custom property so the module CSS
           // owns the rule. The cast through `as React.CSSProperties` allows
           // the custom property without complaint from React's typed style.
@@ -338,7 +342,7 @@ function SimilarClimbCard({
             className={styles.grade}
             style={gradeColor ? ({ '--grade-color': gradeColor } as React.CSSProperties) : undefined}
           >
-            {climb.difficultyName}
+            {formattedGrade}
           </span>
         ) : null}
       </div>

@@ -17,6 +17,14 @@ export type CollapsibleSectionConfig = {
   lazy?: boolean;
   /** When true, this section should be the initially active one (overrides defaultActiveKey). */
   defaultActive?: boolean;
+  /**
+   * When true, this section is rendered as always-expanded — independent
+   * of the single-active accordion state. The user can't collapse it. Use
+   * for sections where the content is the point of opening the drawer
+   * (e.g. Beta videos, Similar climbs) and the user shouldn't have to
+   * tap once to see it.
+   */
+  keepExpanded?: boolean;
   /** When true, removes the inner padding around the expanded content. */
   flush?: boolean;
 };
@@ -141,11 +149,17 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   return (
     <div className={`${styles.steppedContainer} ${compactDesktopGrid ? styles.steppedContainerCompactDesktop : ''}`}>
       {sections.map((section) => {
-        const isActive = effectiveActiveKey === section.key;
+        // keepExpanded sections are treated as permanently-active. They
+        // don't participate in the single-active accordion state machine,
+        // so they sit alongside whatever the user has expanded without
+        // collapsing it.
+        const isActive = section.keepExpanded || effectiveActiveKey === section.key;
         const summaryParts = section.getSummary?.() ?? [];
         const summaryText = summaryParts.length > 0 ? summaryParts.join(' \u00B7 ') : section.defaultSummary;
 
         const shouldRenderContent = section.lazy ? isActive : true;
+
+        const headerClickable = !interactionDisabled && !section.keepExpanded;
 
         return (
           <div
@@ -154,11 +168,11 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
               sectionRefs.current[section.key] = node;
             }}
             className={`${styles.sectionCard} ${isActive ? styles.sectionCardActive : ''}`}
-            {...(!isActive && !interactionDisabled ? { onClick: () => openSection(section.key) } : {})}
+            {...(!isActive && headerClickable ? { onClick: () => openSection(section.key) } : {})}
           >
             <div
               className={`${styles.collapsedRow} ${isActive ? styles.collapsedRowActive : ''}`}
-              {...(isActive && !interactionDisabled ? { onClick: () => setActiveKey(null) } : {})}
+              {...(isActive && headerClickable ? { onClick: () => setActiveKey(null) } : {})}
             >
               <span className={styles.collapsedLabel}>{isActive ? section.title : section.label}</span>
               {isActive && section.action ? (
