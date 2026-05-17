@@ -1,41 +1,31 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
+import MuiAvatar from '@mui/material/Avatar';
+import MuiCard from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Typography from '@mui/material/Typography';
+import { PersonOutlined } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import type {
-  GetUserClimbPercentileQueryResponse,
-  GetUserProfileStatsQueryResponse,
-} from '@/app/lib/graphql/operations/ticks';
 import styles from '@/app/profile/[user_id]/profile-page.module.css';
 import { useProfileData } from '@/app/profile/[user_id]/hooks/use-profile-data';
 import StatsSummary from '@/app/profile/[user_id]/components/stats-summary';
 import BoardStatsSection from '@/app/profile/[user_id]/components/board-stats-section';
-import type { UserProfile, LogbookEntry } from '@/app/profile/[user_id]/utils/profile-constants';
+import FollowerCount from '@/app/components/social/follower-count';
 import { StatsFilterBridgeInjector } from '@/app/components/stats-filter-bridge/stats-filter-bridge-context';
 import StatsFilterDrawer from '@/app/components/stats-filter-drawer/stats-filter-drawer';
+import YouPageSkeleton from './you-page-skeleton';
 
 export type YouProgressContentProps = {
   userId: string;
-  initialProfile?: UserProfile | null;
-  initialProfileStats?: GetUserProfileStatsQueryResponse['userProfileStats'] | null;
-  initialPercentile?: GetUserClimbPercentileQueryResponse['userClimbPercentile'] | null;
-  initialAllBoardsTicks?: Record<string, LogbookEntry[]>;
-  initialLogbook?: LogbookEntry[];
 };
 
-export default function YouProgressContent({
-  userId,
-  initialProfile,
-  initialProfileStats,
-  initialPercentile,
-  initialAllBoardsTicks,
-  initialLogbook,
-}: YouProgressContentProps) {
+export default function YouProgressContent({ userId }: YouProgressContentProps) {
   const { t } = useTranslation('you');
+  const { t: tProfile } = useTranslation('profile');
   const {
     loading,
+    profile,
     selectedBoard,
     setSelectedBoard,
     filteredLogbook,
@@ -55,14 +45,7 @@ export default function YouProgressContent({
     hardestSend,
     hardestFlash,
     percentile,
-  } = useProfileData(userId, {
-    initialProfile: initialProfile ?? undefined,
-    initialProfileStats: initialProfileStats ?? undefined,
-    initialPercentile,
-    initialAllBoardsTicks,
-    initialLogbook,
-    initialIsOwnProfile: true,
-  });
+  } = useProfileData(userId, { initialIsOwnProfile: true });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerRendered, setDrawerRendered] = useState(false);
@@ -83,15 +66,35 @@ export default function YouProgressContent({
   const hasActiveFilters = unifiedTimeframe !== 'all' || selectedBoard !== 'all';
 
   if (loading) {
-    return (
-      <Box className={styles.loadingContent}>
-        <CircularProgress size={48} />
-      </Box>
-    );
+    return <YouPageSkeleton />;
   }
+
+  const displayName = profile?.profile?.displayName || profile?.name || tProfile('page.displayNameFallback');
+  const avatarUrl = profile?.profile?.avatarUrl || profile?.image;
 
   return (
     <>
+      {profile && (
+        <MuiCard className={styles.profileCard}>
+          <CardContent>
+            <div className={styles.profileInfo}>
+              <MuiAvatar sx={{ width: 80, height: 80 }} src={avatarUrl ?? undefined}>
+                {!avatarUrl && <PersonOutlined />}
+              </MuiAvatar>
+              <div className={styles.profileDetails}>
+                <Typography variant="h6" component="h1" className={styles.displayName}>
+                  {displayName}
+                </Typography>
+                <FollowerCount
+                  userId={profile.id}
+                  followerCount={profile.followerCount}
+                  followingCount={profile.followingCount}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </MuiCard>
+      )}
       <StatsFilterBridgeInjector
         openDrawer={openDrawer}
         pageTitle={t('progress.title')}

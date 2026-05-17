@@ -21,7 +21,6 @@ import {
   generateLayoutSlug,
   generateSizeSlug,
   generateSetSlug,
-  searchParamsToUrlParams,
   getPlaylistsBasePath,
 } from '@/app/lib/url-utils';
 import { themeTokens } from '@/app/theme/theme-config';
@@ -29,7 +28,7 @@ import { useColorMode } from '@/app/hooks/use-color-mode';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { usePersistentSessionState } from '../persistent-session';
 import { getLastUsedBoard } from '@/app/lib/last-used-board-db';
-import { getRecentSearches } from '@/app/components/search-drawer/recent-searches-storage';
+import LocaleLink from '@/app/components/i18n/locale-link';
 import BoardDiscoveryScroll from '../board-scroll/board-discovery-scroll';
 import BoardSelectorDrawer from '../board-selector-drawer/board-selector-drawer';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
@@ -155,149 +154,45 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
     return null;
   })();
 
-  const handleHomeTab = () => {
-    router.push('/');
-    track('Bottom Tab Bar', { tab: 'home' });
-  };
-
-  // Whether we're currently on a board page (URL derived from pathname is reliable)
-  const isOnBoardPage =
-    pathname.startsWith('/b/') ||
-    (!!effectiveBoardDetails &&
-      pathname !== '/' &&
-      !pathname.startsWith('/profile') &&
-      !pathname.startsWith('/you') &&
-      !pathname.startsWith('/playlists') &&
-      !pathname.startsWith('/notifications'));
-
-  const handleClimbsTab = async () => {
-    let url: string | null = null;
-
-    if (isOnBoardPage) {
-      // On a board page, use listUrl derived from the current pathname
-      url = listUrl;
-    } else {
-      // Not on a board page: prefer the stored URL (preserves /b/ format)
-      const lastUsed = await getLastUsedBoard();
-      if (lastUsed?.url) {
-        url = lastUsed.url;
-      }
-      // Fall back to computed listUrl from session board details
-      if (!url) {
-        url = listUrl;
-      }
-    }
-
-    // Final fallback for isOnBoardPage case where listUrl is null
-    if (!url) {
-      const lastUsed = await getLastUsedBoard();
-      url = lastUsed?.url ?? null;
-    }
-
-    // Open board selector drawer if no board context
-    if (!url) {
-      setIsBoardSelectorRendered(true);
-      setIsBoardSelectorOpen(true);
-      track('Bottom Tab Bar', { tab: 'climbs', action: 'open_selector' });
-      return;
-    }
-
-    // Auto-apply most recent filter
-    try {
-      const recentSearches = await getRecentSearches();
-      if (recentSearches.length > 0) {
-        const mostRecent = recentSearches[0];
-        const filterParams = searchParamsToUrlParams(
-          mostRecent.filters as Parameters<typeof searchParamsToUrlParams>[0],
-        );
-        const filterString = filterParams.toString();
-        if (filterString) {
-          url = `${url}?${filterString}`;
-        }
-      }
-    } catch {
-      // Ignore errors loading recent searches
-    }
-
-    // Preserve active session param so BoardSessionBridge can re-activate the session
-    if (activeSession?.sessionId && url) {
-      const separator = url.includes('?') ? '&' : '?';
-      url = `${url}${separator}session=${activeSession.sessionId}`;
-    }
-
-    const currentUrl = pathname + (typeof window !== 'undefined' ? window.location.search : '');
-    if (url !== currentUrl) {
-      router.push(url);
-    }
-    track('Bottom Tab Bar', { tab: 'climbs' });
-  };
-
   const playlistsUrl = getPlaylistsBasePath(pathname);
 
-  const handleLibraryTab = () => {
-    const currentUrl = pathname + (typeof window !== 'undefined' ? window.location.search : '');
-    if (playlistsUrl !== currentUrl) {
-      router.push(playlistsUrl);
+  // Synchronous climbs href: prefer the slug URL when board context is known,
+  // append the active session param so BoardSessionBridge can re-activate it.
+  // When listUrl is null (no board context), we fall back to an async handler
+  // that consults IndexedDB for the last-used board.
+  const climbsHref = (() => {
+    if (!listUrl) return null;
+    if (activeSession?.sessionId) {
+      const separator = listUrl.includes('?') ? '&' : '?';
+      return `${listUrl}${separator}session=${activeSession.sessionId}`;
     }
-    track('Bottom Tab Bar', { tab: 'library' });
-  };
+    return listUrl;
+  })();
 
-  const handleFeedTab = () => {
-    router.push('/feed');
-    track('Bottom Tab Bar', { tab: 'feed' });
-  };
-
-  const handleYouTab = () => {
-    if (!isAuthenticated || !session?.user?.id) {
-      openAuthModal({
-        title: t('bottomTabBar.youSignInTitle'),
-        description: t('bottomTabBar.youSignInDescription'),
-        onSuccess: () => {
-          router.push('/you');
-        },
-      });
+  // Fallback async handler when no static href is available for the climbs tab.
+  const handleClimbsFallback = useCallback(async () => {
+    const lastUsed = await getLastUsedBoard();
+    if (lastUsed?.url) {
+      let url = lastUsed.url;
+      if (activeSession?.sessionId) {
+        const separator = url.includes('?') ? '&' : '?';
+        url = `${url}${separator}session=${activeSession.sessionId}`;
+      }
+      router.push(url);
+      track('Bottom Tab Bar', { tab: 'climbs' });
       return;
     }
-    router.push('/you');
-    track('Bottom Tab Bar', { tab: 'you' });
-  };
+    setIsBoardSelectorRendered(true);
+    setIsBoardSelectorOpen(true);
+    track('Bottom Tab Bar', { tab: 'climbs', action: 'open_selector' });
+  }, [activeSession?.sessionId, router]);
 
-  const handleCreateTab = () => {
-    track('Bottom Tab Bar', { tab: 'create' });
-    // Go directly to create climb, skip the drawer
-    if (createClimbUrl) {
-      router.push(createClimbUrl);
-      return;
-    }
-    if (boardConfigs) {
-      setIsCreateClimbFlow(true);
-      setIsBoardSelectorRendered(true);
-      setIsBoardSelectorOpen(true);
-    }
-  };
-
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: Tab) => {
-    switch (newValue) {
-      case 'home':
-        handleHomeTab();
-        break;
-      case 'climbs':
-        void handleClimbsTab();
-        break;
-      case 'library':
-        handleLibraryTab();
-        break;
-      case 'feed':
-        handleFeedTab();
-        break;
-      case 'create':
-        handleCreateTab();
-        break;
-      case 'you':
-        handleYouTab();
-        break;
-    }
-  };
+  const handleCreateFallback = useCallback(() => {
+    if (!boardConfigs) return;
+    setIsCreateClimbFlow(true);
+    setIsBoardSelectorRendered(true);
+    setIsBoardSelectorOpen(true);
+  }, [boardConfigs]);
 
   const handleBoardSelected = useCallback(
     (url: string, config?: StoredBoardConfig) => {
@@ -381,7 +276,10 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
       <BottomNavigation
         data-testid="bottom-tab-bar"
         value={activeTab}
-        onChange={handleTabChange}
+        // Each action is its own <Link>/onClick — onChange would just bounce
+        // duplicate work. MUI still wants the prop wired on a controlled bar,
+        // so pass a no-op to silence the controlled-without-onChange warning.
+        onChange={() => {}}
         showLabels
         sx={{
           background: isDark ? 'rgba(26, 26, 26, 0.7)' : 'rgba(255, 255, 255, 0.3)',
@@ -404,36 +302,95 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
           label={t('bottomTabBar.home')}
           icon={<HomeOutlined sx={{ fontSize: 20 }} />}
           value="home"
+          component={LocaleLink}
+          href="/"
+          onClick={() => track('Bottom Tab Bar', { tab: 'home' })}
           sx={actionSx}
         />
-        <BottomNavigationAction
-          label={t('bottomTabBar.climb')}
-          icon={<FormatListBulletedOutlined sx={{ fontSize: 20 }} />}
-          value="climbs"
-          sx={actionSx}
-        />
+        {climbsHref ? (
+          <BottomNavigationAction
+            label={t('bottomTabBar.climb')}
+            icon={<FormatListBulletedOutlined sx={{ fontSize: 20 }} />}
+            value="climbs"
+            component={LocaleLink}
+            href={climbsHref}
+            onClick={() => track('Bottom Tab Bar', { tab: 'climbs' })}
+            sx={actionSx}
+          />
+        ) : (
+          <BottomNavigationAction
+            label={t('bottomTabBar.climb')}
+            icon={<FormatListBulletedOutlined sx={{ fontSize: 20 }} />}
+            value="climbs"
+            onClick={() => {
+              void handleClimbsFallback();
+            }}
+            sx={actionSx}
+          />
+        )}
         <BottomNavigationAction
           label={t('bottomTabBar.discover')}
           icon={<LocalOfferOutlined sx={{ fontSize: 20 }} />}
           value="library"
+          component={LocaleLink}
+          href={playlistsUrl}
+          onClick={() => track('Bottom Tab Bar', { tab: 'library' })}
           sx={actionSx}
         />
         <BottomNavigationAction
           label={t('bottomTabBar.feed')}
           icon={<DynamicFeedOutlined sx={{ fontSize: 20 }} />}
           value="feed"
+          component={LocaleLink}
+          href="/feed"
+          onClick={() => track('Bottom Tab Bar', { tab: 'feed' })}
           sx={actionSx}
         />
-        <BottomNavigationAction
-          label={t('bottomTabBar.create')}
-          icon={<AddOutlined sx={{ fontSize: 20 }} />}
-          value="create"
-          sx={actionSx}
-        />
+        {createClimbUrl ? (
+          <BottomNavigationAction
+            label={t('bottomTabBar.create')}
+            icon={<AddOutlined sx={{ fontSize: 20 }} />}
+            value="create"
+            component={LocaleLink}
+            href={createClimbUrl}
+            onClick={() => track('Bottom Tab Bar', { tab: 'create' })}
+            sx={actionSx}
+          />
+        ) : (
+          <BottomNavigationAction
+            label={t('bottomTabBar.create')}
+            icon={<AddOutlined sx={{ fontSize: 20 }} />}
+            value="create"
+            onClick={() => {
+              track('Bottom Tab Bar', { tab: 'create' });
+              handleCreateFallback();
+            }}
+            sx={actionSx}
+          />
+        )}
         <BottomNavigationAction
           label={t('bottomTabBar.you')}
           icon={<PersonOutlined sx={{ fontSize: 20 }} />}
           value="you"
+          component={LocaleLink}
+          href="/you"
+          onClick={(event: React.MouseEvent<HTMLAnchorElement>) => {
+            // During the session-loading window we don't yet know whether the
+            // user is signed in. Let Next.js navigate to /you; the layout
+            // resolves auth on the server and redirects to / if needed.
+            if (sessionStatus !== 'loading' && (!isAuthenticated || !session?.user?.id)) {
+              event.preventDefault();
+              openAuthModal({
+                title: t('bottomTabBar.youSignInTitle'),
+                description: t('bottomTabBar.youSignInDescription'),
+                onSuccess: () => {
+                  router.push('/you');
+                },
+              });
+              return;
+            }
+            track('Bottom Tab Bar', { tab: 'you' });
+          }}
           sx={actionSx}
         />
       </BottomNavigation>
