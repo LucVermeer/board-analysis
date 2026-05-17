@@ -21,16 +21,18 @@ type UseDrawerUrlSyncArgs = {
 /**
  * Keeps the browser URL in sync with the PlayViewDrawer's open state.
  *
- * - Opening the drawer pushes `/view/{climb_uuid}` onto history (or replaces
- *   the current entry if the user already direct-hit a /view/ URL).
- * - Changing the displayed climb (prev/next/swipe) calls `replaceState` so the
- *   address bar tracks the visible climb without piling up history entries.
- * - Closing the drawer strips the /view/ segment back to the list URL.
- * - A browser back gesture (popstate) closes the drawer via the `onClose`
- *   callback.
+ * Two effects:
+ * - The `isOpen` effect owns the popstate listener and the close-cleanup
+ *   (return the URL to the list / pop the pushed entry when the drawer closes).
+ * - The `displayedClimb` effect owns the actual URL mutation — pushState the
+ *   first time we see a climb on a non-/view/ pathname, replaceState on every
+ *   subsequent climb change. This is split out so the URL push fires when the
+ *   climb arrives from the queue bridge a render after `isOpen` flipped (the
+ *   bridge between the deep `GraphQLQueueProvider` and the root QueueControlBar
+ *   propagates via an effect, lagging by one render in solo mode).
  *
- * The history.state payload stamps each entry so coexisting URL handlers (e.g.
- * the PlayViewClient at /play/) can distinguish their own pushes from ours.
+ * The history.state payload stamps each entry so coexisting URL handlers
+ * (e.g. the PlayViewClient at /play/) can distinguish their pushes from ours.
  */
 export function useDrawerUrlSync({
   isOpen,
@@ -43,7 +45,7 @@ export function useDrawerUrlSync({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Refs let the open effect read the latest pathname / searchParams / onClose
+  // Refs let the effects read the latest pathname / searchParams / onClose
   // without re-subscribing the popstate listener every render.
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
@@ -56,60 +58,22 @@ export function useDrawerUrlSync({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // Cached source for the current drawer-open lifecycle. Set by the URL
+  // mutation effect on the first push/replace, cleared by the close cleanup.
   const sourceRef = useRef<DrawerUrlSyncSource | null>(null);
+  // Pathname at the moment the drawer started opening — used to derive `source`
+  // and to compute the right list URL on close (since pathnameRef may have
+  // moved on by the time cleanup fires).
+  const openStartPathnameRef = useRef<string | null>(null);
 
-  // Open: push the view URL onto history and listen for back.
+  // Effect A — open/close lifecycle: popstate listener + URL restoration.
   useEffect(() => {
-    // TEMP debug
-    // eslint-disable-next-line no-console
-    console.info('[urlSync open]', {
-      enabled,
-      isOpen,
-      hasClimb: !!displayedClimb,
-      uuid: displayedClimb?.uuid?.slice(0, 8),
-      hookPathname: pathnameRef.current,
-      windowPathname: typeof window !== 'undefined' ? window.location.pathname : '(ssr)',
-    });
-    if (!enabled || !isOpen || !displayedClimb) {
-      sourceRef.current = null;
+    if (!enabled || !isOpen) {
       return;
     }
-
-    const startPathname = pathnameRef.current;
-    const startSearchParams = searchParamsRef.current;
-    const onViewRoute = startPathname.includes('/view/');
-    const source: DrawerUrlSyncSource = onViewRoute ? 'direct' : 'list-tap';
-    sourceRef.current = source;
-
-    const viewUrl = withSearchParams(
-      getContextAwareClimbViewUrl(
-        startPathname,
-        boardDetailsRef.current,
-        angleRef.current,
-        displayedClimb.uuid,
-        displayedClimb.name,
-      ),
-      startSearchParams,
-    );
-    // eslint-disable-next-line no-console
-    console.info('[urlSync push]', { source, viewUrl, willPush: !onViewRoute });
-
-    const baseState = window.history.state ?? {};
-    const stampedState = { ...baseState, boardseshDrawerUrlSync: { climbUuid: displayedClimb.uuid, source } };
-
-    if (onViewRoute) {
-      // Already on a /view/ URL — stamp the current entry so popstate can
-      // recognize close intent, and refresh the URL in case the climb resolved
-      // a different slug than the one in the route.
-      window.history.replaceState(stampedState, '', viewUrl);
-    } else {
-      window.history.pushState(stampedState, '', viewUrl);
-    }
+    openStartPathnameRef.current = pathnameRef.current;
 
     const handlePopState = () => {
-      // Any time the entry under us is no longer a /view/ URL, the drawer
-      // should close. The drawer's own state update will trigger this
-      // effect's cleanup, which is a no-op because the URL already moved.
       if (!window.location.pathname.includes('/view/')) {
         onCloseRef.current();
       }
@@ -118,70 +82,42 @@ export function useDrawerUrlSync({
 
     return () => {
       window.removeEventListener('popstate', handlePopState);
+      const startPathname = openStartPathnameRef.current ?? pathnameRef.current;
+      openStartPathnameRef.current = null;
+      const source = sourceRef.current;
+      sourceRef.current = null;
       if (!window.location.pathname.includes('/view/')) {
         // popstate already navigated us off /view/ — nothing left to do.
-        sourceRef.current = null;
         return;
       }
       // User-initiated close (close button, swipe-down, etc.). Restore the URL.
-      const listUrl = withSearchParams(
-        getListUrl(boardDetailsRef.current, angleRef.current, startPathname),
-        searchParamsRef.current,
-      );
       if (source === 'list-tap') {
         // Pop the entry we pushed when opening so back-button history stays clean.
         window.history.back();
       } else {
-        // Direct hit — there is no entry we own to pop, and we must not push
-        // either: pushing /list forward traps the user (Back from /list would
-        // return them to /view/{uuid}, where the drawer is closed but the URL
-        // says open). Replace the current entry instead so Back leaves the
-        // tab/site cleanly.
-        window.history.replaceState({ ...window.history.state }, '', listUrl);
+        // Direct hit (or never-pushed) — replace forward to the list URL.
+        // Pushing would trap the user: Back from /list would return to
+        // /view/{uuid} where the drawer is closed but the URL still says open.
+        const listUrl = withSearchParams(
+          getListUrl(boardDetailsRef.current, angleRef.current, startPathname),
+          searchParamsRef.current,
+        );
+        window.history.replaceState({ ...(window.history.state ?? {}) }, '', listUrl);
       }
-      sourceRef.current = null;
     };
-    // The open effect should run only on the open/close transition. The
-    // climb-change case (swipe / row-tap while open) is handled by the replace
-    // effect below; if we included displayedClimb in this dep array the
-    // cleanup would fire mid-open and `history.back()` would close the drawer
-    // right after a row tap. pathname, searchParams, boardDetails and angle
-    // changes are picked up through refs so the listener doesn't churn on
-    // every keystroke in the search bar.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, enabled]);
 
-  // While open, replace the URL when the displayed climb changes (swipe / prev / next).
-  const lastSyncedUuidRef = useRef<string | null>(null);
+  // Effect B — URL push/replace whenever the displayed climb is available.
+  // Fires on isOpen flips AND on climb changes, so a solo /b/ tap (where the
+  // climb arrives one render after isOpen via the queue bridge) still gets
+  // its URL pushed.
   useEffect(() => {
-    // TEMP debug
-    // eslint-disable-next-line no-console
-    console.info('[urlSync replace]', {
-      enabled,
-      isOpen,
-      hasClimb: !!displayedClimb,
-      uuid: displayedClimb?.uuid?.slice(0, 8),
-      lastSynced: lastSyncedUuidRef.current?.slice(0, 8),
-      windowPathname: typeof window !== 'undefined' ? window.location.pathname : '(ssr)',
-    });
-    if (!enabled || !isOpen || !displayedClimb) {
-      lastSyncedUuidRef.current = null;
-      return;
-    }
-    if (lastSyncedUuidRef.current === displayedClimb.uuid) return;
-    lastSyncedUuidRef.current = displayedClimb.uuid;
+    if (!enabled || !isOpen || !displayedClimb) return;
 
-    // Only refresh the URL once we own the /view/ entry — the initial push is
-    // handled by the open effect above.
-    if (!window.location.pathname.includes('/view/')) {
-      // eslint-disable-next-line no-console
-      console.info('[urlSync replace] skip — not on /view/');
-      return;
-    }
-
+    const startPathname = openStartPathnameRef.current ?? pathnameRef.current;
     const viewUrl = withSearchParams(
       getContextAwareClimbViewUrl(
-        pathnameRef.current,
+        startPathname,
         boardDetailsRef.current,
         angleRef.current,
         displayedClimb.uuid,
@@ -189,17 +125,25 @@ export function useDrawerUrlSync({
       ),
       searchParamsRef.current,
     );
+
+    // Derive source once per open lifecycle: if we direct-hit a /view/ URL
+    // it's 'direct'; otherwise we'll be pushing over /list, /b/.../list, etc.
+    if (!sourceRef.current) {
+      sourceRef.current = startPathname.includes('/view/') ? 'direct' : 'list-tap';
+    }
     const stampedState = {
-      ...window.history.state,
-      boardseshDrawerUrlSync: {
-        climbUuid: displayedClimb.uuid,
-        source: sourceRef.current ?? 'list-tap',
-      },
+      ...(window.history.state ?? {}),
+      boardseshDrawerUrlSync: { climbUuid: displayedClimb.uuid, source: sourceRef.current },
     };
-    // eslint-disable-next-line no-console
-    console.info('[urlSync replace] doing replace', { viewUrl });
-    window.history.replaceState(stampedState, '', viewUrl);
-  }, [displayedClimb, enabled, isOpen]);
+
+    if (window.location.pathname.includes('/view/')) {
+      // Either a direct-hit refresh of the URL or a climb-change replace.
+      window.history.replaceState(stampedState, '', viewUrl);
+    } else {
+      // First time we have a climb on a non-/view/ pathname — push.
+      window.history.pushState(stampedState, '', viewUrl);
+    }
+  }, [isOpen, displayedClimb?.uuid, enabled]);
 }
 
 function withSearchParams(url: string, searchParams: URLSearchParams): string {
