@@ -19,9 +19,12 @@ async function waitForPageReady(page: Page) {
   await expect(page.locator(bottomTabBar)).toBeVisible({ timeout: 15000 });
 }
 
-// Scoped tab button selector to avoid ambiguity with multiple bars during transitions
+// Scoped tab selector to avoid ambiguity with multiple bars during transitions.
+// BottomNavigationAction renders as `<a>` (role="link") when component={LocaleLink},
+// or as `<button>` when no static href is available. Match either role.
 function bottomTabButton(page: Page, name: string, exact = false) {
-  return page.locator(bottomTabBar).getByRole('button', { name, exact });
+  const scope = page.locator(bottomTabBar);
+  return scope.getByRole('link', { name, exact }).or(scope.getByRole('button', { name, exact }));
 }
 
 test.describe('Bottom Tab Bar - Visibility', () => {

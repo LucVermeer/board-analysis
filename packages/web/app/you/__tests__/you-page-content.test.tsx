@@ -55,6 +55,14 @@ vi.mock('@/app/components/stats-filter-drawer/stats-filter-drawer', () => ({
   default: () => <div data-testid="stats-filter-drawer" />,
 }));
 
+vi.mock('@/app/components/social/follower-count', () => ({
+  default: (props: { userId: string; followerCount: number; followingCount: number }) => (
+    <div data-testid="follower-count" data-user-id={props.userId}>
+      {props.followerCount} followers, {props.followingCount} following
+    </div>
+  ),
+}));
+
 // --- Imports after mocks ---
 
 const mockUseProfileData = vi.mocked(useProfileData);
@@ -99,12 +107,15 @@ describe('YouProgressContent', () => {
     mockUseProfileData.mockReturnValue(mockProfileDataReturn());
   });
 
-  it('shows loading spinner when loading is true', () => {
+  it('shows the page skeleton when loading is true', () => {
     mockUseProfileData.mockReturnValue(mockProfileDataReturn({ loading: true }));
 
-    render(<YouProgressContent userId="user-1" />);
+    const { container } = render(<YouProgressContent userId="user-1" />);
 
-    expect(screen.getByRole('progressbar')).toBeTruthy();
+    // YouPageSkeleton renders MUI Skeletons (.MuiSkeleton-root) instead of the
+    // old CircularProgress, so we assert at least one skeleton is present and
+    // that none of the real content has rendered yet.
+    expect(container.querySelectorAll('.MuiSkeleton-root').length).toBeGreaterThan(0);
     expect(screen.queryByTestId('stats-summary')).toBeNull();
   });
 
@@ -113,6 +124,51 @@ describe('YouProgressContent', () => {
 
     expect(screen.getByTestId('stats-summary')).toBeTruthy();
     expect(screen.getByTestId('board-stats-section')).toBeTruthy();
+  });
+
+  it('renders the profile header with display name and follower counts when profile is loaded', () => {
+    mockUseProfileData.mockReturnValue(
+      mockProfileDataReturn({
+        profile: {
+          id: 'user-123',
+          email: 'test@boardsesh.com',
+          name: 'Test User',
+          image: null,
+          profile: { displayName: 'Display Name', avatarUrl: null, instagramUrl: null },
+          followerCount: 42,
+          followingCount: 17,
+          isFollowedByMe: false,
+        },
+      }),
+    );
+
+    render(<YouProgressContent userId="user-1" />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Display Name' })).toBeTruthy();
+    const followerCount = screen.getByTestId('follower-count');
+    expect(followerCount.getAttribute('data-user-id')).toBe('user-123');
+    expect(followerCount.textContent).toContain('42 followers');
+  });
+
+  it('falls back to profile.name when displayName is missing', () => {
+    mockUseProfileData.mockReturnValue(
+      mockProfileDataReturn({
+        profile: {
+          id: 'user-123',
+          email: 'test@boardsesh.com',
+          name: 'Test User',
+          image: null,
+          profile: { displayName: null, avatarUrl: null, instagramUrl: null },
+          followerCount: 0,
+          followingCount: 0,
+          isFollowedByMe: false,
+        },
+      }),
+    );
+
+    render(<YouProgressContent userId="user-1" />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Test User' })).toBeTruthy();
   });
 
   it('passes weekly bars into StatsSummary and keeps BoardStatsSection fallback-only', () => {
