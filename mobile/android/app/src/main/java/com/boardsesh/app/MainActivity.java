@@ -19,6 +19,9 @@ import android.webkit.WebView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.boardsesh.app.plugins.DevUrlPlugin;
 import com.getcapacitor.Bridge;
@@ -55,6 +58,34 @@ public class MainActivity extends BridgeActivity {
         // any other App Link) never lands. Mirror SceneDelegate.swift on iOS by
         // forwarding the intent URL into the WebView ourselves.
         loadDeepLinkIfPresent(getIntent(), webView);
+
+        // The safe-area plugin (8.0.x) pads the DecorView by imeInsets.bottom on
+        // Chrome >= 140, which physically shrinks window.innerHeight when the keyboard
+        // opens. This overrides interactiveWidget: 'resizes-visual' (set in the
+        // viewport meta) because the browser treats it as a physical window resize,
+        // not a virtual keyboard event — collapsing all dvh-based layouts.
+        // Chrome 140+ handles keyboard insets natively via interactiveWidget, so the
+        // physical padding is not needed. Override the listener here (after super.onCreate
+        // which loads plugins) to pass system bar insets through — preserving
+        // env(safe-area-inset-*) — without applying keyboard padding.
+        disableSafeAreaKeyboardPadding();
+    }
+
+    private void disableSafeAreaKeyboardPadding() {
+        android.view.View decorView = getWindow().getDecorView();
+        ViewCompat.setOnApplyWindowInsetsListener(decorView, (v, windowInsets) -> {
+            Insets systemBarsInsets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            );
+            v.setPadding(0, 0, 0, 0);
+            return new WindowInsetsCompat.Builder(windowInsets)
+                .setInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout(),
+                    Insets.of(systemBarsInsets.left, systemBarsInsets.top,
+                              systemBarsInsets.right, systemBarsInsets.bottom)
+                )
+                .build();
+        });
     }
 
     @Override
