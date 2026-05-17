@@ -3,7 +3,7 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vite-plus/test';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { IsRestoringProvider, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
@@ -31,14 +31,17 @@ const mockUseSession = vi.mocked(useSession);
 const mockUseSnackbar = vi.mocked(useSnackbar);
 const mockUseGradeFormat = vi.mocked(useGradeFormat);
 
-function renderProfileDataHook<T>(callback: () => T) {
+function renderProfileDataHook<T>(callback: () => T, options?: { isRestoring?: boolean }) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
     },
   });
+  const isRestoring = options?.isRestoring ?? false;
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <IsRestoringProvider value={isRestoring}>{children}</IsRestoringProvider>
+    </QueryClientProvider>
   );
   return renderHook(callback, { wrapper });
 }
@@ -296,9 +299,11 @@ describe('useProfileData', () => {
       }),
     );
 
-    // Give React Query a tick — if refetchOnMount fired, the mocks would
-    // record a call by now.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Flush pending microtasks (React-Query effect bookkeeping) without
+    // sleeping — using a real timer would race against test scheduling.
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(fetch).not.toHaveBeenCalled();
     expect(mockRequest).not.toHaveBeenCalledWith(GET_USER_PROFILE_STATS, { userId: 'user-1' });
@@ -355,5 +360,70 @@ describe('useProfileData', () => {
     );
 
     expect(result.current.percentile).toEqual(initialPercentile);
+  });
+
+  it('does not show loading skeleton when SSR data is present but persister is still restoring', () => {
+    const { result } = renderProfileDataHook(
+      () =>
+        useProfileData('user-1', {
+          initialProfile: {
+            id: 'user-1',
+            email: undefined,
+            name: 'SSR User',
+            image: null,
+            profile: null,
+            credentials: [],
+            followerCount: 0,
+            followingCount: 0,
+            isFollowedByMe: false,
+          },
+          initialProfileStats: { totalDistinctClimbs: 0, layoutStats: [] },
+          initialPercentile: null,
+          initialAllBoardsTicks: { kilter: [] },
+          initialLogbook: [],
+          initialIsOwnProfile: true,
+        }),
+      { isRestoring: true },
+    );
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.loadingAggregated).toBe(false);
+    expect(result.current.loadingProfileStats).toBe(false);
+  });
+
+  it('logs ticks/stats/percentile query failures to the console', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockRequest.mockImplementation(async (query: unknown) => {
+      if (query === GET_USER_TICKS) throw new Error('ticks boom');
+      if (query === GET_USER_PROFILE_STATS) throw new Error('stats boom');
+      if (query === GET_USER_CLIMB_PERCENTILE) throw new Error('percentile boom');
+      return {};
+    });
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'user-1',
+        email: undefined,
+        name: 'Test',
+        image: null,
+        profile: null,
+        credentials: [],
+        followerCount: 0,
+        followingCount: 0,
+        isFollowedByMe: false,
+      }),
+    } as Response);
+
+    renderProfileDataHook(() => useProfileData('user-1'));
+
+    await waitFor(() => {
+      const messages = consoleErrorSpy.mock.calls.map((args) => String(args[0]));
+      expect(messages.some((m) => m.includes('all boards ticks'))).toBe(true);
+      expect(messages.some((m) => m.includes('profile stats'))).toBe(true);
+      expect(messages.some((m) => m.includes('climb percentile'))).toBe(true);
+    });
+
+    consoleErrorSpy.mockRestore();
   });
 });

@@ -123,6 +123,9 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     showMessage('Failed to load profile data', 'error');
   }, [profileError, showMessage]);
 
+  // The other three queries don't surface a snackbar (the page still renders
+  // partial data), but their failures shouldn't be silent in logs/Sentry.
+
   const ticksInitial = initialData?.initialAllBoardsTicks;
   const ticksQuery = useQuery<BoardTicks>({
     queryKey: ['userTicks', userId],
@@ -173,8 +176,13 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     meta: { persist: isOwnProfile },
   });
 
-  const percentileInitial = initialData?.initialPercentile ?? undefined;
-  const percentileQuery = useQuery<GetUserClimbPercentileQueryResponse['userClimbPercentile']>({
+  // initialPercentile is `undefined` when no SSR seed was passed, and `null`
+  // when SSR explicitly returned no percentile (e.g. user with zero climbs).
+  // Treat both presences of a key as "have initial data" so a legitimate null
+  // doesn't trigger an unnecessary refetch.
+  const hasPercentileInitial = initialData ? 'initialPercentile' in initialData : false;
+  const percentileInitial = initialData?.initialPercentile;
+  const percentileQuery = useQuery<GetUserClimbPercentileQueryResponse['userClimbPercentile'] | null>({
     queryKey: ['userClimbPercentile', userId],
     queryFn: async () => {
       const client = createGraphQLHttpClient(null);
@@ -185,11 +193,29 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     },
     staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
-    refetchOnMount: percentileInitial !== undefined ? true : 'always',
+    refetchOnMount: hasPercentileInitial ? true : 'always',
     initialData: percentileInitial,
-    initialDataUpdatedAt: percentileInitial !== undefined ? Date.now() : undefined,
+    initialDataUpdatedAt: hasPercentileInitial ? Date.now() : undefined,
     meta: { persist: isOwnProfile },
   });
+
+  useEffect(() => {
+    const err = ticksQuery.error;
+    if (!err || isAbortError(err)) return;
+    console.error('Error fetching all boards ticks:', err);
+  }, [ticksQuery.error]);
+
+  useEffect(() => {
+    const err = profileStatsQuery.error;
+    if (!err || isAbortError(err)) return;
+    console.error('Error fetching profile stats:', err);
+  }, [profileStatsQuery.error]);
+
+  useEffect(() => {
+    const err = percentileQuery.error;
+    if (!err || isAbortError(err)) return;
+    console.error('Error fetching climb percentile:', err);
+  }, [percentileQuery.error]);
 
   const profile = profileQuery.data ?? null;
   const profileStats = profileStatsQuery.data ?? null;
@@ -203,12 +229,12 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     [queryClient, userId],
   );
 
-  // `loading` is the first-paint gate. Treat hydration-from-IDB as "still
-  // loading" so the skeleton hides until either persisted or fresh data is
-  // available — otherwise hard reloads show an empty state for one frame.
-  const loading = !notFound && (isRestoring || (profileQuery.isPending && !profile));
-  const loadingAggregated = !notFound && (isRestoring || (ticksQuery.isPending && !ticksQuery.data));
-  const loadingProfileStats = !notFound && (isRestoring || (profileStatsQuery.isPending && !profileStats));
+  // `loading` is the first-paint gate. Only show it when there's genuinely no
+  // data to render — if SSR seeded `initialData` we want to render immediately
+  // even while the persister is still hydrating from IDB in the background.
+  const loading = !notFound && !profile && (isRestoring || profileQuery.isPending);
+  const loadingAggregated = !notFound && !ticksQuery.data && (isRestoring || ticksQuery.isPending);
+  const loadingProfileStats = !notFound && !profileStats && (isRestoring || profileStatsQuery.isPending);
 
   // Filter allBoardsTicks by selected board
   const filteredBoardsTicks = useMemo<BoardTicks>(() => {
