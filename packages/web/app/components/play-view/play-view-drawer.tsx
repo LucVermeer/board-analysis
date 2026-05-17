@@ -88,6 +88,20 @@ const PlayDrawerContent = React.memo<PlayDrawerContentProps>(
       enabled: sectionsEnabled,
     });
 
+    // When the active climb changes (e.g. tapping a card in the Similar
+    // climbs slider activates a new climb), reset the drawer's scroll
+    // position to the top so the user sees the new climb's header /
+    // board first instead of landing mid-scroll on whatever section
+    // they were on in the previous climb. The data-scroll-container
+    // attribute is set by ClimbDetailShellClient on its mobileScrollLayout
+    // wrapper (climb-detail-shell.client.tsx:38).
+    useEffect(() => {
+      const scrollContainer = document.querySelector<HTMLElement>('[data-scroll-container]');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, [climb.uuid]);
+
     return <ClimbDetailShellClient mode="play" sections={sections} aboveFold={aboveFold} />;
   },
 );
