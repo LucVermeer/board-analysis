@@ -270,21 +270,27 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions, compat
     <>
       <Box sx={{ position: 'relative' }}>
         {thumbnail}
-        <IconButton
-          size="small"
-          onClick={handleEllipsisClick}
-          aria-label={t('similarClimbs.openActions')}
-          sx={{
-            position: 'absolute',
-            top: 4,
-            right: 4,
-            backgroundColor: 'var(--semantic-surface-overlay)',
-            backdropFilter: 'blur(4px)',
-            '&:hover': { backgroundColor: 'var(--semantic-surface)' },
-          }}
-        >
-          <MoreVertOutlined fontSize="small" />
-        </IconButton>
+        {/* Skip the ellipsis when we have no boardDetails — the actions
+            drawer needs them to render anything useful, and clicking the
+            button would silently dismiss the drawer on open. Better to
+            hide the affordance than to expose a dead button. */}
+        {boardDetails ? (
+          <IconButton
+            size="small"
+            onClick={handleEllipsisClick}
+            aria-label={t('similarClimbs.openActions')}
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              backgroundColor: 'var(--semantic-surface-overlay)',
+              backdropFilter: 'blur(4px)',
+              '&:hover': { backgroundColor: 'var(--semantic-surface)' },
+            }}
+          >
+            <MoreVertOutlined fontSize="small" />
+          </IconButton>
+        ) : null}
       </Box>
       <div className={`${styles.nameRow}${dimClass}`}>
         <div className={styles.name} title={climb.name || undefined}>

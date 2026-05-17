@@ -165,13 +165,18 @@ export async function findExactDuplicateMatch({
         ${dbSchema.boardClimbs.uuid},
         ${dbSchema.boardClimbs.name},
         ${dbSchema.boardClimbs.setterUsername},
-        ${dbSchema.boardClimbs.angle},
-        ${dbSchema.boardClimbStats.ascensionistCount}
+        ${dbSchema.boardClimbs.angle}
       HAVING string_agg(
         ${dbSchema.boardClimbHolds.holdId}::text || ':' || ${dbSchema.boardClimbHolds.holdState},
         ',' ORDER BY ${dbSchema.boardClimbHolds.holdId}
       ) = ${signature}
-      ORDER BY COALESCE(${dbSchema.boardClimbStats.ascensionistCount}, 0) DESC, ${dbSchema.boardClimbs.uuid} ASC
+      -- Aggregate ascensionist_count rather than grouping by it so we
+      -- depend solely on the PK uniqueness of board_climbs.uuid for
+      -- per-climb grouping. board_climb_stats.PK is (boardType, climbUuid,
+      -- angle) so each (uuid, angle) join row contributes one stats row at
+      -- most today, but expressing it as MAX() keeps the query correct if
+      -- the schema ever grows additional stats per climb.
+      ORDER BY MAX(COALESCE(${dbSchema.boardClimbStats.ascensionistCount}, 0)) DESC, ${dbSchema.boardClimbs.uuid} ASC
       LIMIT 1
     `,
   );

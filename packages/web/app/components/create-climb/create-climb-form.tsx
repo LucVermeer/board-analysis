@@ -241,6 +241,12 @@ export default function CreateClimbForm({
   const markJustSaved = useCallback(() => {
     setJustSaved(true);
     autosaveSuppressedRef.current = true;
+    // A successful save clears any prior duplicate-publish error. The
+    // useEffect on litUpHoldsMap / isDraft already covers the "user changed
+    // a hold" path; this catches the metadata-only-retry case where the
+    // user fixed the conflict by re-saving without touching holds or the
+    // draft flag (e.g. server-side state changed in the meantime).
+    setPublishDuplicateError(null);
     void clearAutosave();
     if (savedTimeoutRef.current !== null) {
       window.clearTimeout(savedTimeoutRef.current);
