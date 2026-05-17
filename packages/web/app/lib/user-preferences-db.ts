@@ -30,6 +30,7 @@ export type UserPreferenceKeyMap = {
   tickBarExpanded: boolean;
   'shakeToReport:dismissed': boolean;
   esp32Connections: Esp32Connection[];
+  lastUsedGrade: number;
 };
 
 // Map of IDB preference keys to their legacy localStorage keys for one-time migration
@@ -150,4 +151,21 @@ export const getGradeDisplayFormat = async (): Promise<GradeDisplayFormat> => {
  */
 export const setGradeDisplayFormat = async (format: GradeDisplayFormat): Promise<void> => {
   await setPreference('gradeDisplayFormat', format);
+};
+
+/**
+ * Get the last grade the user picked in any grade picker (filter min/max,
+ * logbook min/max, playlist target). Used to focus the picker on a familiar
+ * grade when it mounts unselected.
+ */
+export const getLastUsedGrade = async (): Promise<number | undefined> => {
+  const value = await getPreference<number>('lastUsedGrade');
+  return typeof value === 'number' ? value : undefined;
+};
+
+/**
+ * Remember the last grade the user picked across grade-picker call sites.
+ */
+export const setLastUsedGrade = async (difficultyId: number): Promise<void> => {
+  await setPreference('lastUsedGrade', difficultyId);
 };

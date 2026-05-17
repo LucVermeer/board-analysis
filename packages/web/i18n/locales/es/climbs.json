@@ -101,7 +101,6 @@
     },
     "fields": {
       "climbName": "Nombre del bloque",
-      "gradeRange": "Rango de grados",
       "minGrade": "Mín",
       "maxGrade": "Máx",
       "setter": "Aperturista",
@@ -341,6 +340,7 @@
       "noRating": "Sin valoración",
       "gradeOverride": "Grado personalizado",
       "clearGradeOverride": "Borrar grado personalizado",
+      "consensusSuffix": "consenso",
       "attemptCount": "Número de intentos"
     },
     "bar": {

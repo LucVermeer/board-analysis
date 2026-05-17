@@ -101,7 +101,6 @@
     },
     "fields": {
       "climbName": "Climb Name",
-      "gradeRange": "Grade Range",
       "minGrade": "Min",
       "maxGrade": "Max",
       "setter": "Setter",
@@ -346,6 +345,7 @@
       "starOption_other": "{{count}} stars",
       "gradeOverride": "Grade override",
       "clearGradeOverride": "Clear grade override",
+      "consensusSuffix": "consensus",
       "attemptCount": "Attempt count"
     },
     "bar": {
