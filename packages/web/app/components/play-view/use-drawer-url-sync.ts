@@ -60,15 +60,6 @@ export function useDrawerUrlSync({
 
   // Open: push the view URL onto history and listen for back.
   useEffect(() => {
-    // TEMP debug — remove once /b/ URL sync confirmed working.
-    // eslint-disable-next-line no-console
-    console.info('[useDrawerUrlSync] open-effect', {
-      enabled,
-      isOpen,
-      hasClimb: !!displayedClimb,
-      climbUuid: displayedClimb?.uuid ?? null,
-      pathname: typeof window !== 'undefined' ? window.location.pathname : '(ssr)',
-    });
     if (!enabled || !isOpen || !displayedClimb) {
       sourceRef.current = null;
       return;
@@ -90,15 +81,6 @@ export function useDrawerUrlSync({
       ),
       startSearchParams,
     );
-    // TEMP debug — remove once /b/ URL sync confirmed working.
-    // eslint-disable-next-line no-console
-    console.info('[useDrawerUrlSync] push', {
-      startPathname,
-      viewUrl,
-      climbUuid: displayedClimb.uuid,
-      source,
-      windowPathname: window.location.pathname,
-    });
 
     const baseState = window.history.state ?? {};
     const stampedState = { ...baseState, boardseshDrawerUrlSync: { climbUuid: displayedClimb.uuid, source } };
