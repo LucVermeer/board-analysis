@@ -1,7 +1,7 @@
 'use client';
 
 import React, { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { QueryClient, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, type Query, useQueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useSession } from 'next-auth/react';
 import { createIdbPersister } from '@/app/lib/react-query-idb-persister';
@@ -26,6 +26,8 @@ export default function QueryClientProvider({ children }: QueryClientProviderPro
   );
 
   const [persister] = useState(() => createIdbPersister());
+  // Reads useSession(), so this provider must mount inside SessionProviderWrapper.
+  // See app/layout.tsx for the nesting order.
   const { data: session } = useSession();
   const sessionUserId = session?.user?.id ?? null;
 
@@ -39,8 +41,7 @@ export default function QueryClientProvider({ children }: QueryClientProviderPro
       persister,
       maxAge: MAX_AGE_MS,
       dehydrateOptions: {
-        shouldDehydrateQuery: (query: { meta?: Record<string, unknown>; state: { status: string } }) =>
-          query.meta?.persist === true && query.state.status === 'success',
+        shouldDehydrateQuery: (query: Query) => query.meta?.persist === true && query.state.status === 'success',
       },
     }),
     [persister],

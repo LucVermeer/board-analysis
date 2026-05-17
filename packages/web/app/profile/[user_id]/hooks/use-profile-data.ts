@@ -55,7 +55,10 @@ class ProfileNotFoundError extends Error {
   }
 }
 
-const PROFILE_STALE_TIME_MS = 5 * 60 * 1000;
+// Cache survives 24h in IDB but is always considered stale on mount: each
+// visit serves data from the persisted cache instantly, then fires a
+// background refetch. `staleTime` defaults to 0 and `refetchOnMount: 'always'`
+// enforces the revalidation regardless of `initialDataUpdatedAt`.
 const PROFILE_GC_TIME_MS = 24 * 60 * 60 * 1000;
 
 export function useProfileData(userId: string, initialData?: InitialData) {
@@ -93,12 +96,10 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       } satisfies UserProfile;
     },
     enabled: !initialData?.initialNotFound,
-    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
     refetchOnMount: 'always',
     retry: (failureCount, error) => !(error instanceof ProfileNotFoundError) && failureCount < 3,
     initialData: profileInitial,
-    initialDataUpdatedAt: profileInitial ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -138,11 +139,9 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       );
       return collected;
     },
-    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
     refetchOnMount: 'always',
     initialData: ticksInitial,
-    initialDataUpdatedAt: ticksInitial ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -155,11 +154,9 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       const response = await client.request<GetUserProfileStatsQueryResponse>(GET_USER_PROFILE_STATS, variables);
       return response.userProfileStats;
     },
-    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
     refetchOnMount: 'always',
     initialData: profileStatsInitial,
-    initialDataUpdatedAt: profileStatsInitial ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -173,11 +170,9 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       });
       return response.userClimbPercentile;
     },
-    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
     refetchOnMount: 'always',
     initialData: percentileInitial,
-    initialDataUpdatedAt: percentileInitial !== undefined ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -291,6 +286,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     setToDate,
 
     // Board stats
+    allBoardsTicks,
     filteredLogbook,
     weeklyBars,
 

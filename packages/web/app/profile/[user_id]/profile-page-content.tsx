@@ -53,27 +53,30 @@ export default function ProfilePageContent({
   const { gradeFormat } = useGradeFormat();
   const { t } = useTranslation('profile');
 
-  const { loading, notFound, profile, setProfile, isOwnProfile, statisticsSummary } = useProfileData(userId, {
-    initialProfile: initialProfile ?? undefined,
-    initialProfileStats: initialProfileStats ?? undefined,
-    initialPercentile,
-    initialAllBoardsTicks,
-    initialLogbook,
-    initialIsOwnProfile,
-    initialNotFound,
-  });
+  const { loading, notFound, profile, setProfile, isOwnProfile, statisticsSummary, allBoardsTicks } = useProfileData(
+    userId,
+    {
+      initialProfile: initialProfile ?? undefined,
+      initialProfileStats: initialProfileStats ?? undefined,
+      initialPercentile,
+      initialAllBoardsTicks,
+      initialLogbook,
+      initialIsOwnProfile,
+      initialNotFound,
+    },
+  );
 
-  // Build overview bars: last 3 months across all boards
+  // Build overview bars from the live cache rather than the SSR-only prop, so
+  // the chart updates after a tick mutation invalidates ['userTicks', ...].
   const overviewBars = useMemo(() => {
-    if (!initialAllBoardsTicks) return null;
-    const allTicks = Object.values(initialAllBoardsTicks).flat();
+    const allTicks = Object.values(allBoardsTicks).flat();
     if (allTicks.length === 0) return null;
     const now = new Date();
     const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
     const fromDate = threeMonthsAgo.toISOString().split('T')[0];
     const toDate = now.toISOString().split('T')[0];
     return buildWeeklyBars(allTicks, fromDate, toDate, gradeFormat);
-  }, [initialAllBoardsTicks, gradeFormat]);
+  }, [allBoardsTicks, gradeFormat]);
 
   const sharedDisplayName = useMemo(() => profile?.profile?.displayName || profile?.name || null, [profile]);
 

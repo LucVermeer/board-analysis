@@ -75,6 +75,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Suspense fallback={null}>
           <AnalyticsClient />
         </Suspense>
+        {/* QueryClientProvider sits inside SessionProviderWrapper so its
+            PersistQueryClientProvider can read useSession() — do not reorder. */}
         <SessionProviderWrapper>
           <QueryClientProvider>
             <AppRouterCacheProvider>

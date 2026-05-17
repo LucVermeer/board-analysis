@@ -274,6 +274,63 @@ describe('useProfileData', () => {
     expect(result.current.hardestFlash).toBeNull();
   });
 
+  it('fires background refetches even when initial data is present (SWR behaviour)', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'user-1',
+        email: undefined,
+        name: 'Refreshed User',
+        image: null,
+        profile: null,
+        credentials: [],
+        followerCount: 7,
+        followingCount: 1,
+        isFollowedByMe: false,
+      }),
+    } as Response);
+    mockRequest.mockImplementation(async (query: unknown) => {
+      if (query === GET_USER_PROFILE_STATS) {
+        return { userProfileStats: { totalDistinctClimbs: 99, layoutStats: [] } };
+      }
+      if (query === GET_USER_CLIMB_PERCENTILE) {
+        return { userClimbPercentile: { totalDistinctClimbs: 99, percentile: 50, totalActiveUsers: 200 } };
+      }
+      if (query === GET_USER_TICKS) {
+        return { userTicks: [] };
+      }
+      return {};
+    });
+
+    renderProfileDataHook(() =>
+      useProfileData('user-1', {
+        initialProfile: {
+          id: 'user-1',
+          email: undefined,
+          name: 'Stale User',
+          image: null,
+          profile: null,
+          credentials: [],
+          followerCount: 0,
+          followingCount: 0,
+          isFollowedByMe: false,
+        },
+        initialProfileStats: { totalDistinctClimbs: 0, layoutStats: [] },
+        initialPercentile: { totalDistinctClimbs: 0, percentile: 0, totalActiveUsers: 0 },
+        initialAllBoardsTicks: { kilter: [] },
+        initialLogbook: [],
+        initialIsOwnProfile: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith('/api/internal/profile/user-1');
+      expect(mockRequest).toHaveBeenCalledWith(GET_USER_PROFILE_STATS, { userId: 'user-1' });
+      expect(mockRequest).toHaveBeenCalledWith(GET_USER_CLIMB_PERCENTILE, { userId: 'user-1' });
+    });
+  });
+
   it('seeds percentile from initial data without waiting on a fetch', () => {
     const initialPercentile = {
       totalDistinctClimbs: 12,

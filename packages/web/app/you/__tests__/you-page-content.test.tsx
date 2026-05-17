@@ -79,6 +79,7 @@ function mockProfileDataReturn(overrides?: Partial<ReturnType<typeof useProfileD
     isOwnProfile: true,
     selectedBoard: 'all',
     setSelectedBoard: vi.fn(),
+    allBoardsTicks: {},
     filteredLogbook: [],
     unifiedTimeframe: 'all' as const,
     setUnifiedTimeframe: vi.fn(),

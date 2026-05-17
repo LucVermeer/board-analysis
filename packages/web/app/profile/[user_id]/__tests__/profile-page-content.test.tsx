@@ -107,6 +107,7 @@ function mockProfileDataReturn(overrides?: Partial<ReturnType<typeof useProfileD
     isOwnProfile: false,
     selectedBoard: 'all',
     setSelectedBoard: vi.fn(),
+    allBoardsTicks: {},
     filteredLogbook: [],
     unifiedTimeframe: 'all' as const,
     setUnifiedTimeframe: vi.fn(),
@@ -214,10 +215,6 @@ describe('ProfilePageContent', () => {
 
   it('renders overview chart when tick data is available', () => {
     const profile = makeProfile();
-    mockUseProfileData.mockReturnValue(mockProfileDataReturn({ profile }));
-
-    mockBuildWeeklyBars.mockReturnValue([{ label: 'W1', segments: [{ value: 3, color: '#ccc', label: 'V3' }] }]);
-
     const allBoardsTicks = {
       kilter: [
         {
@@ -230,6 +227,9 @@ describe('ProfilePageContent', () => {
         },
       ],
     };
+    mockUseProfileData.mockReturnValue(mockProfileDataReturn({ profile, allBoardsTicks }));
+
+    mockBuildWeeklyBars.mockReturnValue([{ label: 'W1', segments: [{ value: 3, color: '#ccc', label: 'V3' }] }]);
 
     render(<ProfilePageContent userId="user-2" initialAllBoardsTicks={allBoardsTicks} />);
 
