@@ -12,10 +12,9 @@ import type { SimilarClimb } from '@boardsesh/shared-schema';
 import BoardImageLayers from '@/app/components/board-renderer/board-image-layers';
 import BoardCanvasRenderer from '@/app/components/board-renderer/board-canvas-renderer';
 import { useCanvasRendererReady } from '@/app/lib/board-render-worker/worker-manager';
-import { ClimbActions } from '@/app/components/climb-actions';
+import { ClimbActionsDrawer } from '@/app/components/climb-actions';
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
 import LocaleLink from '@/app/components/i18n/locale-link';
-import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { formatSends } from '@/app/lib/format-climb-stats';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
@@ -406,20 +405,8 @@ function SimilarClimbActionsDrawer({ climb, boardType, onClose }: SimilarClimbAc
 
   if (!boardDetails) return null;
 
-  const stub = buildClimbStub(climb, boardType);
-
   return (
-    <SwipeableDrawer title={stub.name || ''} placement="bottom" open onClose={onClose} swipeEnabled={false}>
-      <Box sx={{ p: 2 }}>
-        <ClimbActions
-          climb={stub}
-          boardDetails={boardDetails}
-          angle={stub.angle}
-          viewMode="list"
-          onActionComplete={onClose}
-        />
-      </Box>
-    </SwipeableDrawer>
+    <ClimbActionsDrawer open onClose={onClose} climb={buildClimbStub(climb, boardType)} boardDetails={boardDetails} />
   );
 }
 
