@@ -9,6 +9,8 @@ import {
   REPLACE_QUEUE_ITEM,
   TAKE_CONTROL,
   RELEASE_CONTROL,
+  CONFIRM_CLIMB_ON_WALL,
+  SET_SESSION_BOARD_SERIAL,
 } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import { type Session, toClimbQueueItemInput } from '../types';
@@ -41,6 +43,21 @@ export type QueueMutationsActions = {
    * isn't currently the driver. In solo, also a backend no-op.
    */
   releaseControl: () => Promise<void>;
+  /**
+   * Tell the backend that this client's phone has just relayed `climbUuid` to
+   * the wall over BLE. The server broadcasts a `WallConfirmedClimb` event so
+   * other party participants can flip their lightbulb to "confirmed" and
+   * dismiss their fallback timer. No-op in solo (no session) — solo drives the
+   * local wall-confirm bus directly from `BluetoothAutoSender`.
+   */
+  confirmClimbOnWall: (climbUuid: string) => Promise<void>;
+  /**
+   * Record the BLE serial this client just paired to as the session's
+   * `lastConnectedBoardSerial`. Other mobile participants can use the
+   * broadcast `SessionBoardSerialChanged` to auto-connect to the same
+   * physical board. No-op in solo.
+   */
+  setSessionBoardSerial: (serial: string) => Promise<void>;
 };
 
 /**
@@ -201,6 +218,37 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     });
   }, []);
 
+  const confirmClimbOnWall = useCallback(async (climbUuid: string) => {
+    const session = sessionRef.current;
+    // Solo or pre-connect: nothing to broadcast to. The local wall-confirm bus
+    // is fed directly by `BluetoothAutoSender` for solo's drawer timer.
+    if (!clientRef.current || !session?.id) return;
+    try {
+      await execute(clientRef.current, {
+        query: CONFIRM_CLIMB_ON_WALL,
+        variables: { sessionId: session.id, climbUuid },
+      });
+    } catch (error) {
+      // Confirmation is best-effort — the BLE send already succeeded by the
+      // time we get here, so swallow transport errors rather than surfacing
+      // them to the user.
+      console.error('Failed to broadcast wall confirmation:', error);
+    }
+  }, []);
+
+  const setSessionBoardSerial = useCallback(async (serial: string) => {
+    const session = sessionRef.current;
+    if (!clientRef.current || !session?.id) return;
+    try {
+      await execute(clientRef.current, {
+        query: SET_SESSION_BOARD_SERIAL,
+        variables: { sessionId: session.id, serial },
+      });
+    } catch (error) {
+      console.error('Failed to set session board serial:', error);
+    }
+  }, []);
+
   return {
     addQueueItem,
     removeQueueItem,
@@ -210,5 +258,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     replaceQueueItem,
     takeControl,
     releaseControl,
+    confirmClimbOnWall,
+    setSessionBoardSerial,
   };
 }

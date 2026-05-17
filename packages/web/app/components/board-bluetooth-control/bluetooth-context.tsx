@@ -19,6 +19,8 @@ import { DevicePickerDialog } from './device-picker-dialog';
 import { BoardConfigMismatchDialog } from './board-config-mismatch-dialog';
 import { AutoConnectHandler } from './auto-connect-handler';
 import { parseSerialNumber } from './bluetooth-aurora';
+import { emitWallConfirm } from './wall-confirm-bus';
+import { usePersistentSessionActions, usePersistentSessionState } from '@/app/components/persistent-session';
 import { useSnackbar } from '../providers/snackbar-provider';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { resolveSerialNumbers, type ResolvedBoardEntry } from '@/app/lib/ble/resolve-serials';
@@ -70,6 +72,7 @@ const BluetoothContext = createContext<BluetoothContextValue | null>(null);
 function BluetoothAutoSender({
   sendFramesToBoard,
   layoutName,
+  onWallConfirmed,
 }: {
   sendFramesToBoard: (
     frames: string,
@@ -78,6 +81,14 @@ function BluetoothAutoSender({
     climbUuid?: string,
   ) => Promise<boolean | undefined>;
   layoutName: string;
+  /**
+   * Fires after a successful BLE write. Always emits onto the local
+   * wall-confirm bus (so the same phone's drawer timer dismisses); in party
+   * mode it additionally broadcasts via `confirmClimbOnWall` so non-BLE
+   * participants see the confirmation. Keeping both paths in one callback
+   * means BluetoothAutoSender doesn't need to know whether a session exists.
+   */
+  onWallConfirmed: (climbUuid: string) => void;
 }) {
   const { currentClimbQueueItem } = useCurrentClimb();
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -107,6 +118,10 @@ function BluetoothAutoSender({
             climbUuid: currentClimbQueueItem.climb?.uuid,
             boardLayout: layoutName,
           });
+          // Wall actually received the climb — emit confirmation so the
+          // drawer's lightbulb timer dismisses (locally on this phone, and
+          // via WS broadcast for other party members).
+          onWallConfirmed(currentClimbQueueItem.climb.uuid);
         } else if (result === false) {
           track('Climb Sent to Board Failure', {
             climbUuid: currentClimbQueueItem.climb?.uuid,
@@ -127,7 +142,7 @@ function BluetoothAutoSender({
     return () => {
       controller.abort();
     };
-  }, [currentClimbQueueItem, sendFramesToBoard, layoutName]);
+  }, [currentClimbQueueItem, sendFramesToBoard, layoutName, onWallConfirmed]);
 
   return null;
 }
@@ -144,11 +159,51 @@ export function BluetoothProvider({
 }) {
   const [ledColorOverrides, setLedColorOverrides] = useLedColorOverrides();
 
+  // Party-session hooks pulled here so the AutoSender (mounted only when
+  // connected) and the connect callback share the same references. The
+  // BluetoothProvider always mounts inside a PersistentSessionProvider in
+  // the live tree, so these calls always resolve. Tests must provide a mock.
+  const persistentSessionActions = usePersistentSessionActions();
+  const persistentSessionState = usePersistentSessionState();
+  const sessionId = persistentSessionState.session?.id ?? null;
+  const { confirmClimbOnWall, setSessionBoardSerial } = persistentSessionActions;
+  // Mirror the live sessionId into a ref so the BLE-connect callback
+  // (created during useBoardBluetooth init) reads the current value, not a
+  // stale snapshot from the first render.
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  const handleConnectSuccess = useCallback(
+    (serial: string | null) => {
+      if (!serial) return;
+      if (sessionIdRef.current) {
+        void setSessionBoardSerial(serial);
+      }
+    },
+    [setSessionBoardSerial],
+  );
+
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({
     boardDetails,
     boardUuid,
     ledColorOverrides,
+    onConnectSuccess: handleConnectSuccess,
   });
+
+  // Always emit on the local wall-confirm bus (so the same phone's drawer
+  // dismisses its 2s fallback timer); only fire the WS mutation when a
+  // session exists (solo has no peers to notify).
+  const handleWallConfirmed = useCallback(
+    (climbUuid: string) => {
+      emitWallConfirm(climbUuid);
+      if (sessionIdRef.current) {
+        void confirmClimbOnWall(climbUuid);
+      }
+    },
+    [confirmClimbOnWall],
+  );
   const { token, isAuthenticated } = useWsAuthToken();
   const { showMessage } = useSnackbar();
   const { t } = useTranslation('settings');
@@ -444,7 +499,11 @@ export function BluetoothProvider({
   return (
     <BluetoothContext.Provider value={value}>
       {isConnected && partyMode === 'off' && (
-        <BluetoothAutoSender sendFramesToBoard={sendFramesToBoard} layoutName={boardDetails.layout_name ?? ''} />
+        <BluetoothAutoSender
+          sendFramesToBoard={sendFramesToBoard}
+          layoutName={boardDetails.layout_name ?? ''}
+          onWallConfirmed={handleWallConfirmed}
+        />
       )}
       {activePickerState && (
         <DevicePickerDialog

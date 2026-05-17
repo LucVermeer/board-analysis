@@ -176,6 +176,10 @@ export type QueueDataType = {
   /** Whether the local user currently drives the wall (true in solo; in party,
    *  true when local participant id matches `driverParticipantId`). */
   isDriver?: boolean;
+  /** Most recent BLE board serial the session has paired to (party). Null in
+   *  solo and when no member has ever paired. Used by the drawer's lightbulb
+   *  fallback to auto-connect to the same board another member is paired to. */
+  lastConnectedBoardSerial?: string | null;
   isBackendMode?: boolean;
   hasConnected?: boolean;
   connectionError?: Error | null;

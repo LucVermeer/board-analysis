@@ -83,6 +83,11 @@ export type SessionDataType = {
    *  True in solo regardless of state; in party, true when the local
    *  `participantId` matches `driverParticipantId`. */
   isDriver: boolean;
+  /** Most recently observed BLE board serial for this session, or null when
+   *  unset (solo, or party with no member ever paired). The drawer's
+   *  lightbulb fallback uses this to auto-connect to the same board another
+   *  member is already paired to, skipping the picker. */
+  lastConnectedBoardSerial: string | null;
   isBackendMode: boolean;
   hasConnected: boolean;
   connectionError: Error | null;

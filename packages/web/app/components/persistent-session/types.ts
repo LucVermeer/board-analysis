@@ -27,6 +27,14 @@ export type Session = {
    * presentation/legacy.
    */
   driverParticipantId: string | null;
+  /**
+   * Most recently observed BLE board serial for this session, or null when no
+   * member has ever paired. Set via the setSessionBoardSerial mutation and
+   * kept in sync via the SessionBoardSerialChanged broadcast. Mobile clients
+   * use this to auto-connect to the same physical board another member is
+   * already paired with.
+   */
+  lastConnectedBoardSerial: string | null;
   clientId: string;
   goal?: string | null;
   isPublic?: boolean;
@@ -88,6 +96,12 @@ export type PersistentSessionActionsType = {
   // treat takeControl(climb) as a drop-in for setCurrentClimb(climb).
   takeControl: (climb?: LocalClimbQueueItem | null) => Promise<void>;
   releaseControl: () => Promise<void>;
+
+  // Wall-confirm + board-serial mutations. Both are no-ops in solo (no
+  // active session) so callers can fire them unconditionally without an
+  // `if (sessionId)` guard at the call site.
+  confirmClimbOnWall: (climbUuid: string) => Promise<void>;
+  setSessionBoardSerial: (serial: string) => Promise<void>;
 
   // Event subscription for board-level components
   subscribeToQueueEvents: (callback: (event: SubscriptionQueueEvent) => void) => () => void;

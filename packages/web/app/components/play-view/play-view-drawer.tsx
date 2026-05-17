@@ -35,6 +35,8 @@ import { ShareBoardButton } from '../board-page/share-button';
 import { useBoardProvider } from '../board-provider/board-provider-context';
 import SwipeBoardCarousel from '../board-renderer/swipe-board-carousel';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
+import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
+import { useWallConfirmFallback } from './use-wall-confirm-fallback';
 import { themeTokens } from '@/app/theme/theme-config';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import AngleSelector from '../board-page/angle-selector';
@@ -545,6 +547,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const { viewOnlyMode, isPersistentSessionActive, isDriver } = isOpen ? sessionData : deferredSession;
   const { mirrorClimb, getNextClimbQueueItem, getPreviousClimbQueueItem, setCurrentClimbQueueItem, takeControl } =
     useQueueActions();
+  const { isConnected: isBluetoothConnected, isBluetoothSupported, connect: bluetoothConnect } = useBluetoothContext();
+  const { lastConnectedBoardSerial } = isOpen ? sessionData : deferredSession;
 
   // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
   // callers via the open-drawer event payload) takes precedence over the wall
@@ -686,6 +690,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     if (!prev) return;
     advanceTo(prev, 'playViewDrawer', 'previous');
   }, [getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, advanceTo]);
+  // Wall-confirm watcher: armed by handleLightbulbClick, dismissed by the
+  // local wall-confirm bus or fires a connect fallback after 2 s. Owns its
+  // own unmount cleanup so the drawer doesn't need to thread that wiring.
+  const { armWatcher: armWallConfirmWatcher } = useWallConfirmFallback({
+    isBluetoothConnected,
+    isBluetoothSupported,
+    lastConnectedBoardSerial,
+    bluetoothConnect,
+  });
+
   /**
    * Lightbulb press: the queue-control-bar pivot's primary "send/take" gesture.
    * Routes through `queueActions.takeControl(climb)`, which:
@@ -696,6 +710,15 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
    *  - In party + driver: re-broadcasts the climb (the resolver's atomic-swap
    *    suppresses the redundant DriverChanged event; CurrentClimbChanged still
    *    fires so peers see the new wall climb).
+   *
+   * In addition to the broadcast, arm a 2-second wall-confirm watcher: if no
+   * `WallConfirmedClimb` arrives in that window (via the local bus from
+   * BluetoothAutoSender or via the WS broadcast from a BLE-paired peer),
+   * run a fallback to get the climb onto the wall:
+   *  - Already BLE-connected → trust the AutoSender's in-flight write.
+   *  - Have a stored session board serial + running in the native shell →
+   *    auto-connect to that serial without showing the picker.
+   *  - Otherwise → kick off connect() which opens the device picker dialog.
    */
   const handleLightbulbClick = useCallback(() => {
     if (!currentClimb) return;
@@ -711,7 +734,22 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
       mode: isPersistentSessionActive ? 'party' : 'solo',
       climbUuid: currentClimb.uuid,
     });
-  }, [currentClimb, takeControl, setDrawerDisplayedItem, isDriver, isPersistentSessionActive]);
+    armWallConfirmWatcher({
+      climbUuid: currentClimb.uuid,
+      frames: currentClimb.frames,
+      mirrored: !!currentClimb.mirrored,
+      mode: isPersistentSessionActive ? 'party' : 'solo',
+      boardLayout: boardDetails.layout_name ?? '',
+    });
+  }, [
+    currentClimb,
+    takeControl,
+    setDrawerDisplayedItem,
+    isDriver,
+    isPersistentSessionActive,
+    armWallConfirmWatcher,
+    boardDetails.layout_name,
+  ]);
   const handleNextNavClick = useCallback(() => {
     const next = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
     if (!next) return;

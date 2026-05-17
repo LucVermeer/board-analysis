@@ -708,6 +708,12 @@ export function useSessionLifecycle({
                         // `isLeader` untouched here — leader semantics are
                         // presentation/legacy and ride on `LeaderChanged`.
                         return { ...prev, driverParticipantId: event.driverParticipantId };
+                      case 'SessionBoardSerialChanged':
+                        // Mobile clients consult this when running the
+                        // lightbulb fallback so the second phone joining
+                        // a multi-board gym can auto-connect to the same
+                        // physical board the first phone is paired to.
+                        return { ...prev, lastConnectedBoardSerial: event.lastConnectedBoardSerial };
                       case 'SessionEnded':
                         if (DEBUG) console.info('[PersistentSession] Session ended:', event.reason);
                         removePreference(ACTIVE_SESSION_KEY).catch(() => {});

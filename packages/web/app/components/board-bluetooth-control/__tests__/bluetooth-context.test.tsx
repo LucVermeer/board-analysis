@@ -112,8 +112,20 @@ vi.mock('../bluetooth-status-store', () => ({
 vi.mock('@/app/lib/ble/capacitor-utils', () => ({
   isCapacitor: vi.fn(() => false),
   isCapacitorWebView: vi.fn(() => false),
+  isNativeApp: vi.fn(() => false),
   waitForCapacitor: vi.fn().mockResolvedValue(false),
   CAPACITOR_BRIDGE_TIMEOUT_MS: 2000,
+}));
+
+const mockConfirmClimbOnWall = vi.fn().mockResolvedValue(undefined);
+const mockSetSessionBoardSerial = vi.fn().mockResolvedValue(undefined);
+let mockPersistentSessionState: { session: { id: string } | null } = { session: null };
+vi.mock('@/app/components/persistent-session', () => ({
+  usePersistentSessionActions: () => ({
+    confirmClimbOnWall: mockConfirmClimbOnWall,
+    setSessionBoardSerial: mockSetSessionBoardSerial,
+  }),
+  usePersistentSessionState: () => mockPersistentSessionState,
 }));
 
 let mockCurrentClimbQueueItem: {
@@ -178,6 +190,9 @@ describe('BluetoothProvider', () => {
     lastMismatchProps = null;
     mockAuth = { token: null, isAuthenticated: false };
     mockResolveSerialNumbers.mockResolvedValue(new Map());
+    mockPersistentSessionState = { session: null };
+    mockConfirmClimbOnWall.mockResolvedValue(undefined);
+    mockSetSessionBoardSerial.mockResolvedValue(undefined);
   });
 
   describe('useBluetoothContext', () => {

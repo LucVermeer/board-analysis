@@ -28,6 +28,7 @@ import { usePendingUpdateCleanup } from './hooks/use-pending-update-cleanup';
 import { useMutationGuard } from './hooks/use-mutation-guard';
 import { useOfflineQueueBuffer } from './hooks/use-offline-queue-buffer';
 import { useOfflineReconciliation } from './hooks/use-offline-reconciliation';
+import { emitWallConfirm } from '../board-bluetooth-control/wall-confirm-bus';
 import { useQueueAddValidator } from '../board-lock/use-queue-add-validator';
 import type {
   GraphQLQueueContextType,
@@ -130,6 +131,12 @@ export const GraphQLQueueProvider = ({
   // concept so we report null and treat `isDriver` as true).
   const driverParticipantId = isPersistentSessionActive ? persistentSession.driverParticipantId : null;
   const isDriver = deriveIsDriver({ isPersistentSessionActive, participantId, driverParticipantId });
+  // Pull the session's currently-known BLE board serial through so consumers
+  // (the drawer's lightbulb fallback) don't have to reach into the
+  // persistent-session context directly.
+  const lastConnectedBoardSerial = isPersistentSessionActive
+    ? (persistentSession.session?.lastConnectedBoardSerial ?? null)
+    : null;
   const hasConnected = isPersistentSessionActive ? persistentSession.hasConnected : false;
   const users = useMemo(
     () => (isPersistentSessionActive ? persistentSession.users : []),
@@ -200,6 +207,21 @@ export const GraphQLQueueProvider = ({
     persistentSession,
     needsResync: state.needsResync,
   });
+
+  // --- Wall-confirm relay ---
+  // The BLE-paired phone broadcasts WallConfirmedClimb whenever it relays a
+  // climb to the wall. Republish on the local bus so the drawer's lightbulb
+  // timer (subscribed locally) dismisses the same way it does in solo,
+  // regardless of whether this client did the BLE write or saw a peer do it.
+  useEffect(() => {
+    if (!isPersistentSessionActive) return;
+    const unsubscribe = persistentSession.subscribeToSessionEvents((event) => {
+      if (event.__typename === 'WallConfirmedClimb') {
+        emitWallConfirm(event.climbUuid);
+      }
+    });
+    return unsubscribe;
+  }, [isPersistentSessionActive, persistentSession.subscribeToSessionEvents]);
 
   // --- Pending update cleanup ---
   usePendingUpdateCleanup({
@@ -848,6 +870,7 @@ export const GraphQLQueueProvider = ({
       isLeader,
       driverParticipantId,
       isDriver,
+      lastConnectedBoardSerial,
       isBackendMode: !!backendUrl,
       hasConnected,
       connectionError,
@@ -879,6 +902,7 @@ export const GraphQLQueueProvider = ({
       isLeader,
       driverParticipantId,
       isDriver,
+      lastConnectedBoardSerial,
       backendUrl,
       hasConnected,
       connectionError,
@@ -950,6 +974,7 @@ export const GraphQLQueueProvider = ({
       isLeader,
       driverParticipantId,
       isDriver,
+      lastConnectedBoardSerial,
       isBackendMode: !!backendUrl,
       hasConnected,
       connectionError,
@@ -970,6 +995,7 @@ export const GraphQLQueueProvider = ({
       isLeader,
       driverParticipantId,
       isDriver,
+      lastConnectedBoardSerial,
       backendUrl,
       hasConnected,
       connectionError,
