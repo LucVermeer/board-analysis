@@ -180,6 +180,13 @@ export async function findExactDuplicateMatch({
        AND ${dbSchema.boardClimbStats.angle} = ${dbSchema.boardClimbs.angle}
       WHERE ${dbSchema.boardClimbs.boardType} = ${boardType}
         AND ${dbSchema.boardClimbs.layoutId} = ${layoutId}
+        -- Angle is deliberately NOT a predicate. A climb is the same physical
+        -- route regardless of board angle; setting it up at 30° vs 40° is a
+        -- session choice, not a new climb. Same holds at a different angle
+        -- still collides with the existing row and is blocked from publish.
+        -- Angle is still in SELECT / GROUP BY so the error message can cite
+        -- the existing climb's saved angle, and the LEFT JOIN to stats
+        -- attaches the ascensionist count for ranking the match.
         AND ${dbSchema.boardClimbs.isDraft} = FALSE
         AND ${dbSchema.boardClimbs.isListed} IS NOT FALSE
         AND ${dbSchema.boardClimbs.framesCount} = 1
@@ -425,6 +432,10 @@ export async function acquireDuplicateGateLock(
   signature: string,
 ): Promise<void> {
   if (!signature) return;
+  // Lock key composition mirrors the gate's WHERE clause: (board, layout,
+  // hold-set). Angle is intentionally absent — see `findExactDuplicateMatch`
+  // for the rationale — so two callers publishing the same holds at
+  // different angles still serialize behind the same lock.
   await executor.execute(
     sql`SELECT pg_advisory_xact_lock(${CLIMB_DUPLICATE_LOCK_NAMESPACE}, hashtext(${`${boardType}|${layoutId}|${signature}`}))`,
   );
