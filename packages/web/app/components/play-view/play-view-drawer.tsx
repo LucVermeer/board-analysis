@@ -429,6 +429,13 @@ type PlayViewDrawerProps = {
    *  the drawer displays the wall climb directly). */
   drawerDisplayedItem?: ClimbQueueItem | null;
   setDrawerDisplayedItem?: (item: ClimbQueueItem | null) => void;
+  /**
+   * When true, the drawer paints in its open state on first mount with no
+   * slide-in animation. Used on /view/{uuid} hard-refresh so the drawer is
+   * visible immediately on SSR paint. After the first mount this prop is a
+   * no-op — subsequent close/open cycles animate normally.
+   */
+  initialOpenWithoutAnimation?: boolean;
 };
 
 const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
@@ -439,6 +446,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   onPaperRef,
   drawerDisplayedItem = null,
   setDrawerDisplayedItem,
+  initialOpenWithoutAnimation = false,
 }) => {
   const { t } = useTranslation('session');
   const isOpen = activeDrawer === 'play';
@@ -684,11 +692,17 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     };
   }, []);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // When opened from a /view/ direct hit (initialOpenWithoutAnimation), seed
+  // drawerOpen synchronously so the SSR-rendered DOM already has the drawer
+  // visible. Otherwise start closed and let the open-effect below drive the
+  // animation as usual.
+  const [drawerOpen, setDrawerOpen] = useState(() => initialOpenWithoutAnimation && isOpen);
   const openRafRef = useRef<number>(0);
-  const hasBeenMountedRef = useRef(false);
+  // Seed `hasBeenMounted` to true when we open synchronously so the open
+  // effect below doesn't try to RAF the transition on the same render.
+  const hasBeenMountedRef = useRef(initialOpenWithoutAnimation && isOpen);
 
-  const [contentReady, setContentReady] = useState(false);
+  const [contentReady, setContentReady] = useState(() => initialOpenWithoutAnimation && isOpen);
   useEffect(() => {
     const setReady = () => {
       setContentReady(true);
@@ -934,6 +948,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
       paperRef={combinedPaperRef}
       swipeEnabled={!isActionsOpen && !isQueueOpen && !isPlaylistSelectorOpen}
       showDragHandle
+      disableEnterAnimation={initialOpenWithoutAnimation}
       styles={{
         body: { padding: 0 },
         wrapper: { height: '100%', backgroundColor: 'var(--semantic-background)' },

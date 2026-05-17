@@ -1,6 +1,6 @@
 import React from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
-import type { BoardRouteParametersWithUuid, SearchRequestPagination } from '@/app/lib/types';
+import type { BoardRouteParametersWithUuid } from '@/app/lib/types';
 import { getClimb } from '@/app/lib/data/queries';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import {
@@ -13,8 +13,8 @@ import { parseRouteParams } from '@/app/lib/url-utils.server';
 
 import type { Metadata } from 'next';
 import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-list';
-import { fetchListPageData } from '@/app/lib/data/list-page-data.server';
-import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
+import { buildOgBoardRenderUrl, buildOverlayUrl } from '@/app/components/board-renderer/util';
+import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createPageMetadata } from '@/app/lib/seo/metadata';
 import ClimbViewSeoFragment from '@/app/components/climb-detail/climb-view-seo-fragment';
@@ -64,11 +64,8 @@ export async function generateMetadata(props: { params: Promise<BoardRouteParame
   }
 }
 
-export default async function ClimbViewPage(props: {
-  params: Promise<BoardRouteParametersWithUuid>;
-  searchParams: Promise<SearchRequestPagination>;
-}) {
-  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
+export default async function ClimbViewPage(props: { params: Promise<BoardRouteParametersWithUuid> }) {
+  const params = await props.params;
 
   try {
     const { parsedParams, isNumericFormat } = await parseRouteParams(params);
@@ -107,9 +104,14 @@ export default async function ClimbViewPage(props: {
       }
     }
 
-    const listData = await fetchListPageData(parsedParams, searchParams);
-    if (!listData) notFound();
-    const { boardDetails, searchResponse, preloadUrl } = listData;
+    const boardDetails = getBoardDetailsForBoard(parsedParams);
+
+    // Warm the full-resolution overlay for the viewed climb so the drawer's
+    // board render appears as soon as possible after hydration. The climbs
+    // list is no longer SSR-fetched here — the drawer is the primary surface
+    // on this route, and React Query loads the list async on mount.
+    scheduleOverlayWarming({ boardDetails, climbs: [currentClimb], variant: 'full' });
+    const preloadUrl = currentClimb.frames ? buildOverlayUrl(boardDetails, currentClimb.frames, false) : null;
 
     return (
       <>
@@ -118,8 +120,8 @@ export default async function ClimbViewPage(props: {
         <BoardPageClimbsList
           {...parsedParams}
           boardDetails={boardDetails}
-          initialClimbs={searchResponse.climbs}
-          initialHasMore={searchResponse.hasMore}
+          initialClimbs={[]}
+          initialHasMore
           initialOpenClimb={currentClimb}
         />
       </>

@@ -43,6 +43,13 @@ export type SwipeableDrawerProps = {
   keepMounted?: boolean;
   /** Ref forwarded to the MUI Paper element inside the drawer. */
   paperRef?: React.Ref<HTMLDivElement>;
+  /**
+   * When true, the MUI Slide transition skips the enter animation on the
+   * drawer's very first paint (after that, normal open/close transitions
+   * resume). Use for drawers that should appear already-open on a route's
+   * first render — e.g. the play view on a direct hit to /view/{uuid}.
+   */
+  disableEnterAnimation?: boolean;
   children?: React.ReactNode;
 };
 
@@ -67,6 +74,7 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
   keepMounted = false,
   paperRef,
   disableBackdropClick,
+  disableEnterAnimation = false,
   open,
   children,
 }) => {
@@ -350,12 +358,17 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
     // Intentionally empty: opening is controlled by parent state
   }, []);
 
+  // `appear` controls only the very first mount transition. When set false
+  // and the drawer mounts already-open, MUI skips the slide-in animation.
+  // After mount the prop has no effect, so subsequent open/close cycles
+  // animate normally without any extra bookkeeping.
   const slideProps = useMemo(
     () => ({
       onExited: () => userOnTransitionEnd?.(false),
       onEntered: () => userOnTransitionEnd?.(true),
+      appear: !disableEnterAnimation,
     }),
-    [userOnTransitionEnd],
+    [userOnTransitionEnd, disableEnterAnimation],
   );
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {

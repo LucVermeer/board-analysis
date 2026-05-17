@@ -11,7 +11,11 @@
       "description": "{{climbName}} - {{grade}} par {{setter}}. Qualité : {{quality}}/5. Enchaînements : {{ascents}}",
       "imageAlt": "{{climbName}} - {{grade}} sur le board {{boardName}}",
       "fallbackTitle": "Bloc",
-      "fallbackDescription": "Voir les détails du bloc et les vidéos de beta"
+      "fallbackDescription": "Voir les détails du bloc et les vidéos de beta",
+      "seoHeading": "{{climbName}} — {{grade}}",
+      "seoSummary": "Bloc {{boardName}} {{layoutName}}",
+      "seoSetterSuffix": " ouvert par {{setter}}",
+      "seoAscentsSuffix": ". {{ascents}} enchaînements enregistrés."
     },
     "play": {
       "title": "{{climbName}} - {{grade}} | Mode Play",

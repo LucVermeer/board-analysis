@@ -84,14 +84,11 @@ vi.mock('@/app/lib/url-utils', () => ({
 
 vi.mock('@/app/components/board-renderer/util', () => ({
   buildOgBoardRenderUrl: vi.fn(() => '/api/internal/board-render?board_name=kilter&variant=og&format=png'),
+  buildOverlayUrl: vi.fn(() => '/api/internal/board-render?board_name=kilter&variant=overlay'),
 }));
 
 // Stubs for the page body's imports — generateMetadata never uses them, but
-// importing the page module pulls them in, and `list-page-data.server` uses
-// `import 'server-only'` which blows up under JSDom.
-vi.mock('@/app/lib/data/list-page-data.server', () => ({
-  fetchListPageData: vi.fn(async () => null),
-}));
+// importing the page module pulls them in.
 vi.mock('@/app/components/board-page/board-page-climbs-list', () => ({
   default: () => null,
 }));

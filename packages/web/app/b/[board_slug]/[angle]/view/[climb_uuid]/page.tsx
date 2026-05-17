@@ -1,29 +1,24 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import type { SearchRequestPagination } from '@/app/lib/types';
 import { resolveBoardBySlug, boardToRouteParams } from '@/app/lib/board-slug-utils';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getClimb } from '@/app/lib/data/queries';
 import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-list';
-import { fetchListPageData } from '@/app/lib/data/list-page-data.server';
 import { extractUuidFromSlug } from '@/app/lib/url-utils';
-import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
+import { buildOgBoardRenderUrl, buildOverlayUrl } from '@/app/components/board-renderer/util';
+import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createPageMetadata } from '@/app/lib/seo/metadata';
 import ClimbViewSeoFragment from '@/app/components/climb-detail/climb-view-seo-fragment';
 
 type BoardSlugViewRouteParams = { board_slug: string; angle: string; climb_uuid: string };
 
-type BoardSlugViewMetadataProps = {
+type BoardSlugViewPageProps = {
   params: Promise<BoardSlugViewRouteParams>;
 };
 
-type BoardSlugViewPageProps = BoardSlugViewMetadataProps & {
-  searchParams: Promise<SearchRequestPagination>;
-};
-
-export async function generateMetadata(props: BoardSlugViewMetadataProps): Promise<Metadata> {
+export async function generateMetadata(props: BoardSlugViewPageProps): Promise<Metadata> {
   const params = await props.params;
   const { t, locale } = await getServerTranslation('climbs');
 
@@ -72,7 +67,7 @@ export async function generateMetadata(props: BoardSlugViewMetadataProps): Promi
 }
 
 export default async function BoardSlugViewPage(props: BoardSlugViewPageProps) {
-  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
+  const params = await props.params;
 
   const board = await resolveBoardBySlug(params.board_slug);
   if (!board) {
@@ -85,14 +80,12 @@ export default async function BoardSlugViewPage(props: BoardSlugViewPageProps) {
   };
 
   try {
-    const [currentClimb, listData] = await Promise.all([
-      getClimb(parsedParams),
-      fetchListPageData(parsedParams, searchParams),
-    ]);
-
+    const currentClimb = await getClimb(parsedParams);
     if (!currentClimb) notFound();
-    if (!listData) notFound();
-    const { boardDetails, searchResponse, preloadUrl } = listData;
+
+    const boardDetails = getBoardDetailsForBoard(parsedParams);
+    scheduleOverlayWarming({ boardDetails, climbs: [currentClimb], variant: 'full' });
+    const preloadUrl = currentClimb.frames ? buildOverlayUrl(boardDetails, currentClimb.frames, false) : null;
 
     return (
       <>
@@ -101,8 +94,8 @@ export default async function BoardSlugViewPage(props: BoardSlugViewPageProps) {
         <BoardPageClimbsList
           {...parsedParams}
           boardDetails={boardDetails}
-          initialClimbs={searchResponse.climbs}
-          initialHasMore={searchResponse.hasMore}
+          initialClimbs={[]}
+          initialHasMore
           initialOpenClimb={currentClimb}
         />
       </>
