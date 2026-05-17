@@ -398,7 +398,8 @@
       "publishDuplicateNamed": "This hold pattern matches \"{{name}}\". Toggle Draft to save it without publishing, or change a hold.",
       "publishDuplicateUnnamed": "This hold pattern matches an existing climb. Toggle Draft to save it without publishing, or change a hold.",
       "viewMatchingClimb": "View matching climb",
-      "identicalClimbDrawerTitle": "Identical climb"
+      "identicalClimbDrawerTitle": "Identical climb",
+      "saveFailedFallback": "Failed to save climb. Please try again."
     },
     "settings": {
       "tooltip": "Climb settings",

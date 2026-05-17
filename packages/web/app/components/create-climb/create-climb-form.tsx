@@ -923,7 +923,7 @@ export default function CreateClimbForm({
           target: { kind: 'frames', frames },
         });
       } else {
-        showMessage(error instanceof Error ? error.message : 'Failed to save climb. Please try again.', 'error');
+        showMessage(error instanceof Error ? error.message : t('createClimbForm.alerts.saveFailedFallback'), 'error');
       }
     } finally {
       setIsSaving(false);
@@ -943,6 +943,7 @@ export default function CreateClimbForm({
     savedClimb,
     showMessage,
     syncSavedClimbToQueue,
+    t,
   ]);
 
   // Save climb - MoonBoard
@@ -1093,7 +1094,7 @@ export default function CreateClimbForm({
           target: existingClimbUuid ? { kind: 'climbUuid', climbUuid: existingClimbUuid } : null,
         });
       } else {
-        showMessage(error instanceof Error ? error.message : 'Failed to save climb. Please try again.', 'error');
+        showMessage(error instanceof Error ? error.message : t('createClimbForm.alerts.saveFailedFallback'), 'error');
       }
     } finally {
       setIsSaving(false);
@@ -1116,6 +1117,7 @@ export default function CreateClimbForm({
     savedClimb,
     updateClimb,
     syncSavedClimbToQueue,
+    t,
   ]);
 
   const handleAuthSuccess = useCallback(async () => {

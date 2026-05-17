@@ -737,8 +737,13 @@ describe('climb mutations', () => {
       createMockChain(undefined, (values) => insertCalls.push({ table, values })),
     );
 
-    await expect(
-      climbMutations.saveMoonBoardClimb(
+    // Capture the thrown error so we can assert both the message and the
+    // CLIMB_IS_DUPLICATE GraphQL extension. The frontend's duplicate-error
+    // UX branches on extensions.code, so this is the contract the
+    // saveMoonBoardClimb gate has to honour for parity with saveClimb.
+    let caught: unknown;
+    try {
+      await climbMutations.saveMoonBoardClimb(
         {},
         {
           input: {
@@ -756,8 +761,20 @@ describe('climb mutations', () => {
           },
         },
         makeCtx(),
-      ),
-    ).rejects.toThrow('A MoonBoard climb with the same holds already exists: "Already There"');
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain(
+      'A MoonBoard climb with the same holds already exists: "Already There"',
+    );
+    const extensions = (caught as { extensions?: Record<string, unknown> }).extensions;
+    expect(extensions).toMatchObject({
+      code: 'CLIMB_IS_DUPLICATE',
+      existingClimbUuid: 'existing-uuid',
+      existingClimbName: 'Already There',
+    });
 
     expect(insertCalls).toHaveLength(0);
     expect(mockPublishSocialEvent).not.toHaveBeenCalled();
