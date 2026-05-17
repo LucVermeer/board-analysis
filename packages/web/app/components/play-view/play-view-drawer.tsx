@@ -620,17 +620,28 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const nextItem = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
   const prevItem = getPreviousClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
 
+  // The pivot's preview-vs-broadcast fork: in party, non-drivers preview
+  // (drawer-local state, no wall change); drivers broadcast (wall climb +
+  // BLE send). Solo always broadcasts. Phase 1 routed every party tap to
+  // preview; PR3 narrows that to "party AND not driving" so driver
+  // gestures inside the drawer (swipe, prev/next) walk the queue/
+  // suggestions and update the wall as the spec requires.
   const advanceTo = useCallback(
     (item: ClimbQueueItem, method: string, direction: 'next' | 'previous') => {
-      if (isPersistentSessionActive) {
+      if (isPersistentSessionActive && !isDriver) {
         setDrawerDisplayedItem?.(item);
         track('Queue Navigation', { direction, method, mode: 'preview' });
       } else {
+        // Broadcast path: clear any lingering drawer-local preview so the
+        // drawer's `effectiveItem = drawerDisplayedItem ?? wallClimb`
+        // fall-through reads the freshly-broadcast wall climb instead of a
+        // stale preview from before the user became driver.
+        setDrawerDisplayedItem?.(null);
         setCurrentClimbQueueItem(item);
         track('Queue Navigation', { direction, method, mode: 'broadcast' });
       }
     },
-    [isPersistentSessionActive, setCurrentClimbQueueItem, setDrawerDisplayedItem],
+    [isPersistentSessionActive, isDriver, setCurrentClimbQueueItem, setDrawerDisplayedItem],
   );
 
   const handleSwipeNext = useCallback(() => {
@@ -689,13 +700,18 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const handleLightbulbClick = useCallback(() => {
     if (!currentClimb) return;
     void takeControl(currentClimb);
+    // Once driver, subsequent prev/next/swipe broadcast (per the advanceTo
+    // fork). Clear the drawer-local preview so the drawer reads from the
+    // fresh wall climb instead of the stale preview snapshot from before
+    // the user took control.
+    setDrawerDisplayedItem?.(null);
     track('Wall Control Taken', {
       source: 'lightbulb_drawer',
       previousDriver: isDriver ? 'self' : 'other',
       mode: isPersistentSessionActive ? 'party' : 'solo',
       climbUuid: currentClimb.uuid,
     });
-  }, [currentClimb, takeControl, isDriver, isPersistentSessionActive]);
+  }, [currentClimb, takeControl, setDrawerDisplayedItem, isDriver, isPersistentSessionActive]);
   const handleNextNavClick = useCallback(() => {
     const next = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
     if (!next) return;
