@@ -25,6 +25,7 @@ import {
   CLIMB_DUPLICATE_ERROR_CODE,
   buildDuplicateClimbErrorMessage,
   buildHoldSignature,
+  acquireDuplicateGateLock,
   findExactDuplicateMatch,
   parseFramesToHoldEntries,
 } from './climb-similarity';
@@ -116,103 +117,112 @@ export const climbMutations = {
 
     const framesCount = validated.framesCount ?? 1;
     const holdEntries = parseFramesToHoldEntries(validated.boardType as BoardName, validated.frames);
-
-    // Only gate single-frame climbs. The similarity index defines duplicates
-    // by hold set; multi-frame climbs (dynos with intermediate frames) need a
-    // richer comparison than this PR ships.
-    if (!validated.isDraft && framesCount === 1) {
-      const signature = buildHoldSignature(holdEntries);
-      const existing = await findExactDuplicateMatch({
-        boardType: validated.boardType as BoardName,
-        layoutId: validated.layoutId,
-        signature,
-      });
-      if (existing) {
-        throw new GraphQLError(buildDuplicateClimbErrorMessage(existing.name), {
-          extensions: {
-            code: CLIMB_DUPLICATE_ERROR_CODE,
-            existingClimbUuid: existing.uuid,
-            existingClimbName: existing.name,
-          },
-        });
-      }
-    }
-
     const uuid = generateClimbUuid();
 
-    await db.insert(UNIFIED_TABLES.climbs).values({
-      boardType: validated.boardType,
-      uuid,
-      layoutId: validated.layoutId,
-      userId: ctx.userId!,
-      setterId: null,
-      setterUsername: preferredSetter,
-      name: validated.name,
-      description: validated.description ?? '',
-      angle: validated.angle,
-      framesCount,
-      framesPace: validated.framesPace ?? 0,
-      frames: validated.frames,
-      isDraft: validated.isDraft,
-      isListed,
-      createdAt: now,
-      publishedAt,
-      synced: false,
-      syncError: null,
-    });
+    // Atomicity envelope: gate-check, insert, holds seed, and stats seed all
+    // run inside one transaction so a half-completed publish can never leave
+    // the row visible to search without its supporting holds/stats. The
+    // advisory lock taken at the top of the transaction serializes concurrent
+    // publishes of the same hold signature, eliminating the gate's TOCTOU
+    // race (two callers reading "no match" simultaneously and both writing).
+    // Lock is no-op for drafts / multi-frame climbs since the gate doesn't
+    // fire there anyway.
+    const shouldGate = !validated.isDraft && framesCount === 1;
+    const gateSignature = shouldGate ? buildHoldSignature(holdEntries) : '';
+    await db.transaction(async (tx) => {
+      if (shouldGate) {
+        await acquireDuplicateGateLock(tx, validated.boardType as BoardName, validated.layoutId, gateSignature);
+        const existing = await findExactDuplicateMatch({
+          boardType: validated.boardType as BoardName,
+          layoutId: validated.layoutId,
+          signature: gateSignature,
+          executor: tx,
+        });
+        if (existing) {
+          throw new GraphQLError(buildDuplicateClimbErrorMessage(existing.name), {
+            extensions: {
+              code: CLIMB_DUPLICATE_ERROR_CODE,
+              existingClimbUuid: existing.uuid,
+              existingClimbName: existing.name,
+            },
+          });
+        }
+      }
 
-    // Aurora's sync-back round-trip eventually populates board_climb_holds for
-    // these climbs (via aurora-board-import-helpers), but the latency is
-    // open-ended. Seed the rows ourselves so the next call's duplicate gate
-    // can see this climb immediately. Aurora's later re-import is idempotent
-    // via onConflictDoNothing on the PK (board_type, climb_uuid, hold_id).
-    if (holdEntries.length > 0) {
-      await db
-        .insert(dbSchema.boardClimbHolds)
-        .values(
-          holdEntries.map((entry) => ({
+      await tx.insert(UNIFIED_TABLES.climbs).values({
+        boardType: validated.boardType,
+        uuid,
+        layoutId: validated.layoutId,
+        userId: ctx.userId!,
+        setterId: null,
+        setterUsername: preferredSetter,
+        name: validated.name,
+        description: validated.description ?? '',
+        angle: validated.angle,
+        framesCount,
+        framesPace: validated.framesPace ?? 0,
+        frames: validated.frames,
+        isDraft: validated.isDraft,
+        isListed,
+        createdAt: now,
+        publishedAt,
+        synced: false,
+        syncError: null,
+      });
+
+      // Aurora's sync-back round-trip eventually populates board_climb_holds for
+      // these climbs (via aurora-board-import-helpers), but the latency is
+      // open-ended. Seed the rows ourselves so the next call's duplicate gate
+      // can see this climb immediately. Aurora's later re-import is idempotent
+      // via onConflictDoNothing on the PK (board_type, climb_uuid, hold_id).
+      if (holdEntries.length > 0) {
+        await tx
+          .insert(dbSchema.boardClimbHolds)
+          .values(
+            holdEntries.map((entry) => ({
+              boardType: validated.boardType,
+              climbUuid: uuid,
+              holdId: entry.holdId,
+              frameNumber: entry.frameNumber,
+              holdState: entry.holdState,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+
+      // Populate denormalized required_set_ids and compatible_size_ids
+      await populateDenormalizedColumns(tx, validated.boardType, [uuid]);
+
+      // Stats rows used to come exclusively from the Aurora sync pipeline, so
+      // Boardsesh-originated climbs had none. The hot search path INNER JOINs
+      // board_climb_stats (search-climbs.ts:statsDrivenSearch), which hid these
+      // climbs from search until someone synced them. Seed a row at the chosen
+      // angle so the climb is discoverable immediately.
+      //
+      // Skip drafts: search uses LEFT JOIN for drafts and a stats row there would
+      // expose the climb to the listed/INNER-JOIN path the moment is_listed flips,
+      // before any other write occurs. Matches migration 0096 Step 1, which only
+      // backfills rows where is_draft = FALSE, and updateClimb (below) which seeds
+      // on draft → publish transition.
+      if (!validated.isDraft) {
+        await tx
+          .insert(dbSchema.boardClimbStats)
+          .values({
             boardType: validated.boardType,
             climbUuid: uuid,
-            holdId: entry.holdId,
-            frameNumber: entry.frameNumber,
-            holdState: entry.holdState,
-          })),
-        )
-        .onConflictDoNothing();
-    }
-
-    // Populate denormalized required_set_ids and compatible_size_ids
-    await populateDenormalizedColumns(db, validated.boardType, [uuid]);
-
-    // Stats rows used to come exclusively from the Aurora sync pipeline, so
-    // Boardsesh-originated climbs had none. The hot search path INNER JOINs
-    // board_climb_stats (search-climbs.ts:statsDrivenSearch), which hid these
-    // climbs from search until someone synced them. Seed a row at the chosen
-    // angle so the climb is discoverable immediately.
-    //
-    // Skip drafts: search uses LEFT JOIN for drafts and a stats row there would
-    // expose the climb to the listed/INNER-JOIN path the moment is_listed flips,
-    // before any other write occurs. Matches migration 0096 Step 1, which only
-    // backfills rows where is_draft = FALSE, and updateClimb (below) which seeds
-    // on draft → publish transition.
-    if (!validated.isDraft) {
-      await db
-        .insert(dbSchema.boardClimbStats)
-        .values({
-          boardType: validated.boardType,
-          climbUuid: uuid,
-          angle: validated.angle,
-          ascensionistCount: 0,
-          faUsername: preferredSetter,
-        })
-        .onConflictDoNothing({
-          target: [
-            dbSchema.boardClimbStats.boardType,
-            dbSchema.boardClimbStats.climbUuid,
-            dbSchema.boardClimbStats.angle,
-          ],
-        });
-    }
+            angle: validated.angle,
+            ascensionistCount: 0,
+            faUsername: preferredSetter,
+          })
+          .onConflictDoNothing({
+            target: [
+              dbSchema.boardClimbStats.boardType,
+              dbSchema.boardClimbStats.climbUuid,
+              dbSchema.boardClimbStats.angle,
+            ],
+          });
+      }
+    });
 
     await publishSocialEvent({
       type: 'climb.created',
@@ -485,67 +495,76 @@ export const climbMutations = {
       throw new Error('Cannot publish climb without an angle');
     }
 
-    // Run the duplicate gate before the UPDATE so a duplicate publish attempt
-    // fails cleanly without flipping isDraft / publishedAt and leaving the
-    // row in a half-state. Gate fires on draft→publish, or on a published
-    // climb whose holds are being changed via the 24h edit window.
+    // Atomicity envelope: the gate check, the UPDATE on board_climbs, the
+    // denorm column refresh, the holds DELETE+INSERT, and the stats seed all
+    // run inside one transaction. Without this a partial failure mid-sequence
+    // could leave the row published with stale board_climb_holds (a real
+    // data-integrity bug — the search hot path joins against the holds table
+    // for filtering, so out-of-sync rows surface as silently-wrong results).
+    //
+    // The advisory lock taken before the gate read serializes concurrent
+    // publishes of the same hold signature so the gate's TOCTOU race
+    // disappears: two simultaneous draft→publish attempts whose holds collide
+    // now line up behind the lock, and whichever lands second sees the first
+    // through the gate and throws cleanly. Multi-frame climbs and pure
+    // metadata edits don't take the lock (the gate doesn't fire for them).
     const framesChanged = validated.frames !== undefined && validated.frames !== existing.frames;
     const nextFrames = validated.frames ?? existing.frames ?? '';
     const nextFramesCount = validated.framesCount ?? existing.framesCount ?? 1;
     const shouldGate = !nextIsDraft && (transitioningToPublished || framesChanged) && nextFramesCount === 1;
-    if (shouldGate) {
-      const holdEntries = parseFramesToHoldEntries(validated.boardType as BoardName, nextFrames);
-      const signature = buildHoldSignature(holdEntries);
-      const existingMatch = await findExactDuplicateMatch({
-        boardType: validated.boardType as BoardName,
-        layoutId: existing.layoutId,
-        signature,
-        excludeUuid: validated.uuid,
-      });
-      if (existingMatch) {
-        throw new GraphQLError(buildDuplicateClimbErrorMessage(existingMatch.name), {
-          extensions: {
-            code: CLIMB_DUPLICATE_ERROR_CODE,
-            existingClimbUuid: existingMatch.uuid,
-            existingClimbName: existingMatch.name,
-          },
+    const gateSignature = shouldGate
+      ? buildHoldSignature(parseFramesToHoldEntries(validated.boardType as BoardName, nextFrames))
+      : '';
+
+    await db.transaction(async (tx) => {
+      if (shouldGate) {
+        await acquireDuplicateGateLock(tx, validated.boardType as BoardName, existing.layoutId, gateSignature);
+        const existingMatch = await findExactDuplicateMatch({
+          boardType: validated.boardType as BoardName,
+          layoutId: existing.layoutId,
+          signature: gateSignature,
+          excludeUuid: validated.uuid,
+          executor: tx,
         });
+        if (existingMatch) {
+          throw new GraphQLError(buildDuplicateClimbErrorMessage(existingMatch.name), {
+            extensions: {
+              code: CLIMB_DUPLICATE_ERROR_CODE,
+              existingClimbUuid: existingMatch.uuid,
+              existingClimbName: existingMatch.name,
+            },
+          });
+        }
       }
-    }
 
-    // Build the update set from provided fields only.
-    const updateSet: Record<string, unknown> = {
-      isDraft: nextIsDraft,
-      isListed: !nextIsDraft,
-      publishedAt: nextPublishedAt,
-    };
-    if (validated.name !== undefined) updateSet.name = validated.name;
-    if (validated.description !== undefined) updateSet.description = validated.description;
-    if (validated.frames !== undefined) updateSet.frames = validated.frames;
-    if (validated.angle !== undefined) updateSet.angle = validated.angle;
-    if (validated.framesCount !== undefined) updateSet.framesCount = validated.framesCount;
-    if (validated.framesPace !== undefined) updateSet.framesPace = validated.framesPace;
+      // Build the update set from provided fields only.
+      const updateSet: Record<string, unknown> = {
+        isDraft: nextIsDraft,
+        isListed: !nextIsDraft,
+        publishedAt: nextPublishedAt,
+      };
+      if (validated.name !== undefined) updateSet.name = validated.name;
+      if (validated.description !== undefined) updateSet.description = validated.description;
+      if (validated.frames !== undefined) updateSet.frames = validated.frames;
+      if (validated.angle !== undefined) updateSet.angle = validated.angle;
+      if (validated.framesCount !== undefined) updateSet.framesCount = validated.framesCount;
+      if (validated.framesPace !== undefined) updateSet.framesPace = validated.framesPace;
 
-    await db
-      .update(dbSchema.boardClimbs)
-      .set(updateSet)
-      .where(
-        and(eq(dbSchema.boardClimbs.uuid, validated.uuid), eq(dbSchema.boardClimbs.boardType, validated.boardType)),
-      );
+      await tx
+        .update(dbSchema.boardClimbs)
+        .set(updateSet)
+        .where(
+          and(eq(dbSchema.boardClimbs.uuid, validated.uuid), eq(dbSchema.boardClimbs.boardType, validated.boardType)),
+        );
 
-    // If frames changed we need to refresh the denormalized edge/set columns
-    // so search filters still match, and resync board_climb_holds (which the
-    // duplicate gate and similarity queries read from).
-    if (validated.frames !== undefined) {
-      await populateDenormalizedColumns(db, validated.boardType, [validated.uuid]);
+      // If frames changed we need to refresh the denormalized edge/set columns
+      // so search filters still match, and resync board_climb_holds (which the
+      // duplicate gate and similarity queries read from).
+      if (validated.frames !== undefined) {
+        await populateDenormalizedColumns(tx, validated.boardType, [validated.uuid]);
 
-      if (framesChanged) {
-        // Replace the hold rows atomically: between the DELETE and the
-        // INSERT a concurrent findExactDuplicateMatch / findSimilarClimbs
-        // would otherwise see this climb as having zero holds and silently
-        // mis-rank it (or pass a near-duplicate through).
-        const refreshedHolds = parseFramesToHoldEntries(validated.boardType as BoardName, nextFrames);
-        await db.transaction(async (tx) => {
+        if (framesChanged) {
+          const refreshedHolds = parseFramesToHoldEntries(validated.boardType as BoardName, nextFrames);
           await tx
             .delete(dbSchema.boardClimbHolds)
             .where(
@@ -568,34 +587,34 @@ export const climbMutations = {
               )
               .onConflictDoNothing();
           }
-        });
+        }
       }
-    }
 
-    // The search hot path INNER JOINs board_climb_stats by (boardType, climbUuid, angle).
-    // Make sure a row exists at the resolved angle whenever the climb is, or just became,
-    // searchable. The old row at the previous angle is left in place — it's harmless
-    // because search filters by exact angle, and removing it would race with concurrent ticks.
-    // The combined check also re-narrows `resolvedAngle` to non-null for TS — we threw
-    // above on (shouldSeedStats && null) so the second clause is the only path through.
-    if (shouldSeedStats && resolvedAngle !== null) {
-      await db
-        .insert(dbSchema.boardClimbStats)
-        .values({
-          boardType: validated.boardType,
-          climbUuid: validated.uuid,
-          angle: resolvedAngle,
-          ascensionistCount: 0,
-          faUsername: existing.setterUsername,
-        })
-        .onConflictDoNothing({
-          target: [
-            dbSchema.boardClimbStats.boardType,
-            dbSchema.boardClimbStats.climbUuid,
-            dbSchema.boardClimbStats.angle,
-          ],
-        });
-    }
+      // The search hot path INNER JOINs board_climb_stats by (boardType, climbUuid, angle).
+      // Make sure a row exists at the resolved angle whenever the climb is, or just became,
+      // searchable. The old row at the previous angle is left in place — it's harmless
+      // because search filters by exact angle, and removing it would race with concurrent ticks.
+      // The combined check also re-narrows `resolvedAngle` to non-null for TS — we threw
+      // above on (shouldSeedStats && null) so the second clause is the only path through.
+      if (shouldSeedStats && resolvedAngle !== null) {
+        await tx
+          .insert(dbSchema.boardClimbStats)
+          .values({
+            boardType: validated.boardType,
+            climbUuid: validated.uuid,
+            angle: resolvedAngle,
+            ascensionistCount: 0,
+            faUsername: existing.setterUsername,
+          })
+          .onConflictDoNothing({
+            target: [
+              dbSchema.boardClimbStats.boardType,
+              dbSchema.boardClimbStats.climbUuid,
+              dbSchema.boardClimbStats.angle,
+            ],
+          });
+      }
+    });
 
     // Tell the web app to drop the cached climb-view render so the edit
     // shows up immediately instead of waiting for the 1h TTL.

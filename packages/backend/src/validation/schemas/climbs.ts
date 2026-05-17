@@ -222,9 +222,12 @@ export const SimilarClimbsInputSchema = z
     layoutId: z.number().int().positive('Layout ID must be positive'),
     threshold: z.number().min(0).max(1).optional(),
     limit: z.number().int().min(1).max(200).optional(),
-    excludeClimbUuid: z.string().min(1).max(100).optional(),
+    // ExternalUUIDSchema keeps these aligned with the rest of the codebase
+    // (favorites, playlists, etc.) and length-bounds them so a malformed
+    // string can't reach the underlying SQL.
+    excludeClimbUuid: ExternalUUIDSchema.optional(),
     angle: z.number().int().min(0).max(90).optional(),
-    climbUuid: z.string().min(1).max(100).optional(),
+    climbUuid: ExternalUUIDSchema.optional(),
     frames: z.string().min(1).max(10000).optional(),
   })
   .refine((input) => Boolean(input.climbUuid) !== Boolean(input.frames), {

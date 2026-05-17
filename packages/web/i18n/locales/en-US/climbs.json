@@ -335,7 +335,8 @@
     "emptyOnLayout": "No similar climbs on this layout.",
     "emptyIdentical": "No identical climbs found right now.",
     "untitledClimb": "Untitled climb",
-    "openActions": "More actions"
+    "openActions": "More actions",
+    "actionsUnavailable": "Can't open actions for this climb — board configuration unavailable."
   },
   "multiboardList": {
     "noClimbsFound": "No climbs found",

@@ -37,11 +37,46 @@ export type ExtendedClient = {
  * the server emits multiple errors and the typed one isn't first — picking
  * blindly by index would silently drop the gate's CLIMB_IS_DUPLICATE code.
  */
-export class GraphQLOperationError extends Error {
-  readonly extensions: Record<string, unknown> | null;
-  readonly graphqlErrors: ReadonlyArray<{ message: string; extensions?: Record<string, unknown> }>;
 
-  constructor(graphqlErrors: ReadonlyArray<{ message: string; extensions?: Record<string, unknown> }>) {
+/**
+ * Strict shape for the `extensions` blob the backend attaches to GraphQL
+ * errors. Always carries an optional string `code`; payload fields for
+ * known codes are unioned in so call-sites that narrow via the
+ * `isClimbDuplicateExtension` guard below get strongly-typed payloads.
+ *
+ * Unknown codes (older clients hitting newer servers, codes we haven't
+ * typed yet) flow through with `unknown` payload — callers can still
+ * read `code` to switch on, and must explicitly cast to access anything
+ * else.
+ */
+export type GraphQLErrorExtensions = {
+  code?: string;
+  existingClimbUuid?: string | null;
+  existingClimbName?: string | null;
+  [key: string]: unknown;
+};
+
+/**
+ * Type guard for the CLIMB_IS_DUPLICATE extension shape. Narrows
+ * `extensions` to the variant where `existingClimbUuid` and
+ * `existingClimbName` are typed `string | null | undefined` rather than
+ * `unknown`, so call-sites don't need ad-hoc `typeof` guards.
+ */
+export function isClimbDuplicateExtension(
+  extensions: GraphQLErrorExtensions | null | undefined,
+): extensions is GraphQLErrorExtensions & {
+  code: 'CLIMB_IS_DUPLICATE';
+  existingClimbUuid?: string | null;
+  existingClimbName?: string | null;
+} {
+  return extensions?.code === 'CLIMB_IS_DUPLICATE';
+}
+
+export class GraphQLOperationError extends Error {
+  readonly extensions: GraphQLErrorExtensions | null;
+  readonly graphqlErrors: ReadonlyArray<{ message: string; extensions?: GraphQLErrorExtensions }>;
+
+  constructor(graphqlErrors: ReadonlyArray<{ message: string; extensions?: GraphQLErrorExtensions }>) {
     const message = graphqlErrors.map((err) => err.message).join(', ');
     super(message);
     this.name = 'GraphQLOperationError';

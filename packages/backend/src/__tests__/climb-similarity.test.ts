@@ -253,6 +253,56 @@ describe('findSimilarClimbs', () => {
     ]);
   });
 
+  it('emits CEIL(targetSize * threshold) as the HAVING cutoff at boundary values', async () => {
+    // The early-prune HAVING clause is what keeps the query from scanning
+    // every climb on a layout. Lock its arithmetic at the extreme thresholds
+    // so a stray refactor can't silently widen the funnel (threshold=0 would
+    // need every candidate's overlap counted) or shrink it past the input
+    // (threshold=1 cutoff > targetSize prunes everything but exact matches).
+    mockDb.execute.mockResolvedValueOnce([]);
+    await findSimilarClimbs({
+      boardType: 'kilter',
+      layoutId: 1,
+      holds: [
+        { holdId: 1, holdState: 'STARTING' },
+        { holdId: 2, holdState: 'HAND' },
+        { holdId: 3, holdState: 'HAND' },
+        { holdId: 4, holdState: 'FINISH' },
+      ],
+      threshold: 0,
+    });
+    {
+      const [query] = mockDb.execute.mock.calls[0];
+      const { params } = new PgDialect().sqlToQuery(query as SQL);
+      // threshold=0 → CEIL(4 * 0) = 0; the HAVING simplifies to "shared >= 0"
+      // which lets every candidate through, deliberately. The DB still drops
+      // candidates with 0 overlap via the INNER JOIN before HAVING runs.
+      expect(params).toContain(0);
+    }
+
+    mockDb.execute.mockReset();
+    mockDb.execute.mockResolvedValueOnce([]);
+    await findSimilarClimbs({
+      boardType: 'kilter',
+      layoutId: 1,
+      holds: [
+        { holdId: 1, holdState: 'STARTING' },
+        { holdId: 2, holdState: 'HAND' },
+        { holdId: 3, holdState: 'HAND' },
+        { holdId: 4, holdState: 'FINISH' },
+      ],
+      threshold: 1,
+    });
+    {
+      const [query] = mockDb.execute.mock.calls[0];
+      const { params } = new PgDialect().sqlToQuery(query as SQL);
+      // threshold=1 → CEIL(4 * 1) = 4; candidates need at least every target
+      // hold to clear the prune. Anything less drops here, before Jaccard.
+      expect(params).toContain(1);
+      expect(params).toContain(4);
+    }
+  });
+
   it('dedupes the target by hold position before sizing', async () => {
     // Discovery similarity is position-only — see the docblock on
     // findSimilarClimbs. Verify the target side dedupes by hold_id so an

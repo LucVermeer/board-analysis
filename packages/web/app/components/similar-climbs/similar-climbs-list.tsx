@@ -14,6 +14,7 @@ import BoardCanvasRenderer from '@/app/components/board-renderer/board-canvas-re
 import { useCanvasRendererReady } from '@/app/lib/board-render-worker/worker-manager';
 import { ClimbActionsDrawer } from '@/app/components/climb-actions';
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
+import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { formatSends } from '@/app/lib/format-climb-stats';
@@ -380,6 +381,8 @@ type SimilarClimbActionsDrawerProps = {
 };
 
 function SimilarClimbActionsDrawer({ climb, boardType, onClose }: SimilarClimbActionsDrawerProps) {
+  const { t } = useTranslation('climbs');
+  const { showMessage } = useSnackbar();
   const boardDetails = useMemo<BoardDetails | null>(() => {
     const config = getDefaultBoardConfig(boardType, climb.layoutId);
     if (!config) return null;
@@ -395,13 +398,18 @@ function SimilarClimbActionsDrawer({ climb, boardType, onClose }: SimilarClimbAc
     }
   }, [boardType, climb.layoutId]);
 
-  // No boardDetails means we can't compute URLs for the actions either, so
-  // close the drawer. Effect rather than calling onClose() inline — calling
-  // a parent state setter during render triggers React's render-time update
-  // warning and risks an infinite loop.
+  // No boardDetails means we can't compute URLs for the actions, so dismiss
+  // the drawer and tell the user — otherwise tapping the ellipsis just makes
+  // the sheet flash open and disappear with no explanation. Effect rather
+  // than calling onClose() inline — calling a parent state setter during
+  // render triggers React's render-time update warning and risks an
+  // infinite loop.
   useEffect(() => {
-    if (!boardDetails) onClose();
-  }, [boardDetails, onClose]);
+    if (!boardDetails) {
+      showMessage(t('similarClimbs.actionsUnavailable'), 'info');
+      onClose();
+    }
+  }, [boardDetails, onClose, showMessage, t]);
 
   if (!boardDetails) return null;
 

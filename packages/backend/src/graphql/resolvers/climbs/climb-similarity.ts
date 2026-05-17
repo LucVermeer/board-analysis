@@ -1,9 +1,20 @@
 import { sql } from 'drizzle-orm';
+import type { SQLWrapper } from 'drizzle-orm';
 import * as dbSchema from '@boardsesh/db/schema';
 import { STATE_TO_PRIMARY_CODE, convertLitUpHoldsStringToMap } from '@boardsesh/board-constants/hold-states';
 import type { BoardName } from '@boardsesh/board-constants';
 import { executeRows } from '@boardsesh/db/client';
 import { db } from '../../../db/client';
+
+/**
+ * Anything that can run a SQL query — the connection-pool `db` or a
+ * transaction `tx` handed to `db.transaction(async (tx) => …)`. We thread
+ * this through so callers can run the gate inside their write transaction
+ * and have the same connection see their pending state.
+ */
+export type DuplicateGateExecutor = {
+  execute(query: SQLWrapper | string): PromiseLike<unknown>;
+};
 
 export type NormalizedHold = {
   holdId: number;
@@ -48,6 +59,12 @@ export type SimilarClimbResult = {
 // a real duplicate through. We derive the set at module load from
 // STATE_TO_PRIMARY_CODE rather than hand-coding it so that adding a new
 // canonical climb state to board-constants automatically widens the gate.
+//
+// Note: this is a module-load snapshot. If `STATE_TO_PRIMARY_CODE` changes
+// at runtime (it doesn't today — the constants ship hard-coded), the gate
+// won't see the change until the backend process restarts. Adding a new
+// hold state therefore requires a redeploy. Acceptable trade-off: live
+// reconfiguration of hold-state codes is not a real workflow we support.
 const KNOWN_HOLD_STATES: ReadonlyArray<string> = Array.from(
   new Set(Object.values(STATE_TO_PRIMARY_CODE).flatMap((perBoard) => Object.keys(perBoard))),
 ).sort();
@@ -116,6 +133,11 @@ type FindExactDuplicateArgs = {
   layoutId: number;
   signature: string;
   excludeUuid?: string;
+  /** When provided, runs the gate query on this connection (typically a
+   *  transaction handle). Required when callers want the check serialized
+   *  with their own INSERT/UPDATE via pg_advisory_xact_lock — the lock and
+   *  the query must be on the same session. */
+  executor?: DuplicateGateExecutor;
 };
 
 /**
@@ -130,6 +152,7 @@ export async function findExactDuplicateMatch({
   layoutId,
   signature,
   excludeUuid,
+  executor,
 }: FindExactDuplicateArgs): Promise<ExactDuplicateMatch | null> {
   if (!signature) return null;
 
@@ -139,7 +162,7 @@ export async function findExactDuplicateMatch({
     setter_username: string | null;
     angle: number | null;
   }>(
-    db,
+    executor ?? db,
     sql`
       SELECT
         ${dbSchema.boardClimbs.uuid} AS uuid,
@@ -359,6 +382,35 @@ export async function findSimilarClimbs({
     candidateHoldCount: Number(row.candidate_hold_count),
     targetHoldCount: targetSize,
   }));
+}
+
+/**
+ * Serialize concurrent publish attempts that would otherwise both pass the
+ * duplicate gate. The gate is TOCTOU by nature: it reads `board_climbs`, then
+ * the caller writes — two transactions racing within milliseconds can both
+ * read "no match" before either writes. Taking a transaction-scoped advisory
+ * lock keyed on (board_type, layout_id, signature) makes the check + insert
+ * sequence linear for the same hold pattern, eliminating the race.
+ *
+ * Why not a partial unique index on a materialized signature column? Same
+ * structural guarantee, less invasive to layer on this PR — the follow-up
+ * hash-as-PK migration replaces both this lock and the gate query with a
+ * primary-key collision, so a schema change here would be dead code in the
+ * next iteration.
+ *
+ * Advisory locks are per-Postgres-server, so they cover all backend
+ * instances pointing at the same DB. They auto-release at COMMIT/ROLLBACK.
+ */
+export async function acquireDuplicateGateLock(
+  executor: DuplicateGateExecutor,
+  boardType: BoardName,
+  layoutId: number,
+  signature: string,
+): Promise<void> {
+  if (!signature) return;
+  await executor.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`climb-dup:${boardType}|${layoutId}|${signature}`}, 0))`,
+  );
 }
 
 export const CLIMB_DUPLICATE_ERROR_CODE = 'CLIMB_IS_DUPLICATE';

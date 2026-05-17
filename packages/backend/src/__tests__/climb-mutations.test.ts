@@ -23,6 +23,22 @@ vi.mock('../db/client', () => ({
   db: mockDb,
 }));
 
+// Stub the advisory-xact-lock acquisition so it doesn't consume the same
+// mockResolvedValueOnce queue the tests use to script findExactDuplicateMatch
+// responses. The lock fires a SELECT on the same `executor.execute` channel,
+// and without this it would eat each test's gate response. The actual locking
+// behavior is exercised at the DB level — the resolver-level tests only need
+// to verify the gate sequence, not the lock side-effect.
+vi.mock('../graphql/resolvers/climbs/climb-similarity', async () => {
+  const actual = await vi.importActual<typeof import('../graphql/resolvers/climbs/climb-similarity')>(
+    '../graphql/resolvers/climbs/climb-similarity',
+  );
+  return {
+    ...actual,
+    acquireDuplicateGateLock: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 vi.mock('../events', () => ({
   publishSocialEvent: mockPublishSocialEvent,
 }));
@@ -80,11 +96,12 @@ function createMockChain(resolveValue: unknown = [], onValues?: (values: unknown
 describe('climb mutations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // clearAllMocks resets call history but NOT the mockResolvedValueOnce queue.
-    // Reset execute specifically so leftover queued values from a prior test
-    // (e.g. tests that no longer hit the duplicate-check path because the gate
-    // skips drafts) don't leak into the next test's findMoonBoardDuplicateMatch.
+    // clearAllMocks resets call history but NOT the mockResolvedValueOnce
+    // queue. Reset the queued values too — a test that throws partway through
+    // would otherwise leak its leftover queue entries into the next test and
+    // cause inscrutable cascade failures.
     mockDb.execute.mockReset();
+    mockDb.select.mockReset();
     insertCalls.length = 0;
     mockDb.transaction.mockImplementation(async (callback: (tx: typeof mockDb) => Promise<unknown>) =>
       callback(mockDb),

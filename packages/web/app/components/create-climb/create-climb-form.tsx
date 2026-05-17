@@ -934,10 +934,8 @@ export default function CreateClimbForm({
       });
       if (error instanceof GraphQLOperationError && error.extensions?.code === 'CLIMB_IS_DUPLICATE') {
         setPublishDuplicateError({
-          existingClimbUuid:
-            typeof error.extensions.existingClimbUuid === 'string' ? error.extensions.existingClimbUuid : null,
-          existingClimbName:
-            typeof error.extensions.existingClimbName === 'string' ? error.extensions.existingClimbName : null,
+          existingClimbUuid: error.extensions.existingClimbUuid ?? null,
+          existingClimbName: error.extensions.existingClimbName ?? null,
           target: { kind: 'frames', frames },
         });
       } else {
@@ -1101,12 +1099,10 @@ export default function CreateClimbForm({
     } catch (error) {
       console.error('Failed to save climb:', error);
       if (error instanceof GraphQLOperationError && error.extensions?.code === 'CLIMB_IS_DUPLICATE') {
-        const existingClimbUuid =
-          typeof error.extensions.existingClimbUuid === 'string' ? error.extensions.existingClimbUuid : null;
+        const existingClimbUuid = error.extensions.existingClimbUuid ?? null;
         setPublishDuplicateError({
           existingClimbUuid,
-          existingClimbName:
-            typeof error.extensions.existingClimbName === 'string' ? error.extensions.existingClimbName : null,
+          existingClimbName: error.extensions.existingClimbName ?? null,
           // MoonBoard doesn't expose a canonical frames string on the client,
           // so drive the SimilarClimbsList off the existing climb's uuid.
           target: existingClimbUuid ? { kind: 'climbUuid', climbUuid: existingClimbUuid } : null,
