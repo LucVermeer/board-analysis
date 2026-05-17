@@ -171,6 +171,73 @@ describe('YouProgressContent', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Test User' })).toBeTruthy();
   });
 
+  it("falls back to 'Climber' when both displayName and name are null", () => {
+    mockUseProfileData.mockReturnValue(
+      mockProfileDataReturn({
+        profile: {
+          id: 'user-123',
+          email: 'test@boardsesh.com',
+          name: null,
+          image: null,
+          profile: { displayName: null, avatarUrl: null, instagramUrl: null },
+          followerCount: 0,
+          followingCount: 0,
+          isFollowedByMe: false,
+        },
+      }),
+    );
+
+    render(<YouProgressContent userId="user-1" />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Climber' })).toBeTruthy();
+  });
+
+  it('renders avatar with profile.profile.avatarUrl when set', () => {
+    mockUseProfileData.mockReturnValue(
+      mockProfileDataReturn({
+        profile: {
+          id: 'user-123',
+          email: 'test@boardsesh.com',
+          name: 'Test User',
+          image: 'https://example.com/avatar.jpg',
+          profile: {
+            displayName: 'Display Name',
+            avatarUrl: 'https://example.com/profile-avatar.jpg',
+            instagramUrl: null,
+          },
+          followerCount: 0,
+          followingCount: 0,
+          isFollowedByMe: false,
+        },
+      }),
+    );
+
+    render(<YouProgressContent userId="user-1" />);
+
+    expect(screen.getByRole('img').getAttribute('src')).toBe('https://example.com/profile-avatar.jpg');
+  });
+
+  it('falls back to profile.image when profile.avatarUrl is null', () => {
+    mockUseProfileData.mockReturnValue(
+      mockProfileDataReturn({
+        profile: {
+          id: 'user-123',
+          email: 'test@boardsesh.com',
+          name: 'Test User',
+          image: 'https://example.com/avatar.jpg',
+          profile: { displayName: 'Display Name', avatarUrl: null, instagramUrl: null },
+          followerCount: 0,
+          followingCount: 0,
+          isFollowedByMe: false,
+        },
+      }),
+    );
+
+    render(<YouProgressContent userId="user-1" />);
+
+    expect(screen.getByRole('img').getAttribute('src')).toBe('https://example.com/avatar.jpg');
+  });
+
   it('passes weekly bars into StatsSummary and keeps BoardStatsSection fallback-only', () => {
     mockUseProfileData.mockReturnValue(
       mockProfileDataReturn({

@@ -400,6 +400,20 @@ describe('BottomTabBar You tab', () => {
     );
     expect(mockPush).not.toHaveBeenCalled();
   });
+
+  it('does NOT open the auth modal while session is still loading', () => {
+    // Session-loading window: NextAuth hasn't resolved yet. An already
+    // signed-in user tapping You here would see a spurious modal if we
+    // short-circuited on !isAuthenticated. The /you layout handles the
+    // real auth check server-side, so we let Link navigate.
+    mockSessionData = null;
+    mockSessionStatus = 'loading';
+    render(<BottomTabBar boardConfigs={boardConfigs} />);
+
+    fireEvent.click(getTab('You'));
+
+    expect(mockOpenAuthModal).not.toHaveBeenCalled();
+  });
 });
 
 describe('BottomTabBar locale-aware pathname matching', () => {

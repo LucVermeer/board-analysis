@@ -276,6 +276,10 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
       <BottomNavigation
         data-testid="bottom-tab-bar"
         value={activeTab}
+        // Each action is its own <Link>/onClick — onChange would just bounce
+        // duplicate work. MUI still wants the prop wired on a controlled bar,
+        // so pass a no-op to silence the controlled-without-onChange warning.
+        onChange={() => {}}
         showLabels
         sx={{
           background: isDark ? 'rgba(26, 26, 26, 0.7)' : 'rgba(255, 255, 255, 0.3)',
@@ -371,7 +375,10 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
           component={LocaleLink}
           href="/you"
           onClick={(event: React.MouseEvent<HTMLAnchorElement>) => {
-            if (!isAuthenticated || !session?.user?.id) {
+            // During the session-loading window we don't yet know whether the
+            // user is signed in. Let Next.js navigate to /you; the layout
+            // resolves auth on the server and redirects to / if needed.
+            if (sessionStatus !== 'loading' && (!isAuthenticated || !session?.user?.id)) {
               event.preventDefault();
               openAuthModal({
                 title: t('bottomTabBar.youSignInTitle'),
