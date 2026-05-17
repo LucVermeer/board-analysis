@@ -43,6 +43,8 @@ export const sessionTypeDefs = /* GraphQL */ `
     isLeader: Boolean!
     "Stable participant id of the user currently driving the wall. Set via takeControl, cleared via releaseControl or driver disconnect. Distinct from isLeader, which is presentation/legacy only."
     driverParticipantId: ID
+    "Most recently observed BLE board serial for this session. Set when a participant pairs their phone to a physical board; broadcast as SessionBoardSerialChanged so late-joiners can auto-connect to the same board. Null when no board has been recorded."
+    lastConnectedBoardSerial: String
     "Unique identifier for this client's connection"
     clientId: ID!
     "Optional session goal text"

@@ -1780,6 +1780,15 @@ export type Mutation = {
    */
   attachBetaLink: Scalars['Boolean']['output'];
   authorizeControllerForSession: Scalars['Boolean']['output'];
+  /**
+   * Confirm to all session participants that a climb was successfully relayed to the wall
+   * over BLE from this client's phone. Any session participant may call (no driver
+   * requirement) — the BLE-capable phone that handled the send is the source of truth for
+   * confirmation. The server stamps `confirmedAt` and `confirmedByParticipantId` from
+   * the caller's identity; clients cannot forge either field. Publishes
+   * `WallConfirmedClimb`.
+   */
+  confirmClimbOnWall: Scalars['Boolean']['output'];
   controllerHeartbeat: Scalars['Boolean']['output'];
   /** Create a new board. */
   createBoard: UserBoard;
@@ -1923,6 +1932,13 @@ export type Mutation = {
    * Used for bulk operations or syncing from external sources.
    */
   setQueue: QueueState;
+  /**
+   * Record the BLE board serial that this client paired with so other (mobile)
+   * participants can auto-connect to the same physical board. Any session participant
+   * may call. Idempotent: when the stored serial already matches, no event fires.
+   * Publishes `SessionBoardSerialChanged` on change.
+   */
+  setSessionBoardSerial: Scalars['Boolean']['output'];
   /** Setter override: directly set community status for your own climb. */
   setterOverrideCommunityStatus: ClimbCommunityStatus;
   /**
@@ -2037,6 +2053,12 @@ export type MutationAttachBetaLinkArgs = {
 /** Root mutation type for all write operations. */
 export type MutationAuthorizeControllerForSessionArgs = {
   controllerId: Scalars['ID']['input'];
+  sessionId: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationConfirmClimbOnWallArgs = {
+  climbUuid: Scalars['ID']['input'];
   sessionId: Scalars['ID']['input'];
 };
 
@@ -2316,6 +2338,12 @@ export type MutationSetInferredSessionHealthKitWorkoutIdArgs = {
 export type MutationSetQueueArgs = {
   currentClimbQueueItem?: InputMaybe<ClimbQueueItemInput>;
   queue: Array<ClimbQueueItemInput>;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationSetSessionBoardSerialArgs = {
+  serial: Scalars['String']['input'];
+  sessionId: Scalars['ID']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3888,6 +3916,8 @@ export type Session = {
   isPermanent: Scalars['Boolean']['output'];
   /** Whether session is publicly discoverable */
   isPublic: Scalars['Boolean']['output'];
+  /** Most recently observed BLE board serial for this session. Set when a participant pairs their phone to a physical board; broadcast as SessionBoardSerialChanged so late-joiners can auto-connect to the same board. Null when no board has been recorded. */
+  lastConnectedBoardSerial?: Maybe<Scalars['String']['output']>;
   /** Optional name for the session */
   name?: Maybe<Scalars['String']['output']>;
   /** Current queue state */
@@ -3896,6 +3926,19 @@ export type Session = {
   startedAt?: Maybe<Scalars['String']['output']>;
   /** Users currently in the session */
   users: Array<SessionUser>;
+};
+
+/**
+ * Event when the session's last-connected BLE board serial changes.
+ * Used by mobile participants to auto-connect to the same board another
+ * member is already paired with — saves the chooser step on the second
+ * phone joining a session in a gym with multiple physical boards.
+ * Null when the board has been forgotten or never recorded.
+ */
+export type SessionBoardSerialChanged = {
+  __typename?: 'SessionBoardSerialChanged';
+  /** Most recently observed BLE board serial, or null when cleared/never set */
+  lastConnectedBoardSerial?: Maybe<Scalars['String']['output']>;
 };
 
 /** Current realtime connection state for a session participant. */
@@ -3968,11 +4011,13 @@ export type SessionEnded = {
 export type SessionEvent =
   | DriverChanged
   | LeaderChanged
+  | SessionBoardSerialChanged
   | SessionEnded
   | SessionStatsUpdated
   | UserJoined
   | UserLeft
-  | UserPresenceChanged;
+  | UserPresenceChanged
+  | WallConfirmedClimb;
 
 /** A session feed card representing a group of ticks from a climbing session. */
 export type SessionFeedItem = {
@@ -4857,6 +4902,23 @@ export type VoteSummary = {
 };
 
 /**
+ * Event broadcast when a participant's phone successfully relays a climb to the
+ * wall over BLE. Other clients use this confirmation to flip the queue-control-bar
+ * lightbulb from pending to confirmed and to dismiss the local fallback timer.
+ * Server-stamped: `confirmedAt` is set by the backend on receipt to keep ordering
+ * authoritative across clients.
+ */
+export type WallConfirmedClimb = {
+  __typename?: 'WallConfirmedClimb';
+  /** UUID of the climb that was sent to the wall */
+  climbUuid: Scalars['ID']['output'];
+  /** Server timestamp when the confirmation was received (ISO 8601) */
+  confirmedAt: Scalars['String']['output'];
+  /** Stable participant id of the member whose phone relayed the climb */
+  confirmedByParticipantId: Scalars['ID']['output'];
+};
+
+/**
  * Bounding box defining a board region for filtering climbs.
  * Coordinates are in the same grid space as board placements
  * (board_holes.x/y) and board_climbs edge columns.
@@ -4960,11 +5022,13 @@ export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = Reso
   SessionEvent:
     | DriverChanged
     | LeaderChanged
+    | SessionBoardSerialChanged
     | SessionEnded
     | SessionStatsUpdated
     | UserJoined
     | UserLeft
-    | UserPresenceChanged;
+    | UserPresenceChanged
+    | WallConfirmedClimb;
 }>;
 
 /** Mapping between all available schema types and the resolvers types */
@@ -5154,6 +5218,7 @@ export type ResolversTypes = ResolversObject<{
   SendDeviceLogsInput: SendDeviceLogsInput;
   SendDeviceLogsResponse: ResolverTypeWrapper<SendDeviceLogsResponse>;
   Session: ResolverTypeWrapper<Session>;
+  SessionBoardSerialChanged: ResolverTypeWrapper<SessionBoardSerialChanged>;
   SessionConnectionState: SessionConnectionState;
   SessionDetail: ResolverTypeWrapper<SessionDetail>;
   SessionDetailTick: ResolverTypeWrapper<SessionDetailTick>;
@@ -5216,6 +5281,7 @@ export type ResolversTypes = ResolversObject<{
   VoteInput: VoteInput;
   VoteOnProposalInput: VoteOnProposalInput;
   VoteSummary: ResolverTypeWrapper<VoteSummary>;
+  WallConfirmedClimb: ResolverTypeWrapper<WallConfirmedClimb>;
   ZoneBoxInput: ZoneBoxInput;
   ZoneMatchMode: ZoneMatchMode;
 }>;
@@ -5399,6 +5465,7 @@ export type ResolversParentTypes = ResolversObject<{
   SendDeviceLogsInput: SendDeviceLogsInput;
   SendDeviceLogsResponse: SendDeviceLogsResponse;
   Session: Session;
+  SessionBoardSerialChanged: SessionBoardSerialChanged;
   SessionDetail: SessionDetail;
   SessionDetailTick: SessionDetailTick;
   SessionEnded: SessionEnded;
@@ -5455,6 +5522,7 @@ export type ResolversParentTypes = ResolversObject<{
   VoteInput: VoteInput;
   VoteOnProposalInput: VoteOnProposalInput;
   VoteSummary: VoteSummary;
+  WallConfirmedClimb: WallConfirmedClimb;
   ZoneBoxInput: ZoneBoxInput;
 }>;
 
@@ -6360,6 +6428,12 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationAuthorizeControllerForSessionArgs, 'controllerId' | 'sessionId'>
   >;
+  confirmClimbOnWall?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationConfirmClimbOnWallArgs, 'climbUuid' | 'sessionId'>
+  >;
   controllerHeartbeat?: Resolver<
     ResolversTypes['Boolean'],
     ParentType,
@@ -6658,6 +6732,12 @@ export type MutationResolvers<
     ParentType,
     ContextType,
     RequireFields<MutationSetQueueArgs, 'queue'>
+  >;
+  setSessionBoardSerial?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetSessionBoardSerialArgs, 'serial' | 'sessionId'>
   >;
   setterOverrideCommunityStatus?: Resolver<
     ResolversTypes['ClimbCommunityStatus'],
@@ -7661,10 +7741,20 @@ export type SessionResolvers<
   isLeader?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   isPermanent?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   isPublic?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  lastConnectedBoardSerial?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   name?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   queueState?: Resolver<ResolversTypes['QueueState'], ParentType, ContextType>;
   startedAt?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   users?: Resolver<Array<ResolversTypes['SessionUser']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type SessionBoardSerialChangedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionBoardSerialChanged'] =
+    ResolversParentTypes['SessionBoardSerialChanged'],
+> = ResolversObject<{
+  lastConnectedBoardSerial?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7741,11 +7831,13 @@ export type SessionEventResolvers<
   __resolveType: TypeResolveFn<
     | 'DriverChanged'
     | 'LeaderChanged'
+    | 'SessionBoardSerialChanged'
     | 'SessionEnded'
     | 'SessionStatsUpdated'
     | 'UserJoined'
     | 'UserLeft'
-    | 'UserPresenceChanged',
+    | 'UserPresenceChanged'
+    | 'WallConfirmedClimb',
     ParentType,
     ContextType
   >;
@@ -8226,6 +8318,16 @@ export type VoteSummaryResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type WallConfirmedClimbResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['WallConfirmedClimb'] = ResolversParentTypes['WallConfirmedClimb'],
+> = ResolversObject<{
+  climbUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  confirmedAt?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  confirmedByParticipantId?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   ActivityFeedItem?: ActivityFeedItemResolvers<ContextType>;
   ActivityFeedResult?: ActivityFeedResultResolvers<ContextType>;
@@ -8326,6 +8428,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SearchPlaylistsResult?: SearchPlaylistsResultResolvers<ContextType>;
   SendDeviceLogsResponse?: SendDeviceLogsResponseResolvers<ContextType>;
   Session?: SessionResolvers<ContextType>;
+  SessionBoardSerialChanged?: SessionBoardSerialChangedResolvers<ContextType>;
   SessionDetail?: SessionDetailResolvers<ContextType>;
   SessionDetailTick?: SessionDetailTickResolvers<ContextType>;
   SessionEnded?: SessionEndedResolvers<ContextType>;
@@ -8363,4 +8466,5 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   UserSearchConnection?: UserSearchConnectionResolvers<ContextType>;
   UserSearchResult?: UserSearchResultResolvers<ContextType>;
   VoteSummary?: VoteSummaryResolvers<ContextType>;
+  WallConfirmedClimb?: WallConfirmedClimbResolvers<ContextType>;
 }>;

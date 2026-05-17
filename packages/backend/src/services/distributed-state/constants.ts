@@ -47,6 +47,10 @@ export const KEYS = {
   // pivot's lightbulb gesture. Empty / missing key means "no driver" — the
   // wall is unclaimed.
   sessionDriver: (sessionId: string) => `boardsesh:session:${sessionId}:driver`,
+  // String: sessionId -> last-connected BLE board serial. Set by
+  // `setSessionBoardSerial`; consumed by mobile clients on join so a second
+  // phone can auto-pair with the same physical board as the first.
+  sessionBoardSerial: (sessionId: string) => `boardsesh:session:${sessionId}:boardSerial`,
   // Set: instanceId -> set of connectionIds owned by this instance
   instanceConnections: (instanceId: string) => `boardsesh:instance:${instanceId}:conns`,
   // String: instanceId -> heartbeat timestamp

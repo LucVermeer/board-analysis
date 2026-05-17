@@ -53,6 +53,11 @@ vi.mock('../services/room-manager', () => ({
     // the current driver via the room manager; mock it to "no driver" so
     // these tests don't need to care about the new field.
     getSessionDriverParticipantId: vi.fn().mockResolvedValue(null),
+    // Session-level board serial (Phase 2 simplified pivot). Returned by
+    // session-shape resolvers so the lightbulb-on-confirm flow can show
+    // peers which physical board is paired. Default to "no board" so this
+    // existing test suite needn't model BLE pairing.
+    getSessionBoardSerial: vi.fn().mockResolvedValue(null),
   },
 }));
 

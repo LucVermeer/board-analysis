@@ -98,6 +98,13 @@ export type SessionEvent =
   | { __typename: 'UserPresenceChanged'; user: SessionUser }
   | { __typename: 'LeaderChanged'; leaderId: string; leaderConnectionId?: string | null }
   | { __typename: 'DriverChanged'; driverParticipantId: string | null }
+  | {
+      __typename: 'WallConfirmedClimb';
+      climbUuid: string;
+      confirmedAt: string;
+      confirmedByParticipantId: string;
+    }
+  | { __typename: 'SessionBoardSerialChanged'; lastConnectedBoardSerial: string | null }
   | { __typename: 'SessionEnded'; reason: string; newPath?: string }
   | {
       __typename: 'SessionStatsUpdated';

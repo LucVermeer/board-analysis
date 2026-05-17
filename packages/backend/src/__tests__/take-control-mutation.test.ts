@@ -50,6 +50,11 @@ vi.mock('../services/room-manager', () => ({
       version: 0,
     }),
     getSessionLeaderConnectionId: vi.fn().mockResolvedValue('some-other-connection'),
+    // Board-serial plumbing (Phase 2 simplified pivot). The takeControl /
+    // releaseControl resolvers now hydrate `lastConnectedBoardSerial` on the
+    // session payload, so this needs to resolve to a value (null is fine —
+    // the test doesn't assert on it).
+    getSessionBoardSerial: vi.fn().mockResolvedValue(null),
   },
 }));
 

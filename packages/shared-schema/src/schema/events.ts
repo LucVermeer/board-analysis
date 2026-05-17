@@ -8,6 +8,8 @@ export const eventsTypeDefs = /* GraphQL */ `
     | UserPresenceChanged
     | LeaderChanged
     | DriverChanged
+    | WallConfirmedClimb
+    | SessionBoardSerialChanged
     | SessionEnded
     | SessionStatsUpdated
 
@@ -51,6 +53,34 @@ export const eventsTypeDefs = /* GraphQL */ `
   type DriverChanged {
     "Stable participant id of the new driver, or null when control was released"
     driverParticipantId: ID
+  }
+
+  """
+  Event broadcast when a participant's phone successfully relays a climb to the
+  wall over BLE. Other clients use this confirmation to flip the queue-control-bar
+  lightbulb from pending to confirmed and to dismiss the local fallback timer.
+  Server-stamped: \`confirmedAt\` is set by the backend on receipt to keep ordering
+  authoritative across clients.
+  """
+  type WallConfirmedClimb {
+    "UUID of the climb that was sent to the wall"
+    climbUuid: ID!
+    "Server timestamp when the confirmation was received (ISO 8601)"
+    confirmedAt: String!
+    "Stable participant id of the member whose phone relayed the climb"
+    confirmedByParticipantId: ID!
+  }
+
+  """
+  Event when the session's last-connected BLE board serial changes.
+  Used by mobile participants to auto-connect to the same board another
+  member is already paired with — saves the chooser step on the second
+  phone joining a session in a gym with multiple physical boards.
+  Null when the board has been forgotten or never recorded.
+  """
+  type SessionBoardSerialChanged {
+    "Most recently observed BLE board serial, or null when cleared/never set"
+    lastConnectedBoardSerial: String
   }
 
   """

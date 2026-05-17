@@ -310,6 +310,8 @@ type Session {
   isLeader: Boolean!
   "Stable participant id of the user currently driving the wall. Set via takeControl, cleared via releaseControl or driver disconnect. Distinct from isLeader, which is presentation/legacy only."
   driverParticipantId: ID
+  "Most recently observed BLE board serial for this session. Set when a participant pairs their phone to a physical board; broadcast as SessionBoardSerialChanged so late-joiners can auto-connect to the same board. Null when no board has been recorded."
+  lastConnectedBoardSerial: String
   "Unique identifier for this client's connection"
   clientId: ID!
   "Optional session goal text"
@@ -4028,6 +4030,24 @@ type Mutation {
   """
   releaseControl: Session!
 
+  """
+  Confirm to all session participants that a climb was successfully relayed to the wall
+  over BLE from this client's phone. Any session participant may call (no driver
+  requirement) — the BLE-capable phone that handled the send is the source of truth for
+  confirmation. The server stamps `confirmedAt` and `confirmedByParticipantId` from
+  the caller's identity; clients cannot forge either field. Publishes
+  `WallConfirmedClimb`.
+  """
+  confirmClimbOnWall(sessionId: ID!, climbUuid: ID!): Boolean!
+
+  """
+  Record the BLE board serial that this client paired with so other (mobile)
+  participants can auto-connect to the same physical board. Any session participant
+  may call. Idempotent: when the stored serial already matches, no event fires.
+  Publishes `SessionBoardSerialChanged` on change.
+  """
+  setSessionBoardSerial(sessionId: ID!, serial: String!): Boolean!
+
   # ============================================
   # User Management Mutations (require auth)
   # ============================================
@@ -4508,6 +4528,8 @@ union SessionEvent =
   | UserPresenceChanged
   | LeaderChanged
   | DriverChanged
+  | WallConfirmedClimb
+  | SessionBoardSerialChanged
   | SessionEnded
   | SessionStatsUpdated
 
@@ -4551,6 +4573,34 @@ Event when the wall driver changes (the participant authorized to drive the wall
 type DriverChanged {
   "Stable participant id of the new driver, or null when control was released"
   driverParticipantId: ID
+}
+
+"""
+Event broadcast when a participant's phone successfully relays a climb to the
+wall over BLE. Other clients use this confirmation to flip the queue-control-bar
+lightbulb from pending to confirmed and to dismiss the local fallback timer.
+Server-stamped: `confirmedAt` is set by the backend on receipt to keep ordering
+authoritative across clients.
+"""
+type WallConfirmedClimb {
+  "UUID of the climb that was sent to the wall"
+  climbUuid: ID!
+  "Server timestamp when the confirmation was received (ISO 8601)"
+  confirmedAt: String!
+  "Stable participant id of the member whose phone relayed the climb"
+  confirmedByParticipantId: ID!
+}
+
+"""
+Event when the session's last-connected BLE board serial changes.
+Used by mobile participants to auto-connect to the same board another
+member is already paired with — saves the chooser step on the second
+phone joining a session in a gym with multiple physical boards.
+Null when the board has been forgotten or never recorded.
+"""
+type SessionBoardSerialChanged {
+  "Most recently observed BLE board serial, or null when cleared/never set"
+  lastConnectedBoardSerial: String
 }
 
 """

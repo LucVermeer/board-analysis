@@ -90,6 +90,24 @@ export const mutationsTypeDefs = /* GraphQL */ `
     """
     releaseControl: Session!
 
+    """
+    Confirm to all session participants that a climb was successfully relayed to the wall
+    over BLE from this client's phone. Any session participant may call (no driver
+    requirement) — the BLE-capable phone that handled the send is the source of truth for
+    confirmation. The server stamps \`confirmedAt\` and \`confirmedByParticipantId\` from
+    the caller's identity; clients cannot forge either field. Publishes
+    \`WallConfirmedClimb\`.
+    """
+    confirmClimbOnWall(sessionId: ID!, climbUuid: ID!): Boolean!
+
+    """
+    Record the BLE board serial that this client paired with so other (mobile)
+    participants can auto-connect to the same physical board. Any session participant
+    may call. Idempotent: when the stored serial already matches, no event fires.
+    Publishes \`SessionBoardSerialChanged\` on change.
+    """
+    setSessionBoardSerial(sessionId: ID!, serial: String!): Boolean!
+
     # ============================================
     # User Management Mutations (require auth)
     # ============================================

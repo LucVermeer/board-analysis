@@ -97,6 +97,27 @@ export const QueueIndexSchema = z.number().int('Index must be an integer').min(0
 export const QueueItemIdSchema = z.string().min(1, 'Queue item ID cannot be empty').max(100, 'Queue item ID too long');
 
 /**
+ * Climb UUID schema for resolver inputs. Matches the lenient `ExternalUUIDSchema`
+ * shape rather than `UUIDSchema` — Aurora climb UUIDs are not always
+ * dash-formatted standard UUIDs (Kilter/Tension store them as compact strings)
+ * and the wall-confirm path has to accept whatever the queue item already
+ * stores client-side.
+ */
+export const ClimbUuidSchema = z.string().min(1, 'Climb UUID cannot be empty').max(64, 'Climb UUID too long');
+
+/**
+ * BLE board serial schema. The Aurora boards' BLE peripherals advertise a
+ * short alphanumeric serial; allowed characters mirror the manufacturer
+ * format and the 64-char cap is conservative defence-in-depth against
+ * accidental long strings ending up in Redis values.
+ */
+export const BoardSerialSchema = z
+  .string()
+  .min(1, 'Board serial cannot be empty')
+  .max(64, 'Board serial too long')
+  .regex(/^[A-Za-z0-9_:-]+$/, 'Board serial must be alphanumeric (colon, hyphen, underscore allowed)');
+
+/**
  * Validate input and throw a user-friendly error if invalid.
  */
 export function validateInput<T>(schema: z.ZodSchema<T>, data: unknown, fieldName?: string): T {

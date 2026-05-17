@@ -47,6 +47,7 @@ export const JOIN_SESSION = `
       clientId
       isLeader
       driverParticipantId
+      lastConnectedBoardSerial
       goal
       isPublic
       startedAt
@@ -186,6 +187,25 @@ export const RELEASE_CONTROL = `
   }
 `;
 
+// Wall confirmation — the BLE-capable phone tells the backend that the climb
+// was successfully relayed to the board. Server broadcasts WallConfirmedClimb
+// to every session participant so non-BLE clients can flip the lightbulb to
+// confirmed and dismiss their fallback timer.
+export const CONFIRM_CLIMB_ON_WALL = `
+  mutation ConfirmClimbOnWall($sessionId: ID!, $climbUuid: ID!) {
+    confirmClimbOnWall(sessionId: $sessionId, climbUuid: $climbUuid)
+  }
+`;
+
+// Session board serial — when a phone pairs with a physical board over BLE,
+// it records the serial on the session so other (mobile) participants can
+// auto-connect without picking from a list.
+export const SET_SESSION_BOARD_SERIAL = `
+  mutation SetSessionBoardSerial($sessionId: ID!, $serial: String!) {
+    setSessionBoardSerial(sessionId: $sessionId, serial: $serial)
+  }
+`;
+
 export const SET_QUEUE = `
   mutation SetQueue($queue: [ClimbQueueItemInput!]!, $currentClimbQueueItem: ClimbQueueItemInput) {
     setQueue(queue: $queue, currentClimbQueueItem: $currentClimbQueueItem) {
@@ -210,6 +230,7 @@ export const CREATE_SESSION = `
       clientId
       isLeader
       driverParticipantId
+      lastConnectedBoardSerial
       goal
       isPublic
       startedAt
@@ -272,6 +293,14 @@ export const SESSION_UPDATES = `
       }
       ... on DriverChanged {
         driverParticipantId
+      }
+      ... on WallConfirmedClimb {
+        climbUuid
+        confirmedAt
+        confirmedByParticipantId
+      }
+      ... on SessionBoardSerialChanged {
+        lastConnectedBoardSerial
       }
       ... on SessionEnded {
         reason

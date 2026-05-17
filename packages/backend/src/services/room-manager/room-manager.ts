@@ -51,6 +51,10 @@ class RoomManager {
   // consistent with the Redis-backed path. Always written alongside Redis so
   // `getSessionDriverParticipantId` returns the same answer either way.
   private localDriverBySession = new Map<string, string>();
+  // In-memory board-serial shadow. Mirrors `localDriverBySession`'s rationale:
+  // when running without Redis (single-instance test/dev), the room manager is
+  // the sole source of truth and persistence has to live somewhere local.
+  private localBoardSerialBySession = new Map<string, string>();
   private sessionGraceTimers = new Map<string, NodeJS.Timeout>();
   private readonly SESSION_GRACE_PERIOD_MS = 60_000;
   private pendingJoinPersists = new Map<string, Promise<void>>();
@@ -73,6 +77,7 @@ class RoomManager {
     this.sessions.clear();
     this.sessionParticipants.clear();
     this.localDriverBySession.clear();
+    this.localBoardSerialBySession.clear();
     this.redisStore = null;
     this.distributedState = null;
 
@@ -430,6 +435,36 @@ class RoomManager {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Get the most recently observed BLE board serial for a session, or null
+   * when no participant has paired yet. Mobile clients use this on join to
+   * skip the chooser screen when another participant has already paired.
+   */
+  async getSessionBoardSerial(sessionId: string): Promise<string | null> {
+    if (this.distributedState) {
+      return this.distributedState.getSessionBoardSerial(sessionId);
+    }
+    return this.localBoardSerialBySession.get(sessionId) ?? null;
+  }
+
+  /**
+   * Set the session's last-connected BLE board serial and return the previous
+   * value atomically (or null when unset). Same pattern as
+   * `setSessionDriverAndReturnPrevious` — the caller compares previous vs.
+   * new to decide whether to broadcast `SessionBoardSerialChanged`, so
+   * concurrent writes can't both fire redundant events for the same value.
+   */
+  async setSessionBoardSerialAndReturnPrevious(sessionId: string, serial: string): Promise<string | null> {
+    const previousLocal = this.localBoardSerialBySession.get(sessionId) ?? null;
+    this.localBoardSerialBySession.set(sessionId, serial);
+    if (this.distributedState) {
+      // Distributed-state path is the authoritative previous value when Redis
+      // is wired; the local shadow can be stale across instances.
+      return this.distributedState.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
+    }
+    return previousLocal;
   }
 
   /**

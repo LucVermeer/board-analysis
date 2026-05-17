@@ -569,6 +569,40 @@ export async function clearSessionDriverIf(
 }
 
 /**
+ * Get the last-connected BLE board serial for a session, or null when unset.
+ */
+export async function getSessionBoardSerial(redis: Redis, sessionId: string): Promise<string | null> {
+  validateSessionId(sessionId);
+  return redis.get(KEYS.sessionBoardSerial(sessionId));
+}
+
+/**
+ * Set the session's last-connected BLE board serial.
+ *
+ * Returns the previous value atomically (via SET ... GET, pipelined with EXPIRE
+ * to keep the TTL aligned with session membership). The atomic previous-value
+ * read lets the caller decide whether to broadcast `SessionBoardSerialChanged`
+ * — concurrent writes from two participants pairing at the same time both see
+ * a consistent prior value, so only the actual transition fires the event.
+ */
+export async function setSessionBoardSerialAndReturnPrevious(
+  redis: Redis,
+  sessionId: string,
+  serial: string,
+): Promise<string | null> {
+  validateSessionId(sessionId);
+  const key = KEYS.sessionBoardSerial(sessionId);
+  const pipeline = redis.multi();
+  pipeline.set(key, serial, 'GET');
+  pipeline.expire(key, TTL.sessionMembership);
+  const result = await pipeline.exec();
+  if (!result || result.length === 0) return null;
+  const [setErr, prev] = result[0] as [Error | null, string | null];
+  if (setErr) throw setErr;
+  return prev ?? null;
+}
+
+/**
  * Get count of live members in a session.
  * Filters out stale entries whose connection hashes have expired.
  */
@@ -672,6 +706,7 @@ export async function cleanupEmptySession(redis: Redis, sessionId: string): Prom
   multi.del(KEYS.sessionMembers(sessionId));
   multi.del(KEYS.sessionLeader(sessionId));
   multi.del(KEYS.sessionDriver(sessionId));
+  multi.del(KEYS.sessionBoardSerial(sessionId));
   await multi.exec();
 
   logger.info(`[DistributedState] Cleaned up empty session: ${sessionId.slice(0, 8)}`);

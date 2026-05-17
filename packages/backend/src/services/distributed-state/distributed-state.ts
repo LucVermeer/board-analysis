@@ -17,6 +17,8 @@ import {
   getSessionDriver,
   setSessionDriverAndReturnPrevious,
   clearSessionDriverIf,
+  getSessionBoardSerial,
+  setSessionBoardSerialAndReturnPrevious,
   getSessionMemberCount,
   isConnectionInSession,
   refreshConnection,
@@ -192,6 +194,20 @@ export class DistributedStateManager {
    */
   async clearSessionDriverIf(sessionId: string, expectedParticipantId: string): Promise<boolean> {
     return clearSessionDriverIf(this.redis, sessionId, expectedParticipantId);
+  }
+
+  /** Get the session's last-connected BLE board serial, or null when unset. */
+  async getSessionBoardSerial(sessionId: string): Promise<string | null> {
+    return getSessionBoardSerial(this.redis, sessionId);
+  }
+
+  /**
+   * Set the session's last-connected BLE board serial and return the previous
+   * value atomically. Callers compare previous vs. new to decide whether to
+   * publish `SessionBoardSerialChanged`.
+   */
+  async setSessionBoardSerialAndReturnPrevious(sessionId: string, serial: string): Promise<string | null> {
+    return setSessionBoardSerialAndReturnPrevious(this.redis, sessionId, serial);
   }
 
   /** Get count of live members in a session. */

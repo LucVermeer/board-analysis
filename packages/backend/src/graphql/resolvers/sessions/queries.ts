@@ -21,6 +21,7 @@ export const sessionQueries = {
     const queueState = await roomManager.getQueueState(sessionId);
     const sessionInfo = await roomManager.getSessionById(sessionId);
     const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
+    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
 
     return {
       id: sessionId,
@@ -30,6 +31,7 @@ export const sessionQueries = {
       // These need connection context, but for Query we return defaults
       isLeader: false,
       driverParticipantId,
+      lastConnectedBoardSerial,
       clientId: '',
       goal: sessionInfo?.goal || null,
       isPublic: sessionInfo?.isPublic ?? true,

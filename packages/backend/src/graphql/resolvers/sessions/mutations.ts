@@ -19,6 +19,8 @@ import {
   SessionNameSchema,
   CreateSessionInputSchema,
   ClimbQueueItemSchema,
+  ClimbUuidSchema,
+  BoardSerialSchema,
   QueueArraySchema,
 } from '../../../validation/schemas';
 import { logger } from '../../../utils/logger';
@@ -157,6 +159,7 @@ export const sessionMutations = {
     // Fetch session data for new fields
     const sessionData = await roomManager.getSessionById(sessionId);
     const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
+    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
 
     return {
       id: sessionId,
@@ -171,6 +174,7 @@ export const sessionMutations = {
       },
       isLeader: result.isLeader,
       driverParticipantId,
+      lastConnectedBoardSerial,
       clientId: result.clientId,
       goal: sessionData?.goal || null,
       isPublic: sessionData?.isPublic ?? true,
@@ -291,6 +295,9 @@ export const sessionMutations = {
         // the lightbulb to claim the wall. Null here lets the bar render the
         // empty/outlined state in PR 2 onward.
         driverParticipantId: null,
+        // No board has been paired yet; gets set the first time anyone in the
+        // session calls setSessionBoardSerial.
+        lastConnectedBoardSerial: null,
         clientId: result.clientId,
         goal: input.goal || null,
         isPublic: true,
@@ -315,6 +322,7 @@ export const sessionMutations = {
       queueState: null,
       isLeader: false,
       driverParticipantId: null,
+      lastConnectedBoardSerial: null,
       clientId: null,
       goal: input.goal || null,
       isPublic: true,
@@ -424,6 +432,7 @@ export const sessionMutations = {
     const users = await roomManager.getSessionUsers(sessionId);
     const sessionData = await roomManager.getSessionById(sessionId);
     const queueState = await roomManager.getQueueState(sessionId);
+    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
 
     return {
       id: sessionId,
@@ -438,6 +447,7 @@ export const sessionMutations = {
       },
       isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
       driverParticipantId: participantId,
+      lastConnectedBoardSerial,
       clientId: ctx.connectionId,
       goal: sessionData?.goal || null,
       isPublic: sessionData?.isPublic ?? true,
@@ -446,6 +456,63 @@ export const sessionMutations = {
       isPermanent: sessionData?.isPermanent ?? false,
       color: sessionData?.color || null,
     };
+  },
+
+  /**
+   * Confirm to all session members that a climb was successfully sent to the
+   * wall over BLE from this client's phone. Any session participant may call —
+   * the BLE-capable phone that handled the send is the source of truth for
+   * confirmation, regardless of who holds the driver role. The server stamps
+   * `confirmedAt` and derives `confirmedByParticipantId` from the caller's
+   * identity so clients cannot forge either field. Publishes
+   * `WallConfirmedClimb`. Returns `true` once the event is queued for
+   * broadcast.
+   */
+  confirmClimbOnWall: async (
+    _: unknown,
+    { sessionId, climbUuid }: { sessionId: string; climbUuid: string },
+    ctx: ConnectionContext,
+  ) => {
+    await applyRateLimit(ctx);
+    validateInput(SessionIdSchema, sessionId, 'sessionId');
+    validateInput(ClimbUuidSchema, climbUuid, 'climbUuid');
+    await requireSessionMember(ctx, sessionId);
+
+    const participantId = ctx.participantId || ctx.connectionId;
+    pubsub.publishSessionEvent(sessionId, {
+      __typename: 'WallConfirmedClimb',
+      climbUuid,
+      confirmedAt: new Date().toISOString(),
+      confirmedByParticipantId: participantId,
+    });
+    return true;
+  },
+
+  /**
+   * Record the BLE board serial paired with this client's phone. The serial is
+   * stored on the session (Redis when distributed, in-memory otherwise) so
+   * other mobile participants can auto-connect to the same physical board.
+   * Idempotent: when the stored serial already equals the incoming value, no
+   * `SessionBoardSerialChanged` event is emitted.
+   */
+  setSessionBoardSerial: async (
+    _: unknown,
+    { sessionId, serial }: { sessionId: string; serial: string },
+    ctx: ConnectionContext,
+  ) => {
+    await applyRateLimit(ctx);
+    validateInput(SessionIdSchema, sessionId, 'sessionId');
+    validateInput(BoardSerialSchema, serial, 'serial');
+    await requireSessionMember(ctx, sessionId);
+
+    const previousSerial = await roomManager.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
+    if (previousSerial !== serial) {
+      pubsub.publishSessionEvent(sessionId, {
+        __typename: 'SessionBoardSerialChanged',
+        lastConnectedBoardSerial: serial,
+      });
+    }
+    return true;
   },
 
   /**
@@ -474,6 +541,7 @@ export const sessionMutations = {
     const queueState = await roomManager.getQueueState(sessionId);
     // Skip the re-read when we just cleared — we already know the answer.
     const driverParticipantId = cleared ? null : await roomManager.getSessionDriverParticipantId(sessionId);
+    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
 
     return {
       id: sessionId,
@@ -488,6 +556,7 @@ export const sessionMutations = {
       },
       isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
       driverParticipantId,
+      lastConnectedBoardSerial,
       clientId: ctx.connectionId,
       goal: sessionData?.goal || null,
       isPublic: sessionData?.isPublic ?? true,
