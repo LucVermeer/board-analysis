@@ -57,7 +57,10 @@ function makeCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext 
   } as ConnectionContext;
 }
 
-function mockSelectChain(rows: Array<{ holdId: number; holdState: string }>) {
+// The shape varies by select: the board_climb_holds branch yields
+// (holdId, holdState) rows; the legacy-frames fallback yields (frames)
+// rows. Keep the helper polymorphic so callers can drive either path.
+function mockSelectChain(rows: ReadonlyArray<Record<string, unknown>>) {
   const chain: Record<string, unknown> = {};
   for (const method of ['from', 'where', 'limit']) {
     chain[method] = vi.fn(() => chain);
@@ -166,7 +169,10 @@ describe('climbQueries.similarClimbs', () => {
   });
 
   it('short-circuits to an empty array when the target has no holds, without calling the helper', async () => {
-    mockDb.select.mockReturnValueOnce(mockSelectChain([]));
+    // First select: board_climb_holds lookup → no rows.
+    // Second select: legacy frames-fallback on board_climbs → no row.
+    // Both empty → resolver returns [] without hitting findSimilarClimbs.
+    mockDb.select.mockReturnValueOnce(mockSelectChain([])).mockReturnValueOnce(mockSelectChain([]));
 
     const result = await climbQueries.similarClimbs(
       {},
@@ -176,5 +182,34 @@ describe('climbQueries.similarClimbs', () => {
 
     expect(result).toEqual([]);
     expect(findSimilarClimbsMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to parsing board_climbs.frames when board_climb_holds is empty (legacy MoonBoard climbs)', async () => {
+    findSimilarClimbsMock.mockResolvedValue([]);
+    // First select: board_climb_holds → no rows (legacy state).
+    // Second select: board_climbs → returns the frames blob the gate
+    // recorded in the legacy import. The resolver should parse that and
+    // pass the resulting holds to findSimilarClimbs, so the duplicate
+    // drawer doesn't silently surface "no identical climbs" for a match
+    // that absolutely exists.
+    mockDb.select
+      .mockReturnValueOnce(mockSelectChain([]))
+      .mockReturnValueOnce(mockSelectChain([{ frames: 'p1r12p2r13' }]));
+    parseFramesToHoldEntriesMock.mockReturnValueOnce([
+      { frameNumber: 0, holdId: 1, holdState: 'STARTING' },
+      { frameNumber: 0, holdId: 2, holdState: 'HAND' },
+    ]);
+
+    await climbQueries.similarClimbs(
+      {},
+      { input: { boardType: 'moonboard', layoutId: 1, climbUuid: 'legacy-mb' } },
+      makeCtx(),
+    );
+
+    expect(parseFramesToHoldEntriesMock).toHaveBeenCalledWith('moonboard', 'p1r12p2r13');
+    expect(findSimilarClimbsMock).toHaveBeenCalledTimes(1);
+    const args = findSimilarClimbsMock.mock.calls[0][0];
+    expect(args.holds).toHaveLength(2);
+    expect(args.excludeUuid).toBe('legacy-mb');
   });
 });

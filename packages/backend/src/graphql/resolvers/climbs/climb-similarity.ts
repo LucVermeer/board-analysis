@@ -248,6 +248,12 @@ type FindSimilarClimbsArgs = {
  *
  * Single-frame only — multi-frame Aurora climbs are excluded to keep the
  * definition simple and the result set meaningful.
+ *
+ * Unlike `findExactDuplicateMatch`, this function does not accept an
+ * executor — it's only ever called from a read path (the `similarClimbs`
+ * resolver), never from inside a write transaction with an advisory lock.
+ * If that changes, add an `executor?: DuplicateGateExecutor` parameter and
+ * thread it through to `executeRows` (same pattern as the gate function).
  */
 export async function findSimilarClimbs({
   boardType,
@@ -385,6 +391,17 @@ export async function findSimilarClimbs({
 }
 
 /**
+ * Advisory-lock namespace for the climb-duplicate gate. `pg_advisory_xact_lock`'s
+ * single-int8 form shares a global lock space with every other advisory-lock
+ * caller in the cluster (other Boardsesh subsystems, pg_cron, migration tools,
+ * any other application on the same Postgres), so we use the two-int form
+ * with an arbitrary namespace constant — `0x434c4942` is ASCII "CLIB" for
+ * "climb". Mirrors the pattern in `push-tokens.ts` (`PUSH_TOKEN_LOCK_NAMESPACE`).
+ * Pick a distinct namespace if another caller needs its own lock space.
+ */
+const CLIMB_DUPLICATE_LOCK_NAMESPACE = 0x434c4942;
+
+/**
  * Serialize concurrent publish attempts that would otherwise both pass the
  * duplicate gate. The gate is TOCTOU by nature: it reads `board_climbs`, then
  * the caller writes — two transactions racing within milliseconds can both
@@ -409,7 +426,7 @@ export async function acquireDuplicateGateLock(
 ): Promise<void> {
   if (!signature) return;
   await executor.execute(
-    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`climb-dup:${boardType}|${layoutId}|${signature}`}, 0))`,
+    sql`SELECT pg_advisory_xact_lock(${CLIMB_DUPLICATE_LOCK_NAMESPACE}, hashtext(${`${boardType}|${layoutId}|${signature}`}))`,
   );
 }
 

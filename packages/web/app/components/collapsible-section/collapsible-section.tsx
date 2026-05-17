@@ -161,6 +161,15 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
 
         const headerClickable = !interactionDisabled && !section.keepExpanded;
 
+        // a11y: header advertises its accordion state so screen readers can
+        // announce expanded/collapsed correctly. keepExpanded sections set
+        // aria-disabled so AT users hear "this can't be collapsed" instead
+        // of expecting an interaction the click handler silently drops.
+        const headerRole = headerClickable ? 'button' : undefined;
+        const headerTabIndex = headerClickable ? 0 : undefined;
+        const headerAriaExpanded = section.keepExpanded ? true : isActive;
+        const headerAriaDisabled = section.keepExpanded ? true : undefined;
+
         return (
           <div
             key={section.key}
@@ -171,6 +180,10 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
             {...(!isActive && headerClickable ? { onClick: () => openSection(section.key) } : {})}
           >
             <div
+              role={headerRole}
+              tabIndex={headerTabIndex}
+              aria-expanded={headerAriaExpanded}
+              aria-disabled={headerAriaDisabled}
               className={`${styles.collapsedRow} ${isActive ? styles.collapsedRowActive : ''}`}
               {...(isActive && headerClickable ? { onClick: () => setActiveKey(null) } : {})}
             >

@@ -56,7 +56,13 @@ export const climbQueries = {
     { input }: { input: SimilarClimbsInput },
     ctx: ConnectionContext,
   ): Promise<SimilarClimb[]> => {
-    await applyRateLimit(ctx, 60, 'similar-climbs');
+    // 30/min/IP. The similar-climbs CTE scans board_climb_holds for the
+    // whole layout before the HAVING prune. React Query caches identical
+    // queries for 5 min but the play-drawer surface keys on climbUuid so
+    // rapid climb-switching generates fresh requests; 30/min stays well
+    // above any realistic interactive cadence while keeping a CGNAT'd
+    // shared IP from running the query at 1/s sustained.
+    await applyRateLimit(ctx, 30, 'similar-climbs');
     const validated = validateInput(SimilarClimbsInputSchema, input, 'input');
 
     if (!isValidBoardName(validated.boardType)) {
@@ -81,6 +87,27 @@ export const climbQueries = {
           ),
         );
       holds = targetHoldRows.map((row) => ({ holdId: row.holdId, holdState: row.holdState }));
+
+      // Legacy fallback: pre-existing climbs (especially MoonBoard imports)
+      // carry their hold pattern in board_climbs.frames but have no rows in
+      // board_climb_holds yet (backfill follow-up #1). Without this fallback
+      // a MoonBoard duplicate-publish that points the UI at the existing
+      // climb via `climbUuid` would surface an empty "no identical climbs"
+      // state for the exact match it just rejected.
+      if (holds.length === 0) {
+        const [climbRow] = await db
+          .select({ frames: dbSchema.boardClimbs.frames })
+          .from(dbSchema.boardClimbs)
+          .where(and(eq(dbSchema.boardClimbs.boardType, boardType), eq(dbSchema.boardClimbs.uuid, validated.climbUuid)))
+          .limit(1);
+        if (climbRow?.frames) {
+          holds = parseFramesToHoldEntries(boardType, climbRow.frames).map(({ holdId, holdState }) => ({
+            holdId,
+            holdState,
+          }));
+        }
+      }
+
       // Always exclude the target climb itself from its own similar list.
       excludeUuid = validated.climbUuid;
     } else {

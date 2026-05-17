@@ -464,6 +464,16 @@ function formatByline(climb: SimilarClimb): string {
  * (`setCurrentClimb`, `ClimbActions`) that expect the full type. Stats fields
  * the similar-climbs query doesn't include get safe defaults; the queue and
  * drawer re-fetch the canonical row from board search by uuid on activation.
+ *
+ * `stars`, `difficulty_error`, `benchmark_difficulty`, and the empty
+ * `quality_average` / `difficulty` strings are intentional placeholder
+ * values for the window between activation and the search refetch
+ * resolving — typically a single roundtrip (~100ms). UI consumers that
+ * render these fields (the queue card, the actions sheet) already render
+ * empty-state copy when these are blank, so the brief swap is not visible
+ * as a flash of misleading data; we accept the latency rather than
+ * over-fetching every similar-climbs hit just to pre-populate fields the
+ * user may never see.
  */
 function buildClimbStub(similar: SimilarClimb, boardType: BoardName): Climb {
   return {
