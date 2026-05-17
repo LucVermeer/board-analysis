@@ -274,41 +274,13 @@ describe('useProfileData', () => {
     expect(result.current.hardestFlash).toBeNull();
   });
 
-  it('fires background refetches even when initial data is present (SWR behaviour)', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        id: 'user-1',
-        email: undefined,
-        name: 'Refreshed User',
-        image: null,
-        profile: null,
-        credentials: [],
-        followerCount: 7,
-        followingCount: 1,
-        isFollowedByMe: false,
-      }),
-    } as Response);
-    mockRequest.mockImplementation(async (query: unknown) => {
-      if (query === GET_USER_PROFILE_STATS) {
-        return { userProfileStats: { totalDistinctClimbs: 99, layoutStats: [] } };
-      }
-      if (query === GET_USER_CLIMB_PERCENTILE) {
-        return { userClimbPercentile: { totalDistinctClimbs: 99, percentile: 50, totalActiveUsers: 200 } };
-      }
-      if (query === GET_USER_TICKS) {
-        return { userTicks: [] };
-      }
-      return {};
-    });
-
+  it('treats SSR-seeded initial data as fresh and does not refetch on mount', async () => {
     renderProfileDataHook(() =>
       useProfileData('user-1', {
         initialProfile: {
           id: 'user-1',
           email: undefined,
-          name: 'Stale User',
+          name: 'SSR User',
           image: null,
           profile: null,
           credentials: [],
@@ -324,11 +296,14 @@ describe('useProfileData', () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith('/api/internal/profile/user-1');
-      expect(mockRequest).toHaveBeenCalledWith(GET_USER_PROFILE_STATS, { userId: 'user-1' });
-      expect(mockRequest).toHaveBeenCalledWith(GET_USER_CLIMB_PERCENTILE, { userId: 'user-1' });
-    });
+    // Give React Query a tick — if refetchOnMount fired, the mocks would
+    // record a call by now.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mockRequest).not.toHaveBeenCalledWith(GET_USER_PROFILE_STATS, { userId: 'user-1' });
+    expect(mockRequest).not.toHaveBeenCalledWith(GET_USER_CLIMB_PERCENTILE, { userId: 'user-1' });
+    expect(mockRequest).not.toHaveBeenCalledWith(GET_USER_TICKS, { userId: 'user-1', boardType: 'kilter' });
   });
 
   it('seeds percentile from initial data without waiting on a fetch', () => {

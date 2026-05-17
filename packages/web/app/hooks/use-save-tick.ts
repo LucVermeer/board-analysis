@@ -135,6 +135,8 @@ export function useSaveTick(boardName: BoardName) {
       void clearTickDraft(options.climbUuid, options.angle);
 
       // Bust the You-page stats caches so the next visit reflects the new tick.
+      // React Query does prefix matching on queryKey arrays — the bare root
+      // string invalidates every variant (['userTicks', '<any-userId>']).
       void queryClient.invalidateQueries({ queryKey: ['userTicks'] });
       void queryClient.invalidateQueries({ queryKey: ['userProfileStats'] });
       void queryClient.invalidateQueries({ queryKey: ['userClimbPercentile'] });

@@ -4,13 +4,11 @@ import React, { type ReactNode, useEffect, useMemo, useRef, useState } from 'rea
 import { QueryClient, type Query, useQueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useSession } from 'next-auth/react';
-import { createIdbPersister } from '@/app/lib/react-query-idb-persister';
+import { createIdbPersister, PERSIST_MAX_AGE_MS } from '@/app/lib/react-query-idb-persister';
 
 type QueryClientProviderProps = {
   children: ReactNode;
 };
-
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export default function QueryClientProvider({ children }: QueryClientProviderProps) {
   const [queryClient] = useState(
@@ -39,7 +37,7 @@ export default function QueryClientProvider({ children }: QueryClientProviderPro
   const persistOptions = useMemo(
     () => ({
       persister,
-      maxAge: MAX_AGE_MS,
+      maxAge: PERSIST_MAX_AGE_MS,
       dehydrateOptions: {
         shouldDehydrateQuery: (query: Query) => query.meta?.persist === true && query.state.status === 'success',
       },

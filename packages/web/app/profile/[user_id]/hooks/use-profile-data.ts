@@ -25,6 +25,7 @@ import {
 } from '../utils/profile-constants';
 import { getGradeColor, getGradeTextColor } from '@/app/lib/grade-colors';
 import { isAbortError } from '@/app/lib/is-abort-error';
+import { PERSIST_MAX_AGE_MS } from '@/app/lib/react-query-idb-persister';
 import {
   filterLogbookByTimeframe,
   buildAggregatedStackedBars,
@@ -55,11 +56,14 @@ class ProfileNotFoundError extends Error {
   }
 }
 
-// Cache survives 24h in IDB but is always considered stale on mount: each
-// visit serves data from the persisted cache instantly, then fires a
-// background refetch. `staleTime` defaults to 0 and `refetchOnMount: 'always'`
-// enforces the revalidation regardless of `initialDataUpdatedAt`.
-const PROFILE_GC_TIME_MS = 24 * 60 * 60 * 1000;
+// Brief freshness window so consumers with SSR-seeded `initialData` (tagged
+// with `initialDataUpdatedAt: Date.now()`) don't fire a redundant network
+// request the moment they mount. /you skips this with `refetchOnMount: 'always'`.
+const PROFILE_STALE_TIME_MS = 30 * 1000;
+
+// Persisted IDB cache lifetime — aligned with the persister so a query never
+// outlives its dehydrated copy.
+const PROFILE_GC_TIME_MS = PERSIST_MAX_AGE_MS;
 
 export function useProfileData(userId: string, initialData?: InitialData) {
   const { data: session } = useSession();
@@ -77,7 +81,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
 
   const profileInitial = initialData?.initialProfile;
   const profileQuery = useQuery<UserProfile>({
-    queryKey: ['profile', userId],
+    queryKey: ['userProfile', userId],
     queryFn: async () => {
       const response = await fetch(`/api/internal/profile/${userId}`);
       if (response.status === 404) throw new ProfileNotFoundError();
@@ -96,10 +100,12 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       } satisfies UserProfile;
     },
     enabled: !initialData?.initialNotFound,
+    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
-    refetchOnMount: 'always',
+    refetchOnMount: profileInitial ? true : 'always',
     retry: (failureCount, error) => !(error instanceof ProfileNotFoundError) && failureCount < 3,
     initialData: profileInitial,
+    initialDataUpdatedAt: profileInitial ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -139,9 +145,11 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       );
       return collected;
     },
+    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
-    refetchOnMount: 'always',
+    refetchOnMount: ticksInitial ? true : 'always',
     initialData: ticksInitial,
+    initialDataUpdatedAt: ticksInitial ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -154,9 +162,11 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       const response = await client.request<GetUserProfileStatsQueryResponse>(GET_USER_PROFILE_STATS, variables);
       return response.userProfileStats;
     },
+    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
-    refetchOnMount: 'always',
+    refetchOnMount: profileStatsInitial ? true : 'always',
     initialData: profileStatsInitial,
+    initialDataUpdatedAt: profileStatsInitial ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -170,9 +180,11 @@ export function useProfileData(userId: string, initialData?: InitialData) {
       });
       return response.userClimbPercentile;
     },
+    staleTime: PROFILE_STALE_TIME_MS,
     gcTime: PROFILE_GC_TIME_MS,
-    refetchOnMount: 'always',
+    refetchOnMount: percentileInitial !== undefined ? true : 'always',
     initialData: percentileInitial,
+    initialDataUpdatedAt: percentileInitial !== undefined ? Date.now() : undefined,
     meta: { persist: true },
   });
 
@@ -183,7 +195,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
 
   const setProfile = useCallback(
     (next: UserProfile) => {
-      queryClient.setQueryData<UserProfile>(['profile', userId], next);
+      queryClient.setQueryData<UserProfile>(['userProfile', userId], next);
     },
     [queryClient, userId],
   );

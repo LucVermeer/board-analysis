@@ -6,6 +6,11 @@ const DB_NAME = 'boardsesh-react-query';
 const STORE_NAME = 'cache';
 const CLIENT_KEY = 'client';
 
+// 24h: bound IDB blob age and align query gcTime to the same horizon.
+// Shared with anywhere that needs to size cache lifetimes around the
+// persister window — see use-profile-data.ts and query-client-provider.tsx.
+export const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 const getDB = createIndexedDBStore(DB_NAME, STORE_NAME);
 
 export function createIdbPersister(): Persister {
