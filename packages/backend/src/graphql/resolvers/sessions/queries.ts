@@ -11,7 +11,7 @@ export const sessionQueries = {
    * Get a session by ID
    * Returns session info including users and queue state
    */
-  session: async (_: unknown, { sessionId }: { sessionId: string }) => {
+  session: async (_: unknown, { sessionId }: { sessionId: string }, ctx: ConnectionContext) => {
     // Validate session ID
     validateInput(SessionIdSchema, sessionId, 'sessionId');
 
@@ -33,6 +33,7 @@ export const sessionQueries = {
       driverParticipantId,
       lastConnectedBoardSerial,
       clientId: '',
+      participantId: ctx.participantId || ctx.connectionId || '',
       goal: sessionInfo?.goal || null,
       isPublic: sessionInfo?.isPublic ?? true,
       startedAt: sessionInfo?.startedAt?.toISOString() || null,

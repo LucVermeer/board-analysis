@@ -45,6 +45,7 @@ export const JOIN_SESSION = `
       name
       boardPath
       clientId
+      participantId
       isLeader
       driverParticipantId
       lastConnectedBoardSerial
@@ -163,6 +164,7 @@ export const TAKE_CONTROL = `
   mutation TakeControl($climb: ClimbQueueItemInput) {
     takeControl(climb: $climb) {
       id
+      participantId
       driverParticipantId
       queueState {
         sequence
@@ -228,6 +230,7 @@ export const CREATE_SESSION = `
       name
       boardPath
       clientId
+      participantId
       isLeader
       driverParticipantId
       lastConnectedBoardSerial

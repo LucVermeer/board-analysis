@@ -47,6 +47,8 @@ export const sessionTypeDefs = /* GraphQL */ `
     lastConnectedBoardSerial: String
     "Unique identifier for this client's connection"
     clientId: ID!
+    "Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) when comparing against driverParticipantId — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity."
+    participantId: ID!
     "Optional session goal text"
     goal: String
     "Whether session is publicly discoverable"

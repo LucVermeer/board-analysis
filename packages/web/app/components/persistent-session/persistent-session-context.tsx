@@ -222,7 +222,13 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       hasConnected: lifecycle.hasConnected,
       error: lifecycle.error,
       clientId: lifecycle.session?.clientId ?? null,
-      participantId: lifecycle.activeSession?.participantId ?? null,
+      // Prefer the backend-resolved participantId (lifecycle.session.participantId)
+      // over the locally-generated activeSession.participantId. The backend
+      // ignores client-supplied participantIds for security and uses
+      // `userId || connectionId` instead — the resolved value is what
+      // DriverChanged events carry, so the driver derivation only works when
+      // we compare against the same identity the server broadcasts.
+      participantId: lifecycle.session?.participantId ?? lifecycle.activeSession?.participantId ?? null,
       isLeader: lifecycle.session?.isLeader ?? false,
       driverParticipantId: lifecycle.session?.driverParticipantId ?? null,
       users: lifecycle.session?.users ?? [],

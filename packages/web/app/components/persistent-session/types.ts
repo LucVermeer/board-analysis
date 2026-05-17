@@ -36,6 +36,15 @@ export type Session = {
    */
   lastConnectedBoardSerial: string | null;
   clientId: string;
+  /**
+   * Backend-resolved participant id for this connection. For authenticated
+   * users this is their user UUID; for anonymous users it equals `clientId`.
+   * Compare this (not `ActiveSessionInfo.participantId`, which is a
+   * client-generated preference the backend ignores) against
+   * `driverParticipantId` or any `SessionUser.id` — the server broadcasts
+   * `DriverChanged` with this resolved value.
+   */
+  participantId: string;
   goal?: string | null;
   isPublic?: boolean;
   startedAt?: string | null;
