@@ -13,16 +13,38 @@ vi.mock('next-auth/react', () => ({
   useSession: vi.fn(),
 }));
 
+vi.mock('react-i18next', () => ({
+  // The hook returns the key unchanged so tests can assert against the
+  // catalog identifier directly — keeps the test independent of locale
+  // file contents.
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
 const mockShowMessage = vi.fn();
 vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: mockShowMessage }),
 }));
 
-const mockExecute = vi.fn();
-const mockDispose = vi.fn();
+const { mockExecute, mockDispose, FakeGraphQLOperationError } = vi.hoisted(() => {
+  // Mirrors the real GraphQLOperationError: pick the first error that
+  // carries a `code`, fall back to the first error's extensions. Keeping
+  // the fake in sync prevents tests from quietly passing while the real
+  // class's multi-error pickup logic regresses.
+  class FakeGraphQLOperationError extends Error {
+    readonly extensions: Record<string, unknown> | null;
+    constructor(errors: ReadonlyArray<{ message: string; extensions?: Record<string, unknown> }>) {
+      super(errors.map((err) => err.message).join(', '));
+      this.name = 'GraphQLOperationError';
+      const coded = errors.find((err) => err.extensions && typeof err.extensions.code === 'string');
+      this.extensions = coded?.extensions ?? errors[0]?.extensions ?? null;
+    }
+  }
+  return { mockExecute: vi.fn(), mockDispose: vi.fn(), FakeGraphQLOperationError };
+});
 vi.mock('@/app/components/graphql-queue/graphql-client', () => ({
   createGraphQLClient: () => ({ dispose: mockDispose }),
   execute: (...args: unknown[]) => mockExecute(...args),
+  GraphQLOperationError: FakeGraphQLOperationError,
 }));
 
 vi.mock('@/app/lib/graphql/operations/new-climb-feed', () => ({
@@ -202,7 +224,9 @@ describe('useSaveClimb', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(mockShowMessage).toHaveBeenCalledWith('Failed to save climb', 'error');
+    // useTranslation is mocked to return the key unchanged, so the test
+    // sees the catalog key rather than the rendered English string.
+    expect(mockShowMessage).toHaveBeenCalledWith('createClimbForm.alerts.saveFailedFallback', 'error');
   });
 
   it('disposes client even on error (finally block)', async () => {

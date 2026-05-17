@@ -3,9 +3,12 @@ import {
   type CheckMoonBoardClimbDuplicatesInput,
   type ClimbSearchInput,
   type ConnectionContext,
+  type SimilarClimb,
+  type SimilarClimbsInput,
   SUPPORTED_BOARDS,
   USER_SPECIFIC_SEARCH_PARAMS,
 } from '@boardsesh/shared-schema';
+import type { BoardName } from '@boardsesh/board-constants';
 import { logger } from '../../../utils/logger';
 import {
   type ClimbSearchParams,
@@ -15,11 +18,13 @@ import {
 import { isValidBoardName } from '../../../db/queries/util/table-select';
 import { applyRateLimit, validateInput } from '../shared/helpers';
 import { findMoonBoardDuplicateMatches } from './moonboard-duplicates';
+import { findSimilarClimbs, parseFramesToHoldEntries, type NormalizedHold } from './climb-similarity';
 import {
   BoardNameSchema,
   CheckMoonBoardClimbDuplicatesInputSchema,
   ClimbSearchInputSchema,
   ExternalUUIDSchema,
+  SimilarClimbsInputSchema,
 } from '../../../validation/schemas';
 import type { ClimbSearchContext } from '../shared/types';
 import { db } from '../../../db/client';
@@ -37,6 +42,92 @@ export const climbQueries = {
     await applyRateLimit(ctx, 60, 'moonboard-duplicate-check');
     const validated = validateInput(CheckMoonBoardClimbDuplicatesInputSchema, input, 'input');
     return findMoonBoardDuplicateMatches(validated.layoutId, validated.angle, validated.climbs);
+  },
+
+  /**
+   * Find climbs on the same board+layout that share at least `threshold`
+   * (default 0.5) position-only Jaccard similarity with the target's holds.
+   * Used by the playview drawer's similar-climbs panel (0.5) and by the
+   * create-climb form to preview the exact duplicate when a publish is
+   * blocked (1.0).
+   */
+  similarClimbs: async (
+    _: unknown,
+    { input }: { input: SimilarClimbsInput },
+    ctx: ConnectionContext,
+  ): Promise<SimilarClimb[]> => {
+    // 30/min/IP. The similar-climbs CTE scans board_climb_holds for the
+    // whole layout before the HAVING prune. React Query caches identical
+    // queries for 5 min but the play-drawer surface keys on climbUuid so
+    // rapid climb-switching generates fresh requests; 30/min stays well
+    // above any realistic interactive cadence while keeping a CGNAT'd
+    // shared IP from running the query at 1/s sustained.
+    await applyRateLimit(ctx, 30, 'similar-climbs');
+    const validated = validateInput(SimilarClimbsInputSchema, input, 'input');
+
+    if (!isValidBoardName(validated.boardType)) {
+      throw new Error(`Invalid board name: ${validated.boardType}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
+    }
+    const boardType = validated.boardType as BoardName;
+
+    let holds: NormalizedHold[];
+    let excludeUuid = validated.excludeClimbUuid ?? undefined;
+
+    if (validated.climbUuid) {
+      const targetHoldRows = await db
+        .select({
+          holdId: dbSchema.boardClimbHolds.holdId,
+          holdState: dbSchema.boardClimbHolds.holdState,
+        })
+        .from(dbSchema.boardClimbHolds)
+        .where(
+          and(
+            eq(dbSchema.boardClimbHolds.boardType, boardType),
+            eq(dbSchema.boardClimbHolds.climbUuid, validated.climbUuid),
+          ),
+        );
+      holds = targetHoldRows.map((row) => ({ holdId: row.holdId, holdState: row.holdState }));
+
+      // Legacy fallback: pre-existing climbs (especially MoonBoard imports)
+      // carry their hold pattern in board_climbs.frames but have no rows in
+      // board_climb_holds yet (backfill follow-up #1). Without this fallback
+      // a MoonBoard duplicate-publish that points the UI at the existing
+      // climb via `climbUuid` would surface an empty "no identical climbs"
+      // state for the exact match it just rejected.
+      if (holds.length === 0) {
+        const [climbRow] = await db
+          .select({ frames: dbSchema.boardClimbs.frames })
+          .from(dbSchema.boardClimbs)
+          .where(and(eq(dbSchema.boardClimbs.boardType, boardType), eq(dbSchema.boardClimbs.uuid, validated.climbUuid)))
+          .limit(1);
+        if (climbRow?.frames) {
+          holds = parseFramesToHoldEntries(boardType, climbRow.frames).map(({ holdId, holdState }) => ({
+            holdId,
+            holdState,
+          }));
+        }
+      }
+
+      // Always exclude the target climb itself from its own similar list.
+      excludeUuid = validated.climbUuid;
+    } else {
+      holds = parseFramesToHoldEntries(boardType, validated.frames ?? '').map(({ holdId, holdState }) => ({
+        holdId,
+        holdState,
+      }));
+    }
+
+    if (holds.length === 0) return [];
+
+    return findSimilarClimbs({
+      boardType,
+      layoutId: validated.layoutId,
+      holds,
+      threshold: validated.threshold ?? 0.5,
+      limit: validated.limit ?? 25,
+      excludeUuid,
+      statsAngle: validated.angle ?? undefined,
+    });
   },
 
   /**

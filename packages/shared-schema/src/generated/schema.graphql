@@ -3348,6 +3348,66 @@ type UpdateClimbResult {
 }
 
 """
+Input for finding climbs similar to a target on the same board+layout.
+Provide either climbUuid (compare against an existing climb's holds) or
+frames (compare against a not-yet-saved hold set).
+"""
+input SimilarClimbsInput {
+  boardType: String!
+  layoutId: Int!
+  "Jaccard threshold (0..1). Returns climbs at or above this similarity."
+  threshold: Float
+  "Max number of results to return. Defaults to 25, capped at 200 server-side."
+  limit: Int
+  "Exclude this climb's uuid from results (e.g. when looking up similars for an existing climb)."
+  excludeClimbUuid: ID
+  """
+  Viewer angle. When provided, grade/quality/ascent stats and the displayed
+  difficulty name are resolved against this angle on each candidate climb.
+  When omitted, falls back to each candidate's own saved angle — useful for
+  contexts that don't have a viewer angle (e.g. the create-climb duplicate
+  drawer where the candidate's angle is the right reference).
+  """
+  angle: Int
+  "Existing climb to compare against. Reads its holds from the database."
+  climbUuid: ID
+  "Raw frames string for an in-progress climb that hasn't been saved yet."
+  frames: String
+}
+
+type SimilarClimb {
+  uuid: ID!
+  name: String
+  setterUsername: String
+  angle: Int
+  layoutId: Int!
+  "Aurora-style frame string for rendering the climb thumbnail."
+  frames: String
+  "Difficulty grade name at this climb's angle (e.g. 6c+, V5)."
+  difficultyName: String
+  "Average quality (0..3 in MoonBoard convention, 0..5 elsewhere) at this angle."
+  qualityAverage: Float
+  "Number of recorded ascents at this angle."
+  ascensionistCount: Int
+  """
+  Product sizes this climb fits on (denormalised from edge bounds). Callers
+  on a smaller wall can use this to grey out climbs that extend beyond
+  their physical board — those climbs are still navigable in the actions
+  menu but can't be set as the active climb. Empty array means the
+  server has no compatibility data for this climb (legacy row).
+  """
+  compatibleSizeIds: [Int!]!
+  "Jaccard similarity (0..1) over hold positions."
+  similarity: Float!
+  "Number of hold positions present in both climbs."
+  sharedHoldCount: Int!
+  "Number of hold positions on the candidate climb."
+  candidateHoldCount: Int!
+  "Number of hold positions on the target climb (input)."
+  targetHoldCount: Int!
+}
+
+"""
 An external Instagram or TikTok beta link attached to a climb.
 Thumbnail (when present) is served from our own S3 bucket.
 """
@@ -3434,6 +3494,19 @@ type Query {
   Returns one result per submitted candidate.
   """
   checkMoonBoardClimbDuplicates(input: CheckMoonBoardClimbDuplicatesInput!): [MoonBoardClimbDuplicateMatch!]!
+
+  """
+  Find climbs on the same board+layout with at least `threshold` Jaccard
+  similarity over hold positions (hold_id only, state-agnostic). Used by:
+  - The playview drawer's "Similar climbs" section at threshold 0.5 —
+    empirically the floor where matches feel related rather than
+    coincidentally co-located on the wall.
+  - The create-climb duplicate UX at threshold 1.0, which filters to
+    true position-exact matches.
+  The duplicate-publish gate uses state-aware (hold_id, hold_state)
+  matching separately — see findExactDuplicateMatch.
+  """
+  similarClimbs(input: SimilarClimbsInput!): [SimilarClimb!]!
 
   """
   Get a single climb by its UUID.

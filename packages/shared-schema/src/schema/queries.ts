@@ -64,6 +64,19 @@ export const queriesTypeDefs = /* GraphQL */ `
     checkMoonBoardClimbDuplicates(input: CheckMoonBoardClimbDuplicatesInput!): [MoonBoardClimbDuplicateMatch!]!
 
     """
+    Find climbs on the same board+layout with at least \`threshold\` Jaccard
+    similarity over hold positions (hold_id only, state-agnostic). Used by:
+    - The playview drawer's "Similar climbs" section at threshold 0.5 —
+      empirically the floor where matches feel related rather than
+      coincidentally co-located on the wall.
+    - The create-climb duplicate UX at threshold 1.0, which filters to
+      true position-exact matches.
+    The duplicate-publish gate uses state-aware (hold_id, hold_state)
+    matching separately — see findExactDuplicateMatch.
+    """
+    similarClimbs(input: SimilarClimbsInput!): [SimilarClimb!]!
+
+    """
     Get a single climb by its UUID.
     """
     climb(boardName: String!, layoutId: Int!, sizeId: Int!, setIds: String!, angle: Int!, climbUuid: ID!): Climb

@@ -10,6 +10,7 @@ type ClimbViewSidebarProps = {
   climbUuid: string;
   boardType: string;
   angle: number;
+  layoutId: number;
   currentClimbDifficulty?: string;
   boardName?: string;
 };
@@ -19,6 +20,7 @@ export default function ClimbViewSidebar({
   climbUuid,
   boardType,
   angle,
+  layoutId,
   currentClimbDifficulty,
   boardName,
 }: ClimbViewSidebarProps) {
@@ -27,6 +29,7 @@ export default function ClimbViewSidebar({
     climbUuid,
     boardType,
     angle,
+    layoutId,
     currentClimbDifficulty,
     boardName,
   });

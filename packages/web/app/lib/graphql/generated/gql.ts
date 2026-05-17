@@ -41,6 +41,7 @@ type Documents = {
   '\n  mutation UnsubscribeNewClimbs($input: NewClimbSubscriptionInput!) {\n    unsubscribeNewClimbs(input: $input)\n  }\n': typeof types.UnsubscribeNewClimbsDocument;
   '\n  subscription OnNewClimbCreated($boardType: String!, $layoutId: Int!) {\n    newClimbCreated(boardType: $boardType, layoutId: $layoutId) {\n      climb {\n        uuid\n        name\n        boardType\n        layoutId\n        setterDisplayName\n        setterAvatarUrl\n        angle\n        frames\n        difficultyName\n        isNoMatch\n        createdAt\n      }\n    }\n  }\n': typeof types.OnNewClimbCreatedDocument;
   '\n  query CheckMoonBoardClimbDuplicates($input: CheckMoonBoardClimbDuplicatesInput!) {\n    checkMoonBoardClimbDuplicates(input: $input) {\n      clientKey\n      exists\n      existingClimbUuid\n      existingClimbName\n    }\n  }\n': typeof types.CheckMoonBoardClimbDuplicatesDocument;
+  '\n  query SimilarClimbs($input: SimilarClimbsInput!) {\n    similarClimbs(input: $input) {\n      uuid\n      name\n      setterUsername\n      angle\n      layoutId\n      frames\n      difficultyName\n      qualityAverage\n      ascensionistCount\n      compatibleSizeIds\n      similarity\n      sharedHoldCount\n      candidateHoldCount\n      targetHoldCount\n    }\n  }\n': typeof types.SimilarClimbsDocument;
   '\n  mutation SaveClimb($input: SaveClimbInput!) {\n    saveClimb(input: $input) {\n      uuid\n      synced\n      createdAt\n      publishedAt\n    }\n  }\n': typeof types.SaveClimbDocument;
   '\n  mutation SaveMoonBoardClimb($input: SaveMoonBoardClimbInput!) {\n    saveMoonBoardClimb(input: $input) {\n      uuid\n      synced\n      createdAt\n      publishedAt\n    }\n  }\n': typeof types.SaveMoonBoardClimbDocument;
   '\n  mutation UpdateClimb($input: UpdateClimbInput!) {\n    updateClimb(input: $input) {\n      uuid\n      createdAt\n      publishedAt\n      isDraft\n    }\n  }\n': typeof types.UpdateClimbDocument;
@@ -175,6 +176,8 @@ const documents: Documents = {
     types.OnNewClimbCreatedDocument,
   '\n  query CheckMoonBoardClimbDuplicates($input: CheckMoonBoardClimbDuplicatesInput!) {\n    checkMoonBoardClimbDuplicates(input: $input) {\n      clientKey\n      exists\n      existingClimbUuid\n      existingClimbName\n    }\n  }\n':
     types.CheckMoonBoardClimbDuplicatesDocument,
+  '\n  query SimilarClimbs($input: SimilarClimbsInput!) {\n    similarClimbs(input: $input) {\n      uuid\n      name\n      setterUsername\n      angle\n      layoutId\n      frames\n      difficultyName\n      qualityAverage\n      ascensionistCount\n      compatibleSizeIds\n      similarity\n      sharedHoldCount\n      candidateHoldCount\n      targetHoldCount\n    }\n  }\n':
+    types.SimilarClimbsDocument,
   '\n  mutation SaveClimb($input: SaveClimbInput!) {\n    saveClimb(input: $input) {\n      uuid\n      synced\n      createdAt\n      publishedAt\n    }\n  }\n':
     types.SaveClimbDocument,
   '\n  mutation SaveMoonBoardClimb($input: SaveMoonBoardClimbInput!) {\n    saveMoonBoardClimb(input: $input) {\n      uuid\n      synced\n      createdAt\n      publishedAt\n    }\n  }\n':
@@ -507,6 +510,12 @@ export function graphql(
 export function graphql(
   source: '\n  query CheckMoonBoardClimbDuplicates($input: CheckMoonBoardClimbDuplicatesInput!) {\n    checkMoonBoardClimbDuplicates(input: $input) {\n      clientKey\n      exists\n      existingClimbUuid\n      existingClimbName\n    }\n  }\n',
 ): (typeof documents)['\n  query CheckMoonBoardClimbDuplicates($input: CheckMoonBoardClimbDuplicatesInput!) {\n    checkMoonBoardClimbDuplicates(input: $input) {\n      clientKey\n      exists\n      existingClimbUuid\n      existingClimbName\n    }\n  }\n'];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  query SimilarClimbs($input: SimilarClimbsInput!) {\n    similarClimbs(input: $input) {\n      uuid\n      name\n      setterUsername\n      angle\n      layoutId\n      frames\n      difficultyName\n      qualityAverage\n      ascensionistCount\n      compatibleSizeIds\n      similarity\n      sharedHoldCount\n      candidateHoldCount\n      targetHoldCount\n    }\n  }\n',
+): (typeof documents)['\n  query SimilarClimbs($input: SimilarClimbsInput!) {\n    similarClimbs(input: $input) {\n      uuid\n      name\n      setterUsername\n      angle\n      layoutId\n      frames\n      difficultyName\n      qualityAverage\n      ascensionistCount\n      compatibleSizeIds\n      similarity\n      sharedHoldCount\n      candidateHoldCount\n      targetHoldCount\n    }\n  }\n'];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

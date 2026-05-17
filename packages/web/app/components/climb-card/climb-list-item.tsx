@@ -14,12 +14,11 @@ import ClimbThumbnail from './climb-thumbnail';
 import ClimbTitle, { type ClimbTitleProps } from './climb-title';
 import DrawerClimbHeader from './drawer-climb-header';
 import { AscentStatus } from './ascent-status';
-import { ClimbActions } from '../climb-actions';
+import { ClimbActionsDrawer } from '../climb-actions';
 import { useDoubleTapFavorite } from '../climb-actions/use-double-tap-favorite';
 import HeartAnimationOverlay from './heart-animation-overlay';
 import PlaylistSelectionContent from '../climb-actions/playlist-selection-content';
 import { useSwipeActions } from '@/app/hooks/use-swipe-actions';
-import { useDrawerDragResize } from '@/app/hooks/use-drawer-drag-resize';
 import { useDoubleTap } from '@/app/lib/hooks/use-double-tap';
 import { themeTokens } from '@/app/theme/theme-config';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
@@ -29,7 +28,6 @@ import { InlineListTickBar } from '../logbook/inline-list-tick-bar';
 import { useOptionalBoardProvider } from '../board-provider/board-provider-context';
 import { useSnackbar } from '../providers/snackbar-provider';
 import ascentStyles from './ascent-status.module.css';
-import drawerCss from '../swipeable-drawer/swipeable-drawer.module.css';
 
 const SwipeableDrawer = dynamic(() => import('../swipeable-drawer/swipeable-drawer'), {
   ssr: false,
@@ -135,19 +133,6 @@ const thumbnailStyle: React.CSSProperties = {
 const centerStyle: React.CSSProperties = { flex: 1, minWidth: 0 };
 
 const iconButtonStyle: React.CSSProperties = { flexShrink: 0, color: 'var(--neutral-400)' };
-
-const actionsDrawerStyles = {
-  wrapper: {
-    width: '100%',
-    touchAction: 'pan-y' as const,
-    transition: 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-  },
-  body: { padding: `${themeTokens.spacing[2]}px 0` },
-  header: {
-    paddingLeft: `${themeTokens.spacing[3]}px`,
-    paddingRight: `${themeTokens.spacing[3]}px`,
-  },
-} as const;
 
 const playlistDrawerStyles = {
   wrapper: { height: 'auto', maxHeight: '70vh', width: '100%' },
@@ -437,12 +422,6 @@ const ClimbListItem: React.FC<ClimbListItemProps> = React.memo(
       showMessage(t('card.list.tickError'), 'error');
     }, [showMessage, t]);
 
-    // --- Actions drawer drag-to-resize (Spotify-style) ---
-    const { paperRef: actionsPaperRef, dragHandlers: actionsDragHandlers } = useDrawerDragResize({
-      open: isActionsOpen,
-      onClose: handleCloseActions,
-    });
-
     // --- Queue drawer state ---
     const [isQueueListOpen, setIsQueueListOpen] = useState(false);
 
@@ -653,33 +632,17 @@ const ClimbListItem: React.FC<ClimbListItemProps> = React.memo(
         {/* Default actions drawers - only rendered when no parent drawer callbacks and boardDetails is available */}
         {!hasParentDrawers && boardDetails && (
           <>
-            <SwipeableDrawer
-              title={
-                <div data-swipe-blocked="" {...actionsDragHandlers} className={drawerCss.dragHeaderWrapper}>
-                  <DrawerClimbHeader climb={climb} boardDetails={boardDetails} />
-                </div>
-              }
-              placement="bottom"
-              height="60%"
-              paperRef={actionsPaperRef}
+            <ClimbActionsDrawer
               open={isActionsOpen}
               onClose={handleCloseActions}
-              swipeEnabled={false}
-              styles={actionsDrawerStyles}
-            >
-              <ClimbActions
-                climb={climb}
-                boardDetails={boardDetails}
-                angle={climb.angle}
-                currentPathname={pathname}
-                viewMode="list"
-                exclude={excludeActions}
-                onOpenPlaylistSelector={handleOpenPlaylistFromActions}
-                onActionComplete={handleCloseActions}
-                onTickAction={boardProvider?.isAuthenticated ? handleOpenInlineTickBar : undefined}
-                onGoToQueue={handleGoToQueue}
-              />
-            </SwipeableDrawer>
+              climb={climb}
+              boardDetails={boardDetails}
+              angle={climb.angle}
+              exclude={excludeActions}
+              onOpenPlaylistSelector={handleOpenPlaylistFromActions}
+              onTickAction={boardProvider?.isAuthenticated ? handleOpenInlineTickBar : undefined}
+              onGoToQueue={handleGoToQueue}
+            />
 
             <SwipeableDrawer
               title={<DrawerClimbHeader climb={climb} boardDetails={boardDetails} />}

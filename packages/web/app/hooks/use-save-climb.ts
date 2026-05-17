@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useWsAuthToken } from './use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
@@ -12,7 +13,7 @@ import {
   type UpdateClimbMutationVariables,
   type UpdateClimbMutationResponse,
 } from '@/app/lib/graphql/operations/new-climb-feed';
-import { createGraphQLClient, execute } from '@/app/components/graphql-queue/graphql-client';
+import { createGraphQLClient, execute, GraphQLOperationError } from '@/app/components/graphql-queue/graphql-client';
 import { getBackendWsUrl } from '@/app/lib/backend-url';
 import type { BoardName } from '@/app/lib/types';
 import type { SaveClimbOptions } from '@/app/lib/api-wrappers/aurora/types';
@@ -38,6 +39,7 @@ export function useSaveClimb(boardName: BoardName) {
   const { token } = useWsAuthToken();
   const { data: session, status: sessionStatus } = useSession();
   const { showMessage } = useSnackbar();
+  const { t } = useTranslation('climbs');
 
   return useMutation({
     mutationFn: async (options: Omit<SaveClimbOptions, 'setter_id' | 'user_id'>): Promise<SaveClimbResponse> => {
@@ -77,8 +79,14 @@ export function useSaveClimb(boardName: BoardName) {
         void client.dispose();
       }
     },
-    onError: () => {
-      showMessage('Failed to save climb', 'error');
+    onError: (err) => {
+      // Duplicate-publish rejections render a richer inline UX in the form
+      // (see create-climb-form), so suppress the generic snackbar for that
+      // case and let the caller handle it explicitly.
+      if (err instanceof GraphQLOperationError && err.extensions?.code === 'CLIMB_IS_DUPLICATE') {
+        return;
+      }
+      showMessage(t('createClimbForm.alerts.saveFailedFallback'), 'error');
     },
   });
 }

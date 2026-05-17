@@ -23,6 +23,22 @@ vi.mock('../db/client', () => ({
   db: mockDb,
 }));
 
+// Stub the advisory-xact-lock acquisition so it doesn't consume the same
+// mockResolvedValueOnce queue the tests use to script findExactDuplicateMatch
+// responses. The lock fires a SELECT on the same `executor.execute` channel,
+// and without this it would eat each test's gate response. The actual locking
+// behavior is exercised at the DB level — the resolver-level tests only need
+// to verify the gate sequence, not the lock side-effect.
+vi.mock('../graphql/resolvers/climbs/climb-similarity', async () => {
+  const actual = await vi.importActual<typeof import('../graphql/resolvers/climbs/climb-similarity')>(
+    '../graphql/resolvers/climbs/climb-similarity',
+  );
+  return {
+    ...actual,
+    acquireDuplicateGateLock: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 vi.mock('../events', () => ({
   publishSocialEvent: mockPublishSocialEvent,
 }));
@@ -80,6 +96,12 @@ function createMockChain(resolveValue: unknown = [], onValues?: (values: unknown
 describe('climb mutations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks resets call history but NOT the mockResolvedValueOnce
+    // queue. Reset the queued values too — a test that throws partway through
+    // would otherwise leak its leftover queue entries into the next test and
+    // cause inscrutable cascade failures.
+    mockDb.execute.mockReset();
+    mockDb.select.mockReset();
     insertCalls.length = 0;
     mockDb.transaction.mockImplementation(async (callback: (tx: typeof mockDb) => Promise<unknown>) =>
       callback(mockDb),
@@ -87,6 +109,8 @@ describe('climb mutations', () => {
   });
 
   it('stores non-draft Aurora climbs as listed', async () => {
+    // No exact-match duplicate found — findExactDuplicateMatch on a non-draft save.
+    mockDb.execute.mockResolvedValueOnce([]);
     mockDb.select.mockReturnValueOnce(
       createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
     );
@@ -110,15 +134,66 @@ describe('climb mutations', () => {
       makeCtx(),
     );
 
-    expect(insertCalls).toHaveLength(2);
+    // INSERTs: board_climbs, board_climb_holds, board_climb_stats
+    expect(insertCalls).toHaveLength(3);
     expect(insertCalls[0].values).toMatchObject({
       isDraft: false,
       isListed: true,
     });
-    expect(insertCalls[1].values).toMatchObject({
+    expect(insertCalls[1].values).toEqual([
+      expect.objectContaining({
+        boardType: 'kilter',
+        holdId: 1,
+        holdState: 'HAND',
+      }),
+    ]);
+    expect(insertCalls[2].values).toMatchObject({
       boardType: 'kilter',
       angle: 40,
       ascensionistCount: 0,
+    });
+  });
+
+  it('skips the duplicate gate for multi-frame Aurora climbs', async () => {
+    // Multi-frame climbs (Aurora dynos with intermediate frames) are out of
+    // scope for the gate. We don't queue any "found a match" execute
+    // response — if the gate fired regardless it would either error on the
+    // missing mock or come back with no result and proceed; either way the
+    // climb should save successfully (no rejection).
+    //
+    // populateDenormalizedColumns runs raw SQL via execute too, so we
+    // can't assert "execute never called" — instead verify the save
+    // completes end-to-end with framesCount=2 preserved on the row.
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
+    );
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.saveClimb(
+      {},
+      {
+        input: {
+          boardType: 'kilter',
+          layoutId: 1,
+          name: 'Multi-frame Dyno',
+          description: '',
+          isDraft: false,
+          frames: 'p1r43,p2r43',
+          framesCount: 2,
+          angle: 40,
+        },
+      },
+      makeCtx(),
+    );
+
+    // board_climbs INSERT + holds INSERT + stats INSERT.
+    expect(insertCalls).toHaveLength(3);
+    expect(insertCalls[0].values).toMatchObject({
+      framesCount: 2,
+      isDraft: false,
+      isListed: true,
     });
   });
 
@@ -146,11 +221,20 @@ describe('climb mutations', () => {
       makeCtx(),
     );
 
-    expect(insertCalls).toHaveLength(1);
+    // Draft skips the duplicate-gate query AND the stats seed, but still
+    // writes board_climb_holds so the next save's gate has authoritative data.
+    expect(insertCalls).toHaveLength(2);
     expect(insertCalls[0].values).toMatchObject({
       isDraft: true,
       isListed: false,
     });
+    expect(insertCalls[1].values).toEqual([
+      expect.objectContaining({
+        boardType: 'kilter',
+        holdId: 1,
+        holdState: 'HAND',
+      }),
+    ]);
   });
 
   it('stores non-draft MoonBoard climbs as listed', async () => {
@@ -348,6 +432,7 @@ describe('climb mutations', () => {
             publishedAt: null,
             createdAt: '2026-05-14T20:00:00.000Z',
             angle: 35,
+            layoutId: 8,
             setterUsername: 'Alice Setter',
           },
         ]),
@@ -389,7 +474,13 @@ describe('climb mutations', () => {
       expect.objectContaining({
         type: 'climb.created',
         entityId: 'climb-1',
-        metadata: expect.objectContaining({ setterDisplayName: 'Alice Setter' }),
+        metadata: expect.objectContaining({
+          setterDisplayName: 'Alice Setter',
+          // The draft→publish path must propagate the climb's layoutId into
+          // the social event so follower feeds get the layout context (the
+          // payload was previously '' even though the existing row knew it).
+          layoutId: '8',
+        }),
       }),
     );
   });
@@ -505,6 +596,146 @@ describe('climb mutations', () => {
     expect(insertCalls).toHaveLength(0);
   });
 
+  // -----------------------------------------------------------------------
+  // updateClimb duplicate-gate coverage. These tests exercise the path
+  // added in this PR: the gate fires on draft→publish transitions, on
+  // frames-changing republishes within the 24h edit window, and stays out
+  // of the way for non-frames updates. The shared helper itself is unit-
+  // tested in climb-similarity.test.ts; here we only verify the resolver
+  // wiring.
+  // -----------------------------------------------------------------------
+
+  function makeExistingDraft(overrides: Record<string, unknown> = {}) {
+    return {
+      uuid: 'climb-x',
+      userId: 'user-123',
+      isDraft: true,
+      publishedAt: null,
+      createdAt: '2026-05-14T20:00:00.000Z',
+      angle: 35,
+      layoutId: 1,
+      frames: 'p1117r12p1140r15',
+      framesCount: 1,
+      setterUsername: 'Alice Setter',
+      ...overrides,
+    };
+  }
+
+  it('updateClimb rejects a draft→publish whose holds match an existing published climb', async () => {
+    mockDb.select.mockReturnValueOnce(createMockChain([makeExistingDraft()]));
+    // First execute call: findExactDuplicateMatch — returns a match.
+    mockDb.execute.mockResolvedValueOnce([
+      { uuid: 'twin', name: 'Twin Climb', setter_username: 'somebody', angle: 30 },
+    ]);
+    mockDb.update = vi.fn().mockReturnValue(createMockChain(undefined));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await expect(
+      climbMutations.updateClimb({}, { input: { boardType: 'kilter', uuid: 'climb-x', isDraft: false } }, makeCtx()),
+    ).rejects.toThrow(/holds already exists/);
+
+    // The gate must fire BEFORE the UPDATE so the row isn't flipped to
+    // isDraft=false + publishedAt=now before the throw. Same invariant the
+    // existing 'throws when publishing a draft without an angle' test enforces.
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+    expect(mockPublishSocialEvent).not.toHaveBeenCalled();
+  });
+
+  it('updateClimb allows a draft→publish when no existing climb matches', async () => {
+    mockDb.select
+      .mockReturnValueOnce(createMockChain([makeExistingDraft()]))
+      .mockReturnValueOnce(
+        createMockChain([{ name: 'Alice', displayName: 'Alice Setter', image: null, avatarUrl: null }]),
+      );
+    // findExactDuplicateMatch → no match.
+    mockDb.execute.mockResolvedValueOnce([]);
+    mockDb.update = vi.fn().mockReturnValue(createMockChain(undefined));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.updateClimb(
+      {},
+      { input: { boardType: 'kilter', uuid: 'climb-x', isDraft: false } },
+      makeCtx(),
+    );
+
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockPublishSocialEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('updateClimb rejects a frames-changing publish whose new holds match another climb', async () => {
+    const publishedAt = new Date(Date.now() - 60 * 1000).toISOString();
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([
+        makeExistingDraft({
+          uuid: 'climb-y',
+          isDraft: false,
+          publishedAt,
+          createdAt: publishedAt,
+        }),
+      ]),
+    );
+    // findExactDuplicateMatch on the *new* frames → returns a match.
+    mockDb.execute.mockResolvedValueOnce([
+      { uuid: 'twin', name: 'Twin Climb', setter_username: 'somebody', angle: 30 },
+    ]);
+    mockDb.update = vi.fn().mockReturnValue(createMockChain(undefined));
+    mockDb.transaction.mockImplementation(async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb));
+    mockDb.delete.mockReturnValue(createMockChain(undefined));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await expect(
+      climbMutations.updateClimb(
+        {},
+        {
+          input: {
+            boardType: 'kilter',
+            uuid: 'climb-y',
+            frames: 'p9999r12p8888r13',
+          },
+        },
+        makeCtx(),
+      ),
+    ).rejects.toThrow(/holds already exists/);
+
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it('updateClimb skips the gate query when only metadata changes (no frames, no publish)', async () => {
+    const publishedAt = new Date(Date.now() - 60 * 1000).toISOString();
+    mockDb.select.mockReturnValueOnce(
+      createMockChain([
+        makeExistingDraft({
+          uuid: 'climb-z',
+          isDraft: false,
+          publishedAt,
+          createdAt: publishedAt,
+        }),
+      ]),
+    );
+    mockDb.update = vi.fn().mockReturnValue(createMockChain(undefined));
+    mockDb.insert.mockImplementation((table: unknown) =>
+      createMockChain(undefined, (values) => insertCalls.push({ table, values })),
+    );
+
+    await climbMutations.updateClimb(
+      {},
+      { input: { boardType: 'kilter', uuid: 'climb-z', name: 'New name only' } },
+      makeCtx(),
+    );
+
+    // No duplicate-gate query and no holds replace — execute must be untouched.
+    expect(mockDb.execute).not.toHaveBeenCalled();
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects duplicate MoonBoard climbs before inserting', async () => {
     mockDb.execute
       .mockResolvedValueOnce([
@@ -523,8 +754,13 @@ describe('climb mutations', () => {
       createMockChain(undefined, (values) => insertCalls.push({ table, values })),
     );
 
-    await expect(
-      climbMutations.saveMoonBoardClimb(
+    // Capture the thrown error so we can assert both the message and the
+    // CLIMB_IS_DUPLICATE GraphQL extension. The frontend's duplicate-error
+    // UX branches on extensions.code, so this is the contract the
+    // saveMoonBoardClimb gate has to honour for parity with saveClimb.
+    let caught: unknown;
+    try {
+      await climbMutations.saveMoonBoardClimb(
         {},
         {
           input: {
@@ -542,8 +778,20 @@ describe('climb mutations', () => {
           },
         },
         makeCtx(),
-      ),
-    ).rejects.toThrow('A MoonBoard climb with the same holds already exists: "Already There"');
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain(
+      'A MoonBoard climb with the same holds already exists: "Already There"',
+    );
+    const extensions = (caught as { extensions?: Record<string, unknown> }).extensions;
+    expect(extensions).toMatchObject({
+      code: 'CLIMB_IS_DUPLICATE',
+      existingClimbUuid: 'existing-uuid',
+      existingClimbName: 'Already There',
+    });
 
     expect(insertCalls).toHaveLength(0);
     expect(mockPublishSocialEvent).not.toHaveBeenCalled();
