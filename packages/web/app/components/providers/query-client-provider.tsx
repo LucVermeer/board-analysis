@@ -81,7 +81,12 @@ export function SessionCacheBuster({ persister, sessionUserId }: SessionCacheBus
     if (previous === null) return;
 
     queryClient.removeQueries({ predicate: (query) => query.meta?.persist === true });
-    void persister.removeClient();
+    // The persister already swallows IDB errors internally, but log anything
+    // that escapes so a failed sign-out wipe is observable instead of silent.
+    // removeClient() is typed as Promisable<void>, so wrap to normalise.
+    Promise.resolve(persister.removeClient()).catch((error: unknown) => {
+      console.error('Failed to clear persisted react-query cache on session change:', error);
+    });
   }, [queryClient, persister, sessionUserId]);
 
   return null;

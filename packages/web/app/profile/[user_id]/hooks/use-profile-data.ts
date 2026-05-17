@@ -77,6 +77,9 @@ export function useProfileData(userId: string, initialData?: InitialData) {
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
 
+  // Drives both the UI's "own profile" branches and whether we persist the
+  // four queries to IDB. Persisting other users' profile data would let it
+  // accumulate unbounded across one-off visits (capped only by 24h maxAge).
   const isOwnProfile = session?.user?.id ? session.user.id === userId : (initialData?.initialIsOwnProfile ?? false);
 
   const profileInitial = initialData?.initialProfile;
@@ -106,7 +109,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     retry: (failureCount, error) => !(error instanceof ProfileNotFoundError) && failureCount < 3,
     initialData: profileInitial,
     initialDataUpdatedAt: profileInitial ? Date.now() : undefined,
-    meta: { persist: true },
+    meta: { persist: isOwnProfile },
   });
 
   const profileError = profileQuery.error;
@@ -150,7 +153,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     refetchOnMount: ticksInitial ? true : 'always',
     initialData: ticksInitial,
     initialDataUpdatedAt: ticksInitial ? Date.now() : undefined,
-    meta: { persist: true },
+    meta: { persist: isOwnProfile },
   });
 
   const profileStatsInitial = initialData?.initialProfileStats;
@@ -167,7 +170,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     refetchOnMount: profileStatsInitial ? true : 'always',
     initialData: profileStatsInitial,
     initialDataUpdatedAt: profileStatsInitial ? Date.now() : undefined,
-    meta: { persist: true },
+    meta: { persist: isOwnProfile },
   });
 
   const percentileInitial = initialData?.initialPercentile ?? undefined;
@@ -185,7 +188,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     refetchOnMount: percentileInitial !== undefined ? true : 'always',
     initialData: percentileInitial,
     initialDataUpdatedAt: percentileInitial !== undefined ? Date.now() : undefined,
-    meta: { persist: true },
+    meta: { persist: isOwnProfile },
   });
 
   const profile = profileQuery.data ?? null;

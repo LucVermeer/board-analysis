@@ -306,6 +306,21 @@ describe('useProfileData', () => {
     expect(mockRequest).not.toHaveBeenCalledWith(GET_USER_TICKS, { userId: 'user-1', boardType: 'kilter' });
   });
 
+  it('flags notFound when the profile endpoint returns 404', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    } as Response);
+
+    const { result } = renderProfileDataHook(() => useProfileData('missing-user'));
+
+    await waitFor(() => {
+      expect(result.current.notFound).toBe(true);
+    });
+    expect(result.current.profile).toBeNull();
+  });
+
   it('seeds percentile from initial data without waiting on a fetch', () => {
     const initialPercentile = {
       totalDistinctClimbs: 12,
