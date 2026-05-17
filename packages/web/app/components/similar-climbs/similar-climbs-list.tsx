@@ -297,7 +297,13 @@ function SimilarClimbCard({ climb, boardType, onSetActive, onOpenActions, compat
           {climb.name || t('similarClimbs.untitledClimb')}
         </div>
         {climb.difficultyName ? (
-          <span className={styles.grade} style={gradeColor ? { color: gradeColor } : undefined}>
+          // Set the grade colour as a CSS custom property so the module CSS
+          // owns the rule. The cast through `as React.CSSProperties` allows
+          // the custom property without complaint from React's typed style.
+          <span
+            className={styles.grade}
+            style={gradeColor ? ({ '--grade-color': gradeColor } as React.CSSProperties) : undefined}
+          >
             {climb.difficultyName}
           </span>
         ) : null}

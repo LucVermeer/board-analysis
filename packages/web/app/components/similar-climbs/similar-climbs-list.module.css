@@ -95,7 +95,10 @@
   flex: 0 0 auto;
   font-size: 13px;
   font-weight: 700;
-  /* color is set inline via getSoftGradeColor */
+  /* --grade-color is set as a CSS custom property on each instance from
+     getSoftGradeColor; the fallback is the surrounding text colour so the
+     label stays legible if the helper returned undefined. */
+  color: var(--grade-color, inherit);
   white-space: nowrap;
 }
 

@@ -415,6 +415,7 @@ describe('climb mutations', () => {
             publishedAt: null,
             createdAt: '2026-05-14T20:00:00.000Z',
             angle: 35,
+            layoutId: 8,
             setterUsername: 'Alice Setter',
           },
         ]),
@@ -456,7 +457,13 @@ describe('climb mutations', () => {
       expect.objectContaining({
         type: 'climb.created',
         entityId: 'climb-1',
-        metadata: expect.objectContaining({ setterDisplayName: 'Alice Setter' }),
+        metadata: expect.objectContaining({
+          setterDisplayName: 'Alice Setter',
+          // The draft→publish path must propagate the climb's layoutId into
+          // the social event so follower feeds get the layout context (the
+          // payload was previously '' even though the existing row knew it).
+          layoutId: '8',
+        }),
       }),
     );
   });

@@ -614,7 +614,11 @@ export const climbMutations = {
         timestamp: Date.now(),
         metadata: {
           boardType: validated.boardType,
-          layoutId: '',
+          // existing.layoutId came from the SELECT extended in this PR for
+          // the duplicate gate. Use it so follower feeds get the layout
+          // context — the empty-string placeholder was a leftover from
+          // before that column was selectable here.
+          layoutId: existing.layoutId != null ? String(existing.layoutId) : '',
           climbName: validated.name ?? '',
           climbUuid: validated.uuid,
           angle: validated.angle !== undefined ? String(validated.angle) : '',
