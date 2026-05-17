@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import LocaleLink from '@/app/components/i18n/locale-link';
@@ -11,8 +11,6 @@ import { useResolvedBoardDetails } from '@/app/hooks/use-resolved-board-details'
 import { track } from '@/app/lib/analytics';
 import FastRewindOutlined from '@mui/icons-material/FastRewindOutlined';
 import IconButton, { type IconButtonProps } from '@mui/material/IconButton';
-import { useHoldToConfirm } from '@/app/lib/hooks/use-hold-to-confirm';
-import { useSnackbar } from '../providers/snackbar-provider';
 
 type PreviousClimbButtonProps = {
   navigate: boolean;
@@ -25,12 +23,22 @@ const PreviousButton = ({ ariaLabel, ...props }: IconButtonProps & { ariaLabel: 
   </IconButton>
 );
 
+/**
+ * Bar previous-climb button.
+ *
+ * Queue-control-bar pivot (simplified): any participant — driver or
+ * non-driver, solo or party — can tap this and the wall climb advances
+ * instantly to the previous queue item. There is no hold-to-confirm gate
+ * and no driver transfer; the presser stays a non-driver, only the shared
+ * queue position moves. `setCurrentClimbQueueItem` updates the queue
+ * state (and broadcasts via the persistent-session subscription when
+ * party is active) but never calls `takeControl`.
+ */
 export default function PreviousClimbButton({ navigate, boardDetails }: PreviousClimbButtonProps) {
   const { t } = useTranslation('climbs');
   const ariaLabel = t('actions.navigation.previousClimb');
   const { getPreviousClimbQueueItem, setCurrentClimbQueueItem } = useQueueActions();
-  const { viewOnlyMode, isPersistentSessionActive, isDriver } = useSessionData();
-  const { showMessage } = useSnackbar();
+  const { viewOnlyMode } = useSessionData();
   const { rawParams, angle, pathname, searchParams, isPlayPage, resolvedDetails } =
     useResolvedBoardDetails(boardDetails);
 
@@ -73,49 +81,33 @@ export default function PreviousClimbButton({ navigate, boardDetails }: Previous
     return climbUrl;
   };
 
-  // Mirrors NextClimbButton — see that file for the rule-6 hold-to-confirm
-  // rationale.
-  const requiresHold = isPersistentSessionActive && !isDriver;
-
   const fireAdvance = useCallback(() => {
     if (!previousClimb) return;
     setCurrentClimbQueueItem(previousClimb);
     track('Queue Navigation', {
       direction: 'previous',
-      method: requiresHold ? 'button_held' : 'button',
+      method: 'button',
       boardLayout: boardDetails?.layout_name || '',
     });
     if (navigate && isPlayPage) {
       const url = buildClimbUrl();
       if (url) window.history.pushState(null, '', url);
     }
+    // buildClimbUrl is a closure over current state; recreating each fire is
+    // intentional. previousClimb is the only ref-stable input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previousClimb, requiresHold, navigate, isPlayPage, setCurrentClimbQueueItem, boardDetails?.layout_name]);
-
-  const { handlers, isHolding, secondsRemaining } = useHoldToConfirm({
-    enabled: requiresHold,
-    onConfirm: fireAdvance,
-  });
-
-  useEffect(() => {
-    if (isHolding && secondsRemaining != null && secondsRemaining > 0) {
-      showMessage(`Advancing in ${secondsRemaining}…`, 'info', undefined, 1100);
-    }
-  }, [isHolding, secondsRemaining, showMessage]);
+  }, [previousClimb, navigate, isPlayPage, setCurrentClimbQueueItem, boardDetails?.layout_name]);
 
   if (!viewOnlyMode && navigate && previousClimb) {
     if (isPlayPage) {
-      return <PreviousButton ariaLabel={ariaLabel} {...handlers} />;
+      return <PreviousButton ariaLabel={ariaLabel} onClick={fireAdvance} />;
     }
     const climbUrl = buildClimbUrl();
-    if (requiresHold) {
-      return <PreviousButton ariaLabel={ariaLabel} {...handlers} />;
-    }
     return (
-      <LocaleLink href={climbUrl} prefetch={false} onClick={handlers.onClick}>
+      <LocaleLink href={climbUrl} prefetch={false} onClick={fireAdvance}>
         <PreviousButton ariaLabel={ariaLabel} />
       </LocaleLink>
     );
   }
-  return <PreviousButton ariaLabel={ariaLabel} {...handlers} disabled={!previousClimb || viewOnlyMode} />;
+  return <PreviousButton ariaLabel={ariaLabel} onClick={fireAdvance} disabled={!previousClimb || viewOnlyMode} />;
 }

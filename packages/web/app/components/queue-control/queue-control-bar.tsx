@@ -62,7 +62,6 @@ import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
 import Badge from '@mui/material/Badge';
 import Lightbulb from '@mui/icons-material/Lightbulb';
-import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import Typography from '@mui/material/Typography';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
 import { useColorMode } from '@/app/hooks/use-color-mode';
@@ -210,7 +209,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     users,
     clientId,
     isPersistentSessionActive,
-    isDriver,
     driverParticipantId,
   } = useSessionData();
 
@@ -262,24 +260,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     setCurrentClimbQueueItem,
     endSession,
     disconnect,
-    takeControl,
-    releaseControl,
   } = useQueueActions();
-  /**
-   * Bar lightbulb toggle: if local user is driving, release; otherwise claim.
-   * Pure session-state toggle — no climb attached (the wall climb stays put).
-   * In solo (no party) the helper is a backend no-op; this button is hidden
-   * anyway via `isPersistentSessionActive`.
-   */
-  const handleBarLightbulbClick = useCallback(() => {
-    if (isDriver) {
-      void releaseControl();
-      track('Wall Control Released', { reason: 'manual', source: 'lightbulb_bar' });
-    } else {
-      void takeControl();
-      track('Wall Control Taken', { source: 'lightbulb_bar', previousDriver: 'other', mode: 'party' });
-    }
-  }, [isDriver, releaseControl, takeControl]);
   const handleThumbnailClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
     // No-payload dispatch + wallView flag: drawer falls back to the wall
@@ -1403,24 +1384,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                           </IconButton>
                         </LocaleLink>
                       </span>
-                    )}
-                    {/* Bar lightbulb — queue-control-bar pivot's driver
-                        toggle. Filled (color=primary) when the local user is
-                        driving; outlined when someone else holds (or in
-                        solo, where isDriver is always true and the lightbulb
-                        is effectively a no-op given the BLE auto-sender does
-                        the work). Click toggles claim/release; in solo the
-                        helper short-circuits. Hidden outside an active
-                        party session — solo users use the drawer lightbulb
-                        per the spec. */}
-                    {isPersistentSessionActive && (
-                      <IconButton
-                        onClick={handleBarLightbulbClick}
-                        aria-label={isDriver ? "You're driving. Tap to release." : 'Take wall control'}
-                        color={isDriver ? 'primary' : 'default'}
-                      >
-                        {isDriver ? <Lightbulb /> : <LightbulbOutlined />}
-                      </IconButton>
                     )}
                     {/* Navigation buttons - desktop only */}
                     <span className={styles.navButtons}>
