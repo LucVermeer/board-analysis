@@ -160,6 +160,9 @@ export async function findExactDuplicateMatch({
         AND ${dbSchema.boardClimbs.isDraft} = FALSE
         AND ${dbSchema.boardClimbs.isListed} IS NOT FALSE
         AND ${dbSchema.boardClimbs.framesCount} = 1
+        -- Aurora-convention "No match" placeholder climbs are not real
+        -- routes; never block a real setter's save by citing a placeholder.
+        AND LOWER(COALESCE(${dbSchema.boardClimbs.description}, '')) NOT LIKE 'no match%'
         ${excludeUuid ? sql`AND ${dbSchema.boardClimbs.uuid} <> ${excludeUuid}` : sql``}
       GROUP BY
         ${dbSchema.boardClimbs.uuid},

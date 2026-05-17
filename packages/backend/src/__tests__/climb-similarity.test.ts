@@ -176,6 +176,22 @@ describe('findExactDuplicateMatch', () => {
       expect(params).toContain(state);
     }
   });
+
+  it("excludes Aurora 'No match' placeholder climbs from the gate", async () => {
+    // Aurora ships placeholder rows whose descriptions start with "No match".
+    // Without this filter a real setter typing in the same holds as a
+    // placeholder gets a false-positive duplicate error citing the placeholder.
+    mockDb.execute.mockResolvedValueOnce([]);
+    await findExactDuplicateMatch({
+      boardType: 'kilter',
+      layoutId: 1,
+      signature: '1:STARTING',
+    });
+    const [query] = mockDb.execute.mock.calls[0];
+    const { sql: rendered, params } = new PgDialect().sqlToQuery(query as SQL);
+    expect(rendered).toContain("NOT LIKE 'no match%'");
+    expect(params).not.toContain('no match%');
+  });
 });
 
 describe('findSimilarClimbs', () => {

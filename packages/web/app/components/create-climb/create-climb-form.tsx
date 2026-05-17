@@ -461,10 +461,28 @@ export default function CreateClimbForm({
 
   // Clear the publish duplicate error when the user changes anything that
   // could resolve it — toggling isDraft (the suggested escape hatch) or
-  // changing the hold pattern. The next save attempt re-evaluates from scratch.
+  // changing the hold pattern. We snapshot the holds (and isDraft) at the
+  // moment the error is set so async hold-map updates that happen *after*
+  // the error (e.g. autosave restore on a remount, a bluetooth state echo)
+  // don't wipe the error before the user has actually edited anything.
+  // Comparison is content-based — litUpHoldsMap can churn its object
+  // identity without contents changing.
+  const errorSnapshotRef = useRef<{ holdsJson: string; isDraft: boolean } | null>(null);
   useEffect(() => {
-    setPublishDuplicateError(null);
-  }, [litUpHoldsMap, isDraft]);
+    if (!publishDuplicateError) {
+      errorSnapshotRef.current = null;
+      setShowDuplicateMatchDrawer(false);
+      return;
+    }
+    if (errorSnapshotRef.current === null) {
+      errorSnapshotRef.current = { holdsJson: JSON.stringify(litUpHoldsMap), isDraft };
+      return;
+    }
+    const currentHoldsJson = JSON.stringify(litUpHoldsMap);
+    if (currentHoldsJson !== errorSnapshotRef.current.holdsJson || isDraft !== errorSnapshotRef.current.isDraft) {
+      setPublishDuplicateError(null);
+    }
+  }, [publishDuplicateError, litUpHoldsMap, isDraft]);
 
   // The SimilarClimbsList needs the active board+layout to scope its query.
   // Aurora reads from boardDetails; MoonBoard reads from the layoutId prop.

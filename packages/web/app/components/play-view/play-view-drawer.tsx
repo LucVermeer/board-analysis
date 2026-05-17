@@ -72,10 +72,11 @@ type PlayDrawerContentProps = {
   viewerBoardDetails: BoardDetails;
   aboveFold: React.ReactNode;
   sectionsEnabled: boolean;
+  paperRef: React.RefObject<HTMLDivElement | null>;
 };
 
 const PlayDrawerContent = React.memo<PlayDrawerContentProps>(
-  ({ climb, boardType, angle, layoutId, viewerBoardDetails, aboveFold, sectionsEnabled }) => {
+  ({ climb, boardType, angle, layoutId, viewerBoardDetails, aboveFold, sectionsEnabled, paperRef }) => {
     const sections = useBuildClimbDetailSections({
       climb,
       climbUuid: climb.uuid,
@@ -94,13 +95,15 @@ const PlayDrawerContent = React.memo<PlayDrawerContentProps>(
     // board first instead of landing mid-scroll on whatever section
     // they were on in the previous climb. The data-scroll-container
     // attribute is set by ClimbDetailShellClient on its mobileScrollLayout
-    // wrapper (climb-detail-shell.client.tsx:38).
+    // wrapper (climb-detail-shell.client.tsx:38). Scope to paperRef so we
+    // don't accidentally grab a foreign element that happens to carry the
+    // same attribute elsewhere on the page.
     useEffect(() => {
-      const scrollContainer = document.querySelector<HTMLElement>('[data-scroll-container]');
+      const scrollContainer = paperRef.current?.querySelector<HTMLElement>('[data-scroll-container]');
       if (scrollContainer) {
         scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    }, [climb.uuid]);
+    }, [climb.uuid, paperRef]);
 
     return <ClimbDetailShellClient mode="play" sections={sections} aboveFold={aboveFold} />;
   },
@@ -962,6 +965,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 viewerBoardDetails={boardDetails}
                 sectionsEnabled={sectionsEverEnabled && isOpen}
                 aboveFold={aboveFold}
+                paperRef={playPaperRef}
               />
             ) : (
               <ClimbDetailShellClient mode="play" sections={[]} aboveFold={null} />
