@@ -1506,17 +1506,26 @@ export default function CreateClimbForm({
           </MuiAlert>
         )}
 
-        {boardType === 'moonboard' && moonBoardDuplicateError && (
+        {/* MoonBoard pre-save live check Alert. Two things govern when it
+            shows: (1) the live debounced query has flagged a match, AND
+            (2) the save-time CLIMB_IS_DUPLICATE gate hasn't already
+            surfaced its own (richer) Alert. The two error UIs would
+            otherwise stack on the same publish attempt. */}
+        {boardType === 'moonboard' && moonBoardDuplicateError && !publishDuplicateError && (
           <MuiAlert severity="error" className={styles.alertBanner}>
             {moonBoardDuplicateError}
           </MuiAlert>
         )}
 
-        {boardType === 'moonboard' && !moonBoardDuplicateError && isCheckingMoonBoardDuplicate && isValid && (
-          <MuiAlert severity="info" className={styles.alertBanner}>
-            {t('createClimbForm.alerts.checkingMoonBoardDuplicate')}
-          </MuiAlert>
-        )}
+        {boardType === 'moonboard' &&
+          !moonBoardDuplicateError &&
+          !publishDuplicateError &&
+          isCheckingMoonBoardDuplicate &&
+          isValid && (
+            <MuiAlert severity="info" className={styles.alertBanner}>
+              {t('createClimbForm.alerts.checkingMoonBoardDuplicate')}
+            </MuiAlert>
+          )}
 
         {publishDuplicateError && (
           <MuiAlert

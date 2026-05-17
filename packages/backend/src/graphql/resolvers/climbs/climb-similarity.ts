@@ -281,8 +281,13 @@ export async function findSimilarClimbs({
           AND h.hold_state IN ${KNOWN_HOLD_STATES_SQL}
           AND c.layout_id = ${layoutId}
           AND c.is_draft = FALSE
+          -- IS NOT FALSE rather than = true so we include rows where Aurora
+          -- left is_listed NULL (most kilter/tension Aurora-synced climbs).
           AND c.is_listed IS NOT FALSE
           AND c.frames_count = 1
+          -- Aurora-convention "No match" placeholder climbs are not real
+          -- routes; exclude them from both the gate and the similarity list.
+          AND LOWER(COALESCE(c.description, '')) NOT LIKE 'no match%'
           ${excludeUuid ? sql`AND h.climb_uuid <> ${excludeUuid}` : sql``}
         GROUP BY h.climb_uuid
         HAVING COUNT(DISTINCT h.hold_id) >= CEIL(${targetSize}::float * ${safeThreshold})::int
