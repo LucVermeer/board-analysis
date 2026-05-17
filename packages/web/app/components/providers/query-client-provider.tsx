@@ -29,17 +29,21 @@ export default function QueryClientProvider({ children }: QueryClientProviderPro
   const { data: session } = useSession();
   const sessionUserId = session?.user?.id ?? null;
 
+  // No `buster` here: useSession() returns null on the first render of every
+  // page load (status: loading), so any session-derived buster would discard
+  // the persisted cache before the session resolves. Per-user isolation comes
+  // from the query keys themselves (['profile', userId], etc.) — a different
+  // user simply misses the cache because their keys don't exist in it.
   const persistOptions = useMemo(
     () => ({
       persister,
       maxAge: MAX_AGE_MS,
-      buster: sessionUserId ?? 'anon',
       dehydrateOptions: {
         shouldDehydrateQuery: (query: { meta?: Record<string, unknown>; state: { status: string } }) =>
           query.meta?.persist === true && query.state.status === 'success',
       },
     }),
-    [persister, sessionUserId],
+    [persister],
   );
 
   return (
@@ -55,17 +59,28 @@ type SessionCacheBusterProps = {
   sessionUserId: string | null;
 };
 
-// Belt-and-braces companion to the persister `buster`: when the signed-in user
-// changes (sign-out, switch account), wipe the in-memory persist-flagged
-// queries and clear the IDB blob so the next user can't ever see a stale frame
-// from the previous identity.
-function SessionCacheBuster({ persister, sessionUserId }: SessionCacheBusterProps) {
+// Wipe both the in-memory persisted queries and the IDB blob when the user
+// transitions from one signed-in identity to another, or signs out — so the
+// next render can't show one user a frame of another user's data.
+//
+// The ref is seeded `undefined` as a sentinel for "no transition observed
+// yet", which lets us skip two non-transitions that would otherwise wipe a
+// healthy cache on every hard reload:
+//   - first effect after mount, no matter the session value
+//   - the loading → authenticated transition (lastUserIdRef === null), which
+//     fires on every page load while NextAuth resolves the session
+export function SessionCacheBuster({ persister, sessionUserId }: SessionCacheBusterProps) {
   const queryClient = useQueryClient();
-  const lastUserIdRef = useRef<string | null>(sessionUserId);
+  const lastUserIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    if (lastUserIdRef.current === sessionUserId) return;
+    const previous = lastUserIdRef.current;
     lastUserIdRef.current = sessionUserId;
+
+    if (previous === undefined) return;
+    if (previous === sessionUserId) return;
+    if (previous === null) return;
+
     queryClient.removeQueries({ predicate: (query) => query.meta?.persist === true });
     void persister.removeClient();
   }, [queryClient, persister, sessionUserId]);
