@@ -16,7 +16,7 @@ import OpenInFullOutlined from '@mui/icons-material/OpenInFullOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
 import { track } from '@/app/lib/analytics';
 import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
-import NextClimbButton from './next-climb-button';
+import QueueNavButton from './queue-nav-button';
 import { usePathname, useParams, useSearchParams } from 'next/navigation';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import LocaleLink from '@/app/components/i18n/locale-link';
@@ -30,7 +30,6 @@ import type { BoardRouteParameters, BoardDetails, Angle, Climb } from '@/app/lib
 import type { ClimbQueueItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { readPlayDrawerEventDetail } from './play-drawer-event';
-import PreviousClimbButton from './previous-climb-button';
 import QueueDrawer from '../play-view/queue-drawer';
 import { useSwipeable } from 'react-swipeable';
 import { TickButton } from '../logbook/tick-button';
@@ -43,12 +42,7 @@ import ClimbThumbnail from '../climb-card/climb-thumbnail';
 import ClimbTitle from '../climb-card/climb-title';
 import { themeTokens } from '@/app/theme/theme-config';
 import { TOUR_CLOSE_PLAY_VIEW_EVENT } from '../onboarding/onboarding-tour-events';
-import {
-  useCardSwipeNavigation,
-  EXIT_DURATION,
-  SNAP_BACK_DURATION,
-  ENTER_ANIMATION_DURATION,
-} from '@/app/hooks/use-card-swipe-navigation';
+import { useCardSwipeNavigation, EXIT_DURATION, SNAP_BACK_DURATION } from '@/app/hooks/use-card-swipe-navigation';
 import PlayViewDrawer from '../play-view/play-view-drawer';
 import CircularProgress from '@mui/material/CircularProgress';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
@@ -167,21 +161,22 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const params = useParams<BoardRouteParameters>();
   const searchParams = useSearchParams();
   const router = useLocaleRouter();
-  const enterFallbackRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset activeDrawer on navigation
   useEffect(() => {
     setActiveDrawer('none');
   }, [pathname]);
 
-  // Cleanup timeouts on unmount
+  // Whenever the play drawer closes, clear its event-driven payload state so
+  // the next open from any path (PLAY_DRAWER_EVENT or direct setActiveDrawer)
+  // starts from a clean slate. Belt-and-braces vs. handleCloseDrawer which
+  // only fires when the queue-list drawer's onClose runs.
   useEffect(() => {
-    return () => {
-      if (enterFallbackRef.current) {
-        clearTimeout(enterFallbackRef.current);
-      }
-    };
-  }, []);
+    if (activeDrawer !== 'play') {
+      setDrawerDisplayedItem(null);
+      setDrawerWallView(false);
+    }
+  }, [activeDrawer]);
 
   // Tour hook: close the play view drawer on demand (e.g. before showing the
   // session overview so the two drawers don't stack).
@@ -243,8 +238,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   const handleCloseDrawer = useCallback(() => {
     setActiveDrawer('none');
-    setDrawerDisplayedItem(null);
-    setDrawerWallView(false);
   }, []);
   const { activeSession, session: persistentSession, users: sessionUsers } = usePersistentSessionState();
   const {
@@ -750,15 +743,14 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     return { gridTemplateRows: `${fraction}fr`, opacity: fraction, transition: 'none' };
   }, [tickSwipeOffset]);
 
-  const { swipeHandlers, swipeOffset, isAnimating, animationDirection, enterDirection, clearEnterAnimation } =
-    useCardSwipeNavigation({
-      onSwipeNext: handleSwipeNext,
-      onSwipePrevious: handleSwipePrevious,
-      canSwipeNext,
-      canSwipePrevious,
-      threshold: 80,
-      delayNavigation: true,
-    });
+  const { swipeHandlers, swipeOffset, isAnimating, animationDirection, enterDirection } = useCardSwipeNavigation({
+    onSwipeNext: handleSwipeNext,
+    onSwipePrevious: handleSwipePrevious,
+    canSwipeNext,
+    canSwipePrevious,
+    threshold: 80,
+    delayNavigation: true,
+  });
 
   const playUrl = useMemo(() => {
     if (!currentClimb) return null;
@@ -884,21 +876,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       setShowCancelConfirm(false);
     }
   }, [isReconnecting]);
-
-  // Clear enterDirection (for thumbnail crossfade) after it plays
-  useEffect(() => {
-    if (enterDirection) {
-      enterFallbackRef.current = setTimeout(() => {
-        clearEnterAnimation();
-      }, ENTER_ANIMATION_DURATION);
-    }
-    return () => {
-      if (enterFallbackRef.current) {
-        clearTimeout(enterFallbackRef.current);
-        enterFallbackRef.current = null;
-      }
-    };
-  }, [enterDirection, clearEnterAnimation]);
 
   const reconnectView = (
     <MuiCard variant="outlined" className={styles.card} sx={{ border: 'none', backgroundColor: 'transparent' }}>
@@ -1390,8 +1367,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                     {/* Navigation buttons - desktop only */}
                     <span className={styles.navButtons}>
                       <Stack direction="row" spacing={0.5}>
-                        <PreviousClimbButton navigate={shouldNavigate} boardDetails={boardDetails} />
-                        <NextClimbButton navigate={shouldNavigate} boardDetails={boardDetails} />
+                        <QueueNavButton direction="previous" navigate={shouldNavigate} boardDetails={boardDetails} />
+                        <QueueNavButton direction="next" navigate={shouldNavigate} boardDetails={boardDetails} />
                       </Stack>
                     </span>
                     {/* Attempt button — visible whenever tick mode is active */}

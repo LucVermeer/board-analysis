@@ -105,6 +105,17 @@ export function validateParticipantId(participantId: string): void {
 }
 
 /**
+ * Validate BLE board serial format before writing to Redis. Mirrors
+ * BoardSerialSchema from validation/schemas/primitives.ts so direct callers of
+ * session-ops can't bypass the resolver-layer check.
+ */
+export function validateBoardSerial(serial: string): void {
+  if (!serial || serial.length > 64 || !/^[A-Za-z0-9_:-]+$/.test(serial)) {
+    throw new Error(`Invalid boardSerial format: ${serial.slice(0, 20)}`);
+  }
+}
+
+/**
  * Convert connection object to Redis hash fields.
  */
 export function connectionToHash(conn: DistributedConnection): Record<string, string> {

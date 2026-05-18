@@ -17,7 +17,12 @@ import { useClimbActionsData } from '@/app/hooks/use-climb-actions-data';
 import { SUGGESTIONS_THRESHOLD } from '../board-page/constants';
 import { useSnackbar } from '../providers/snackbar-provider';
 import SessionSummaryDialog from '../session-summary/session-summary-dialog';
-import { trackQueueOperation, trackQueueOperationError, type QueueOperationMode } from '@/app/lib/queue-metrics';
+import {
+  trackQueueOperation,
+  trackQueueOperationError,
+  resolveQueueOperationMode,
+  type QueueOperationMode,
+} from '@/app/lib/queue-metrics';
 
 import { dispatchOpenPlayDrawer } from '../queue-control/play-drawer-event';
 import { useSessionIdManagement } from './hooks/use-session-id-management';
@@ -320,7 +325,6 @@ export const GraphQLQueueProvider = ({
     climbSearchResults,
     suggestedClimbs,
     setCountSearchParams,
-    correlationCounterRef,
     startSession,
     joinSession,
     endSession,
@@ -345,7 +349,6 @@ export const GraphQLQueueProvider = ({
     climbSearchResults,
     suggestedClimbs,
     setCountSearchParams,
-    correlationCounterRef,
     startSession,
     joinSession,
     endSession,
@@ -355,16 +358,17 @@ export const GraphQLQueueProvider = ({
   };
 
   // --- Stable action callbacks (read from latestRef, never recreated) ---
+  const nextCorrelationId = useCallback((): string | undefined => {
+    const { clientId } = latestRef.current;
+    return clientId ? `${clientId}-${++correlationCounterRef.current}` : undefined;
+  }, []);
+
   const addToQueue = useCallback((climb: Climb) => {
     const startTime = performance.now();
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
     if (!latest.validateQueueAdd(climb)) return;
-    const mode: QueueOperationMode = !latest.isPersistentSessionActive
-      ? 'local'
-      : latest.isDisconnected
-        ? 'party-offline'
-        : 'party';
+    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
     latest.dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item: newItem } });
     if (latest.isDisconnected && latest.isPersistentSessionActive) {
@@ -387,11 +391,7 @@ export const GraphQLQueueProvider = ({
     const startTime = performance.now();
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
-    const mode: QueueOperationMode = !latest.isPersistentSessionActive
-      ? 'local'
-      : latest.isDisconnected
-        ? 'party-offline'
-        : 'party';
+    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     latest.dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid: item.uuid } });
     if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
       latest.persistentSession
@@ -415,13 +415,9 @@ export const GraphQLQueueProvider = ({
     const latest = latestRef.current;
     if (latest.guardMutation()) return null;
     if (!latest.validateQueueAdd(climb)) return null;
-    const mode: QueueOperationMode = !latest.isPersistentSessionActive
-      ? 'local'
-      : latest.isDisconnected
-        ? 'party-offline'
-        : 'party';
+    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
-    const correlationId = latest.clientId ? `${latest.clientId}-${++latest.correlationCounterRef.current}` : undefined;
+    const correlationId = nextCorrelationId();
     latest.dispatch({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
       payload: { item: newItem, shouldAddToQueue: true, insertAfterCurrent: true, correlationId },
@@ -511,9 +507,7 @@ export const GraphQLQueueProvider = ({
       if (!latest.validateQueueAdd(climb)) return null;
 
       const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
-      const correlationId = latest.clientId
-        ? `${latest.clientId}-${++latest.correlationCounterRef.current}`
-        : undefined;
+      const correlationId = nextCorrelationId();
 
       // Optimistic local update so the bar/drawer reflect the new wall climb
       // before the server round-trip completes. Matches `setCurrentClimb`'s
@@ -569,11 +563,7 @@ export const GraphQLQueueProvider = ({
     if (latest.guardMutation()) return;
     if (!latest.validateQueueAdd(climb)) return;
     const existing = latest.state.queue.find((qItem) => qItem.uuid === queueItemUuid);
-    const mode: QueueOperationMode = !latest.isPersistentSessionActive
-      ? 'local'
-      : latest.isDisconnected
-        ? 'party-offline'
-        : 'party';
+    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     const base = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
     const newItem: ClimbQueueItem = {
       ...base,
@@ -603,11 +593,7 @@ export const GraphQLQueueProvider = ({
     const startTime = performance.now();
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
-    const mode: QueueOperationMode = !latest.isPersistentSessionActive
-      ? 'local'
-      : latest.isDisconnected
-        ? 'party-offline'
-        : 'party';
+    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     latest.dispatch({
       type: 'UPDATE_QUEUE',
       payload: { queue, currentClimbQueueItem: latest.state.currentClimbQueueItem },
@@ -629,12 +615,8 @@ export const GraphQLQueueProvider = ({
     const startTime = performance.now();
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
-    const mode: QueueOperationMode = !latest.isPersistentSessionActive
-      ? 'local'
-      : latest.isDisconnected
-        ? 'party-offline'
-        : 'party';
-    const correlationId = latest.clientId ? `${latest.clientId}-${++latest.correlationCounterRef.current}` : undefined;
+    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
+    const correlationId = nextCorrelationId();
     latest.dispatch({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
       payload: { item, shouldAddToQueue: item.suggested, correlationId },
@@ -673,11 +655,7 @@ export const GraphQLQueueProvider = ({
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
     if (!latest.state.currentClimbQueueItem?.climb) return;
-    const mode: QueueOperationMode = !latest.isPersistentSessionActive
-      ? 'local'
-      : latest.isDisconnected
-        ? 'party-offline'
-        : 'party';
+    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     const newMirroredState = !latest.state.currentClimbQueueItem.climb?.mirrored;
     // Local-origin dispatch: pass the current climb's uuid so the reducer's
     // server-event uuid guard is a no-op here (it only suppresses when uuid

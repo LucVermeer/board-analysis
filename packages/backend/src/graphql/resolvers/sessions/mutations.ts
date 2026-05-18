@@ -477,7 +477,10 @@ export const sessionMutations = {
     { sessionId, climbUuid }: { sessionId: string; climbUuid: string },
     ctx: ConnectionContext,
   ) => {
-    await applyRateLimit(ctx);
+    // Tighter than the default 60/min: a single BLE send produces one
+    // confirmation, so 6/min covers worst-case rapid swiping with headroom
+    // and chokes off replay storms from a misbehaving client.
+    await applyRateLimit(ctx, 6);
     validateInput(SessionIdSchema, sessionId, 'sessionId');
     validateInput(ClimbUuidSchema, climbUuid, 'climbUuid');
     await requireSessionMember(ctx, sessionId);

@@ -92,6 +92,14 @@ function BluetoothAutoSender({
 }) {
   const { currentClimbQueueItem } = useCurrentClimb();
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Mirror onWallConfirmed so the send effect doesn't re-run (and abort the
+  // in-flight write) when sessionId-derived callback identity changes
+  // mid-send. Without this, joining/leaving a party while a write is pending
+  // re-fires the GATT operation and triggers Android's "GATT in progress" race.
+  const onWallConfirmedRef = useRef(onWallConfirmed);
+  useEffect(() => {
+    onWallConfirmedRef.current = onWallConfirmed;
+  }, [onWallConfirmed]);
 
   useEffect(() => {
     if (!currentClimbQueueItem) return;
@@ -121,7 +129,7 @@ function BluetoothAutoSender({
           // Wall actually received the climb — emit confirmation so the
           // drawer's lightbulb timer dismisses (locally on this phone, and
           // via WS broadcast for other party members).
-          onWallConfirmed(currentClimbQueueItem.climb.uuid);
+          onWallConfirmedRef.current(currentClimbQueueItem.climb.uuid);
         } else if (result === false) {
           track('Climb Sent to Board Failure', {
             climbUuid: currentClimbQueueItem.climb?.uuid,
@@ -142,7 +150,7 @@ function BluetoothAutoSender({
     return () => {
       controller.abort();
     };
-  }, [currentClimbQueueItem, sendFramesToBoard, layoutName, onWallConfirmed]);
+  }, [currentClimbQueueItem, sendFramesToBoard, layoutName]);
 
   return null;
 }

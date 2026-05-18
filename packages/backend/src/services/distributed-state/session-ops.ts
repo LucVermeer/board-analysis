@@ -4,6 +4,7 @@ import {
   KEYS,
   TTL,
   UNSET_SENTINEL,
+  validateBoardSerial,
   validateConnectionId,
   validateParticipantId,
   validateSessionId,
@@ -527,16 +528,11 @@ export async function setSessionDriverAndReturnPrevious(
   validateSessionId(sessionId);
   validateParticipantId(participantId);
   const key = KEYS.sessionDriver(sessionId);
-  // ioredis's `set(key, value, 'GET')` returns the previous value while
-  // setting the new one. Followed by EXPIRE (pipelined) so the TTL stays in
-  // lockstep with the session-membership TTL.
-  const pipeline = redis.multi();
-  pipeline.set(key, participantId, 'GET');
-  pipeline.expire(key, TTL.sessionMembership);
-  const result = await pipeline.exec();
-  if (!result || result.length === 0) return null;
-  const [setErr, prev] = result[0] as [Error | null, string | null];
-  if (setErr) throw setErr;
+  // SET key value EX <ttl> GET sets the new value, attaches a fresh TTL, and
+  // returns the previous value — all in one atomic round-trip. Cheaper and
+  // more correct than the prior multi().set().expire() pipeline (which split
+  // the set+TTL into two commands and lost any EXPIRE error).
+  const prev = await redis.set(key, participantId, 'EX', TTL.sessionMembership, 'GET');
   return prev ?? null;
 }
 
@@ -553,19 +549,18 @@ export async function clearSessionDriverIf(
   validateSessionId(sessionId);
   validateParticipantId(expectedParticipantId);
   const key = KEYS.sessionDriver(sessionId);
-  try {
-    await redis.watch(key);
-    const current = await redis.get(key);
-    if (current !== expectedParticipantId) {
-      await redis.unwatch();
-      return false;
-    }
-    const result = await redis.multi().del(key).exec();
-    return result !== null && result.length > 0;
-  } catch {
-    await redis.unwatch().catch(() => {});
+  await redis.watch(key);
+  const current = await redis.get(key);
+  if (current !== expectedParticipantId) {
+    await redis.unwatch();
     return false;
   }
+  // result === null indicates a WATCH abort (someone else mutated the key
+  // between the GET and EXEC). Treat that as "didn't clear" rather than an
+  // error — the take-control race is the expected reason. Any other error
+  // propagates so the caller can surface or retry.
+  const result = await redis.multi().del(key).exec();
+  return result !== null && result.length > 0;
 }
 
 /**
@@ -591,14 +586,10 @@ export async function setSessionBoardSerialAndReturnPrevious(
   serial: string,
 ): Promise<string | null> {
   validateSessionId(sessionId);
+  validateBoardSerial(serial);
   const key = KEYS.sessionBoardSerial(sessionId);
-  const pipeline = redis.multi();
-  pipeline.set(key, serial, 'GET');
-  pipeline.expire(key, TTL.sessionMembership);
-  const result = await pipeline.exec();
-  if (!result || result.length === 0) return null;
-  const [setErr, prev] = result[0] as [Error | null, string | null];
-  if (setErr) throw setErr;
+  // Atomic SET + TTL + previous-value read — see setSessionDriverAndReturnPrevious.
+  const prev = await redis.set(key, serial, 'EX', TTL.sessionMembership, 'GET');
   return prev ?? null;
 }
 

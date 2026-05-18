@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useMe
 import { useTranslation } from 'react-i18next';
 import { track } from '@/app/lib/analytics';
 import MuiBadge from '@mui/material/Badge';
+import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -689,17 +690,18 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     [isPersistentSessionActive, isDriver, setCurrentClimbQueueItem, setDrawerDisplayedItem],
   );
 
-  const handleSwipeNext = useCallback(() => {
-    const next = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
-    if (!next || viewOnlyMode) return;
-    advanceTo(next, 'swipePlayViewDrawer', 'next');
-  }, [getNextClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, viewOnlyMode, advanceTo]);
+  const navigate = useCallback(
+    (direction: 'next' | 'previous', source: 'swipePlayViewDrawer' | 'playViewDrawer') => {
+      const getter = direction === 'next' ? getNextClimbQueueItem : getPreviousClimbQueueItem;
+      const item = getter({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
+      if (!item || viewOnlyMode) return;
+      advanceTo(item, source, direction);
+    },
+    [getNextClimbQueueItem, getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, viewOnlyMode, advanceTo],
+  );
 
-  const handleSwipePrevious = useCallback(() => {
-    const prev = getPreviousClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
-    if (!prev || viewOnlyMode) return;
-    advanceTo(prev, 'swipePlayViewDrawer', 'previous');
-  }, [getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, viewOnlyMode, advanceTo]);
+  const handleSwipeNext = useCallback(() => navigate('next', 'swipePlayViewDrawer'), [navigate]);
+  const handleSwipePrevious = useCallback(() => navigate('previous', 'swipePlayViewDrawer'), [navigate]);
 
   // Wall-view mode is a read-only display of the wall climb — disable swipe
   // navigation entirely. The drawer is anchored to whatever is on the wall;
@@ -726,15 +728,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     showMessage(t('playView.tickError'), 'error');
   }, [showMessage, t]);
 
-  const handlePrevNavClick = useCallback(() => {
-    const prev = getPreviousClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
-    if (!prev) return;
-    advanceTo(prev, 'playViewDrawer', 'previous');
-  }, [getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, advanceTo]);
+  const handlePrevNavClick = useCallback(() => navigate('previous', 'playViewDrawer'), [navigate]);
   // Wall-confirm watcher: armed by handleLightbulbClick, dismissed by the
   // local wall-confirm bus or fires a connect fallback after 2 s. Owns its
   // own unmount cleanup so the drawer doesn't need to thread that wiring.
-  const { armWatcher: armWallConfirmWatcher } = useWallConfirmFallback({
+  const { armWatcher: armWallConfirmWatcher, cancelWatcher: cancelWallConfirmWatcher } = useWallConfirmFallback({
     isBluetoothConnected,
     isBluetoothSupported,
     lastConnectedBoardSerial,
@@ -763,6 +761,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const handleLightbulbClick = useCallback(() => {
     if (!currentClimb) return;
     if (isDriver) {
+      // Cancel any in-flight watcher: if the user took control then released
+      // within the 2s window, we don't want the fallback to fire after the
+      // role is already released.
+      cancelWallConfirmWatcher();
       void releaseControl();
       track('Wall Control Released', {
         reason: 'manual',
@@ -796,13 +798,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     isDriver,
     isPersistentSessionActive,
     armWallConfirmWatcher,
+    cancelWallConfirmWatcher,
     boardDetails.layout_name,
   ]);
-  const handleNextNavClick = useCallback(() => {
-    const next = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
-    if (!next) return;
-    advanceTo(next, 'playViewDrawer', 'next');
-  }, [getNextClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, advanceTo]);
+  const handleNextNavClick = useCallback(() => navigate('next', 'playViewDrawer'), [navigate]);
   const handleOpenActionsMenu = useCallback(() => {
     setIsQueueOpen(false);
     setIsPlaylistSelectorOpen(false);
@@ -985,12 +984,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
       <>
         {wallView && (
           // Wall-view banner (pivot Phase 3): makes the mode unambiguous when
-          // the user tapped the bar body. PR 3 keeps this minimal — just a
-          // one-line label. Driver avatar inline + roster tap-through can
-          // land as polish.
-          <div
-            style={{
-              padding: '8px 16px',
+          // the user tapped the bar body.
+          <Box
+            sx={{
+              px: 2,
+              py: 1,
               fontSize: 13,
               fontWeight: 500,
               color: themeTokens.colors.primary,
@@ -998,7 +996,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             }}
           >
             {t('playView.wallViewHeader')}
-          </div>
+          </Box>
         )}
         {/* Header: Grade | Name */}
         <div className={styles.headerSection}>
