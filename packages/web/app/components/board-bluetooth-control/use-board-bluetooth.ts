@@ -308,7 +308,12 @@ export function useBoardBluetooth({
         void incrementBluetoothSends().then(maybeFireFeedbackPromptEvent);
         return true;
       } catch (error) {
-        // Abort errors are expected during rapid swiping — don't log or show them
+        // AbortError is now the primary unmount-mid-write path — the
+        // BluetoothAutoSender scopes a single AbortController to its
+        // lifetime and aborts it on unmount, so the adapter.write above
+        // surfaces an AbortError. Swallow it silently; the drain loop
+        // already returns before firing analytics / confirmClimbOnWall.
+        // External callers that pass their own signal also land here.
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }

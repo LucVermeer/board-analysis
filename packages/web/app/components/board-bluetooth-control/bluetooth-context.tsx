@@ -36,6 +36,15 @@ type BluetoothContextValue = {
   loading: boolean;
   connect: (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>;
   disconnect: () => void;
+  /**
+   * Send LED frames to the connected board. The `signal` parameter is plumbed
+   * through to the underlying BLE adapter write — primarily used internally by
+   * `BluetoothAutoSender` (mounted by this provider) to abort in-flight writes
+   * when the provider unmounts mid-send so post-send side effects (analytics,
+   * `confirmClimbOnWall`) are skipped for a navigated-away climb. The
+   * parameter remains on the public context type for future external callers
+   * that need cancellation.
+   */
   sendFramesToBoard: (
     frames: string,
     mirrored?: boolean,
@@ -115,9 +124,31 @@ function BluetoothAutoSender({
   // as the old abort-and-restart pattern, but no overlapping GATT calls.
   const isWritingRef = useRef(false);
   const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
+  // Deduplicate same-uuid broadcasts. The reducer now lets duplicate
+  // CurrentClimbChanged events through (so the BLE phone re-sends on each
+  // event), but the wall is already showing the climb — re-sending double-
+  // counts analytics and double-fires confirmClimbOnWall. Skip the send when
+  // the pending uuid matches the last one we actually wrote.
+  const lastSentUuidRef = useRef<string | null>(null);
+  // Single AbortController lives across the AutoSender's lifetime. Aborted
+  // exactly once on unmount so the in-flight drain loop (a) cancels the
+  // underlying adapter.write via the signal, and (b) returns before firing
+  // analytics / confirmClimbOnWall for a climb the user has navigated away
+  // from. Scoping per-effect would abort on every climb change and break
+  // the latest-wins drain pattern.
+  const abortControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    return () => {
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentClimbQueueItem) return;
+    const signal = abortControllerRef.current?.signal;
+    if (signal?.aborted) return;
     if (isWritingRef.current) {
       pendingClimbRef.current = currentClimbQueueItem;
       return;
@@ -127,15 +158,24 @@ function BluetoothAutoSender({
       let toSend: ClimbQueueItem | null = currentClimbQueueItem;
       try {
         while (toSend) {
+          if (signal?.aborted) return;
           const item = toSend;
+          // Deduplicate same-uuid re-broadcasts. The board is idempotent so a
+          // re-send is functionally fine, but we'd double-fire analytics and
+          // confirmClimbOnWall — skip the send entirely instead.
+          if (item.climb.uuid === lastSentUuidRef.current) {
+            toSend = pendingClimbRef.current;
+            pendingClimbRef.current = null;
+            continue;
+          }
           try {
-            const result = await sendFramesToBoard(
-              item.climb.frames,
-              !!item.climb.mirrored,
-              undefined,
-              item.climb.uuid,
-            );
+            const result = await sendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal, item.climb.uuid);
+            // After the await, the AutoSender may have unmounted — skip the
+            // post-send side effects so a navigated-away climb doesn't fire
+            // analytics or confirmClimbOnWall for a session the user has left.
+            if (signal?.aborted) return;
             if (result === true) {
+              lastSentUuidRef.current = item.climb.uuid;
               track('Climb Sent to Board Success', {
                 climbUuid: item.climb?.uuid,
                 boardLayout: layoutName,
@@ -151,6 +191,7 @@ function BluetoothAutoSender({
               });
             }
           } catch (error) {
+            if (signal?.aborted) return;
             console.error('Error sending climb to board:', error);
             track('Climb Sent to Board Failure', {
               climbUuid: item.climb?.uuid,
