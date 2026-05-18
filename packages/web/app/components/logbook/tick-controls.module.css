@@ -240,18 +240,18 @@
 @media (hover: hover) {
   .pickerItem:hover {
     opacity: 1;
-    background-color: rgba(128, 128, 128, 0.12);
+    background-color: rgba(140, 74, 82, 0.1);
   }
 }
 
 .pickerItem:focus-visible {
   opacity: 1;
-  background-color: rgba(128, 128, 128, 0.12);
+  background-color: rgba(140, 74, 82, 0.1);
 }
 
 .pickerItemSelected {
   opacity: 1;
-  background-color: rgba(128, 128, 128, 0.18);
+  background-color: rgba(140, 74, 82, 0.18);
 }
 
 .pickerItemFocused {
