@@ -113,7 +113,7 @@ function createTestBoardDetails(overrides?: Partial<BoardDetails>): BoardDetails
   } as BoardDetails;
 }
 
-const expectSessionWithParticipant = (actual: unknown, expected: object) => {
+const expectSession = (actual: unknown, expected: object) => {
   expect(actual).toMatchObject(expected);
 };
 
@@ -235,7 +235,7 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     });
 
     // Party session should be active
-    expectSessionWithParticipant(result.current.activeSession, sessionInfo);
+    expectSession(result.current.activeSession, sessionInfo);
     // Local queue should be empty (no IndexedDB persistence)
     expect(result.current.localQueue).toEqual([]);
   });
@@ -267,7 +267,7 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     // Wait for the async persistence to complete
     await waitFor(async () => {
       const stored = await getPreference(ACTIVE_SESSION_KEY);
-      expectSessionWithParticipant(stored, sessionInfo);
+      expectSession(stored, sessionInfo);
     });
   });
 
@@ -336,14 +336,14 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expectSessionWithParticipant(result.current.activeSession, sessionInfo);
+      expectSession(result.current.activeSession, sessionInfo);
     });
 
     expect(result.current.sessionSummaryAutoFinished).toBe(false);
     expect(result.current.sessionSummary).toBeNull();
 
     const stored = await getPreference(ACTIVE_SESSION_KEY);
-    expectSessionWithParticipant(stored, sessionInfo);
+    expectSession(stored, sessionInfo);
   });
 
   it('waits for auth to load before running mount pre-flight', async () => {
@@ -427,7 +427,7 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     rerender();
 
     await waitFor(() => {
-      expectSessionWithParticipant(result.current.activeSession, sessionInfo);
+      expectSession(result.current.activeSession, sessionInfo);
     });
 
     expect(mockHttpRequest).toHaveBeenCalledTimes(1);
@@ -452,7 +452,7 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
 
     // First mount: pre-flight says still-active, session is restored.
     await waitFor(() => {
-      expectSessionWithParticipant(result.current.activeSession, sessionInfo);
+      expectSession(result.current.activeSession, sessionInfo);
     });
     expect(result.current.sessionSummaryAutoFinished).toBe(false);
 
@@ -497,7 +497,7 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
     const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expectSessionWithParticipant(result.current.activeSession, sessionInfo);
+      expectSession(result.current.activeSession, sessionInfo);
     });
 
     act(() => {

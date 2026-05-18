@@ -120,7 +120,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
   >({ inFlight: false, pending: null });
 
   const addQueueItem = useCallback(async (item: LocalClimbQueueItem, position?: number) => {
-    if (!clientRef.current || !sessionRef.current) throw new Error('Not connected to session');
+    if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
     await execute(clientRef.current, {
       query: ADD_QUEUE_ITEM,
       variables: { item: toClimbQueueItemInput(item), position },
@@ -128,7 +128,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
   }, []);
 
   const removeQueueItem = useCallback(async (uuid: string) => {
-    if (!clientRef.current || !sessionRef.current) throw new Error('Not connected to session');
+    if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
     await execute(clientRef.current, {
       query: REMOVE_QUEUE_ITEM,
       variables: { uuid },
@@ -137,12 +137,12 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
 
   const setCurrentClimb = useCallback(
     async (item: LocalClimbQueueItem | null, shouldAddToQueue?: boolean, correlationId?: string) => {
-      if (!clientRef.current || !sessionRef.current) throw new Error('Not connected to session');
+      if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
       await executeWithLatestWins(
         setCurrentClimbRefs.current,
         { item, shouldAddToQueue, correlationId },
         async (args) => {
-          if (!clientRef.current || !sessionRef.current) throw new Error('Not connected to session');
+          if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
           await execute(clientRef.current, {
             query: SET_CURRENT_CLIMB,
             variables: {
@@ -168,7 +168,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
   );
 
   const mirrorCurrentClimb = useCallback(async (mirrored: boolean) => {
-    if (!clientRef.current || !sessionRef.current) throw new Error('Not connected to session');
+    if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
     await execute(clientRef.current, {
       query: MIRROR_CURRENT_CLIMB,
       variables: { mirrored },
@@ -177,7 +177,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
 
   const setQueue = useCallback(
     async (newQueue: LocalClimbQueueItem[], newCurrentClimbQueueItem?: LocalClimbQueueItem | null) => {
-      if (!clientRef.current || !sessionRef.current) throw new Error('Not connected to session');
+      if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
       await execute(clientRef.current, {
         query: SET_QUEUE,
         variables: {
@@ -190,7 +190,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
   );
 
   const replaceQueueItem = useCallback(async (uuid: string, item: LocalClimbQueueItem) => {
-    if (!clientRef.current || !sessionRef.current) throw new Error('Not connected to session');
+    if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
     await execute(clientRef.current, {
       query: REPLACE_QUEUE_ITEM,
       variables: { uuid, item: toClimbQueueItemInput(item) },
@@ -198,7 +198,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
   }, []);
 
   const takeControl = useCallback(async (climb?: LocalClimbQueueItem | null) => {
-    if (!clientRef.current || !sessionRef.current) {
+    if (!clientRef.current || !sessionRef.current?.id) {
       // Solo (no active party session). The backend has nothing to track —
       // resolve silently so the QueueContext takeControl helper can degrade
       // cleanly to setCurrentClimb's local-only path.
@@ -211,7 +211,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
   }, []);
 
   const releaseControl = useCallback(async () => {
-    if (!clientRef.current || !sessionRef.current) return;
+    if (!clientRef.current || !sessionRef.current?.id) return;
     await execute(clientRef.current, {
       query: RELEASE_CONTROL,
       variables: {},

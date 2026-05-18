@@ -840,6 +840,11 @@ export const GraphQLQueueProvider = ({
   }, []);
 
   // --- Actions context value (stable — callbacks never change) ---
+  // Every callback in this object is identity-stable: each `useCallback` here
+  // uses `[]` (or `[setCurrentClimb]` where `setCurrentClimb` itself uses `[]`),
+  // so the references in the closure never change between renders. The dep
+  // array can therefore be empty — the memo computes once and the same
+  // reference is reused for the lifetime of the provider.
   const actionsValue: GraphQLQueueActionsType = useMemo(
     () => ({
       addToQueue,
@@ -864,29 +869,8 @@ export const GraphQLQueueProvider = ({
       endSession: stableEndSession,
       dismissSessionSummary: stableDismissSessionSummary,
     }),
-    [
-      addToQueue,
-      removeFromQueue,
-      setCurrentClimb,
-      previewClimbFromBrowse,
-      setQueue,
-      setCurrentClimbQueueItem,
-      replaceQueueItem,
-      setClimbSearchParams,
-      setCountSearchParamsAction,
-      mirrorClimb,
-      stableFetchMoreClimbs,
-      getNextClimbQueueItem,
-      getPreviousClimbQueueItem,
-      dispatchWidgetNavigation,
-      takeControl,
-      releaseControl,
-      stableDisconnect,
-      stableStartSession,
-      stableJoinSession,
-      stableEndSession,
-      stableDismissSessionSummary,
-    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   // --- Data context value (changes when state/data changes) ---

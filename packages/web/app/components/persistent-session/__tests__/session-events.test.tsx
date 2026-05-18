@@ -67,7 +67,7 @@ function buildSession(overrides?: Partial<Session>): Session {
         isLeader: false,
         avatarUrl: undefined,
         userId: null,
-        connectionState: 'connected',
+        connectionState: 'CONNECTED',
       },
     ],
     queueState: {
@@ -265,6 +265,9 @@ afterEach(() => {
 });
 
 function createTestBoardDetails(): BoardDetails {
+  // Cast through `unknown` because the test fixture intentionally omits the
+  // optional fields BoardDetails carries (set_names, size_description, etc).
+  // The provider only reaches into the strict subset below during restore.
   return {
     board_name: 'kilter',
     layout_id: 1,
@@ -280,7 +283,7 @@ function createTestBoardDetails(): BoardDetails {
     boardWidth: 100,
     layout_name: 'Original',
     size_name: '12x12',
-  } as BoardDetails;
+  } as unknown as BoardDetails;
 }
 
 function createWrapper() {
