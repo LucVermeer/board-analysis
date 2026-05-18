@@ -23,6 +23,20 @@ enum SharedConstants {
     static let sizeIdKey = "bs_size_id"
     static let setIdsKey = "bs_set_ids"
     static let pendingActionKey = "bs_pending_action"
+    /// Action ("next" | "previous") associated with the most recent Darwin
+    /// notification. Always written by the intent; the Darwin handler reads
+    /// it before notifying JS. Distinct from `pendingActionKey`, which is
+    /// only written when the HTTP path failed and a WebSocket-mutation
+    /// fallback is required.
+    static let widgetNavigateActionKey = "bs_widget_navigate_action"
+    /// CorrelationId associated with the most recent Darwin notification.
+    /// On HTTP success this is `'widget-navigate'` (matches the constant the
+    /// backend's `/api/widget/navigate` handler uses when broadcasting
+    /// `CurrentClimbChanged`). On HTTP failure this is the UUID the Darwin
+    /// handler generates for its WebSocket-mutation fallback. The JS bridge
+    /// adds whichever value to `pendingCurrentClimbUpdates` so the matching
+    /// server echo is treated as own-echo.
+    static let widgetNavigateCorrelationIdKey = "bs_widget_navigate_correlation_id"
     static let bleBoardConfigKey = "bs_ble_board_config"
     /// Legacy key — auth token now lives in `SharedKeychain` under
     /// `SharedKeychain.authTokenKey`. Kept here only so upgrade paths can

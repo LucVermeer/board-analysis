@@ -175,26 +175,69 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func handleQueueNavigateFromWidget() {
         guard let defaults = SharedConstants.sharedDefaults else { return }
-        guard let action = defaults.string(forKey: SharedConstants.pendingActionKey) else { return }
+
+        // The intent always writes widgetNavigateActionKey; pendingActionKey
+        // is only present when the HTTP path failed and we need to send a
+        // WebSocket mutation as a fallback.
+        guard let action = defaults.string(forKey: SharedConstants.widgetNavigateActionKey) else {
+            // Backwards compatible path for pre-update intents that still only
+            // set pendingActionKey. Falls back to the old behaviour: fallback
+            // mutation + notify JS.
+            if let legacyAction = defaults.string(forKey: SharedConstants.pendingActionKey) {
+                handleLegacyMutationFallback(defaults: defaults, action: legacyAction)
+            }
+            return
+        }
+        defaults.removeObject(forKey: SharedConstants.widgetNavigateActionKey)
+
+        let needsMutationFallback = defaults.string(forKey: SharedConstants.pendingActionKey) != nil
         defaults.removeObject(forKey: SharedConstants.pendingActionKey)
 
         // Read the updated queue state that the widget intent already saved.
         let (items, currentIndex) = SharedQueueState.load(from: defaults)
 
-        // Generate a shared correlationId so the JS side can register the
-        // optimistic update and suppress the server echo when it arrives.
+        // CorrelationId resolution:
+        //   - HTTP success path: intent stored `'widget-navigate'` (matches the
+        //     constant the backend's `/api/widget/navigate` handler echoes
+        //     back), and the WebSocket mutation is skipped.
+        //   - HTTP failure path: no correlationId was stored; we generate a
+        //     fresh UUID here and use it for both the WebSocket mutation we
+        //     send and the JS notify, so the reducer's pending-update tracker
+        //     can match the server echo.
+        let storedCorrelationId = defaults.string(forKey: SharedConstants.widgetNavigateCorrelationIdKey)
+        defaults.removeObject(forKey: SharedConstants.widgetNavigateCorrelationIdKey)
+        let correlationId = storedCorrelationId ?? UUID().uuidString
+
+        if needsMutationFallback, !items.isEmpty, currentIndex >= 0, currentIndex < items.count {
+            let item = items[currentIndex]
+            SessionWebSocketManager.shared.navigateToItem(item, at: currentIndex, totalItems: items, correlationId: correlationId)
+        }
+
+        // Always notify JS so the bridge dispatches the optimistic reducer
+        // update. retainUntilConsumed ensures the event is queued if no
+        // listener is attached yet (e.g. app was on the lock screen).
+        notifyListeners("queueNavigate", data: [
+            "action": action,
+            "currentIndex": currentIndex,
+            "correlationId": correlationId,
+        ], retainUntilConsumed: true)
+    }
+
+    /// Legacy path for older intent builds (pre-widgetNavigateActionKey) that
+    /// only ever wrote pendingActionKey. New installs never hit this branch;
+    /// it stays so a TestFlight build with the old intent + new plugin still
+    /// behaves the same as before.
+    private func handleLegacyMutationFallback(defaults: UserDefaults, action: String) {
+        defaults.removeObject(forKey: SharedConstants.pendingActionKey)
+
+        let (items, currentIndex) = SharedQueueState.load(from: defaults)
         let correlationId = UUID().uuidString
 
-        // Send the server mutation via the native WebSocket.
-        // This works even from the lock screen (no web view needed).
         if !items.isEmpty, currentIndex >= 0, currentIndex < items.count {
             let item = items[currentIndex]
             SessionWebSocketManager.shared.navigateToItem(item, at: currentIndex, totalItems: items, correlationId: correlationId)
         }
 
-        // Also notify JS so it can dispatch an optimistic reducer update
-        // using the same correlationId. retainUntilConsumed ensures the event
-        // is queued if no listener is attached yet (e.g. app was on the lock screen).
         notifyListeners("queueNavigate", data: [
             "action": action,
             "currentIndex": currentIndex,

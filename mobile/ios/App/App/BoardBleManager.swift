@@ -201,7 +201,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     /// would silently no-op against the `connectedPeripheral == nil` guard.
     /// If `readyTimeout` elapses before readiness, the write is still
     /// attempted; the existing `notConnected` guard in `writeOnBleQueue` will
-    /// no-op cleanly.
+    /// no-op cleanly. The not-ready case is logged at `error` level so a
+    /// "widget UI moved but wall didn't" report can be diagnosed from
+    /// Console.app without recompiling under DEBUG.
     func displayCurrentItemAwaitingReady(
         items: [SharedQueueItem],
         currentIndex: Int,
@@ -209,6 +211,15 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         drainTimeout: TimeInterval = 1.5
     ) async {
         await waitUntilReady(timeout: readyTimeout)
+        let ready = runOnBleQueueSync { isReadyForWrite }
+        if !ready {
+            let state = runOnBleQueueSync { (
+                centralState: centralManager.state.rawValue,
+                hasPeripheral: connectedPeripheral != nil,
+                hasWriteChar: writeCharacteristic != nil
+            ) }
+            logger.error("displayCurrentItemAwaitingReady: not ready after \(readyTimeout, privacy: .public)s — centralState=\(state.centralState, privacy: .public) peripheral=\(state.hasPeripheral, privacy: .public) writeChar=\(state.hasWriteChar, privacy: .public); BLE write will no-op until the JS layer's BluetoothAutoSender re-fires")
+        }
         displayCurrentItem(items: items, currentIndex: currentIndex)
         await waitForWriteDrain(timeout: drainTimeout)
     }
