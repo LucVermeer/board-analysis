@@ -245,48 +245,15 @@ export const queueMutations = {
       }
     }
 
-    if (item === null) {
-      // Null-item path: clear current climb without queue changes. Retains the
-      // pre-extract behaviour (the shared helper assumes a non-null item).
-      let sequence = 0;
-      let stateHash = '';
-      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        const currentState = await roomManager.getQueueState(sessionId);
-        try {
-          const result = await roomManager.updateQueueState(sessionId, currentState.queue, null, currentState.version);
-          sequence = result.sequence;
-          stateHash = result.stateHash;
-          break;
-        } catch (error) {
-          if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
-            if (DEBUG)
-              logger.info(
-                `[setCurrentClimb] Version conflict (null), retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
-              );
-            continue;
-          }
-          throw error;
-        }
-      }
-      pubsub.publishQueueEvent(sessionId, {
-        __typename: 'CurrentClimbChanged',
-        sequence,
-        stateHash,
-        item: null,
-        clientId: ctx.connectionId || null,
-        correlationId: correlationId || null,
-      });
-    } else {
-      await setCurrentClimbAndPublish(
-        sessionId,
-        item,
-        !!shouldAddToQueue,
-        roomManager,
-        pubsub,
-        ctx.connectionId || null,
-        correlationId || null,
-      );
-    }
+    await setCurrentClimbAndPublish(
+      sessionId,
+      item,
+      !!shouldAddToQueue,
+      roomManager,
+      pubsub,
+      ctx.connectionId || null,
+      correlationId || null,
+    );
 
     logMutationMetrics('setCurrentClimb', performance.now() - startTime, sessionId, {
       shouldAddToQueue: !!shouldAddToQueue,
