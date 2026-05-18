@@ -33,6 +33,7 @@ import { generateSessionSummary } from './session-summary';
 import { adoptRecentTicksForSession, extractBoardType } from '../../../jobs/inferred-session-builder';
 import { endLiveActivity } from '../../../services/apns';
 import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
+import { buildSessionPayload } from './helpers';
 
 /**
  * Queue-control-bar pivot — `isLeader` audit (2026-05-23):
@@ -171,15 +172,7 @@ export const sessionMutations = {
       : { __typename: 'UserJoined', user: sessionUser };
     pubsub.publishSessionEvent(sessionId, sessionEvent);
 
-    // Fetch session data for new fields
-    const sessionData = await roomManager.getSessionById(sessionId);
-    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
-    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
-
-    return {
-      id: sessionId,
-      name: result.sessionName || null,
-      boardPath,
+    return buildSessionPayload(sessionId, ctx, {
       users: result.users,
       queueState: {
         sequence: result.sequence,
@@ -188,17 +181,11 @@ export const sessionMutations = {
         currentClimbQueueItem: result.currentClimbQueueItem,
       },
       isLeader: result.isLeader,
-      driverParticipantId,
-      lastConnectedBoardSerial,
       clientId: result.clientId,
       participantId: result.participantId,
-      goal: sessionData?.goal || null,
-      isPublic: sessionData?.isPublic ?? true,
-      startedAt: sessionData?.startedAt?.toISOString() || null,
-      endedAt: sessionData?.endedAt?.toISOString() || null,
-      isPermanent: sessionData?.isPermanent ?? false,
-      color: sessionData?.color || null,
-    };
+      name: result.sessionName || null,
+      boardPath,
+    });
   },
 
   /**
@@ -466,41 +453,12 @@ export const sessionMutations = {
       });
     }
 
-    // Build the Session payload. The fields mirror joinSession's return so
-    // clients can apply the response without a refetch. Fan the
-    // independent reads out in parallel — sequential awaits over four
-    // unrelated lookups only burns latency.
-    const [users, sessionData, queueState, lastConnectedBoardSerial, leaderConnectionId] = await Promise.all([
-      roomManager.getSessionUsers(sessionId),
-      roomManager.getSessionById(sessionId),
-      roomManager.getQueueState(sessionId),
-      roomManager.getSessionBoardSerial(sessionId),
-      roomManager.getSessionLeaderConnectionId(sessionId),
-    ]);
-
-    return {
-      id: sessionId,
-      name: sessionData?.name || null,
-      boardPath: sessionData?.boardPath || '',
-      users,
-      queueState: {
-        sequence: queueState.sequence,
-        stateHash: queueState.stateHash,
-        queue: queueState.queue,
-        currentClimbQueueItem: queueState.currentClimbQueueItem,
-      },
-      isLeader: leaderConnectionId === ctx.connectionId,
+    // We already know the new driver from the atomic swap above; everything
+    // else fans out via the helper.
+    return buildSessionPayload(sessionId, ctx, {
       driverParticipantId: participantId,
-      lastConnectedBoardSerial,
-      clientId: ctx.connectionId,
       participantId,
-      goal: sessionData?.goal || null,
-      isPublic: sessionData?.isPublic ?? true,
-      startedAt: sessionData?.startedAt?.toISOString() || null,
-      endedAt: sessionData?.endedAt?.toISOString() || null,
-      isPermanent: sessionData?.isPermanent ?? false,
-      color: sessionData?.color || null,
-    };
+    });
   },
 
   /**
@@ -570,40 +528,8 @@ export const sessionMutations = {
 
     // Mirror takeControl / releaseControl: return the resolved Session so
     // optimistic-UI callers can apply server-derived state without a
-    // follow-up query. Fan the independent reads out in parallel.
-    const [users, sessionData, queueState, driverParticipantId, lastConnectedBoardSerial, leaderConnectionId] =
-      await Promise.all([
-        roomManager.getSessionUsers(sessionId),
-        roomManager.getSessionById(sessionId),
-        roomManager.getQueueState(sessionId),
-        roomManager.getSessionDriverParticipantId(sessionId),
-        roomManager.getSessionBoardSerial(sessionId),
-        roomManager.getSessionLeaderConnectionId(sessionId),
-      ]);
-
-    return {
-      id: sessionId,
-      name: sessionData?.name || null,
-      boardPath: sessionData?.boardPath || '',
-      users,
-      queueState: {
-        sequence: queueState.sequence,
-        stateHash: queueState.stateHash,
-        queue: queueState.queue,
-        currentClimbQueueItem: queueState.currentClimbQueueItem,
-      },
-      isLeader: leaderConnectionId === ctx.connectionId,
-      driverParticipantId,
-      lastConnectedBoardSerial,
-      clientId: ctx.connectionId,
-      participantId,
-      goal: sessionData?.goal || null,
-      isPublic: sessionData?.isPublic ?? true,
-      startedAt: sessionData?.startedAt?.toISOString() || null,
-      endedAt: sessionData?.endedAt?.toISOString() || null,
-      isPermanent: sessionData?.isPermanent ?? false,
-      color: sessionData?.color || null,
-    };
+    // follow-up query.
+    return buildSessionPayload(sessionId, ctx, { participantId });
   },
 
   /**
@@ -641,46 +567,13 @@ export const sessionMutations = {
     }
     const participantId = ctx.participantId;
 
-    // Mirror takeControl / releaseControl: return the resolved Session. Fan
-    // the independent reads out in parallel — sequential awaits over six
-    // unrelated lookups burns latency on every wall-pair. Re-read
-    // `lastConnectedBoardSerial` from the room manager rather than echoing
-    // the input: another writer (different participant on a different board)
-    // can land between our write and this read, and the authoritative
-    // value is what every other Session-returning resolver returns.
-    const [users, sessionData, queueState, driverParticipantId, lastConnectedBoardSerial, leaderConnectionId] =
-      await Promise.all([
-        roomManager.getSessionUsers(sessionId),
-        roomManager.getSessionById(sessionId),
-        roomManager.getQueueState(sessionId),
-        roomManager.getSessionDriverParticipantId(sessionId),
-        roomManager.getSessionBoardSerial(sessionId),
-        roomManager.getSessionLeaderConnectionId(sessionId),
-      ]);
-
-    return {
-      id: sessionId,
-      name: sessionData?.name || null,
-      boardPath: sessionData?.boardPath || '',
-      users,
-      queueState: {
-        sequence: queueState.sequence,
-        stateHash: queueState.stateHash,
-        queue: queueState.queue,
-        currentClimbQueueItem: queueState.currentClimbQueueItem,
-      },
-      isLeader: leaderConnectionId === ctx.connectionId,
-      driverParticipantId,
-      lastConnectedBoardSerial,
-      clientId: ctx.connectionId,
-      participantId,
-      goal: sessionData?.goal || null,
-      isPublic: sessionData?.isPublic ?? true,
-      startedAt: sessionData?.startedAt?.toISOString() || null,
-      endedAt: sessionData?.endedAt?.toISOString() || null,
-      isPermanent: sessionData?.isPermanent ?? false,
-      color: sessionData?.color || null,
-    };
+    // Mirror takeControl / releaseControl: return the resolved Session.
+    // Re-read `lastConnectedBoardSerial` (via the helper's default lookup)
+    // rather than echoing the input — another writer (different participant
+    // on a different board) can land between our write and this read, and
+    // the authoritative value is what every other Session-returning
+    // resolver returns.
+    return buildSessionPayload(sessionId, ctx, { participantId });
   },
 
   /**
@@ -794,43 +687,12 @@ export const sessionMutations = {
       });
     }
 
-    // Fan the response-payload reads out in parallel — these five queries
-    // are independent and sequential awaits only burn latency.
-    // `driverParticipantId` is short-circuited when we just cleared (we
-    // already know it's null), avoiding the extra read in that branch.
-    const [users, sessionData, queueState, lastConnectedBoardSerial, leaderConnectionId, driverParticipantId] =
-      await Promise.all([
-        roomManager.getSessionUsers(sessionId),
-        roomManager.getSessionById(sessionId),
-        roomManager.getQueueState(sessionId),
-        roomManager.getSessionBoardSerial(sessionId),
-        roomManager.getSessionLeaderConnectionId(sessionId),
-        cleared ? Promise.resolve(null) : roomManager.getSessionDriverParticipantId(sessionId),
-      ]);
-
-    return {
-      id: sessionId,
-      name: sessionData?.name || null,
-      boardPath: sessionData?.boardPath || '',
-      users,
-      queueState: {
-        sequence: queueState.sequence,
-        stateHash: queueState.stateHash,
-        queue: queueState.queue,
-        currentClimbQueueItem: queueState.currentClimbQueueItem,
-      },
-      isLeader: leaderConnectionId === ctx.connectionId,
-      driverParticipantId,
-      lastConnectedBoardSerial,
-      clientId: ctx.connectionId,
+    // Short-circuit the driver lookup when we just cleared (we already know
+    // it's null). Everything else fans out through the helper.
+    return buildSessionPayload(sessionId, ctx, {
       participantId,
-      goal: sessionData?.goal || null,
-      isPublic: sessionData?.isPublic ?? true,
-      startedAt: sessionData?.startedAt?.toISOString() || null,
-      endedAt: sessionData?.endedAt?.toISOString() || null,
-      isPermanent: sessionData?.isPermanent ?? false,
-      color: sessionData?.color || null,
-    };
+      ...(cleared ? { driverParticipantId: null } : {}),
+    });
   },
 
   /**
