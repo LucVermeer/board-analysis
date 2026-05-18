@@ -36,6 +36,12 @@ export type QueueState = {
   lastReceivedStateHash: string | null;
   // Flag to indicate corrupted data was filtered and a resync is needed
   needsResync: boolean;
+  // Optimistic driver participant id, used between `takeControl` firing and the
+  // server's `DriverChanged` broadcast landing. When set, the QueueContext
+  // prefers this over `persistentSession.driverParticipantId` so the lightbulb
+  // flips visual state instantly. Cleared on the next `DriverChanged` event
+  // (idempotent if the server agrees; corrects the UI if we lost a race).
+  optimisticDriverParticipantId: string | null;
 };
 
 export type QueueAction =
@@ -78,7 +84,12 @@ export type QueueAction =
   | { type: 'DELTA_REPLACE_QUEUE_ITEM'; payload: { uuid: string; item: ClimbQueueItem } }
   | { type: 'CLEANUP_PENDING_UPDATE'; payload: { correlationId: string } }
   | { type: 'CLEANUP_PENDING_UPDATES_BATCH'; payload: { correlationIds: string[] } }
-  | { type: 'CLEAR_RESYNC_FLAG' };
+  | { type: 'CLEAR_RESYNC_FLAG' }
+  // Optimistic driver claim — applied immediately when the local user fires
+  // `takeControl`, cleared on the authoritative `DriverChanged` broadcast.
+  // Lets the bar/drawer lightbulb flip visual state before the server round-trip.
+  | { type: 'OPTIMISTIC_SET_DRIVER'; payload: { participantId: string } }
+  | { type: 'OPTIMISTIC_CLEAR_DRIVER' };
 
 // Stable action functions — identity rarely changes
 export type QueueActionsType = {

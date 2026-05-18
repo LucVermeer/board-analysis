@@ -134,7 +134,14 @@ export const GraphQLQueueProvider = ({
   // Wall driver — distinct from leader. The current driver's participant id,
   // or null when the wall is unclaimed (party only; solo has no driver
   // concept so we report null and treat `isDriver` as true).
-  const driverParticipantId = isPersistentSessionActive ? persistentSession.driverParticipantId : null;
+  //
+  // Prefer the optimistic local claim over the server-confirmed value during
+  // the brief window between firing `takeControl` and the `DriverChanged`
+  // broadcast landing. Cleared in the DriverChanged effect below, so the
+  // server stays authoritative — if we lost a take-control race, the
+  // optimistic value flips back to the real driver within one round trip.
+  const serverDriverParticipantId = isPersistentSessionActive ? persistentSession.driverParticipantId : null;
+  const driverParticipantId = state.optimisticDriverParticipantId ?? serverDriverParticipantId;
   const isDriver = deriveIsDriver({ isPersistentSessionActive, participantId, driverParticipantId });
   // Pull the session's currently-known BLE board serial through so consumers
   // (the drawer's lightbulb fallback) don't have to reach into the
@@ -213,16 +220,40 @@ export const GraphQLQueueProvider = ({
     needsResync: state.needsResync,
   });
 
-  // --- Wall-confirm relay ---
+  // --- Session-event relay ---
   // The BLE-paired phone broadcasts WallConfirmedClimb whenever it relays a
   // climb to the wall. Republish on the local bus so the drawer's lightbulb
   // timer (subscribed locally) dismisses the same way it does in solo,
   // regardless of whether this client did the BLE write or saw a peer do it.
+  //
+  // DriverChanged also runs through here so the optimistic-driver claim from
+  // `takeControl` clears on the authoritative broadcast (no risk of a stuck
+  // lit lightbulb), and we resync the wall climb if we lost a take-control
+  // race (DriverChanged names someone else — their take-control's wall climb
+  // is the truth, our optimistic DELTA_UPDATE_CURRENT_CLIMB needs replacing).
   useEffect(() => {
     if (!isPersistentSessionActive) return;
     const unsubscribe = persistentSession.subscribeToSessionEvents((event) => {
       if (event.__typename === 'WallConfirmedClimb') {
         emitWallConfirm(event.climbUuid);
+        return;
+      }
+      if (event.__typename === 'DriverChanged') {
+        const latest = latestRef.current;
+        // Authoritative server state has landed — clear any local optimistic
+        // claim regardless of who won. The next render reads
+        // `serverDriverParticipantId` instead.
+        latest.dispatch({ type: 'OPTIMISTIC_CLEAR_DRIVER' });
+        // If the new driver isn't us, we lost the race. Resync the wall
+        // climb from the server immediately rather than waiting up to 5s for
+        // `pendingCurrentClimbUpdates` cleanup to fire — the winner's climb
+        // is what's actually on the wall and we want the drawer/bar to flip
+        // to it without an obvious lag.
+        const localParticipantId = latest.persistentSession.participantId;
+        const newDriverId = event.driverParticipantId ?? null;
+        if (localParticipantId && newDriverId && newDriverId !== localParticipantId) {
+          latest.persistentSession.triggerResync();
+        }
       }
     });
     return unsubscribe;
@@ -496,6 +527,17 @@ export const GraphQLQueueProvider = ({
       const startTime = performance.now();
       const mode: QueueOperationMode = latest.isDisconnected ? 'party-offline' : 'party';
 
+      // Optimistic driver claim — the lightbulb (bar + drawer) flips to "I'm
+      // driving" before the round-trip. Cleared by the DriverChanged effect
+      // when the server's broadcast lands; if we lost the take-control race,
+      // that clear flips back to the actual driver and triggers a resync of
+      // the wall climb. Read `participantId` off latestRef so we don't capture
+      // a stale value (it shifts when join completes).
+      const localParticipantId = latest.persistentSession.participantId;
+      if (localParticipantId) {
+        latest.dispatch({ type: 'OPTIMISTIC_SET_DRIVER', payload: { participantId: localParticipantId } });
+      }
+
       if (!climb) {
         // Driver-only claim, no wall change.
         try {
@@ -505,12 +547,21 @@ export const GraphQLQueueProvider = ({
           trackQueueOperation('takeControl', performance.now() - startTime, mode);
         } catch (error: unknown) {
           console.error('Failed to take control:', error);
+          // Roll back the optimistic claim on transport failure — without this
+          // the lightbulb would stay "I'm driving" until the next DriverChanged
+          // (which the server won't send because the mutation didn't land).
+          latest.dispatch({ type: 'OPTIMISTIC_CLEAR_DRIVER' });
           trackQueueOperationError('takeControl', mode);
         }
         return null;
       }
 
-      if (!latest.validateQueueAdd(climb)) return null;
+      if (!latest.validateQueueAdd(climb)) {
+        // Validation rejection rolls the optimistic claim back too — `validateQueueAdd`
+        // can refuse e.g. cross-board adds, in which case the mutation never fires.
+        latest.dispatch({ type: 'OPTIMISTIC_CLEAR_DRIVER' });
+        return null;
+      }
 
       const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
       const correlationId = nextCorrelationId();
@@ -536,6 +587,9 @@ export const GraphQLQueueProvider = ({
         } catch (error: unknown) {
           console.error('Failed to take control with climb:', error);
           if (correlationId) latest.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
+          // Roll back the optimistic driver claim — the mutation didn't land,
+          // so the server won't broadcast a DriverChanged to clear it for us.
+          latest.dispatch({ type: 'OPTIMISTIC_CLEAR_DRIVER' });
           trackQueueOperationError('takeControl', mode);
         }
       } else {

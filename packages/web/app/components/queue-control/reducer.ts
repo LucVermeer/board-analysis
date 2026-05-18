@@ -13,6 +13,7 @@ const initialState = (initialSearchParams: SearchRequestPagination): QueueState 
   lastReceivedSequence: null,
   lastReceivedStateHash: null,
   needsResync: false,
+  optimisticDriverParticipantId: null,
 });
 
 export function queueReducer(state: QueueState, action: QueueAction): QueueState {
@@ -340,6 +341,23 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
       return {
         ...state,
         needsResync: false,
+      };
+
+    case 'OPTIMISTIC_SET_DRIVER':
+      // Fired from `takeControl` so the lightbulb flips before the server
+      // round-trip. Idempotent — re-setting the same participant id is a no-op
+      // for the consumer (string equality).
+      if (state.optimisticDriverParticipantId === action.payload.participantId) return state;
+      return {
+        ...state,
+        optimisticDriverParticipantId: action.payload.participantId,
+      };
+
+    case 'OPTIMISTIC_CLEAR_DRIVER':
+      if (state.optimisticDriverParticipantId === null) return state;
+      return {
+        ...state,
+        optimisticDriverParticipantId: null,
       };
 
     default:

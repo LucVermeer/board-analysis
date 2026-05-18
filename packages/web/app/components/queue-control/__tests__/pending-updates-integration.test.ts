@@ -58,6 +58,7 @@ const initialState: QueueState = {
   lastReceivedSequence: null,
   lastReceivedStateHash: null,
   needsResync: false,
+  optimisticDriverParticipantId: null,
 };
 
 describe('Pending Updates - Integration Tests', () => {
