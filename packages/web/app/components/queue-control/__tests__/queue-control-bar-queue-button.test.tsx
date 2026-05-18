@@ -339,7 +339,7 @@ describe('QueueControlBar queue button', () => {
     expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('false');
 
     await act(async () => {
-      fireEvent.click(screen.getByLabelText('Open queue'));
+      fireEvent.click(screen.getByLabelText('Open up next'));
     });
 
     expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('true');
@@ -353,7 +353,7 @@ describe('QueueControlBar queue button', () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByLabelText('Open queue'));
+      fireEvent.click(screen.getByLabelText('Open up next'));
     });
 
     expect(dispatchOpenSeshSettingsDrawer).not.toHaveBeenCalled();
@@ -371,7 +371,7 @@ describe('QueueControlBar queue button', () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
-    const badge = screen.getByLabelText('Open queue').querySelector('.MuiBadge-badge');
+    const badge = screen.getByLabelText('Open up next').querySelector('.MuiBadge-badge');
     expect(badge).toBeTruthy();
     expect(badge!.textContent).toBe('3');
   });
@@ -383,7 +383,7 @@ describe('QueueControlBar queue button', () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
-    const badge = screen.getByLabelText('Open queue').querySelector('.MuiBadge-badge');
+    const badge = screen.getByLabelText('Open up next').querySelector('.MuiBadge-badge');
     expect(badge).toBeTruthy();
     // MUI renders `badgeContent={0}` literally; `invisible={true}` hides it via CSS
     // (no public class name in v6+), so we assert on the bound count, not visibility.

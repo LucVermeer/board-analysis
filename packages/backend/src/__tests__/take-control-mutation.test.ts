@@ -243,13 +243,16 @@ describe('takeControl mutation', () => {
     expect(shouldAdd).toBe(true);
   });
 
-  it('falls back to connectionId when ctx.participantId is missing (anonymous users)', async () => {
-    // Anonymous WS users bind participantId === connectionId — but if ctx
-    // somehow has no participantId set, the resolver should still produce a
-    // stable identifier rather than write `null` to Redis.
+  it('throws when ctx.participantId is missing (refuses to fall back to connectionId)', async () => {
+    // ConnectionIds rotate on every reconnect — falling back would leak the
+    // driver assignment because clearSessionDriverIf/releaseDriverIfMatches
+    // wouldn't match after a reconnect. The resolver hard-errors instead
+    // so the failure surfaces and auth gets a chance to publish a real
+    // participantId.
     const ctx = makeCtx({ participantId: undefined });
-    await sessionMutations.takeControl(undefined, {}, ctx);
-    expect(roomManagerMock.setSessionDriverAndReturnPrevious).toHaveBeenCalledWith('session-1', 'conn-1');
+    await expect(sessionMutations.takeControl(undefined, {}, ctx)).rejects.toThrow(/requires ctx\.participantId/);
+    expect(roomManagerMock.setSessionDriverAndReturnPrevious).not.toHaveBeenCalled();
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
 
   it('throws when called outside a session', async () => {

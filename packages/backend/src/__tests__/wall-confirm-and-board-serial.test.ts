@@ -13,7 +13,9 @@
  *    participant ID to all session members.
  *  - Any session participant may call (no driver requirement); non-members
  *    are rejected by the membership check.
- *  - Falls back to connectionId when ctx.participantId is missing (anon WS).
+ *  - Hard-errors when ctx.participantId is missing (refuses to fall back to
+ *    connectionId, which rotates across reconnects and would silently leak
+ *    the confirmer identity).
  *
  *  setSessionBoardSerial
  *  - Persists the serial via the room manager and publishes
@@ -193,18 +195,16 @@ describe('confirmClimbOnWall mutation', () => {
     expect(stampedMs).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
-  it('falls back to connectionId when ctx.participantId is missing (anonymous users)', async () => {
+  it('throws when ctx.participantId is missing (refuses to fall back to connectionId)', async () => {
+    // ConnectionIds rotate on every reconnect — the resolver hard-errors
+    // rather than recording a confirmer identity that won't survive a
+    // reconnect. Auth is expected to publish a real participantId.
     const ctx = makeCtx({ participantId: undefined, connectionId: 'conn-anon-1' });
 
-    await sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx);
-
-    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith(
-      'session-1',
-      expect.objectContaining({
-        __typename: 'WallConfirmedClimb',
-        confirmedByParticipantId: 'conn-anon-1',
-      }),
+    await expect(sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx)).rejects.toThrow(
+      /requires ctx\.participantId/,
     );
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
 
   it('rejects non-members (requireSessionMember throws) and does not publish', async () => {

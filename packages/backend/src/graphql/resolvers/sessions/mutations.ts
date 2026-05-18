@@ -400,12 +400,16 @@ export const sessionMutations = {
       validateInput(ClimbQueueItemSchema, climb, 'climb');
     }
 
-    const participantId = ctx.participantId || ctx.connectionId;
+    // Hard-error when ctx.participantId is missing rather than silently
+    // falling back to connectionId. The connectionId rotates on every
+    // reconnect, so any subsequent clearSessionDriverIf/releaseDriverIfMatches
+    // call (e.g. driver bounces wifi, reconnects with a fresh connectionId)
+    // would fail to match the prior key and leak the driver assignment.
+    // Surfacing the failure forces auth to publish a real participantId.
     if (!ctx.participantId) {
-      logger.warn(
-        `[takeControl] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
-      );
+      throw new Error('takeControl requires ctx.participantId; refusing to fall back to connectionId.');
     }
+    const participantId = ctx.participantId;
 
     // Broadcast the climb to the wall BEFORE swapping the driver. If
     // setCurrentClimbAndPublish throws (e.g. Redis VersionConflict over
@@ -518,16 +522,14 @@ export const sessionMutations = {
     validateInput(ClimbUuidSchema, climbUuid, 'climbUuid');
     await requireSessionMember(ctx, sessionId);
 
-    const participantId = ctx.participantId || ctx.connectionId;
+    // Hard-error when ctx.participantId is missing. ConnectionIds rotate on
+    // every reconnect, so falling back would leak the confirmer's identity
+    // across reconnects and weaken the wire event. See takeControl above for
+    // the full reasoning.
     if (!ctx.participantId) {
-      // Connection IDs are non-stable across reconnects, so treating one as
-      // the confirmer's identity weakens the wire event. Surface the
-      // fallback so we can detect clients joining without participantId in
-      // prod and tighten the client glue.
-      logger.warn(
-        `[confirmClimbOnWall] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
-      );
+      throw new Error('confirmClimbOnWall requires ctx.participantId; refusing to fall back to connectionId.');
     }
+    const participantId = ctx.participantId;
 
     // Reject when the climb on the wire doesn't match the session's current
     // climb. Without this guard, any session member could spam fake confirms
@@ -617,12 +619,13 @@ export const sessionMutations = {
       });
     }
 
-    const participantId = ctx.participantId || ctx.connectionId;
+    // Hard-error when ctx.participantId is missing — same reasoning as
+    // takeControl / confirmClimbOnWall: connectionIds aren't stable across
+    // reconnects.
     if (!ctx.participantId) {
-      logger.warn(
-        `[setSessionBoardSerial] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
-      );
+      throw new Error('setSessionBoardSerial requires ctx.participantId; refusing to fall back to connectionId.');
     }
+    const participantId = ctx.participantId;
 
     // Mirror takeControl / releaseControl: return the resolved Session. Fan
     // the independent reads out in parallel — sequential awaits over five
@@ -671,12 +674,15 @@ export const sessionMutations = {
     const sessionId = requireSession(ctx);
     await requireSessionMember(ctx, sessionId);
 
-    const participantId = ctx.participantId || ctx.connectionId;
+    // Hard-error when ctx.participantId is missing. Falling back to
+    // connectionId would silently fail to clear the driver key after the
+    // user's connectionId rotated — the original takeControl wrote under
+    // their stable participantId, and a release under a rotated connectionId
+    // wouldn't match. See takeControl above for the full reasoning.
     if (!ctx.participantId) {
-      logger.warn(
-        `[releaseControl] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
-      );
+      throw new Error('releaseControl requires ctx.participantId; refusing to fall back to connectionId.');
     }
+    const participantId = ctx.participantId;
     const cleared = await roomManager.clearSessionDriverIf(sessionId, participantId);
 
     if (cleared) {

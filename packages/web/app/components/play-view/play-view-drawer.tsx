@@ -253,16 +253,7 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
           onAnimationEnd={lightbulbCoachmark ? onLightbulbCoachmarkSeen : undefined}
         >
           {lightbulbActive ? (
-            <Lightbulb
-              sx={{
-                color: themeTokens.colors.warning,
-                '@keyframes connectedGlow': {
-                  '0%': { filter: `drop-shadow(0 0 2px ${themeTokens.colors.warning}99)` },
-                  '100%': { filter: `drop-shadow(0 0 6px ${themeTokens.colors.warning})` },
-                },
-                animation: 'connectedGlow 1.5s ease-in-out infinite alternate',
-              }}
-            />
+            <Lightbulb className={styles.lightbulbConnectedGlow} sx={{ color: themeTokens.colors.warning }} />
           ) : (
             <LightbulbOutlined />
           )}

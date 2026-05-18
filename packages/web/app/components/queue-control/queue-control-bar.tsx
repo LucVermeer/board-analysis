@@ -89,10 +89,9 @@ const TICK_BADGE_SX = {
 
 const DRIVER_BADGE_SX = {
   '& .MuiBadge-badge': {
+    ...themeTokens.badge.small,
     backgroundColor: themeTokens.colors.primary,
     color: 'common.white',
-    height: 14,
-    minWidth: 14,
     borderRadius: '50%',
     border: '2px solid transparent',
   },

@@ -44,7 +44,35 @@ const LEGACY_LOCALSTORAGE_KEYS: Record<string, string> = {
   'boardsesh:partyMode': 'boardsesh:partyMode',
 };
 
-const getDB = createIndexedDBStore('boardsesh-user-preferences', STORE_NAME);
+// Preference keys that used to live in IndexedDB but were removed from
+// UserPreferenceKeyMap. Their stored values would otherwise sit untouched
+// in users' stores forever. Cleaned up once per page load on first DB
+// access — `delete` is idempotent (no-op when the key isn't present).
+const ORPHANED_PREFERENCE_KEYS = [
+  // Removed when the queue-control-bar pivot dropped the play-view drawer
+  // peek-animation hint in favour of the lightbulb coachmark (`swipeHint:lightbulbSeen`).
+  'swipeHint:playViewSeen',
+] as const;
+
+const getDBRaw = createIndexedDBStore('boardsesh-user-preferences', STORE_NAME);
+
+let orphanCleanupPromise: Promise<void> | null = null;
+const getDB: typeof getDBRaw = async () => {
+  const db = await getDBRaw();
+  if (db && !orphanCleanupPromise) {
+    orphanCleanupPromise = (async () => {
+      for (const key of ORPHANED_PREFERENCE_KEYS) {
+        try {
+          await db.delete(STORE_NAME, key);
+        } catch {
+          // Idempotent cleanup — swallow per-key failures so one missing/
+          // locked key can't block legitimate preference reads.
+        }
+      }
+    })();
+  }
+  return db;
+};
 
 /**
  * Get a preference value from IndexedDB.

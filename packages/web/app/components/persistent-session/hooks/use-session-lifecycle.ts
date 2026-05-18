@@ -206,7 +206,7 @@ type UseSessionLifecycleArgs = {
   >;
 };
 
-type SessionLifecycleState = {
+export type SessionLifecycleState = {
   activeSession: ActiveSessionInfo | null;
   client: Client | null;
   session: Session | null;
@@ -219,7 +219,7 @@ type SessionLifecycleState = {
   sessionSummaryAutoFinished: boolean;
 };
 
-type SessionLifecycleActions = {
+export type SessionLifecycleActions = {
   activateSession: (info: ActiveSessionInfo) => void;
   deactivateSession: (options?: { notifyServer?: boolean }) => void;
   setInitialQueueForSession: (
