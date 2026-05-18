@@ -219,8 +219,14 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
         // but state will converge correctly.
       }
 
-      // Skip if this is the same item (deduplication for optimistic updates)
-      if (item && state.currentClimbQueueItem?.uuid === item.uuid) {
+      // Skip own-tap re-dispatches (same QueueItem from same local code path
+      // firing twice without a server round-trip). Only applies to LOCAL
+      // updates — server events that landed here passed the correlationId /
+      // clientId echo guards above, so they're legitimate peer broadcasts and
+      // need to flow through (the BLE-paired phone re-sends the climb to the
+      // board on every broadcast, even when the wall climb's uuid hasn't
+      // changed — e.g. driver release+retake on the same climb).
+      if (!isServerEvent && item && state.currentClimbQueueItem?.uuid === item.uuid) {
         return state;
       }
 
