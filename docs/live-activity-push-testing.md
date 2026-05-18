@@ -71,7 +71,7 @@ Device-to-server (widget buttons):
 
 Latency on the BLE side from a suspended-app cold-launch is ~1.5–2.5 s: background-launch (~0.5–1 s) + CoreBluetooth state restoration (~0.5–1 s) + UART chunk flush (~0.2–0.5 s). Subsequent taps inside the same wake window are faster because the peripheral stays connected.
 
-Cross-device limitation: when *another* user navigates and your phone is suspended, your board does **not** repaint — the WS connection is dead and the APNs Live Activity push reaches the widget extension, which can't open the CoreBluetooth connection. Tracked in issue #2174; ultimately solved by the planned WS-enabled board controller.
+Cross-device limitation: when _another_ user navigates and your phone is suspended, your board does **not** repaint — the WS connection is dead and the APNs Live Activity push reaches the widget extension, which can't open the CoreBluetooth connection. Tracked in issue #2174; ultimately solved by the planned WS-enabled board controller.
 
 ## Prerequisites
 

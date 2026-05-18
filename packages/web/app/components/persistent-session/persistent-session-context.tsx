@@ -78,11 +78,6 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     avatarUrlRef.current = avatarUrl;
   }, [avatarUrl]);
 
-  // Stable no-op: session is managed internally by lifecycle hook.
-  // MUST be useCallback to avoid recreating on every render, which would
-  // destabilize the lifecycle effect's dependency array and cause infinite reconnects.
-  const noopSetSession = useCallback(() => {}, []);
-
   const refs: SharedRefs = {
     offlineBufferRef,
     wsAuthTokenRef,
@@ -123,7 +118,6 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     handleQueueEvent: eventProcessor.handleQueueEvent,
     handleSessionEvent: eventProcessor.handleSessionEvent,
     setLastReceivedStateHash: eventProcessor.setLastReceivedStateHash,
-    setSession: noopSetSession, // Session is managed internally by lifecycle
     refs,
   });
 
@@ -175,6 +169,10 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       mirrorCurrentClimb: mutations.mirrorCurrentClimb,
       setQueue: mutations.setQueue,
       replaceQueueItem: mutations.replaceQueueItem,
+      takeControl: mutations.takeControl,
+      releaseControl: mutations.releaseControl,
+      confirmClimbOnWall: mutations.confirmClimbOnWall,
+      setSessionBoardSerial: mutations.setSessionBoardSerial,
       setLocalQueueState: queueStorage.setLocalQueueState,
       clearLocalQueue: queueStorage.clearLocalQueue,
       subscribeToQueueEvents: subscriptions.subscribeToQueueEvents,
@@ -197,6 +195,10 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       mutations.mirrorCurrentClimb,
       mutations.setQueue,
       mutations.replaceQueueItem,
+      mutations.takeControl,
+      mutations.releaseControl,
+      mutations.confirmClimbOnWall,
+      mutations.setSessionBoardSerial,
       queueStorage.setLocalQueueState,
       queueStorage.clearLocalQueue,
       subscriptions.subscribeToQueueEvents,
@@ -214,7 +216,11 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       hasConnected: lifecycle.hasConnected,
       error: lifecycle.error,
       clientId: lifecycle.session?.clientId ?? null,
+      // Backend-resolved participantId from join — server uses this identity
+      // when broadcasting DriverChanged, so driver derivation compares against it.
+      participantId: lifecycle.session?.participantId ?? null,
       isLeader: lifecycle.session?.isLeader ?? false,
+      driverParticipantId: lifecycle.session?.driverParticipantId ?? null,
       users: lifecycle.session?.users ?? [],
       currentClimbQueueItem: eventProcessor.currentClimbQueueItem,
       queue: eventProcessor.queue,

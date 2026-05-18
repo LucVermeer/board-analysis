@@ -8,6 +8,7 @@ import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import { useBoardBluetooth } from './use-board-bluetooth';
 import { useCurrentClimb } from '../graphql-queue';
 import type { BoardDetails } from '@/app/lib/types';
+import type { ClimbQueueItem } from '../queue-control/types';
 import {
   isCapacitor,
   isCapacitorWebView,
@@ -19,6 +20,8 @@ import { DevicePickerDialog } from './device-picker-dialog';
 import { BoardConfigMismatchDialog } from './board-config-mismatch-dialog';
 import { AutoConnectHandler } from './auto-connect-handler';
 import { parseSerialNumber } from './bluetooth-aurora';
+import { emitWallConfirm } from './wall-confirm-bus';
+import { usePersistentSessionActions, usePersistentSessionState } from '@/app/components/persistent-session';
 import { useSnackbar } from '../providers/snackbar-provider';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { resolveSerialNumbers, type ResolvedBoardEntry } from '@/app/lib/ble/resolve-serials';
@@ -33,6 +36,15 @@ type BluetoothContextValue = {
   loading: boolean;
   connect: (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>;
   disconnect: () => void;
+  /**
+   * Send LED frames to the connected board. The `signal` parameter is plumbed
+   * through to the underlying BLE adapter write — primarily used internally by
+   * `BluetoothAutoSender` (mounted by this provider) to abort in-flight writes
+   * when the provider unmounts mid-send so post-send side effects (analytics,
+   * `confirmClimbOnWall`) are skipped for a navigated-away climb. The
+   * parameter remains on the public context type for future external callers
+   * that need cancellation.
+   */
   sendFramesToBoard: (
     frames: string,
     mirrored?: boolean,
@@ -70,6 +82,7 @@ const BluetoothContext = createContext<BluetoothContextValue | null>(null);
 function BluetoothAutoSender({
   sendFramesToBoard,
   layoutName,
+  onWallConfirmed,
 }: {
   sendFramesToBoard: (
     frames: string,
@@ -78,55 +91,121 @@ function BluetoothAutoSender({
     climbUuid?: string,
   ) => Promise<boolean | undefined>;
   layoutName: string;
+  /**
+   * Fires after a successful BLE write. Always emits onto the local
+   * wall-confirm bus (so the same phone's drawer timer dismisses); in party
+   * mode it additionally broadcasts via `confirmClimbOnWall` so non-BLE
+   * participants see the confirmation. Keeping both paths in one callback
+   * means BluetoothAutoSender doesn't need to know whether a session exists.
+   */
+  onWallConfirmed: (climbUuid: string) => void;
 }) {
   const { currentClimbQueueItem } = useCurrentClimb();
-  const abortControllerRef = useRef<AbortController | null>(null);
-
+  // Mirror onWallConfirmed so the send loop doesn't re-run when
+  // sessionId-derived callback identity changes mid-send.
+  const onWallConfirmedRef = useRef(onWallConfirmed);
   useEffect(() => {
-    if (!currentClimbQueueItem) return;
+    onWallConfirmedRef.current = onWallConfirmed;
+  }, [onWallConfirmed]);
 
-    // Abort any in-flight BLE write from the previous climb
-    abortControllerRef.current?.abort();
+  // Serialize BLE writes with a latest-wins queue. Web Bluetooth on Android
+  // can't actually cancel an in-flight GATT operation when the JS AbortSignal
+  // fires — the OS-level write keeps going, so a second adapter.write
+  // started before it completes throws "GATT operation already in progress."
+  // With my recent reducer fix that lets duplicate server broadcasts through
+  // (so the BLE phone re-sends on every CurrentClimbChanged, including
+  // takeControl(currentClimb) re-broadcasts of the same climb), this hits
+  // any time two broadcasts land in quick succession.
+  //
+  // Pattern: while a write is in flight, store the most recent pending
+  // climb. When the current write resolves, the drain loop picks up
+  // whatever's pending and sends that, repeating until pending is empty.
+  // Intermediate climbs that got overwritten are skipped — same end state
+  // as the old abort-and-restart pattern, but no overlapping GATT calls.
+  const isWritingRef = useRef(false);
+  const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
+  // Deduplicate same-uuid broadcasts. The reducer now lets duplicate
+  // CurrentClimbChanged events through (so the BLE phone re-sends on each
+  // event), but the wall is already showing the climb — re-sending double-
+  // counts analytics and double-fires confirmClimbOnWall. Skip the send when
+  // the pending uuid matches the last one we actually wrote.
+  const lastSentUuidRef = useRef<string | null>(null);
+  // Single AbortController lives across the AutoSender's lifetime. Aborted
+  // exactly once on unmount so the in-flight drain loop (a) cancels the
+  // underlying adapter.write via the signal, and (b) returns before firing
+  // analytics / confirmClimbOnWall for a climb the user has navigated away
+  // from. Scoping per-effect would abort on every climb change and break
+  // the latest-wins drain pattern.
+  const abortControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
-    const sendClimb = async () => {
-      try {
-        const result = await sendFramesToBoard(
-          currentClimbQueueItem.climb.frames,
-          !!currentClimbQueueItem.climb.mirrored,
-          controller.signal,
-          currentClimbQueueItem.climb.uuid,
-        );
-
-        // Skip analytics if this send was aborted (rapid swiping)
-        if (controller.signal.aborted) return;
-
-        if (result === true) {
-          track('Climb Sent to Board Success', {
-            climbUuid: currentClimbQueueItem.climb?.uuid,
-            boardLayout: layoutName,
-          });
-        } else if (result === false) {
-          track('Climb Sent to Board Failure', {
-            climbUuid: currentClimbQueueItem.climb?.uuid,
-            boardLayout: layoutName,
-          });
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        console.error('Error sending climb to board:', error);
-        track('Climb Sent to Board Failure', {
-          climbUuid: currentClimbQueueItem.climb?.uuid,
-          boardLayout: layoutName,
-        });
-      }
-    };
-    void sendClimb();
-
     return () => {
       controller.abort();
     };
+  }, []);
+
+  useEffect(() => {
+    if (!currentClimbQueueItem) return;
+    const signal = abortControllerRef.current?.signal;
+    if (signal?.aborted) return;
+    if (isWritingRef.current) {
+      pendingClimbRef.current = currentClimbQueueItem;
+      return;
+    }
+    isWritingRef.current = true;
+    const drain = async () => {
+      let toSend: ClimbQueueItem | null = currentClimbQueueItem;
+      try {
+        while (toSend) {
+          if (signal?.aborted) return;
+          const item = toSend;
+          // Deduplicate same-uuid re-broadcasts. The board is idempotent so a
+          // re-send is functionally fine, but we'd double-fire analytics and
+          // confirmClimbOnWall — skip the send entirely instead.
+          if (item.climb.uuid === lastSentUuidRef.current) {
+            toSend = pendingClimbRef.current;
+            pendingClimbRef.current = null;
+            continue;
+          }
+          try {
+            const result = await sendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal, item.climb.uuid);
+            // After the await, the AutoSender may have unmounted — skip the
+            // post-send side effects so a navigated-away climb doesn't fire
+            // analytics or confirmClimbOnWall for a session the user has left.
+            if (signal?.aborted) return;
+            if (result === true) {
+              lastSentUuidRef.current = item.climb.uuid;
+              track('Climb Sent to Board Success', {
+                climbUuid: item.climb?.uuid,
+                boardLayout: layoutName,
+              });
+              // Wall actually received the climb — emit confirmation so the
+              // drawer's lightbulb timer dismisses (locally on this phone,
+              // and via WS broadcast for other party members).
+              onWallConfirmedRef.current(item.climb.uuid);
+            } else if (result === false) {
+              track('Climb Sent to Board Failure', {
+                climbUuid: item.climb?.uuid,
+                boardLayout: layoutName,
+              });
+            }
+          } catch (error) {
+            if (signal?.aborted) return;
+            console.error('Error sending climb to board:', error);
+            track('Climb Sent to Board Failure', {
+              climbUuid: item.climb?.uuid,
+              boardLayout: layoutName,
+            });
+          }
+          toSend = pendingClimbRef.current;
+          pendingClimbRef.current = null;
+        }
+      } finally {
+        isWritingRef.current = false;
+      }
+    };
+    void drain();
   }, [currentClimbQueueItem, sendFramesToBoard, layoutName]);
 
   return null;
@@ -144,11 +223,51 @@ export function BluetoothProvider({
 }) {
   const [ledColorOverrides, setLedColorOverrides] = useLedColorOverrides();
 
+  // Party-session hooks pulled here so the AutoSender (mounted only when
+  // connected) and the connect callback share the same references. The
+  // BluetoothProvider always mounts inside a PersistentSessionProvider in
+  // the live tree, so these calls always resolve. Tests must provide a mock.
+  const persistentSessionActions = usePersistentSessionActions();
+  const persistentSessionState = usePersistentSessionState();
+  const sessionId = persistentSessionState.session?.id ?? null;
+  const { confirmClimbOnWall, setSessionBoardSerial } = persistentSessionActions;
+  // Mirror the live sessionId into a ref so the BLE-connect callback
+  // (created during useBoardBluetooth init) reads the current value, not a
+  // stale snapshot from the first render.
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  const handleConnectSuccess = useCallback(
+    (serial: string | null) => {
+      if (!serial) return;
+      if (sessionIdRef.current) {
+        void setSessionBoardSerial(serial);
+      }
+    },
+    [setSessionBoardSerial],
+  );
+
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({
     boardDetails,
     boardUuid,
     ledColorOverrides,
+    onConnectSuccess: handleConnectSuccess,
   });
+
+  // Always emit on the local wall-confirm bus (so the same phone's drawer
+  // dismisses its 2s fallback timer); only fire the WS mutation when a
+  // session exists (solo has no peers to notify).
+  const handleWallConfirmed = useCallback(
+    (climbUuid: string) => {
+      emitWallConfirm(climbUuid);
+      if (sessionIdRef.current) {
+        void confirmClimbOnWall(climbUuid);
+      }
+    },
+    [confirmClimbOnWall],
+  );
   const { token, isAuthenticated } = useWsAuthToken();
   const { showMessage } = useSnackbar();
   const { t } = useTranslation('settings');
@@ -444,7 +563,11 @@ export function BluetoothProvider({
   return (
     <BluetoothContext.Provider value={value}>
       {isConnected && partyMode === 'off' && (
-        <BluetoothAutoSender sendFramesToBoard={sendFramesToBoard} layoutName={boardDetails.layout_name ?? ''} />
+        <BluetoothAutoSender
+          sendFramesToBoard={sendFramesToBoard}
+          layoutName={boardDetails.layout_name ?? ''}
+          onWallConfirmed={handleWallConfirmed}
+        />
       )}
       {activePickerState && (
         <DevicePickerDialog

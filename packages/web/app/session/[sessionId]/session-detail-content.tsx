@@ -58,7 +58,7 @@ import { generateSessionName } from '@/app/lib/session-utils';
 import { ConfirmPopover } from '@/app/components/ui/confirm-popover';
 import { useDeleteTick } from '@/app/hooks/use-delete-tick';
 import SaveToHealthKitButton from '@/app/components/healthkit/save-to-healthkit-button';
-import { useOptionalQueueActions } from '@/app/components/graphql-queue';
+import { useOptionalQueueActions, useOptionalSessionData } from '@/app/components/graphql-queue';
 
 type SessionDetailContentProps = {
   session: SessionDetail | null;
@@ -298,6 +298,8 @@ export default function SessionDetailContent({
   const deleteTick = useDeleteTick();
   const { showMessage } = useSnackbar();
   const queueActions = useOptionalQueueActions();
+  const optionalSessionData = useOptionalSessionData();
+  const isPersistentSessionActive = !!optionalSessionData?.isPersistentSessionActive;
 
   const {
     session: hookSession,
@@ -426,10 +428,17 @@ export default function SessionDetailContent({
   const navigateToClimb = useCallback(
     async (climb: Climb) => {
       try {
-        if (queueActions) {
+        if (queueActions && !isPersistentSessionActive) {
+          // Solo: keep today's behavior — set as active so BLE sends the
+          // climb to the board, and skip navigation when board-compat
+          // validation fails (snackbar already surfaced).
           const result = await queueActions.setCurrentClimb(climb);
           if (result === null) return;
         }
+        // Party: skip setCurrentClimb so we don't yank the wall away from
+        // other party members. We still navigate to the climb's board page
+        // (in non-embedded mode), where the party member can preview or
+        // explicitly send via the lightbulb/Set Active path.
         if (embedded) return;
         const bt = climb.boardType;
         if (!bt) return;
@@ -442,7 +451,7 @@ export default function SessionDetailContent({
         console.error('Failed to navigate to climb:', error);
       }
     },
-    [queueActions, embedded, router],
+    [queueActions, embedded, router, isPersistentSessionActive],
   );
 
   const handleShare = useCallback(async () => {

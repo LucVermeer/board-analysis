@@ -111,20 +111,17 @@ vi.mock('@/app/components/queue-control/queue-list', () => ({
   default: React.forwardRef(() => React.createElement('div', { 'data-testid': 'queue-list' })),
 }));
 
-vi.mock('@/app/components/queue-control/next-climb-button', () => ({
-  default: () => React.createElement('button', { 'data-testid': 'next-climb' }),
-}));
-
-vi.mock('@/app/components/queue-control/previous-climb-button', () => ({
-  default: () => React.createElement('button', { 'data-testid': 'prev-climb' }),
+// queue-control-bar now uses the single `queue-nav-button` for both prev and
+// next (next-climb-button.tsx / previous-climb-button.tsx were removed during
+// the queue pivot). Mock the new module with a no-op so unit tests don't have
+// to satisfy its hooks.
+vi.mock('@/app/components/queue-control/queue-nav-button', () => ({
+  default: ({ direction }: { direction: 'next' | 'previous' }) =>
+    React.createElement('button', { 'data-testid': `${direction}-climb` }),
 }));
 
 vi.mock('@/app/components/logbook/tick-button', () => ({
   TickButton: () => React.createElement('button', { 'data-testid': 'tick-button' }),
-}));
-
-vi.mock('@/app/components/board-page/share-button', () => ({
-  ShareBoardButton: () => null,
 }));
 
 vi.mock('@/app/components/play-view/play-view-drawer', () => ({

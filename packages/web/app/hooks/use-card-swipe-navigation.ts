@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSwipeable } from 'react-swipeable';
 import { useSwipeDirection } from './use-swipe-direction';
 
@@ -46,6 +46,16 @@ export function useCardSwipeNavigation({
   const [enterDirection, setEnterDirection] = useState<'from-left' | 'from-right' | null>(null);
   const { detect: detectDirection, reset: resetDirection, isHorizontalRef } = useSwipeDirection();
   const animatingRef = useRef(false);
+  // Owned-by-hook fallback so consumers don't each reimplement the
+  // "clear enterDirection after ENTER_ANIMATION_DURATION" timer.
+  const enterClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (enterClearTimerRef.current) clearTimeout(enterClearTimerRef.current);
+    },
+    [],
+  );
 
   const resetSwipe = useCallback(() => {
     setSwipeOffset(0);
@@ -56,6 +66,10 @@ export function useCardSwipeNavigation({
   }, [resetDirection]);
 
   const clearEnterAnimation = useCallback(() => {
+    if (enterClearTimerRef.current) {
+      clearTimeout(enterClearTimerRef.current);
+      enterClearTimerRef.current = null;
+    }
     setEnterDirection(null);
     animatingRef.current = false;
   }, []);
@@ -101,8 +115,14 @@ export function useCardSwipeNavigation({
           setIsAnimating(false);
           setAnimationDirection(null);
           resetDirection();
-          // Set enter direction for thumbnail crossfade
+          // Set enter direction for thumbnail crossfade, and self-clear after
+          // ENTER_ANIMATION_DURATION so consumers don't have to wire the timer.
           setEnterDirection(direction === 'left' ? 'from-right' : 'from-left');
+          if (enterClearTimerRef.current) clearTimeout(enterClearTimerRef.current);
+          enterClearTimerRef.current = setTimeout(() => {
+            setEnterDirection(null);
+            enterClearTimerRef.current = null;
+          }, ENTER_ANIMATION_DURATION);
           // Unblock swipes immediately — peek text provides visual continuity
           animatingRef.current = false;
         }, CLIP_EXIT_DURATION);

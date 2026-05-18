@@ -18,10 +18,6 @@ vi.mock('react-i18next', () => ({
 // Mock heavy deps that PlayViewActionBar imports transitively.
 // ---------------------------------------------------------------------------
 
-vi.mock('@/app/components/board-page/share-button', () => ({
-  ShareBoardButton: () => React.createElement('button', { 'data-testid': 'share-button' }),
-}));
-
 // MUI icons — keep as simple SVG stubs so we don't need a full MUI theme
 vi.mock('@mui/icons-material/SkipPreviousOutlined', () => ({
   default: () => React.createElement('svg', { 'data-testid': 'icon-skip-prev' }),
@@ -70,6 +66,9 @@ function buildProps(
     onToggleFavorite: vi.fn(),
     onOpenActions: vi.fn(),
     onOpenQueue: vi.fn(),
+    lightbulbActive: true,
+    displayedClimbName: 'Test Climb',
+    onLightbulb: vi.fn(),
     ...overrides,
   };
 }
@@ -81,7 +80,7 @@ function buildProps(
 describe('PlayViewActionBar', () => {
   it('renders prev and next buttons', () => {
     render(<PlayViewActionBar {...buildProps()} />);
-    expect(screen.getByLabelText('Open queue')).toBeTruthy();
+    expect(screen.getByLabelText('Open up next')).toBeTruthy();
     expect(screen.getByTestId('icon-skip-prev')).toBeTruthy();
     expect(screen.getByTestId('icon-skip-next')).toBeTruthy();
   });
@@ -159,7 +158,7 @@ describe('PlayViewActionBar', () => {
   it('calls onOpenQueue when queue button clicked', () => {
     const onOpenQueue = vi.fn();
     render(<PlayViewActionBar {...buildProps({ onOpenQueue })} />);
-    fireEvent.click(screen.getByLabelText('Open queue'));
+    fireEvent.click(screen.getByLabelText('Open up next'));
     expect(onOpenQueue).toHaveBeenCalledOnce();
   });
 

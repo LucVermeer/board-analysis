@@ -20,7 +20,7 @@ Control the climbing board from the lock screen while the app is backgrounded. T
 1. Widget can only do prev/next -- no add, remove, reorder, or mirror mutations from lock screen
 2. Rust board renderer has no Swift/iOS bindings -- only targets WASM today
 3. MoonBoard remains on the existing Capacitor BLE path; the native background BLE path currently targets Aurora boards only
-4. Cross-device repaint when *another* user navigates: if your phone is suspended, your board stays stale until you unlock the phone. Tracked in issue #2174 (presence/ack design) and ultimately solved by the planned WS-enabled board controller.
+4. Cross-device repaint when _another_ user navigates: if your phone is suspended, your board stays stale until you unlock the phone. Tracked in issue #2174 (presence/ack design) and ultimately solved by the planned WS-enabled board controller.
 
 ## Architecture Decision: Where Does BLE Live?
 

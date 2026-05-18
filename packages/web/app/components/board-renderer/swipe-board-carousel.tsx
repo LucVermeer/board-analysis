@@ -3,12 +3,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import BoardImageLayers from './board-image-layers';
 import BoardCanvasRenderer from './board-canvas-renderer';
-import {
-  useCardSwipeNavigation,
-  EXIT_DURATION,
-  SNAP_BACK_DURATION,
-  ENTER_ANIMATION_DURATION,
-} from '@/app/hooks/use-card-swipe-navigation';
+import { useCardSwipeNavigation, EXIT_DURATION, SNAP_BACK_DURATION } from '@/app/hooks/use-card-swipe-navigation';
 import type { BoardDetails } from '@/app/lib/types';
 import { useCanvasRendererReady } from '@/app/lib/board-render-worker/worker-manager';
 import { useDoubleTap } from '@/app/lib/hooks/use-double-tap';
@@ -59,40 +54,18 @@ const SwipeBoardCarousel = React.memo<SwipeBoardCarouselProps>(
     overlay,
     onZoomChange: onZoomChangeProp,
   }) => {
-    const enterFallbackRef = useRef<NodeJS.Timeout | null>(null);
     const [isZoomed, setIsZoomed] = useState(false);
 
-    const {
-      swipeHandlers,
-      swipeOffset,
-      isAnimating,
-      animationDirection,
-      enterDirection,
-      clearEnterAnimation,
-      isHorizontalSwipeRef,
-    } = useCardSwipeNavigation({
-      onSwipeNext,
-      onSwipePrevious,
-      canSwipeNext,
-      canSwipePrevious,
-      threshold: 80,
-      delayNavigation: true,
-      enabled: !isZoomed,
-    });
-
-    useEffect(() => {
-      if (enterDirection) {
-        enterFallbackRef.current = setTimeout(() => {
-          clearEnterAnimation();
-        }, ENTER_ANIMATION_DURATION);
-      }
-      return () => {
-        if (enterFallbackRef.current) {
-          clearTimeout(enterFallbackRef.current);
-          enterFallbackRef.current = null;
-        }
-      };
-    }, [enterDirection, clearEnterAnimation]);
+    const { swipeHandlers, swipeOffset, isAnimating, animationDirection, enterDirection, isHorizontalSwipeRef } =
+      useCardSwipeNavigation({
+        onSwipeNext,
+        onSwipePrevious,
+        canSwipeNext,
+        canSwipePrevious,
+        threshold: 80,
+        delayNavigation: true,
+        enabled: !isZoomed,
+      });
 
     const getSwipeTransition = () => {
       if (enterDirection) return 'none';

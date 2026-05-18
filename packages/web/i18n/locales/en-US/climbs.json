@@ -67,16 +67,6 @@
     "linkCopied": "Link copied",
     "shareFailed": "Failed to share"
   },
-  "board": {
-    "connect": "Connect to board",
-    "disconnect": "Disconnect from board",
-    "connectError": "Could not connect to board. Make sure Bluetooth is on and the board is nearby.",
-    "lightingUnavailable": "Board lighting unavailable",
-    "lightingUnavailableIos": "Safari doesn't support Bluetooth. Use the Boardsesh app to light up holds on your board.",
-    "lightingUnavailableBrowser": "This browser doesn't support Bluetooth. Switch to Chrome to light up holds on your board.",
-    "dismiss": "Dismiss",
-    "getApp": "Get the app"
-  },
   "angleSelector": {
     "selectAngle": "Select Angle",
     "loadingStats": "Loading stats...",
@@ -256,6 +246,12 @@
         "submit": "Create"
       }
     },
+    "sendToBoard": {
+      "label": "Send to board",
+      "active": "On the wall",
+      "tooltip": "Send to the board",
+      "activeTooltip": "Currently on the wall"
+    },
     "tick": {
       "drawer": {
         "signInRequired": "Sign in required",
@@ -371,12 +367,12 @@
     "signInRequired": "Sign In Required",
     "signInBody": "Please sign in to view your liked climbs.",
     "actionsAriaLabel": "Actions",
-    "queueAll": "Queue All",
+    "queueAll": "Add all to up next",
     "adding": "Adding...",
     "noClimbsToAdd": "No climbs to add",
-    "addedToQueue_one": "Added {{count}} climb to queue",
-    "addedToQueue_other": "Added {{count}} climbs to queue",
-    "addToQueueFailed": "Failed to add climbs to queue",
+    "addedToQueue_one": "Added {{count}} climb to up next",
+    "addedToQueue_other": "Added {{count}} climbs to up next",
+    "addToQueueFailed": "Failed to add climbs to up next",
     "loadFailed": "Failed to load liked climbs",
     "emptyState": "No liked climbs yet. Heart some climbs to see them here!"
   },

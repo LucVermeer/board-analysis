@@ -26,6 +26,7 @@ import SwipeHintOrchestrator from './swipe-hint-orchestrator';
 import { getExcludedClimbActions } from '@/app/lib/climb-action-utils';
 import { SelectionStoreContext, useSelectionStore } from './selected-climb-store';
 import { dispatchOpenPlayDrawer } from '../queue-control/play-drawer-event';
+import { useOptionalQueueActions } from '../graphql-queue';
 import { useOnboardingTourOptional } from '@/app/components/onboarding/onboarding-tour-provider';
 import { dispatchTourClimbListPick } from '@/app/components/onboarding/onboarding-tour-events';
 import { useTranslation } from 'react-i18next';
@@ -356,6 +357,15 @@ const ClimbsList = ({
   const onClimbSelectRef = useRef(onClimbSelect);
   onClimbSelectRef.current = onClimbSelect;
 
+  // Default browse path: opens the drawer for the tapped climb. In solo this
+  // also sends to the wall (same as today via setCurrentClimb under the hood);
+  // in a party session, the climb is shown locally in the drawer without
+  // yanking the wall. Callers that need bespoke handling (e.g. multiboard
+  // navigating to another board) pass `onClimbSelect` and own the click.
+  const queueActions = useOptionalQueueActions();
+  const previewClimbFromBrowseRef = useRef(queueActions?.previewClimbFromBrowse);
+  previewClimbFromBrowseRef.current = queueActions?.previewClimbFromBrowse;
+
   const tour = useOnboardingTourOptional();
   const tourStepRef = useRef(tour?.currentStepId ?? null);
   tourStepRef.current = tour?.currentStepId ?? null;
@@ -402,22 +412,34 @@ const ClimbsList = ({
     isFetching,
   });
 
-  // Row / thumbnail / card-cover click: activates the climb and opens the play drawer.
+  // Row / thumbnail / card-cover click: opens the play drawer with the tapped
+  // climb. In solo, also sends to the wall; in party, the drawer shows the
+  // climb locally without broadcasting (see previewClimbFromBrowse).
   const handleClimbThumbnailClickByIndex = useCallback(
     (index: number) => {
       const climb = climbs[index];
-      if (climb) {
-        onClimbSelectRef.current?.(climb);
-        // During the onboarding tour's "set active" step, swallow the play
-        // drawer open — we want the user to just set the climb active so the
-        // tour can advance to the queue-add step, not fall into the play view.
-        if (tourStepRef.current === 'climb-list') {
-          dispatchTourClimbListPick();
-        } else {
-          dispatchOpenPlayDrawer();
-        }
+      if (!climb) return;
+      // During the onboarding tour's "climb-list" step, swallow the drawer
+      // open and signal the tour — we want the user to just pick a climb so
+      // the tour can advance, not fall into the play view.
+      if (tourStepRef.current === 'climb-list') {
+        dispatchTourClimbListPick();
         track('Climb List Row Clicked', { climbUuid: climb.uuid });
+        return;
       }
+      if (onClimbSelectRef.current) {
+        // Caller-owned tap handling (e.g. multiboard navigating away).
+        // The caller is responsible for opening the drawer or navigating.
+        onClimbSelectRef.current(climb);
+      } else if (previewClimbFromBrowseRef.current) {
+        // Default browse path: forks on solo/party inside QueueContext.
+        previewClimbFromBrowseRef.current(climb);
+      } else {
+        // No queue context available — just open the drawer (other surfaces
+        // listening to PLAY_DRAWER_EVENT may handle it).
+        dispatchOpenPlayDrawer(climb);
+      }
+      track('Climb List Row Clicked', { climbUuid: climb.uuid });
     },
     [climbs],
   );

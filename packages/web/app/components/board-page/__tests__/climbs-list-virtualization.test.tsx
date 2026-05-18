@@ -317,8 +317,10 @@ describe('ClimbsList thumbnail and row click both open the play drawer', () => {
     lastVirtualizerOpts = null;
   });
 
-  it('row click activates the climb AND opens the play drawer', () => {
-    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+  it('row click delegates to onClimbSelect override when provided', () => {
+    // When a caller passes onClimbSelect (e.g. multiboard navigating to a
+    // different board), ClimbsList delegates fully — the caller owns the
+    // click and any drawer-open behavior.
     const onClimbSelect = vi.fn();
     render(
       <ClimbsList
@@ -334,15 +336,9 @@ describe('ClimbsList thumbnail and row click both open the play drawer', () => {
     fireEvent.click(screen.getByTestId('row-climb-0'));
 
     expect(onClimbSelect).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-0' }));
-    const dispatched = dispatchSpy.mock.calls.some(
-      ([event]) => event instanceof CustomEvent && event.type === 'boardsesh:open-play-drawer',
-    );
-    expect(dispatched).toBe(true);
-    dispatchSpy.mockRestore();
   });
 
-  it('thumbnail click activates the climb AND opens the play drawer', () => {
-    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+  it('thumbnail click delegates to onClimbSelect override when provided', () => {
     const onClimbSelect = vi.fn();
     render(
       <ClimbsList
@@ -358,10 +354,29 @@ describe('ClimbsList thumbnail and row click both open the play drawer', () => {
     fireEvent.click(screen.getByTestId('thumb-climb-0'));
 
     expect(onClimbSelect).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'climb-0' }));
-    const dispatched = dispatchSpy.mock.calls.some(
-      ([event]) => event instanceof CustomEvent && event.type === 'boardsesh:open-play-drawer',
+  });
+
+  it('row click dispatches the drawer-open event with the climb when no onClimbSelect is provided', () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    render(
+      <ClimbsList
+        boardDetails={makeBoardDetails()}
+        climbs={allClimbs.slice(0, 3)}
+        isFetching={false}
+        hasMore={false}
+        onLoadMore={vi.fn()}
+      />,
     );
-    expect(dispatched).toBe(true);
+
+    fireEvent.click(screen.getByTestId('row-climb-0'));
+
+    const drawerEvents = dispatchSpy.mock.calls
+      .map(([event]) => event)
+      .filter(
+        (event): event is CustomEvent => event instanceof CustomEvent && event.type === 'boardsesh:open-play-drawer',
+      );
+    expect(drawerEvents).toHaveLength(1);
+    expect(drawerEvents[0].detail).toMatchObject({ climb: expect.objectContaining({ uuid: 'climb-0' }) });
     dispatchSpy.mockRestore();
   });
 });

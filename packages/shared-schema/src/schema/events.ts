@@ -2,7 +2,16 @@ export const eventsTypeDefs = /* GraphQL */ `
   """
   Union of possible session events.
   """
-  union SessionEvent = UserJoined | UserLeft | UserPresenceChanged | LeaderChanged | SessionEnded | SessionStatsUpdated
+  union SessionEvent =
+    | UserJoined
+    | UserLeft
+    | UserPresenceChanged
+    | LeaderChanged
+    | DriverChanged
+    | WallConfirmedClimb
+    | SessionBoardSerialChanged
+    | SessionEnded
+    | SessionStatsUpdated
 
   """
   Event when a user joins the session.
@@ -36,6 +45,46 @@ export const eventsTypeDefs = /* GraphQL */ `
     leaderId: ID!
     "Connection ID of the new leader, for current-client leadership checks"
     leaderConnectionId: ID
+  }
+
+  """
+  Event when the wall driver changes (the participant authorized to drive the wall via the queue-control-bar pivot's lightbulb). Null when no member is currently driving.
+  """
+  type DriverChanged {
+    "Stable participant id of the new driver, or null when control was released"
+    driverParticipantId: ID
+    "Stable participant id of the previous driver, or null when there was none (e.g. the very first take of the session, or after a release). Lets clients render 'X took the wall from Y' toasts and populate the Phase 5 previousDriver analytics property without local bookkeeping."
+    previousDriverParticipantId: ID
+  }
+
+  """
+  Event broadcast when a participant's phone successfully relays a climb to the
+  wall over BLE. Other clients use this confirmation to flip the queue-control-bar
+  lightbulb from pending to confirmed and to dismiss the local fallback timer.
+  Server-stamped: \`confirmedAt\` is set by the backend on receipt to keep ordering
+  authoritative across clients.
+  """
+  type WallConfirmedClimb {
+    "UUID of the climb that was sent to the wall"
+    climbUuid: ID!
+    "Server timestamp when the confirmation was received (ISO 8601)"
+    confirmedAt: String!
+    "Stable participant id of the member whose phone relayed the climb"
+    confirmedByParticipantId: ID!
+    "UUID of the queue item that triggered this send, or null when the BLE-capable phone reported only a climb UUID. Lets clients disambiguate when the same climb is queued twice — without this, both queue entries' pending lightbulbs would clear on a single confirmation."
+    queueItemUuid: ID
+  }
+
+  """
+  Event when the session's last-connected BLE board serial changes.
+  Used by mobile participants to auto-connect to the same board another
+  member is already paired with — saves the chooser step on the second
+  phone joining a session in a gym with multiple physical boards.
+  Null when the board has been forgotten or never recorded.
+  """
+  type SessionBoardSerialChanged {
+    "Most recently observed BLE board serial, or null when cleared/never set"
+    lastConnectedBoardSerial: String
   }
 
   """

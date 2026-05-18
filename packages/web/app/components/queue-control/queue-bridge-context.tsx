@@ -37,6 +37,8 @@ import { getBoardDetailsForPlaylist } from '@/app/lib/board-config-for-playlist'
 import { useSnackbar } from '../providers/snackbar-provider';
 import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
+import { dispatchOpenPlayDrawer } from './play-drawer-event';
+import { deriveIsDriver } from '../graphql-queue/driver-state';
 
 const LiveActivityBridge = dynamic(() => import('@/app/lib/live-activity/live-activity-bridge'), {
   ssr: false,
@@ -203,17 +205,30 @@ function usePersistentSessionQueueAdapter(): {
     return false;
   }, []);
 
-  const getNextClimbQueueItem = useCallback((): ClimbQueueItem | null => {
-    const { queue, currentClimbQueueItem: current } = latestRef.current;
-    const idx = queue.findIndex(({ uuid }) => uuid === current?.uuid);
-    return idx >= 0 && idx < queue.length - 1 ? queue[idx + 1] : null;
-  }, []);
+  // Bridge-mode nav is queue-only (no search results plumbed through here),
+  // so suggestionsOnly is a no-op in this adapter — return null instead of
+  // a queue item. The drawer is the only caller passing suggestionsOnly today.
+  const getNextClimbQueueItem = useCallback(
+    (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }): ClimbQueueItem | null => {
+      if (options?.suggestionsOnly) return null;
+      const { queue, currentClimbQueueItem: current } = latestRef.current;
+      const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
+      const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
+      return idx >= 0 && idx < queue.length - 1 ? queue[idx + 1] : null;
+    },
+    [],
+  );
 
-  const getPreviousClimbQueueItem = useCallback((): ClimbQueueItem | null => {
-    const { queue, currentClimbQueueItem: current } = latestRef.current;
-    const idx = queue.findIndex(({ uuid }) => uuid === current?.uuid);
-    return idx > 0 ? queue[idx - 1] : null;
-  }, []);
+  const getPreviousClimbQueueItem = useCallback(
+    (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }): ClimbQueueItem | null => {
+      if (options?.suggestionsOnly) return null;
+      const { queue, currentClimbQueueItem: current } = latestRef.current;
+      const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
+      const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
+      return idx > 0 ? queue[idx - 1] : null;
+    },
+    [],
+  );
 
   const setCurrentClimbQueueItem = useCallback((item: ClimbQueueItem) => {
     const { queue, currentClimbQueueItem: current, ps, boardDetails, baseBoardPath } = latestRef.current;
@@ -380,6 +395,78 @@ function usePersistentSessionQueueAdapter(): {
     [validateClimbForQueue, buildQueueItem],
   );
 
+  // Bridge-mode browse helper. Party non-driver: preview only (drawer-open
+  // with the climb payload). Party driver, or solo: broadcast via
+  // setCurrentClimb so the wall climb actually changes. Mirrors the driver
+  // gate used by play-view-drawer.advanceTo and QueueContext.previewClimbFromBrowse
+  // (pivot rules 4 + 5: driver actions broadcast, non-driver actions preview).
+  const previewClimbFromBrowse = useCallback(
+    (climb: Climb) => {
+      const { ps } = latestRef.current;
+      const isParty = !!ps.activeSession;
+      const isDriver = deriveIsDriver({
+        isPersistentSessionActive: isParty,
+        participantId: ps.participantId,
+        driverParticipantId: isParty ? ps.driverParticipantId : null,
+      });
+      if (isParty && !isDriver) {
+        dispatchOpenPlayDrawer(climb);
+        return;
+      }
+      void setCurrentClimb(climb);
+      dispatchOpenPlayDrawer();
+    },
+    [setCurrentClimb],
+  );
+
+  // Bridge-mode wall-control claim. Mirrors GraphQLQueueProvider.takeControl
+  // semantics but uses the bridge's queue plumbing (which writes through the
+  // persistent session for party mode and local state for solo).
+  //
+  // Guards on `hasConnected` so a tap during WS reconnection doesn't throw
+  // — use-queue-mutations.ts asserts `Not connected to session` when the
+  // client ref is null. Matches the QueueContext version's `hasConnected`
+  // short-circuit.
+  const takeControl = useCallback(
+    async (climb?: Climb | null): Promise<ClimbQueueItem | null> => {
+      const { ps } = latestRef.current;
+      if (!ps.activeSession) {
+        if (!climb) return null;
+        return setCurrentClimb(climb);
+      }
+      if (!ps.hasConnected) return null;
+      if (!climb) {
+        try {
+          await ps.takeControl(null);
+        } catch (err: unknown) {
+          console.error('Failed to take control:', err);
+        }
+        return null;
+      }
+      if (!validateClimbForQueue(climb)) return null;
+      const newItem = buildQueueItem(climb);
+      try {
+        await ps.takeControl(newItem);
+        return newItem;
+      } catch (err: unknown) {
+        console.error('Failed to take control with climb:', err);
+        return null;
+      }
+    },
+    [setCurrentClimb, validateClimbForQueue, buildQueueItem],
+  );
+
+  const releaseControl = useCallback(async (): Promise<void> => {
+    const { ps } = latestRef.current;
+    if (!ps.activeSession) return;
+    if (!ps.hasConnected) return;
+    try {
+      await ps.releaseControl();
+    } catch (err: unknown) {
+      console.error('Failed to release control:', err);
+    }
+  }, []);
+
   // Bridge-mode replace: in party mode, delegate to the persistent session's
   // WebSocket-backed replaceQueueItem; otherwise mirror the local-state update
   // with a new climb while preserving the queue-item uuid and existing
@@ -420,6 +507,7 @@ function usePersistentSessionQueueAdapter(): {
       addToQueue,
       removeFromQueue,
       setCurrentClimb,
+      previewClimbFromBrowse,
       setCurrentClimbQueueItem,
       replaceQueueItem,
       setClimbSearchParams: noopSetClimbSearchParams,
@@ -429,6 +517,8 @@ function usePersistentSessionQueueAdapter(): {
       getNextClimbQueueItem,
       getPreviousClimbQueueItem,
       setQueue,
+      takeControl,
+      releaseControl,
       startSession: noopStartSession,
       joinSession: noopJoinSession,
       endSession: stableDeactivateSession,
@@ -439,6 +529,7 @@ function usePersistentSessionQueueAdapter(): {
       addToQueue,
       removeFromQueue,
       setCurrentClimb,
+      previewClimbFromBrowse,
       setCurrentClimbQueueItem,
       replaceQueueItem,
       noopSetClimbSearchParams,
@@ -447,6 +538,8 @@ function usePersistentSessionQueueAdapter(): {
       getNextClimbQueueItem,
       getPreviousClimbQueueItem,
       setQueue,
+      takeControl,
+      releaseControl,
       stableDeactivateSession,
       noopStartSession,
       noopJoinSession,
@@ -471,12 +564,21 @@ function usePersistentSessionQueueAdapter(): {
       canMutate: true,
       parsedParams,
       isSessionActive: isParty && ps.hasConnected,
+      isPersistentSessionActive: isParty,
       sessionId: ps.activeSession?.sessionId ?? null,
       sessionSummary: null,
       sessionGoal: ps.session?.goal ?? null,
       users: isParty ? ps.users : [],
       clientId: ps.clientId,
+      participantId: ps.participantId,
       isLeader: ps.isLeader,
+      driverParticipantId: isParty ? ps.driverParticipantId : null,
+      isDriver: deriveIsDriver({
+        isPersistentSessionActive: isParty,
+        participantId: ps.participantId,
+        driverParticipantId: isParty ? ps.driverParticipantId : null,
+      }),
+      lastConnectedBoardSerial: isParty ? (ps.session?.lastConnectedBoardSerial ?? null) : null,
       isBackendMode: true,
       hasConnected: ps.hasConnected,
       connectionError: ps.error,
@@ -490,9 +592,12 @@ function usePersistentSessionQueueAdapter(): {
       ps.hasConnected,
       ps.activeSession?.sessionId,
       ps.session?.goal,
+      ps.session?.lastConnectedBoardSerial,
       ps.users,
       ps.clientId,
+      ps.participantId,
       ps.isLeader,
+      ps.driverParticipantId,
       ps.error,
     ],
   );
@@ -712,6 +817,7 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     () => ({
       viewOnlyMode: effectiveData.viewOnlyMode,
       isSessionActive: effectiveData.isSessionActive,
+      isPersistentSessionActive: effectiveData.isPersistentSessionActive,
       sessionId: effectiveData.sessionId,
       sessionSummary: effectiveData.sessionSummary,
       sessionGoal: effectiveData.sessionGoal,
@@ -720,7 +826,11 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       isDisconnected: effectiveData.isDisconnected,
       users: effectiveData.users ?? [],
       clientId: effectiveData.clientId ?? null,
+      participantId: effectiveData.participantId ?? null,
       isLeader: effectiveData.isLeader ?? false,
+      driverParticipantId: effectiveData.driverParticipantId ?? null,
+      isDriver: effectiveData.isDriver ?? false,
+      lastConnectedBoardSerial: effectiveData.lastConnectedBoardSerial ?? null,
       isBackendMode: effectiveData.isBackendMode ?? false,
       hasConnected: effectiveData.hasConnected ?? false,
       connectionError: effectiveData.connectionError ?? null,
@@ -728,6 +838,7 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     [
       effectiveData.viewOnlyMode,
       effectiveData.isSessionActive,
+      effectiveData.isPersistentSessionActive,
       effectiveData.sessionId,
       effectiveData.sessionSummary,
       effectiveData.sessionGoal,
@@ -736,7 +847,11 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       effectiveData.isDisconnected,
       effectiveData.users,
       effectiveData.clientId,
+      effectiveData.participantId,
       effectiveData.isLeader,
+      effectiveData.driverParticipantId,
+      effectiveData.isDriver,
+      effectiveData.lastConnectedBoardSerial,
       effectiveData.isBackendMode,
       effectiveData.hasConnected,
       effectiveData.connectionError,
@@ -750,6 +865,11 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   // version writes to local state (no-op in party mode) and would silently
   // drop widget navigation during an active sesh.
   const onSetCurrentClimb = effectiveActions.setCurrentClimbQueueItem;
+  // Intentional degrade: off-board (adapter-mode) sessions don't populate
+  // `dispatchWidgetNavigation` in `actionsValue` above, so the iOS Live
+  // Activity widget's prev/next taps silently no-op outside of a mounted
+  // board route. Once a board route mounts and injects its own actions,
+  // this falls back to the real dispatcher from GraphQLQueueProvider.
   const onWidgetNavigate = effectiveActions.dispatchWidgetNavigation;
 
   return (

@@ -1,19 +1,56 @@
+import type { Climb } from '@/app/lib/types';
+
 /**
  * Window-level event that asks the mounted QueueControlBar / PlayViewDrawer
  * to open the play drawer. Dispatched by climb list items and similar
  * surfaces that live outside the bar's React tree.
  *
- * Callers MUST set the active climb (via setCurrentClimb or
- * setCurrentClimbQueueItem) before dispatching — the listener only toggles
- * the drawer open.
+ * In an active party session, callers pass the tapped climb via `detail.climb`
+ * and the bar uses it as the drawer's locally-displayed climb without writing
+ * to `state.currentClimbQueueItem` (so browsing does not change what is lit
+ * on the wall). In solo mode, callers either pre-mutate state via
+ * setCurrentClimb or rely on the centralized `previewClimbFromBrowse` helper.
  *
- * Lives in its own module so lightweight components (like QueueClimbListItem)
- * can import it without pulling in the full QueueControlBar tree — important
- * for isolated unit tests.
+ * Lives in its own module so lightweight components can import it without
+ * pulling in the full QueueControlBar tree — important for isolated unit
+ * tests.
  */
 export const PLAY_DRAWER_EVENT = 'boardsesh:open-play-drawer';
 
-export const dispatchOpenPlayDrawer = (): void => {
+/**
+ * Options for `dispatchOpenPlayDrawer`. Kept in a dedicated type so call sites
+ * (and tests) can reuse it without restating the shape.
+ *
+ * - `wallView`: opens the drawer in read-only "Currently on the wall" mode.
+ *   The bar's body-tap (title region + thumbnail) sets this so the user can
+ *   inspect the wall climb without the normal browse affordances (no
+ *   prev/next, no swipe). The lightbulb and standard climb actions remain.
+ */
+export type OpenPlayDrawerOptions = {
+  wallView?: boolean;
+};
+
+export type PlayDrawerEventDetail = {
+  climb?: Climb;
+  /**
+   * When true, the drawer opens in "wall-view mode" (queue-control-bar pivot,
+   * Phase 3): renders a "Currently on the wall" header with the driver avatar
+   * inline, hides prev/next, disables swipe. The lightbulb and standard
+   * climb actions remain. Set by the bar's body-tap handler so users can
+   * inspect the wall climb in detail without the normal browsing affordances.
+   */
+  wallView?: boolean;
+};
+
+export const dispatchOpenPlayDrawer = (climb?: Climb, options?: OpenPlayDrawerOptions): void => {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(PLAY_DRAWER_EVENT));
+  const detail: PlayDrawerEventDetail = {};
+  if (climb) detail.climb = climb;
+  if (options?.wallView) detail.wallView = true;
+  window.dispatchEvent(new CustomEvent<PlayDrawerEventDetail>(PLAY_DRAWER_EVENT, { detail }));
+};
+
+export const readPlayDrawerEventDetail = (event: Event): PlayDrawerEventDetail | undefined => {
+  if (!(event instanceof CustomEvent)) return undefined;
+  return event.detail as PlayDrawerEventDetail | undefined;
 };

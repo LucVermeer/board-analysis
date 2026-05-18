@@ -1,9 +1,9 @@
-import type { SessionEvent } from '@boardsesh/shared-schema';
+import type { SessionStatsUpdated } from '@boardsesh/shared-schema/generated';
 import { sessionFeedQueries } from '../social/session-feed';
 
 export async function buildSessionStatsUpdatedEvent(
   sessionId: string,
-): Promise<Extract<SessionEvent, { __typename: 'SessionStatsUpdated' }> | null> {
+): Promise<(SessionStatsUpdated & { __typename: 'SessionStatsUpdated' }) | null> {
   const sessionDetail = await sessionFeedQueries.sessionDetail(null, { sessionId });
   if (!sessionDetail || sessionDetail.sessionType !== 'party') return null;
 

@@ -242,8 +242,10 @@ vi.mock('@/app/components/board-page/climbs-list', () => ({
 // matching production behavior on /session/[sessionId] standalone pages.
 const mockSetCurrentClimb = vi.fn();
 let mockQueueActions: { setCurrentClimb: typeof mockSetCurrentClimb } | null = null;
+let mockSessionDataValue: { isPersistentSessionActive: boolean } | null = null;
 vi.mock('@/app/components/graphql-queue', () => ({
   useOptionalQueueActions: () => mockQueueActions,
+  useOptionalSessionData: () => mockSessionDataValue,
 }));
 
 vi.mock('@/app/components/climb-actions/favorites-batch-context', () => ({
@@ -794,6 +796,10 @@ describe('SessionDetailContent', () => {
       mockSetCurrentClimb.mockReset();
       mockRouterPush.mockReset();
       mockQueueActions = null;
+      // Default to solo (no party session active) — preserves today's
+      // "click a session climb → sets active + navigates" behavior. Tests
+      // that exercise the party fork flip this on explicitly.
+      mockSessionDataValue = { isPersistentSessionActive: false };
       global.fetch = vi.fn(() =>
         Promise.resolve({
           ok: true,
@@ -854,6 +860,18 @@ describe('SessionDetailContent', () => {
       await Promise.resolve();
       expect(global.fetch).not.toHaveBeenCalled();
       expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call setCurrentClimb in a party session, but still navigates', async () => {
+      // In an active party session, clicking a session climb shouldn't yank
+      // the wall away from whoever's climbing. The user still navigates to
+      // the climb's board page, where they can preview or explicitly send.
+      mockSessionDataValue = { isPersistentSessionActive: true };
+      mockQueueActions = { setCurrentClimb: mockSetCurrentClimb };
+      render(<SessionDetailContent session={makeSession()} />);
+      fireEvent.click(screen.getByTestId('climb-item'));
+      await waitFor(() => expect(mockRouterPush).toHaveBeenCalledWith('/kilter/1/10/1/40/view/climb-1'));
+      expect(mockSetCurrentClimb).not.toHaveBeenCalled();
     });
   });
 });

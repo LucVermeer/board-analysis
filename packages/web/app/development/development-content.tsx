@@ -9,7 +9,6 @@ import AddOutlined from '@mui/icons-material/AddOutlined';
 
 import { getPreference, setPreference, type Esp32Connection } from '@/app/lib/user-preferences-db';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
-import { themeTokens } from '@/app/theme/theme-config';
 
 import AddEsp32Dialog from './components/add-esp32-dialog';
 import Esp32Tab from './components/esp32-tab';
@@ -101,12 +100,10 @@ export default function DevelopmentContent({ boardConfigs }: DevelopmentContentP
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        // Both the global header and the bottom tab bar are `position: fixed`,
-        // so we carve out vertical space for both. --global-header-height +
-        // themeTokens.layout.bottomNavSpacer (which already includes the iOS
-        // safe-area inset) match the rest of the app's full-height pages.
+        // The bottom tab bar and queue control bar are hidden on /development
+        // (see RootBottomBar), so we only need to clear the global header.
         marginTop: 'var(--global-header-height)',
-        height: `calc(100vh - var(--global-header-height) - ${themeTokens.layout.bottomNavSpacer})`,
+        height: 'calc(100vh - var(--global-header-height))',
       }}
     >
       <Box sx={{ borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>

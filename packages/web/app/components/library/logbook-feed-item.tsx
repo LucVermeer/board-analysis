@@ -30,7 +30,6 @@ import { track } from '@/app/lib/analytics';
 import type { AscentFeedItem } from '@/app/lib/graphql/operations/ticks';
 import type { BoardDetails, BoardName } from '@/app/lib/types';
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
-import { dispatchOpenPlayDrawer } from '@/app/components/queue-control/play-drawer-event';
 import { AscentStatusIcon } from '@/app/components/ascent-status/ascent-status-icon';
 import { ClimbActions } from '@/app/components/climb-actions';
 import DrawerClimbHeader from '@/app/components/climb-card/drawer-climb-header';
@@ -442,14 +441,10 @@ const LogbookFeedItem: React.FC<LogbookFeedItemProps> = React.memo(
     // Map ascent to Climb for ClimbActions + set-active handlers
     const climb = useMemo(() => ascentFeedItemToClimb(item), [item]);
 
-    const handleRowClick = useCallback(async () => {
+    const handleRowClick = useCallback(() => {
       if (isEditing || !queueActions) return;
-      try {
-        await queueActions.setCurrentClimb(climb);
-        track('Logbook Row Clicked', { climbUuid: climb.uuid });
-      } catch (err) {
-        console.error('Failed to set active climb from logbook row', err);
-      }
+      queueActions.previewClimbFromBrowse(climb);
+      track('Logbook Row Clicked', { climbUuid: climb.uuid });
     }, [isEditing, queueActions, climb]);
 
     const handleRowKeyDown = useCallback(
@@ -458,22 +453,17 @@ const LogbookFeedItem: React.FC<LogbookFeedItemProps> = React.memo(
         if (e.key !== 'Enter' && e.key !== ' ') return;
         if (e.target !== e.currentTarget) return;
         e.preventDefault();
-        void handleRowClick();
+        handleRowClick();
       },
       [isEditing, queueActions, handleRowClick],
     );
 
     const handleThumbnailClick = useCallback(
-      async (e: React.MouseEvent) => {
+      (e: React.MouseEvent) => {
         e.stopPropagation();
         if (isEditing || !queueActions) return;
-        try {
-          await queueActions.setCurrentClimb(climb);
-          dispatchOpenPlayDrawer();
-          track('Logbook Thumbnail Clicked', { climbUuid: climb.uuid });
-        } catch (err) {
-          console.error('Failed to set active climb from logbook thumbnail', err);
-        }
+        queueActions.previewClimbFromBrowse(climb);
+        track('Logbook Thumbnail Clicked', { climbUuid: climb.uuid });
       },
       [isEditing, queueActions, climb],
     );

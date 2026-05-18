@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import type { BoardDetails } from '@/app/lib/types';
-import { getPreference, removePreference, setPreference } from '@/app/lib/user-preferences-db';
+import { getPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_SESSION_SUMMARY, type GetSessionSummaryResponse } from '@/app/lib/graphql/operations/sessions';
 import { type ActiveSessionInfo, ACTIVE_SESSION_KEY, DEBUG } from '../types';
@@ -15,15 +15,6 @@ type UseQueueStorageArgs = {
   wsAuthToken?: string | null;
   isAuthLoading?: boolean;
 };
-
-function ensureParticipantId(info: ActiveSessionInfo): ActiveSessionInfo {
-  if (info.participantId) return info;
-  const participantId =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `participant-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  return { ...info, participantId };
-}
 
 export type QueueStorageState = {
   localQueue: LocalClimbQueueItem[];
@@ -99,11 +90,7 @@ export function useQueueStorage({
       try {
         const persisted = await getPreference<ActiveSessionInfo>(ACTIVE_SESSION_KEY);
         if (persisted && persisted.sessionId && persisted.boardPath && persisted.boardDetails) {
-          const restored = ensureParticipantId(persisted);
-          if (restored !== persisted) {
-            await setPreference(ACTIVE_SESSION_KEY, restored);
-          }
-          if (DEBUG) console.info('[PersistentSession] Restoring persisted session:', restored.sessionId);
+          if (DEBUG) console.info('[PersistentSession] Restoring persisted session:', persisted.sessionId);
 
           if (!wsAuthToken) {
             console.info(
@@ -111,13 +98,13 @@ export function useQueueStorage({
             );
             if (!hasActivatedRef.current) {
               hasActivatedRef.current = true;
-              setActiveSession(restored);
+              setActiveSession(persisted);
             }
             setIsLocalQueueLoaded(true);
             return;
           }
 
-          const autoFinished = await fetchAutoFinishedSummary(restored, wsAuthToken);
+          const autoFinished = await fetchAutoFinishedSummary(persisted, wsAuthToken);
           hasRunPreflightRef.current = true;
           if (autoFinished) {
             if (DEBUG) console.info('[PersistentSession] Session was auto-finished, showing summary');
@@ -129,7 +116,7 @@ export function useQueueStorage({
 
           if (!hasActivatedRef.current) {
             hasActivatedRef.current = true;
-            setActiveSession(restored);
+            setActiveSession(persisted);
           }
           setIsLocalQueueLoaded(true);
           return;
