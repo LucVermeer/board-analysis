@@ -865,6 +865,11 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   // version writes to local state (no-op in party mode) and would silently
   // drop widget navigation during an active sesh.
   const onSetCurrentClimb = effectiveActions.setCurrentClimbQueueItem;
+  // Intentional degrade: off-board (adapter-mode) sessions don't populate
+  // `dispatchWidgetNavigation` in `actionsValue` above, so the iOS Live
+  // Activity widget's prev/next taps silently no-op outside of a mounted
+  // board route. Once a board route mounts and injects its own actions,
+  // this falls back to the real dispatcher from GraphQLQueueProvider.
   const onWidgetNavigate = effectiveActions.dispatchWidgetNavigation;
 
   return (
