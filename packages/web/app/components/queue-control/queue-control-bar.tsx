@@ -114,10 +114,18 @@ function TickBadgeAvatar({
    *  both. */
   isDriver?: boolean;
 }) {
+  const { t } = useTranslation('session');
+  // Accessible label: when the user is driving, screen readers should hear
+  // "<username> is driving" — relying on `alt` is invisible because Avatar
+  // without `src` renders the username initial as text, not an <img>. Apply
+  // aria-label to the Avatar root so the SR sees it regardless of the
+  // src/initials branch.
+  const driverAriaLabel = isDriver ? t('queueBar.ariaLabels.userIsDriving', { username: user.username }) : undefined;
   const baseAvatar = (
     <Avatar
       alt={user.username}
       src={user.avatarUrl ?? undefined}
+      aria-label={driverAriaLabel}
       sx={size !== 28 ? { width: size, height: size } : undefined}
     />
   );
@@ -348,7 +356,19 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         tabIndex={0}
         aria-label={t('common:ariaLabels.openQueue')}
       >
-        <IconButton size="small" component="span" tabIndex={-1} sx={{ p: 0.25 }}>
+        <IconButton
+          size="small"
+          component="span"
+          tabIndex={-1}
+          sx={{
+            // 48dp minimum touch target (a11y: WCAG 2.5.5). Padding stays
+            // small so the icon visual size doesn't change — minWidth/minHeight
+            // grow the hit area around the centered icon.
+            p: 0.25,
+            minWidth: themeTokens.spacing[12],
+            minHeight: themeTokens.spacing[12],
+          }}
+        >
           <Badge
             badgeContent={queue.length}
             max={99}
@@ -645,14 +665,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     void setPreference('tickBarExpanded', expanded);
   }, []);
 
-  // Phase 2 PR3: the bar's role is now self-evident from its content
-  // (wall-climb mirror + driver avatar with lightbulb badge + prev/next +
-  // tap-for-wall-view); the bar-bounce peek animation that previously
-  // hinted "there's something behind here" is obsolete and misleading. The
-  // new lightbulb first-run coachmark (PR3) conceptually replaces it.
-  // The matching `swipeHint:playViewSeen` preference key has been removed
-  // from `user-preferences-db.ts`.
-
   // Close expanded participants when tick mode opens
   useEffect(() => {
     if (tickBarActive) setParticipantsExpanded(false);
@@ -794,13 +806,18 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   }, [currentClimb, boardDetails, angle, params, searchParams]);
 
   const handleClimbInfoClick = useCallback(() => {
-    if (!currentClimb) return;
-    setActiveDrawer('play');
+    if (!currentClimb || viewOnlyMode) return;
+    // Route through dispatchOpenPlayDrawer with wallView:true so the title
+    // region matches the thumbnail's path. The previous direct setActiveDrawer
+    // call skipped the drawer-local wallView wiring and opened the normal
+    // browse drawer, even though the title region is the dominant tap target
+    // for "show me what's on the wall right now."
+    dispatchOpenPlayDrawer(undefined, { wallView: true });
     track('Play Drawer Opened', {
       boardLayout: boardDetails.layout_name || '',
       source: 'bar_tap',
     });
-  }, [currentClimb, boardDetails.layout_name]);
+  }, [currentClimb, viewOnlyMode, boardDetails.layout_name]);
 
   // Transition style shared by current and peek text
   const getTextTransitionStyle = () => {
@@ -1004,7 +1021,19 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                       }}
                     >
                       {participantsExpanded ? (
-                        <IconButton size="small" component="span" tabIndex={-1} sx={{ p: 0.25 }}>
+                        <IconButton
+                          size="small"
+                          component="span"
+                          tabIndex={-1}
+                          sx={{
+                            // 48dp minimum touch target (a11y: WCAG 2.5.5).
+                            // Padding stays small so the icon visual size
+                            // doesn't change.
+                            p: 0.25,
+                            minWidth: themeTokens.spacing[12],
+                            minHeight: themeTokens.spacing[12],
+                          }}
+                        >
                           <CloseOutlined sx={{ fontSize: 18 }} />
                         </IconButton>
                       ) : (
@@ -1102,6 +1131,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                                 tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
                               }
                               size={32}
+                              isDriver={driverParticipantId != null && user.id === driverParticipantId}
                             />
                             <Typography variant="caption" className={styles.participantName} noWrap>
                               {user.username}
@@ -1286,10 +1316,27 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
                     {/* Text swipe clip — overflow hidden to contain sliding text */}
                     <div className={styles.textSwipeClip}>
-                      {/* Current climb text — slides with finger */}
+                      {/* Current climb text — slides with finger. Tap opens
+                          the play drawer in wall-view mode (mirrors thumbnail).
+                          When the tick bar is active the title region is
+                          non-interactive — no role/tabIndex so keyboard users
+                          aren't fed a dead-end button.  */}
                       <div
                         id="onboarding-queue-toggle"
                         onClick={tickBarActive ? undefined : handleClimbInfoClick}
+                        onKeyDown={
+                          tickBarActive
+                            ? undefined
+                            : (e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  handleClimbInfoClick();
+                                }
+                              }
+                        }
+                        role={tickBarActive ? undefined : 'button'}
+                        tabIndex={tickBarActive ? undefined : 0}
+                        aria-label={tickBarActive ? undefined : t('queueBar.ariaLabels.openWallView')}
                         className={styles.queueToggle}
                         style={{
                           transform: tickBarActive ? undefined : `translateX(${swipeOffset}px)`,

@@ -194,7 +194,9 @@
       "enterPlayMode": "Passer en mode jeu",
       "logAttempt": "Enregistrer un essai",
       "showParticipants": "Afficher les participants",
-      "hideParticipants": "Masquer les participants"
+      "hideParticipants": "Masquer les participants",
+      "openWallView": "Show what's on the wall",
+      "userIsDriving": "{{username}} is driving"
     },
     "offline": {
       "idle": "Hors ligne",

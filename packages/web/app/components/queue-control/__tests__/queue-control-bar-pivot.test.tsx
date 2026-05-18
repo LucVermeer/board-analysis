@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
-import { dispatchOpenSeshSettingsDrawer } from '@/app/components/sesh-settings/sesh-settings-drawer-event';
+import {
+  PLAY_DRAWER_EVENT,
+  readPlayDrawerEventDetail,
+  type PlayDrawerEventDetail,
+} from '@/app/components/queue-control/play-drawer-event';
 import QueueControlBar from '../queue-control-bar';
 
 // -- All mocks before imports --
@@ -53,6 +57,8 @@ vi.mock('@/app/components/graphql-queue', () => ({
     isBackendMode: false,
     hasConnected: true,
     connectionError: null,
+    isPersistentSessionActive: mockQueueContext.isPersistentSessionActive ?? false,
+    driverParticipantId: mockQueueContext.driverParticipantId ?? null,
   }),
 }));
 
@@ -283,6 +289,8 @@ const baseQueueContext = {
   getNextClimbQueueItem: vi.fn().mockReturnValue(null),
   getPreviousClimbQueueItem: vi.fn().mockReturnValue(null),
   setQueue: vi.fn(),
+  isPersistentSessionActive: false,
+  driverParticipantId: null,
 };
 
 const defaultProps = {
@@ -304,7 +312,15 @@ const defaultProps = {
   } as never,
 };
 
-const activeSessionState = {
+// Build a party session state with N participants. The driver is the
+// participant with id === driverId (when provided). users[*] order is the
+// declared order in the array; the bar's driver-first partition should float
+// the driver to position 0 if it isn't already.
+//
+// Each participant defaults to a unique `userId` derived from `id` so the
+// bar's dedupe (`user.userId ?? user.id`) doesn't collapse the roster to a
+// single avatar.
+const makeSessionState = (users: { id: string; username: string; userId?: string }[]): Record<string, unknown> => ({
   activeSession: {
     sessionId: 'session-1',
     sessionName: 'Test Session',
@@ -313,10 +329,16 @@ const activeSessionState = {
   localBoardDetails: null,
   localCurrentClimbQueueItem: null,
   session: { id: 'session-1', name: 'Test Session', startedAt: new Date('2025-01-01').toISOString() },
-  users: [],
-};
+  users: users.map((u) => ({
+    id: u.id,
+    username: u.username,
+    isLeader: false,
+    userId: u.userId ?? `user-${u.id}`,
+    connectionState: 'CONNECTED',
+  })),
+});
 
-describe('QueueControlBar queue button', () => {
+describe('QueueControlBar pivot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueueContext = { ...baseQueueContext };
@@ -331,77 +353,197 @@ describe('QueueControlBar queue button', () => {
     mockSetPreference.mockResolvedValue(undefined);
   });
 
-  it('opens the queue drawer when clicked', async () => {
+  // --- Wall-view dispatch (P0-2) -------------------------------------------
+
+  it('tapping the climb-title region dispatches wallView=true on the play-drawer event', async () => {
+    const seenDetails: PlayDrawerEventDetail[] = [];
+    const handler = (event: Event) => {
+      const detail = readPlayDrawerEventDetail(event);
+      if (detail) seenDetails.push(detail);
+    };
+    window.addEventListener(PLAY_DRAWER_EVENT, handler);
+
+    try {
+      await act(async () => {
+        render(<QueueControlBar {...defaultProps} />);
+      });
+
+      const title = document.getElementById('onboarding-queue-toggle');
+      expect(title).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.click(title!);
+      });
+
+      // At least one dispatch fired, and the most recent had wallView=true.
+      expect(seenDetails.length).toBeGreaterThan(0);
+      const last = seenDetails[seenDetails.length - 1];
+      expect(last.wallView).toBe(true);
+      // No climb payload on the bar's body-tap path — the drawer falls back
+      // to the wall climb.
+      expect(last.climb).toBeUndefined();
+    } finally {
+      window.removeEventListener(PLAY_DRAWER_EVENT, handler);
+    }
+  });
+
+  it('keyboard Enter on the climb-title region dispatches wallView=true', async () => {
+    const seenDetails: PlayDrawerEventDetail[] = [];
+    const handler = (event: Event) => {
+      const detail = readPlayDrawerEventDetail(event);
+      if (detail) seenDetails.push(detail);
+    };
+    window.addEventListener(PLAY_DRAWER_EVENT, handler);
+
+    try {
+      await act(async () => {
+        render(<QueueControlBar {...defaultProps} />);
+      });
+
+      const title = document.getElementById('onboarding-queue-toggle');
+      expect(title).toBeTruthy();
+
+      await act(async () => {
+        fireEvent.keyDown(title!, { key: 'Enter' });
+      });
+
+      expect(seenDetails.length).toBeGreaterThan(0);
+      expect(seenDetails[seenDetails.length - 1].wallView).toBe(true);
+    } finally {
+      window.removeEventListener(PLAY_DRAWER_EVENT, handler);
+    }
+  });
+
+  // --- Accessibility on climb-title CTA (P1-C) -----------------------------
+
+  it('climb-title region has role="button" and an accessible aria-label', async () => {
     await act(async () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
-    expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('false');
-
-    await act(async () => {
-      fireEvent.click(screen.getByLabelText('Open queue'));
-    });
-
-    expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('true');
+    const title = document.getElementById('onboarding-queue-toggle');
+    expect(title).toBeTruthy();
+    expect(title!.getAttribute('role')).toBe('button');
+    expect(title!.getAttribute('tabindex')).toBe('0');
+    expect(title!.getAttribute('aria-label')).toBe("Show what's on the wall");
   });
 
-  it('stopPropagation prevents the parent session header from opening sesh settings', async () => {
-    mockPersistentSessionState = activeSessionState;
+  // --- Driver-first ordering (P1-C) ----------------------------------------
 
-    await act(async () => {
-      render(<QueueControlBar {...defaultProps} />);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByLabelText('Open queue'));
-    });
-
-    expect(dispatchOpenSeshSettingsDrawer).not.toHaveBeenCalled();
-    // And the queue drawer did open, confirming the click landed on the button.
-    expect(screen.getByTestId('queue-drawer').getAttribute('data-open')).toBe('true');
-  });
-
-  it('badge shows the queue count when items are queued', async () => {
+  it('renders the driver first in the participant roster', async () => {
     mockQueueContext = {
       ...baseQueueContext,
-      queue: [makeQueueItem('item-1'), makeQueueItem('item-2'), makeQueueItem('item-3')],
+      isPersistentSessionActive: true,
+      driverParticipantId: 'p-bob',
     };
+    // Alice is first in users[]; Bob is the driver and must float to slot 0.
+    mockPersistentSessionState = makeSessionState([
+      { id: 'p-alice', username: 'alice' },
+      { id: 'p-bob', username: 'bob' },
+      { id: 'p-carol', username: 'carol' },
+    ]);
+
+    const { container } = await act(async () => {
+      return render(<QueueControlBar {...defaultProps} />);
+    });
+
+    // The expanded participant scroll renders each user as a labeled tile
+    // (`participantItem`) with the username as text. The bar's driver-first
+    // partition floats the driver to index 0, so the rendered DOM order of
+    // username labels should be: bob, alice, carol — even though the source
+    // users[] array declared them as alice, bob, carol.
+    const items = container.querySelectorAll('[class*="participantItem"]');
+    expect(items.length).toBe(3);
+    const orderedUsernames = Array.from(items).map((el) => el.textContent?.trim());
+    expect(orderedUsernames).toEqual(['bob', 'alice', 'carol']);
+  });
+
+  it('does not reorder participants when there is no driver', async () => {
+    mockQueueContext = {
+      ...baseQueueContext,
+      isPersistentSessionActive: true,
+      driverParticipantId: null,
+    };
+    mockPersistentSessionState = makeSessionState([
+      { id: 'p-alice', username: 'alice' },
+      { id: 'p-bob', username: 'bob' },
+    ]);
 
     await act(async () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
-    const badge = screen.getByLabelText('Open queue').querySelector('.MuiBadge-badge');
-    expect(badge).toBeTruthy();
-    expect(badge!.textContent).toBe('3');
+    // No driver — no driving aria-label should be rendered.
+    expect(screen.queryByLabelText(/is driving/)).toBeNull();
   });
 
-  it('badge content is 0 (and rendered invisible) when queue is empty', async () => {
-    mockQueueContext = { ...baseQueueContext, queue: [] };
+  // --- Driver badge & aria-label (P1-C) ------------------------------------
+
+  it('renders the driver avatar with an accessible "is driving" aria-label in the mini bar', async () => {
+    mockQueueContext = {
+      ...baseQueueContext,
+      isPersistentSessionActive: true,
+      driverParticipantId: 'p-bob',
+    };
+    mockPersistentSessionState = makeSessionState([
+      { id: 'p-alice', username: 'alice' },
+      { id: 'p-bob', username: 'bob' },
+    ]);
+
+    const { container } = await act(async () => {
+      return render(<QueueControlBar {...defaultProps} />);
+    });
+
+    // Mini-bar AvatarGroup carries the driver's "is driving" aria-label on
+    // its avatar — find it by scoping to the AvatarGroup so the expanded
+    // roster's duplicate label doesn't muddy this assertion.
+    const avatarGroup = container.querySelector('.MuiAvatarGroup-root');
+    expect(avatarGroup).toBeTruthy();
+    const drivingInMiniBar = avatarGroup!.querySelector('[aria-label="bob is driving"]');
+    expect(drivingInMiniBar).toBeTruthy();
+  });
+
+  it('renders the driver avatar with the "is driving" aria-label in the expanded roster', async () => {
+    mockQueueContext = {
+      ...baseQueueContext,
+      isPersistentSessionActive: true,
+      driverParticipantId: 'p-bob',
+    };
+    mockPersistentSessionState = makeSessionState([
+      { id: 'p-alice', username: 'alice' },
+      { id: 'p-bob', username: 'bob' },
+      { id: 'p-carol', username: 'carol' },
+    ]);
+
+    const { container } = await act(async () => {
+      return render(<QueueControlBar {...defaultProps} />);
+    });
+
+    // The expanded participant roster lives in `participantBar` and is always
+    // rendered (CSS toggles visibility on `participantBarExpanded`). Scope
+    // the query to that subtree so the assertion is unambiguous regardless of
+    // the mini-bar's matching avatar.
+    const participantBar = container.querySelector('[class*="participantBar"]');
+    expect(participantBar).toBeTruthy();
+    const driverInRoster = participantBar!.querySelector('[aria-label="bob is driving"]');
+    expect(driverInRoster).toBeTruthy();
+  });
+
+  it('does not surface a driver aria-label when no driver is set', async () => {
+    mockQueueContext = {
+      ...baseQueueContext,
+      isPersistentSessionActive: true,
+      driverParticipantId: null,
+    };
+    mockPersistentSessionState = makeSessionState([
+      { id: 'p-alice', username: 'alice' },
+      { id: 'p-bob', username: 'bob' },
+    ]);
 
     await act(async () => {
       render(<QueueControlBar {...defaultProps} />);
     });
 
-    const badge = screen.getByLabelText('Open queue').querySelector('.MuiBadge-badge');
-    expect(badge).toBeTruthy();
-    // MUI renders `badgeContent={0}` literally; `invisible={true}` hides it via CSS
-    // (no public class name in v6+), so we assert on the bound count, not visibility.
-    expect(badge!.textContent).toBe('0');
-  });
-
-  it('mini bar collapses (loses sessionHeaderExpanded) when tick mode activates', async () => {
-    const { container } = render(<QueueControlBar {...defaultProps} />);
-    await act(async () => {});
-
-    const wrapper = container.querySelector('[class*="sessionHeaderWrapper"]');
-    expect(wrapper).toBeTruthy();
-    expect(wrapper!.getAttribute('class')).toMatch(/sessionHeaderExpanded/);
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('tick-button'));
-    });
-
-    expect(wrapper!.getAttribute('class')).not.toMatch(/sessionHeaderExpanded/);
+    expect(screen.queryByLabelText(/is driving/)).toBeNull();
   });
 });

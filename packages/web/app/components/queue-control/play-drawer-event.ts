@@ -17,6 +17,19 @@ import type { Climb } from '@/app/lib/types';
  */
 export const PLAY_DRAWER_EVENT = 'boardsesh:open-play-drawer';
 
+/**
+ * Options for `dispatchOpenPlayDrawer`. Kept in a dedicated type so call sites
+ * (and tests) can reuse it without restating the shape.
+ *
+ * - `wallView`: opens the drawer in read-only "Currently on the wall" mode.
+ *   The bar's body-tap (title region + thumbnail) sets this so the user can
+ *   inspect the wall climb without the normal browse affordances (no
+ *   prev/next, no swipe). The lightbulb and standard climb actions remain.
+ */
+export type OpenPlayDrawerOptions = {
+  wallView?: boolean;
+};
+
 export type PlayDrawerEventDetail = {
   climb?: Climb;
   /**
@@ -29,7 +42,7 @@ export type PlayDrawerEventDetail = {
   wallView?: boolean;
 };
 
-export const dispatchOpenPlayDrawer = (climb?: Climb, options?: { wallView?: boolean }): void => {
+export const dispatchOpenPlayDrawer = (climb?: Climb, options?: OpenPlayDrawerOptions): void => {
   if (typeof window === 'undefined') return;
   const detail: PlayDrawerEventDetail = {};
   if (climb) detail.climb = climb;

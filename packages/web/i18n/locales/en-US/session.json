@@ -194,7 +194,9 @@
       "enterPlayMode": "Enter play mode",
       "logAttempt": "Log attempt",
       "showParticipants": "Show participants",
-      "hideParticipants": "Hide participants"
+      "hideParticipants": "Hide participants",
+      "openWallView": "Show what's on the wall",
+      "userIsDriving": "{{username}} is driving"
     },
     "offline": {
       "idle": "Offline",
