@@ -204,18 +204,28 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
         {isFavorited ? <Favorite sx={{ color: themeTokens.colors.error }} /> : <FavoriteBorderOutlined />}
       </IconButton>
       {/* Lightbulb: the queue-control-bar pivot's primary "send/take" gesture.
-          Filled when the local user is driving (in solo this is always true);
-          outlined when someone else holds the wall (party non-driver).
-          Long-press opens the light-control drawer (disco / glyphs / palette
-          / manual disconnect) — those used to live on the ShareBoardButton
-          that this drawer no longer renders. */}
-      <IconButton
-        ref={lightbulbLongPressRef}
-        onClick={handleLightbulbTap}
-        aria-label={lightbulbLabel}
-        color={lightbulbActive ? 'primary' : 'default'}
-      >
-        {lightbulbActive ? <Lightbulb /> : <LightbulbOutlined />}
+          Filled+amber-glowing when the lightbulb is active (driver in party,
+          BLE-paired in solo); outlined when inactive (non-driver in party,
+          unpaired in solo). The warm-amber styling matches the ShareBoardButton
+          that this drawer replaced — it reads as "this bulb is lit" rather
+          than the dusty-rose primary, which the user kept misreading as an
+          error state. Long-press opens the light-control drawer (disco /
+          glyphs / palette / manual disconnect). */}
+      <IconButton ref={lightbulbLongPressRef} onClick={handleLightbulbTap} aria-label={lightbulbLabel}>
+        {lightbulbActive ? (
+          <Lightbulb
+            sx={{
+              color: themeTokens.colors.warning,
+              '@keyframes connectedGlow': {
+                '0%': { filter: `drop-shadow(0 0 2px ${themeTokens.colors.warning}99)` },
+                '100%': { filter: `drop-shadow(0 0 6px ${themeTokens.colors.warning})` },
+              },
+              animation: 'connectedGlow 1.5s ease-in-out infinite alternate',
+            }}
+          />
+        ) : (
+          <LightbulbOutlined />
+        )}
       </IconButton>
       {angleSelector}
       <IconButton onClick={onOpenActions} aria-label={t('playView.actionBar.climbActionsAria')}>
