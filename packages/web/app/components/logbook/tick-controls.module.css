@@ -240,18 +240,21 @@
 @media (hover: hover) {
   .pickerItem:hover {
     opacity: 1;
-    background-color: rgba(140, 74, 82, 0.1);
+    background-color: rgba(175, 45, 60, 0.14);
   }
 }
 
 .pickerItem:focus-visible {
   opacity: 1;
-  background-color: rgba(140, 74, 82, 0.1);
+  background-color: rgba(175, 45, 60, 0.14);
 }
 
+/* Brand-rose tint + solid ring so selection reads even against vivid grade-text colors */
 .pickerItemSelected {
   opacity: 1;
-  background-color: rgba(140, 74, 82, 0.18);
+  background-color: rgba(175, 45, 60, 0.28);
+  outline: 1.5px solid #8c4a52;
+  outline-offset: -1.5px;
 }
 
 .pickerItemFocused {
@@ -270,8 +273,10 @@
   background-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Dark mode: white-tint surface treatment already reads; drop the rose ring to avoid clashing */
 :global(html[data-theme='dark']) .pickerItemSelected {
   background-color: rgba(255, 255, 255, 0.15);
+  outline: none;
 }
 
 .pickerClear {
