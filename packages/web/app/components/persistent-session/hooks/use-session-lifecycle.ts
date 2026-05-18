@@ -24,7 +24,7 @@ import { setPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@/app/lib/graphql/operations/sessions';
 import { fetchAutoFinishedSummary } from './use-queue-storage';
-import { upsertSessionUser } from '../event-utils';
+import { coerceSessionUser, upsertSessionUser } from '../event-utils';
 import { TransientJoinError } from '../errors';
 import {
   type Session,
@@ -633,9 +633,9 @@ export function useSessionLifecycle({
                     if (!prev) return prev;
                     switch (event.__typename) {
                       case 'UserJoined':
-                        return { ...prev, users: upsertSessionUser(prev.users, event.user) };
+                        return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
                       case 'UserPresenceChanged':
-                        return { ...prev, users: upsertSessionUser(prev.users, event.user) };
+                        return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
                       case 'UserLeft':
                         return { ...prev, users: prev.users.filter((u) => u.id !== event.userId) };
                       case 'LeaderChanged': {
@@ -680,13 +680,17 @@ export function useSessionLifecycle({
                         // queue-control-bar pivot's lightbulb gesture). Keep
                         // `isLeader` untouched here — leader semantics are
                         // presentation/legacy and ride on `LeaderChanged`.
-                        return { ...prev, driverParticipantId: event.driverParticipantId };
+                        // Coerce undefined→null: generated GraphQL types use
+                        // `Maybe<string>` (string | null | undefined) for
+                        // nullable fields, but the local Session uses the
+                        // tighter `string | null`.
+                        return { ...prev, driverParticipantId: event.driverParticipantId ?? null };
                       case 'SessionBoardSerialChanged':
                         // Mobile clients consult this when running the
                         // lightbulb fallback so the second phone joining
                         // a multi-board gym can auto-connect to the same
                         // physical board the first phone is paired to.
-                        return { ...prev, lastConnectedBoardSerial: event.lastConnectedBoardSerial };
+                        return { ...prev, lastConnectedBoardSerial: event.lastConnectedBoardSerial ?? null };
                       case 'SessionEnded':
                         if (DEBUG) console.info('[PersistentSession] Session ended:', event.reason);
                         removePreference(ACTIVE_SESSION_KEY).catch(() => {});

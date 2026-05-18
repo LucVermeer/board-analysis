@@ -224,9 +224,13 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     // is fed directly by `BluetoothAutoSender` for solo's drawer timer.
     if (!clientRef.current || !session?.id) return;
     try {
+      // The mutation now resolves session identity from the WebSocket context
+      // (WS-implicit pattern shared with takeControl / releaseControl) and
+      // returns the resolved Session. We discard the response — future tracks
+      // can wire it up for optimistic UI.
       await execute(clientRef.current, {
         query: CONFIRM_CLIMB_ON_WALL,
-        variables: { sessionId: session.id, climbUuid },
+        variables: { climbUuid },
       });
     } catch (error) {
       // Confirmation is best-effort — the BLE send already succeeded by the
@@ -240,9 +244,12 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     const session = sessionRef.current;
     if (!clientRef.current || !session?.id) return;
     try {
+      // WS-implicit pattern: session identity comes from the connection
+      // context, not an explicit argument. Returns Session! which we discard
+      // here (optimistic-UI wiring is a follow-up).
       await execute(clientRef.current, {
         query: SET_SESSION_BOARD_SERIAL,
-        variables: { sessionId: session.id, serial },
+        variables: { serial },
       });
     } catch (error) {
       console.error('Failed to set session board serial:', error);
