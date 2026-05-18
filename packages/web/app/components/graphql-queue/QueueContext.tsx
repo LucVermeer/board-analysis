@@ -902,8 +902,7 @@ export const GraphQLQueueProvider = ({
     const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
     if (
       (latest.state.queue.length === 0 || latest.state.queue.length <= queueItemIndex + 1) &&
-      latest.climbSearchResults &&
-      latest.climbSearchResults.length > 0
+      latest.suggestedClimbs.length > 0
     ) {
       const nextClimb = latest.suggestedClimbs.find(
         (climb: Climb) =>

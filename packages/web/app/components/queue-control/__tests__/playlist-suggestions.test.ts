@@ -98,6 +98,7 @@ function makeQueueState(playlistSuggestionSource: QueueState['playlistSuggestion
     lastReceivedSequence: null,
     lastReceivedStateHash: null,
     needsResync: false,
+    optimisticDriverParticipantId: null,
   };
 }
 
