@@ -334,6 +334,8 @@ describe('BluetoothProvider', () => {
           expect(mockTrack).toHaveBeenCalledWith('Climb Sent to Board Failure', {
             climbUuid: 'climb-1',
             boardLayout: 'Original',
+            failureReason: 'characteristic_unavailable',
+            climbHoldCount: 1,
           });
         });
       });
@@ -376,6 +378,8 @@ describe('BluetoothProvider', () => {
           expect(mockTrack).toHaveBeenCalledWith('Climb Sent to Board Failure', {
             climbUuid: 'climb-1',
             boardLayout: 'Original',
+            failureReason: 'write_aborted',
+            climbHoldCount: 1,
           });
         });
       });

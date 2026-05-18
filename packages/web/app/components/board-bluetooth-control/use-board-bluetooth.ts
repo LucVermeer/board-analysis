@@ -184,9 +184,14 @@ export function useBoardBluetooth({
     connectedAtRef.current = null;
     configuredBoardKeyRef.current = null;
     if (connectedAt !== null) {
+      const connectionDurationSec = Math.max(0, Math.round((Date.now() - connectedAt) / 1000));
       track('Bluetooth Disconnected', {
         reason: 'lost',
         duration_connected_ms: Date.now() - connectedAt,
+        // Hardware/OS-side drop. Can't reliably distinguish out-of-range from
+        // GATT error from this signal alone — default to 'gatt_error'.
+        disconnectReason: 'gatt_error',
+        connectionDurationSec,
       });
     }
     setIsConnected(false);
@@ -355,6 +360,11 @@ export function useBoardBluetooth({
 
       setLoading(true);
 
+      // Tracks which stage of the pairing flow we're in so the catch block
+      // can tag the Pairing Failed event with the actual failure point.
+      let pairingStage: 'scan' | 'user_cancelled' | 'gatt_connect' | 'service_discover' | 'first_write' | 'unknown' =
+        'scan';
+
       try {
         // Create a fresh adapter for each connection attempt.
         // Only inject our custom picker when the native BLE bridge supports
@@ -379,18 +389,23 @@ export function useBoardBluetooth({
           configuredBoardKeyRef.current = null;
           unsubDisconnectRef.current?.();
           if (previousConnectedAt !== null) {
+            const connectionDurationSec = Math.max(0, Math.round((Date.now() - previousConnectedAt) / 1000));
             track('Bluetooth Disconnected', {
               reason: 'reconnect',
               duration_connected_ms: Date.now() - previousConnectedAt,
+              disconnectReason: 'user_initiated',
+              connectionDurationSec,
             });
           }
           await adapterRef.current.disconnect();
         }
 
         // Connect via the adapter and parse API level from device name
+        pairingStage = 'gatt_connect';
         const connection = await adapter.requestAndConnect(targetSerial);
         deviceNameRef.current = connection.deviceName;
         apiLevelRef.current = parseApiLevel(connection.deviceName);
+        pairingStage = 'service_discover';
         await configureConnectedBoard(adapter);
 
         // Set up disconnection listener
@@ -414,6 +429,7 @@ export function useBoardBluetooth({
 
         // Send initial frames if provided
         if (initialFrames) {
+          pairingStage = 'first_write';
           await sendFramesToBoard(initialFrames, mirrored);
         }
 
@@ -425,8 +441,24 @@ export function useBoardBluetooth({
         console.error('Error connecting to Bluetooth:', error);
         configuredBoardKeyRef.current = null;
         setIsConnected(false);
+
+        const domError = error instanceof DOMException ? error : null;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorName = domError?.name ?? (error instanceof Error ? error.name : undefined);
+        const isUserCancel =
+          domError?.name === 'NotFoundError' ||
+          /user cancelled|cancel/i.test(errorMessage) ||
+          /Device selection cancelled/i.test(errorMessage);
+        const stage = isUserCancel ? 'user_cancelled' : pairingStage;
+
         track('Bluetooth Connection Failed', {
           boardLayout: `${boardDetails.layout_name}`,
+        });
+        track('Pairing Failed', {
+          boardType: boardDetails.board_name,
+          stage,
+          errorCode: errorName,
+          errorMessage,
         });
       } finally {
         setLoading(false);
@@ -466,9 +498,12 @@ export function useBoardBluetooth({
     setIsConnected(false);
     onConnectionChange?.(false);
     if (connectedAt !== null) {
+      const connectionDurationSec = Math.max(0, Math.round((Date.now() - connectedAt) / 1000));
       track('Bluetooth Disconnected', {
         reason: 'user',
         duration_connected_ms: Date.now() - connectedAt,
+        disconnectReason: 'user_initiated',
+        connectionDurationSec,
       });
     }
     await adapter?.disconnect();
@@ -491,9 +526,12 @@ export function useBoardBluetooth({
       configuredBoardKeyRef.current = null;
       unsubDisconnectRef.current?.();
       if (connectedAt !== null) {
+        const connectionDurationSec = Math.max(0, Math.round((Date.now() - connectedAt) / 1000));
         track('Bluetooth Disconnected', {
           reason: 'navigation',
           duration_connected_ms: Date.now() - connectedAt,
+          disconnectReason: 'unknown',
+          connectionDurationSec,
         });
       }
       void adapterRef.current?.disconnect();

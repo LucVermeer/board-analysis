@@ -34,7 +34,7 @@ export default function QueueButton({
       e.preventDefault();
 
       if (addToQueue && !recentlyAdded) {
-        addToQueue(climb);
+        addToQueue(climb, 'search');
 
         track('Add to Queue', {
           source: 'queueButton',

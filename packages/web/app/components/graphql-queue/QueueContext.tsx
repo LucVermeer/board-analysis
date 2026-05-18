@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useQueueReducer } from '../queue-control/reducer';
 import { useQueueDataFetching } from '../queue-control/hooks/use-queue-data-fetching';
-import type { ClimbQueueItem, UserName, QueueItemUser } from '../queue-control/types';
+import type { ClimbQueueItem, UserName, QueueItemUser, AddToQueueSource } from '../queue-control/types';
 import { urlParamsToSearchParams, searchParamsToUrlParams } from '@/app/lib/url-utils';
 import type { Climb, SearchRequestPagination } from '@/app/lib/types';
 import { usePartyProfile } from '../party-manager/party-profile-context';
@@ -35,6 +35,13 @@ import { useOfflineQueueBuffer } from './hooks/use-offline-queue-buffer';
 import { useOfflineReconciliation } from './hooks/use-offline-reconciliation';
 import { emitWallConfirm } from '../board-bluetooth-control/wall-confirm-bus';
 import { useQueueAddValidator } from '../board-lock/use-queue-add-validator';
+import { track } from '@/app/lib/analytics';
+import {
+  emitSessionEnded,
+  incrementSessionClimbsAttempted,
+  updateSessionPeerCount,
+  getActiveTrackedSessionIds,
+} from '@/app/lib/session-lifecycle-tracking';
 import type {
   GraphQLQueueContextType,
   GraphQLQueueActionsType,
@@ -213,11 +220,15 @@ export const GraphQLQueueProvider = ({
   });
 
   // --- Queue event subscription ---
+  const queueLengthRef = useRef(state.queue.length);
+  queueLengthRef.current = state.queue.length;
   useQueueEventSubscription({
     isPersistentSessionActive,
     dispatch,
     persistentSession,
     needsResync: state.needsResync,
+    boardLayoutName: boardDetails.layout_name ?? null,
+    queueLengthRef,
   });
 
   // --- Session-event relay ---
@@ -266,6 +277,34 @@ export const GraphQLQueueProvider = ({
     dispatch,
     onStalePendingUpdates: persistentSession.triggerResync,
   });
+
+  // --- Session lifecycle: keep peer-count high-water-mark current, emit
+  // Session Ended on tab_closed (pagehide). Explicit user_left fires from
+  // use-session-id-management's endSession(). ---
+  useEffect(() => {
+    if (!sessionId) return;
+    updateSessionPeerCount(sessionId, users.length);
+  }, [sessionId, users.length]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onPageHide = () => {
+      for (const activeId of getActiveTrackedSessionIds()) {
+        emitSessionEnded(activeId, 'tab_closed');
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, []);
+  // Intentionally NOT emitting Session Ended on connectionState === 'error':
+  // graphql-ws errors are routinely transient (network blip, server restart
+  // followed by reconnect, suspended tab). Tearing down the session record on
+  // every error would mark recoverable hiccups as permanent ends and skip the
+  // eventual user_left / tab_closed emission. If we later need a distinct
+  // 'server_disconnect' signal we should drive it from confirmed server-side
+  // session eviction, not transport state.
+  // TODO: idle-timeout 'idle' endedBy reason is not wired — no inactivity
+  // timer exists yet that terminates sessions. Add here when one lands.
 
   // --- Current user info ---
   const currentUserInfo: QueueItemUser | undefined = useMemo(() => {
@@ -363,6 +402,8 @@ export const GraphQLQueueProvider = ({
     dismissSessionSummary,
     fetchMoreClimbs,
     validateQueueAdd,
+    boardDetails,
+    sessionId,
   });
   // Sync ref every render (synchronous — safe for refs)
   latestRef.current = {
@@ -388,6 +429,8 @@ export const GraphQLQueueProvider = ({
     dismissSessionSummary,
     fetchMoreClimbs,
     validateQueueAdd,
+    boardDetails,
+    sessionId,
   };
 
   // --- Stable action callbacks (read from latestRef, never recreated) ---
@@ -396,7 +439,7 @@ export const GraphQLQueueProvider = ({
     return clientId ? `${clientId}-${++correlationCounterRef.current}` : undefined;
   }, []);
 
-  const addToQueue = useCallback((climb: Climb) => {
+  const addToQueue = useCallback((climb: Climb, source: AddToQueueSource = 'unknown') => {
     const startTime = performance.now();
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
@@ -404,6 +447,17 @@ export const GraphQLQueueProvider = ({
     const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
     latest.dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item: newItem } });
+    const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
+    // `latest.state.queue.length` reflects the most recent committed render,
+    // so two adds dispatched back-to-back in the same tick will both report
+    // the same `currentQueueLength + 1`. Acceptable for the queue-churn
+    // dashboard tile; the dispatched reducer state will still be correct.
+    track('Climb Added to Queue', {
+      boardLayout: latest.boardDetails?.layout_name ?? null,
+      addedFromTab: source,
+      currentQueueLength: latest.state.queue.length + 1,
+      partyMode,
+    });
     if (latest.isDisconnected && latest.isPersistentSessionActive) {
       latest.offlineBuffer.bufferAddition(newItem);
       trackQueueOperation('addToQueue', performance.now() - startTime, mode);
@@ -426,6 +480,12 @@ export const GraphQLQueueProvider = ({
     if (latest.guardMutation()) return;
     const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     latest.dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid: item.uuid } });
+    const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
+    track('Climb Removed from Queue', {
+      boardLayout: latest.boardDetails?.layout_name ?? null,
+      partyMode,
+      removedBy: 'self',
+    });
     if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
       latest.persistentSession
         .removeQueueItem(item.uuid)
@@ -455,6 +515,7 @@ export const GraphQLQueueProvider = ({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
       payload: { item: newItem, shouldAddToQueue: true, insertAfterCurrent: true, correlationId },
     });
+    if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
     if (latest.isDisconnected && latest.isPersistentSessionActive) {
       latest.offlineBuffer.bufferAddition(newItem);
       trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
@@ -681,6 +742,7 @@ export const GraphQLQueueProvider = ({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
       payload: { item, shouldAddToQueue: item.suggested, correlationId },
     });
+    if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
     if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
       latest.persistentSession
         .setCurrentClimb(item, item.suggested, correlationId)

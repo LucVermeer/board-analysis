@@ -175,7 +175,7 @@ describe('useClimbActions', () => {
       result.current.handleQueue();
     });
 
-    expect(mockAddToQueue).toHaveBeenCalledWith(mockClimb);
+    expect(mockAddToQueue).toHaveBeenCalledWith(mockClimb, 'climb_detail');
     expect(mockTrack).toHaveBeenCalledWith(
       'Add to Queue',
       expect.objectContaining({

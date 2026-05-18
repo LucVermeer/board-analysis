@@ -10,6 +10,7 @@ import { useConnectionSettings } from '../../connection-manager/connection-setti
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@/app/lib/graphql/operations/sessions';
+import { emitSessionEnded } from '@/app/lib/session-lifecycle-tracking';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '../../queue-control/types';
 
@@ -172,6 +173,7 @@ export function useSessionIdManagement({
 
   const endSession = useCallback(() => {
     const endingSessionId = activeSessionId;
+    if (endingSessionId) emitSessionEnded(endingSessionId, 'user_left');
     persistentSession.deactivateSession({ notifyServer: false });
     clearClimbSessionCookie();
     setActiveSessionId(null);

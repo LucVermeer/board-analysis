@@ -704,7 +704,7 @@ describe('ClimbListItem', () => {
 
       const swipeLeftHandler = capturedSwipeOptions?.onSwipeLeft as () => void;
       swipeLeftHandler();
-      expect(addToQueue).toHaveBeenCalledWith(climb);
+      expect(addToQueue).toHaveBeenCalledWith(climb, 'search');
     });
 
     it('calls onOpenPlaylistSelector on swipe-right', () => {

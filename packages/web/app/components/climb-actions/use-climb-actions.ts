@@ -133,7 +133,7 @@ export function useClimbActions({
   const handleQueue = useCallback(() => {
     if (!climb || !addToQueue || recentlyAddedToQueue) return;
 
-    addToQueue(climb);
+    addToQueue(climb, 'climb_detail');
 
     track('Add to Queue', {
       source: 'climbActions',

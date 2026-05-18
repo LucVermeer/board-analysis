@@ -7,6 +7,7 @@ import type { BoardDetails, ParsedBoardRouteParameters } from '@/app/lib/types';
 import { getBaseBoardPath } from '@/app/lib/url-utils';
 import { getClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import { track } from '@/app/lib/analytics';
+import { registerSessionStart } from '@/app/lib/session-lifecycle-tracking';
 
 type BoardSessionBridgeProps = {
   boardDetails: BoardDetails;
@@ -56,6 +57,7 @@ const BoardSessionBridge: React.FC<BoardSessionBridgeProps> = ({ boardDetails, p
         // already on the matching session and skip this branch. Board reconfig
         // within the same session also skips.
         if (activeSession?.sessionId !== sessionIdFromCookie) {
+          registerSessionStart(sessionIdFromCookie);
           track('Session Joined', {
             session_id: sessionIdFromCookie,
             board_name: boardDetailsRef.current.board_name,
