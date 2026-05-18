@@ -15,8 +15,13 @@
  */
 
 import type { ClimbQueueItem, QueueState } from './queue';
-import type { SessionUser } from './session';
-import type { SessionFeedParticipant, SessionGradeDistributionItem, SessionDetailTick } from './activity-feed';
+
+// Re-export the canonical SessionEvent union from codegen so this file
+// never drifts from the GraphQL schema. The hand-written union previously
+// duplicated here was already going stale (it predated the additions of
+// previousDriverParticipantId on DriverChanged and queueItemUuid on
+// WallConfirmedClimb).
+export type { SessionEvent } from '../generated/types';
 
 // Response for delta sync event replay (Phase 2). Backend resolvers publish
 // QueueEvent objects, while GraphQL clients receive aliased subscription-shaped
@@ -90,36 +95,6 @@ export type SubscriptionQueueEvent =
       stateHash: string;
       mirroredUuid?: string | null;
       mirrored: boolean;
-    };
-
-export type SessionEvent =
-  | { __typename: 'UserJoined'; user: SessionUser }
-  | { __typename: 'UserLeft'; userId: string }
-  | { __typename: 'UserPresenceChanged'; user: SessionUser }
-  | { __typename: 'LeaderChanged'; leaderId: string; leaderConnectionId?: string | null }
-  | { __typename: 'DriverChanged'; driverParticipantId: string | null }
-  | {
-      __typename: 'WallConfirmedClimb';
-      climbUuid: string;
-      confirmedAt: string;
-      confirmedByParticipantId: string;
-    }
-  | { __typename: 'SessionBoardSerialChanged'; lastConnectedBoardSerial: string | null }
-  | { __typename: 'SessionEnded'; reason: string; newPath?: string }
-  | {
-      __typename: 'SessionStatsUpdated';
-      sessionId: string;
-      totalSends: number;
-      totalFlashes: number;
-      totalAttempts: number;
-      tickCount: number;
-      participants: SessionFeedParticipant[];
-      gradeDistribution: SessionGradeDistributionItem[];
-      boardTypes: string[];
-      hardestGrade?: string | null;
-      durationMinutes?: number | null;
-      goal?: string | null;
-      ticks: SessionDetailTick[];
     };
 
 export type ConnectionContext = {

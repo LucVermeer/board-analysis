@@ -314,8 +314,8 @@ type Session {
   lastConnectedBoardSerial: String
   "Unique identifier for this client's connection"
   clientId: ID!
-  "Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) when comparing against driverParticipantId — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity."
-  participantId: ID!
+  "Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) when comparing against driverParticipantId — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity. TEMPORARILY NULLABLE: a follow-up release will flip this back to ID! once every Session-returning resolver has been audited to confirm it populates the field. Clients should treat null as 'unknown — fall back to clientId for self-checks'."
+  participantId: ID
   "Optional session goal text"
   goal: String
   "Whether session is publicly discoverable"
@@ -4038,17 +4038,23 @@ type Mutation {
   requirement) — the BLE-capable phone that handled the send is the source of truth for
   confirmation. The server stamps `confirmedAt` and `confirmedByParticipantId` from
   the caller's identity; clients cannot forge either field. Publishes
-  `WallConfirmedClimb`.
+  `WallConfirmedClimb`. The optional `queueItemUuid` disambiguates the press when
+  the same climb is queued twice. Returns the resolved Session so optimistic-UI callers
+  can apply server-derived state without a follow-up query (symmetric with
+  `takeControl` / `releaseControl`). Session identity is resolved from the WebSocket
+  connection context — no `sessionId` argument is required.
   """
-  confirmClimbOnWall(sessionId: ID!, climbUuid: ID!): Boolean!
+  confirmClimbOnWall(climbUuid: ID!, queueItemUuid: ID): Session!
 
   """
   Record the BLE board serial that this client paired with so other (mobile)
   participants can auto-connect to the same physical board. Any session participant
   may call. Idempotent: when the stored serial already matches, no event fires.
-  Publishes `SessionBoardSerialChanged` on change.
+  Publishes `SessionBoardSerialChanged` on change. Returns the resolved Session for
+  optimistic-UI symmetry with `takeControl` / `releaseControl`. Session identity is
+  resolved from the WebSocket connection context — no `sessionId` argument is required.
   """
-  setSessionBoardSerial(sessionId: ID!, serial: String!): Boolean!
+  setSessionBoardSerial(serial: String!): Session!
 
   # ============================================
   # User Management Mutations (require auth)
@@ -4575,6 +4581,8 @@ Event when the wall driver changes (the participant authorized to drive the wall
 type DriverChanged {
   "Stable participant id of the new driver, or null when control was released"
   driverParticipantId: ID
+  "Stable participant id of the previous driver, or null when there was none (e.g. the very first take of the session, or after a release). Lets clients render 'X took the wall from Y' toasts and populate the Phase 5 previousDriver analytics property without local bookkeeping."
+  previousDriverParticipantId: ID
 }
 
 """
@@ -4591,6 +4599,8 @@ type WallConfirmedClimb {
   confirmedAt: String!
   "Stable participant id of the member whose phone relayed the climb"
   confirmedByParticipantId: ID!
+  "UUID of the queue item that triggered this send, or null when the BLE-capable phone reported only a climb UUID. Lets clients disambiguate when the same climb is queued twice — without this, both queue entries' pending lightbulbs would clear on a single confirmation."
+  queueItemUuid: ID
 }
 
 """

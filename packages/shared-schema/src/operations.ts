@@ -192,19 +192,31 @@ export const RELEASE_CONTROL = `
 // Wall confirmation — the BLE-capable phone tells the backend that the climb
 // was successfully relayed to the board. Server broadcasts WallConfirmedClimb
 // to every session participant so non-BLE clients can flip the lightbulb to
-// confirmed and dismiss their fallback timer.
+// confirmed and dismiss their fallback timer. The optional $queueItemUuid
+// disambiguates which queued press the confirmation matches when the same
+// climb is queued twice. Returns Session! for optimistic-UI symmetry with
+// takeControl / releaseControl; the selection set mirrors releaseControl's.
 export const CONFIRM_CLIMB_ON_WALL = `
-  mutation ConfirmClimbOnWall($sessionId: ID!, $climbUuid: ID!) {
-    confirmClimbOnWall(sessionId: $sessionId, climbUuid: $climbUuid)
+  mutation ConfirmClimbOnWall($climbUuid: ID!, $queueItemUuid: ID) {
+    confirmClimbOnWall(climbUuid: $climbUuid, queueItemUuid: $queueItemUuid) {
+      id
+      driverParticipantId
+      lastConnectedBoardSerial
+    }
   }
 `;
 
 // Session board serial — when a phone pairs with a physical board over BLE,
 // it records the serial on the session so other (mobile) participants can
-// auto-connect without picking from a list.
+// auto-connect without picking from a list. Returns Session! for optimistic-UI
+// symmetry with takeControl / releaseControl.
 export const SET_SESSION_BOARD_SERIAL = `
-  mutation SetSessionBoardSerial($sessionId: ID!, $serial: String!) {
-    setSessionBoardSerial(sessionId: $sessionId, serial: $serial)
+  mutation SetSessionBoardSerial($serial: String!) {
+    setSessionBoardSerial(serial: $serial) {
+      id
+      driverParticipantId
+      lastConnectedBoardSerial
+    }
   }
 `;
 
@@ -296,11 +308,13 @@ export const SESSION_UPDATES = `
       }
       ... on DriverChanged {
         driverParticipantId
+        previousDriverParticipantId
       }
       ... on WallConfirmedClimb {
         climbUuid
         confirmedAt
         confirmedByParticipantId
+        queueItemUuid
       }
       ... on SessionBoardSerialChanged {
         lastConnectedBoardSerial

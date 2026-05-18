@@ -53,6 +53,8 @@ export const eventsTypeDefs = /* GraphQL */ `
   type DriverChanged {
     "Stable participant id of the new driver, or null when control was released"
     driverParticipantId: ID
+    "Stable participant id of the previous driver, or null when there was none (e.g. the very first take of the session, or after a release). Lets clients render 'X took the wall from Y' toasts and populate the Phase 5 previousDriver analytics property without local bookkeeping."
+    previousDriverParticipantId: ID
   }
 
   """
@@ -69,6 +71,8 @@ export const eventsTypeDefs = /* GraphQL */ `
     confirmedAt: String!
     "Stable participant id of the member whose phone relayed the climb"
     confirmedByParticipantId: ID!
+    "UUID of the queue item that triggered this send, or null when the BLE-capable phone reported only a climb UUID. Lets clients disambiguate when the same climb is queued twice — without this, both queue entries' pending lightbulbs would clear on a single confirmation."
+    queueItemUuid: ID
   }
 
   """

@@ -96,17 +96,23 @@ export const mutationsTypeDefs = /* GraphQL */ `
     requirement) — the BLE-capable phone that handled the send is the source of truth for
     confirmation. The server stamps \`confirmedAt\` and \`confirmedByParticipantId\` from
     the caller's identity; clients cannot forge either field. Publishes
-    \`WallConfirmedClimb\`.
+    \`WallConfirmedClimb\`. The optional \`queueItemUuid\` disambiguates the press when
+    the same climb is queued twice. Returns the resolved Session so optimistic-UI callers
+    can apply server-derived state without a follow-up query (symmetric with
+    \`takeControl\` / \`releaseControl\`). Session identity is resolved from the WebSocket
+    connection context — no \`sessionId\` argument is required.
     """
-    confirmClimbOnWall(sessionId: ID!, climbUuid: ID!): Boolean!
+    confirmClimbOnWall(climbUuid: ID!, queueItemUuid: ID): Session!
 
     """
     Record the BLE board serial that this client paired with so other (mobile)
     participants can auto-connect to the same physical board. Any session participant
     may call. Idempotent: when the stored serial already matches, no event fires.
-    Publishes \`SessionBoardSerialChanged\` on change.
+    Publishes \`SessionBoardSerialChanged\` on change. Returns the resolved Session for
+    optimistic-UI symmetry with \`takeControl\` / \`releaseControl\`. Session identity is
+    resolved from the WebSocket connection context — no \`sessionId\` argument is required.
     """
-    setSessionBoardSerial(sessionId: ID!, serial: String!): Boolean!
+    setSessionBoardSerial(serial: String!): Session!
 
     # ============================================
     # User Management Mutations (require auth)
