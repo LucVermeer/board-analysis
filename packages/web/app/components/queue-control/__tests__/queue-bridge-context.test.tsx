@@ -325,10 +325,13 @@ function useTestQueueActions() {
 }
 
 /**
- * Hook to read the QueueDataContext value exposed by QueueBridgeProvider.
+ * Hook to read data fields exposed by QueueBridgeProvider. The bridge no
+ * longer wraps with QueueDataContext (retired in PR #2198 phase 3.6); the
+ * combined QueueContext now carries every data field directly, so we read
+ * from there.
  */
 function useTestQueueData() {
-  return React.useContext(QueueDataContext);
+  return React.useContext(QueueContext);
 }
 
 /**
