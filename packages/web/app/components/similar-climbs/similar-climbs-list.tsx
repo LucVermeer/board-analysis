@@ -309,32 +309,9 @@ function SimilarClimbCard({
     void onSetActive(buildClimbStub(climb, boardType));
   }, [onSetActive, climb, boardType]);
 
-  const body = (
+  const cardInner = (
     <>
-      <Box sx={{ position: 'relative' }}>
-        {thumbnail}
-        {/* Skip the ellipsis when we have no boardDetails — the actions
-            drawer needs them to render anything useful, and clicking the
-            button would silently dismiss the drawer on open. Better to
-            hide the affordance than to expose a dead button. */}
-        {boardDetails ? (
-          <IconButton
-            size="small"
-            onClick={handleEllipsisClick}
-            aria-label={t('similarClimbs.openActions')}
-            sx={{
-              position: 'absolute',
-              top: 4,
-              right: 4,
-              backgroundColor: 'var(--semantic-surface-overlay)',
-              backdropFilter: 'blur(4px)',
-              '&:hover': { backgroundColor: 'var(--semantic-surface)' },
-            }}
-          >
-            <MoreVertOutlined fontSize="small" />
-          </IconButton>
-        ) : null}
-      </Box>
+      {thumbnail}
       <div className={`${styles.nameRow}${dimClass}`}>
         <div className={styles.name} title={climb.name || undefined}>
           {climb.name || t('similarClimbs.untitledClimb')}
@@ -355,6 +332,21 @@ function SimilarClimbCard({
     </>
   );
 
+  // The ellipsis is rendered as a sibling of the clickable card surface
+  // (not a descendant), because a <button> can't be nested inside another
+  // <button> or inside an <a> per HTML spec. Skip it when we have no
+  // boardDetails — the actions drawer needs them to render anything useful.
+  const ellipsis = boardDetails ? (
+    <IconButton
+      size="small"
+      onClick={handleEllipsisClick}
+      aria-label={t('similarClimbs.openActions')}
+      className={styles.ellipsis}
+    >
+      <MoreVertOutlined fontSize="small" />
+    </IconButton>
+  ) : null;
+
   // When the queue is available, the card is a button that activates the
   // climb in the play drawer (same drawer the user already has open). When
   // it isn't, fall back to navigating to the climb-view page so the user
@@ -362,21 +354,27 @@ function SimilarClimbCard({
   // duplicate-resolution drawer in create-climb-form).
   if (onSetActive) {
     return (
-      <button type="button" onClick={handleCardClick} className={`${styles.card} ${styles.cardButton}`}>
-        {body}
-      </button>
+      <div className={styles.cardWrapper}>
+        <button type="button" onClick={handleCardClick} className={`${styles.card} ${styles.cardButton}`}>
+          {cardInner}
+        </button>
+        {ellipsis}
+      </div>
     );
   }
 
   if (climbViewPath) {
     return (
-      <LocaleLink href={climbViewPath} className={styles.card}>
-        {body}
-      </LocaleLink>
+      <div className={styles.cardWrapper}>
+        <LocaleLink href={climbViewPath} className={styles.card}>
+          {cardInner}
+        </LocaleLink>
+        {ellipsis}
+      </div>
     );
   }
 
-  return <div className={`${styles.card} ${styles.cardDisabled}`}>{body}</div>;
+  return <div className={`${styles.card} ${styles.cardDisabled}`}>{cardInner}</div>;
 }
 
 type SimilarClimbActionsDrawerProps = {
