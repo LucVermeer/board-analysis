@@ -79,6 +79,15 @@ const BluetoothContext = createContext<BluetoothContextValue | null>(null);
  * itself never subscribes to the climb context — preventing re-renders of the
  * entire component tree on every climb change when BT is disconnected.
  */
+function countClimbHolds(frames: string | undefined | null): number {
+  if (!frames) return 0;
+  let count = 0;
+  for (let i = 0; i < frames.length; i++) {
+    if (frames[i] === 'p') count += 1;
+  }
+  return count;
+}
+
 function BluetoothAutoSender({
   sendFramesToBoard,
   layoutName,
@@ -168,6 +177,7 @@ function BluetoothAutoSender({
             pendingClimbRef.current = null;
             continue;
           }
+          const climbHoldCount = countClimbHolds(item.climb.frames);
           try {
             const result = await sendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal, item.climb.uuid);
             // After the await, the AutoSender may have unmounted — skip the
@@ -188,6 +198,8 @@ function BluetoothAutoSender({
               track('Climb Sent to Board Failure', {
                 climbUuid: item.climb?.uuid,
                 boardLayout: layoutName,
+                failureReason: 'characteristic_unavailable',
+                climbHoldCount,
               });
             }
           } catch (error) {
@@ -196,6 +208,8 @@ function BluetoothAutoSender({
             track('Climb Sent to Board Failure', {
               climbUuid: item.climb?.uuid,
               boardLayout: layoutName,
+              failureReason: 'write_aborted',
+              climbHoldCount,
             });
           }
           toSend = pendingClimbRef.current;

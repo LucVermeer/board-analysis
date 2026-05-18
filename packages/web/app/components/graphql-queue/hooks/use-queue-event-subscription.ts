@@ -1,6 +1,7 @@
 import { type Dispatch, useEffect } from 'react';
 import type { SubscriptionQueueEvent } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem, QueueAction } from '../../queue-control/types';
+import { track } from '@/app/lib/analytics';
 
 type UseQueueEventSubscriptionParams = {
   isPersistentSessionActive: boolean;
@@ -11,6 +12,10 @@ type UseQueueEventSubscriptionParams = {
     triggerResync: () => void;
   };
   needsResync: boolean;
+  // Used to label peer-originated queue events with the local board layout.
+  boardLayoutName?: string | null;
+  // Read at event time so peer-broadcast events report the live queue length.
+  getCurrentQueueLength?: () => number;
 };
 
 /**
@@ -23,6 +28,8 @@ export function useQueueEventSubscription({
   dispatch,
   persistentSession,
   needsResync,
+  boardLayoutName,
+  getCurrentQueueLength,
 }: UseQueueEventSubscriptionParams) {
   // Subscribe to queue events from persistent session
   useEffect(() => {
@@ -47,11 +54,22 @@ export function useQueueEventSubscription({
               position: event.position ?? undefined,
             },
           });
+          track('Climb Added to Queue', {
+            boardLayout: boardLayoutName ?? null,
+            addedFromTab: 'peer_broadcast',
+            currentQueueLength: (getCurrentQueueLength?.() ?? 0) + 1,
+            partyMode: true,
+          });
           break;
         case 'QueueItemRemoved':
           dispatch({
             type: 'DELTA_REMOVE_QUEUE_ITEM',
             payload: { uuid: event.uuid },
+          });
+          track('Climb Removed from Queue', {
+            boardLayout: boardLayoutName ?? null,
+            partyMode: true,
+            removedBy: 'peer',
           });
           break;
         case 'QueueReordered':
@@ -92,7 +110,7 @@ export function useQueueEventSubscription({
     });
 
     return unsubscribe;
-  }, [isPersistentSessionActive, persistentSession, dispatch]);
+  }, [isPersistentSessionActive, persistentSession, dispatch, boardLayoutName, getCurrentQueueLength]);
 
   // Trigger resync when corrupted data is detected
   useEffect(() => {

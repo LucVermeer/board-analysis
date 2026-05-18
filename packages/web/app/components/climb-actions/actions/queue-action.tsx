@@ -36,7 +36,7 @@ export function QueueAction({
 
       if (!queueActions?.addToQueue || recentlyAdded) return;
 
-      queueActions.addToQueue(climb);
+      queueActions.addToQueue(climb, 'climb_detail');
 
       track('Add to Queue', {
         source: 'climbActions',

@@ -10,6 +10,7 @@ import CheckOutlined from '@mui/icons-material/CheckOutlined';
 import LocalOfferOutlined from '@mui/icons-material/LocalOfferOutlined';
 import { track } from '@/app/lib/analytics';
 import type { Climb, BoardDetails } from '@/app/lib/types';
+import type { AddToQueueSource } from '../queue-control/types';
 import ClimbThumbnail from './climb-thumbnail';
 import ClimbTitle, { type ClimbTitleProps } from './climb-title';
 import DrawerClimbHeader from './drawer-climb-header';
@@ -190,8 +191,9 @@ type ClimbListItemProps = {
   /** When provided, the item delegates opening the playlist selector to the parent instead of rendering its own. */
   onOpenPlaylistSelector?: (climb: Climb) => void;
   /** Optional callback to add the climb to the queue (default swipe-left action).
-   *  When not provided, swipe-left is a no-op. Pass from a parent that subscribes to QueueContext. */
-  addToQueue?: (climb: Climb) => void;
+   *  When not provided, swipe-left is a no-op. Pass from a parent that subscribes to QueueContext.
+   *  The optional `source` is forwarded for analytics attribution. */
+  addToQueue?: (climb: Climb, source?: AddToQueueSource) => void;
   /** Replaces the default ClimbThumbnail + heart overlay + AscentStatus badge with custom content. */
   thumbnailSlot?: React.ReactNode;
   /** Renders below the swipeable row (e.g., inline edit controls). */
@@ -276,7 +278,7 @@ const ClimbListItem: React.FC<ClimbListItemProps> = React.memo(
     // Default swipe handlers
     // Swipe left (right action): add to queue
     const handleDefaultSwipeLeft = useCallback(() => {
-      addToQueueRef.current?.(climb);
+      addToQueueRef.current?.(climb, 'search');
       track('Add to Queue', { source: 'swipe' });
     }, [climb]);
 

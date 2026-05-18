@@ -96,7 +96,7 @@ export default function LikedClimbsViewContent({ boardDetails, angle }: LikedCli
       }
 
       for (const climb of allClimbs) {
-        addToQueue(climb);
+        addToQueue(climb, 'playlist');
       }
 
       track('Liked Climbs Add All To Queue', {

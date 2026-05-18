@@ -2,6 +2,8 @@ import type { Climb, SearchRequestPagination, ParsedBoardRouteParameters } from 
 import type { SessionUser } from '@boardsesh/shared-schema';
 import type { ConnectionState } from '../connection-manager/websocket-connection-manager';
 
+export type AddToQueueSource = 'search' | 'playlist' | 'climb_detail' | 'peer_broadcast' | 'unknown';
+
 export type PeerId = string | null;
 export type UserName = PeerId;
 
@@ -93,7 +95,7 @@ export type QueueAction =
 
 // Stable action functions — identity rarely changes
 export type QueueActionsType = {
-  addToQueue: (climb: Climb) => void;
+  addToQueue: (climb: Climb, source?: AddToQueueSource) => void;
   removeFromQueue: (item: ClimbQueueItem) => void;
   /** Sets the climb as current. Resolves to the freshly-created ClimbQueueItem
    *  so callers can capture its uuid (e.g. the create form tracks this uuid

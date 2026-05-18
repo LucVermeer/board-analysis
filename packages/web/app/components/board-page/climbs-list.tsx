@@ -15,6 +15,7 @@ import { useDrawerDragResize } from '@/app/hooks/use-drawer-drag-resize';
 import drawerCss from '../swipeable-drawer/swipeable-drawer.module.css';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import type { Climb, BoardDetails } from '@/app/lib/types';
+import type { AddToQueueSource } from '../queue-control/types';
 import ErrorBoundary from '../error-boundary';
 import ClimbListItem from '../climb-card/climb-list-item';
 import { ClimbCardSkeleton, ClimbListItemSkeleton } from './board-page-skeleton';
@@ -213,7 +214,7 @@ export type ClimbsListProps = {
   isFetching: boolean;
   hasMore: boolean;
   onClimbSelect?: (climb: Climb) => void;
-  addToQueue?: (climb: Climb) => void;
+  addToQueue?: (climb: Climb, source?: AddToQueueSource) => void;
   onLoadMore: () => void;
   header?: React.ReactNode;
   headerInline?: React.ReactNode;

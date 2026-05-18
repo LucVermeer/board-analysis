@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { track } from '@/app/lib/analytics';
+import { registerSessionStart } from '@/app/lib/session-lifecycle-tracking';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -353,6 +354,7 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
 
       router.push(navigateUrl);
 
+      registerSessionStart(sessionId);
       track('Session Started', {
         boardName: effectiveBoardDetails?.board_name ?? '',
         hasGoal: !!formData.goal,
