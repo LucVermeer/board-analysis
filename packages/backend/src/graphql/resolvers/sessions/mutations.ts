@@ -401,6 +401,31 @@ export const sessionMutations = {
     }
 
     const participantId = ctx.participantId || ctx.connectionId;
+    if (!ctx.participantId) {
+      logger.warn(
+        `[takeControl] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
+      );
+    }
+
+    // Broadcast the climb to the wall BEFORE swapping the driver. If
+    // setCurrentClimbAndPublish throws (e.g. Redis VersionConflict over
+    // MAX_RETRIES, or any other failure inside the queue-update path), the
+    // driver hasn't moved yet — subscribers don't end up in the wedged
+    // "B is driving, but the wall still shows A's previous climb" state
+    // that the old "driver first, then climb" ordering produced. The atomic
+    // swap below is the moment the driver actually flips for everyone.
+    if (climb) {
+      await setCurrentClimbAndPublish(
+        sessionId,
+        climb,
+        true, // takeControl always treats the climb as a queue-add candidate (matches the old setCurrentClimb+shouldAddToQueue:true path)
+        roomManager,
+        pubsub,
+        ctx.connectionId || null,
+        null,
+      );
+    }
+
     // Atomic swap so the previous-vs-new comparison can't race a concurrent
     // takeControl from another participant. The room manager returns the
     // previous driver from a single Redis GETSET in multi-instance mode (and
@@ -422,24 +447,17 @@ export const sessionMutations = {
       });
     }
 
-    if (climb) {
-      await setCurrentClimbAndPublish(
-        sessionId,
-        climb,
-        true, // takeControl always treats the climb as a queue-add candidate (matches the old setCurrentClimb+shouldAddToQueue:true path)
-        roomManager,
-        pubsub,
-        ctx.connectionId || null,
-        null,
-      );
-    }
-
     // Build the Session payload. The fields mirror joinSession's return so
-    // clients can apply the response without a refetch.
-    const users = await roomManager.getSessionUsers(sessionId);
-    const sessionData = await roomManager.getSessionById(sessionId);
-    const queueState = await roomManager.getQueueState(sessionId);
-    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
+    // clients can apply the response without a refetch. Fan the
+    // independent reads out in parallel — sequential awaits over four
+    // unrelated lookups only burns latency.
+    const [users, sessionData, queueState, lastConnectedBoardSerial, leaderConnectionId] = await Promise.all([
+      roomManager.getSessionUsers(sessionId),
+      roomManager.getSessionById(sessionId),
+      roomManager.getQueueState(sessionId),
+      roomManager.getSessionBoardSerial(sessionId),
+      roomManager.getSessionLeaderConnectionId(sessionId),
+    ]);
 
     return {
       id: sessionId,
@@ -452,7 +470,7 @@ export const sessionMutations = {
         queue: queueState.queue,
         currentClimbQueueItem: queueState.currentClimbQueueItem,
       },
-      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      isLeader: leaderConnectionId === ctx.connectionId,
       driverParticipantId: participantId,
       lastConnectedBoardSerial,
       clientId: ctx.connectionId,
@@ -484,10 +502,15 @@ export const sessionMutations = {
     { climbUuid, queueItemUuid }: { climbUuid: string; queueItemUuid?: string | null },
     ctx: ConnectionContext,
   ) => {
-    // Tighter than the default 60/min: a single BLE send produces one
-    // confirmation, so 6/min covers worst-case rapid swiping with headroom
-    // and chokes off replay storms from a misbehaving client.
-    await applyRateLimit(ctx, 6);
+    // Give confirmClimbOnWall its own per-operation bucket. The previous
+    // `applyRateLimit(ctx, 6)` shared the default bucket with every other
+    // mutation on the same user — six rapid forward swipes (which fire
+    // setCurrentClimb / addQueueItem alongside the wall confirm) would burn
+    // through it and every peer's recovery fallback would wedge on the
+    // 2 s picker timeout. 60/min covers worst-case rapid swiping with
+    // headroom while still choking off replay storms from a misbehaving
+    // client.
+    await applyRateLimit(ctx, 60, 'confirmClimbOnWall');
     // Session identity comes from the WebSocket connection context (the
     // "WS-implicit" pattern used by takeControl / releaseControl) — clients
     // no longer pass `sessionId` as an argument.
@@ -496,6 +519,31 @@ export const sessionMutations = {
     await requireSessionMember(ctx, sessionId);
 
     const participantId = ctx.participantId || ctx.connectionId;
+    if (!ctx.participantId) {
+      // Connection IDs are non-stable across reconnects, so treating one as
+      // the confirmer's identity weakens the wire event. Surface the
+      // fallback so we can detect clients joining without participantId in
+      // prod and tighten the client glue.
+      logger.warn(
+        `[confirmClimbOnWall] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
+      );
+    }
+
+    // Reject when the climb on the wire doesn't match the session's current
+    // climb. Without this guard, any session member could spam fake confirms
+    // for an unrelated climb UUID and suppress everyone else's 2 s fallback
+    // (the client-side watcher resolves the moment its bus sees a
+    // WallConfirmedClimb with the same climbUuid). The current climb is the
+    // authoritative answer to "what was just sent to the wall" — anything
+    // else must be a stale, racing, or malicious confirm.
+    const queueState = await roomManager.getQueueState(sessionId);
+    const currentClimbUuid = queueState.currentClimbQueueItem?.climb.uuid ?? null;
+    if (currentClimbUuid !== climbUuid) {
+      throw new Error(
+        `confirmClimbOnWall: climbUuid mismatch (got ${climbUuid.slice(0, 8)}, current ${currentClimbUuid ? currentClimbUuid.slice(0, 8) : 'none'})`,
+      );
+    }
+
     pubsub.publishSessionEvent(sessionId, {
       __typename: 'WallConfirmedClimb',
       climbUuid,
@@ -505,13 +553,17 @@ export const sessionMutations = {
     });
 
     // Mirror takeControl / releaseControl: return the resolved Session so
-    // optimistic-UI callers can apply server-derived state without a follow-up
-    // query. Build the payload from the same room-manager helpers.
-    const users = await roomManager.getSessionUsers(sessionId);
-    const sessionData = await roomManager.getSessionById(sessionId);
-    const queueState = await roomManager.getQueueState(sessionId);
-    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
-    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
+    // optimistic-UI callers can apply server-derived state without a
+    // follow-up query. Fan the independent reads out in parallel — these
+    // four queries don't depend on each other, so a sequential chain only
+    // burns latency. `queueState` was already fetched above for the
+    // correlation check; reuse it instead of re-reading.
+    const [users, sessionData, driverParticipantId, lastConnectedBoardSerial] = await Promise.all([
+      roomManager.getSessionUsers(sessionId),
+      roomManager.getSessionById(sessionId),
+      roomManager.getSessionDriverParticipantId(sessionId),
+      roomManager.getSessionBoardSerial(sessionId),
+    ]);
 
     return {
       id: sessionId,
@@ -565,12 +617,23 @@ export const sessionMutations = {
       });
     }
 
-    // Mirror takeControl / releaseControl: return the resolved Session.
-    const users = await roomManager.getSessionUsers(sessionId);
-    const sessionData = await roomManager.getSessionById(sessionId);
-    const queueState = await roomManager.getQueueState(sessionId);
-    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
     const participantId = ctx.participantId || ctx.connectionId;
+    if (!ctx.participantId) {
+      logger.warn(
+        `[setSessionBoardSerial] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
+      );
+    }
+
+    // Mirror takeControl / releaseControl: return the resolved Session. Fan
+    // the independent reads out in parallel — sequential awaits over five
+    // unrelated lookups burns latency on every wall-pair.
+    const [users, sessionData, queueState, driverParticipantId, leaderConnectionId] = await Promise.all([
+      roomManager.getSessionUsers(sessionId),
+      roomManager.getSessionById(sessionId),
+      roomManager.getQueueState(sessionId),
+      roomManager.getSessionDriverParticipantId(sessionId),
+      roomManager.getSessionLeaderConnectionId(sessionId),
+    ]);
 
     return {
       id: sessionId,
@@ -583,7 +646,7 @@ export const sessionMutations = {
         queue: queueState.queue,
         currentClimbQueueItem: queueState.currentClimbQueueItem,
       },
-      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      isLeader: leaderConnectionId === ctx.connectionId,
       driverParticipantId,
       lastConnectedBoardSerial: serial,
       clientId: ctx.connectionId,
@@ -609,6 +672,11 @@ export const sessionMutations = {
     await requireSessionMember(ctx, sessionId);
 
     const participantId = ctx.participantId || ctx.connectionId;
+    if (!ctx.participantId) {
+      logger.warn(
+        `[releaseControl] ctx.participantId missing; falling back to connectionId ${ctx.connectionId.slice(0, 8)} for session ${sessionId.slice(0, 8)}`,
+      );
+    }
     const cleared = await roomManager.clearSessionDriverIf(sessionId, participantId);
 
     if (cleared) {
@@ -621,12 +689,19 @@ export const sessionMutations = {
       });
     }
 
-    const users = await roomManager.getSessionUsers(sessionId);
-    const sessionData = await roomManager.getSessionById(sessionId);
-    const queueState = await roomManager.getQueueState(sessionId);
-    // Skip the re-read when we just cleared — we already know the answer.
-    const driverParticipantId = cleared ? null : await roomManager.getSessionDriverParticipantId(sessionId);
-    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
+    // Fan the response-payload reads out in parallel — these five queries
+    // are independent and sequential awaits only burn latency.
+    // `driverParticipantId` is short-circuited when we just cleared (we
+    // already know it's null), avoiding the extra read in that branch.
+    const [users, sessionData, queueState, lastConnectedBoardSerial, leaderConnectionId, driverParticipantId] =
+      await Promise.all([
+        roomManager.getSessionUsers(sessionId),
+        roomManager.getSessionById(sessionId),
+        roomManager.getQueueState(sessionId),
+        roomManager.getSessionBoardSerial(sessionId),
+        roomManager.getSessionLeaderConnectionId(sessionId),
+        cleared ? Promise.resolve(null) : roomManager.getSessionDriverParticipantId(sessionId),
+      ]);
 
     return {
       id: sessionId,
@@ -639,7 +714,7 @@ export const sessionMutations = {
         queue: queueState.queue,
         currentClimbQueueItem: queueState.currentClimbQueueItem,
       },
-      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      isLeader: leaderConnectionId === ctx.connectionId,
       driverParticipantId,
       lastConnectedBoardSerial,
       clientId: ctx.connectionId,

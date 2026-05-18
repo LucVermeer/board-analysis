@@ -31,6 +31,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 
+// The current climb on the session queue. confirmClimbOnWall now correlates
+// the confirm's climbUuid against this value, so tests that exercise the
+// happy path mock `getQueueState` to return a queue item with the same UUID.
+const validClimbUuid = '22222222-2222-2222-2222-222222222222';
+const validSerial = 'KB-AB12-CD34';
+
 vi.mock('../services/room-manager', () => ({
   roomManager: {
     setSessionBoardSerialAndReturnPrevious: vi.fn(),
@@ -52,7 +58,14 @@ vi.mock('../services/room-manager', () => ({
       sequence: 0,
       stateHash: 'hash',
       queue: [],
-      currentClimbQueueItem: null,
+      // currentClimbQueueItem.climb.uuid must equal the climbUuid the
+      // confirm path will send in order for the correlation check to pass.
+      // Individual tests can override this when they want to exercise the
+      // mismatch branch.
+      currentClimbQueueItem: {
+        uuid: 'queue-item-1',
+        climb: { uuid: '22222222-2222-2222-2222-222222222222' },
+      },
     }),
     getSessionDriverParticipantId: vi.fn().mockResolvedValue(null),
     getSessionLeaderConnectionId: vi.fn().mockResolvedValue(null),
@@ -103,6 +116,7 @@ const sharedHelpers = await import('../graphql/resolvers/shared/helpers');
 const roomManagerMock = roomManager as unknown as {
   setSessionBoardSerialAndReturnPrevious: ReturnType<typeof vi.fn>;
   getSessionBoardSerial: ReturnType<typeof vi.fn>;
+  getQueueState: ReturnType<typeof vi.fn>;
 };
 const pubsubMock = pubsub as unknown as { publishSessionEvent: ReturnType<typeof vi.fn> };
 const requireSessionMemberMock = sharedHelpers.requireSessionMember as unknown as ReturnType<typeof vi.fn>;
@@ -119,13 +133,30 @@ function makeCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext 
   };
 }
 
-const validClimbUuid = '22222222-2222-2222-2222-222222222222';
-const validSerial = 'KB-AB12-CD34';
+// Resets `getQueueState` to return a queue with `validClimbUuid` as the
+// current climb. The vi.mock setup pre-fills this, but `vi.clearAllMocks`
+// in `beforeEach` blows away the resolved value so each test that exercises
+// the happy path has to re-prime it.
+function primeCurrentClimb(uuid: string = validClimbUuid): void {
+  roomManagerMock.getQueueState.mockResolvedValue({
+    sequence: 0,
+    stateHash: 'hash',
+    queue: [],
+    currentClimbQueueItem: {
+      uuid: 'queue-item-1',
+      climb: { uuid },
+    },
+  });
+}
 
 describe('confirmClimbOnWall mutation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireSessionMemberMock.mockResolvedValue(undefined);
+    // Default to the happy path: the session's current climb matches the
+    // confirm's climbUuid so the correlation check passes. Tests exercising
+    // the mismatch branch override this explicitly.
+    primeCurrentClimb();
   });
 
   it('publishes WallConfirmedClimb with the caller as confirmedByParticipantId and a server-stamped timestamp, returning a Session', async () => {
@@ -205,6 +236,42 @@ describe('confirmClimbOnWall mutation', () => {
         queueItemUuid,
       }),
     );
+  });
+
+  it('rejects when climbUuid does not match the session current climb (grief-vector guard)', async () => {
+    // Session is on a different climb than the one being confirmed. Without
+    // this guard any member could spam fake confirms for an unrelated
+    // climbUuid and suppress everyone's 2 s recovery fallback.
+    roomManagerMock.getQueueState.mockResolvedValueOnce({
+      sequence: 0,
+      stateHash: 'hash',
+      queue: [],
+      currentClimbQueueItem: {
+        uuid: 'queue-item-1',
+        climb: { uuid: 'AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA' },
+      },
+    });
+    const ctx = makeCtx();
+
+    await expect(sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx)).rejects.toThrow(
+      /climbUuid mismatch/i,
+    );
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the session has no current climb (correlation requires a target)', async () => {
+    roomManagerMock.getQueueState.mockResolvedValueOnce({
+      sequence: 0,
+      stateHash: 'hash',
+      queue: [],
+      currentClimbQueueItem: null,
+    });
+    const ctx = makeCtx();
+
+    await expect(sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx)).rejects.toThrow(
+      /climbUuid mismatch/i,
+    );
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
 });
 
