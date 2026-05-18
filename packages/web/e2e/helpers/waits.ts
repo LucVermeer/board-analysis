@@ -31,6 +31,89 @@ export async function waitForDrawerOpen(page: Page, index = 0, timeout = 10_000)
   await drawer(page, index).waitFor({ timeout });
 }
 
+export async function clickWithDomFallback(
+  page: Page,
+  trigger: Locator,
+  options: {
+    maxAttempts?: number;
+    clickTimeout?: number;
+    interAttemptMs?: number;
+  } = {},
+): Promise<void> {
+  const maxAttempts = options.maxAttempts ?? 4;
+  const clickTimeout = options.clickTimeout ?? 5_000;
+  const interAttemptMs = options.interAttemptMs ?? 250;
+  let lastFailure: unknown;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await trigger.click({ timeout: clickTimeout });
+      return;
+    } catch (clickError) {
+      lastFailure = clickError;
+      try {
+        await trigger.evaluate((element: Element) => {
+          if (element instanceof HTMLElement) {
+            element.click();
+            return;
+          }
+          element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        });
+        return;
+      } catch (fallbackError) {
+        lastFailure = fallbackError;
+        if (attempt < maxAttempts - 1) {
+          await page.waitForTimeout(interAttemptMs);
+        }
+      }
+    }
+  }
+
+  if (lastFailure instanceof Error) {
+    throw lastFailure;
+  }
+  throw new Error('Click did not complete after repeated attempts');
+}
+
+export async function clickUntilVisible(
+  page: Page,
+  trigger: Locator,
+  target: Locator,
+  options: {
+    maxAttempts?: number;
+    clickTimeout?: number;
+    waitTimeout?: number;
+    interAttemptMs?: number;
+  } = {},
+): Promise<void> {
+  const maxAttempts = options.maxAttempts ?? 4;
+  const clickTimeout = options.clickTimeout ?? 5_000;
+  const waitTimeout = options.waitTimeout ?? 5_000;
+  const interAttemptMs = options.interAttemptMs ?? 250;
+  let lastFailure: unknown;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await clickWithDomFallback(page, trigger, {
+        clickTimeout,
+        maxAttempts: 1,
+      });
+      await target.waitFor({ state: 'visible', timeout: waitTimeout });
+      return;
+    } catch (error) {
+      lastFailure = error;
+      if (attempt < maxAttempts - 1) {
+        await page.waitForTimeout(interAttemptMs);
+      }
+    }
+  }
+
+  if (lastFailure instanceof Error) {
+    throw lastFailure;
+  }
+  throw new Error('Target did not become visible after repeated clicks');
+}
+
 // Soft wait: if skeletons never fully unmount within the timeout, resolve
 // rather than throw. Boardsesh renders MUI Skeletons in two patterns:
 //   1. "page is loading data" — these unmount once the data arrives.

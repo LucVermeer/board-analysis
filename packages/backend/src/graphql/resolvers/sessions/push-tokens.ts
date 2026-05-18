@@ -315,7 +315,9 @@ export const pushTokenMutations = {
         const state = await buildContentStateForSession(sessionId);
         if (!state) return;
         try {
-          await sendLiveActivityUpdateToTokens(sessionId, [token], state, { source: 'registration' });
+          await sendLiveActivityUpdateToTokens(sessionId, [{ token, userId: ctx.userId ?? null }], state, {
+            source: 'registration',
+          });
         } catch (error) {
           logger.warn(
             `[APNs] Failed initial Live Activity send for session ${sessionId} (${describeTokenForLog(token)}):`,
