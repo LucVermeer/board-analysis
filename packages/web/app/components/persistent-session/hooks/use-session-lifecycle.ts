@@ -80,6 +80,62 @@ export function transformToSubscriptionEvent(event: QueueEvent | SubscriptionQue
   }
 }
 
+/**
+ * Apply a single `SessionEvent` (excluding `SessionStatsUpdated`, which is
+ * dispatched through the React Query cache rather than the session reducer)
+ * to a `Session`. Pure so the rules can be unit-tested without standing up
+ * the WebSocket subscription pipeline.
+ *
+ * Returns `null` when `prev` is `null` (no session to mutate). For
+ * `SessionEnded` we leave the previous state in place — clearing happens via
+ * IndexedDB removal and the next lifecycle tick, not the reducer.
+ */
+export function applySessionEvent(prev: Session | null, event: SessionEvent): Session | null {
+  if (!prev) return prev;
+  switch (event.__typename) {
+    case 'UserJoined':
+      return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
+    case 'UserPresenceChanged':
+      return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
+    case 'UserLeft':
+      return { ...prev, users: prev.users.filter((u) => u.id !== event.userId) };
+    case 'LeaderChanged': {
+      // See the long-form comment in the subscription's `next` handler below for
+      // the anonymous-vs-authenticated fallback rationale.
+      const localEntry = prev.users.find((u) => u.id === prev.clientId);
+      const isAnonymous = localEntry !== undefined && !localEntry.userId;
+      const effectiveLeaderConnectionId = event.leaderConnectionId ?? (isAnonymous ? event.leaderId : null);
+      return {
+        ...prev,
+        isLeader: effectiveLeaderConnectionId === prev.clientId,
+        users: prev.users.map((u) => ({
+          ...u,
+          isLeader: u.id === event.leaderId,
+        })),
+      };
+    }
+    case 'DriverChanged':
+      // Driver is a separate concept from leader (the queue-control-bar pivot's
+      // lightbulb gesture). Keep `isLeader` untouched here — leader semantics
+      // are presentation/legacy and ride on `LeaderChanged`. Coerce
+      // undefined → null so the local Session's tighter `string | null` shape
+      // holds even when the wire payload omits the field.
+      return { ...prev, driverParticipantId: event.driverParticipantId ?? null };
+    case 'SessionBoardSerialChanged':
+      // Mobile clients consult this when running the lightbulb fallback so a
+      // second phone joining a multi-board gym auto-connects to the same
+      // physical board the first phone is paired to.
+      return { ...prev, lastConnectedBoardSerial: event.lastConnectedBoardSerial ?? null };
+    case 'SessionEnded':
+      // The lifecycle effect clears IndexedDB and tears the session down on
+      // its own; the reducer just leaves the existing state in place so the
+      // UI doesn't snap to "no session" before the dialog can mount.
+      return prev;
+    default:
+      return prev;
+  }
+}
+
 export function hasContiguousReplayCoverage(
   events: SubscriptionQueueEvent[],
   sinceSequence: number,
@@ -626,79 +682,19 @@ export function useSessionLifecycle({
             next: (data) => {
               if (data.sessionUpdates) {
                 subscriptionRetryCount = 0;
-                // Handle UserJoined/UserLeft/LeaderChanged/SessionEnded in session state
                 const event = data.sessionUpdates;
+                // SessionStatsUpdated is dispatched through React Query in
+                // `handleSessionEvent` — it doesn't touch session state, so
+                // the reducer call skips it.
                 if (event.__typename !== 'SessionStatsUpdated') {
-                  setSession((prev) => {
-                    if (!prev) return prev;
-                    switch (event.__typename) {
-                      case 'UserJoined':
-                        return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
-                      case 'UserPresenceChanged':
-                        return { ...prev, users: upsertSessionUser(prev.users, coerceSessionUser(event.user)) };
-                      case 'UserLeft':
-                        return { ...prev, users: prev.users.filter((u) => u.id !== event.userId) };
-                      case 'LeaderChanged': {
-                        // `prev.clientId` is the WebSocket connectionId. The
-                        // current backend always emits both `leaderConnectionId`
-                        // and `leaderId`; prefer the explicit connectionId.
-                        //
-                        // When `leaderConnectionId` is missing (rolling deploy
-                        // from a pre-#2128 backend), fall back to `leaderId`
-                        // ONLY if the local client is anonymous. Anonymous
-                        // users bind `participantId` to `connectionId` per
-                        // the P1 fix, so their `leaderId` is interchangeable
-                        // with a `connectionId`. Authenticated users have a
-                        // userId UUID as their participantId — comparing it
-                        // to a connectionId never matches, so the fallback
-                        // for them would silently misreport `isLeader: false`.
-                        //
-                        // Detect anonymity by looking up the local client's
-                        // entry in the user list: anonymous participants
-                        // appear there with `id === clientId` (since
-                        // participantId === connectionId). If the local
-                        // user isn't in the list yet — possible during a
-                        // very fresh join — we conservatively skip the
-                        // fallback. That's a brief, recoverable window:
-                        // the next read corrects state, and the modern
-                        // backend always sends `leaderConnectionId` anyway.
-                        const localEntry = prev.users.find((u) => u.id === prev.clientId);
-                        const isAnonymous = localEntry !== undefined && !localEntry.userId;
-                        const effectiveLeaderConnectionId =
-                          event.leaderConnectionId ?? (isAnonymous ? event.leaderId : null);
-                        return {
-                          ...prev,
-                          isLeader: effectiveLeaderConnectionId === prev.clientId,
-                          users: prev.users.map((u) => ({
-                            ...u,
-                            isLeader: u.id === event.leaderId,
-                          })),
-                        };
-                      }
-                      case 'DriverChanged':
-                        // Driver is a separate concept from leader (the
-                        // queue-control-bar pivot's lightbulb gesture). Keep
-                        // `isLeader` untouched here — leader semantics are
-                        // presentation/legacy and ride on `LeaderChanged`.
-                        // Coerce undefined→null: generated GraphQL types use
-                        // `Maybe<string>` (string | null | undefined) for
-                        // nullable fields, but the local Session uses the
-                        // tighter `string | null`.
-                        return { ...prev, driverParticipantId: event.driverParticipantId ?? null };
-                      case 'SessionBoardSerialChanged':
-                        // Mobile clients consult this when running the
-                        // lightbulb fallback so the second phone joining
-                        // a multi-board gym can auto-connect to the same
-                        // physical board the first phone is paired to.
-                        return { ...prev, lastConnectedBoardSerial: event.lastConnectedBoardSerial ?? null };
-                      case 'SessionEnded':
-                        if (DEBUG) console.info('[PersistentSession] Session ended:', event.reason);
-                        removePreference(ACTIVE_SESSION_KEY).catch(() => {});
-                        return prev;
-                      default:
-                        return prev;
-                    }
-                  });
+                  // SessionEnded carries the side effect of clearing the
+                  // persisted session id; `applySessionEvent` is pure so the
+                  // IndexedDB removal lives here at the call site.
+                  if (event.__typename === 'SessionEnded') {
+                    if (DEBUG) console.info('[PersistentSession] Session ended:', event.reason);
+                    removePreference(ACTIVE_SESSION_KEY).catch(() => {});
+                  }
+                  setSession((prev) => applySessionEvent(prev, event));
                 }
                 handleSessionEvent(event);
               }
