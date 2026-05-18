@@ -62,6 +62,18 @@
   -webkit-mask-image: linear-gradient(to left, black 60%, transparent);
 }
 
+/* Dark mode: the medium-grey (--neutral-400) gradient base reads as a *light*
+   frost against the dark drawer surface — exactly the wrong direction. Swap
+   to a translucent black so the blur fades darker into the surface, giving a
+   "dark frosted glass" look instead of a "white glass" look. */
+:global(html[data-theme='dark']) .scrollIndicatorLeft {
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.55) 0%, transparent 100%);
+}
+
+:global(html[data-theme='dark']) .scrollIndicatorRight {
+  background: linear-gradient(to left, rgba(0, 0, 0, 0.55) 0%, transparent 100%);
+}
+
 .pickerItem {
   display: inline-flex;
   align-items: center;
