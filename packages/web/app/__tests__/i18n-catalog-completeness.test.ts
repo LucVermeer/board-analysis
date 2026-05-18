@@ -6,11 +6,11 @@ import { DEFAULT_LOCALE } from '@/app/lib/i18n/config';
 
 const LOCALES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'i18n', 'locales');
 
-// Locales we ship and own end-to-end. Community-maintained locales (e.g. `es`)
-// are intentionally allowed to have gaps — i18next falls back to English. New
-// owned locales must stay at full parity so a missing key surfaces here, not
-// in production as silently-English copy.
-const STRICTLY_ENFORCED_LOCALES = ['fr'] as const;
+// Every supported locale (except the source `en-US`) must stay at full parity
+// with the English catalog. Missing keys silently fall back to English at
+// runtime, ship untranslated copy to users, and spam Sentry with missing-key
+// warnings — fail the build here instead.
+const STRICTLY_ENFORCED_LOCALES = ['es', 'fr'] as const;
 
 type Catalog = Record<string, unknown>;
 

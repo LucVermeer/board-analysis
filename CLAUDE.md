@@ -257,7 +257,7 @@ Boardsesh ships English (`en-US`) at root paths and Spanish (`es`) at `/es/*`. T
 
 **Adding new copy**
 
-- Add the key to the matching English catalog only: `packages/web/i18n/locales/en-US/<namespace>.json`. Spanish catalogs are filled by community contributors. Missing Spanish keys fall back to English automatically (i18next `fallbackLng`).
+- Add the key to **every** supported locale catalog: `packages/web/i18n/locales/<locale>/<namespace>.json` for each entry in `SUPPORTED_LOCALES` (currently `en-US`, `es`, `fr`). Catalogs must stay at full parity — missing keys would fall back to English at runtime via i18next's `fallbackLng`, but they show up as warnings in Sentry and ship silently-English copy to non-English users. `packages/web/app/__tests__/i18n-catalog-completeness.test.ts` enforces parity per namespace for every supported locale and will fail the build if you add an English key without its `es` and `fr` translations.
 - Pick the right namespace. Currently `common` (shared chrome) and `marketing` (about/help/docs/legal/privacy/home). Add a new namespace by adding it to `SEED_NAMESPACES` in `packages/web/app/lib/i18n/config.ts` and creating `<lang>/<namespace>.json` files for each supported locale.
 - Use ICU-style placeholders for interpolation: `"greeting": "Hello {{name}}"`.
 
