@@ -356,19 +356,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         tabIndex={0}
         aria-label={t('common:ariaLabels.openQueue')}
       >
-        <IconButton
-          size="small"
-          component="span"
-          tabIndex={-1}
-          sx={{
-            // 48dp minimum touch target (a11y: WCAG 2.5.5). Padding stays
-            // small so the icon visual size doesn't change — minWidth/minHeight
-            // grow the hit area around the centered icon.
-            p: 0.25,
-            minWidth: themeTokens.spacing[12],
-            minHeight: themeTokens.spacing[12],
-          }}
-        >
+        <IconButton size="small" component="span" tabIndex={-1} sx={{ p: 0.25 }}>
           <Badge
             badgeContent={queue.length}
             max={99}
@@ -1021,19 +1009,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                       }}
                     >
                       {participantsExpanded ? (
-                        <IconButton
-                          size="small"
-                          component="span"
-                          tabIndex={-1}
-                          sx={{
-                            // 48dp minimum touch target (a11y: WCAG 2.5.5).
-                            // Padding stays small so the icon visual size
-                            // doesn't change.
-                            p: 0.25,
-                            minWidth: themeTokens.spacing[12],
-                            minHeight: themeTokens.spacing[12],
-                          }}
-                        >
+                        <IconButton size="small" component="span" tabIndex={-1} sx={{ p: 0.25 }}>
                           <CloseOutlined sx={{ fontSize: 18 }} />
                         </IconButton>
                       ) : (
