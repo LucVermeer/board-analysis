@@ -10,12 +10,16 @@ vi.mock('@/app/lib/analytics', () => ({
   track: (...args: unknown[]) => mockTrack(...args),
 }));
 
-const mockIsNativeApp = vi.fn(() => false);
+// Default to the picker branch unless a test explicitly opts into the
+// native-shell behaviour by overriding the `isNativeAppOverride` Dep.
 vi.mock('@/app/lib/ble/capacitor-utils', () => ({
-  isNativeApp: () => mockIsNativeApp(),
+  // Production calls `isNativeApp()` directly; tests prefer the
+  // `isNativeAppOverride` Dep so the override seam stays exercised.
+  isNativeApp: () => false,
 }));
 
 type Deps = Parameters<typeof useWallConfirmFallback>[0];
+type Callbacks = NonNullable<Parameters<typeof useWallConfirmFallback>[1]>;
 
 const baseClimb = {
   climbUuid: 'climb-1',
@@ -28,7 +32,9 @@ function makeDeps(overrides: Partial<Deps> = {}): Deps {
     isBluetoothConnected: false,
     isBluetoothSupported: true,
     lastConnectedBoardSerial: null,
+    isPersistentSessionActive: false,
     bluetoothConnect: vi.fn().mockResolvedValue(true),
+    isNativeAppOverride: () => false,
     ...overrides,
   };
 }
@@ -37,7 +43,6 @@ describe('useWallConfirmFallback', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockTrack.mockClear();
-    mockIsNativeApp.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -46,13 +51,17 @@ describe('useWallConfirmFallback', () => {
 
   it('clears the timer when a matching wall-confirm arrives within the window', () => {
     const deps = makeDeps();
-    const { result } = renderHook(() => useWallConfirmFallback(deps));
+    const onConfirmed = vi.fn();
+    const { result } = renderHook(() => useWallConfirmFallback(deps, { onConfirmed } satisfies Callbacks));
 
     act(() => {
       result.current.armWatcher(baseClimb);
     });
 
-    // Fire the matching confirm before the 2s window elapses.
+    // Advance partway then fire the matching confirm.
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
     act(() => {
       emitWallConfirm('climb-1');
     });
@@ -63,7 +72,43 @@ describe('useWallConfirmFallback', () => {
     });
 
     expect(deps.bluetoothConnect).not.toHaveBeenCalled();
-    expect(mockTrack).not.toHaveBeenCalled();
+    expect(mockTrack).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledWith('Wall Confirmed', {
+      climbUuid: 'climb-1',
+      latencyMs: 500,
+      confirmedByRole: 'other',
+      mode: 'solo',
+      boardLayout: 'Original',
+    });
+    expect(onConfirmed).toHaveBeenCalledOnce();
+    expect(onConfirmed).toHaveBeenCalledWith({
+      climbUuid: 'climb-1',
+      latencyMs: 500,
+      confirmedByRole: 'other',
+    });
+  });
+
+  it('marks confirmedByRole as "self" when the local phone is BLE-connected', () => {
+    const deps = makeDeps({ isBluetoothConnected: true });
+    const { result } = renderHook(() => useWallConfirmFallback(deps));
+
+    act(() => {
+      result.current.armWatcher(baseClimb);
+    });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    act(() => {
+      emitWallConfirm('climb-1');
+    });
+
+    expect(mockTrack).toHaveBeenCalledWith('Wall Confirmed', {
+      climbUuid: 'climb-1',
+      latencyMs: 300,
+      confirmedByRole: 'self',
+      mode: 'solo',
+      boardLayout: 'Original',
+    });
   });
 
   it('ignores wall-confirms for a different climb', () => {
@@ -117,8 +162,12 @@ describe('useWallConfirmFallback', () => {
   });
 
   it('auto-connects to stored serial when on native shell', () => {
-    mockIsNativeApp.mockReturnValue(true);
-    const deps = makeDeps({ lastConnectedBoardSerial: 'serial-42' });
+    // Exercises the `isNativeAppOverride` seam: tests drive the auto-connect
+    // branch deterministically without monkey-patching `isNativeApp`.
+    const deps = makeDeps({
+      lastConnectedBoardSerial: 'serial-42',
+      isNativeAppOverride: () => true,
+    });
     const { result } = renderHook(() => useWallConfirmFallback(deps));
 
     act(() => {
@@ -139,11 +188,12 @@ describe('useWallConfirmFallback', () => {
   });
 
   it('falls back to picker when stored serial exists but not on native shell', () => {
-    // mockIsNativeApp returns false by default — this models a desktop web
-    // browser that happens to have a session-recorded board serial. The
-    // safer behaviour is to show the picker rather than silently auto-
-    // connect to a serial the user never explicitly chose on this device.
-    const deps = makeDeps({ lastConnectedBoardSerial: 'serial-42' });
+    // Exercises the other side of the override seam — non-native shell with
+    // a stored serial still picks rather than silently auto-connecting.
+    const deps = makeDeps({
+      lastConnectedBoardSerial: 'serial-42',
+      isNativeAppOverride: () => false,
+    });
     const { result } = renderHook(() => useWallConfirmFallback(deps));
 
     act(() => {
@@ -246,5 +296,162 @@ describe('useWallConfirmFallback', () => {
 
     expect(deps.bluetoothConnect).not.toHaveBeenCalled();
     expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  // -- P0-3 race regression coverage --
+
+  it('does not tear down a re-armed watcher if a stale timeout fires', () => {
+    // Models the P0-3 race: timer-A is scheduled with capturedTimeoutId=A.
+    // The user re-arms before A elapses, which calls cancelWatcher() and
+    // installs watcher-B (timeoutId=B). If the JS task that runs A's
+    // setTimeout callback was already queued and not cancellable (or if a
+    // future scheduler ran it anyway), A's runFallback() must not tear down
+    // B's watcher.
+    const deps = makeDeps();
+    const { result } = renderHook(() => useWallConfirmFallback(deps));
+
+    act(() => {
+      result.current.armWatcher(baseClimb);
+    });
+
+    // Reach inside to grab watcher A's timeoutId, then force-cancel without
+    // clearing it (simulates a queued-but-not-yet-fired stale timer that
+    // beat the cancel).
+    act(() => {
+      // Re-arm: cancels A's timer (and unsubscribes A's subscriber) and
+      // installs B.
+      result.current.armWatcher({ ...baseClimb, climbUuid: 'climb-2' });
+    });
+
+    // Manually emit a confirm for climb-2 — this should match watcher B.
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    act(() => {
+      emitWallConfirm('climb-2');
+    });
+
+    // Past the window: neither A's timeout nor B's should run a picker
+    // fallback (B was confirmed; A is stale).
+    act(() => {
+      vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS + 100);
+    });
+
+    expect(deps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(mockTrack).toHaveBeenCalledTimes(1);
+    expect(mockTrack).toHaveBeenCalledWith(
+      'Wall Confirmed',
+      expect.objectContaining({ climbUuid: 'climb-2', mode: 'solo' }),
+    );
+  });
+
+  it('is a no-op when a WallConfirmedClimb arrives after the timeout already ran', () => {
+    const deps = makeDeps();
+    const { result } = renderHook(() => useWallConfirmFallback(deps));
+
+    act(() => {
+      result.current.armWatcher(baseClimb);
+    });
+
+    // Timeout fires — fallback runs.
+    act(() => {
+      vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS);
+    });
+    expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledWith('Wall Confirm Timeout', expect.objectContaining({ fallback: 'picker' }));
+
+    // A late confirm for the same climb arrives — must not double-fire or
+    // tear anything down (the watcher is already gone).
+    act(() => {
+      emitWallConfirm('climb-1');
+    });
+
+    expect(deps.bluetoothConnect).toHaveBeenCalledOnce();
+    expect(mockTrack).toHaveBeenCalledOnce();
+  });
+
+  it('coalesces repeated emits for the same climbUuid (two-phones racing)', () => {
+    // Two BLE-paired members both wrote the same climb and both broadcast
+    // WallConfirmedClimb. After the first cancel, subsequent emits for the
+    // same uuid must be no-ops.
+    const deps = makeDeps();
+    const { result } = renderHook(() => useWallConfirmFallback(deps));
+
+    act(() => {
+      result.current.armWatcher(baseClimb);
+    });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    // First confirm fires the success path.
+    act(() => {
+      emitWallConfirm('climb-1');
+    });
+
+    // Repeated emits — no fresh events, no fallback, no crash.
+    act(() => {
+      emitWallConfirm('climb-1');
+      emitWallConfirm('climb-1');
+    });
+
+    expect(mockTrack).toHaveBeenCalledTimes(1);
+    expect(mockTrack).toHaveBeenCalledWith('Wall Confirmed', expect.objectContaining({ climbUuid: 'climb-1' }));
+    expect(deps.bluetoothConnect).not.toHaveBeenCalled();
+  });
+
+  it('cancels the watcher silently when the persistent session ends mid-window', () => {
+    // Session-swap during pending: user leaves the party (or the WS dies and
+    // we deactivate the session) before the 2s elapses. The picker should
+    // not pop up after the user already moved on.
+    const deps = makeDeps({ isPersistentSessionActive: true });
+    const { result, rerender } = renderHook((d: Deps) => useWallConfirmFallback(d), { initialProps: deps });
+
+    act(() => {
+      result.current.armWatcher({ ...baseClimb, mode: 'party' });
+    });
+
+    // Flip the session off mid-window.
+    const stoppedDeps = makeDeps({ isPersistentSessionActive: false });
+    rerender(stoppedDeps);
+
+    act(() => {
+      vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS + 100);
+    });
+
+    expect(stoppedDeps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(deps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+  });
+
+  it('reads the latest deps when they change mid-window', () => {
+    // Deps update mid-window: the watcher was armed when BLE was
+    // disconnected, then mid-window the BLE auto-connect succeeds. The
+    // fallback should read the live `isBluetoothConnected=true` and report
+    // `already_connected` instead of the committed-at-arm `false`.
+    const initialDeps = makeDeps({ isBluetoothConnected: false });
+    const { result, rerender } = renderHook((d: Deps) => useWallConfirmFallback(d), {
+      initialProps: initialDeps,
+    });
+
+    act(() => {
+      result.current.armWatcher(baseClimb);
+    });
+
+    // BLE connects mid-window.
+    const connectedDeps = makeDeps({ isBluetoothConnected: true });
+    rerender(connectedDeps);
+
+    act(() => {
+      vi.advanceTimersByTime(WALL_CONFIRM_TIMEOUT_MS);
+    });
+
+    expect(initialDeps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(connectedDeps.bluetoothConnect).not.toHaveBeenCalled();
+    expect(mockTrack).toHaveBeenCalledWith(
+      'Wall Confirm Timeout',
+      expect.objectContaining({ fallback: 'already_connected' }),
+    );
   });
 });
