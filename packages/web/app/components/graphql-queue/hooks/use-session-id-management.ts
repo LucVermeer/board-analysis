@@ -42,6 +42,12 @@ export function useSessionIdManagement({
     isOffBoardMode ? persistentSessionId : sessionIdFromCookie,
   );
 
+  // Compute base board path up front — the board-path gate on the
+  // persistent-session sync effect below reads it. This used to live further
+  // down (after the sync effect), so moving it up keeps the lexical order in
+  // sync with the React hook order it always ran in.
+  const baseBoardPath = useMemo(() => propsBaseBoardPath ?? getBaseBoardPath(pathname), [propsBaseBoardPath, pathname]);
+
   // Backward compat: migrate ?session= URL param to cookie and strip from URL
   useEffect(() => {
     if (isOffBoardMode) return;
@@ -56,11 +62,39 @@ export function useSessionIdManagement({
     }
   }, [searchParams, isOffBoardMode, pathname, router]);
 
-  // Sync activeSessionId from persistent session (off-board mode only)
+  // Sync activeSessionId from persistent session when a new session is
+  // activated. Covers both modes:
+  //   - Off-board: persistentSessionId is the only source of truth.
+  //   - Board: the cookie set by start-sesh-drawer is the initial value, but
+  //     when the user creates a session from THIS provider's route (no
+  //     navigation, same baseBoardPath as the page they're on), nothing
+  //     else picks up the new id. Without this sync, isPersistentSessionActive
+  //     stays false, deriveIsDriver returns true (solo branch), and the
+  //     drawer lightbulb keeps reading as "lit BLE" instead of flipping to
+  //     "party, no driver claimed yet".
+  //
+  // Guarded on persistentSessionId being non-null so the cookie value isn't
+  // wiped during the initial IndexedDB-load window (where activeSession is
+  // briefly null before restoration completes). The active→null deactivation
+  // case is handled by the prevPersistentSessionIdRef effect below.
+  //
+  // In board mode we further gate the sync on the active session's board path
+  // matching the current route. Multi-session restore can leave session C
+  // (board X) in IndexedDB while the user is browsing board Y — without this
+  // gate we'd write C's id into board Y's cookie/state and have isPersistentSessionActive
+  // briefly flicker true on the wrong board until the boardPath check on
+  // L101-L104 settled. Off-board mode skips the gate (there's no route board
+  // to compare against; persistentSessionId is the authority).
+  const activeSessionBoardPath = persistentSession.activeSession?.boardPath
+    ? getBaseBoardPath(persistentSession.activeSession.boardPath)
+    : null;
   useEffect(() => {
-    if (!isOffBoardMode) return;
+    if (!persistentSessionId) return;
+    if (!isOffBoardMode && activeSessionBoardPath && activeSessionBoardPath !== baseBoardPath) {
+      return;
+    }
     setActiveSessionId(persistentSessionId);
-  }, [isOffBoardMode, persistentSessionId]);
+  }, [persistentSessionId, isOffBoardMode, activeSessionBoardPath, baseBoardPath]);
 
   // Sync when persistent session is deactivated externally (e.g. sesh-settings-drawer
   // calling deactivateSession() directly). We track the previous persistentSessionId
@@ -78,9 +112,6 @@ export function useSessionIdManagement({
   }, [persistentSessionId]);
 
   const sessionId = activeSessionId;
-
-  // Compute base board path
-  const baseBoardPath = useMemo(() => propsBaseBoardPath ?? getBaseBoardPath(pathname), [propsBaseBoardPath, pathname]);
 
   // Check if persistent session is active for this board
   const isPersistentSessionActive =

@@ -11,7 +11,7 @@ export const sessionQueries = {
    * Get a session by ID
    * Returns session info including users and queue state
    */
-  session: async (_: unknown, { sessionId }: { sessionId: string }) => {
+  session: async (_: unknown, { sessionId }: { sessionId: string }, ctx: ConnectionContext) => {
     // Validate session ID
     validateInput(SessionIdSchema, sessionId, 'sessionId');
 
@@ -20,6 +20,8 @@ export const sessionQueries = {
 
     const queueState = await roomManager.getQueueState(sessionId);
     const sessionInfo = await roomManager.getSessionById(sessionId);
+    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
+    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
 
     return {
       id: sessionId,
@@ -28,7 +30,10 @@ export const sessionQueries = {
       queueState,
       // These need connection context, but for Query we return defaults
       isLeader: false,
+      driverParticipantId,
+      lastConnectedBoardSerial,
       clientId: '',
+      participantId: ctx.participantId || ctx.connectionId || '',
       goal: sessionInfo?.goal || null,
       isPublic: sessionInfo?.isPublic ?? true,
       startedAt: sessionInfo?.startedAt?.toISOString() || null,

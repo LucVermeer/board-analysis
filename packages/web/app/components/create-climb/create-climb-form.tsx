@@ -44,7 +44,7 @@ import { useCreateClimb } from './use-create-climb';
 import { useMoonBoardCreateClimb } from './use-moonboard-create-climb';
 import { useBoardBluetooth } from '../board-bluetooth-control/use-board-bluetooth';
 import type { MoonBoardClimbDuplicateMatch, UpdateClimbInput } from '@boardsesh/shared-schema';
-import type { BoardDetails, Climb } from '@/app/lib/types';
+import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';
 import { convertLitUpHoldsStringToMap } from '../board-renderer/util';
 import type { LitUpHoldsMap } from '../board-renderer/types';
 import { getMoonBoardGradeLabel, MOONBOARD_GRADES, MOONBOARD_ANGLES } from '@/app/lib/moonboard-config';
@@ -52,7 +52,8 @@ import { getSoftGradeColor } from '@/app/lib/grade-colors';
 import { useColorMode } from '@/app/hooks/use-color-mode';
 import { parseScreenshot } from '@boardsesh/moonboard-ocr/browser';
 import { convertOcrHoldsToMap } from '@/app/lib/moonboard-climbs-db';
-import { createGraphQLClient, execute, type Client } from '../graphql-queue/graphql-client';
+import { createGraphQLClient, execute, GraphQLOperationError, type Client } from '../graphql-queue/graphql-client';
+import SimilarClimbsList from '@/app/components/similar-climbs/similar-climbs-list';
 import { getBackendWsUrl } from '@/app/lib/backend-url';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
@@ -72,7 +73,7 @@ import {
   type ClimbSearchCountResponse,
   type ClimbSearchInputVariables,
 } from '@/app/lib/graphql/operations/climb-search';
-import { convertLitUpHoldsMapToMoonBoardHolds, isMoonBoardDuplicateError } from '@/app/lib/moonboard-climb-helpers';
+import { convertLitUpHoldsMapToMoonBoardHolds } from '@/app/lib/moonboard-climb-helpers';
 import styles from './create-climb-form.module.css';
 import {
   CHECK_MOONBOARD_CLIMB_DUPLICATES_QUERY,
@@ -240,6 +241,12 @@ export default function CreateClimbForm({
   const markJustSaved = useCallback(() => {
     setJustSaved(true);
     autosaveSuppressedRef.current = true;
+    // A successful save clears any prior duplicate-publish error. The
+    // useEffect on litUpHoldsMap / isDraft already covers the "user changed
+    // a hold" path; this catches the metadata-only-retry case where the
+    // user fixed the conflict by re-saving without touching holds or the
+    // draft flag (e.g. server-side state changed in the meantime).
+    setPublishDuplicateError(null);
     void clearAutosave();
     if (savedTimeoutRef.current !== null) {
       window.clearTimeout(savedTimeoutRef.current);
@@ -311,6 +318,23 @@ export default function CreateClimbForm({
   const [selectedAngle, setSelectedAngle] = useState<number>(angle);
   const [moonBoardDuplicateMatch, setMoonBoardDuplicateMatch] = useState<MoonBoardClimbDuplicateMatch | null>(null);
   const [isCheckingMoonBoardDuplicate, setIsCheckingMoonBoardDuplicate] = useState(false);
+  // Set when a publish attempt is rejected by the server because the holds
+  // exactly match an existing climb. We surface an inline Alert + a drawer
+  // that shows the matching climb via the SimilarClimbsList component.
+  // `target` says how to drive the list — by frames (Aurora) or by the
+  // existing climb's uuid (MoonBoard, where we don't compose frames locally).
+  // `target` is what drives the SimilarClimbsList drawer. It's optional —
+  // if the backend's CLIMB_IS_DUPLICATE error didn't carry an existing-climb
+  // uuid AND we can't compose a frames string on the client (today: MoonBoard
+  // without a uuid in the extension), the inline error still renders but the
+  // "View matching climb" button hides. Avoids sending an empty `frames` to
+  // the server, which would fail SimilarClimbsInputSchema's min(1) check.
+  const [publishDuplicateError, setPublishDuplicateError] = useState<{
+    existingClimbUuid: string | null;
+    existingClimbName: string | null;
+    target: { kind: 'frames'; frames: string } | { kind: 'climbUuid'; climbUuid: string } | null;
+  } | null>(null);
+  const [showDuplicateMatchDrawer, setShowDuplicateMatchDrawer] = useState(false);
 
   // Common state — in edit mode use the original name, not "{name} fork"
   const isEditMode = !!editClimb;
@@ -434,6 +458,42 @@ export default function CreateClimbForm({
     // itself — otherwise this effect would re-run every time we clear the flag.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [climbName, description, litUpHoldsMap]);
+
+  // Clear the publish duplicate error when the user changes anything that
+  // could resolve it — toggling isDraft (the suggested escape hatch) or
+  // changing the hold pattern. We snapshot the holds (and isDraft) at the
+  // moment the error is set so async hold-map updates that happen *after*
+  // the error (e.g. autosave restore on a remount, a bluetooth state echo)
+  // don't wipe the error before the user has actually edited anything.
+  // Comparison is content-based — litUpHoldsMap can churn its object
+  // identity without contents changing.
+  const errorSnapshotRef = useRef<{ holdsJson: string; isDraft: boolean } | null>(null);
+  useEffect(() => {
+    if (!publishDuplicateError) {
+      errorSnapshotRef.current = null;
+      setShowDuplicateMatchDrawer(false);
+      return;
+    }
+    if (errorSnapshotRef.current === null) {
+      errorSnapshotRef.current = { holdsJson: JSON.stringify(litUpHoldsMap), isDraft };
+      return;
+    }
+    const currentHoldsJson = JSON.stringify(litUpHoldsMap);
+    if (currentHoldsJson !== errorSnapshotRef.current.holdsJson || isDraft !== errorSnapshotRef.current.isDraft) {
+      setPublishDuplicateError(null);
+    }
+  }, [publishDuplicateError, litUpHoldsMap, isDraft]);
+
+  // The SimilarClimbsList needs the active board+layout to scope its query.
+  // Aurora reads from boardDetails; MoonBoard reads from the layoutId prop.
+  // Both stay null when their source isn't ready — render path below hides
+  // the drawer rather than silently defaulting to a wrong board (a Tension
+  // user shouldn't see Kilter results because boardDetails hadn't loaded
+  // by the time the publish attempt threw).
+  const duplicateMatchBoardName: BoardName | null =
+    boardType === 'aurora' ? ((boardDetails?.board_name as BoardName | undefined) ?? null) : 'moonboard';
+  const duplicateMatchLayoutId: number | null =
+    boardType === 'aurora' ? (boardDetails?.layout_id ?? null) : (layoutId ?? null);
 
   // Hold-type picker: tracks which hold the user just tapped, anchors the
   // popover against its DOM element, and routes selections back to setHoldState.
@@ -744,10 +804,13 @@ export default function CreateClimbForm({
 
     setIsSaving(true);
 
-    try {
-      const frames = generateFramesString();
+    // Captured before the try/catch so the catch block can drive the
+    // duplicate-resolution drawer off the exact frames we attempted to
+    // save, rather than re-reading the form state (which the user may
+    // have edited between the failure and the catch).
+    const frames = generateFramesString();
 
-      // Invalidation keys used in both branches.
+    try {
       const invalidateDraftCaches = () =>
         Promise.all([
           queryClient.invalidateQueries({
@@ -869,7 +932,15 @@ export default function CreateClimbForm({
       track('Climb Create Failed', {
         boardLayout: boardDetails.layout_name || '',
       });
-      showMessage(error instanceof Error ? error.message : 'Failed to save climb. Please try again.', 'error');
+      if (error instanceof GraphQLOperationError && error.extensions?.code === 'CLIMB_IS_DUPLICATE') {
+        setPublishDuplicateError({
+          existingClimbUuid: error.extensions.existingClimbUuid ?? null,
+          existingClimbName: error.extensions.existingClimbName ?? null,
+          target: { kind: 'frames', frames },
+        });
+      } else {
+        showMessage(error instanceof Error ? error.message : t('createClimbForm.alerts.saveFailedFallback'), 'error');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -888,6 +959,7 @@ export default function CreateClimbForm({
     savedClimb,
     showMessage,
     syncSavedClimbToQueue,
+    t,
   ]);
 
   // Save climb - MoonBoard
@@ -1026,10 +1098,18 @@ export default function CreateClimbForm({
       markJustSaved();
     } catch (error) {
       console.error('Failed to save climb:', error);
-      if (error instanceof Error && isMoonBoardDuplicateError(error.message)) {
-        await runMoonBoardDuplicateCheck(moonBoardHolds);
+      if (error instanceof GraphQLOperationError && error.extensions?.code === 'CLIMB_IS_DUPLICATE') {
+        const existingClimbUuid = error.extensions.existingClimbUuid ?? null;
+        setPublishDuplicateError({
+          existingClimbUuid,
+          existingClimbName: error.extensions.existingClimbName ?? null,
+          // MoonBoard doesn't expose a canonical frames string on the client,
+          // so drive the SimilarClimbsList off the existing climb's uuid.
+          target: existingClimbUuid ? { kind: 'climbUuid', climbUuid: existingClimbUuid } : null,
+        });
+      } else {
+        showMessage(error instanceof Error ? error.message : t('createClimbForm.alerts.saveFailedFallback'), 'error');
       }
-      showMessage(error instanceof Error ? error.message : 'Failed to save climb. Please try again.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -1047,11 +1127,11 @@ export default function CreateClimbForm({
     wsAuthToken,
     queryClient,
     showMessage,
-    runMoonBoardDuplicateCheck,
     markJustSaved,
     savedClimb,
     updateClimb,
     syncSavedClimbToQueue,
+    t,
   ]);
 
   const handleAuthSuccess = useCallback(async () => {
@@ -1448,15 +1528,44 @@ export default function CreateClimbForm({
           </MuiAlert>
         )}
 
-        {boardType === 'moonboard' && moonBoardDuplicateError && (
+        {/* MoonBoard pre-save live check Alert. Two things govern when it
+            shows: (1) the live debounced query has flagged a match, AND
+            (2) the save-time CLIMB_IS_DUPLICATE gate hasn't already
+            surfaced its own (richer) Alert. The two error UIs would
+            otherwise stack on the same publish attempt. */}
+        {boardType === 'moonboard' && moonBoardDuplicateError && !publishDuplicateError && (
           <MuiAlert severity="error" className={styles.alertBanner}>
             {moonBoardDuplicateError}
           </MuiAlert>
         )}
 
-        {boardType === 'moonboard' && !moonBoardDuplicateError && isCheckingMoonBoardDuplicate && isValid && (
-          <MuiAlert severity="info" className={styles.alertBanner}>
-            {t('createClimbForm.alerts.checkingMoonBoardDuplicate')}
+        {boardType === 'moonboard' &&
+          !moonBoardDuplicateError &&
+          !publishDuplicateError &&
+          isCheckingMoonBoardDuplicate &&
+          isValid && (
+            <MuiAlert severity="info" className={styles.alertBanner}>
+              {t('createClimbForm.alerts.checkingMoonBoardDuplicate')}
+            </MuiAlert>
+          )}
+
+        {publishDuplicateError && (
+          <MuiAlert
+            severity="error"
+            className={styles.alertBanner}
+            action={
+              publishDuplicateError.target ? (
+                <MuiButton color="inherit" size="small" onClick={() => setShowDuplicateMatchDrawer(true)}>
+                  {t('createClimbForm.alerts.viewMatchingClimb')}
+                </MuiButton>
+              ) : undefined
+            }
+          >
+            {publishDuplicateError.existingClimbName
+              ? t('createClimbForm.alerts.publishDuplicateNamed', {
+                  name: publishDuplicateError.existingClimbName,
+                })
+              : t('createClimbForm.alerts.publishDuplicateUnnamed')}
           </MuiAlert>
         )}
 
@@ -1648,6 +1757,42 @@ export default function CreateClimbForm({
           onLoadDraft={handleLoadDraft}
           onDraftDeleted={handleDraftDeleted}
         />
+      )}
+
+      {/* Drawer that surfaces the existing climb whose holds matched, so the
+          user can decide whether to drop their candidate, save as draft, or
+          shift a hold. SimilarClimbsList runs the same query as the playview
+          drawer's similar-climbs section, just pinned at threshold 1.0. */}
+      {publishDuplicateError?.target && duplicateMatchBoardName && duplicateMatchLayoutId != null && (
+        <SwipeableDrawer
+          title={t('createClimbForm.alerts.identicalClimbDrawerTitle')}
+          placement="bottom"
+          open={showDuplicateMatchDrawer}
+          onClose={() => setShowDuplicateMatchDrawer(false)}
+          swipeEnabled
+        >
+          <Box sx={{ p: 2 }}>
+            {publishDuplicateError.target.kind === 'frames' ? (
+              <SimilarClimbsList
+                boardType={duplicateMatchBoardName}
+                layoutId={duplicateMatchLayoutId}
+                frames={publishDuplicateError.target.frames}
+                threshold={1.0}
+                limit={20}
+                emptyMessage={t('similarClimbs.emptyIdentical')}
+              />
+            ) : (
+              <SimilarClimbsList
+                boardType={duplicateMatchBoardName}
+                layoutId={duplicateMatchLayoutId}
+                climbUuid={publishDuplicateError.target.climbUuid}
+                threshold={1.0}
+                limit={20}
+                emptyMessage={t('similarClimbs.emptyIdentical')}
+              />
+            )}
+          </Box>
+        </SwipeableDrawer>
       )}
 
       {/* Settings nested drawer */}

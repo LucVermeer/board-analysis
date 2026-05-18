@@ -75,8 +75,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Suspense fallback={null}>
           <AnalyticsClient />
         </Suspense>
-        <QueryClientProvider>
-          <SessionProviderWrapper>
+        {/* QueryClientProvider sits inside SessionProviderWrapper so its
+            PersistQueryClientProvider can read useSession() — do not reorder. */}
+        <SessionProviderWrapper>
+          <QueryClientProvider>
             <AppRouterCacheProvider>
               <ColorModeProvider>
                 <I18nProvider
@@ -111,8 +113,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </I18nProvider>
               </ColorModeProvider>
             </AppRouterCacheProvider>
-          </SessionProviderWrapper>
-        </QueryClientProvider>
+          </QueryClientProvider>
+        </SessionProviderWrapper>
         <VercelSpeedInsights />
         {process.env.NODE_ENV === 'development' && <VercelToolbar />}
       </body>

@@ -40,8 +40,15 @@ let mockBluetoothState = {
 };
 let mockPickerState: PickerStateMock = null;
 
+// Capture the `onConnectSuccess` callback passed by BluetoothProvider so
+// tests can simulate "BLE connected with parsed serial" without rendering
+// the real adapter or stubbing every other useBoardBluetooth dependency.
+let lastUseBoardBluetoothOptions: { onConnectSuccess?: (serial: string | null) => void } | null = null;
 vi.mock('../use-board-bluetooth', () => ({
-  useBoardBluetooth: () => ({ ...mockBluetoothState, pickerState: mockPickerState }),
+  useBoardBluetooth: (options: { onConnectSuccess?: (serial: string | null) => void }) => {
+    lastUseBoardBluetoothOptions = options;
+    return { ...mockBluetoothState, pickerState: mockPickerState };
+  },
 }));
 
 let mockAuth: { token: string | null; isAuthenticated: boolean } = { token: null, isAuthenticated: false };
@@ -112,8 +119,20 @@ vi.mock('../bluetooth-status-store', () => ({
 vi.mock('@/app/lib/ble/capacitor-utils', () => ({
   isCapacitor: vi.fn(() => false),
   isCapacitorWebView: vi.fn(() => false),
+  isNativeApp: vi.fn(() => false),
   waitForCapacitor: vi.fn().mockResolvedValue(false),
   CAPACITOR_BRIDGE_TIMEOUT_MS: 2000,
+}));
+
+const mockConfirmClimbOnWall = vi.fn().mockResolvedValue(undefined);
+const mockSetSessionBoardSerial = vi.fn().mockResolvedValue(undefined);
+let mockPersistentSessionState: { session: { id: string } | null } = { session: null };
+vi.mock('@/app/components/persistent-session', () => ({
+  usePersistentSessionActions: () => ({
+    confirmClimbOnWall: mockConfirmClimbOnWall,
+    setSessionBoardSerial: mockSetSessionBoardSerial,
+  }),
+  usePersistentSessionState: () => mockPersistentSessionState,
 }));
 
 let mockCurrentClimbQueueItem: {
@@ -178,6 +197,10 @@ describe('BluetoothProvider', () => {
     lastMismatchProps = null;
     mockAuth = { token: null, isAuthenticated: false };
     mockResolveSerialNumbers.mockResolvedValue(new Map());
+    mockPersistentSessionState = { session: null };
+    mockConfirmClimbOnWall.mockResolvedValue(undefined);
+    mockSetSessionBoardSerial.mockResolvedValue(undefined);
+    lastUseBoardBluetoothOptions = null;
   });
 
   describe('useBluetoothContext', () => {
@@ -362,22 +385,27 @@ describe('BluetoothProvider', () => {
     });
   });
 
-  describe('rapid-swiping cancellation', () => {
-    it('passes AbortSignal to sendFramesToBoard and aborts on unmount', async () => {
-      // Simulate a slow send that doesn't resolve
-      let resolveFirstSend: (value: boolean) => void;
+  describe('rapid-swiping serialization', () => {
+    it('queues the latest climb while a write is in flight and sends it after current completes', async () => {
+      // Web BT on Android can't actually cancel an in-flight GATT operation,
+      // so the AutoSender serializes writes via a latest-wins queue instead
+      // of abort-and-restart. While one write is in flight, the most recent
+      // pending climb is stored and sent when the current write resolves.
+      // Intermediate climbs are skipped.
+      let resolveFirstSend: (value: boolean) => void = () => {};
       mockSendFramesToBoard.mockImplementationOnce(
         () =>
           new Promise<boolean>((resolve) => {
             resolveFirstSend = resolve;
           }),
       );
+      mockSendFramesToBoard.mockResolvedValue(true);
       mockCurrentClimbQueueItem = {
         climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
       };
       mockBluetoothState.isConnected = true;
 
-      const { unmount } = renderHook(() => useBluetoothContext(), {
+      const { rerender } = renderHook(() => useBluetoothContext(), {
         wrapper: createWrapper(),
       });
 
@@ -388,57 +416,75 @@ describe('BluetoothProvider', () => {
         });
       });
 
-      // Verify an AbortSignal was passed as the third argument
-      const signal = mockSendFramesToBoard.mock.calls[0][2] as AbortSignal;
-      expect(signal).toBeInstanceOf(AbortSignal);
-      expect(signal.aborted).toBe(false);
+      // Swap in a new climb while the first is in flight — should queue
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-2', frames: 'p3r14', mirrored: false },
+      };
+      rerender();
 
-      // Unmount triggers effect cleanup which aborts the controller
-      unmount();
-      expect(signal.aborted).toBe(true);
+      // And another — should overwrite the queued climb (latest wins)
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-3', frames: 'p5r16', mirrored: false },
+      };
+      rerender();
 
-      // Resolve the send — since signal is aborted, analytics should not be tracked
-      resolveFirstSend!(true);
-      // Give microtasks a chance to flush
+      // Still only one in-flight write so far
+      expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+
+      // Resolve the first send — drain loop picks up climb-3 (climb-2 skipped)
+      resolveFirstSend(true);
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 10));
+        await vi.waitFor(() => {
+          expect(mockSendFramesToBoard).toHaveBeenCalledTimes(2);
+        });
       });
-      expect(mockTrack).not.toHaveBeenCalled();
+      expect(mockSendFramesToBoard).toHaveBeenLastCalledWith('p5r16', false, expect.any(AbortSignal), 'climb-3');
     });
 
-    it('does not track analytics when send throws after abort', async () => {
-      // When signal is already aborted, the send throws AbortError
-      // The catch block should check signal.aborted and skip analytics
-      mockSendFramesToBoard.mockImplementation((_frames: string, _mirrored: boolean, signal?: AbortSignal) => {
-        if (signal?.aborted) {
-          return Promise.reject(new DOMException('Write aborted', 'AbortError'));
-        }
-        return Promise.resolve(true);
-      });
+    it('deduplicates back-to-back same-uuid broadcasts — single send + single confirmClimbOnWall', async () => {
+      // The reducer now lets duplicate CurrentClimbChanged events through
+      // (so the BLE phone re-sends on every event, including takeControl
+      // re-broadcasts of the same climb). The AutoSender must skip the
+      // re-send so analytics + confirmClimbOnWall don't double-fire.
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+      mockSendFramesToBoard.mockResolvedValue(true);
       mockCurrentClimbQueueItem = {
         climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
       };
       mockBluetoothState.isConnected = true;
 
-      renderHook(() => useBluetoothContext(), {
+      const { rerender } = renderHook(() => useBluetoothContext(), {
         wrapper: createWrapper(),
       });
 
+      // Wait for the first send + confirm.
       await act(async () => {
         await vi.waitFor(() => {
           expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+          expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(1);
         });
       });
 
-      // The signal was NOT aborted, so analytics should track success
+      // Same uuid re-broadcast (new object identity, but uuid unchanged).
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      rerender();
+
+      // Let any pending microtasks / drain iterations run.
       await act(async () => {
-        await vi.waitFor(() => {
-          expect(mockTrack).toHaveBeenCalledWith('Climb Sent to Board Success', {
-            climbUuid: 'climb-1',
-            boardLayout: 'Original',
-          });
-        });
+        await Promise.resolve();
+        await Promise.resolve();
       });
+
+      // No additional send / confirm fired for the duplicate.
+      expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+      expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(1);
+      expect(
+        mockTrack.mock.calls.filter(
+          (call) => call[0] === 'Climb Sent to Board Success' && call[1]?.climbUuid === 'climb-1',
+        ),
+      ).toHaveLength(1);
     });
   });
 
@@ -599,6 +645,234 @@ describe('BluetoothProvider', () => {
       expect(mockPickerHandleSelect).not.toHaveBeenCalled();
       expect(mockPickerHandleCancel).not.toHaveBeenCalled();
       expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('session mutations', () => {
+    it('fires confirmClimbOnWall once per successful send with the climb uuid', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+      mockSendFramesToBoard.mockResolvedValue(true);
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(1);
+        });
+      });
+      expect(mockConfirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+    });
+
+    it('does not call confirmClimbOnWall when no session exists (solo)', async () => {
+      // The local wall-confirm bus still receives the signal (drawer timer
+      // dismisses), but the WS mutation is skipped — solo has no peers.
+      mockPersistentSessionState = { session: null };
+      mockSendFramesToBoard.mockResolvedValue(true);
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      expect(mockConfirmClimbOnWall).not.toHaveBeenCalled();
+    });
+
+    it('does not call confirmClimbOnWall when send returns false', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+      mockSendFramesToBoard.mockResolvedValue(false);
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(mockTrack).toHaveBeenCalledWith('Climb Sent to Board Failure', expect.any(Object));
+        });
+      });
+
+      expect(mockConfirmClimbOnWall).not.toHaveBeenCalled();
+    });
+
+    it('does not call confirmClimbOnWall when send throws a non-Abort error', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+      mockSendFramesToBoard.mockRejectedValue(new Error('Bluetooth write failed'));
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(mockTrack).toHaveBeenCalledWith('Climb Sent to Board Failure', expect.any(Object));
+        });
+      });
+
+      expect(mockConfirmClimbOnWall).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it('fires setSessionBoardSerial when connect resolves with a parsed serial in a session', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(lastUseBoardBluetoothOptions?.onConnectSuccess).toBeDefined();
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+
+      expect(mockSetSessionBoardSerial).toHaveBeenCalledTimes(1);
+      expect(mockSetSessionBoardSerial).toHaveBeenCalledWith('KB-12345');
+    });
+
+    it('does not call setSessionBoardSerial when no session exists (solo)', async () => {
+      mockPersistentSessionState = { session: null };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+
+      expect(mockSetSessionBoardSerial).not.toHaveBeenCalled();
+    });
+
+    it('does not call setSessionBoardSerial for a null serial (e.g. moonboard)', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.(null);
+        await Promise.resolve();
+      });
+
+      expect(mockSetSessionBoardSerial).not.toHaveBeenCalled();
+    });
+
+    it('routes confirmClimbOnWall through the live session when a session is joined mid-send', async () => {
+      // The session-id mirror ref in BluetoothProvider lets the post-send
+      // callback read the *live* sessionId rather than a snapshot captured
+      // at render time. Start solo, kick off a long-running send, join a
+      // session before the send resolves, and assert the confirm fires.
+      mockPersistentSessionState = { session: null };
+      let resolveSend: (value: boolean) => void = () => {};
+      mockSendFramesToBoard.mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveSend = resolve;
+          }),
+      );
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      const { rerender } = renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      // Join a session while the BLE write is in flight.
+      mockPersistentSessionState = { session: { id: 'session-late' } };
+      rerender();
+
+      // Resolve the send — confirmClimbOnWall should fire against the joined session.
+      await act(async () => {
+        resolveSend(true);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await vi.waitFor(() => {
+        expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(1);
+      });
+      expect(mockConfirmClimbOnWall).toHaveBeenCalledWith('climb-1');
+    });
+  });
+
+  describe('unmount mid-send', () => {
+    it('does not fire confirmClimbOnWall or success analytics when provider unmounts mid-send', async () => {
+      // The AutoSender abort-controller cleanup runs on unmount. The
+      // in-flight write must NOT fire `confirmClimbOnWall` (party) or the
+      // success analytic for a climb the user has navigated away from.
+      mockPersistentSessionState = { session: { id: 'session-1' } };
+      let resolveSend: (value: boolean) => void = () => {};
+      mockSendFramesToBoard.mockImplementation(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveSend = resolve;
+          }),
+      );
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      const { unmount } = renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      // Wait for the drain loop to invoke sendFramesToBoard.
+      await act(async () => {
+        await vi.waitFor(() => {
+          expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      // Unmount the provider mid-send (e.g. user navigated away).
+      unmount();
+
+      // Resolve the in-flight write as if the OS-level GATT write completed
+      // after the JS abort. The drain loop must bail before firing the
+      // post-send side effects.
+      await act(async () => {
+        resolveSend(true);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockConfirmClimbOnWall).not.toHaveBeenCalled();
+      expect(mockTrack.mock.calls.find((call) => call[0] === 'Climb Sent to Board Success')).toBeUndefined();
     });
   });
 });

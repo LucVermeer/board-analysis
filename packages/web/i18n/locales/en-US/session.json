@@ -180,7 +180,10 @@
     },
     "tickBar": {
       "collapse": "Collapse",
-      "expand": "Expand"
+      "expand": "Expand",
+      "expandAria": "Expand tick bar",
+      "collapseAria": "Collapse tick bar",
+      "commentAria": "Tick comment"
     },
     "ariaLabels": {
       "leaveSession": "Leave session",
@@ -189,13 +192,22 @@
       "shareSessionLink": "Share session link",
       "closeTickBar": "Close tick bar",
       "enterPlayMode": "Enter play mode",
-      "logAttempt": "Log attempt"
+      "logAttempt": "Log attempt",
+      "showParticipants": "Show participants",
+      "hideParticipants": "Hide participants",
+      "openWallView": "Show what's on the wall",
+      "userIsDriving": "{{username}} is driving"
+    },
+    "offline": {
+      "idle": "Offline",
+      "party": "Offline. Queued climbs will still sync.",
+      "solo": "Offline. Changes will sync when you reconnect."
     }
   },
   "queueDrawer": {
-    "title": "Queue",
-    "clearTitle": "Clear queue",
-    "clearDescription": "Are you sure you want to clear all items from the queue?",
+    "title": "Up next",
+    "clearTitle": "Clear up next",
+    "clearDescription": "Are you sure you want to clear everything in up next?",
     "clearConfirm": "Clear",
     "clear": "Clear",
     "removeItems_one": "Remove {{count}} item",
@@ -208,9 +220,10 @@
     "endMessage": "That's all for now"
   },
   "queueProvider": {
-    "offlineLimitReached": "You've hit the offline queue limit. Reconnect to sync your climbs."
+    "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs."
   },
   "playView": {
+    "wallViewHeader": "Currently on the wall",
     "yourAscents_one": "Your Ascent ({{count}})",
     "yourAscents_other": "Your Ascents ({{count}})",
     "triesCount_one": "{{count}} try",
@@ -221,7 +234,14 @@
     "browseClimbs": "Browse Climbs",
     "actionBar": {
       "climbActionsAria": "Climb actions",
-      "openQueueAria": "Open queue"
+      "openQueueAria": "Open up next",
+      "lightbulb": {
+        "drivingNamed": "You’re driving “{{name}}”. Tap to release control.",
+        "driving": "You’re driving. Tap to release control.",
+        "takeNamed": "Take wall control and send “{{name}}”",
+        "take": "Take wall control",
+        "coachmark": "Send to the wall"
+      }
     },
     "tickFab": {
       "logAscentAria": "Log ascent"

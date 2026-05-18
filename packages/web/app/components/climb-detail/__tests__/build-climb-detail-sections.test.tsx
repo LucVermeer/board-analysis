@@ -115,6 +115,7 @@ const BASE_PROPS = {
   climbUuid: MOCK_CLIMB.uuid,
   boardType: 'kilter',
   angle: 40,
+  layoutId: 1,
 };
 
 // ---------------------------------------------------------------------------
@@ -128,13 +129,20 @@ describe('useBuildClimbDetailSections', () => {
     mockBetaLinks = [];
   });
 
-  it('returns 5 sections when enabled (default)', () => {
+  it('returns 6 sections when enabled (default)', () => {
     const { result } = renderHook(() => useBuildClimbDetailSections(BASE_PROPS), {
       wrapper: createWrapper(),
     });
 
-    expect(result.current).toHaveLength(5);
-    expect(result.current.map((s) => s.key)).toEqual(['beta', 'logbook', 'crew-logbook', 'community', 'analytics']);
+    expect(result.current).toHaveLength(6);
+    expect(result.current.map((s) => s.key)).toEqual([
+      'beta',
+      'logbook',
+      'crew-logbook',
+      'community',
+      'analytics',
+      'similar-climbs',
+    ]);
   });
 
   it('returns empty array when enabled is false', () => {
@@ -156,8 +164,15 @@ describe('useBuildClimbDetailSections', () => {
 
     rerender({ enabled: true });
 
-    expect(result.current).toHaveLength(5);
-    expect(result.current.map((s) => s.key)).toEqual(['beta', 'logbook', 'crew-logbook', 'community', 'analytics']);
+    expect(result.current).toHaveLength(6);
+    expect(result.current.map((s) => s.key)).toEqual([
+      'beta',
+      'logbook',
+      'crew-logbook',
+      'community',
+      'analytics',
+      'similar-climbs',
+    ]);
   });
 
   it('all sections are lazy', () => {

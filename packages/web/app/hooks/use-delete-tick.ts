@@ -40,6 +40,8 @@ export function useDeleteTick() {
       queryClient.removeQueries({ queryKey: ['logbook'] });
       void queryClient.invalidateQueries({ queryKey: ['sessionDetail'] });
       void queryClient.invalidateQueries({ queryKey: ['userProfileStats'] });
+      void queryClient.invalidateQueries({ queryKey: ['userTicks'] });
+      void queryClient.invalidateQueries({ queryKey: ['userClimbPercentile'] });
     },
     onError: (err) => {
       let errorMessage = 'Failed to delete tick';

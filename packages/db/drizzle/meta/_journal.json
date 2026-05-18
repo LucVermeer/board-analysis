@@ -694,6 +694,20 @@
       "when": 1778814078423,
       "tag": "0098_mute_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1778892409830,
+      "tag": "0099_split_ascensionist_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1778933722490,
+      "tag": "0100_backfill_boardsesh_climb_averages",
+      "breakpoints": true
     }
   ]
 }

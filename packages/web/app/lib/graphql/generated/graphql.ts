@@ -1090,6 +1090,15 @@ export type DiscoverableSession = {
   participantCount: Scalars['Int']['output'];
 };
 
+/** Event when the wall driver changes (the participant authorized to drive the wall via the queue-control-bar pivot's lightbulb). Null when no member is currently driving. */
+export type DriverChanged = {
+  __typename?: 'DriverChanged';
+  /** Stable participant id of the new driver, or null when control was released */
+  driverParticipantId?: Maybe<Scalars['ID']['output']>;
+  /** Stable participant id of the previous driver, or null when there was none (e.g. the very first take of the session, or after a release). Lets clients render 'X took the wall from Y' toasts and populate the Phase 5 previousDriver analytics property without local bookkeeping. */
+  previousDriverParticipantId?: Maybe<Scalars['ID']['output']>;
+};
+
 /**
  * Response containing events since a given sequence number.
  * Used for delta synchronization when reconnecting.
@@ -1770,6 +1779,19 @@ export type Mutation = {
    */
   attachBetaLink: Scalars['Boolean']['output'];
   authorizeControllerForSession: Scalars['Boolean']['output'];
+  /**
+   * Confirm to all session participants that a climb was successfully relayed to the wall
+   * over BLE from this client's phone. Any session participant may call (no driver
+   * requirement) — the BLE-capable phone that handled the send is the source of truth for
+   * confirmation. The server stamps `confirmedAt` and `confirmedByParticipantId` from
+   * the caller's identity; clients cannot forge either field. Publishes
+   * `WallConfirmedClimb`. The optional `queueItemUuid` disambiguates the press when
+   * the same climb is queued twice. Returns the resolved Session so optimistic-UI callers
+   * can apply server-derived state without a follow-up query (symmetric with
+   * `takeControl` / `releaseControl`). Session identity is resolved from the WebSocket
+   * connection context — no `sessionId` argument is required.
+   */
+  confirmClimbOnWall: Session;
   controllerHeartbeat: Scalars['Boolean']['output'];
   /** Create a new board. */
   createBoard: UserBoard;
@@ -1858,6 +1880,11 @@ export type Mutation = {
    */
   registerActivityPushToken: Scalars['Boolean']['output'];
   registerController: ControllerRegistration;
+  /**
+   * Release wall-control authority. Clears the driver only when the caller is the current
+   * driver (idempotent otherwise). Publishes `DriverChanged { driverParticipantId: null }`.
+   */
+  releaseControl: Session;
   /** Remove a climb from a playlist. */
   removeClimbFromPlaylist: Scalars['Boolean']['output'];
   /** Remove a member from a gym. */
@@ -1908,6 +1935,15 @@ export type Mutation = {
    * Used for bulk operations or syncing from external sources.
    */
   setQueue: QueueState;
+  /**
+   * Record the BLE board serial that this client paired with so other (mobile)
+   * participants can auto-connect to the same physical board. Any session participant
+   * may call. Idempotent: when the stored serial already matches, no event fires.
+   * Publishes `SessionBoardSerialChanged` on change. Returns the resolved Session for
+   * optimistic-UI symmetry with `takeControl` / `releaseControl`. Session identity is
+   * resolved from the WebSocket connection context — no `sessionId` argument is required.
+   */
+  setSessionBoardSerial: Session;
   /** Setter override: directly set community status for your own climb. */
   setterOverrideCommunityStatus: ClimbCommunityStatus;
   /**
@@ -1918,6 +1954,13 @@ export type Mutation = {
   submitAppFeedback: Scalars['Boolean']['output'];
   /** Subscribe to new climbs for a board type and layout. */
   subscribeNewClimbs: Scalars['Boolean']['output'];
+  /**
+   * Claim wall-control authority in the current session and optionally broadcast a climb.
+   * Any session participant may call — yank-on-press by design. If `climb` is provided, also
+   * appends it to the queue (when not already present) and sets it as the current climb,
+   * mirroring `setCurrentClimb`'s side effects. Publishes `DriverChanged`.
+   */
+  takeControl: Session;
   /**
    * Toggle favorite status for a climb.
    * Returns new favorite state.
@@ -2016,6 +2059,12 @@ export type MutationAttachBetaLinkArgs = {
 export type MutationAuthorizeControllerForSessionArgs = {
   controllerId: Scalars['ID']['input'];
   sessionId: Scalars['ID']['input'];
+};
+
+/** Root mutation type for all write operations. */
+export type MutationConfirmClimbOnWallArgs = {
+  climbUuid: Scalars['ID']['input'];
+  queueItemUuid?: InputMaybe<Scalars['ID']['input']>;
 };
 
 /** Root mutation type for all write operations. */
@@ -2297,6 +2346,11 @@ export type MutationSetQueueArgs = {
 };
 
 /** Root mutation type for all write operations. */
+export type MutationSetSessionBoardSerialArgs = {
+  serial: Scalars['String']['input'];
+};
+
+/** Root mutation type for all write operations. */
 export type MutationSetterOverrideCommunityStatusArgs = {
   input: SetterOverrideInput;
 };
@@ -2309,6 +2363,11 @@ export type MutationSubmitAppFeedbackArgs = {
 /** Root mutation type for all write operations. */
 export type MutationSubscribeNewClimbsArgs = {
   input: NewClimbSubscriptionInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationTakeControlArgs = {
+  climb?: InputMaybe<ClimbQueueItemInput>;
 };
 
 /** Root mutation type for all write operations. */
@@ -3044,6 +3103,18 @@ export type Query = {
   /** Get a setter profile by username. */
   setterProfile?: Maybe<SetterProfile>;
   /**
+   * Find climbs on the same board+layout with at least `threshold` Jaccard
+   * similarity over hold positions (hold_id only, state-agnostic). Used by:
+   * - The playview drawer's "Similar climbs" section at threshold 0.5 —
+   *   empirically the floor where matches feel related rather than
+   *   coincidentally co-located on the wall.
+   * - The create-climb duplicate UX at threshold 1.0, which filters to
+   *   true position-exact matches.
+   * The duplicate-publish gate uses state-aware (hold_id, hold_state)
+   * matching separately — see findExactDuplicateMatch.
+   */
+  similarClimbs: Array<SimilarClimb>;
+  /**
    * Get a smart (computed) playlist for a user — five-stars, most-repeated, or projects.
    * Public — no authentication required.
    */
@@ -3453,6 +3524,11 @@ export type QuerySetterProfileArgs = {
 };
 
 /** Root query type for all read operations. */
+export type QuerySimilarClimbsArgs = {
+  input: SimilarClimbsInput;
+};
+
+/** Root query type for all read operations. */
 export type QuerySmartPlaylistArgs = {
   input: GetSmartPlaylistInput;
 };
@@ -3847,6 +3923,8 @@ export type Session = {
   clientId: Scalars['ID']['output'];
   /** Hex color for multi-session display */
   color?: Maybe<Scalars['String']['output']>;
+  /** Stable participant id of the user currently driving the wall. Set via takeControl, cleared via releaseControl or driver disconnect. Distinct from isLeader, which is presentation/legacy only. */
+  driverParticipantId?: Maybe<Scalars['ID']['output']>;
   /** When the session was ended (ISO 8601) */
   endedAt?: Maybe<Scalars['String']['output']>;
   /** Optional session goal text */
@@ -3859,14 +3937,31 @@ export type Session = {
   isPermanent: Scalars['Boolean']['output'];
   /** Whether session is publicly discoverable */
   isPublic: Scalars['Boolean']['output'];
+  /** Most recently observed BLE board serial for this session. Set when a participant pairs their phone to a physical board; broadcast as SessionBoardSerialChanged so late-joiners can auto-connect to the same board. Null when no board has been recorded. */
+  lastConnectedBoardSerial?: Maybe<Scalars['String']['output']>;
   /** Optional name for the session */
   name?: Maybe<Scalars['String']['output']>;
+  /** Backend-resolved participant id for the requesting client. For authenticated users this is the user UUID; for anonymous users it equals clientId. Use this (not the locally generated activeSession.participantId) when comparing against driverParticipantId — the backend always ignores client-supplied participantIds for security and uses this resolved value as the broadcast identity. TEMPORARILY NULLABLE: a follow-up release will flip this back to ID! once every Session-returning resolver has been audited to confirm it populates the field. Clients should treat null as 'unknown — fall back to clientId for self-checks'. */
+  participantId?: Maybe<Scalars['ID']['output']>;
   /** Current queue state */
   queueState: QueueState;
   /** When the session was started (ISO 8601) */
   startedAt?: Maybe<Scalars['String']['output']>;
   /** Users currently in the session */
   users: Array<SessionUser>;
+};
+
+/**
+ * Event when the session's last-connected BLE board serial changes.
+ * Used by mobile participants to auto-connect to the same board another
+ * member is already paired with — saves the chooser step on the second
+ * phone joining a session in a gym with multiple physical boards.
+ * Null when the board has been forgotten or never recorded.
+ */
+export type SessionBoardSerialChanged = {
+  __typename?: 'SessionBoardSerialChanged';
+  /** Most recently observed BLE board serial, or null when cleared/never set */
+  lastConnectedBoardSerial?: Maybe<Scalars['String']['output']>;
 };
 
 /** Current realtime connection state for a session participant. */
@@ -3937,12 +4032,15 @@ export type SessionEnded = {
 
 /** Union of possible session events. */
 export type SessionEvent =
+  | DriverChanged
   | LeaderChanged
+  | SessionBoardSerialChanged
   | SessionEnded
   | SessionStatsUpdated
   | UserJoined
   | UserLeft
-  | UserPresenceChanged;
+  | UserPresenceChanged
+  | WallConfirmedClimb;
 
 /** A session feed card representing a group of ticks from a climbing session. */
 export type SessionFeedItem = {
@@ -4231,6 +4329,67 @@ export type SetterSearchResult = {
   isFollowedByMe: Scalars['Boolean']['output'];
   /** The setter's Aurora username */
   username: Scalars['String']['output'];
+};
+
+export type SimilarClimb = {
+  __typename?: 'SimilarClimb';
+  angle?: Maybe<Scalars['Int']['output']>;
+  /** Number of recorded ascents at this angle. */
+  ascensionistCount?: Maybe<Scalars['Int']['output']>;
+  /** Number of hold positions on the candidate climb. */
+  candidateHoldCount: Scalars['Int']['output'];
+  /**
+   * Product sizes this climb fits on (denormalised from edge bounds). Callers
+   * on a smaller wall can use this to grey out climbs that extend beyond
+   * their physical board — those climbs are still navigable in the actions
+   * menu but can't be set as the active climb. Empty array means the
+   * server has no compatibility data for this climb (legacy row).
+   */
+  compatibleSizeIds: Array<Scalars['Int']['output']>;
+  /** Difficulty grade name at this climb's angle (e.g. 6c+, V5). */
+  difficultyName?: Maybe<Scalars['String']['output']>;
+  /** Aurora-style frame string for rendering the climb thumbnail. */
+  frames?: Maybe<Scalars['String']['output']>;
+  layoutId: Scalars['Int']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  /** Average quality (0..3 in MoonBoard convention, 0..5 elsewhere) at this angle. */
+  qualityAverage?: Maybe<Scalars['Float']['output']>;
+  setterUsername?: Maybe<Scalars['String']['output']>;
+  /** Number of hold positions present in both climbs. */
+  sharedHoldCount: Scalars['Int']['output'];
+  /** Jaccard similarity (0..1) over hold positions. */
+  similarity: Scalars['Float']['output'];
+  /** Number of hold positions on the target climb (input). */
+  targetHoldCount: Scalars['Int']['output'];
+  uuid: Scalars['ID']['output'];
+};
+
+/**
+ * Input for finding climbs similar to a target on the same board+layout.
+ * Provide either climbUuid (compare against an existing climb's holds) or
+ * frames (compare against a not-yet-saved hold set).
+ */
+export type SimilarClimbsInput = {
+  /**
+   * Viewer angle. When provided, grade/quality/ascent stats and the displayed
+   * difficulty name are resolved against this angle on each candidate climb.
+   * When omitted, falls back to each candidate's own saved angle — useful for
+   * contexts that don't have a viewer angle (e.g. the create-climb duplicate
+   * drawer where the candidate's angle is the right reference).
+   */
+  angle?: InputMaybe<Scalars['Int']['input']>;
+  boardType: Scalars['String']['input'];
+  /** Existing climb to compare against. Reads its holds from the database. */
+  climbUuid?: InputMaybe<Scalars['ID']['input']>;
+  /** Exclude this climb's uuid from results (e.g. when looking up similars for an existing climb). */
+  excludeClimbUuid?: InputMaybe<Scalars['ID']['input']>;
+  /** Raw frames string for an in-progress climb that hasn't been saved yet. */
+  frames?: InputMaybe<Scalars['String']['input']>;
+  layoutId: Scalars['Int']['input'];
+  /** Max number of results to return. Defaults to 25, capped at 200 server-side. */
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  /** Jaccard threshold (0..1). Returns climbs at or above this similarity. */
+  threshold?: InputMaybe<Scalars['Float']['input']>;
 };
 
 /** Climb count for a single smart playlist type (used to render library cards). */
@@ -4827,6 +4986,25 @@ export type VoteSummary = {
 };
 
 /**
+ * Event broadcast when a participant's phone successfully relays a climb to the
+ * wall over BLE. Other clients use this confirmation to flip the queue-control-bar
+ * lightbulb from pending to confirmed and to dismiss the local fallback timer.
+ * Server-stamped: `confirmedAt` is set by the backend on receipt to keep ordering
+ * authoritative across clients.
+ */
+export type WallConfirmedClimb = {
+  __typename?: 'WallConfirmedClimb';
+  /** UUID of the climb that was sent to the wall */
+  climbUuid: Scalars['ID']['output'];
+  /** Server timestamp when the confirmation was received (ISO 8601) */
+  confirmedAt: Scalars['String']['output'];
+  /** Stable participant id of the member whose phone relayed the climb */
+  confirmedByParticipantId: Scalars['ID']['output'];
+  /** UUID of the queue item that triggered this send, or null when the BLE-capable phone reported only a climb UUID. Lets clients disambiguate when the same climb is queued twice — without this, both queue entries' pending lightbulbs would clear on a single confirmation. */
+  queueItemUuid?: Maybe<Scalars['ID']['output']>;
+};
+
+/**
  * Bounding box defining a board region for filtering climbs.
  * Coordinates are in the same grid space as board placements
  * (board_holes.x/y) and board_climbs edge columns.
@@ -5296,6 +5474,31 @@ export type CheckMoonBoardClimbDuplicatesQuery = {
     exists: boolean;
     existingClimbUuid?: string | null;
     existingClimbName?: string | null;
+  }>;
+};
+
+export type SimilarClimbsQueryVariables = Exact<{
+  input: SimilarClimbsInput;
+}>;
+
+export type SimilarClimbsQuery = {
+  __typename?: 'Query';
+  similarClimbs: Array<{
+    __typename?: 'SimilarClimb';
+    uuid: string;
+    name?: string | null;
+    setterUsername?: string | null;
+    angle?: number | null;
+    layoutId: number;
+    frames?: string | null;
+    difficultyName?: string | null;
+    qualityAverage?: number | null;
+    ascensionistCount?: number | null;
+    compatibleSizeIds: Array<number>;
+    similarity: number;
+    sharedHoldCount: number;
+    candidateHoldCount: number;
+    targetHoldCount: number;
   }>;
 };
 
@@ -8272,6 +8475,61 @@ export const CheckMoonBoardClimbDuplicatesDocument = {
     },
   ],
 } as unknown as DocumentNode<CheckMoonBoardClimbDuplicatesQuery, CheckMoonBoardClimbDuplicatesQueryVariables>;
+export const SimilarClimbsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'SimilarClimbs' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'SimilarClimbsInput' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'similarClimbs' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'setterUsername' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'angle' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'frames' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'difficultyName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'qualityAverage' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'ascensionistCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'compatibleSizeIds' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'similarity' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'sharedHoldCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'candidateHoldCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'targetHoldCount' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<SimilarClimbsQuery, SimilarClimbsQueryVariables>;
 export const SaveClimbDocument = {
   kind: 'Document',
   definitions: [

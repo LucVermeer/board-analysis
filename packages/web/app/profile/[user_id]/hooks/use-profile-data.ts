@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
   GET_USER_TICKS,
@@ -24,6 +25,7 @@ import {
 } from '../utils/profile-constants';
 import { getGradeColor, getGradeTextColor } from '@/app/lib/grade-colors';
 import { isAbortError } from '@/app/lib/is-abort-error';
+import { PERSIST_MAX_AGE_MS } from '@/app/lib/react-query-idb-persister';
 import {
   filterLogbookByTimeframe,
   buildAggregatedStackedBars,
@@ -43,75 +45,111 @@ type InitialData = {
   initialNotFound?: boolean;
 };
 
+type BoardTicks = Record<string, LogbookEntry[]>;
+
+// 404 from the profile endpoint is meaningful: the user wants the "not found"
+// page. Tag it so the query consumer can branch on it without parsing strings.
+class ProfileNotFoundError extends Error {
+  readonly code = 'PROFILE_NOT_FOUND';
+  constructor() {
+    super('Profile not found');
+  }
+}
+
+// Brief freshness window so consumers with SSR-seeded `initialData` (tagged
+// with `initialDataUpdatedAt: Date.now()`) don't fire a redundant network
+// request the moment they mount — `refetchOnMount` defaults to `true` for
+// those queries, which means "refetch only if stale". The /you path has no
+// initial data and uses `refetchOnMount: 'always'`, so the staleTime is
+// irrelevant there: every visit triggers a background refetch.
+const PROFILE_STALE_TIME_MS = 30 * 1000;
+
+// Persisted IDB cache lifetime — aligned with the persister so a query never
+// outlives its dehydrated copy.
+const PROFILE_GC_TIME_MS = PERSIST_MAX_AGE_MS;
+
 export function useProfileData(userId: string, initialData?: InitialData) {
   const { data: session } = useSession();
   const { showMessage } = useSnackbar();
   const { gradeFormat } = useGradeFormat();
+  const queryClient = useQueryClient();
+  const isRestoring = useIsRestoring();
 
-  const [loading, setLoading] = useState(!initialData?.initialProfile && !initialData?.initialNotFound);
-  const [notFound, setNotFound] = useState(initialData?.initialNotFound ?? false);
-  const [profile, setProfile] = useState<UserProfile | null>(initialData?.initialProfile ?? null);
   const [selectedBoard, setSelectedBoard] = useState<string>('all');
   const [unifiedTimeframe, setUnifiedTimeframe] = useState<UnifiedTimeframeType>('all');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
-  const [allBoardsTicks, setAllBoardsTicks] = useState<Record<string, LogbookEntry[]>>(
-    initialData?.initialAllBoardsTicks ?? {},
-  );
-  const [loadingAggregated, setLoadingAggregated] = useState(!initialData?.initialAllBoardsTicks);
-  const [profileStats, setProfileStats] = useState<GetUserProfileStatsQueryResponse['userProfileStats'] | null>(
-    initialData?.initialProfileStats ?? null,
-  );
-  const [loadingProfileStats, setLoadingProfileStats] = useState(!initialData?.initialProfileStats);
-  const [percentile, setPercentile] = useState<{
-    totalDistinctClimbs: number;
-    percentile: number;
-    totalActiveUsers: number;
-  } | null>(initialData?.initialPercentile ?? null);
 
+  // Drives both the UI's "own profile" branches and whether we persist the
+  // four queries to IDB. Persisting other users' profile data would let it
+  // accumulate unbounded across one-off visits (capped only by 24h maxAge).
+  //
+  // First-render correctness depends on the `initialIsOwnProfile` seed:
+  // /you passes `true`; /profile/[user_id] passes `viewerUserId === user_id`
+  // from server-side auth. Without that seed, the value flips false → true
+  // when NextAuth resolves on the next render, and queries created during
+  // the loading window get `meta.persist = false`. React Query reads `meta`
+  // from the latest options on every render, so the dehydrate predicate
+  // picks up the flipped flag on the next persist tick — but make sure any
+  // new caller passes `initialIsOwnProfile` to avoid a brief window where
+  // the cache wouldn't be persisted.
   const isOwnProfile = session?.user?.id ? session.user.id === userId : (initialData?.initialIsOwnProfile ?? false);
 
-  const fetchProfile = useCallback(async () => {
-    try {
+  const profileInitial = initialData?.initialProfile;
+  const profileQuery = useQuery<UserProfile>({
+    queryKey: ['userProfile', userId],
+    queryFn: async () => {
       const response = await fetch(`/api/internal/profile/${userId}`);
-      if (response.status === 404) {
-        setNotFound(true);
-        return;
-      }
+      if (response.status === 404) throw new ProfileNotFoundError();
       if (!response.ok) throw new Error('Failed to fetch profile');
-      const data = await response.json();
-      setProfile({
-        id: data.id,
-        email: data.email,
-        name: data.name,
-        image: data.image,
-        profile: data.profile,
-        credentials: data.credentials,
-        followerCount: data.followerCount ?? 0,
-        followingCount: data.followingCount ?? 0,
-        isFollowedByMe: data.isFollowedByMe ?? false,
-      });
-    } catch (error) {
-      // Navigation away from the page aborts the in-flight fetch — that's not
-      // a real failure, so don't bother the user with an error toast.
-      if (isAbortError(error)) return;
-      console.error('Failed to fetch profile:', error);
-      showMessage('Failed to load profile data', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, showMessage]);
+      const body = await response.json();
+      return {
+        id: body.id,
+        email: body.email,
+        name: body.name,
+        image: body.image,
+        profile: body.profile,
+        credentials: body.credentials,
+        followerCount: body.followerCount ?? 0,
+        followingCount: body.followingCount ?? 0,
+        isFollowedByMe: body.isFollowedByMe ?? false,
+      } satisfies UserProfile;
+    },
+    enabled: !initialData?.initialNotFound,
+    staleTime: PROFILE_STALE_TIME_MS,
+    gcTime: PROFILE_GC_TIME_MS,
+    refetchOnMount: profileInitial ? true : 'always',
+    retry: (failureCount, error) => !(error instanceof ProfileNotFoundError) && failureCount < 3,
+    initialData: profileInitial,
+    initialDataUpdatedAt: profileInitial ? Date.now() : undefined,
+    meta: { persist: isOwnProfile },
+  });
 
-  const fetchAllBoardsTicks = useCallback(async () => {
-    setLoadingAggregated(true);
-    try {
+  const profileError = profileQuery.error;
+  const notFound = (initialData?.initialNotFound ?? false) || profileError instanceof ProfileNotFoundError;
+
+  useEffect(() => {
+    if (!profileError) return;
+    if (profileError instanceof ProfileNotFoundError) return;
+    if (isAbortError(profileError)) return;
+    console.error('Failed to fetch profile:', profileError);
+    showMessage('Failed to load profile data', 'error');
+  }, [profileError, showMessage]);
+
+  // The other three queries don't surface a snackbar (the page still renders
+  // partial data), but their failures shouldn't be silent in logs/Sentry.
+
+  const ticksInitial = initialData?.initialAllBoardsTicks;
+  const ticksQuery = useQuery<BoardTicks>({
+    queryKey: ['userTicks', userId],
+    queryFn: async () => {
       const client = createGraphQLHttpClient(null);
-      const results: Record<string, LogbookEntry[]> = {};
+      const collected: BoardTicks = {};
       await Promise.all(
         BOARD_TYPES.map(async (boardType) => {
           const variables: GetUserTicksQueryVariables = { userId, boardType };
           const response = await client.request<GetUserTicksQueryResponse>(GET_USER_TICKS, variables);
-          results[boardType] = response.userTicks.map((tick) => ({
+          collected[boardType] = response.userTicks.map((tick) => ({
             climbed_at: tick.climbedAt,
             difficulty: tick.difficulty,
             effectiveDifficulty: tick.effectiveDifficulty ?? null,
@@ -124,63 +162,95 @@ export function useProfileData(userId: string, initialData?: InitialData) {
           }));
         }),
       );
-      setAllBoardsTicks(results);
-    } catch (error) {
-      if (isAbortError(error)) return;
-      console.error('Error fetching all boards ticks:', error);
-      setAllBoardsTicks({});
-    } finally {
-      setLoadingAggregated(false);
-    }
-  }, [userId]);
+      return collected;
+    },
+    staleTime: PROFILE_STALE_TIME_MS,
+    gcTime: PROFILE_GC_TIME_MS,
+    refetchOnMount: ticksInitial ? true : 'always',
+    initialData: ticksInitial,
+    initialDataUpdatedAt: ticksInitial ? Date.now() : undefined,
+    meta: { persist: isOwnProfile },
+  });
 
-  const fetchProfileStats = useCallback(async () => {
-    setLoadingProfileStats(true);
-    try {
+  const profileStatsInitial = initialData?.initialProfileStats;
+  const profileStatsQuery = useQuery<GetUserProfileStatsQueryResponse['userProfileStats']>({
+    queryKey: ['userProfileStats', userId],
+    queryFn: async () => {
       const client = createGraphQLHttpClient(null);
       const variables: GetUserProfileStatsQueryVariables = { userId };
       const response = await client.request<GetUserProfileStatsQueryResponse>(GET_USER_PROFILE_STATS, variables);
-      setProfileStats(response.userProfileStats);
-    } catch (error) {
-      if (isAbortError(error)) return;
-      console.error('Error fetching profile stats:', error);
-      setProfileStats(null);
-    } finally {
-      setLoadingProfileStats(false);
-    }
-  }, [userId]);
+      return response.userProfileStats;
+    },
+    staleTime: PROFILE_STALE_TIME_MS,
+    gcTime: PROFILE_GC_TIME_MS,
+    refetchOnMount: profileStatsInitial ? true : 'always',
+    initialData: profileStatsInitial,
+    initialDataUpdatedAt: profileStatsInitial ? Date.now() : undefined,
+    meta: { persist: isOwnProfile },
+  });
 
-  const fetchPercentile = useCallback(async () => {
-    try {
+  // initialPercentile is `undefined` when no SSR seed was passed, and `null`
+  // when SSR explicitly returned no percentile (e.g. user with zero climbs).
+  // Treat both presences of a key as "have initial data" so a legitimate null
+  // doesn't trigger an unnecessary refetch.
+  const hasPercentileInitial = initialData ? 'initialPercentile' in initialData : false;
+  const percentileInitial = initialData?.initialPercentile;
+  const percentileQuery = useQuery<GetUserClimbPercentileQueryResponse['userClimbPercentile'] | null>({
+    queryKey: ['userClimbPercentile', userId],
+    queryFn: async () => {
       const client = createGraphQLHttpClient(null);
-      const response = await client.request<GetUserClimbPercentileQueryResponse>(GET_USER_CLIMB_PERCENTILE, { userId });
-      setPercentile(response.userClimbPercentile);
-    } catch (error) {
-      if (isAbortError(error)) return;
-      // Percentile is not critical — silently fail (no snackbar) but keep a
-      // console breadcrumb for real failures so they're not invisible in dev.
-      console.error('Error fetching climb percentile:', error);
-    }
-  }, [userId]);
+      const response = await client.request<GetUserClimbPercentileQueryResponse>(GET_USER_CLIMB_PERCENTILE, {
+        userId,
+      });
+      return response.userClimbPercentile;
+    },
+    staleTime: PROFILE_STALE_TIME_MS,
+    gcTime: PROFILE_GC_TIME_MS,
+    refetchOnMount: hasPercentileInitial ? true : 'always',
+    initialData: percentileInitial,
+    initialDataUpdatedAt: hasPercentileInitial ? Date.now() : undefined,
+    meta: { persist: isOwnProfile },
+  });
 
   useEffect(() => {
-    if (!initialData?.initialProfile && !initialData?.initialNotFound) void fetchProfile();
-  }, [fetchProfile, initialData?.initialProfile, initialData?.initialNotFound]);
+    const err = ticksQuery.error;
+    if (!err || isAbortError(err)) return;
+    console.error('Error fetching all boards ticks:', err);
+  }, [ticksQuery.error]);
 
   useEffect(() => {
-    if (!initialData?.initialAllBoardsTicks) void fetchAllBoardsTicks();
-  }, [fetchAllBoardsTicks, initialData?.initialAllBoardsTicks]);
+    const err = profileStatsQuery.error;
+    if (!err || isAbortError(err)) return;
+    console.error('Error fetching profile stats:', err);
+  }, [profileStatsQuery.error]);
 
   useEffect(() => {
-    if (!initialData?.initialProfileStats) void fetchProfileStats();
-  }, [fetchProfileStats, initialData?.initialProfileStats]);
+    const err = percentileQuery.error;
+    if (!err || isAbortError(err)) return;
+    console.error('Error fetching climb percentile:', err);
+  }, [percentileQuery.error]);
 
-  useEffect(() => {
-    if (!initialData?.initialPercentile) void fetchPercentile();
-  }, [fetchPercentile, initialData?.initialPercentile]);
+  const profile = profileQuery.data ?? null;
+  const profileStats = profileStatsQuery.data ?? null;
+  const percentile = percentileQuery.data ?? null;
+  const allBoardsTicks = useMemo<BoardTicks>(() => ticksQuery.data ?? {}, [ticksQuery.data]);
+
+  const setProfile = useCallback(
+    (next: UserProfile) => {
+      queryClient.setQueryData<UserProfile>(['userProfile', userId], next);
+    },
+    [queryClient, userId],
+  );
+
+  // `loading` is the first-paint gate. Only show it when there's genuinely no
+  // data to render — if SSR seeded `initialData` we want to render immediately
+  // even while the persister is still hydrating from IDB in the background.
+  const loading = !notFound && !profile && (isRestoring || profileQuery.isPending);
+  const loadingAggregated = !notFound && !ticksQuery.data && (isRestoring || ticksQuery.isPending);
+  const loadingProfileStats = !notFound && !profileStats && (isRestoring || profileStatsQuery.isPending);
 
   // Filter allBoardsTicks by selected board
-  const filteredBoardsTicks = useMemo<Record<string, LogbookEntry[]>>(() => {
+  const filteredBoardsTicks = useMemo<BoardTicks>(() => {
     if (selectedBoard === 'all') return allBoardsTicks;
     return { [selectedBoard]: allBoardsTicks[selectedBoard] || [] };
   }, [allBoardsTicks, selectedBoard]);
@@ -270,6 +340,7 @@ export function useProfileData(userId: string, initialData?: InitialData) {
     setToDate,
 
     // Board stats
+    allBoardsTicks,
     filteredLogbook,
     weeklyBars,
 

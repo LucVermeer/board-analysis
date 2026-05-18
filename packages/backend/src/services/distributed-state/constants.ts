@@ -41,6 +41,22 @@ export const KEYS = {
     `boardsesh:participant:${sessionId}:${participantId}:connections`,
   // String: sessionId -> connectionId of leader
   sessionLeader: (sessionId: string) => `boardsesh:session:${sessionId}:leader`,
+  // String: sessionId -> participantId of the wall driver. Distinct from
+  // sessionLeader: driver is stable across reconnects (keyed by participantId)
+  // and is the wall-control authority introduced by the queue-control-bar
+  // pivot's lightbulb gesture. Empty / missing key means "no driver" — the
+  // wall is unclaimed.
+  sessionDriver: (sessionId: string) => `boardsesh:session:${sessionId}:driver`,
+  // String: sessionId -> last-connected BLE board serial. Set by
+  // `setSessionBoardSerial`; consumed by mobile clients on join so a second
+  // phone can auto-pair with the same physical board as the first.
+  sessionBoardSerial: (sessionId: string) => `boardsesh:session:${sessionId}:boardSerial`,
+  // LIST: sessionId -> recent climbUuids that have been broadcast as the
+  // session's current climb. Used by `confirmClimbOnWall` to accept confirms
+  // that arrive after a quick navigate (BLE write completes, then the driver
+  // moves on before the mutation reaches the server). LPUSH-ed on every
+  // current-climb write and trimmed to RECENT_CLIMBS_BUFFER_SIZE.
+  sessionRecentClimbs: (sessionId: string) => `boardsesh:session:${sessionId}:recentClimbs`,
   // Set: instanceId -> set of connectionIds owned by this instance
   instanceConnections: (instanceId: string) => `boardsesh:instance:${instanceId}:conns`,
   // String: instanceId -> heartbeat timestamp
@@ -67,6 +83,13 @@ export const TTL = {
 // Sentinel value to indicate "don't update this field" in Lua scripts
 export const UNSET_SENTINEL = '__UNSET__';
 
+// Number of recent climbUuids retained per session for confirmClimbOnWall
+// correlation. Three covers a fast-navigate race (driver moves on while a BLE
+// confirm is in flight) without making it cheap for a malicious peer to spam
+// fake confirms against a rolling window — the buffer turns over every time
+// the wall actually changes.
+export const RECENT_CLIMBS_BUFFER_SIZE = 3;
+
 /**
  * Validate connectionId format to prevent Redis key injection.
  * ConnectionIds should be UUIDs or similar safe identifiers.
@@ -91,6 +114,17 @@ export function validateSessionId(sessionId: string): void {
 export function validateParticipantId(participantId: string): void {
   if (!participantId || participantId.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(participantId)) {
     throw new Error(`Invalid participantId format: ${participantId.slice(0, 20)}`);
+  }
+}
+
+/**
+ * Validate BLE board serial format before writing to Redis. Mirrors
+ * BoardSerialSchema from validation/schemas/primitives.ts so direct callers of
+ * session-ops can't bypass the resolver-layer check.
+ */
+export function validateBoardSerial(serial: string): void {
+  if (!serial || serial.length > 64 || !/^[A-Za-z0-9_:-]+$/.test(serial)) {
+    throw new Error(`Invalid boardSerial format: ${serial.slice(0, 20)}`);
   }
 }
 

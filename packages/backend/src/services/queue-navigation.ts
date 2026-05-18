@@ -2,8 +2,80 @@ import type { ClimbQueueItem } from '@boardsesh/shared-schema';
 import type { RoomManager } from './room-manager/room-manager';
 import { VersionConflictError } from './room-manager/types';
 import type { pubsub as PubSubInstance } from '../pubsub/index';
+import { MAX_RETRIES } from '../graphql/resolvers/shared/types';
 
-const MAX_RETRIES = 3;
+/**
+ * Set the current climb (optionally appending it to the queue) and publish the
+ * resulting queue event. Mirrors the body of the GraphQL `setCurrentClimb`
+ * resolver so the new `takeControl(climb)` mutation can re-use the
+ * optimistic-locking + event-publish logic without duplicating it.
+ *
+ * Returns the persisted queue state for resolvers that need to echo it back.
+ */
+export async function setCurrentClimbAndPublish(
+  sessionId: string,
+  item: ClimbQueueItem,
+  shouldAddToQueue: boolean,
+  roomManager: RoomManager,
+  pubsub: typeof PubSubInstance,
+  clientId?: string | null,
+  correlationId?: string | null,
+): Promise<{ sequence: number; stateHash: string; queue: ClimbQueueItem[]; addedToQueue: boolean }> {
+  let sequence = 0;
+  let stateHash = '';
+  let addedToQueue = false;
+  let updatedQueue: ClimbQueueItem[] = [];
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const currentState = await roomManager.getQueueState(sessionId);
+    let queue = currentState.queue;
+    let addedInThisAttempt = false;
+
+    if (shouldAddToQueue && !queue.some((i) => i.uuid === item.uuid)) {
+      queue = [...queue, item];
+      addedInThisAttempt = true;
+    }
+
+    try {
+      const result = await roomManager.updateQueueState(sessionId, queue, item, currentState.version);
+      sequence = result.sequence;
+      stateHash = result.stateHash;
+      updatedQueue = queue;
+      addedToQueue = addedInThisAttempt;
+      break;
+    } catch (error) {
+      if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  // Record the climb as the latest authoritative wall climb so the next
+  // `confirmClimbOnWall` accepts it even if the driver navigates on before
+  // the confirm arrives. Best-effort: don't fail the publish if the recency
+  // record breaks (Redis hiccup), and don't await it before the publish.
+  await roomManager.pushRecentClimb(sessionId, item.climb.uuid).catch(() => undefined);
+
+  if (addedToQueue) {
+    pubsub.publishQueueEvent(sessionId, {
+      __typename: 'FullSync',
+      sequence,
+      state: { sequence, stateHash, queue: updatedQueue, currentClimbQueueItem: item },
+    });
+  } else {
+    pubsub.publishQueueEvent(sessionId, {
+      __typename: 'CurrentClimbChanged',
+      sequence,
+      stateHash,
+      item,
+      clientId: clientId ?? null,
+      correlationId: correlationId ?? null,
+    });
+  }
+
+  return { sequence, stateHash, queue: updatedQueue, addedToQueue };
+}
 
 /**
  * Navigate to a specific queue item by index.
@@ -53,6 +125,10 @@ export async function navigateToQueueItem(
   }
 
   if (resultItem) {
+    // Record the climb in the session's recent-climbs ring buffer so a
+    // confirmClimbOnWall arriving after a quick navigate-on still correlates.
+    // See setCurrentClimbAndPublish above for the rationale.
+    await roomManager.pushRecentClimb(sessionId, resultItem.climb.uuid).catch(() => undefined);
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'CurrentClimbChanged',
       sequence: resultSequence,

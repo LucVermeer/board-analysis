@@ -17,6 +17,7 @@
     "customizeColorsTitle": "LED colors",
     "customizeColorsHelp": "Pick the colors your board lights up for hands, feet, and the finish hold. Start holds keep their default green.",
     "resetColors": "Reset",
+    "disconnect": "Disconnect board",
     "role": {
       "HAND": "Hands",
       "FOOT": "Feet",
@@ -42,7 +43,7 @@
     "back": "Back",
     "clearSearch": "Clear search",
     "openFilters": "Open filters",
-    "openQueue": "Open queue",
+    "openQueue": "Open up next",
     "openStatsFilters": "Open stats filters",
     "shareProfile": "Share profile",
     "settings": "Settings",

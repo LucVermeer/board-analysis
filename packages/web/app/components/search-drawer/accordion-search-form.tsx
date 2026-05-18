@@ -5,7 +5,7 @@ import MuiAlert from '@mui/material/Alert';
 import MuiTooltip from '@mui/material/Tooltip';
 import MuiTypography from '@mui/material/Typography';
 import MuiButton from '@mui/material/Button';
-import MuiSelect, { type SelectChangeEvent } from '@mui/material/Select';
+import MuiSelect from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import MuiSwitch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -15,7 +15,9 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
+import { InlineGradePicker } from '@/app/components/grade-picker/inline-grade-picker';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
+import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
 import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
@@ -73,9 +75,18 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     statusValue = 'established';
   }
 
+  const { lastUsedGrade, rememberGrade } = useLastUsedGrade();
+
+  // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips
+  // `undefined` from updates, so we must explicitly pass `0` (not `undefined`)
+  // when the user clears a grade — otherwise the clear action is a silent no-op.
   const handleGradeChange = (type: 'min' | 'max', value: number | undefined) => {
-    updateFilters(buildGradeRangeUpdate(type, value, uiSearchParams.minGrade, uiSearchParams.maxGrade));
+    updateFilters(buildGradeRangeUpdate(type, value ?? 0, uiSearchParams.minGrade, uiSearchParams.maxGrade));
+    rememberGrade(value);
   };
+
+  const minGradeForPicker = uiSearchParams.minGrade > 0 ? uiSearchParams.minGrade : undefined;
+  const maxGradeForPicker = uiSearchParams.maxGrade > 0 ? uiSearchParams.maxGrade : undefined;
 
   const climbContent = (
     <div className={styles.panelContent}>
@@ -85,39 +96,27 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       </div>
 
       <div className={styles.inputGroup}>
-        <span className={styles.fieldLabel}>{t('search.fields.gradeRange')}</span>
-        <div className={styles.gradeRow}>
-          <MuiSelect
-            value={uiSearchParams.minGrade || 0}
-            onChange={(e: SelectChangeEvent<number>) => handleGradeChange('min', Number(e.target.value) || 0)}
-            className={styles.fullWidth}
-            size="small"
-            displayEmpty
-            MenuProps={{ disableScrollLock: true }}
-          >
-            <MenuItem value={0}>{t('search.fields.minGrade')}</MenuItem>
-            {grades.map((grade) => (
-              <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
-                {grade.difficulty_name}
-              </MenuItem>
-            ))}
-          </MuiSelect>
-          <MuiSelect
-            value={uiSearchParams.maxGrade || 0}
-            onChange={(e: SelectChangeEvent<number>) => handleGradeChange('max', Number(e.target.value) || 0)}
-            className={styles.fullWidth}
-            size="small"
-            displayEmpty
-            MenuProps={{ disableScrollLock: true }}
-          >
-            <MenuItem value={0}>{t('search.fields.maxGrade')}</MenuItem>
-            {grades.map((grade) => (
-              <MenuItem key={grade.difficulty_id} value={grade.difficulty_id}>
-                {grade.difficulty_name}
-              </MenuItem>
-            ))}
-          </MuiSelect>
-        </div>
+        <span className={styles.fieldLabel}>{t('search.fields.minGrade')}</span>
+        <InlineGradePicker
+          grades={grades}
+          currentGradeId={minGradeForPicker}
+          scrollToGradeId={lastUsedGrade}
+          onSelect={(value) => handleGradeChange('min', value)}
+          ariaLabel={t('search.fields.minGrade')}
+          clearLabel={t('search.fields.any')}
+        />
+      </div>
+
+      <div className={styles.inputGroup}>
+        <span className={styles.fieldLabel}>{t('search.fields.maxGrade')}</span>
+        <InlineGradePicker
+          grades={grades}
+          currentGradeId={maxGradeForPicker}
+          scrollToGradeId={lastUsedGrade}
+          onSelect={(value) => handleGradeChange('max', value)}
+          ariaLabel={t('search.fields.maxGrade')}
+          clearLabel={t('search.fields.any')}
+        />
       </div>
 
       {(showTallClimbsFilter || showWideClimbsFilter) && (

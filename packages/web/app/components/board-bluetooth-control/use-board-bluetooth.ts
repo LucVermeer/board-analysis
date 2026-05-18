@@ -59,6 +59,11 @@ type UseBoardBluetoothOptions = {
    * this re-creates `sendFramesToBoard` so the auto-sender repaints the
    * current climb with the new colours. */
   ledColorOverrides?: LedColorOverrides;
+  /** Fires once per successful connect with the parsed BLE serial (null when
+   * the device name didn't carry one — e.g., moonboard). Used by
+   * BluetoothProvider to broadcast SessionBoardSerialChanged into the party
+   * session so other mobile participants can auto-connect to the same board. */
+  onConnectSuccess?: (serial: string | null) => void;
 };
 
 /**
@@ -117,6 +122,7 @@ export function useBoardBluetooth({
   boardUuid,
   onConnectionChange,
   ledColorOverrides,
+  onConnectSuccess,
 }: UseBoardBluetoothOptions) {
   const { showMessage } = useSnackbar();
   const [loading, setLoading] = useState(false);
@@ -302,7 +308,12 @@ export function useBoardBluetooth({
         void incrementBluetoothSends().then(maybeFireFeedbackPromptEvent);
         return true;
       } catch (error) {
-        // Abort errors are expected during rapid swiping — don't log or show them
+        // AbortError is now the primary unmount-mid-write path — the
+        // BluetoothAutoSender scopes a single AbortController to its
+        // lifetime and aborts it on unmount, so the adapter.write above
+        // surfaces an AbortError. Swallow it silently; the drain loop
+        // already returns before firing analytics / confirmClimbOnWall.
+        // External callers that pass their own signal also land here.
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }
@@ -393,10 +404,11 @@ export function useBoardBluetooth({
 
         // Auto-record the (serial, current config) mapping for serial→config lookups.
         // Aurora boards only — moonboard device names don't carry a serial in this format.
+        let parsedSerial: string | null = null;
         if (boardDetails.board_name !== 'moonboard') {
-          const serialNumber = parseSerialNumber(connection.deviceName);
-          if (serialNumber) {
-            recordBoardSerial(serialNumber, boardDetails, boardUuid);
+          parsedSerial = parseSerialNumber(connection.deviceName) ?? null;
+          if (parsedSerial) {
+            recordBoardSerial(parsedSerial, boardDetails, boardUuid);
           }
         }
 
@@ -407,6 +419,7 @@ export function useBoardBluetooth({
 
         setIsConnected(true);
         onConnectionChange?.(true);
+        onConnectSuccess?.(parsedSerial);
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
@@ -426,6 +439,7 @@ export function useBoardBluetooth({
       boardDetails,
       boardUuid,
       onConnectionChange,
+      onConnectSuccess,
       sendFramesToBoard,
       showMessage,
       devicePicker,

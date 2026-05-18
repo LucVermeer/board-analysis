@@ -71,16 +71,6 @@
     "linkCopied": "Link copied",
     "shareFailed": "Failed to share"
   },
-  "board": {
-    "connect": "Connect to board",
-    "disconnect": "Disconnect from board",
-    "connectError": "Could not connect to board. Make sure Bluetooth is on and the board is nearby.",
-    "lightingUnavailable": "Board lighting unavailable",
-    "lightingUnavailableIos": "Safari doesn't support Bluetooth. Use the Boardsesh app to light up holds on your board.",
-    "lightingUnavailableBrowser": "This browser doesn't support Bluetooth. Switch to Chrome to light up holds on your board.",
-    "dismiss": "Dismiss",
-    "getApp": "Get the app"
-  },
   "angleSelector": {
     "selectAngle": "Select Angle",
     "loadingStats": "Loading stats...",
@@ -105,7 +95,6 @@
     },
     "fields": {
       "climbName": "Climb Name",
-      "gradeRange": "Grade Range",
       "minGrade": "Min",
       "maxGrade": "Max",
       "setter": "Setter",
@@ -261,6 +250,12 @@
         "submit": "Create"
       }
     },
+    "sendToBoard": {
+      "label": "Send to board",
+      "active": "On the wall",
+      "tooltip": "Send to the board",
+      "activeTooltip": "Currently on the wall"
+    },
     "tick": {
       "drawer": {
         "signInRequired": "Sign in required",
@@ -328,8 +323,19 @@
   },
   "detail": {
     "sections": {
-      "beta": "Beta"
+      "beta": "Beta",
+      "similarClimbs": "Similar climbs",
+      "similarClimbsSummary": "Climbs sharing 50%+ of these holds"
     }
+  },
+  "similarClimbs": {
+    "loadError": "Couldn't load similar climbs.",
+    "emptyDefault": "No similar climbs yet.",
+    "emptyOnLayout": "No similar climbs on this layout.",
+    "emptyIdentical": "No identical climbs found right now.",
+    "untitledClimb": "Untitled climb",
+    "openActions": "More actions",
+    "actionsUnavailable": "Can't open actions for this climb — board configuration unavailable."
   },
   "multiboardList": {
     "noClimbsFound": "No climbs found",
@@ -350,6 +356,7 @@
       "starOption_other": "{{count}} stars",
       "gradeOverride": "Grade override",
       "clearGradeOverride": "Clear grade override",
+      "consensusSuffix": "consensus",
       "attemptCount": "Attempt count"
     },
     "bar": {
@@ -364,12 +371,12 @@
     "signInRequired": "Sign In Required",
     "signInBody": "Please sign in to view your liked climbs.",
     "actionsAriaLabel": "Actions",
-    "queueAll": "Queue All",
+    "queueAll": "Add all to up next",
     "adding": "Adding...",
     "noClimbsToAdd": "No climbs to add",
-    "addedToQueue_one": "Added {{count}} climb to queue",
-    "addedToQueue_other": "Added {{count}} climbs to queue",
-    "addToQueueFailed": "Failed to add climbs to queue",
+    "addedToQueue_one": "Added {{count}} climb to up next",
+    "addedToQueue_other": "Added {{count}} climbs to up next",
+    "addToQueueFailed": "Failed to add climbs to up next",
     "loadFailed": "Failed to load liked climbs",
     "emptyState": "No liked climbs yet. Heart some climbs to see them here!"
   },
@@ -388,7 +395,12 @@
     "alerts": {
       "importFailed": "Import Failed: {{error}}",
       "importWarnings": "Import Warnings:",
-      "checkingMoonBoardDuplicate": "Checking whether this MoonBoard climb already exists..."
+      "checkingMoonBoardDuplicate": "Checking whether this MoonBoard climb already exists...",
+      "publishDuplicateNamed": "This hold pattern matches \"{{name}}\". Toggle Draft to save it without publishing, or change a hold.",
+      "publishDuplicateUnnamed": "This hold pattern matches an existing climb. Toggle Draft to save it without publishing, or change a hold.",
+      "viewMatchingClimb": "View matching climb",
+      "identicalClimbDrawerTitle": "Identical climb",
+      "saveFailedFallback": "Failed to save climb. Please try again."
     },
     "settings": {
       "tooltip": "Climb settings",

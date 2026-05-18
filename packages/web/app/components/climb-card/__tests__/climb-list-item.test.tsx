@@ -59,6 +59,7 @@ vi.mock('../../logbook/inline-list-tick-bar', () => ({
 
 vi.mock('../../climb-actions', () => ({
   ClimbActions: () => <div data-testid="climb-actions" />,
+  ClimbActionsDrawer: ({ open }: { open: boolean }) => (open ? <div data-testid="climb-actions-drawer" /> : null),
 }));
 
 const mockDoubleTapFavorite = {
@@ -362,7 +363,7 @@ describe('ClimbListItem', () => {
       fireEvent.click(button);
 
       // Actions drawer should now be mounted
-      expect(await screen.findByTestId('climb-actions')).toBeTruthy();
+      expect(await screen.findByTestId('climb-actions-drawer')).toBeTruthy();
     });
   });
 

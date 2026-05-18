@@ -325,15 +325,11 @@
   will-change: transform;
 }
 
-/* Hide navigation buttons on mobile - use swipe instead */
+/* Navigation buttons: visible on every breakpoint. Mobile keeps the swipe
+   gesture as a secondary path, but the buttons are the primary one — non-
+   drivers used to have no bar-side advance affordance at all. */
 .navButtons {
-  display: none;
-}
-
-@media (min-width: 768px) {
-  .navButtons {
-    display: inline-flex;
-  }
+  display: inline-flex;
 }
 
 /* Desktop-only elements (mirror, play link) */

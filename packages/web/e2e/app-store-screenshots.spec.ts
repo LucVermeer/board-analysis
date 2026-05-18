@@ -22,9 +22,16 @@
  *   - 6.9" (iPhone 16 Pro Max): 1320x2868 -- App Store Connect accepts 6.5" for this slot
  *   - 12.9" iPad: 2048x2732 -- optional, not covered here
  */
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 import path from 'path';
-import { drawer, waitForBoardListReady, waitForDrawerOpen, waitForSkeletonsGone } from './helpers/waits';
+import {
+  clickWithDomFallback,
+  clickUntilVisible,
+  drawer,
+  waitForBoardListReady,
+  waitForDrawerOpen,
+  waitForSkeletonsGone,
+} from './helpers/waits';
 
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../../mobile/screenshots');
 const boardUrl = '/kilter/original/12x12-square/screw_bolt/40/list';
@@ -88,9 +95,11 @@ test.describe('App Store Screenshots', () => {
     // right state on both desktop and mobile without relying on dblclick.
     const thumbnail = page.locator('#onboarding-climb-card [data-testid="climb-thumbnail"]');
     await thumbnail.waitFor({ state: 'visible', timeout: 15_000 });
-    await thumbnail.click();
-
-    await waitForDrawerOpen(page, 0, 15_000);
+    await clickUntilVisible(page, thumbnail, drawer(page), {
+      clickTimeout: 3_000,
+      waitTimeout: 3_000,
+      maxAttempts: 6,
+    });
     // Board renderer fetches the layout SVG + hold images asynchronously after
     // the drawer animates in. Wait for the in-drawer skeletons to clear, then
     // a brief settle for SVG paint.
@@ -111,22 +120,25 @@ test.describe('App Store Screenshots', () => {
     await secondRow.waitFor({ state: 'visible', timeout: 15_000 });
 
     const queueBar = page.locator('[data-testid="queue-control-bar"]');
-    await firstRow.click();
-    await expect(queueBar).toBeVisible({ timeout: 10_000 });
-    await secondRow.click();
+    const selectedQueueClimb = queueBar.locator('#onboarding-queue-toggle').filter({ hasNotText: 'No climb selected' });
+    await clickUntilVisible(page, firstRow, selectedQueueClimb, { waitTimeout: 3_000 });
+    await clickWithDomFallback(page, secondRow);
     // Brief settle so the queue reducer applies the second add before the
     // third click — there's no per-add DOM signal that's safe to assert on
     // without depending on the climb name (varies per seed).
     await page.waitForTimeout(150);
-    await firstRow.click();
+    await clickWithDomFallback(page, firstRow);
     await page.waitForTimeout(150);
 
     // Open the play drawer (tap the thumbnail), then press the in-drawer
     // queue button so the screenshot shows the actual queue list, not the
     // climb browser with the queue bar at the bottom.
     const thumbnail = firstRow.locator('[data-testid="climb-thumbnail"]');
-    await thumbnail.click();
-    await waitForDrawerOpen(page, 0, 15_000);
+    await clickUntilVisible(page, thumbnail, drawer(page), {
+      clickTimeout: 3_000,
+      waitTimeout: 3_000,
+      maxAttempts: 6,
+    });
 
     await page.getByRole('button', { name: 'Open queue' }).click();
     // The queue drawer is the second swipeable drawer (stacked above play).

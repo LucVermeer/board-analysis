@@ -151,8 +151,12 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
   const pathname = usePathnameWithoutLocale();
   const isNative = isNativeApp();
 
-  const hideTabBar = HIDE_TAB_BAR_PAGES.some((prefix) => pathname.startsWith(prefix)) && !hasActiveQueue;
-  const shouldShowQueueShell = isBoardRoutePath(pathname) && !hasActiveQueue && !boardDetails;
+  // /development is a hardware test rig for ESP32 emulators — it needs the full
+  // viewport for the BLE payload inspector and has no use for either bar.
+  const isDevelopmentRoute = pathname.startsWith('/development');
+  const hideTabBar =
+    isDevelopmentRoute || (HIDE_TAB_BAR_PAGES.some((prefix) => pathname.startsWith(prefix)) && !hasActiveQueue);
+  const shouldShowQueueShell = !isDevelopmentRoute && isBoardRoutePath(pathname) && !hasActiveQueue && !boardDetails;
 
   // Measure the bottom bar's visual occlusion and publish it into the
   // sidecar --bottom-bar-height-measured custom property. The visible
@@ -211,7 +215,7 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
       data-testid="bottom-bar-wrapper"
     >
       <FeedbackPromptBanner />
-      {hasActiveQueue && boardDetails && (
+      {!isDevelopmentRoute && hasActiveQueue && boardDetails && (
         <ErrorBoundary>
           <BoardProvider boardName={boardDetails.board_name}>
             <ConnectionSettingsProvider>

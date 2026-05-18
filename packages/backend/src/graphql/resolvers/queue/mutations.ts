@@ -1,6 +1,7 @@
 import type { ConnectionContext, ClimbQueueItem, QueueState } from '@boardsesh/shared-schema';
 import { roomManager, VersionConflictError } from '../../../services/room-manager';
 import { pubsub } from '../../../pubsub/index';
+import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
 import { requireSession, applyRateLimit, validateInput, MAX_RETRIES } from '../shared/helpers';
 import {
   ClimbQueueItemSchema,
@@ -244,59 +245,47 @@ export const queueMutations = {
       }
     }
 
-    // Retry loop for optimistic locking
-    let sequence = 0;
-    let stateHash = '';
-    let addedToQueue = false;
-    let updatedQueue: ClimbQueueItem[] = [];
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const currentState = await roomManager.getQueueState(sessionId);
-      let queue = currentState.queue;
-      let addedInThisAttempt = false;
-
-      // Optionally add to queue if not already present
-      if (shouldAddToQueue && item && !queue.some((i) => i.uuid === item.uuid)) {
-        queue = [...queue, item];
-        addedInThisAttempt = true;
-      }
-
-      try {
-        const result = await roomManager.updateQueueState(sessionId, queue, item, currentState.version);
-        sequence = result.sequence;
-        stateHash = result.stateHash;
-        updatedQueue = queue;
-        addedToQueue = addedInThisAttempt;
-        break; // Success, exit retry loop
-      } catch (error) {
-        if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
-          if (DEBUG)
-            logger.info(`[setCurrentClimb] Version conflict, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
-          continue; // Retry
+    if (item === null) {
+      // Null-item path: clear current climb without queue changes. Retains the
+      // pre-extract behaviour (the shared helper assumes a non-null item).
+      let sequence = 0;
+      let stateHash = '';
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const currentState = await roomManager.getQueueState(sessionId);
+        try {
+          const result = await roomManager.updateQueueState(sessionId, currentState.queue, null, currentState.version);
+          sequence = result.sequence;
+          stateHash = result.stateHash;
+          break;
+        } catch (error) {
+          if (error instanceof VersionConflictError && attempt < MAX_RETRIES - 1) {
+            if (DEBUG)
+              logger.info(
+                `[setCurrentClimb] Version conflict (null), retrying (attempt ${attempt + 1}/${MAX_RETRIES})`,
+              );
+            continue;
+          }
+          throw error;
         }
-        throw error; // Re-throw if not a version conflict or max retries exceeded
       }
-    }
-
-    if (addedToQueue) {
-      pubsub.publishQueueEvent(sessionId, {
-        __typename: 'FullSync',
-        sequence,
-        state: {
-          sequence,
-          stateHash,
-          queue: updatedQueue,
-          currentClimbQueueItem: item,
-        },
-      });
-    } else {
       pubsub.publishQueueEvent(sessionId, {
         __typename: 'CurrentClimbChanged',
         sequence,
         stateHash,
-        item: item,
+        item: null,
         clientId: ctx.connectionId || null,
         correlationId: correlationId || null,
       });
+    } else {
+      await setCurrentClimbAndPublish(
+        sessionId,
+        item,
+        !!shouldAddToQueue,
+        roomManager,
+        pubsub,
+        ctx.connectionId || null,
+        correlationId || null,
+      );
     }
 
     logMutationMetrics('setCurrentClimb', performance.now() - startTime, sessionId, {

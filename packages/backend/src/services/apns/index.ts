@@ -12,7 +12,12 @@ import apn from '@parse/node-apn';
 import { eq } from 'drizzle-orm';
 import { activityPushTokens } from '@boardsesh/db/schema/app';
 import { db } from '../../db/client';
-import { trackLiveActivityEnded, trackLiveActivityPushDelivery } from '../analytics/live-activity';
+import {
+  trackLiveActivityEnded,
+  trackLiveActivityEndedAttributionGap,
+  trackLiveActivityPushDelivery,
+  trackLiveActivityPushDeliveryAttributionGap,
+} from '../analytics/live-activity';
 import { logger } from '../../utils/logger';
 
 // ---------------------------------------------------------------------------
@@ -43,9 +48,27 @@ interface DebouncedEntry {
   source: SendSource;
 }
 
-interface TokenRegistration {
+export interface LiveActivityTokenRegistration {
   token: string;
   userId: string | null;
+}
+
+interface DeliveryCounts {
+  tokenCount: number;
+  sentCount: number;
+  failedCount: number;
+  staleCount: number;
+}
+
+interface DeliveryTrackingInput {
+  sessionId: string;
+  event: 'update' | 'end';
+  source: SendSource;
+  registrations: LiveActivityTokenRegistration[];
+  sentDevices: string[];
+  failedDevices: string[];
+  staleDevices: ReadonlySet<string>;
+  elapsedMs: number;
 }
 
 // Exponential-ish backoff schedule for transient DB lookup failures.
@@ -196,7 +219,7 @@ export async function shutdownApns(): Promise<void> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-async function getTokenRegistrationsForSession(sessionId: string): Promise<TokenRegistration[]> {
+async function getTokenRegistrationsForSession(sessionId: string): Promise<LiveActivityTokenRegistration[]> {
   const rows = await db
     .select({ token: activityPushTokens.token, userId: activityPushTokens.userId })
     .from(activityPushTokens)
@@ -223,15 +246,107 @@ interface SendOptions {
   source?: SendSource;
 }
 
+function createDeliveryCounts(): DeliveryCounts {
+  return {
+    tokenCount: 0,
+    sentCount: 0,
+    failedCount: 0,
+    staleCount: 0,
+  };
+}
+
+function getDeliveryCountsForRegistration(
+  registration: LiveActivityTokenRegistration,
+  deliveryCountsByUserId: Map<string, DeliveryCounts>,
+  unattributedDeliveryCounts: DeliveryCounts,
+): DeliveryCounts {
+  if (!registration.userId) return unattributedDeliveryCounts;
+
+  const existingCounts = deliveryCountsByUserId.get(registration.userId);
+  if (existingCounts) return existingCounts;
+
+  const createdCounts = createDeliveryCounts();
+  deliveryCountsByUserId.set(registration.userId, createdCounts);
+  return createdCounts;
+}
+
+function trackPushDeliveryForRegistrations({
+  sessionId,
+  event,
+  source,
+  registrations,
+  sentDevices,
+  failedDevices,
+  staleDevices,
+  elapsedMs,
+}: DeliveryTrackingInput): void {
+  const registrationByToken = new Map(registrations.map((registration) => [registration.token, registration]));
+  const deliveryCountsByUserId = new Map<string, DeliveryCounts>();
+  const unattributedDeliveryCounts = createDeliveryCounts();
+
+  for (const registration of registrations) {
+    getDeliveryCountsForRegistration(registration, deliveryCountsByUserId, unattributedDeliveryCounts).tokenCount++;
+  }
+
+  for (const sentDevice of sentDevices) {
+    const registration = registrationByToken.get(sentDevice);
+    if (!registration) continue;
+    getDeliveryCountsForRegistration(registration, deliveryCountsByUserId, unattributedDeliveryCounts).sentCount++;
+  }
+
+  for (const failedDevice of failedDevices) {
+    const registration = registrationByToken.get(failedDevice);
+    if (!registration) continue;
+    const deliveryCounts = getDeliveryCountsForRegistration(
+      registration,
+      deliveryCountsByUserId,
+      unattributedDeliveryCounts,
+    );
+    deliveryCounts.failedCount++;
+    if (staleDevices.has(failedDevice)) {
+      deliveryCounts.staleCount++;
+    }
+  }
+
+  for (const [userId, deliveryCounts] of deliveryCountsByUserId.entries()) {
+    trackLiveActivityPushDelivery({
+      userId,
+      sessionId,
+      event,
+      source,
+      tokenCount: deliveryCounts.tokenCount,
+      sentCount: deliveryCounts.sentCount,
+      failedCount: deliveryCounts.failedCount,
+      staleCount: deliveryCounts.staleCount,
+      elapsedMs,
+    });
+  }
+
+  if (unattributedDeliveryCounts.tokenCount > 0) {
+    trackLiveActivityPushDeliveryAttributionGap({
+      sessionId,
+      event,
+      source,
+      reason: 'missing_user_id',
+      tokenCount: unattributedDeliveryCounts.tokenCount,
+      sentCount: unattributedDeliveryCounts.sentCount,
+      failedCount: unattributedDeliveryCounts.failedCount,
+      staleCount: unattributedDeliveryCounts.staleCount,
+      elapsedMs,
+    });
+  }
+}
+
 async function sendNotification(
   sessionId: string,
-  tokens: string[],
+  registrations: LiveActivityTokenRegistration[],
   event: 'update' | 'end',
   contentState?: LiveActivityContentState,
   options: SendOptions = {},
 ): Promise<{ sent: number; failed: number; stale: number }> {
-  if (!provider || tokens.length === 0) return { sent: 0, failed: 0, stale: 0 };
+  if (!provider || registrations.length === 0) return { sent: 0, failed: 0, stale: 0 };
 
+  const tokens = registrations.map((registration) => registration.token);
   metrics.sendsAttempted += tokens.length;
 
   const notification = new apn.Notification();
@@ -252,6 +367,7 @@ async function sendNotification(
 
   const startedAt = Date.now();
   let stale = 0;
+  const staleDevices = new Set<string>();
 
   try {
     const result = await provider.send(notification, tokens);
@@ -269,6 +385,7 @@ async function sendNotification(
 
         if (status === 410 || reason === 'BadDeviceToken' || reason === 'Unregistered' || reason === 'ExpiredToken') {
           stale++;
+          staleDevices.add(failure.device);
           staleTokenDeletions.push(deleteStaleToken(failure.device));
         } else {
           logger.error(
@@ -288,14 +405,14 @@ async function sendNotification(
         `tokens=${String(tokens.length)} sent=${String(sent)} failed=${String(failed)} stale=${String(stale)} ` +
         `elapsedMs=${String(Date.now() - startedAt)}`,
     );
-    trackLiveActivityPushDelivery({
+    trackPushDeliveryForRegistrations({
       sessionId,
       event,
       source: options.source ?? 'event',
-      tokenCount: tokens.length,
-      sentCount: sent,
-      failedCount: failed,
-      staleCount: stale,
+      registrations,
+      sentDevices: result.sent.map((sentDevice) => sentDevice.device),
+      failedDevices: result.failed.map((failedDevice) => failedDevice.device),
+      staleDevices,
       elapsedMs: Date.now() - startedAt,
     });
 
@@ -303,24 +420,29 @@ async function sendNotification(
   } catch (error) {
     metrics.sendsFailed += tokens.length;
     logger.error(`[APNs] Send error for session ${sessionId}:`, error);
-    trackLiveActivityPushDelivery({
+    trackPushDeliveryForRegistrations({
       sessionId,
       event,
       source: options.source ?? 'event',
-      tokenCount: tokens.length,
-      sentCount: 0,
-      failedCount: tokens.length,
-      staleCount: 0,
+      registrations,
+      sentDevices: [],
+      failedDevices: tokens,
+      staleDevices: new Set<string>(),
       elapsedMs: Date.now() - startedAt,
     });
     return { sent: 0, failed: tokens.length, stale: 0 };
   }
 }
 
-function trackSessionEndedForRegistrations(sessionId: string, registrations: TokenRegistration[]): void {
+function trackSessionEndedForRegistrations(sessionId: string, registrations: LiveActivityTokenRegistration[]): void {
   const tokenCountsByUserId = new Map<string, number>();
+  let unattributedTokenCount = 0;
+
   for (const registration of registrations) {
-    if (!registration.userId) continue;
+    if (!registration.userId) {
+      unattributedTokenCount++;
+      continue;
+    }
     tokenCountsByUserId.set(registration.userId, (tokenCountsByUserId.get(registration.userId) ?? 0) + 1);
   }
 
@@ -330,6 +452,14 @@ function trackSessionEndedForRegistrations(sessionId: string, registrations: Tok
       sessionId,
       reason: 'session-ended',
       tokenCount,
+    });
+  }
+
+  if (unattributedTokenCount > 0) {
+    trackLiveActivityEndedAttributionGap({
+      sessionId,
+      reason: 'missing_user_id',
+      tokenCount: unattributedTokenCount,
     });
   }
 }
@@ -350,7 +480,7 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
   const entry = pendingSends.get(sessionId);
   if (!entry) return;
 
-  let registrations: TokenRegistration[];
+  let registrations: LiveActivityTokenRegistration[];
   try {
     registrations = await getTokenRegistrationsForSession(sessionId);
   } catch (error) {
@@ -388,8 +518,7 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
 
   const source = entry.source;
   pendingSends.delete(sessionId);
-  const tokens = registrations.map((registration) => registration.token);
-  if (tokens.length === 0) {
+  if (registrations.length === 0) {
     // Demoted to debug because every queue event on a party session without an
     // iOS Live Activity device produces one of these. Multiplied by N backend
     // instances and M queue events/min, the info-level version was unreadable.
@@ -397,7 +526,7 @@ async function executeDebouncedSend(sessionId: string): Promise<void> {
     return;
   }
 
-  await sendNotification(sessionId, tokens, 'update', entry.latestState, { source });
+  await sendNotification(sessionId, registrations, 'update', entry.latestState, { source });
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +571,7 @@ export function sendLiveActivityUpdate(
 }
 
 /**
- * Send an immediate Live Activity update to a specific set of tokens,
+ * Send an immediate Live Activity update to a specific set of token registrations,
  * bypassing the per-session debounce. Used right after a device registers a
  * push token so the lock-screen widget exits "Loading…" without waiting for
  * the next organic queue event.
@@ -452,13 +581,15 @@ export function sendLiveActivityUpdate(
  */
 export async function sendLiveActivityUpdateToTokens(
   sessionId: string,
-  tokens: string[],
+  registrations: LiveActivityTokenRegistration[],
   contentState: LiveActivityContentState,
   options: { source?: 'registration' | 'heartbeat' } = {},
 ): Promise<void> {
   if (!configured) return;
-  if (tokens.length === 0) return;
-  await sendNotification(sessionId, tokens, 'update', contentState, { source: options.source ?? 'registration' });
+  if (registrations.length === 0) return;
+  await sendNotification(sessionId, registrations, 'update', contentState, {
+    source: options.source ?? 'registration',
+  });
 }
 
 /**
@@ -475,16 +606,14 @@ export async function endLiveActivity(sessionId: string): Promise<void> {
     pendingSends.delete(sessionId);
   }
 
-  let registrations: TokenRegistration[] = [];
+  let registrations: LiveActivityTokenRegistration[] = [];
   try {
     registrations = await getTokenRegistrationsForSession(sessionId);
   } catch (error) {
     logger.error(`[APNs] endLiveActivity: token lookup failed for session ${sessionId}:`, error);
   }
-  const tokens = registrations.map((registration) => registration.token);
-
-  if (tokens.length > 0) {
-    await sendNotification(sessionId, tokens, 'end');
+  if (registrations.length > 0) {
+    await sendNotification(sessionId, registrations, 'end');
     trackSessionEndedForRegistrations(sessionId, registrations);
   } else {
     logger.debug(`[APNs] No registered Live Activity tokens for session ${sessionId}; skipping end`);

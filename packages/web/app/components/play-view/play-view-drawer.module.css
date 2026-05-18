@@ -214,6 +214,62 @@
   border-top: 1px solid var(--neutral-100);
 }
 
+/*
+ * Pending pulse on the lightbulb (Phase 3 of the queue-control-bar pivot).
+ *
+ * Applied between the lightbulb press and the matching WallConfirmedClimb
+ * event arriving — a soft pulse signals "we asked, we're waiting." The
+ * pulse stops as soon as the watcher resolves (confirm or fallback). The
+ * coachmark variant fires once on first drawer open and clears itself.
+ *
+ * Box-shadow pulse rather than scale/transform so the pulse halo stays
+ * inside the button's hit target and doesn't fight the existing
+ * connectedGlow animation on the lit Lightbulb icon.
+ */
+.lightbulbPending {
+  border-radius: 50%;
+  animation: lightbulbPulse 1100ms ease-in-out infinite;
+}
+
+.lightbulbCoachmark {
+  border-radius: 50%;
+  animation: lightbulbPulse 900ms ease-in-out 1;
+}
+
+/*
+ * Lit-state glow on the Lightbulb icon. Hoisted out of an inline `sx` prop —
+ * defining @keyframes inside `sx` made Emotion mint a fresh class name on
+ * every render (the keyframe text never changes, but Emotion can't know
+ * that). Class-based animation reuses the same identifier across renders.
+ */
+.lightbulbConnectedGlow {
+  animation: connectedGlow 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes lightbulbPulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-warning);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+    opacity: 0.85;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    opacity: 1;
+  }
+}
+
+@keyframes connectedGlow {
+  0% {
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-warning) 60%, transparent));
+  }
+  100% {
+    filter: drop-shadow(0 0 6px var(--color-warning));
+  }
+}
+
 .swipeCardContainer {
   width: 100%;
   height: 100%;

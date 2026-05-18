@@ -71,7 +71,23 @@ export type SessionDataType = {
   isDisconnected: boolean;
   users: SessionUser[];
   clientId: string | null;
+  /** Local user's stable participant id for the current session, or null
+   *  outside a session. Distinct from `clientId` (a connection id). Use this
+   *  when comparing against `driverParticipantId` or any `SessionUser.id`. */
+  participantId: string | null;
   isLeader: boolean;
+  /** Participant id of the current wall driver, or null when unclaimed.
+   *  Always null in solo (no party). */
+  driverParticipantId: string | null;
+  /** Whether the local user currently drives the wall (lightbulb is "lit").
+   *  True in solo regardless of state; in party, true when the local
+   *  `participantId` matches `driverParticipantId`. */
+  isDriver: boolean;
+  /** Most recently observed BLE board serial for this session, or null when
+   *  unset (solo, or party with no member ever paired). The drawer's
+   *  lightbulb fallback uses this to auto-connect to the same board another
+   *  member is already paired to, skipping the picker. */
+  lastConnectedBoardSerial: string | null;
   isBackendMode: boolean;
   hasConnected: boolean;
   connectionError: Error | null;

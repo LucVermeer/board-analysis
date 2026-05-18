@@ -74,7 +74,11 @@
     "about": "Sobre",
     "rateBoardsesh": "Valorar Boardsesh",
     "reportBug": "Reportar un bug",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "devBuild": "Build de dev",
+    "branch": "Rama",
+    "qaNotes": "Notas de QA",
+    "qaNotesEmpty": "Sin archivo de notas de QA"
   },
   "loading": {
     "messages": [
@@ -195,5 +199,40 @@
   },
   "board": {
     "resetZoom": "Restablecer zoom"
+  },
+  "lightControl": {
+    "title": "Luces",
+    "turnOffAll": "Apagar todas las luces",
+    "partyMode": "Modo fiesta",
+    "stopParty": "Parar fiesta",
+    "partyUnsupported": "El modo fiesta no está disponible en esta tabla",
+    "discoMode": "Modo disco",
+    "stopDisco": "Parar disco",
+    "discoNeedsClimb": "Carga un bloque para empezar el disco",
+    "clearFailed": "No se pudo limpiar la tabla",
+    "customizeColors": "Personalizar colores",
+    "customizeColorsUnsupported": "Los colores personalizados no están disponibles en esta tabla",
+    "customizeColorsTitle": "Colores de los LED",
+    "customizeColorsHelp": "Elige los colores con los que tu tabla ilumina las manos, los pies y la presa final. Las presas de inicio mantienen su verde por defecto.",
+    "resetColors": "Restablecer",
+    "disconnect": "Desconectar tabla",
+    "role": {
+      "HAND": "Manos",
+      "FOOT": "Pies",
+      "FINISH": "Final"
+    }
+  },
+  "ascents": {
+    "deleteTitle": "Eliminar encadene",
+    "deleteDescription": "¿Seguro? No se puede deshacer.",
+    "statusFlash": "flash",
+    "statusSend": "encadene",
+    "statusAttempt": "intento",
+    "flashed_one": "Flash",
+    "flashed_other": "{{count}} flashes",
+    "sent_one": "Encadenado",
+    "sent_other": "{{count}} encadenes",
+    "attempts_one": "1 intento",
+    "attempts_other": "{{count}} intentos"
   }
 }

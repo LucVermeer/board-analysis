@@ -89,6 +89,41 @@ After every successful per-user sync, the daemon also runs a shared sync for tha
 
 When the climbs upsert sees previously-unseen UUIDs, the daemon also writes `new_climbs_synced` rows into the `notifications` table for each follower of the climb's setter (`setter_follows` and any linked `user_follows` accounts).
 
+### `board_climb_stats`: two-writer model
+
+`ascensionist_count` is the materialized sum of two source columns, each
+owned by a single writer:
+
+| Column                         | Owner                           | Updated by                                                                                                                |
+| ------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `aurora_ascensionist_count`    | Aurora sync                     | `upsertClimbStats` (this file's daemon) — written verbatim from Aurora's payload                                          |
+| `boardsesh_ascensionist_count` | Boardsesh `recomputeClimbStats` | `packages/backend/src/graphql/resolvers/ticks/recompute-climb-stats.ts` — `COUNT(DISTINCT user_id)` over flash/send ticks |
+| `ascensionist_count`           | Both writers, kept in lockstep  | Every `upsertClimbStats` and every `recomputeClimbStats` recompute it as `COALESCE(aurora,0) + COALESCE(boardsesh,0)`     |
+
+The search hot path reads `ascensionist_count` through the covering index from
+migration 0067, so it stays a regular column (not `GENERATED`) — both writers
+must update it whenever they touch their own share.
+
+`fa_username` / `fa_at` follow a related but asymmetric rule. Aurora's upsert
+writes them verbatim (including `null`, which is how Aurora signals an FA
+correction). `recomputeClimbStats` only re-derives FA for
+Boardsesh-originated climbs (`board_climbs.user_id IS NOT NULL`); on Aurora
+climbs it does `COALESCE(existing, agg.first_user)` so Aurora's authority is
+never disturbed. Boardsesh-created climbs aren't synced from Aurora, so the
+two paths can't collide.
+
+`quality_average`, `difficulty_average`, and `display_difficulty` follow the
+same Boardsesh-owned rule. Aurora's upsert clobbers them on every sync from
+the much larger Aurora ascent population. `recomputeClimbStats` only writes
+these columns for Boardsesh-originated climbs (where Aurora never syncs);
+on Aurora climbs it leaves them untouched so Aurora's averages stay
+authoritative. `display_difficulty` mirrors `difficulty_average` in both
+writers (Aurora: `Number(item.display_difficulty || item.difficulty_average)`;
+Boardsesh: the same `AVG(bt.difficulty)` value used for `difficulty_average`).
+
+If you add a new writer to `board_climb_stats`, decide which side it owns and
+recompute `ascensionist_count` in the same statement that updates that side.
+
 ## CLI Usage
 
 ### Installation

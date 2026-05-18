@@ -14,6 +14,13 @@ import {
   leaveSession,
   getSessionMembers,
   getSessionLeader,
+  getSessionDriver,
+  setSessionDriverAndReturnPrevious,
+  clearSessionDriverIf,
+  getSessionBoardSerial,
+  setSessionBoardSerialAndReturnPrevious,
+  pushRecentClimb,
+  isRecentClimb,
   getSessionMemberCount,
   isConnectionInSession,
   refreshConnection,
@@ -166,6 +173,57 @@ export class DistributedStateManager {
   /** Get the current leader of a session. */
   async getSessionLeader(sessionId: string): Promise<string | null> {
     return getSessionLeader(this.redis, sessionId);
+  }
+
+  /** Get the current wall driver (participantId) of a session, or null when unclaimed. */
+  async getSessionDriver(sessionId: string): Promise<string | null> {
+    return getSessionDriver(this.redis, sessionId);
+  }
+
+  /**
+   * Set the current wall driver atomically and return the previous driver.
+   * Yank-on-press: overwrites any prior driver. Returns the participantId of
+   * the previous driver (or null when unclaimed) so callers can decide
+   * whether to broadcast DriverChanged without a second round trip.
+   */
+  async setSessionDriverAndReturnPrevious(sessionId: string, participantId: string): Promise<string | null> {
+    return setSessionDriverAndReturnPrevious(this.redis, sessionId, participantId);
+  }
+
+  /**
+   * Conditionally clear the driver — only deletes the key when the current
+   * driver matches `expectedParticipantId`. Returns true on deletion.
+   */
+  async clearSessionDriverIf(sessionId: string, expectedParticipantId: string): Promise<boolean> {
+    return clearSessionDriverIf(this.redis, sessionId, expectedParticipantId);
+  }
+
+  /** Get the session's last-connected BLE board serial, or null when unset. */
+  async getSessionBoardSerial(sessionId: string): Promise<string | null> {
+    return getSessionBoardSerial(this.redis, sessionId);
+  }
+
+  /**
+   * Set the session's last-connected BLE board serial and return the previous
+   * value atomically. Callers compare previous vs. new to decide whether to
+   * publish `SessionBoardSerialChanged`.
+   */
+  async setSessionBoardSerialAndReturnPrevious(sessionId: string, serial: string): Promise<string | null> {
+    return setSessionBoardSerialAndReturnPrevious(this.redis, sessionId, serial);
+  }
+
+  /**
+   * Record a climbUuid in the per-session recent-climbs ring buffer (called on
+   * every authoritative current-climb write). Used by confirmClimbOnWall to
+   * accept confirms that arrive within a small navigate-on race window.
+   */
+  async pushRecentClimb(sessionId: string, climbUuid: string): Promise<void> {
+    return pushRecentClimb(this.redis, sessionId, climbUuid);
+  }
+
+  /** Whether climbUuid is one of the session's last few authoritative climbs. */
+  async isRecentClimb(sessionId: string, climbUuid: string): Promise<boolean> {
+    return isRecentClimb(this.redis, sessionId, climbUuid);
   }
 
   /** Get count of live members in a session. */

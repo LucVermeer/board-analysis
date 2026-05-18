@@ -97,6 +97,40 @@ export const QueueIndexSchema = z.number().int('Index must be an integer').min(0
 export const QueueItemIdSchema = z.string().min(1, 'Queue item ID cannot be empty').max(100, 'Queue item ID too long');
 
 /**
+ * Climb UUID schema for resolver inputs. Matches the lenient `ExternalUUIDSchema`
+ * shape rather than `UUIDSchema` — Aurora climb UUIDs are not always
+ * dash-formatted standard UUIDs (Kilter/Tension store them as compact strings)
+ * and the wall-confirm path has to accept whatever the queue item already
+ * stores client-side.
+ */
+export const ClimbUuidSchema = z.string().min(1, 'Climb UUID cannot be empty').max(64, 'Climb UUID too long');
+
+/**
+ * BLE board serial schema. The Aurora boards' BLE peripherals advertise a
+ * short alphanumeric serial inside the `#…@` segment of the device name
+ * (e.g. "Kilter Board#751737@3", "Tension Board#KB-AB12-CD34@3").
+ *
+ * Tightened from the original `[A-Za-z0-9_:-]{1,64}` regex:
+ *  - Minimum length 4. Real Aurora serials are at least four characters; a
+ *    one-character serial would never come out of the BLE parser and only
+ *    weakens grief-vector defence.
+ *  - 32-character cap. Aurora serials are short; the 64-cap was defence
+ *    against accidental long strings but went well past anything the
+ *    manufacturer would ever ship.
+ *  - Underscores removed from the allowed set. The BLE parser at
+ *    `bluetooth-aurora.ts:70` extracts whatever sits between `#` and `@` —
+ *    Aurora's published serials are alphanumeric with optional dashes (and
+ *    occasional colons in multi-segment cases). Underscores never come back
+ *    from the parser, so allowing them only widened the surface for malformed
+ *    inputs ending up in Redis values.
+ */
+export const BoardSerialSchema = z
+  .string()
+  .min(4, 'Board serial too short')
+  .max(32, 'Board serial too long')
+  .regex(/^[A-Za-z0-9:-]+$/, 'Board serial must be alphanumeric (colon and hyphen allowed)');
+
+/**
  * Validate input and throw a user-friendly error if invalid.
  */
 export function validateInput<T>(schema: z.ZodSchema<T>, data: unknown, fieldName?: string): T {

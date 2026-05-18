@@ -3,6 +3,10 @@
     "admin": {
       "title": "Panel de admin",
       "description": "Panel de admin de Boardsesh"
+    },
+    "retention": {
+      "title": "Retención",
+      "description": "Panel de retención por cohortes"
     }
   },
   "title": "Panel de admin",
@@ -109,6 +113,33 @@
       "saved_one": "Se guardó {{count}} ajuste",
       "saved_other": "Se guardaron {{count}} ajustes",
       "saveFailed": "No se pudieron guardar los ajustes"
+    }
+  },
+  "nav": {
+    "retention": "Panel de retención"
+  },
+  "retention": {
+    "heading": "Retención de usuarios",
+    "subheading": "De los usuarios que se registraron en la semana W, qué porcentaje estuvo activo el día N — retención Dn clásica. Calculada tanto para marcas (bloques registrados) como para cualquier actividad en la app.",
+    "definitions": "Cohorte = semana de registro (UTC). Dn cuenta a un usuario si tuvo actividad en la ventana de 24 horas que empieza N días después del registro (así D7 = activo exactamente el día 7, no en cualquier momento de los primeros 7 días). Marcas = al menos un bloque registrado en Boardsesh (las marcas importadas de Aurora no se cuentan). Cualquier actividad = una marca, anfitrión o participación en una sesión de fiesta, favorito, playlist (creada o fijada), seguimiento (de usuario, setter o playlist), suscripción a nuevos bloques, comentario, voto, voto en propuesta o envío de comentarios. Las cohortes más recientes que la ventana muestran —.",
+    "back": "Volver al panel de admin",
+    "table": {
+      "cohortWeek": "Semana de cohorte",
+      "signups": "Registros",
+      "groupTicks": "Marcas",
+      "groupAny": "Cualquier actividad",
+      "activated": "Activados",
+      "d1": "D1",
+      "d3": "D3",
+      "d7": "D7",
+      "d30": "D30",
+      "notReady": "—",
+      "empty": "Aún no hay datos de cohortes."
+    },
+    "chart": {
+      "title": "Retención D7 por semana de cohorte",
+      "label": "Marcas",
+      "labelAny": "Cualquier actividad"
     }
   }
 }

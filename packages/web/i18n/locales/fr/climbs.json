@@ -71,16 +71,6 @@
     "linkCopied": "Lien copié",
     "shareFailed": "Échec du partage"
   },
-  "board": {
-    "connect": "Se connecter au board",
-    "disconnect": "Se déconnecter du board",
-    "connectError": "Impossible de se connecter au board. Vérifiez que le Bluetooth est activé et que le board est à portée.",
-    "lightingUnavailable": "Éclairage du board indisponible",
-    "lightingUnavailableIos": "Safari ne gère pas le Bluetooth. Utilisez l'app Boardsesh pour allumer les prises sur votre board.",
-    "lightingUnavailableBrowser": "Ce navigateur ne gère pas le Bluetooth. Passez à Chrome pour allumer les prises sur votre board.",
-    "dismiss": "Ignorer",
-    "getApp": "Obtenir l'app"
-  },
   "angleSelector": {
     "selectAngle": "Choisir l'inclinaison",
     "loadingStats": "Chargement des stats...",
@@ -105,7 +95,6 @@
     },
     "fields": {
       "climbName": "Nom du bloc",
-      "gradeRange": "Plage de cotation",
       "minGrade": "Min",
       "maxGrade": "Max",
       "setter": "Ouvreur",
@@ -261,6 +250,12 @@
         "submit": "Créer"
       }
     },
+    "sendToBoard": {
+      "label": "Envoyer au board",
+      "active": "Sur le mur",
+      "tooltip": "Envoyer au board",
+      "activeTooltip": "Actuellement sur le mur"
+    },
     "tick": {
       "drawer": {
         "signInRequired": "Connexion requise",
@@ -328,8 +323,19 @@
   },
   "detail": {
     "sections": {
-      "beta": "Beta"
+      "beta": "Beta",
+      "similarClimbs": "Blocs similaires",
+      "similarClimbsSummary": "Blocs partageant au moins 50 % de ces prises"
     }
+  },
+  "similarClimbs": {
+    "loadError": "Impossible de charger les blocs similaires.",
+    "emptyDefault": "Pas encore de blocs similaires.",
+    "emptyOnLayout": "Pas de blocs similaires sur cette configuration.",
+    "emptyIdentical": "Aucun bloc identique trouvé pour le moment.",
+    "untitledClimb": "Bloc sans nom",
+    "openActions": "Plus d'actions",
+    "actionsUnavailable": "Impossible d'ouvrir les actions pour ce bloc — configuration du panneau indisponible."
   },
   "multiboardList": {
     "noClimbsFound": "Aucun bloc trouvé",
@@ -350,6 +356,7 @@
       "noRating": "Pas de note",
       "gradeOverride": "Cotation personnalisée",
       "clearGradeOverride": "Effacer la cotation personnalisée",
+      "consensusSuffix": "consensus",
       "attemptCount": "Nombre d'essais"
     },
     "bar": {
@@ -388,7 +395,12 @@
     "alerts": {
       "importFailed": "Import échoué : {{error}}",
       "importWarnings": "Avertissements d'import :",
-      "checkingMoonBoardDuplicate": "On vérifie si ce bloc MoonBoard existe déjà..."
+      "checkingMoonBoardDuplicate": "On vérifie si ce bloc MoonBoard existe déjà...",
+      "publishDuplicateNamed": "Cette configuration de prises correspond à « {{name}} ». Activez Brouillon pour l'enregistrer sans la publier, ou changez une prise.",
+      "publishDuplicateUnnamed": "Cette configuration de prises correspond à un bloc existant. Activez Brouillon pour l'enregistrer sans le publier, ou changez une prise.",
+      "viewMatchingClimb": "Voir le bloc correspondant",
+      "identicalClimbDrawerTitle": "Bloc identique",
+      "saveFailedFallback": "Échec de l'enregistrement du bloc. Veuillez réessayer."
     },
     "settings": {
       "tooltip": "Paramètres du bloc",

@@ -26,10 +26,17 @@ export type UserPreferenceKeyMap = {
   'swipeHint:climbListSeen': boolean;
   'swipeHint:queueBarSeen': boolean;
   'swipeHint:logbookSeen': boolean;
-  'swipeHint:playViewSeen': boolean;
+  /**
+   * Queue-control-bar pivot Phase 3 first-run coachmark: pulses the lightbulb
+   * in the Play View Drawer once, with the tooltip "Send to the wall."
+   * Replaces the deleted `swipeHint:playViewSeen` peek animation (the bar's
+   * role is now self-evident from its content + driver avatar).
+   */
+  'swipeHint:lightbulbSeen': boolean;
   tickBarExpanded: boolean;
   'shakeToReport:dismissed': boolean;
   esp32Connections: Esp32Connection[];
+  lastUsedGrade: number;
 };
 
 // Map of IDB preference keys to their legacy localStorage keys for one-time migration
@@ -38,7 +45,35 @@ const LEGACY_LOCALSTORAGE_KEYS: Record<string, string> = {
   'boardsesh:partyMode': 'boardsesh:partyMode',
 };
 
-const getDB = createIndexedDBStore('boardsesh-user-preferences', STORE_NAME);
+// Preference keys that used to live in IndexedDB but were removed from
+// UserPreferenceKeyMap. Their stored values would otherwise sit untouched
+// in users' stores forever. Cleaned up once per page load on first DB
+// access — `delete` is idempotent (no-op when the key isn't present).
+const ORPHANED_PREFERENCE_KEYS = [
+  // Removed when the queue-control-bar pivot dropped the play-view drawer
+  // peek-animation hint in favour of the lightbulb coachmark (`swipeHint:lightbulbSeen`).
+  'swipeHint:playViewSeen',
+] as const;
+
+const getDBRaw = createIndexedDBStore('boardsesh-user-preferences', STORE_NAME);
+
+let orphanCleanupPromise: Promise<void> | null = null;
+const getDB: typeof getDBRaw = async () => {
+  const db = await getDBRaw();
+  if (db && !orphanCleanupPromise) {
+    orphanCleanupPromise = (async () => {
+      for (const key of ORPHANED_PREFERENCE_KEYS) {
+        try {
+          await db.delete(STORE_NAME, key);
+        } catch {
+          // Idempotent cleanup — swallow per-key failures so one missing/
+          // locked key can't block legitimate preference reads.
+        }
+      }
+    })();
+  }
+  return db;
+};
 
 /**
  * Get a preference value from IndexedDB.
@@ -150,4 +185,21 @@ export const getGradeDisplayFormat = async (): Promise<GradeDisplayFormat> => {
  */
 export const setGradeDisplayFormat = async (format: GradeDisplayFormat): Promise<void> => {
   await setPreference('gradeDisplayFormat', format);
+};
+
+/**
+ * Get the last grade the user picked in any grade picker (filter min/max,
+ * logbook min/max, playlist target). Used to focus the picker on a familiar
+ * grade when it mounts unselected.
+ */
+export const getLastUsedGrade = async (): Promise<number | undefined> => {
+  const value = await getPreference<number>('lastUsedGrade');
+  return typeof value === 'number' ? value : undefined;
+};
+
+/**
+ * Remember the last grade the user picked across grade-picker call sites.
+ */
+export const setLastUsedGrade = async (difficultyId: number): Promise<void> => {
+  await setPreference('lastUsedGrade', difficultyId);
 };

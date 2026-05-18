@@ -1,5 +1,6 @@
 // Main unified component
 export { ClimbActions } from './climb-actions';
+export { default as ClimbActionsDrawer } from './climb-actions-drawer';
 
 // Core hook
 export { useClimbActions } from './use-climb-actions';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import type { BoardDetails } from '@/app/lib/types';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
@@ -169,10 +169,6 @@ vi.mock('@/app/lib/last-used-board-db', () => ({
   getLastUsedBoard: () => Promise.resolve(null),
 }));
 
-vi.mock('@/app/components/search-drawer/recent-searches-storage', () => ({
-  getRecentSearches: () => Promise.resolve([]),
-}));
-
 vi.mock('@/app/components/board-lock/use-board-switch-guard', () => ({
   useBoardSwitchGuard: () => vi.fn((_: unknown, cb: () => void) => cb()),
 }));
@@ -202,6 +198,22 @@ const boardDetails = {
 
 const boardConfigs = {} as BoardConfigData;
 
+// BottomNavigationAction with component={LocaleLink} renders as `<a>` (role
+// "link"); without it, the action stays a `<button>`. Tests don't care which
+// — they just want the tab — so this helper looks both up.
+function getTab(name: string) {
+  return screen.queryByRole('link', { name }) ?? screen.getByRole('button', { name });
+}
+
+function queryTab(name: string) {
+  return screen.queryByRole('link', { name }) ?? screen.queryByRole('button', { name });
+}
+
+function climbHref() {
+  const climbTab = getTab('Climb');
+  return climbTab.getAttribute('href') ?? '';
+}
+
 describe('BottomTabBar session preservation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -212,7 +224,7 @@ describe('BottomTabBar session preservation', () => {
     mockLanguage = 'en-US';
   });
 
-  it('includes session param when navigating to climbs with active session on /b/ board', async () => {
+  it('includes session param when navigating to climbs with active session on /b/ board', () => {
     mockActiveSession = {
       sessionId: 'test-session-123',
       boardPath: '/b/my-board/35/list',
@@ -221,14 +233,11 @@ describe('BottomTabBar session preservation', () => {
     };
 
     render(<BottomTabBar boardConfigs={boardConfigs} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Climb' }));
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('session=test-session-123'));
-    });
+    expect(climbHref()).toContain('session=test-session-123');
   });
 
-  it('uses /b/ slug URL from active session when on home page', async () => {
+  it('uses /b/ slug URL from active session when on home page', () => {
     mockActiveSession = {
       sessionId: 'test-session-123',
       boardPath: '/b/my-board/35/list',
@@ -237,26 +246,23 @@ describe('BottomTabBar session preservation', () => {
     };
 
     render(<BottomTabBar boardConfigs={boardConfigs} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Climb' }));
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/b/my-board/35/list'));
-    });
+    expect(climbHref()).toContain('/b/my-board/35/list');
   });
 
-  it('does not include session param when no active session', async () => {
+  it('does not include session param when no active session', () => {
     mockPathname = '/kilter/original/12x12-square/screw_bolt/40/list';
 
     render(<BottomTabBar boardDetails={boardDetails} angle={40} boardConfigs={boardConfigs} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Climb' }));
 
-    await waitFor(() => {
-      if (mockPush.mock.calls.length > 0) {
-        expect(mockPush.mock.calls[0][0]).not.toContain('session=');
-      }
-    });
+    expect(climbHref()).not.toContain('session=');
   });
 });
+
+function createHref() {
+  const createTab = getTab('Create');
+  return createTab.getAttribute('href') ?? '';
+}
 
 describe('BottomTabBar create flow', () => {
   beforeEach(() => {
@@ -268,12 +274,10 @@ describe('BottomTabBar create flow', () => {
     mockLanguage = 'en-US';
   });
 
-  it('navigates directly to create climb URL when board details are available', () => {
+  it('renders a link to the create climb URL when board details are available', () => {
     render(<BottomTabBar boardDetails={boardDetails} angle={40} boardConfigs={boardConfigs} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/create'));
+    expect(createHref()).toContain('/create');
   });
 
   it('opens board selector when no board context, then navigates to create after board selection', () => {
@@ -326,14 +330,14 @@ describe('BottomTabBar You tab', () => {
   it('renders "You" tab label instead of "Notifications"', () => {
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    expect(screen.getByRole('button', { name: 'You' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Notifications' })).toBeNull();
+    expect(getTab('You')).toBeTruthy();
+    expect(queryTab('Notifications')).toBeNull();
   });
 
   it('renders PersonOutlined icon for You tab', () => {
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const youTab = screen.getByRole('button', { name: 'You' });
+    const youTab = getTab('You');
     // PersonOutlined renders as an SVG with data-testid="PersonOutlinedIcon"
     const icon = youTab.querySelector('[data-testid="PersonOutlinedIcon"]');
     expect(icon).toBeTruthy();
@@ -343,62 +347,51 @@ describe('BottomTabBar You tab', () => {
     mockPathname = '/you';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const youTab = screen.getByRole('button', { name: 'You' });
-    expect(youTab.classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('You').classList.contains('Mui-selected')).toBe(true);
   });
 
   it('You tab is selected when on /you/sessions path', () => {
     mockPathname = '/you/sessions';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const youTab = screen.getByRole('button', { name: 'You' });
-    expect(youTab.classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('You').classList.contains('Mui-selected')).toBe(true);
   });
 
   it('You tab is NOT selected when on /profile/some-id path (other user)', () => {
     mockPathname = '/profile/some-id';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const youTab = screen.getByRole('button', { name: 'You' });
-    expect(youTab.classList.contains('Mui-selected')).toBe(false);
+    expect(getTab('You').classList.contains('Mui-selected')).toBe(false);
   });
 
   it('Feed tab is selected when on /feed path', () => {
     mockPathname = '/feed';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const feedTab = screen.getByRole('button', { name: 'Feed' });
-    expect(feedTab.classList.contains('Mui-selected')).toBe(true);
-
-    const youTab = screen.getByRole('button', { name: 'You' });
-    expect(youTab.classList.contains('Mui-selected')).toBe(false);
+    expect(getTab('Feed').classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('You').classList.contains('Mui-selected')).toBe(false);
   });
 
   it('Home tab is selected when on / path', () => {
     mockPathname = '/';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const homeTab = screen.getByRole('button', { name: 'Home' });
-    expect(homeTab.classList.contains('Mui-selected')).toBe(true);
-
-    const youTab = screen.getByRole('button', { name: 'You' });
-    expect(youTab.classList.contains('Mui-selected')).toBe(false);
+    expect(getTab('Home').classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('You').classList.contains('Mui-selected')).toBe(false);
   });
 
-  it('navigates to /you when You tab is clicked (authenticated)', () => {
+  it('renders a link to /you when authenticated (Next.js handles navigation)', () => {
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'You' }));
-
-    expect(mockPush).toHaveBeenCalledWith('/you');
+    expect(getTab('You').getAttribute('href')).toBe('/you');
   });
 
-  it('opens auth modal when You tab is clicked and not authenticated', () => {
+  it('opens auth modal and prevents navigation when You tab is clicked and not authenticated', () => {
     mockSessionData = null;
     mockSessionStatus = 'unauthenticated';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'You' }));
+    fireEvent.click(getTab('You'));
 
     expect(mockOpenAuthModal).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -406,6 +399,20 @@ describe('BottomTabBar You tab', () => {
       }),
     );
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('does NOT open the auth modal while session is still loading', () => {
+    // Session-loading window: NextAuth hasn't resolved yet. An already
+    // signed-in user tapping You here would see a spurious modal if we
+    // short-circuited on !isAuthenticated. The /you layout handles the
+    // real auth check server-side, so we let Link navigate.
+    mockSessionData = null;
+    mockSessionStatus = 'loading';
+    render(<BottomTabBar boardConfigs={boardConfigs} />);
+
+    fireEvent.click(getTab('You'));
+
+    expect(mockOpenAuthModal).not.toHaveBeenCalled();
   });
 });
 
@@ -422,41 +429,35 @@ describe('BottomTabBar locale-aware pathname matching', () => {
     mockPathname = '/es/feed';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const feedTab = screen.getByRole('button', { name: 'Feed' });
-    expect(feedTab.classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('Feed').classList.contains('Mui-selected')).toBe(true);
   });
 
   it('You tab is selected when on /es/you', () => {
     mockPathname = '/es/you';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const youTab = screen.getByRole('button', { name: 'You' });
-    expect(youTab.classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('You').classList.contains('Mui-selected')).toBe(true);
   });
 
   it('Home tab is selected when on /es', () => {
     mockPathname = '/es';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const homeTab = screen.getByRole('button', { name: 'Home' });
-    expect(homeTab.classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('Home').classList.contains('Mui-selected')).toBe(true);
   });
 
   it('Discover tab is selected when on /es/playlists', () => {
     mockPathname = '/es/playlists';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const libraryTab = screen.getByRole('button', { name: 'Discover' });
-    expect(libraryTab.classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('Discover').classList.contains('Mui-selected')).toBe(true);
   });
 
   it('Discover tab is selected on smart-playlist /discover/<slug>/<user-id> route', () => {
     mockPathname = '/discover/five-stars/user-123';
     render(<BottomTabBar boardConfigs={boardConfigs} />);
 
-    const libraryTab = screen.getByRole('button', { name: 'Discover' });
-    expect(libraryTab.classList.contains('Mui-selected')).toBe(true);
-    const climbsTab = screen.getByRole('button', { name: 'Climb' });
-    expect(climbsTab.classList.contains('Mui-selected')).toBe(false);
+    expect(getTab('Discover').classList.contains('Mui-selected')).toBe(true);
+    expect(getTab('Climb').classList.contains('Mui-selected')).toBe(false);
   });
 });

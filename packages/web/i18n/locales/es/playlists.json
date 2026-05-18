@@ -163,7 +163,11 @@
       "mainSetVariability": "Variabilidad de la serie principal",
       "numberOfSteps": "Número de pasos",
       "climbsPerStep": "Bloques por paso",
-      "numberOfClimbs": "Número de bloques"
+      "numberOfClimbs": "Número de bloques",
+      "any": "Cualquiera",
+      "minAscentsOption": "{{value}}+",
+      "minRatingOption_one": "{{count}} estrella o más",
+      "minRatingOption_other": "{{count}} estrellas o más"
     },
     "warmUpOptions": {
       "standard": "Estándar",

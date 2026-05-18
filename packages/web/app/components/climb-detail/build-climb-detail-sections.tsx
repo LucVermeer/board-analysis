@@ -14,17 +14,27 @@ import ClimbAnalytics from '@/app/components/charts/climb-analytics';
 import BoardseshBetaList from '@/app/components/beta-videos/boardsesh-beta-list';
 import BoardseshBetaAddPanel from '@/app/components/beta-videos/boardsesh-beta-add-panel';
 import BoardseshBetaAddButton from '@/app/components/beta-videos/boardsesh-beta-add-button';
+import SimilarClimbsList from '@/app/components/similar-climbs/similar-climbs-list';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
 import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
-import type { Climb } from '@/app/lib/types';
+import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';
 
 type BuildClimbDetailSectionsProps = {
   climb: Climb;
   climbUuid: string;
   boardType: string;
   angle: number;
+  /** Route-supplied layout id. In single-board contexts `climb.layoutId` is
+   *  intentionally absent (it's only populated in multi-board listings), so the
+   *  section relies on the caller passing the layout from the URL params. */
+  layoutId: number;
+  /** Route-supplied board details (size + sets + layout). Drives the
+   *  similar-climbs section's thumbnail rendering — compatible candidates
+   *  render at the viewer's wall config, incompatible ones fall back to
+   *  the layout's default config. */
+  viewerBoardDetails?: BoardDetails;
   currentClimbDifficulty?: string;
   boardName?: string;
   /** When false, returns empty sections immediately. Used to defer below-fold
@@ -37,6 +47,8 @@ export function useBuildClimbDetailSections({
   climbUuid,
   boardType,
   angle,
+  layoutId,
+  viewerBoardDetails,
   currentClimbDifficulty,
   boardName,
   enabled: enabledProp = true,
@@ -97,7 +109,13 @@ export function useBuildClimbDetailSections({
       title: betaTitle,
       defaultSummary: 'No videos yet',
       getSummary: () => (betaCount > 0 ? [`${betaCount} video${betaCount !== 1 ? 's' : ''}`] : []),
+      // Beta is the headline content the user opens the drawer for — keep
+      // it expanded alongside whatever single-active section they pick.
+      // defaultActive still fires (no proposalUuid → beta is the
+      // accordion's "active" section too, harmless and keeps fallback
+      // styling correct).
       defaultActive: !highlightProposalUuid,
+      keepExpanded: true,
       flush: true,
       lazy: true,
       action: <BoardseshBetaAddButton isAdding={isAddingBeta} onToggle={() => setIsAddingBeta((v) => !v)} />,
@@ -165,6 +183,29 @@ export function useBuildClimbDetailSections({
       getSummary: () => ['Ascents', 'Quality', 'Trends'],
       lazy: true,
       content: <ClimbAnalytics climbUuid={climbUuid} boardType={boardType} />,
+    },
+    {
+      key: 'similar-climbs',
+      label: t('detail.sections.similarClimbs'),
+      title: t('detail.sections.similarClimbs'),
+      defaultSummary: t('detail.sections.similarClimbsSummary'),
+      // Open by default — saves a tap to discover related climbs, and
+      // the empty-state copy keeps the section unobtrusive when nothing
+      // matches the threshold.
+      keepExpanded: true,
+      lazy: true,
+      content: (
+        <SimilarClimbsList
+          boardType={boardType as BoardName}
+          layoutId={layoutId}
+          viewerBoardDetails={viewerBoardDetails}
+          climbUuid={climbUuid}
+          angle={angle}
+          threshold={0.5}
+          limit={10}
+          emptyMessage={t('similarClimbs.emptyOnLayout')}
+        />
+      ),
     },
   ];
 }

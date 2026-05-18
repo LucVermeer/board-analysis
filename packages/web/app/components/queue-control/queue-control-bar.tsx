@@ -16,7 +16,7 @@ import OpenInFullOutlined from '@mui/icons-material/OpenInFullOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
 import { track } from '@/app/lib/analytics';
 import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
-import NextClimbButton from './next-climb-button';
+import QueueNavButton from './queue-nav-button';
 import { usePathname, useParams, useSearchParams } from 'next/navigation';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import LocaleLink from '@/app/components/i18n/locale-link';
@@ -29,8 +29,7 @@ import {
 import type { BoardRouteParameters, BoardDetails, Angle, Climb } from '@/app/lib/types';
 import type { ClimbQueueItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { readPlayDrawerEventClimb } from './play-drawer-event';
-import PreviousClimbButton from './previous-climb-button';
+import { readPlayDrawerEventDetail } from './play-drawer-event';
 import QueueDrawer from '../play-view/queue-drawer';
 import { useSwipeable } from 'react-swipeable';
 import { TickButton } from '../logbook/tick-button';
@@ -43,13 +42,7 @@ import ClimbThumbnail from '../climb-card/climb-thumbnail';
 import ClimbTitle from '../climb-card/climb-title';
 import { themeTokens } from '@/app/theme/theme-config';
 import { TOUR_CLOSE_PLAY_VIEW_EVENT } from '../onboarding/onboarding-tour-events';
-import { ShareBoardButton } from '../board-page/share-button';
-import {
-  useCardSwipeNavigation,
-  EXIT_DURATION,
-  SNAP_BACK_DURATION,
-  ENTER_ANIMATION_DURATION,
-} from '@/app/hooks/use-card-swipe-navigation';
+import { useCardSwipeNavigation, EXIT_DURATION, SNAP_BACK_DURATION } from '@/app/hooks/use-card-swipe-navigation';
 import PlayViewDrawer from '../play-view/play-view-drawer';
 import CircularProgress from '@mui/material/CircularProgress';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
@@ -61,6 +54,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
 import Badge from '@mui/material/Badge';
+import Lightbulb from '@mui/icons-material/Lightbulb';
 import Typography from '@mui/material/Typography';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
 import { useColorMode } from '@/app/hooks/use-color-mode';
@@ -75,14 +69,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
 import styles from './queue-control-bar.module.css';
-import { PLAY_DRAWER_EVENT as PLAY_DRAWER_EVENT_INTERNAL, dispatchOpenPlayDrawer } from './play-drawer-event';
+import { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 
 export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
-
-// Re-export the window event so existing imports from this file keep working.
-// The actual definition lives in ./play-drawer-event to keep the import graph
-// light for callsites that only need the dispatch helper.
-export { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 
 const QUEUE_BADGE_SX = { '& .MuiBadge-badge': themeTokens.badge.small } as const;
 
@@ -98,31 +87,70 @@ const TICK_BADGE_SX = {
   },
 } as const;
 
+const DRIVER_BADGE_SX = {
+  '& .MuiBadge-badge': {
+    ...themeTokens.badge.small,
+    backgroundColor: themeTokens.colors.primary,
+    color: 'common.white',
+    borderRadius: '50%',
+    border: '2px solid transparent',
+  },
+} as const;
+
 function TickBadgeAvatar({
   user,
   hasTicked,
   size = 28,
+  isDriver = false,
 }: {
   user: { id: string; username: string; avatarUrl?: string };
   hasTicked: boolean;
   size?: number;
+  /** Queue-control-bar pivot: when true, overlay a small lit lightbulb badge
+   *  on the top-right corner of the avatar so the driver is unambiguous in
+   *  the bar's AvatarGroup. Composes with the tick badge (which lives
+   *  bottom-right) so a driver who has also ticked the current climb shows
+   *  both. */
+  isDriver?: boolean;
 }) {
-  const avatar = (
+  const { t } = useTranslation('session');
+  // Accessible label: when the user is driving, screen readers should hear
+  // "<username> is driving" — relying on `alt` is invisible because Avatar
+  // without `src` renders the username initial as text, not an <img>. Apply
+  // aria-label to the Avatar root so the SR sees it regardless of the
+  // src/initials branch.
+  const driverAriaLabel = isDriver ? t('queueBar.ariaLabels.userIsDriving', { username: user.username }) : undefined;
+  const baseAvatar = (
     <Avatar
       alt={user.username}
       src={user.avatarUrl ?? undefined}
+      aria-label={driverAriaLabel}
       sx={size !== 28 ? { width: size, height: size } : undefined}
     />
   );
-  if (!hasTicked) return avatar;
-  return (
+  // Compose tick badge (bottom-right) inside driver badge (top-right) so both
+  // can show on the same avatar without overlapping.
+  const withTick = hasTicked ? (
     <Badge
       overlap="circular"
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       badgeContent={<CheckOutlined sx={{ fontSize: 10 }} />}
       sx={TICK_BADGE_SX}
     >
-      {avatar}
+      {baseAvatar}
+    </Badge>
+  ) : (
+    baseAvatar
+  );
+  if (!isDriver) return withTick;
+  return (
+    <Badge
+      overlap="circular"
+      anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      badgeContent={<Lightbulb sx={{ fontSize: 10 }} />}
+      sx={DRIVER_BADGE_SX}
+    >
+      {withTick}
     </Badge>
   );
 }
@@ -146,7 +174,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const params = useParams<BoardRouteParameters>();
   const searchParams = useSearchParams();
   const router = useLocaleRouter();
-  const enterFallbackRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset activeDrawer on navigation. Skip the very first run — when we just
   // seeded the drawer open from the URL, this would slam it shut before paint.
@@ -156,14 +183,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     setActiveDrawer('none');
   }, [pathname]);
 
-  // Cleanup timeouts on unmount
+  // Whenever the play drawer closes, clear its event-driven payload state so
+  // the next open from any path (PLAY_DRAWER_EVENT or direct setActiveDrawer)
+  // starts from a clean slate. Belt-and-braces vs. handleCloseDrawer which
+  // only fires when the queue-list drawer's onClose runs.
   useEffect(() => {
-    return () => {
-      if (enterFallbackRef.current) {
-        clearTimeout(enterFallbackRef.current);
-      }
-    };
-  }, []);
+    if (activeDrawer !== 'play') {
+      setDrawerDisplayedItem(null);
+      setDrawerWallView(false);
+    }
+  }, [activeDrawer]);
 
   // Tour hook: close the play view drawer on demand (e.g. before showing the
   // session overview so the two drawers don't stack).
@@ -177,8 +206,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const isPlayPage = pathname.includes('/play/');
   const { currentClimb } = useCurrentClimb();
   const { queue } = useQueueList();
-  const { viewOnlyMode, connectionState, sessionId, isDisconnected, users, clientId, isPersistentSessionActive } =
-    useSessionData();
+  const {
+    viewOnlyMode,
+    connectionState,
+    sessionId,
+    isDisconnected,
+    users,
+    clientId,
+    isPersistentSessionActive,
+    driverParticipantId,
+  } = useSessionData();
 
   // Drawer-local "displayed climb" — populated when a browse caller (list
   // row, suggestion thumbnail, logbook row) opens the drawer with a climb
@@ -187,6 +224,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // tapped (drawer also reads the wall climb in that case). Reset to null on
   // drawer close.
   const [drawerDisplayedItem, setDrawerDisplayedItem] = useState<ClimbQueueItem | null>(null);
+  // Wall-view mode (pivot Phase 3): set by the bar's body-tap handler. When
+  // true the drawer hides prev/next, disables swipe, and shows the
+  // "Currently on the wall" header. Reset on close.
+  const [drawerWallView, setDrawerWallView] = useState(false);
 
   // Listen for play drawer open requests from climb list items that live
   // outside this component's React tree (board page, liked list, queue
@@ -200,21 +241,26 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   //     context's `currentClimbQueueItem` is seeded.
   useEffect(() => {
     const handler = (event: Event) => {
-      const climb = readPlayDrawerEventClimb(event);
+      const detail = readPlayDrawerEventDetail(event);
+      const climb = detail?.climb;
+      // Always store a climb payload when present — both party mode
+      // (preview-doesn't-yank via previewClimbFromBrowse) and solo direct
+      // hits to /view/{uuid} depend on this so the drawer has something to
+      // display before the queue context's currentClimbQueueItem is seeded.
       if (climb) {
         setDrawerDisplayedItem({ climb, uuid: uuidv4(), suggested: true });
       } else {
         setDrawerDisplayedItem(null);
       }
+      setDrawerWallView(!!detail?.wallView);
       setActiveDrawer('play');
     };
-    window.addEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
-    return () => window.removeEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
+    window.addEventListener(PLAY_DRAWER_EVENT, handler);
+    return () => window.removeEventListener(PLAY_DRAWER_EVENT, handler);
   }, []);
 
   const handleCloseDrawer = useCallback(() => {
     setActiveDrawer('none');
-    setDrawerDisplayedItem(null);
   }, []);
   const { activeSession, session: persistentSession, users: sessionUsers } = usePersistentSessionState();
   const {
@@ -227,12 +273,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   } = useQueueActions();
   const handleThumbnailClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
-    // No-payload dispatch: drawer falls back to the wall climb (the bar's
-    // own thumbnail mirrors the wall, so there is no other climb to display).
-    // Dispatch the window event so external listeners (e.g. the onboarding tour
-    // provider) observe the play drawer opening. The internal listener in this
-    // component also toggles activeDrawer to 'play'.
-    dispatchOpenPlayDrawer();
+    // No-payload dispatch + wallView flag: drawer falls back to the wall
+    // climb (the bar's own thumbnail mirrors the wall) and opens in
+    // wall-view mode — "Currently on the wall" header, no prev/next, no
+    // swipe. Lightbulb + standard climb actions remain (pivot Phase 3).
+    dispatchOpenPlayDrawer(undefined, { wallView: true });
   }, [currentClimb, viewOnlyMode]);
 
   const { showMessage } = useSnackbar();
@@ -300,8 +345,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     !isDisconnected &&
     (connectionState === 'reconnecting' || connectionState === 'stale' || connectionState === 'error');
 
-  const nextClimb = useMemo(() => getNextClimbQueueItem(), [getNextClimbQueueItem]);
-  const previousClimb = useMemo(() => getPreviousClimbQueueItem(), [getPreviousClimbQueueItem]);
+  // Getter is useCallback(..., [])-stable but reads latestRef internally — call
+  // directly so we don't freeze a stale value into a never-invalidated memo.
+  const nextClimb = getNextClimbQueueItem();
+  const previousClimb = getPreviousClimbQueueItem();
 
   // Declared up here (above the `isReconnecting` early return below) so the
   // hook order stays stable across renders.
@@ -484,15 +531,28 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // Deduplicate session users by userId (stable DB UUID).
   // When userId is absent (unauthenticated), fall back to connection id
   // so distinct participants with the same display name aren't merged.
+  //
+  // Also sort driver-first (queue-control-bar pivot, Phase 3): the
+  // participant whose `id` matches `driverParticipantId` floats to position 0
+  // so the lightbulb badge on the bar's AvatarGroup unambiguously surfaces
+  // who's driving. Stable sort otherwise — non-drivers keep their existing
+  // order so the avatar group doesn't jitter on unrelated participant events.
   const uniqueSessionUsers = useMemo(() => {
     const seen = new Set<string>();
-    return sessionUsers.filter((user) => {
+    const deduped = sessionUsers.filter((user) => {
       const key = user.userId ?? user.id;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [sessionUsers]);
+    if (!driverParticipantId) return deduped;
+    const driverIdx = deduped.findIndex((u) => u.id === driverParticipantId);
+    if (driverIdx <= 0) return deduped;
+    const reordered = [...deduped];
+    const [driver] = reordered.splice(driverIdx, 1);
+    reordered.unshift(driver);
+    return reordered;
+  }, [sessionUsers, driverParticipantId]);
 
   // Resolve the current user's stable userId from the session users list
   const myUserId = useMemo(() => {
@@ -608,90 +668,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     void setPreference('tickBarExpanded', expanded);
   }, []);
 
-  // One-time play view drawer peek — briefly slides the drawer up to show
-  // users there's a full view behind the queue bar.
-  const playViewPaperRef = useRef<HTMLDivElement | null>(null);
-  const playViewHintPlayedRef = useRef(false);
-  const handlePlayViewPaperRef = useCallback((el: HTMLDivElement | null) => {
-    playViewPaperRef.current = el;
-  }, []);
-
-  const hasCurrentClimb = !!currentClimb;
-  useEffect(() => {
-    if (!hasCurrentClimb || activeDrawer !== 'none' || tickBarActive || playViewHintPlayedRef.current) return;
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const animations: Animation[] = [];
-
-    const peekOnce = (el: HTMLElement): Promise<void> => {
-      const slideUp = el.animate([{ transform: 'translateY(100%)' }, { transform: 'translateY(calc(100% - 120px))' }], {
-        duration: 400,
-        easing: 'ease-out',
-        fill: 'forwards',
-      });
-      animations.push(slideUp);
-
-      return slideUp.finished
-        .then(() => {
-          if (cancelled) return;
-          return new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, 800);
-          });
-        })
-        .then(() => {
-          if (cancelled) return;
-          const slideDown = el.animate(
-            [{ transform: 'translateY(calc(100% - 120px))' }, { transform: 'translateY(100%)' }],
-            { duration: 300, easing: 'ease-out', fill: 'forwards' },
-          );
-          animations.push(slideDown);
-          return slideDown.finished as Promise<unknown> as Promise<void>;
-        });
-    };
-
-    void getPreference<boolean>('swipeHint:playViewSeen').then((seen) => {
-      if (cancelled || seen) return;
-      if (!window.matchMedia('(pointer: coarse)').matches) return;
-
-      timer = setTimeout(async () => {
-        if (cancelled) return;
-        const el = playViewPaperRef.current;
-        if (!el) return;
-
-        playViewHintPlayedRef.current = true;
-
-        // The drawer is off-screen with visibility: hidden — temporarily show it.
-        // Restore both visibility and transform in finally so a cancelled hint
-        // doesn't leak `fill: forwards` keyframes onto MUI's Slide Paper.
-        const origVisibility = el.style.visibility;
-        const origTransform = el.style.transform;
-        el.style.visibility = 'visible';
-
-        try {
-          await peekOnce(el);
-          if (cancelled) return;
-          await new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, 300);
-          });
-          if (cancelled) return;
-          await peekOnce(el);
-          if (cancelled) return;
-          void setPreference('swipeHint:playViewSeen', true);
-        } finally {
-          el.style.visibility = origVisibility;
-          el.style.transform = origTransform;
-        }
-      }, 2000);
-    });
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      for (const animation of animations) animation.cancel();
-    };
-  }, [hasCurrentClimb, activeDrawer, tickBarActive]);
-
   // Close expanded participants when tick mode opens
   useEffect(() => {
     if (tickBarActive) setParticipantsExpanded(false);
@@ -782,15 +758,14 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     return { gridTemplateRows: `${fraction}fr`, opacity: fraction, transition: 'none' };
   }, [tickSwipeOffset]);
 
-  const { swipeHandlers, swipeOffset, isAnimating, animationDirection, enterDirection, clearEnterAnimation } =
-    useCardSwipeNavigation({
-      onSwipeNext: handleSwipeNext,
-      onSwipePrevious: handleSwipePrevious,
-      canSwipeNext,
-      canSwipePrevious,
-      threshold: 80,
-      delayNavigation: true,
-    });
+  const { swipeHandlers, swipeOffset, isAnimating, animationDirection, enterDirection } = useCardSwipeNavigation({
+    onSwipeNext: handleSwipeNext,
+    onSwipePrevious: handleSwipePrevious,
+    canSwipeNext,
+    canSwipePrevious,
+    threshold: 80,
+    delayNavigation: true,
+  });
 
   const playUrl = useMemo(() => {
     if (!currentClimb) return null;
@@ -834,13 +809,18 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   }, [currentClimb, boardDetails, angle, params, searchParams]);
 
   const handleClimbInfoClick = useCallback(() => {
-    if (!currentClimb) return;
-    setActiveDrawer('play');
+    if (!currentClimb || viewOnlyMode) return;
+    // Route through dispatchOpenPlayDrawer with wallView:true so the title
+    // region matches the thumbnail's path. The previous direct setActiveDrawer
+    // call skipped the drawer-local wallView wiring and opened the normal
+    // browse drawer, even though the title region is the dominant tap target
+    // for "show me what's on the wall right now."
+    dispatchOpenPlayDrawer(undefined, { wallView: true });
     track('Play Drawer Opened', {
       boardLayout: boardDetails.layout_name || '',
       source: 'bar_tap',
     });
-  }, [currentClimb, boardDetails.layout_name]);
+  }, [currentClimb, viewOnlyMode, boardDetails.layout_name]);
 
   // Transition style shared by current and peek text
   const getTextTransitionStyle = () => {
@@ -917,21 +897,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     }
   }, [isReconnecting]);
 
-  // Clear enterDirection (for thumbnail crossfade) after it plays
-  useEffect(() => {
-    if (enterDirection) {
-      enterFallbackRef.current = setTimeout(() => {
-        clearEnterAnimation();
-      }, ENTER_ANIMATION_DURATION);
-    }
-    return () => {
-      if (enterFallbackRef.current) {
-        clearTimeout(enterFallbackRef.current);
-        enterFallbackRef.current = null;
-      }
-    };
-  }, [enterDirection, clearEnterAnimation]);
-
   const reconnectView = (
     <MuiCard variant="outlined" className={styles.card} sx={{ border: 'none', backgroundColor: 'transparent' }}>
       <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -978,11 +943,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   let offlineBannerText: string;
   if (!sessionId) {
-    offlineBannerText = 'Offline';
+    offlineBannerText = t('queueBar.offline.idle');
   } else if (users && users.length > 1) {
-    offlineBannerText = 'Offline. Queued climbs will still sync.';
+    offlineBannerText = t('queueBar.offline.party');
   } else {
-    offlineBannerText = 'Offline. Changes will sync when you reconnect.';
+    offlineBannerText = t('queueBar.offline.solo');
   }
 
   return (
@@ -1046,7 +1011,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                       }}
                       role="button"
                       tabIndex={0}
-                      aria-label={participantsExpanded ? 'Hide participants' : 'Show participants'}
+                      aria-label={
+                        participantsExpanded
+                          ? t('queueBar.ariaLabels.hideParticipants')
+                          : t('queueBar.ariaLabels.showParticipants')
+                      }
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.stopPropagation();
@@ -1077,6 +1046,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                               hasTicked={
                                 tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
                               }
+                              isDriver={driverParticipantId != null && user.id === driverParticipantId}
                             />
                           ))}
                         </AvatarGroup>
@@ -1152,6 +1122,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                                 tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
                               }
                               size={32}
+                              isDriver={driverParticipantId != null && user.id === driverParticipantId}
                             />
                             <Typography variant="caption" className={styles.participantName} noWrap>
                               {user.username}
@@ -1189,14 +1160,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') handleTickBarExpandedChange(!tickBarExpanded);
                     }}
-                    aria-label={tickBarExpanded ? 'Collapse tick bar' : 'Expand tick bar'}
+                    aria-label={tickBarExpanded ? t('queueBar.tickBar.collapseAria') : t('queueBar.tickBar.expandAria')}
                   >
                     {tickBarExpanded ? (
                       <KeyboardArrowDownOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
                     ) : (
                       <KeyboardArrowUpOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
                     )}
-                    <span className={styles.tickExpandLabel}>{tickBarExpanded ? 'Collapse' : 'Expand'}</span>
+                    <span className={styles.tickExpandLabel}>
+                      {tickBarExpanded ? t('queueBar.tickBar.collapse') : t('queueBar.tickBar.expand')}
+                    </span>
                   </div>
                   <div className={styles.tickCloseButton}>
                     <IconButton
@@ -1247,7 +1220,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                           onFocus={handleTickCommentFocus}
                           onBlur={handleTickCommentBlur}
                           slotProps={{
-                            htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                            htmlInput: { maxLength: 2000, 'aria-label': t('queueBar.tickBar.commentAria') },
                             input: {
                               startAdornment: (
                                 <InputAdornment position="start">
@@ -1282,7 +1255,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         onFocus={handleTickCommentFocus}
                         onBlur={handleTickCommentBlur}
                         slotProps={{
-                          htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                          htmlInput: { maxLength: 2000, 'aria-label': t('queueBar.tickBar.commentAria') },
                         }}
                         sx={{
                           '& .MuiOutlinedInput-root': {
@@ -1334,10 +1307,27 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
                     {/* Text swipe clip — overflow hidden to contain sliding text */}
                     <div className={styles.textSwipeClip}>
-                      {/* Current climb text — slides with finger */}
+                      {/* Current climb text — slides with finger. Tap opens
+                          the play drawer in wall-view mode (mirrors thumbnail).
+                          When the tick bar is active the title region is
+                          non-interactive — no role/tabIndex so keyboard users
+                          aren't fed a dead-end button.  */}
                       <div
                         id="onboarding-queue-toggle"
                         onClick={tickBarActive ? undefined : handleClimbInfoClick}
+                        onKeyDown={
+                          tickBarActive
+                            ? undefined
+                            : (e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  handleClimbInfoClick();
+                                }
+                              }
+                        }
+                        role={tickBarActive ? undefined : 'button'}
+                        tabIndex={tickBarActive ? undefined : 0}
+                        aria-label={tickBarActive ? undefined : t('queueBar.ariaLabels.openWallView')}
                         className={styles.queueToggle}
                         style={{
                           transform: tickBarActive ? undefined : `translateX(${swipeOffset}px)`,
@@ -1415,8 +1405,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                     {/* Navigation buttons - desktop only */}
                     <span className={styles.navButtons}>
                       <Stack direction="row" spacing={0.5}>
-                        <PreviousClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
-                        <NextClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
+                        <QueueNavButton direction="previous" navigate={shouldNavigate} boardDetails={boardDetails} />
+                        <QueueNavButton direction="next" navigate={shouldNavigate} boardDetails={boardDetails} />
                       </Stack>
                     </span>
                     {/* Attempt button — visible whenever tick mode is active */}
@@ -1435,7 +1425,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         </IconButton>
                       </TickButtonWithLabel>
                     )}
-                    {!tickBarActive && <ShareBoardButton />}
                     {/* Tick button — activates tick mode, or saves when already active */}
                     <TickButton
                       currentClimb={displayedClimb}
@@ -1462,10 +1451,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         setActiveDrawer={setActiveDrawer}
         boardDetails={boardDetails}
         angle={angle}
-        onPaperRef={handlePlayViewPaperRef}
         drawerDisplayedItem={drawerDisplayedItem}
         setDrawerDisplayedItem={setDrawerDisplayedItem}
         initialOpenWithoutAnimation={isViewPage}
+        wallView={drawerWallView}
       />
 
       <StartSeshDrawer open={startSeshOpen} onClose={() => setStartSeshOpen(false)} />

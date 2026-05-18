@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEventProcessor } from '../hooks/use-event-processor';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import type { SessionEvent, SessionDetail, SessionDetailTick, SubscriptionQueueEvent } from '@boardsesh/shared-schema';
+import type { SessionStatsUpdated } from '@boardsesh/shared-schema/generated';
 import { SESSION_DETAIL_QUERY_KEY } from '@/app/hooks/use-session-detail';
 
 function createRefs() {
@@ -20,7 +21,10 @@ function createRefs() {
 }
 
 function createStatsEvent(
-  overrides: Partial<Extract<SessionEvent, { __typename: 'SessionStatsUpdated' }>> = {},
+  // Generated SessionEvent union uses `__typename?: 'X'` (optional), so the
+  // `Extract<…, { __typename: 'X' }>` trick resolves to `never`. Reference the
+  // generated concrete type directly instead.
+  overrides: Partial<SessionStatsUpdated> = {},
 ): SessionEvent {
   return {
     __typename: 'SessionStatsUpdated',
