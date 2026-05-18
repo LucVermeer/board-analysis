@@ -65,17 +65,21 @@ const BoardPageClimbsList = ({
   // microtask so the QueueControlBar's drawer-open listener has a chance to
   // subscribe — both components' effects run in the same React commit when
   // the page hydrates, and the listener registration would otherwise race
-  // the dispatch.
+  // the dispatch. Stash the climb in a ref so the effect deps can key on the
+  // stable uuid identity instead of the object reference.
   const initialOpenClimbUuid = initialOpenClimb?.uuid;
+  const initialOpenClimbRef = useRef(initialOpenClimb);
+  initialOpenClimbRef.current = initialOpenClimb;
   const hasDispatchedInitialOpenRef = useRef(false);
   useEffect(() => {
-    if (!initialOpenClimb) return;
+    const climb = initialOpenClimbRef.current;
+    if (!climb) return;
     if (hasDispatchedInitialOpenRef.current) return;
     hasDispatchedInitialOpenRef.current = true;
     queueMicrotask(() => {
-      dispatchOpenPlayDrawer(initialOpenClimb);
+      dispatchOpenPlayDrawer(climb);
     });
-  }, [initialOpenClimb, initialOpenClimbUuid]);
+  }, [initialOpenClimbUuid]);
 
   const headerInline = useMemo(() => <RecentSearchPills />, []);
 

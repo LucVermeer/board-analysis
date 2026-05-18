@@ -1,0 +1,257 @@
+// @vitest-environment jsdom
+
+import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
+import { renderHook } from '@testing-library/react';
+import type { BoardDetails, Climb } from '@/app/lib/types';
+import { useDrawerUrlSync } from '../use-drawer-url-sync';
+
+let mockPathname = '/kilter/original/12x12/default/40/list';
+const mockSearchParams = new URLSearchParams();
+vi.mock('next/navigation', () => ({
+  usePathname: () => mockPathname,
+  useSearchParams: () => mockSearchParams,
+}));
+
+function makeBoardDetails(): BoardDetails {
+  return {
+    board_name: 'kilter',
+    layout_id: 1,
+    layout_name: 'original',
+    size_id: 7,
+    size_name: '12x12',
+    size_description: undefined,
+    set_ids: [1, 20],
+    set_names: ['mainline'],
+    images_to_holds: {},
+    holdsData: [],
+    edge_left: 0,
+    edge_right: 0,
+    edge_bottom: 0,
+    edge_top: 0,
+    boardHeight: 0,
+    boardWidth: 0,
+    supportsMirroring: false,
+  } as unknown as BoardDetails;
+}
+
+function makeClimb(uuid: string, name: string): Climb {
+  return { uuid, name } as Climb;
+}
+
+const CLIMB_A = makeClimb('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'climb a');
+const CLIMB_B = makeClimb('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'climb b');
+
+// Capture the current URL on a settable location.pathname proxy so we can
+// assert what pushState/replaceState wrote. Real jsdom updates the URL when
+// the test calls history.pushState, so we just read window.location after.
+function getPath(): string {
+  return window.location.pathname;
+}
+function setLocation(path: string) {
+  window.history.replaceState(null, '', path);
+}
+
+let onClose: () => void;
+let onCloseMock: ReturnType<typeof vi.fn>;
+beforeEach(() => {
+  mockPathname = '/kilter/original/12x12/default/40/list';
+  setLocation('/kilter/original/12x12/default/40/list');
+  onCloseMock = vi.fn();
+  onClose = onCloseMock as unknown as () => void;
+});
+
+type HookProps = { isOpen: boolean; climb: Climb | null };
+const initialClosed: HookProps = { isOpen: false, climb: null };
+
+describe('useDrawerUrlSync — list-tap flow', () => {
+  it('pushes the view URL when the drawer opens with a climb on a list pathname', () => {
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+
+    expect(getPath()).toContain('/view/');
+    expect(getPath()).toContain(CLIMB_A.uuid);
+  });
+
+  it('replaces the view URL when the displayed climb changes (swipe / row-tap while open)', () => {
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+    const pushedLength = window.history.length;
+
+    rerender({ isOpen: true, climb: CLIMB_B });
+
+    expect(getPath()).toContain(CLIMB_B.uuid);
+    // replaceState should not grow the history stack — push grew it once,
+    // every subsequent climb change should keep it flat.
+    expect(window.history.length).toBe(pushedLength);
+  });
+
+  it('returns to the list URL via history.back() when the drawer closes', () => {
+    const backSpy = vi.spyOn(window.history, 'back');
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+    expect(getPath()).toContain('/view/');
+
+    rerender({ isOpen: false, climb: CLIMB_A });
+
+    expect(backSpy).toHaveBeenCalledTimes(1);
+    backSpy.mockRestore();
+  });
+});
+
+describe('useDrawerUrlSync — direct-hit flow', () => {
+  beforeEach(() => {
+    mockPathname = '/kilter/original/12x12/default/40/view/climb-a-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    setLocation(mockPathname);
+  });
+
+  it('replaces (not pushes) when the drawer opens already on /view/', () => {
+    const before = window.history.length;
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+
+    expect(getPath()).toContain('/view/');
+    expect(window.history.length).toBe(before);
+  });
+
+  it('replaces (not history.back()) when closing from a direct-hit', () => {
+    const before = window.history.length;
+    const backSpy = vi.spyOn(window.history, 'back');
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: { isOpen: true, climb: CLIMB_A } as HookProps },
+    );
+
+    rerender({ isOpen: false, climb: CLIMB_A });
+
+    expect(backSpy).not.toHaveBeenCalled();
+    expect(getPath()).not.toContain('/view/');
+    expect(window.history.length).toBe(before);
+    backSpy.mockRestore();
+  });
+});
+
+describe('useDrawerUrlSync — popstate', () => {
+  it('calls onClose when popstate fires and the URL leaves /view/', () => {
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+    expect(getPath()).toContain('/view/');
+
+    // Simulate the user pressing browser back: URL leaves /view/, then
+    // dispatch popstate. The listener should call onClose.
+    setLocation('/kilter/original/12x12/default/40/list');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    expect(onCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT call onClose when popstate fires and the URL still contains /view/', () => {
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+
+    // popstate fires (e.g. iOS swipe-back into another /view/ URL) but we're
+    // still on /view/ — drawer should stay open.
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    expect(onCloseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDrawerUrlSync — bridge-lag race', () => {
+  it('pushes the URL once displayedClimb arrives, even if isOpen flipped a render earlier', () => {
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    // Solo /b/ tap: isOpen flips true in render N+1 but the queue bridge
+    // hasn't propagated the climb yet — displayedClimb is still null.
+    rerender({ isOpen: true, climb: null });
+    expect(getPath()).not.toContain('/view/');
+
+    // Bridge propagates in render N+2 — climb arrives, hook should push now.
+    rerender({ isOpen: true, climb: CLIMB_A });
+
+    expect(getPath()).toContain('/view/');
+    expect(getPath()).toContain(CLIMB_A.uuid);
+  });
+});

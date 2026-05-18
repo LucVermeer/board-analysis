@@ -102,7 +102,7 @@ export function useDrawerUrlSync({
           getListUrl(boardDetailsRef.current, angleRef.current, startPathname),
           searchParamsRef.current,
         );
-        window.history.replaceState({ ...(window.history.state ?? {}) }, '', listUrl);
+        window.history.replaceState({ ...window.history.state }, '', listUrl);
       }
     };
   }, [isOpen, enabled]);
@@ -132,7 +132,7 @@ export function useDrawerUrlSync({
       sourceRef.current = startPathname.includes('/view/') ? 'direct' : 'list-tap';
     }
     const stampedState = {
-      ...(window.history.state ?? {}),
+      ...window.history.state,
       boardseshDrawerUrlSync: { climbUuid: displayedClimb.uuid, source: sourceRef.current },
     };
 
