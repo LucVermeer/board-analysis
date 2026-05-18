@@ -760,7 +760,14 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
    */
   const handleLightbulbClick = useCallback(() => {
     if (!currentClimb) return;
-    if (isDriver) {
+    // Release path is party-only: in solo there's no driver concept to give
+    // away (deriveIsDriver always returns true), and releaseControl is a
+    // no-op without a session — so a solo tap would do nothing. Gate the
+    // release branch on actually being in a party AND holding control;
+    // everything else (solo of any flavor, party non-driver) falls through
+    // to the take + arm-watcher path, which sends the climb and lets the
+    // 2s fallback open the BLE picker when no board is paired yet.
+    if (isPersistentSessionActive && isDriver) {
       // Cancel any in-flight watcher: if the user took control then released
       // within the 2s window, we don't want the fallback to fire after the
       // role is already released.
@@ -768,7 +775,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
       void releaseControl();
       track('Wall Control Released', {
         reason: 'manual',
-        mode: isPersistentSessionActive ? 'party' : 'solo',
+        mode: 'party',
         boardLayout: boardDetails.layout_name ?? '',
       });
       return;
