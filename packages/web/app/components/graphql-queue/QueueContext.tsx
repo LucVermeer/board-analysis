@@ -313,6 +313,7 @@ export const GraphQLQueueProvider = ({
     state,
     dispatch,
     isPersistentSessionActive,
+    isDriver,
     persistentSession,
     clientId,
     currentUserInfo,
@@ -337,6 +338,7 @@ export const GraphQLQueueProvider = ({
     state,
     dispatch,
     isPersistentSessionActive,
+    isDriver,
     persistentSession,
     clientId,
     currentUserInfo,
@@ -445,20 +447,24 @@ export const GraphQLQueueProvider = ({
     return newItem;
   }, []);
 
-  // Browse-initiated drawer open. The fork between "send to wall" (solo) and
-  // "preview only" (party) lives here so list rows, list covers, suggestion
-  // thumbnails, and logbook rows can share one call site.
+  // Browse-initiated drawer open. The fork between "send to wall" (solo or
+  // driver) and "preview only" (party non-driver) lives here so list rows,
+  // list covers, suggestion thumbnails, and logbook rows can share one call
+  // site. Mirrors the same driver-vs-preview gate used by the drawer's
+  // advanceTo (see play-view-drawer.tsx) and the pivot rules 4 + 5: the
+  // driver broadcasts on browse, non-drivers preview without yanking the wall.
   const previewClimbFromBrowse = useCallback(
     (climb: Climb) => {
       const latest = latestRef.current;
-      if (latest.isPersistentSessionActive) {
-        // Party: leave state.currentClimbQueueItem alone (it mirrors the wall);
-        // ship the climb to the bar's drawer-display state via the existing
-        // open-drawer event.
+      if (latest.isPersistentSessionActive && !latest.isDriver) {
+        // Party non-driver: leave state.currentClimbQueueItem alone (it
+        // mirrors the wall); ship the climb to the bar's drawer-display
+        // state via the existing open-drawer event.
         dispatchOpenPlayDrawer(climb);
         return;
       }
-      // Solo: same behavior as today — pre-mutate state then open the drawer.
+      // Solo, or driver in party: pre-mutate state (broadcasts when party
+      // active) then open the drawer.
       void setCurrentClimb(climb);
       dispatchOpenPlayDrawer();
     },

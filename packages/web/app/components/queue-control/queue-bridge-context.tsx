@@ -395,13 +395,21 @@ function usePersistentSessionQueueAdapter(): {
     [validateClimbForQueue, buildQueueItem],
   );
 
-  // Bridge-mode browse helper: party path dispatches the drawer-open event
-  // with the climb payload so the bar's drawer-display state picks it up
-  // without mutating the wall climb. Solo path delegates to setCurrentClimb.
+  // Bridge-mode browse helper. Party non-driver: preview only (drawer-open
+  // with the climb payload). Party driver, or solo: broadcast via
+  // setCurrentClimb so the wall climb actually changes. Mirrors the driver
+  // gate used by play-view-drawer.advanceTo and QueueContext.previewClimbFromBrowse
+  // (pivot rules 4 + 5: driver actions broadcast, non-driver actions preview).
   const previewClimbFromBrowse = useCallback(
     (climb: Climb) => {
       const { ps } = latestRef.current;
-      if (ps.activeSession) {
+      const isParty = !!ps.activeSession;
+      const isDriver = deriveIsDriver({
+        isPersistentSessionActive: isParty,
+        participantId: ps.participantId,
+        driverParticipantId: isParty ? ps.driverParticipantId : null,
+      });
+      if (isParty && !isDriver) {
         dispatchOpenPlayDrawer(climb);
         return;
       }
