@@ -3,6 +3,43 @@ import { logger } from '../utils/logger';
 
 const REDIS_URL = process.env.REDIS_URL;
 
+// Minimum Redis version required by this backend. We use `SET key value EX ttl
+// GET` in distributed-state/session-ops.ts (setSessionDriverAndReturnPrevious +
+// setSessionBoardSerialAndReturnPrevious), which needs the GET option on SET
+// to atomically read the previous value. That option landed in Redis 6.2. On
+// older Redis the GET keyword is silently ignored and the call returns OK,
+// which would cause DriverChanged / SessionBoardSerialChanged to never fire
+// (the resolver decides whether to publish based on the previous value).
+const MIN_REDIS_MAJOR = 6;
+const MIN_REDIS_MINOR = 2;
+
+function parseRedisVersion(infoBlock: string): { major: number; minor: number; patch: number } | null {
+  // `INFO server` returns lines like "redis_version:7.2.4\r\n". Parse the
+  // first matching line; ignore patch beyond what we need.
+  const match = infoBlock.match(/^redis_version:(\d+)\.(\d+)\.(\d+)/m);
+  if (!match) return null;
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
+}
+
+async function verifyRedisVersion(client: Redis): Promise<void> {
+  const info = await client.info('server');
+  const version = parseRedisVersion(info);
+  if (!version) {
+    logger.warn('[Redis] Could not parse redis_version from INFO output — proceeding without version check');
+    return;
+  }
+  const ok = version.major > MIN_REDIS_MAJOR || (version.major === MIN_REDIS_MAJOR && version.minor >= MIN_REDIS_MINOR);
+  const versionString = `${version.major}.${version.minor}.${version.patch}`;
+  if (!ok) {
+    throw new Error(
+      `Redis ${versionString} is too old. Boardsesh requires Redis ${MIN_REDIS_MAJOR}.${MIN_REDIS_MINOR}+ for the SET ... GET ` +
+        'option used by driver-state and board-serial mutations. Older Redis silently ignores the GET keyword, ' +
+        'which would prevent DriverChanged and SessionBoardSerialChanged events from firing.',
+    );
+  }
+  logger.info(`[Redis] Server version ${versionString} (>= ${MIN_REDIS_MAJOR}.${MIN_REDIS_MINOR} required)`);
+}
+
 export type RedisClients = {
   publisher: Redis;
   subscriber: Redis;
@@ -83,11 +120,20 @@ class RedisClientManager {
       let streamConsumerReady = false;
 
       const checkAllReady = () => {
-        if (publisherReady && subscriberReady && streamConsumerReady) {
-          this.isConnected = true;
-          logger.info('[Redis] Connected successfully (3 connections: publisher, subscriber, streamConsumer)');
-          resolve(true);
-        }
+        if (!(publisherReady && subscriberReady && streamConsumerReady)) return;
+        logger.info('[Redis] Connected successfully (3 connections: publisher, subscriber, streamConsumer)');
+        // Verify server version before declaring ready. Fail-closed: an
+        // older Redis silently breaks the take-control / board-serial event
+        // path, which we'd rather catch at startup than in production.
+        verifyRedisVersion(this.publisher!)
+          .then(() => {
+            this.isConnected = true;
+            resolve(true);
+          })
+          .catch((err: Error) => {
+            logger.error(`[Redis] ${err.message}`);
+            reject(err);
+          });
       };
 
       this.publisher.on('ready', () => {

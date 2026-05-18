@@ -559,8 +559,18 @@ export async function clearSessionDriverIf(
   // between the GET and EXEC). Treat that as "didn't clear" rather than an
   // error — the take-control race is the expected reason. Any other error
   // propagates so the caller can surface or retry.
+  //
+  // WATCH only triggers EXEC abort on explicit key mutations, NOT on TTL
+  // expiry. If the driver key's TTL expires between GET and EXEC, the
+  // transaction still commits but DEL returns 0 (nothing to delete).
+  // Check the actual DEL return value (1 if a key was deleted, 0 if not)
+  // rather than the transaction-committed-something signal. Otherwise we'd
+  // return true and the caller would fire a spurious DriverChanged broadcast.
   const result = await redis.multi().del(key).exec();
-  return result !== null && result.length > 0;
+  if (result === null) return false;
+  const [delErr, delCount] = result[0] as [Error | null, number];
+  if (delErr) throw delErr;
+  return delCount === 1;
 }
 
 /**
