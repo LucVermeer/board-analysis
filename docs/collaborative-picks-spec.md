@@ -15,7 +15,8 @@ specific failures came up:
   full queue history with duplicates and upcoming items.
 
 We don't want to throw the shared queue out — it's mature, the wiring works,
-and it'll matter more once the playlist generator moves to session start.
+and it matters more now that the workout generator can populate a session's
+initial queue from the Start Session drawer.
 What we're changing is the _binding_: instead of one shared `currentClimb`
 that everyone mutates, each climber gets their own `pick`, plus exactly one
 person at a time is the **active climber** whose pick is on the LEDs.

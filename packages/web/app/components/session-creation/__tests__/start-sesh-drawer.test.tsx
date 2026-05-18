@@ -661,6 +661,9 @@ describe('StartSeshDrawer', () => {
         );
       });
     }
+    // The real generator drawer calls onClose() immediately after onComplete,
+    // so wrap both in a single act block — React flushes both state updates
+    // together, matching production's commit boundary.
     await act(async () => {
       lastGeneratorProps!.onComplete?.({
         added: climbs.length,
@@ -668,6 +671,7 @@ describe('StartSeshDrawer', () => {
         total: climbs.length,
         workoutType,
       });
+      lastGeneratorProps!.onClose();
     });
   }
 

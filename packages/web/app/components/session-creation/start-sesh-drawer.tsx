@@ -453,12 +453,12 @@ export default function StartSeshDrawer({ open, onClose, onTransitionEnd, boardC
         <Button
           size="small"
           variant="text"
-          // Don't wipe the current queue on click. If the user dismisses
-          // the generator mid-flow, the previous queue is still intact.
-          // The generator drawer pushes climbs incrementally via onAddClimb,
-          // which appends — so without clearing, a fresh run would mix old
-          // and new climbs. We clear once on the first append of the new run
-          // (handled in the onAddClimb callback below).
+          // Don't wipe the current queue on click. The generator drawer
+          // accumulates new climbs into runBufferRef during its generation
+          // loop and the buffer is only committed to `generatedQueue` when
+          // onComplete fires with added > 0 (see the drawer call site
+          // below). That keeps the previous queue intact if the user
+          // dismisses mid-run.
           onClick={() => setGeneratorOpen(true)}
           disabled={!generatorBoardDetails}
         >

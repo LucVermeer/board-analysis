@@ -71,10 +71,13 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-  // Tracks whether the user actually generated something during this open
-  // session. Lets us distinguish "closed mid-configure" (cancellation) from
-  // "closed after generation completed" (success path, no extra event).
-  const completedSuccessfullyRef = useRef(false);
+  // Tracks whether the user reached the end of a generation run during this
+  // open session. Lets us distinguish "closed before running anything"
+  // (cancellation) from "closed after the run finished" (no extra event).
+  // A 0-climbs run still counts as completed — we already fired a
+  // `Workout Generated` event for that path; firing `Cancelled` on top
+  // would double-count the same outcome.
+  const runCompletedRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -84,7 +87,7 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
       setTargetAngle(defaultAngle);
       setGenerating(false);
       setProgress({ current: 0, total: 0 });
-      completedSuccessfullyRef.current = false;
+      runCompletedRef.current = false;
       track('Workout Generator Opened', {
         targetType,
         boardName: boardDetails.board_name,
@@ -125,15 +128,21 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
     }
   }, [drawerState, targetType, selectedType, boardDetails.board_name]);
 
-  // Wrap onClose so dismissals mid-configure (no run completed) fire a
-  // cancellation event. Generating phase already blocks dismissal via the
-  // `onClose={generating ? undefined : ...}` guard below.
+  // Wrap onClose so dismissals before any generation run fire a cancellation
+  // event. The generating phase blocks dismissal via the
+  // `onClose={generating ? undefined : ...}` guard below — but both the
+  // workout-type-select screen and the configure screen are dismissable.
+  //
+  // `workoutType` is omitted when the user dismisses from the select screen
+  // (no type picked yet). Emitting `null` would widen the event's property
+  // type and trip downstream dashboards that assume the property is always
+  // a valid `WorkoutType`. Treat absence as absence.
   const handleClose = useCallback(() => {
-    if (drawerState === 'configure' && !generating && !completedSuccessfullyRef.current) {
+    if (!generating && !runCompletedRef.current) {
       track('Workout Generator Cancelled', {
         targetType,
-        workoutType: selectedType,
-        stage: 'configure',
+        ...(selectedType ? { workoutType: selectedType } : {}),
+        stage: drawerState,
         boardName: boardDetails.board_name,
       });
     }
@@ -281,7 +290,11 @@ const PlaylistGeneratorDrawer: React.FC<PlaylistGeneratorDrawerProps> = ({
     setGenerating(false);
 
     const added = plannedSlots.length - failedSlots.length;
-    completedSuccessfullyRef.current = added > 0;
+    // Any reached-the-end-of-loop counts as a completed run, even when 0
+    // climbs were saved. We fire `Workout Generated` (below) with
+    // savedCount=0 for that outcome; firing `Cancelled` from the
+    // subsequent onClose would double-count it.
+    runCompletedRef.current = true;
     const durationMs = Math.round(performance.now() - startedAt);
 
     track('Workout Generated', {
