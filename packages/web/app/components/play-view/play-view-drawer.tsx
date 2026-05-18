@@ -109,12 +109,13 @@ type PlayViewActionBarProps = {
   onToggleFavorite: () => void;
   onOpenActions: () => void;
   onOpenQueue: () => void;
-  /** Whether the local user currently drives the wall. Drives the lightbulb
-   *  visual (filled vs outlined). True in solo regardless. Prev/next stay
-   *  visible to everyone in the drawer — Phase 1 already makes them
-   *  preview-only in party (drawer-local state, no broadcast), so non-drivers
-   *  can still scrub through nearby climbs without yanking the wall. */
-  isDriver: boolean;
+  /** Whether the lightbulb should render as filled/lit. In party this is
+   *  `isDriver` (you hold the wall). In solo it's `isBluetoothConnected`
+   *  (a paired board IS the wall — when nothing's paired, the lightbulb is
+   *  outlined to signal "tap to connect"). The driver concept doesn't carry
+   *  any BLE meaning in solo, so the visual would always be lit if we used
+   *  isDriver there — masking the actual connection state. */
+  lightbulbActive: boolean;
   /** Wall-view mode: drawer opened from the bar body to inspect the wall
    *  climb. Hide prev/next entirely (controls live on the bar; this view is
    *  anchored to the wall). The lightbulb stays. */
@@ -146,7 +147,7 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   onToggleFavorite,
   onOpenActions,
   onOpenQueue,
-  isDriver,
+  lightbulbActive,
   displayedClimbName,
   onLightbulb,
   onLightbulbLongPress,
@@ -154,13 +155,15 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   angleSelector,
 }: PlayViewActionBarProps) {
   const { t } = useTranslation('session');
-  // Lightbulb aria label — driver vs non-driver framing makes the action's
-  // destructive-vs-additive nature explicit for screen readers.
+  // Lightbulb aria label — active (filled) vs inactive (outlined) framing
+  // makes the action's destructive-vs-additive nature explicit for screen
+  // readers. "Driving" copy reads fine in solo too (you're driving the board
+  // when BLE is connected).
   const lightbulbLabel = displayedClimbName
-    ? isDriver
+    ? lightbulbActive
       ? t('playView.actionBar.lightbulb.drivingNamed', { name: displayedClimbName })
       : t('playView.actionBar.lightbulb.takeNamed', { name: displayedClimbName })
-    : isDriver
+    : lightbulbActive
       ? t('playView.actionBar.lightbulb.driving')
       : t('playView.actionBar.lightbulb.take');
   // Long-press the lightbulb to reach the light-control drawer (and the
@@ -210,9 +213,9 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
         ref={lightbulbLongPressRef}
         onClick={handleLightbulbTap}
         aria-label={lightbulbLabel}
-        color={isDriver ? 'primary' : 'default'}
+        color={lightbulbActive ? 'primary' : 'default'}
       >
-        {isDriver ? <Lightbulb /> : <LightbulbOutlined />}
+        {lightbulbActive ? <Lightbulb /> : <LightbulbOutlined />}
       </IconButton>
       {angleSelector}
       <IconButton onClick={onOpenActions} aria-label={t('playView.actionBar.climbActionsAria')}>
@@ -759,18 +762,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
    *  - Otherwise → connect() which opens the device picker dialog.
    */
   const handleLightbulbClick = useCallback(() => {
-    if (!currentClimb) return;
-    // Release path is party-only: in solo there's no driver concept to give
-    // away (deriveIsDriver always returns true), and releaseControl is a
-    // no-op without a session — so a solo tap would do nothing. Gate the
-    // release branch on actually being in a party AND holding control;
-    // everything else (solo of any flavor, party non-driver) falls through
-    // to the take + arm-watcher path, which sends the climb and lets the
-    // 2s fallback open the BLE picker when no board is paired yet.
+    // Party + driver: release control (give the wall away). Cancel any
+    // in-flight watcher so the fallback doesn't fire after the role is
+    // already released.
     if (isPersistentSessionActive && isDriver) {
-      // Cancel any in-flight watcher: if the user took control then released
-      // within the 2s window, we don't want the fallback to fire after the
-      // role is already released.
       cancelWallConfirmWatcher();
       void releaseControl();
       track('Wall Control Released', {
@@ -780,21 +775,46 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
       });
       return;
     }
+    // Solo: BLE-centric — the lightbulb's filled state means "a board is
+    // paired." Tap when not paired opens the picker directly (no 2s watcher
+    // needed; there's no other device that might emit a wall-confirm).
+    // Tap when paired re-sends the current climb so the user can retry a
+    // missed write without long-pressing into the light-control drawer.
+    if (!isPersistentSessionActive) {
+      if (!isBluetoothConnected) {
+        track('Wall Control Taken', {
+          source: 'lightbulb_drawer',
+          mode: 'solo',
+          climbUuid: currentClimb?.uuid ?? null,
+        });
+        void bluetoothConnect();
+        return;
+      }
+      if (!currentClimb) return;
+      void takeControl(currentClimb);
+      setDrawerDisplayedItem?.(null);
+      track('Wall Control Taken', {
+        source: 'lightbulb_drawer',
+        mode: 'solo',
+        climbUuid: currentClimb.uuid,
+      });
+      return;
+    }
+    // Party + non-driver: take + arm the 2s wall-confirm watcher. The
+    // watcher fires the picker fallback if no BLE-paired peer emits a
+    // confirmation in time — exactly what the pivot's lightbulb is for.
+    if (!currentClimb) return;
     void takeControl(currentClimb);
-    // Once driver, subsequent prev/next/swipe broadcast (per the advanceTo
-    // fork). Clear the drawer-local preview so the drawer reads from the
-    // fresh wall climb instead of the stale preview snapshot from before
-    // the user took control.
     setDrawerDisplayedItem?.(null);
     track('Wall Control Taken', {
       source: 'lightbulb_drawer',
       previousDriver: 'other',
-      mode: isPersistentSessionActive ? 'party' : 'solo',
+      mode: 'party',
       climbUuid: currentClimb.uuid,
     });
     armWallConfirmWatcher({
       climbUuid: currentClimb.uuid,
-      mode: isPersistentSessionActive ? 'party' : 'solo',
+      mode: 'party',
       boardLayout: boardDetails.layout_name ?? '',
     });
   }, [
@@ -804,6 +824,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     setDrawerDisplayedItem,
     isDriver,
     isPersistentSessionActive,
+    isBluetoothConnected,
+    bluetoothConnect,
     armWallConfirmWatcher,
     cancelWallConfirmWatcher,
     boardDetails.layout_name,
@@ -1085,7 +1107,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             onToggleFavorite={toggleFavorite}
             onOpenActions={handleOpenActionsMenu}
             onOpenQueue={handleOpenQueueDrawer}
-            isDriver={isDriver}
+            lightbulbActive={isPersistentSessionActive ? isDriver : isBluetoothConnected}
             displayedClimbName={currentClimb?.name ?? null}
             onLightbulb={handleLightbulbClick}
             onLightbulbLongPress={handleOpenLightDrawer}
