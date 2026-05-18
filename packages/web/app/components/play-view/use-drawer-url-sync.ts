@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import { constructClimbListWithSlugs, getContextAwareClimbViewUrl } from '@/app/lib/url-utils';
+import { detectLocale } from '@/app/lib/i18n/detect-locale';
 
 type DrawerUrlSyncSource = 'list-tap' | 'direct';
 
@@ -152,17 +153,22 @@ function withSearchParams(url: string, searchParams: URLSearchParams): string {
 }
 
 function getListUrl(boardDetails: BoardDetails, angle: number, pathname: string): string {
+  // Detect a locale prefix once and prepend it to every shape — without this,
+  // a Spanish user closing the drawer on /es/... would briefly land on the
+  // unprefixed URL until middleware corrected it.
+  const { locale, needsRewrite } = detectLocale(pathname);
+  const localePrefix = needsRewrite ? `/${locale}` : '';
+
   // Preserve the short /b/{slug}/{angle}/ route shape when the user came from there.
   // The route tree has no index page under /b/{slug}/{angle}, so we must point
   // at /list explicitly to avoid a 404.
-  const boardSlugMatch = pathname.match(/^(\/[a-z]{2}(?:-[A-Z]{2})?)?\/b\/([^/]+)\/(\d+)/);
+  const boardSlugMatch = pathname.match(/^(?:\/[a-z]{2}(?:-[A-Z]{2})?)?\/b\/([^/]+)\/(\d+)/);
   if (boardSlugMatch) {
-    const localePrefix = boardSlugMatch[1] ?? '';
-    return `${localePrefix}/b/${boardSlugMatch[2]}/${boardSlugMatch[3]}/list`;
+    return `${localePrefix}/b/${boardSlugMatch[1]}/${boardSlugMatch[2]}/list`;
   }
   const { board_name, layout_name, size_name, size_description, set_names } = boardDetails;
   if (layout_name && size_name && set_names) {
-    return constructClimbListWithSlugs(board_name, layout_name, size_name, size_description, set_names, angle);
+    return `${localePrefix}${constructClimbListWithSlugs(board_name, layout_name, size_name, size_description, set_names, angle)}`;
   }
-  return `/${board_name}/${boardDetails.layout_id}/${boardDetails.size_id}/${boardDetails.set_ids.join(',')}/${angle}/list`;
+  return `${localePrefix}/${board_name}/${boardDetails.layout_id}/${boardDetails.size_id}/${boardDetails.set_ids.join(',')}/${angle}/list`;
 }

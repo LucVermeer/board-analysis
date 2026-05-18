@@ -229,6 +229,51 @@ describe('useDrawerUrlSync — popstate', () => {
   });
 });
 
+describe('useDrawerUrlSync — locale prefix', () => {
+  it('preserves the locale prefix when closing from a canonical /es/ view URL', () => {
+    mockPathname = '/es/kilter/original/12x12/default/40/view/climb-a-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    setLocation(mockPathname);
+
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: { isOpen: true, climb: CLIMB_A } as HookProps },
+    );
+
+    rerender({ isOpen: false, climb: CLIMB_A });
+
+    expect(getPath()).toMatch(/^\/es\//);
+    expect(getPath()).not.toContain('/view/');
+  });
+
+  it('preserves the locale prefix on /es/b/{slug}/ short routes too', () => {
+    mockPathname = '/es/b/some-board/40/view/climb-a-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    setLocation(mockPathname);
+
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: { isOpen: true, climb: CLIMB_A } as HookProps },
+    );
+
+    rerender({ isOpen: false, climb: CLIMB_A });
+
+    expect(getPath()).toBe('/es/b/some-board/40/list');
+  });
+});
+
 describe('useDrawerUrlSync — bridge-lag race', () => {
   it('pushes the URL once displayedClimb arrives, even if isOpen flipped a render earlier', () => {
     const { rerender } = renderHook(
