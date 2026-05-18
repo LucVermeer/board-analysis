@@ -18,7 +18,6 @@ import { track } from '@/app/lib/analytics';
 import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
 import QueueNavButton from './queue-nav-button';
 import { usePathname, useParams, useSearchParams } from 'next/navigation';
-import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import {
   constructPlayUrlWithSlugs,
@@ -173,7 +172,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const [startSeshOpen, setStartSeshOpen] = useState(false);
   const params = useParams<BoardRouteParameters>();
   const searchParams = useSearchParams();
-  const router = useLocaleRouter();
 
   // Reset activeDrawer on navigation. Skip the very first run — when we just
   // seeded the drawer open from the URL, this would slam it shut before paint.
@@ -439,7 +437,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     [pathname, boardDetails, angle, params, searchParams, isPlayPage],
   );
 
-  // Handle swipe navigation
+  // Handle swipe navigation. On /play/ the URL is the source of truth — push
+  // the new climb's play URL. On /view/ useDrawerUrlSync owns URL state via
+  // the drawer's open lifecycle; navigating here would race its cleanup and
+  // close the drawer mid-swipe. Other pages (e.g. /list) get queue-only
+  // updates as before.
   const handleSwipeNext = useCallback(() => {
     if (!nextClimb || viewOnlyMode) return;
 
@@ -450,26 +452,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       boardLayout: boardDetails?.layout_name || '',
     });
 
-    if (shouldNavigate) {
+    if (isPlayPage) {
       const url = buildClimbUrl(nextClimb.climb);
-      if (url) {
-        if (isPlayPage) {
-          window.history.pushState(null, '', url);
-        } else {
-          router.push(url);
-        }
-      }
+      if (url) window.history.pushState(null, '', url);
     }
-  }, [
-    nextClimb,
-    viewOnlyMode,
-    setCurrentClimbQueueItem,
-    shouldNavigate,
-    router,
-    buildClimbUrl,
-    boardDetails,
-    isPlayPage,
-  ]);
+  }, [nextClimb, viewOnlyMode, setCurrentClimbQueueItem, buildClimbUrl, boardDetails, isPlayPage]);
 
   const handleSwipePrevious = useCallback(() => {
     if (!previousClimb || viewOnlyMode) return;
@@ -481,26 +468,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       boardLayout: boardDetails?.layout_name || '',
     });
 
-    if (shouldNavigate) {
+    if (isPlayPage) {
       const url = buildClimbUrl(previousClimb.climb);
-      if (url) {
-        if (isPlayPage) {
-          window.history.pushState(null, '', url);
-        } else {
-          router.push(url);
-        }
-      }
+      if (url) window.history.pushState(null, '', url);
     }
-  }, [
-    previousClimb,
-    viewOnlyMode,
-    setCurrentClimbQueueItem,
-    shouldNavigate,
-    router,
-    buildClimbUrl,
-    boardDetails,
-    isPlayPage,
-  ]);
+  }, [previousClimb, viewOnlyMode, setCurrentClimbQueueItem, buildClimbUrl, boardDetails, isPlayPage]);
 
   const tickBarActive = activeDrawer === 'tick';
   const canSwipeNext = !viewOnlyMode && !!nextClimb && !tickBarActive;

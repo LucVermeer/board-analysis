@@ -11,7 +11,11 @@
       "description": "{{climbName}} - {{grade}} de {{setter}}. Calidad: {{quality}}/5. Encadenes: {{ascents}}",
       "imageAlt": "{{climbName}} - {{grade}} en tabla {{boardName}}",
       "fallbackTitle": "Bloque",
-      "fallbackDescription": "Mira los detalles del bloque y vídeos de beta"
+      "fallbackDescription": "Mira los detalles del bloque y vídeos de beta",
+      "seoHeading": "{{climbName}} — {{grade}}",
+      "seoSummary": "Bloque {{boardName}} {{layoutName}}",
+      "seoSetterSuffix": " creado por {{setter}}",
+      "seoAscentsSuffix": ". {{ascents}} encadenes registrados."
     },
     "play": {
       "title": "{{climbName}} - {{grade}} | Modo Jugar",

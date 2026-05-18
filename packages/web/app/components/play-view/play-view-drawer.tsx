@@ -738,6 +738,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     boardDetails,
     angle: currentAngle,
     onClose: handleUrlSyncClose,
+    // Wall-view mode is a peek gesture at the wall climb, not a shareable
+    // /view/{uuid} surface — skip the URL push so the address bar stays put.
+    enabled: !wallView,
   });
   const filteredLogbook = useMemo(() => {
     if (!logbook || !currentClimb) return [];
