@@ -325,11 +325,17 @@
   will-change: transform;
 }
 
-/* Navigation buttons: visible on every breakpoint. Mobile keeps the swipe
-   gesture as a secondary path, but the buttons are the primary one — non-
-   drivers used to have no bar-side advance affordance at all. */
+/* Navigation buttons: desktop only. On mobile the bar's horizontal swipe
+   gesture is the advance affordance — buttons would crowd the row and
+   compete with the swipe target. */
 .navButtons {
-  display: inline-flex;
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .navButtons {
+    display: inline-flex;
+  }
 }
 
 /* Desktop-only elements (mirror, play link) */
