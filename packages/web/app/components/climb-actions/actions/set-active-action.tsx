@@ -4,7 +4,7 @@ import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
 import type { ClimbActionProps, ClimbActionResult } from '../types';
-import { useOptionalQueueActions, useOptionalQueueData } from '../../graphql-queue';
+import { useOptionalQueueActions, useOptionalCurrentClimb } from '../../graphql-queue';
 import { themeTokens } from '@/app/theme/theme-config';
 import { buildActionResult, computeActionDisplay, ActionIconElement } from '../action-view-renderer';
 import { useOptionalPlaylistActivation } from '../playlist-activation-context';
@@ -20,11 +20,11 @@ export function SetActiveAction({
 }: ClimbActionProps): ClimbActionResult {
   const { t } = useTranslation('climbs');
   const queueActions = useOptionalQueueActions();
-  const queueData = useOptionalQueueData();
+  const currentClimbData = useOptionalCurrentClimb();
   const playlistActivation = useOptionalPlaylistActivation();
   const { iconSize } = computeActionDisplay(viewMode, size, showLabel);
 
-  const isCurrentClimb = queueData?.currentClimb?.uuid === climb.uuid;
+  const isCurrentClimb = currentClimbData?.currentClimb?.uuid === climb.uuid;
 
   const handleClick = useCallback(
     (e?: React.MouseEvent) => {

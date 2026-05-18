@@ -58,7 +58,7 @@ import { getBackendWsUrl } from '@/app/lib/backend-url';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { useSnackbar } from '../providers/snackbar-provider';
-import { useOptionalQueueActions, useOptionalQueueData } from '@/app/components/graphql-queue';
+import { useOptionalQueueActions, useOptionalCurrentClimb } from '@/app/components/graphql-queue';
 import { refreshClimbSearchAfterSave } from '@/app/lib/climb-search-cache';
 import { ConfirmPopover } from '@/app/components/ui/confirm-popover';
 import { saveAutosave, loadAutosave, clearAutosave } from '@/app/lib/create-climb-autosave-db';
@@ -222,7 +222,7 @@ export default function CreateClimbForm({
   // The create page is always mounted inside GraphQLQueueProvider, but use the
   // optional hook so unit tests that render the form in isolation don't blow up.
   const queueActions = useOptionalQueueActions();
-  const queueData = useOptionalQueueData();
+  const currentClimbData = useOptionalCurrentClimb();
 
   // Stable UUID for preview climbs pushed to the queue before saving. This
   // ensures repeated "Set Active" presses update the same queue slot.
@@ -760,10 +760,10 @@ export default function CreateClimbForm({
 
   // Whether the current WIP climb is already the active climb in the queue.
   const isPreviewActive = useMemo(() => {
-    if (!queueData?.currentClimb) return false;
-    const activeUuid = queueData.currentClimb.uuid;
+    if (!currentClimbData?.currentClimb) return false;
+    const activeUuid = currentClimbData.currentClimb.uuid;
     return activeUuid === savedClimb?.uuid || activeUuid === previewUuidRef.current;
-  }, [queueData?.currentClimb, savedClimb?.uuid]);
+  }, [currentClimbData?.currentClimb, savedClimb?.uuid]);
 
   // Keep the queue item in sync with hold changes. Once a climb lands in the
   // queue (via Save or Set Active), every hold edit pushes an update so party

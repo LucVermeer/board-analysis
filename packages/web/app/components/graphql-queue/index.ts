@@ -9,10 +9,10 @@ export {
   useOptionalQueueContext,
   useQueueActions,
   useOptionalQueueActions,
-  useQueueData,
-  useOptionalQueueData,
   QueueContext,
   QueueActionsContext,
+  // `QueueDataContext` is a test-only alias for `QueueContext` (see
+  // QueueContext.tsx). Kept exported so the queue-bridge tests compile.
   QueueDataContext,
   // Fine-grained hooks for targeted subscriptions
   useCurrentClimb,

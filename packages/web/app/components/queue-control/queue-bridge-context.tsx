@@ -14,7 +14,6 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   QueueContext,
   QueueActionsContext,
-  QueueDataContext,
   CurrentClimbContext,
   CurrentClimbUuidContext,
   QueueListContext,
@@ -22,7 +21,6 @@ import {
   SessionContext,
   type GraphQLQueueContextType,
   type GraphQLQueueActionsType,
-  type GraphQLQueueDataType,
 } from '../graphql-queue/QueueContext';
 import type { CurrentClimbDataType, QueueListDataType, SearchDataType, SessionDataType } from '../graphql-queue/types';
 import { usePersistentSession } from '../persistent-session';
@@ -91,12 +89,11 @@ type QueueBridgeSetters = {
   inject: (
     ctx: GraphQLQueueContextType,
     actions: GraphQLQueueActionsType,
-    data: GraphQLQueueDataType,
     bd: BoardDetails,
     angle: Angle,
     baseBoardPath: string,
   ) => void;
-  updateContext: (ctx: GraphQLQueueContextType, actions: GraphQLQueueActionsType, data: GraphQLQueueDataType) => void;
+  updateContext: (ctx: GraphQLQueueContextType, actions: GraphQLQueueActionsType) => void;
   clear: () => void;
 };
 
@@ -114,7 +111,6 @@ const QueueBridgeSetterContext = createContext<QueueBridgeSetters>({
 function usePersistentSessionQueueAdapter(): {
   context: GraphQLQueueContextType;
   actionsValue: GraphQLQueueActionsType;
-  dataValue: GraphQLQueueDataType;
   boardDetails: BoardDetails | null;
   angle: Angle;
   hasResolvedAngle: boolean;
@@ -677,8 +673,9 @@ function usePersistentSessionQueueAdapter(): {
     ],
   );
 
-  const dataValue: GraphQLQueueDataType = useMemo(
+  const context: GraphQLQueueContextType = useMemo(
     () => ({
+      ...actionsValue,
       queue,
       currentClimbQueueItem,
       currentClimb: currentClimbQueueItem?.climb ?? null,
@@ -717,6 +714,7 @@ function usePersistentSessionQueueAdapter(): {
       isDisconnected: false,
     }),
     [
+      actionsValue,
       queue,
       currentClimbQueueItem,
       playlistSuggestionSource,
@@ -735,11 +733,6 @@ function usePersistentSessionQueueAdapter(): {
     ],
   );
 
-  const context: GraphQLQueueContextType = useMemo(
-    () => ({ ...dataValue, ...actionsValue }),
-    [dataValue, actionsValue],
-  );
-
   // Sync injected queue state to local queue so the adapter has fresh data
   // when the bridge falls back from injected mode. Only effective in local
   // (non-party) mode — setLocalQueueState no-ops when a party session is active.
@@ -753,7 +746,6 @@ function usePersistentSessionQueueAdapter(): {
   return {
     context,
     actionsValue,
-    dataValue,
     boardDetails,
     angle,
     hasResolvedAngle,
@@ -774,12 +766,11 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   const [injectedBoardDetails, setInjectedBoardDetails] = useState<BoardDetails | null>(null);
   const [injectedAngle, setInjectedAngle] = useState<Angle>(0);
 
-  // Injected values stored in refs to avoid cleanup/setup cycles.
-  // Separate refs for combined, actions, and data so we can track
-  // actions identity changes independently from data changes.
+  // Injected values stored in refs to avoid cleanup/setup cycles. Combined
+  // context now carries every data field, so we no longer need a separate
+  // data ref / version counter.
   const injectedContextRef = useRef<GraphQLQueueContextType | null>(null);
   const injectedActionsRef = useRef<GraphQLQueueActionsType | null>(null);
-  const injectedDataRef = useRef<GraphQLQueueDataType | null>(null);
   // Board state refs for reading during clear() — can't use state in stable callbacks
   const injectedBoardDetailsRef = useRef<BoardDetails | null>(null);
   const injectedBaseBoardPathRef = useRef<string>('');
@@ -810,11 +801,6 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     return injectedActionsRef.current!;
   }, [isInjected, adapter.actionsValue, _actionsVersion]);
 
-  const effectiveData: GraphQLQueueDataType = useMemo(() => {
-    if (!isInjected) return adapter.dataValue;
-    return injectedDataRef.current!;
-  }, [isInjected, adapter.dataValue, _dataVersion]);
-
   const effectiveBoardDetails = isInjected ? injectedBoardDetails : adapter.boardDetails;
   const effectiveAngle = isInjected ? injectedAngle : adapter.angle;
   // The injector path passes a fully-resolved angle from the board route
@@ -842,14 +828,12 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     (
       ctx: GraphQLQueueContextType,
       actions: GraphQLQueueActionsType,
-      data: GraphQLQueueDataType,
       bd: BoardDetails,
       a: Angle,
       baseBoardPath: string,
     ) => {
       injectedContextRef.current = ctx;
       injectedActionsRef.current = actions;
-      injectedDataRef.current = data;
       injectedBoardDetailsRef.current = bd;
       injectedBaseBoardPathRef.current = baseBoardPath;
       setInjectedBoardDetails(bd);
@@ -861,44 +845,38 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     [],
   );
 
-  const updateContext = useCallback(
-    (ctx: GraphQLQueueContextType, actions: GraphQLQueueActionsType, data: GraphQLQueueDataType) => {
-      const actionsChanged = actions !== injectedActionsRef.current;
-      const dataChanged = data !== injectedDataRef.current;
-      injectedContextRef.current = ctx;
-      injectedActionsRef.current = actions;
-      injectedDataRef.current = data;
-      // Only bump data version when the injected data reference actually changed.
-      // Prevents cascading re-renders when updateContext is called with the same
-      // data (e.g. during session stats updates that don't change queue data).
-      if (dataChanged) {
-        setDataVersion((v) => v + 1);
-      }
-      // Only bump actions version when the actions object identity actually changed.
-      // GraphQLQueueProvider's actionsValue uses latestRef with empty deps, so this
-      // almost never changes — keeping QueueActionsContext stable for consumers.
-      if (actionsChanged) {
-        setActionsVersion((v) => v + 1);
-      }
-    },
-    [],
-  );
+  const updateContext = useCallback((ctx: GraphQLQueueContextType, actions: GraphQLQueueActionsType) => {
+    const actionsChanged = actions !== injectedActionsRef.current;
+    const dataChanged = ctx !== injectedContextRef.current;
+    injectedContextRef.current = ctx;
+    injectedActionsRef.current = actions;
+    // Bump data version when the combined context reference changes — that's
+    // the data signal now that the separate data context is gone.
+    if (dataChanged) {
+      setDataVersion((v) => v + 1);
+    }
+    // Only bump actions version when the actions object identity actually changed.
+    // GraphQLQueueProvider's actionsValue uses latestRef with empty deps, so this
+    // almost never changes — keeping QueueActionsContext stable for consumers.
+    if (actionsChanged) {
+      setActionsVersion((v) => v + 1);
+    }
+  }, []);
 
   const clear = useCallback(() => {
     // Before clearing: sync the last injected queue state to the persistent
     // session's local queue so the adapter has up-to-date data when it takes
     // over. In party mode this is a no-op (setLocalQueueState guards on
     // activeSession).
-    const lastData = injectedDataRef.current;
+    const lastCtx = injectedContextRef.current;
     const bd = injectedBoardDetailsRef.current;
     const bbp = injectedBaseBoardPathRef.current;
-    if (lastData && bd && bbp) {
-      adapterSyncRef.current(lastData.queue, lastData.currentClimbQueueItem, bbp, bd);
+    if (lastCtx && bd && bbp) {
+      adapterSyncRef.current(lastCtx.queue, lastCtx.currentClimbQueueItem, bbp, bd);
     }
 
     injectedContextRef.current = null;
     injectedActionsRef.current = null;
-    injectedDataRef.current = null;
     injectedBoardDetailsRef.current = null;
     injectedBaseBoardPathRef.current = '';
     setIsInjected(false);
@@ -910,89 +888,90 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
 
   const setters = useMemo<QueueBridgeSetters>(() => ({ inject, updateContext, clear }), [inject, updateContext, clear]);
 
-  // Derive fine-grained context values from the effective data
+  // Derive fine-grained context values from the effective context (which is
+  // the combined GraphQLQueueContextType — actions + data fields).
   const effectiveCurrentClimb: CurrentClimbDataType = useMemo(
     () => ({
-      currentClimbQueueItem: effectiveData.currentClimbQueueItem,
-      currentClimb: effectiveData.currentClimb,
+      currentClimbQueueItem: effectiveContext.currentClimbQueueItem,
+      currentClimb: effectiveContext.currentClimb,
     }),
-    [effectiveData.currentClimbQueueItem, effectiveData.currentClimb],
+    [effectiveContext.currentClimbQueueItem, effectiveContext.currentClimb],
   );
-  const effectiveCurrentClimbUuid = effectiveData.currentClimbQueueItem?.uuid ?? null;
+  const effectiveCurrentClimbUuid = effectiveContext.currentClimbQueueItem?.uuid ?? null;
 
   const effectiveQueueList: QueueListDataType = useMemo(
     () => ({
-      queue: effectiveData.queue,
-      suggestedClimbs: effectiveData.suggestedClimbs,
+      queue: effectiveContext.queue,
+      suggestedClimbs: effectiveContext.suggestedClimbs,
     }),
-    [effectiveData.queue, effectiveData.suggestedClimbs],
+    [effectiveContext.queue, effectiveContext.suggestedClimbs],
   );
 
   const effectiveSearch: SearchDataType = useMemo(
     () => ({
-      climbSearchParams: effectiveData.climbSearchParams,
-      climbSearchResults: effectiveData.climbSearchResults,
-      totalSearchResultCount: effectiveData.totalSearchResultCount,
-      hasMoreResults: effectiveData.hasMoreResults,
-      isFetchingClimbs: effectiveData.isFetchingClimbs,
-      isFetchingNextPage: effectiveData.isFetchingNextPage,
-      hasDoneFirstFetch: effectiveData.hasDoneFirstFetch,
-      parsedParams: effectiveData.parsedParams,
+      climbSearchParams: effectiveContext.climbSearchParams,
+      climbSearchResults: effectiveContext.climbSearchResults,
+      totalSearchResultCount: effectiveContext.totalSearchResultCount,
+      hasMoreResults: effectiveContext.hasMoreResults,
+      isFetchingClimbs: effectiveContext.isFetchingClimbs,
+      isFetchingNextPage: effectiveContext.isFetchingNextPage,
+      hasDoneFirstFetch: effectiveContext.hasDoneFirstFetch,
+      parsedParams: effectiveContext.parsedParams,
     }),
     [
-      effectiveData.climbSearchParams,
-      effectiveData.climbSearchResults,
-      effectiveData.totalSearchResultCount,
-      effectiveData.hasMoreResults,
-      effectiveData.isFetchingClimbs,
-      effectiveData.isFetchingNextPage,
-      effectiveData.hasDoneFirstFetch,
-      effectiveData.parsedParams,
+      effectiveContext.climbSearchParams,
+      effectiveContext.climbSearchResults,
+      effectiveContext.totalSearchResultCount,
+      effectiveContext.hasMoreResults,
+      effectiveContext.isFetchingClimbs,
+      effectiveContext.isFetchingNextPage,
+      effectiveContext.hasDoneFirstFetch,
+      effectiveContext.parsedParams,
     ],
   );
 
   const effectiveSession: SessionDataType = useMemo(
     () => ({
-      viewOnlyMode: effectiveData.viewOnlyMode,
-      isSessionActive: effectiveData.isSessionActive,
-      isPersistentSessionActive: effectiveData.isPersistentSessionActive,
-      sessionId: effectiveData.sessionId,
-      sessionSummary: effectiveData.sessionSummary,
-      sessionGoal: effectiveData.sessionGoal,
-      connectionState: effectiveData.connectionState,
-      canMutate: effectiveData.canMutate,
-      isDisconnected: effectiveData.isDisconnected,
-      users: effectiveData.users ?? [],
-      clientId: effectiveData.clientId ?? null,
-      participantId: effectiveData.participantId ?? null,
-      isLeader: effectiveData.isLeader ?? false,
-      driverParticipantId: effectiveData.driverParticipantId ?? null,
-      isDriver: effectiveData.isDriver ?? false,
-      lastConnectedBoardSerial: effectiveData.lastConnectedBoardSerial ?? null,
-      isBackendMode: effectiveData.isBackendMode ?? false,
-      hasConnected: effectiveData.hasConnected ?? false,
-      connectionError: effectiveData.connectionError ?? null,
+      viewOnlyMode: effectiveContext.viewOnlyMode,
+      isSessionActive: effectiveContext.isSessionActive,
+      isPersistentSessionActive: effectiveContext.isPersistentSessionActive,
+      sessionId: effectiveContext.sessionId,
+      sessionSummary: effectiveContext.sessionSummary,
+      sessionGoal: effectiveContext.sessionGoal,
+      connectionState: effectiveContext.connectionState,
+      canMutate: effectiveContext.canMutate,
+      isDisconnected: effectiveContext.isDisconnected,
+      users: effectiveContext.users ?? [],
+      clientId: effectiveContext.clientId ?? null,
+      participantId: effectiveContext.participantId ?? null,
+      isLeader: effectiveContext.isLeader ?? false,
+      driverParticipantId: effectiveContext.driverParticipantId ?? null,
+      isDriver: effectiveContext.isDriver ?? false,
+      lastConnectedBoardSerial: effectiveContext.lastConnectedBoardSerial ?? null,
+      isBackendMode: effectiveContext.isBackendMode ?? false,
+      hasConnected: effectiveContext.hasConnected ?? false,
+      connectionError: effectiveContext.connectionError ?? null,
     }),
     [
-      effectiveData.viewOnlyMode,
-      effectiveData.isSessionActive,
-      effectiveData.isPersistentSessionActive,
-      effectiveData.sessionId,
-      effectiveData.sessionSummary,
-      effectiveData.sessionGoal,
-      effectiveData.connectionState,
-      effectiveData.canMutate,
-      effectiveData.isDisconnected,
-      effectiveData.users,
-      effectiveData.clientId,
-      effectiveData.participantId,
-      effectiveData.isLeader,
-      effectiveData.driverParticipantId,
-      effectiveData.isDriver,
-      effectiveData.lastConnectedBoardSerial,
-      effectiveData.isBackendMode,
-      effectiveData.hasConnected,
-      effectiveData.connectionError,
+      effectiveContext.viewOnlyMode,
+      effectiveContext.isSessionActive,
+      effectiveContext.isPersistentSessionActive,
+      effectiveContext.sessionId,
+      effectiveContext.sessionSummary,
+      effectiveContext.sessionGoal,
+      effectiveContext.connectionState,
+      effectiveContext.canMutate,
+      effectiveContext.isDisconnected,
+      effectiveContext.users,
+      effectiveContext.clientId,
+      effectiveContext.participantId,
+      effectiveContext.isLeader,
+      effectiveContext.driverParticipantId,
+      effectiveContext.isDriver,
+      effectiveContext.lastConnectedBoardSerial,
+      effectiveContext.isBackendMode,
+      effectiveContext.hasConnected,
+      effectiveContext.connectionError,
     ],
   );
 
@@ -1014,34 +993,32 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     <QueueBridgeSetterContext.Provider value={setters}>
       <QueueBridgeBoardInfoContext.Provider value={boardInfo}>
         <QueueActionsContext.Provider value={effectiveActions}>
-          <QueueDataContext.Provider value={effectiveData}>
-            <QueueContext.Provider value={effectiveContext}>
-              <CurrentClimbContext.Provider value={effectiveCurrentClimb}>
-                <CurrentClimbUuidContext.Provider value={effectiveCurrentClimbUuid}>
-                  <QueueListContext.Provider value={effectiveQueueList}>
-                    <SearchContext.Provider value={effectiveSearch}>
-                      <SessionContext.Provider value={effectiveSession}>
-                        {/* Sync queue state to iOS Live Activity (code-split, no-op on non-iOS).
-                            Use effectiveData/effectiveBoardDetails so the Live Activity reflects
-                            the live party queue while on a board route (injected mode), not the
-                            adapter's local view (which is a no-op in party mode). */}
-                        <LiveActivityBridge
-                          queue={effectiveData.queue}
-                          currentClimbQueueItem={effectiveData.currentClimbQueueItem}
-                          boardDetails={effectiveBoardDetails}
-                          sessionId={effectiveData.sessionId}
-                          isSessionActive={effectiveData.isSessionActive}
-                          onSetCurrentClimb={onSetCurrentClimb}
-                          onWidgetNavigate={onWidgetNavigate}
-                        />
-                        {children}
-                      </SessionContext.Provider>
-                    </SearchContext.Provider>
-                  </QueueListContext.Provider>
-                </CurrentClimbUuidContext.Provider>
-              </CurrentClimbContext.Provider>
-            </QueueContext.Provider>
-          </QueueDataContext.Provider>
+          <QueueContext.Provider value={effectiveContext}>
+            <CurrentClimbContext.Provider value={effectiveCurrentClimb}>
+              <CurrentClimbUuidContext.Provider value={effectiveCurrentClimbUuid}>
+                <QueueListContext.Provider value={effectiveQueueList}>
+                  <SearchContext.Provider value={effectiveSearch}>
+                    <SessionContext.Provider value={effectiveSession}>
+                      {/* Sync queue state to iOS Live Activity (code-split, no-op on non-iOS).
+                          Use effectiveContext so the Live Activity reflects the live party
+                          queue while on a board route (injected mode), not the adapter's
+                          local view (which is a no-op in party mode). */}
+                      <LiveActivityBridge
+                        queue={effectiveContext.queue}
+                        currentClimbQueueItem={effectiveContext.currentClimbQueueItem}
+                        boardDetails={effectiveBoardDetails}
+                        sessionId={effectiveContext.sessionId}
+                        isSessionActive={effectiveContext.isSessionActive}
+                        onSetCurrentClimb={onSetCurrentClimb}
+                        onWidgetNavigate={onWidgetNavigate}
+                      />
+                      {children}
+                    </SessionContext.Provider>
+                  </SearchContext.Provider>
+                </QueueListContext.Provider>
+              </CurrentClimbUuidContext.Provider>
+            </CurrentClimbContext.Provider>
+          </QueueContext.Provider>
         </QueueActionsContext.Provider>
       </QueueBridgeBoardInfoContext.Provider>
     </QueueBridgeSetterContext.Provider>
@@ -1065,7 +1042,6 @@ export function QueueBridgeInjector({ boardDetails, angle }: QueueBridgeInjector
   // Read the board route's split contexts from GraphQLQueueProvider
   const queueContext = useContext(QueueContext);
   const queueActions = useContext(QueueActionsContext);
-  const queueData = useContext(QueueDataContext);
 
   // Track whether we've done the initial injection
   const hasInjectedRef = useRef(false);
@@ -1077,8 +1053,8 @@ export function QueueBridgeInjector({ boardDetails, angle }: QueueBridgeInjector
 
   // Initial injection: set board details + context on mount
   useLayoutEffect(() => {
-    if (queueContext && queueActions && queueData) {
-      inject(queueContext, queueActions, queueData, boardDetails, angle, baseBoardPathRef.current);
+    if (queueContext && queueActions) {
+      inject(queueContext, queueActions, boardDetails, angle, baseBoardPathRef.current);
       hasInjectedRef.current = true;
     }
     // Only clean up on unmount (navigating away from board route)
@@ -1094,14 +1070,14 @@ export function QueueBridgeInjector({ boardDetails, angle }: QueueBridgeInjector
   // Update the context ref whenever any of the queue context values change.
   // Also handles deferred injection if contexts were null during the useLayoutEffect.
   useEffect(() => {
-    if (!queueContext || !queueActions || !queueData) return;
+    if (!queueContext || !queueActions) return;
     if (hasInjectedRef.current) {
-      updateContext(queueContext, queueActions, queueData);
+      updateContext(queueContext, queueActions);
     } else {
-      inject(queueContext, queueActions, queueData, boardDetails, angle, baseBoardPath);
+      inject(queueContext, queueActions, boardDetails, angle, baseBoardPath);
       hasInjectedRef.current = true;
     }
-  }, [queueContext, queueActions, queueData, updateContext, inject, boardDetails, angle, baseBoardPath]);
+  }, [queueContext, queueActions, updateContext, inject, boardDetails, angle, baseBoardPath]);
 
   return null;
 }
