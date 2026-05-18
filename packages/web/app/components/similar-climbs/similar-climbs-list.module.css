@@ -11,11 +11,22 @@
   display: none;
 }
 
-.card {
+/* Wraps the clickable card and the absolute-positioned ellipsis so the
+   IconButton can render as a sibling (not a descendant) of the card's
+   <button>/<a> — nesting a <button> inside a <button>/<a> is invalid HTML
+   and triggers hydration errors. */
+.cardWrapper {
+  position: relative;
   flex-shrink: 0;
   scroll-snap-align: start;
   /* 180px is the canonical board-preview thumbnail size shared with the
      homepage board card; no spacing-token analogue applies. */
+  width: 180px;
+}
+
+.card {
+  flex-shrink: 0;
+  scroll-snap-align: start;
   width: 180px;
   display: flex;
   flex-direction: column;
@@ -121,4 +132,19 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Positioned over the thumbnail top-right. Anchored to .cardWrapper so the
+   ellipsis stays a sibling of the clickable card surface, not a descendant. */
+.ellipsis {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: var(--semantic-surface-overlay);
+  backdrop-filter: blur(4px);
+  z-index: 1;
+}
+
+.ellipsis:hover {
+  background-color: var(--semantic-surface);
 }
