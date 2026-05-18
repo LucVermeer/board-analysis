@@ -3,7 +3,7 @@
 import { describe, it, expect, vi } from 'vite-plus/test';
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { PlayViewActionBar } from '../play-view-drawer';
+import { PlayViewActionBar } from '../play-view-action-bar';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
 vi.mock('react-i18next', () => ({
