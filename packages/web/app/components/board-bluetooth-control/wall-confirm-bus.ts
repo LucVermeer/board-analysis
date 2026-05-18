@@ -20,6 +20,15 @@
  *
  * Drawer code therefore subscribes once and gets both transports for free —
  * no separate party-vs-solo branch at the call site.
+ *
+ * **Listeners must be idempotent.** In party mode the BLE-paired phone
+ * emits locally *and* the backend broadcasts `WallConfirmedClimb` to every
+ * member of the session (including the sender, since the WS server doesn't
+ * filter by `senderClientId` on confirms). The sender's subscription
+ * therefore republishes onto this bus, so any given listener can see the
+ * same `climbUuid` twice within a few hundred milliseconds. Treat receipt
+ * as a level signal, not an edge — dismissing a timer is fine; incrementing
+ * a counter is not.
  */
 
 const listeners = new Set<(climbUuid: string) => void>();
