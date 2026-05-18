@@ -977,8 +977,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     // Solo: BLE-centric — the lightbulb's filled state means "a board is
     // paired." Tap when not paired opens the picker directly (no 2s watcher
     // needed; there's no other device that might emit a wall-confirm).
-    // Tap when paired releases the wall — long-press still routes to the
-    // light-control-drawer for the deeper manual BLE disconnect path.
+    // Tap when paired sends the displayed climb to the wall — `takeControl`
+    // short-circuits to `setCurrentClimb` in solo, which the BLE AutoSender
+    // picks up. Re-pressing the same climb is deduped at the BLE layer via
+    // `lastSentUuidRef`; the deeper "actually disconnect BLE" path stays on
+    // the long-press into the light-control drawer.
     if (!isPersistentSessionActive) {
       if (!isBluetoothConnected) {
         track('Wall Control Taken', {
@@ -991,18 +994,15 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
         void bluetoothConnect();
         return;
       }
-      // Solo + connected: treat the press as a release. The BLE write that
-      // was on the wall stays there until something else displaces it; the
-      // user's gesture is "I'm done driving" rather than "send again." A
-      // long-press still surfaces the light-control drawer's manual
-      // disconnect for the deeper teardown.
-      cancelWallConfirmWatcher();
-      setPendingClimbUuid(null);
-      void releaseControl();
-      track('Wall Control Released', {
-        reason: 'manual',
+      if (!currentClimb) return;
+      void takeControl(currentClimb);
+      setDrawerDisplayedItem?.(null);
+      track('Wall Control Taken', {
+        source: 'lightbulb_drawer',
+        previousDriver,
         mode: 'solo',
         boardLayout,
+        climbUuid: currentClimb.uuid,
       });
       return;
     }
