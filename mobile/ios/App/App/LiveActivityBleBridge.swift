@@ -8,11 +8,14 @@ import UIKit
 @available(iOS 17.0, *)
 enum LiveActivityBleBridge {
     /// Awaits BLE readiness and issues a board display write inside a
-    /// `beginBackgroundTask` window. The window carries its own expiration
-    /// handler that cleanly releases the task identifier if iOS reclaims
-    /// background budget before the write completes — without that handler
-    /// the system terminates the app on expiry instead of giving us a chance
-    /// to release the identifier ourselves.
+    /// `beginBackgroundTask` window. Pinned to `@MainActor` so `defer { task.end() }`
+    /// can call into the `@MainActor`-isolated background-task wrapper
+    /// synchronously on any exit path — including a future where
+    /// `displayCurrentItemAwaitingReady` becomes cancellation-aware and
+    /// throws `CancellationError`. The `await` on the BLE work hops off
+    /// main actor for the duration, so main actor is only briefly held at
+    /// function entry/exit.
+    @MainActor
     static func writeBoardForIntent(items: [SharedQueueItem], currentIndex: Int) async {
         let task = BleIntentBackgroundTask()
         task.begin(name: "ble-display-intent")
@@ -25,33 +28,45 @@ enum LiveActivityBleBridge {
     }
 }
 
-/// Owns a single `UIBackgroundTaskIdentifier`. Begin and end are atomic and
-/// idempotent so the expiration handler, the `defer` cleanup, and (in pathological
-/// double-tap scenarios) a deinit can all race without crashing or leaking the
-/// identifier. `UIApplication.beginBackgroundTask` / `endBackgroundTask` are
-/// documented to be safe from any thread, so we don't hop to MainActor.
-private final class BleIntentBackgroundTask: @unchecked Sendable {
-    private let lock = NSLock()
+/// Owns a single `UIBackgroundTaskIdentifier`.
+///
+/// **Designed for short-lived stack use** — pair `begin(name:)` with an
+/// explicit `end()`, typically via `defer { task.end() }` (as
+/// `LiveActivityBleBridge.writeBoardForIntent` does). The class deliberately
+/// has **no `deinit`-based cleanup**: `deinit` can't run `@MainActor` methods
+/// in Swift 5, so a property-stored instance whose owner is released without
+/// calling `end()` will leak the task identifier (the expiration handler
+/// eventually fires and ends it, but iOS may have already begun reclaiming
+/// budget). The type is non-`private` purely so `BleIntentBackgroundTaskTests`
+/// can verify the idempotency contract — production callers should treat it
+/// as an implementation detail of `LiveActivityBleBridge`.
+///
+/// `@MainActor`-isolated so `UIApplication.shared` (also `@MainActor`-isolated
+/// under Swift 6 strict concurrency) can be accessed without locks. The
+/// expiration-handler closure passed to `beginBackgroundTask` is documented
+/// to run on the main thread, which we assert via `MainActor.assumeIsolated`
+/// — without that hop the strict-concurrency compile fails because the
+/// closure itself isn't actor-isolated.
+@MainActor
+final class BleIntentBackgroundTask {
     private var taskId: UIBackgroundTaskIdentifier = .invalid
 
     func begin(name: String) {
-        lock.lock()
-        defer { lock.unlock() }
         guard taskId == .invalid else { return }
         taskId = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
-            self?.end()
+            MainActor.assumeIsolated {
+                self?.end()
+            }
         }
     }
 
+    /// Idempotent — safe to call from the expiration handler and from the
+    /// `defer { task.end() }` site. Whichever runs second observes
+    /// `taskId == .invalid` and no-ops.
     func end() {
-        lock.lock()
-        defer { lock.unlock() }
         guard taskId != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(taskId)
+        let id = taskId
         taskId = .invalid
-    }
-
-    deinit {
-        end()
+        UIApplication.shared.endBackgroundTask(id)
     }
 }

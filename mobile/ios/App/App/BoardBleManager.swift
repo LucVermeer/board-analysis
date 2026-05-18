@@ -428,10 +428,23 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     // MARK: - CBCentralManagerDelegate
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn, scanRequested {
-            central.scanForPeripherals(withServices: scanServices.isEmpty ? [auroraServiceUuid] : scanServices, options: [
-                CBCentralManagerScanOptionAllowDuplicatesKey: true,
-            ])
+        if central.state == .poweredOn {
+            // Defensive: during state restoration after an intent-driven
+            // background launch, `didDiscoverCharacteristicsFor` (which
+            // normally calls `readyWaiters.signalAll()`) can land before
+            // the central transitions to `.poweredOn`. In that ordering,
+            // `isReadyForWrite` was still false when the waiter was
+            // enqueued, and signalAll's earlier call hit an empty pool.
+            // Resignal here so the waiter unblocks immediately instead of
+            // sitting until its timeout fires.
+            if isReadyForWrite {
+                readyWaiters.signalAll()
+            }
+            if scanRequested {
+                central.scanForPeripherals(withServices: scanServices.isEmpty ? [auroraServiceUuid] : scanServices, options: [
+                    CBCentralManagerScanOptionAllowDuplicatesKey: true,
+                ])
+            }
         }
     }
 
