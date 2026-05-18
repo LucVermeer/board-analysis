@@ -237,7 +237,8 @@
         "drivingNamed": "You’re driving “{{name}}”. Tap to release control.",
         "driving": "You’re driving. Tap to release control.",
         "takeNamed": "Take wall control and send “{{name}}”",
-        "take": "Take wall control"
+        "take": "Take wall control",
+        "coachmark": "Send to the wall"
       }
     },
     "tickFab": {

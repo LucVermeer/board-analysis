@@ -6,6 +6,7 @@ import { track } from '@/app/lib/analytics';
 import MuiBadge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import SyncOutlined from '@mui/icons-material/SyncOutlined';
@@ -116,6 +117,20 @@ type PlayViewActionBarProps = {
    *  any BLE meaning in solo, so the visual would always be lit if we used
    *  isDriver there — masking the actual connection state. */
   lightbulbActive: boolean;
+  /** Pulse the lightbulb while a take-control press is in flight. Set
+   *  between the press and the matching `WallConfirmedClimb` event (or the
+   *  2-second timeout fallback). Independent from `lightbulbActive`. */
+  lightbulbPending?: boolean;
+  /** Single-iteration pulse + tooltip on first drawer open. The parent
+   *  reads `swipeHint:lightbulbSeen` from IndexedDB and toggles this true
+   *  once, then writes the flag so subsequent opens skip the coachmark. */
+  lightbulbCoachmark?: boolean;
+  /** Localized tooltip copy for the coachmark. Threaded through so the
+   *  parent owns the i18n call and this component stays presentational. */
+  lightbulbCoachmarkText?: string;
+  /** Fired when the coachmark animation runs once — the parent persists
+   *  the seen flag and clears `lightbulbCoachmark`. */
+  onLightbulbCoachmarkSeen?: () => void;
   /** Wall-view mode: drawer opened from the bar body to inspect the wall
    *  climb. Hide prev/next entirely (controls live on the bar; this view is
    *  anchored to the wall). The lightbulb stays. */
@@ -148,6 +163,10 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   onOpenActions,
   onOpenQueue,
   lightbulbActive,
+  lightbulbPending = false,
+  lightbulbCoachmark = false,
+  lightbulbCoachmarkText,
+  onLightbulbCoachmarkSeen,
   displayedClimbName,
   onLightbulb,
   onLightbulbLongPress,
@@ -210,23 +229,45 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
           that this drawer replaced — it reads as "this bulb is lit" rather
           than the dusty-rose primary, which the user kept misreading as an
           error state. Long-press opens the light-control drawer (disco /
-          glyphs / palette / manual disconnect). */}
-      <IconButton ref={lightbulbLongPressRef} onClick={handleLightbulbTap} aria-label={lightbulbLabel}>
-        {lightbulbActive ? (
-          <Lightbulb
-            sx={{
-              color: themeTokens.colors.warning,
-              '@keyframes connectedGlow': {
-                '0%': { filter: `drop-shadow(0 0 2px ${themeTokens.colors.warning}99)` },
-                '100%': { filter: `drop-shadow(0 0 6px ${themeTokens.colors.warning})` },
-              },
-              animation: 'connectedGlow 1.5s ease-in-out infinite alternate',
-            }}
-          />
-        ) : (
-          <LightbulbOutlined />
-        )}
-      </IconButton>
+          glyphs / palette / manual disconnect).
+
+          Pending / coachmark variants share a single CSS pulse class so the
+          two states never compose into a janky doubled animation. */}
+      <Tooltip
+        // Coachmark tooltip only — once `lightbulbCoachmark` flips false the
+        // tooltip is gone (default-closed Tooltip with no children-trigger).
+        open={lightbulbCoachmark && !!lightbulbCoachmarkText}
+        title={lightbulbCoachmarkText ?? ''}
+        placement="top"
+        arrow
+        // Tooltip-only — the underlying button still owns its aria-label.
+        disableInteractive
+      >
+        <IconButton
+          ref={lightbulbLongPressRef}
+          onClick={handleLightbulbTap}
+          aria-label={lightbulbLabel}
+          className={
+            lightbulbPending ? styles.lightbulbPending : lightbulbCoachmark ? styles.lightbulbCoachmark : undefined
+          }
+          onAnimationEnd={lightbulbCoachmark ? onLightbulbCoachmarkSeen : undefined}
+        >
+          {lightbulbActive ? (
+            <Lightbulb
+              sx={{
+                color: themeTokens.colors.warning,
+                '@keyframes connectedGlow': {
+                  '0%': { filter: `drop-shadow(0 0 2px ${themeTokens.colors.warning}99)` },
+                  '100%': { filter: `drop-shadow(0 0 6px ${themeTokens.colors.warning})` },
+                },
+                animation: 'connectedGlow 1.5s ease-in-out infinite alternate',
+              }}
+            />
+          ) : (
+            <LightbulbOutlined />
+          )}
+        </IconButton>
+      </Tooltip>
       {angleSelector}
       <IconButton onClick={onOpenActions} aria-label={t('playView.actionBar.climbActionsAria')}>
         <MoreHorizOutlined />
@@ -540,6 +581,23 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const [isPlaylistSelectorOpen, setIsPlaylistSelectorOpen] = useState(false);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isBoardZoomed, setIsBoardZoomed] = useState(false);
+  /**
+   * Lightbulb pending state (queue-control-bar pivot, Phase 3).
+   *
+   * Set when the user presses the lightbulb to take control (party non-driver
+   * branch) — between the press and the matching `WallConfirmedClimb`, the
+   * lightbulb renders with a soft pulse so the user can see we're waiting.
+   * Cleared either way when `useWallConfirmFallback` resolves (confirm,
+   * timeout, or session-swap cancellation).
+   */
+  const [pendingClimbUuid, setPendingClimbUuid] = useState<string | null>(null);
+  /**
+   * First-run coachmark pulse (queue-control-bar pivot, Phase 3). Reads
+   * `swipeHint:lightbulbSeen` from IndexedDB once on first drawer open, fires
+   * a single-iteration pulse on the lightbulb with the "Send to the wall"
+   * tooltip, then writes the seen flag so subsequent opens are silent.
+   */
+  const [showLightbulbCoachmark, setShowLightbulbCoachmark] = useState(false);
   // Light-control drawer (disco / glyphs / palette / manual BLE disconnect).
   // Opened by long-pressing the action bar's lightbulb — the ShareBoardButton
   // that used to host the long-press is gone (pivot simplification: one
@@ -592,9 +650,14 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
   const { currentClimbQueueItem } = isOpen ? currentClimbData : deferredCurrentClimb;
   const { queue } = isOpen ? queueListData : deferredQueue;
-  const { viewOnlyMode, isPersistentSessionActive, isDriver, lastConnectedBoardSerial } = isOpen
-    ? sessionData
-    : deferredSession;
+  const {
+    viewOnlyMode,
+    isPersistentSessionActive,
+    isDriver,
+    lastConnectedBoardSerial,
+    connectionState,
+    participantId,
+  } = isOpen ? sessionData : deferredSession;
   const {
     mirrorClimb,
     getNextClimbQueueItem,
@@ -703,6 +766,28 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     [isPersistentSessionActive, isDriver, setCurrentClimbQueueItem, setDrawerDisplayedItem],
   );
 
+  // First-run coachmark — pulses the lightbulb once with the "Send to the
+  // wall" tooltip the first time the drawer opens. Reads
+  // `swipeHint:lightbulbSeen` from IndexedDB; if unset, schedules the pulse
+  // and writes the flag. Single-fire per user via the IDB key.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    void getPreference<boolean>('swipeHint:lightbulbSeen').then((seen) => {
+      if (cancelled) return;
+      if (seen) return;
+      setShowLightbulbCoachmark(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  const handleLightbulbCoachmarkSeen = useCallback(() => {
+    setShowLightbulbCoachmark(false);
+    void setPreference('swipeHint:lightbulbSeen', true);
+  }, []);
+
   const navigate = useCallback(
     (direction: 'next' | 'previous', source: 'swipePlayViewDrawer' | 'playViewDrawer') => {
       const getter = direction === 'next' ? getNextClimbQueueItem : getPreviousClimbQueueItem;
@@ -745,12 +830,100 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // Wall-confirm watcher: armed by handleLightbulbClick, dismissed by the
   // local wall-confirm bus or fires a connect fallback after 2 s. Owns its
   // own unmount cleanup so the drawer doesn't need to thread that wiring.
-  const { armWatcher: armWallConfirmWatcher, cancelWatcher: cancelWallConfirmWatcher } = useWallConfirmFallback({
-    isBluetoothConnected,
-    isBluetoothSupported,
-    lastConnectedBoardSerial,
-    bluetoothConnect,
-  });
+  //
+  // `onConfirmed` / `onTimeout` clear the lightbulb's pending pulse state so
+  // the UI accurately reflects the round-trip — pulse during the window,
+  // solid lit on confirm, picker (or no-op) on timeout.
+  const handleWallConfirmed = useCallback((info: { climbUuid: string }) => {
+    setPendingClimbUuid((current) => (current === info.climbUuid ? null : current));
+  }, []);
+  const handleWallConfirmTimeout = useCallback((info: { climbUuid: string }) => {
+    setPendingClimbUuid((current) => (current === info.climbUuid ? null : current));
+  }, []);
+  const { armWatcher: armWallConfirmWatcher, cancelWatcher: cancelWallConfirmWatcher } = useWallConfirmFallback(
+    {
+      isBluetoothConnected,
+      isBluetoothSupported,
+      lastConnectedBoardSerial,
+      isPersistentSessionActive,
+      bluetoothConnect,
+    },
+    { onConfirmed: handleWallConfirmed, onTimeout: handleWallConfirmTimeout },
+  );
+
+  // Session-swap during pending: if the watcher hook cancels because the
+  // session ended mid-window, also clear the local pending UI state. The
+  // hook handles the watcher teardown; this just keeps the pulse from
+  // sticking on the bulb.
+  useEffect(() => {
+    if (!isPersistentSessionActive && pendingClimbUuid) {
+      setPendingClimbUuid(null);
+    }
+  }, [isPersistentSessionActive, pendingClimbUuid]);
+
+  /**
+   * Wall Control Released — yanked + disconnect variants (Phase 5 analytics).
+   *
+   *  - 'yanked': a server-driven `DriverChanged` arrives naming someone else
+   *    while we were the previous driver. Detect by tracking the previously-
+   *    observed isDriver state with a ref and firing when it transitions
+   *    from true → false in an active party session. This catches both the
+   *    "someone else took it" yank and the explicit-release path (the
+   *    release-from-self also flips isDriver to false). We disambiguate by
+   *    consulting `pendingReleaseReasonRef` — if a manual release just fired,
+   *    suppress the yanked event for the same transition.
+   *  - 'disconnect': we're the driver and the WS connection drops. Detect
+   *    by watching `connectionState` while `isDriver` is true.
+   */
+  const wasDriverRef = useRef(isDriver);
+  const wasConnectedRef = useRef(connectionState === 'connected');
+  // Set to 'manual' by handleLightbulbClick right before it calls
+  // releaseControl(); the isDriver flip that follows is then attributed to
+  // the manual release rather than counted as a yank.
+  const pendingReleaseReasonRef = useRef<'manual' | null>(null);
+
+  useEffect(() => {
+    const boardLayout = boardDetails.layout_name ?? '';
+    const wasDriver = wasDriverRef.current;
+    wasDriverRef.current = isDriver;
+
+    // Driver flipped from true → false while still in a party session →
+    // yanked OR manual. Manual flips set the suppression ref; everything
+    // else is a yank.
+    if (wasDriver && !isDriver && isPersistentSessionActive) {
+      const pending = pendingReleaseReasonRef.current;
+      pendingReleaseReasonRef.current = null;
+      if (pending !== 'manual') {
+        track('Wall Control Released', {
+          reason: 'yanked',
+          mode: 'party',
+          boardLayout,
+        });
+      }
+    }
+  }, [isDriver, isPersistentSessionActive, boardDetails.layout_name]);
+
+  useEffect(() => {
+    const boardLayout = boardDetails.layout_name ?? '';
+    const wasConnected = wasConnectedRef.current;
+    const isNowConnected = connectionState === 'connected';
+    wasConnectedRef.current = isNowConnected;
+
+    if (
+      wasConnected &&
+      !isNowConnected &&
+      // Use the latest known driver flag — fire only when we were driving
+      // at the moment the disconnect happened.
+      wasDriverRef.current &&
+      isPersistentSessionActive
+    ) {
+      track('Wall Control Released', {
+        reason: 'disconnect',
+        mode: 'party',
+        boardLayout,
+      });
+    }
+  }, [connectionState, isPersistentSessionActive, boardDetails.layout_name]);
 
   /**
    * Lightbulb press: toggle the driver role.
@@ -772,41 +945,64 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
    *  - Otherwise → connect() which opens the device picker dialog.
    */
   const handleLightbulbClick = useCallback(() => {
+    const boardLayout = boardDetails.layout_name ?? '';
+    // `previousDriver` analytic property: who held the wall before the
+    // local user pressed? Use the live `driverParticipantId` from session
+    // data — null means "none", local participantId means "self" (a no-op
+    // re-take), otherwise some other party member held it.
+    const previousDriver: 'none' | 'self' | 'other' =
+      sessionData.driverParticipantId == null
+        ? 'none'
+        : sessionData.driverParticipantId === participantId
+          ? 'self'
+          : 'other';
+
     // Party + driver: release control (give the wall away). Cancel any
     // in-flight watcher so the fallback doesn't fire after the role is
     // already released.
     if (isPersistentSessionActive && isDriver) {
       cancelWallConfirmWatcher();
+      setPendingClimbUuid(null);
+      // Suppress the upcoming isDriver true→false flip from being counted
+      // as a yank by the analytics watcher below.
+      pendingReleaseReasonRef.current = 'manual';
       void releaseControl();
       track('Wall Control Released', {
         reason: 'manual',
         mode: 'party',
-        boardLayout: boardDetails.layout_name ?? '',
+        boardLayout,
       });
       return;
     }
     // Solo: BLE-centric — the lightbulb's filled state means "a board is
     // paired." Tap when not paired opens the picker directly (no 2s watcher
     // needed; there's no other device that might emit a wall-confirm).
-    // Tap when paired re-sends the current climb so the user can retry a
-    // missed write without long-pressing into the light-control drawer.
+    // Tap when paired releases the wall — long-press still routes to the
+    // light-control-drawer for the deeper manual BLE disconnect path.
     if (!isPersistentSessionActive) {
       if (!isBluetoothConnected) {
         track('Wall Control Taken', {
           source: 'lightbulb_drawer',
+          previousDriver,
           mode: 'solo',
+          boardLayout,
           climbUuid: currentClimb?.uuid ?? null,
         });
         void bluetoothConnect();
         return;
       }
-      if (!currentClimb) return;
-      void takeControl(currentClimb);
-      setDrawerDisplayedItem?.(null);
-      track('Wall Control Taken', {
-        source: 'lightbulb_drawer',
+      // Solo + connected: treat the press as a release. The BLE write that
+      // was on the wall stays there until something else displaces it; the
+      // user's gesture is "I'm done driving" rather than "send again." A
+      // long-press still surfaces the light-control drawer's manual
+      // disconnect for the deeper teardown.
+      cancelWallConfirmWatcher();
+      setPendingClimbUuid(null);
+      void releaseControl();
+      track('Wall Control Released', {
+        reason: 'manual',
         mode: 'solo',
-        climbUuid: currentClimb.uuid,
+        boardLayout,
       });
       return;
     }
@@ -816,16 +1012,18 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     if (!currentClimb) return;
     void takeControl(currentClimb);
     setDrawerDisplayedItem?.(null);
+    setPendingClimbUuid(currentClimb.uuid);
     track('Wall Control Taken', {
       source: 'lightbulb_drawer',
-      previousDriver: 'other',
+      previousDriver,
       mode: 'party',
+      boardLayout,
       climbUuid: currentClimb.uuid,
     });
     armWallConfirmWatcher({
       climbUuid: currentClimb.uuid,
       mode: 'party',
-      boardLayout: boardDetails.layout_name ?? '',
+      boardLayout,
     });
   }, [
     currentClimb,
@@ -839,6 +1037,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     armWallConfirmWatcher,
     cancelWallConfirmWatcher,
     boardDetails.layout_name,
+    participantId,
+    sessionData.driverParticipantId,
   ]);
   const handleNextNavClick = useCallback(() => navigate('next', 'playViewDrawer'), [navigate]);
   const handleOpenActionsMenu = useCallback(() => {
@@ -1118,6 +1318,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             onOpenActions={handleOpenActionsMenu}
             onOpenQueue={handleOpenQueueDrawer}
             lightbulbActive={isPersistentSessionActive ? isDriver : isBluetoothConnected}
+            lightbulbPending={pendingClimbUuid != null}
+            lightbulbCoachmark={showLightbulbCoachmark && !pendingClimbUuid}
+            lightbulbCoachmarkText={t('playView.actionBar.lightbulb.coachmark')}
+            onLightbulbCoachmarkSeen={handleLightbulbCoachmarkSeen}
             displayedClimbName={currentClimb?.name ?? null}
             onLightbulb={handleLightbulbClick}
             onLightbulbLongPress={handleOpenLightDrawer}
@@ -1169,6 +1373,12 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     angle,
     handleTickBarClose,
     handleTickBarError,
+    pendingClimbUuid,
+    showLightbulbCoachmark,
+    handleLightbulbCoachmarkSeen,
+    t,
+    isPersistentSessionActive,
+    isBluetoothConnected,
   ]);
 
   return (

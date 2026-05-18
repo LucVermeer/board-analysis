@@ -237,7 +237,8 @@
         "drivingNamed": "Estás controlando “{{name}}”. Toca para soltar.",
         "driving": "Estás controlando. Toca para soltar.",
         "takeNamed": "Tomar el control y enviar “{{name}}”",
-        "take": "Tomar el control del muro"
+        "take": "Tomar el control del muro",
+        "coachmark": "Enviar al muro"
       }
     },
     "tickFab": {
