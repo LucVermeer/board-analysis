@@ -81,6 +81,10 @@ describe('room manager driver cleanup on disconnect', () => {
     expect(publishSpy).toHaveBeenCalledWith('session-a', {
       __typename: 'DriverChanged',
       driverParticipantId: null,
+      // The departing participant is the previousDriverParticipantId so
+      // subscribers can render "X left the wall" toasts without local
+      // bookkeeping.
+      previousDriverParticipantId: 'participant-driver',
     });
     // And the driver state is actually cleared.
     expect(await roomManager.getSessionDriverParticipantId('session-a')).toBeNull();
@@ -107,6 +111,102 @@ describe('room manager driver cleanup on disconnect', () => {
 
     await releaseDriverIfMatches('session-new', 'participant-1');
 
+    expect(publishSpy).not.toHaveBeenCalled();
+  });
+
+  it('releaseDriverIfMatches skips the clear when the participant still has live connections globally (cross-instance sibling tab)', async () => {
+    // Simulate a multi-instance deployment: the room-manager has a
+    // distributed-state stub plugged in that reports a live connection for
+    // the participant we're trying to release. This models the scenario
+    // where the user has tabs on instance A and instance B; closing the A
+    // tab triggers `releaseDriverIfMatches('A')`, but `participantBecameEmpty`
+    // is computed from local-instance state — instance B's connection is
+    // invisible locally. The global liveness check is the gate that keeps
+    // the driver intact for the still-active sibling.
+    await roomManager.setSessionDriverAndReturnPrevious('session-a', 'participant-driver');
+
+    // Inject a minimal distributed-state stub. The room manager only calls
+    // `getParticipantLiveConnectionCount` on this path; everything else can
+    // throw if accidentally invoked.
+    const distributedStateStub = {
+      getParticipantLiveConnectionCount: vi.fn().mockResolvedValue(1),
+      setSessionDriverAndReturnPrevious: vi.fn().mockResolvedValue('participant-driver'),
+      clearSessionDriverIf: vi.fn().mockResolvedValue(true),
+      getSessionDriver: vi.fn().mockResolvedValue('participant-driver'),
+    };
+    // `distributedState` is a private field; cast to inject the stub for
+    // this test only. Cleared in `afterEach` via `roomManager.reset()`.
+    (roomManager as unknown as { distributedState: typeof distributedStateStub }).distributedState =
+      distributedStateStub;
+    publishSpy.mockClear();
+
+    await releaseDriverIfMatches('session-a', 'participant-driver');
+
+    // Liveness query happened, but the clear did NOT — sibling tab on
+    // instance B is still active.
+    expect(distributedStateStub.getParticipantLiveConnectionCount).toHaveBeenCalledWith(
+      'session-a',
+      'participant-driver',
+    );
+    expect(distributedStateStub.clearSessionDriverIf).not.toHaveBeenCalled();
+    expect(publishSpy).not.toHaveBeenCalled();
+  });
+
+  it('releaseDriverIfMatches proceeds when global liveness reports zero connections (grace-window timed out everywhere)', async () => {
+    // Inverse of the cross-instance case: no live connections remain
+    // anywhere, so the participant is genuinely gone and the cleanup
+    // should actually fire.
+    await roomManager.setSessionDriverAndReturnPrevious('session-a', 'participant-driver');
+
+    const distributedStateStub = {
+      getParticipantLiveConnectionCount: vi.fn().mockResolvedValue(0),
+      setSessionDriverAndReturnPrevious: vi.fn().mockResolvedValue('participant-driver'),
+      clearSessionDriverIf: vi.fn().mockResolvedValue(true),
+      getSessionDriver: vi.fn().mockResolvedValue('participant-driver'),
+    };
+    (roomManager as unknown as { distributedState: typeof distributedStateStub }).distributedState =
+      distributedStateStub;
+    publishSpy.mockClear();
+
+    await releaseDriverIfMatches('session-a', 'participant-driver');
+
+    expect(distributedStateStub.getParticipantLiveConnectionCount).toHaveBeenCalledWith(
+      'session-a',
+      'participant-driver',
+    );
+    expect(distributedStateStub.clearSessionDriverIf).toHaveBeenCalledWith('session-a', 'participant-driver');
+    expect(publishSpy).toHaveBeenCalledTimes(1);
+    expect(publishSpy).toHaveBeenCalledWith('session-a', {
+      __typename: 'DriverChanged',
+      driverParticipantId: null,
+      previousDriverParticipantId: 'participant-driver',
+    });
+  });
+
+  it('releaseDriverIfMatches keeps the driver intact when global liveness query fails (fail-safe, no spurious release)', async () => {
+    // If Redis can't answer the liveness query, the conservative behaviour
+    // is to leave the driver assigned — a phantom release is worse than a
+    // briefly-stale driver assignment. The next legitimate take-control
+    // overwrites the value anyway.
+    await roomManager.setSessionDriverAndReturnPrevious('session-a', 'participant-driver');
+
+    const distributedStateStub = {
+      getParticipantLiveConnectionCount: vi.fn().mockRejectedValue(new Error('Redis unavailable')),
+      setSessionDriverAndReturnPrevious: vi.fn().mockResolvedValue('participant-driver'),
+      clearSessionDriverIf: vi.fn().mockResolvedValue(true),
+      getSessionDriver: vi.fn().mockResolvedValue('participant-driver'),
+    };
+    (roomManager as unknown as { distributedState: typeof distributedStateStub }).distributedState =
+      distributedStateStub;
+    publishSpy.mockClear();
+
+    await releaseDriverIfMatches('session-a', 'participant-driver');
+
+    expect(distributedStateStub.getParticipantLiveConnectionCount).toHaveBeenCalledWith(
+      'session-a',
+      'participant-driver',
+    );
+    expect(distributedStateStub.clearSessionDriverIf).not.toHaveBeenCalled();
     expect(publishSpy).not.toHaveBeenCalled();
   });
 

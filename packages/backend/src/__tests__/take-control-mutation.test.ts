@@ -71,7 +71,9 @@ vi.mock('../graphql/context', () => ({
 }));
 
 // Bypass the auth-check helper's distributed-state lookup; the existence of
-// ctx.sessionId is enough for these tests since we control the context.
+// ctx.sessionId is enough for these tests since we control the context. By
+// default `requireSessionMember` resolves; specific tests override it to
+// reject to exercise the auth-bypass guard.
 vi.mock('../graphql/resolvers/shared/helpers', async () => {
   const actual = await vi.importActual<typeof import('../graphql/resolvers/shared/helpers')>(
     '../graphql/resolvers/shared/helpers',
@@ -107,14 +109,19 @@ const { sessionMutations } = await import('../graphql/resolvers/sessions/mutatio
 const { roomManager } = await import('../services/room-manager');
 const { pubsub } = await import('../pubsub/index');
 const { setCurrentClimbAndPublish } = await import('../services/queue-navigation');
+const sharedHelpers = await import('../graphql/resolvers/shared/helpers');
 
 const roomManagerMock = roomManager as unknown as {
   getSessionDriverParticipantId: ReturnType<typeof vi.fn>;
   setSessionDriverAndReturnPrevious: ReturnType<typeof vi.fn>;
   clearSessionDriverIf: ReturnType<typeof vi.fn>;
+  getSessionUsers: ReturnType<typeof vi.fn>;
+  getQueueState: ReturnType<typeof vi.fn>;
+  getSessionLeaderConnectionId: ReturnType<typeof vi.fn>;
 };
 const pubsubMock = pubsub as unknown as { publishSessionEvent: ReturnType<typeof vi.fn> };
 const setCurrentClimbAndPublishMock = setCurrentClimbAndPublish as unknown as ReturnType<typeof vi.fn>;
+const requireSessionMemberMock = sharedHelpers.requireSessionMember as unknown as ReturnType<typeof vi.fn>;
 
 function makeCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext {
   return {
@@ -157,6 +164,11 @@ describe('takeControl mutation', () => {
     vi.clearAllMocks();
     // Default: no prior driver (atomic swap returns null).
     roomManagerMock.setSessionDriverAndReturnPrevious.mockResolvedValue(null);
+    // The `requireSessionMember` mock is recreated by `vi.clearAllMocks()`;
+    // restore its default resolve so most tests run without the auth-bypass
+    // path firing. Tests that exercise the rejection branch override this
+    // explicitly via `mockRejectedValueOnce`.
+    requireSessionMemberMock.mockResolvedValue(undefined);
   });
 
   it('sets the driver and publishes DriverChanged when there was no prior driver', async () => {
@@ -167,8 +179,20 @@ describe('takeControl mutation', () => {
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
       __typename: 'DriverChanged',
       driverParticipantId: 'participant-1',
+      // No prior driver → server emits previous=null so subscribers can render
+      // "X claimed the wall" toasts without local memoisation.
+      previousDriverParticipantId: null,
     });
-    expect(result.driverParticipantId).toBe('participant-1');
+    // The resolver returns the Session payload with the new driver in place.
+    // Pin the shape so a regression that drops fields (or returns `true`)
+    // would surface here instead of slipping through silently.
+    expect(result).toMatchObject({
+      id: 'session-1',
+      driverParticipantId: 'participant-1',
+      participantId: 'participant-1',
+      lastConnectedBoardSerial: null,
+      queueState: expect.objectContaining({ sequence: 0, stateHash: 'hash-0' }),
+    });
     // No climb means no queue-side publish.
     expect(setCurrentClimbAndPublishMock).not.toHaveBeenCalled();
   });
@@ -185,6 +209,9 @@ describe('takeControl mutation', () => {
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
       __typename: 'DriverChanged',
       driverParticipantId: 'participant-1',
+      // Yanked from `participant-other` — the wire event carries the prior
+      // driver so subscribers can render "X took the wall from Y" toasts.
+      previousDriverParticipantId: 'participant-other',
     });
   });
 
@@ -230,11 +257,74 @@ describe('takeControl mutation', () => {
     await expect(sessionMutations.takeControl(undefined, {}, ctx)).rejects.toThrow(/Must be in a session/);
     expect(roomManagerMock.setSessionDriverAndReturnPrevious).not.toHaveBeenCalled();
   });
+
+  it('rejects when requireSessionMember throws (auth-bypass guard)', async () => {
+    // The global mock resolves by default, which previously meant every test
+    // ran with the session-membership check stubbed out — an auth-bypass
+    // regression in the resolver would slip through unnoticed. Override the
+    // mock to reject and assert the resolver propagates the throw without
+    // mutating any state.
+    requireSessionMemberMock.mockRejectedValueOnce(new Error('Not a member of session'));
+    const ctx = makeCtx();
+
+    await expect(sessionMutations.takeControl(undefined, {}, ctx)).rejects.toThrow(/Not a member of session/);
+    expect(roomManagerMock.setSessionDriverAndReturnPrevious).not.toHaveBeenCalled();
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('two concurrent take-control calls produce a deterministic single winner', async () => {
+    // Models two participants pressing the lightbulb at the exact same
+    // moment. The atomic GETSET semantics in the room manager guarantee one
+    // arrives first; the second sees the first's participantId as `previous`.
+    // Each call only emits DriverChanged when it observed a transition, so
+    // there are exactly two events on the wire: A taking from null, then B
+    // taking from A.
+    const swapCalls: { participantId: string; previous: string | null }[] = [];
+    roomManagerMock.setSessionDriverAndReturnPrevious.mockImplementation(
+      async (_sessionId: string, participantId: string) => {
+        // Simulate the atomic swap: first call sees null, second sees the
+        // first caller's participantId. Order is captured in `swapCalls`.
+        const previous = swapCalls.length === 0 ? null : swapCalls[swapCalls.length - 1].participantId;
+        swapCalls.push({ participantId, previous });
+        return previous;
+      },
+    );
+
+    const ctxA = makeCtx({ participantId: 'A', connectionId: 'conn-A' });
+    const ctxB = makeCtx({ participantId: 'B', connectionId: 'conn-B' });
+
+    await Promise.all([
+      sessionMutations.takeControl(undefined, {}, ctxA),
+      sessionMutations.takeControl(undefined, {}, ctxB),
+    ]);
+
+    // Two swaps, two events. Each event carries the previous driver returned
+    // by the atomic swap so subscribers can build a "Y took it from X" toast.
+    expect(roomManagerMock.setSessionDriverAndReturnPrevious).toHaveBeenCalledTimes(2);
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledTimes(2);
+    const driverChangedEvents = pubsubMock.publishSessionEvent.mock.calls.map(
+      ([, event]) =>
+        event as { __typename: string; driverParticipantId: string; previousDriverParticipantId: string | null },
+    );
+    expect(driverChangedEvents).toEqual([
+      {
+        __typename: 'DriverChanged',
+        driverParticipantId: swapCalls[0].participantId,
+        previousDriverParticipantId: null,
+      },
+      {
+        __typename: 'DriverChanged',
+        driverParticipantId: swapCalls[1].participantId,
+        previousDriverParticipantId: swapCalls[0].participantId,
+      },
+    ]);
+  });
 });
 
 describe('releaseControl mutation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    requireSessionMemberMock.mockResolvedValue(undefined);
   });
 
   it('clears the driver and publishes DriverChanged{null} when the caller is the driver', async () => {
@@ -247,6 +337,9 @@ describe('releaseControl mutation', () => {
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
       __typename: 'DriverChanged',
       driverParticipantId: null,
+      // `cleared = true` means the caller was the driver, so they're the
+      // previousDriverParticipantId carried on the event.
+      previousDriverParticipantId: 'participant-1',
     });
   });
 

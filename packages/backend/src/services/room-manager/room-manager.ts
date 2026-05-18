@@ -247,7 +247,23 @@ class RoomManager {
       // Explicit leave (vs. transient disconnect) drains the participant
       // immediately, so the driver role must follow. The disconnect path
       // handles its own cleanup via the grace-timer eviction callback.
-      void this.releaseDriverIfMatches(result.sessionId, result.participantId);
+      //
+      // `participantFullyLeft` is computed from local-instance state in
+      // client-lifecycle.ts. In multi-instance deploys an authenticated user
+      // with tabs on instances A and B who closes their only A tab will hit
+      // this branch with `participantFullyLeft=true` even though the same
+      // participantId is still connected on B. Without a global guard,
+      // releaseDriverIfMatches would yank the driver out from under the
+      // still-active sibling tab. `releaseDriverIfMatches` re-checks global
+      // participant-liveness before mutating Redis.
+      const departingSessionId = result.sessionId;
+      const departingParticipantId = result.participantId;
+      this.releaseDriverIfMatches(departingSessionId, departingParticipantId).catch((err) => {
+        logger.error(
+          `[RoomManager] Unhandled error releasing driver for ${departingParticipantId.slice(0, 8)} after leave in session ${departingSessionId.slice(0, 8)}:`,
+          err,
+        );
+      });
     }
     return result;
   }
@@ -276,7 +292,18 @@ class RoomManager {
         // pub/sub independently and their relative arrival order at a remote
         // subscriber is not guaranteed — the spec tolerates this because
         // driver and presence are independent state machines.
-        void this.releaseDriverIfMatches(sessionId, participantId);
+        //
+        // The grace-timer callback runs even when the participant has live
+        // sibling connections on another instance (their absence is detected
+        // locally first). `releaseDriverIfMatches` re-checks global liveness
+        // before mutating Redis to avoid yanking the driver out from under
+        // a still-active sibling tab.
+        this.releaseDriverIfMatches(sessionId, participantId).catch((err) => {
+          logger.error(
+            `[RoomManager] Unhandled error releasing driver for ${participantId.slice(0, 8)} on grace-timer eviction in session ${sessionId.slice(0, 8)}:`,
+            err,
+          );
+        });
       },
     );
   }
@@ -286,9 +313,43 @@ class RoomManager {
    * and publish `DriverChanged { driverParticipantId: null }`. No-op when the
    * participant is not the driver. Used on disconnect and explicit-leave
    * cleanup paths so the wall doesn't stay assigned to a vanished member.
+   *
+   * Multi-instance safety: callers can only see local-instance state when
+   * they decide to fire this cleanup (`participantFullyLeft` and the
+   * grace-timer's local participant map are both per-instance). Before
+   * touching Redis we re-check global liveness via
+   * `getParticipantLiveConnectionCount` — if the same participant still has
+   * a live connection on another backend instance (multi-tab user across
+   * instances), we skip the release. Without this gate, closing a sibling
+   * tab on instance A would yank the wall out from under the same user
+   * still happily driving on instance B with their lightbulb lit.
    */
   private async releaseDriverIfMatches(sessionId: string, participantId: string): Promise<void> {
     try {
+      if (this.distributedState) {
+        let liveConnections: number;
+        try {
+          liveConnections = await this.distributedState.getParticipantLiveConnectionCount(sessionId, participantId);
+        } catch (err) {
+          // Conservative: if Redis can't answer the liveness query, do not
+          // yank the driver. A spurious release is worse than leaving the
+          // driver assigned briefly — the next legitimate take-control will
+          // overwrite it.
+          logger.error(
+            `[RoomManager] Failed to count live connections for ${participantId.slice(0, 8)} during driver release in session ${sessionId.slice(0, 8)}; keeping driver as-is:`,
+            err,
+          );
+          return;
+        }
+        if (liveConnections > 0) {
+          // Still active somewhere — sibling tab on another instance, or a
+          // grace-window reconnect raced this cleanup. Leave the driver
+          // alone; the participant will either reclaim cleanly or fire
+          // their own release later.
+          return;
+        }
+      }
+
       const cleared = await this.clearSessionDriverIf(sessionId, participantId);
       if (cleared) {
         // We just confirmed `participantId` was the driver before the clear,
@@ -407,16 +468,26 @@ class RoomManager {
    * publish DriverChanged in arbitrary order — leaving subscribers' state
    * divergent from Redis. Both the distributed (Redis GETSET) and in-memory
    * paths return the previous value to keep callers consistent across modes.
+   *
+   * Write ordering: Redis (when present) is the source of truth across
+   * instances, so we await it first. The local shadow is updated only after
+   * the distributed write resolves successfully — otherwise a Redis throw
+   * would leave the in-process shadow ahead of Redis and the next read could
+   * return a phantom driver that no other instance can see.
    */
   async setSessionDriverAndReturnPrevious(sessionId: string, participantId: string): Promise<string | null> {
+    if (this.distributedState) {
+      // The Redis GETSET is the authoritative previous value across instances.
+      // Await before mutating the local shadow so any throw rolls the in-process
+      // state back to its pre-call value.
+      const previous = await this.distributedState.setSessionDriverAndReturnPrevious(sessionId, participantId);
+      this.localDriverBySession.set(sessionId, participantId);
+      return previous;
+    }
+    // Single-instance (no Redis): the in-memory shadow is the source of truth.
+    // Read-then-write is atomic in JS, so no extra ordering guard is needed.
     const previousLocal = this.localDriverBySession.get(sessionId) ?? null;
     this.localDriverBySession.set(sessionId, participantId);
-    if (this.distributedState) {
-      // The Redis GETSET is the authoritative previous value across instances;
-      // the local shadow's previous reading may be stale in multi-instance
-      // mode, so prefer the distributed result.
-      return this.distributedState.setSessionDriverAndReturnPrevious(sessionId, participantId);
-    }
     return previousLocal;
   }
 
@@ -458,15 +529,25 @@ class RoomManager {
    * `setSessionDriverAndReturnPrevious` — the caller compares previous vs.
    * new to decide whether to broadcast `SessionBoardSerialChanged`, so
    * concurrent writes can't both fire redundant events for the same value.
+   *
+   * Write ordering: Redis (when present) is the source of truth across
+   * instances, so we await it first. The local shadow is updated only after
+   * the distributed write resolves successfully — otherwise a Redis throw
+   * would leave the in-process shadow ahead of Redis and the next read could
+   * return a phantom serial that no other instance can see.
    */
   async setSessionBoardSerialAndReturnPrevious(sessionId: string, serial: string): Promise<string | null> {
-    const previousLocal = this.localBoardSerialBySession.get(sessionId) ?? null;
-    this.localBoardSerialBySession.set(sessionId, serial);
     if (this.distributedState) {
       // Distributed-state path is the authoritative previous value when Redis
-      // is wired; the local shadow can be stale across instances.
-      return this.distributedState.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
+      // is wired. Await before mutating the local shadow so any throw rolls
+      // the in-process state back to its pre-call value.
+      const previous = await this.distributedState.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
+      this.localBoardSerialBySession.set(sessionId, serial);
+      return previous;
     }
+    // Single-instance (no Redis): the in-memory shadow is the source of truth.
+    const previousLocal = this.localBoardSerialBySession.get(sessionId) ?? null;
+    this.localBoardSerialBySession.set(sessionId, serial);
     return previousLocal;
   }
 
@@ -595,6 +676,15 @@ class RoomManager {
   }
 
   async endSession(sessionId: string): Promise<void> {
+    // Drop the in-memory driver / board-serial shadows for this session
+    // before delegating to the discovery layer. The shadows are local to
+    // this RoomManager instance and were growing unbounded across session
+    // lifecycles — endSession is the only deterministic hook to clear them.
+    // Distributed-state's Redis keys for these are cleaned up by
+    // `cleanupEmptySession` when the session set drains; this is the
+    // single-instance / single-process equivalent.
+    this.localDriverBySession.delete(sessionId);
+    this.localBoardSerialBySession.delete(sessionId);
     return endSessionFn(
       sessionId,
       this.sessions,
