@@ -1,4 +1,4 @@
-import { type Dispatch, useEffect } from 'react';
+import { type Dispatch, type RefObject, useEffect } from 'react';
 import type { SubscriptionQueueEvent } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem, QueueAction } from '../../queue-control/types';
 import { track } from '@/app/lib/analytics';
@@ -15,7 +15,11 @@ type UseQueueEventSubscriptionParams = {
   // Used to label peer-originated queue events with the local board layout.
   boardLayoutName?: string | null;
   // Read at event time so peer-broadcast events report the live queue length.
-  getCurrentQueueLength?: () => number;
+  // Passed as a ref (not a closure) so the subscription effect doesn't tear
+  // down and re-subscribe on every render — a wrapper function would change
+  // identity each render and re-arm the deps array, briefly leaving the
+  // socket unsubscribed and dropping in-flight peer events.
+  queueLengthRef?: RefObject<number>;
 };
 
 /**
@@ -29,7 +33,7 @@ export function useQueueEventSubscription({
   persistentSession,
   needsResync,
   boardLayoutName,
-  getCurrentQueueLength,
+  queueLengthRef,
 }: UseQueueEventSubscriptionParams) {
   // Subscribe to queue events from persistent session
   useEffect(() => {
@@ -57,7 +61,7 @@ export function useQueueEventSubscription({
           track('Climb Added to Queue', {
             boardLayout: boardLayoutName ?? null,
             addedFromTab: 'peer_broadcast',
-            currentQueueLength: (getCurrentQueueLength?.() ?? 0) + 1,
+            currentQueueLength: (queueLengthRef?.current ?? 0) + 1,
             partyMode: true,
           });
           break;
@@ -110,7 +114,7 @@ export function useQueueEventSubscription({
     });
 
     return unsubscribe;
-  }, [isPersistentSessionActive, persistentSession, dispatch, boardLayoutName, getCurrentQueueLength]);
+  }, [isPersistentSessionActive, persistentSession, dispatch, boardLayoutName, queueLengthRef]);
 
   // Trigger resync when corrupted data is detected
   useEffect(() => {

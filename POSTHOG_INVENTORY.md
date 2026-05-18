@@ -465,7 +465,7 @@ Boardsesh has comprehensive PostHog instrumentation across both web (Next.js) an
 
 ## Appendix A — 2026-05-18 instrumentation patch (Board Sessions & Hardware dashboard)
 
-Six events added or enriched to unblock the new dashboard at `/dashboard/1597030`. Plan: `/home/developer/.claude/plans/analyse-what-metrics-we-flickering-bengio.md`.
+Six events added or enriched to unblock the new dashboard at `/dashboard/1597030`.
 
 ### New events (3)
 

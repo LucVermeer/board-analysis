@@ -228,7 +228,7 @@ export const GraphQLQueueProvider = ({
     persistentSession,
     needsResync: state.needsResync,
     boardLayoutName: boardDetails.layout_name ?? null,
-    getCurrentQueueLength: () => queueLengthRef.current,
+    queueLengthRef,
   });
 
   // --- Session-event relay ---
@@ -279,18 +279,12 @@ export const GraphQLQueueProvider = ({
   });
 
   // --- Session lifecycle: keep peer-count high-water-mark current, emit
-  // Session Ended for tab_closed (pagehide) and server_disconnect paths ---
+  // Session Ended on tab_closed (pagehide). Explicit user_left fires from
+  // use-session-id-management's endSession(). ---
   useEffect(() => {
     if (!sessionId) return;
     updateSessionPeerCount(sessionId, users.length);
   }, [sessionId, users.length]);
-
-  useEffect(() => {
-    if (!sessionId) return;
-    if (connectionState === 'error') {
-      emitSessionEnded(sessionId, 'server_disconnect');
-    }
-  }, [sessionId, connectionState]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -302,8 +296,15 @@ export const GraphQLQueueProvider = ({
     window.addEventListener('pagehide', onPageHide);
     return () => window.removeEventListener('pagehide', onPageHide);
   }, []);
-  // TODO: idle-timeout 'idle' endedBy reason is not wired — no inactivity timer
-  // exists yet that terminates sessions. Add here when one lands.
+  // Intentionally NOT emitting Session Ended on connectionState === 'error':
+  // graphql-ws errors are routinely transient (network blip, server restart
+  // followed by reconnect, suspended tab). Tearing down the session record on
+  // every error would mark recoverable hiccups as permanent ends and skip the
+  // eventual user_left / tab_closed emission. If we later need a distinct
+  // 'server_disconnect' signal we should drive it from confirmed server-side
+  // session eviction, not transport state.
+  // TODO: idle-timeout 'idle' endedBy reason is not wired — no inactivity
+  // timer exists yet that terminates sessions. Add here when one lands.
 
   // --- Current user info ---
   const currentUserInfo: QueueItemUser | undefined = useMemo(() => {
