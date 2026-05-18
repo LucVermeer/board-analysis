@@ -259,10 +259,10 @@ describe('APNs Live Activity service', () => {
         expect(mockSend).not.toHaveBeenCalled();
         // SUT requeued — a new debounce window is in flight for this session.
         expect(apns.hasPendingSend(sessionId)).toBe(true);
+      } finally {
         // Halt the requeue loop *before* restoring the spy so the next cycle
         // doesn't race the test teardown by succeeding against a real DB call.
         apns.__resetApnsForTests();
-      } finally {
         selectSpy.mockRestore();
       }
     });

@@ -368,6 +368,8 @@ If you have the push token from the database, you can send a test push directly:
 
 APNs env vars are not set in `packages/backend/.env.local`. Double-check all five vars are present.
 
+Specifically, a missing `APNS_BUNDLE_ID` now produces a warn-and-abort at startup — APNs stays disabled, and there is no hardcoded `com.boardsesh.app` fallback. If the `[APNs] Initialized (... bundleId=...)` line is absent from the init log, that is likely the cause.
+
 ### Push token not appearing in database
 
 - Verify the Live Activity started (check for "Started Live Activity" in Xcode console)

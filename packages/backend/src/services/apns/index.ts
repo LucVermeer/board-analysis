@@ -636,8 +636,8 @@ export async function cleanupTokensForSession(sessionId: string): Promise<void> 
   }
 }
 
-/** Test-only utility: clears pendingSends timers and resets counters. */
-export function __resetApnsStateForTests(): void {
+/** Internal helper for `__resetApnsForTests`: clears pendingSends timers and resets counters. */
+function __resetApnsStateForTests(): void {
   for (const [, entry] of pendingSends) {
     clearTimeout(entry.timeout);
   }
