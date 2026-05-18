@@ -365,6 +365,18 @@ describe('setSessionBoardSerial mutation', () => {
     expect(roomManagerMock.setSessionBoardSerialAndReturnPrevious).not.toHaveBeenCalled();
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
+
+  it('throws when ctx.participantId is missing and does not mutate state or publish', async () => {
+    // Regression guard: an earlier revision placed the participantId hard-error
+    // AFTER the roomManager write and SessionBoardSerialChanged publish, so
+    // anonymous callers still mutated Redis and broadcast before being rejected.
+    const ctx = makeCtx({ participantId: undefined, connectionId: 'conn-anon-1' });
+    await expect(sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx)).rejects.toThrow(
+      /requires ctx\.participantId/,
+    );
+    expect(roomManagerMock.setSessionBoardSerialAndReturnPrevious).not.toHaveBeenCalled();
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
 });
 
 describe('setSessionBoardPath mutation', () => {
