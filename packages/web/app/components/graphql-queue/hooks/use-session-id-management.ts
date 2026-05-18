@@ -56,11 +56,26 @@ export function useSessionIdManagement({
     }
   }, [searchParams, isOffBoardMode, pathname, router]);
 
-  // Sync activeSessionId from persistent session (off-board mode only)
+  // Sync activeSessionId from persistent session when a new session is
+  // activated. Covers both modes:
+  //   - Off-board: persistentSessionId is the only source of truth.
+  //   - Board: the cookie set by start-sesh-drawer is the initial value, but
+  //     when the user creates a session from THIS provider's route (no
+  //     navigation, same baseBoardPath as the page they're on), nothing
+  //     else picks up the new id. Without this sync, isPersistentSessionActive
+  //     stays false, deriveIsDriver returns true (solo branch), and the
+  //     drawer lightbulb keeps reading as "lit BLE" instead of flipping to
+  //     "party, no driver claimed yet".
+  //
+  // Guarded on persistentSessionId being non-null so the cookie value isn't
+  // wiped during the initial IndexedDB-load window (where activeSession is
+  // briefly null before restoration completes). The active→null deactivation
+  // case is handled by the prevPersistentSessionIdRef effect below.
   useEffect(() => {
-    if (!isOffBoardMode) return;
-    setActiveSessionId(persistentSessionId);
-  }, [isOffBoardMode, persistentSessionId]);
+    if (persistentSessionId) {
+      setActiveSessionId(persistentSessionId);
+    }
+  }, [persistentSessionId]);
 
   // Sync when persistent session is deactivated externally (e.g. sesh-settings-drawer
   // calling deactivateSession() directly). We track the previous persistentSessionId
