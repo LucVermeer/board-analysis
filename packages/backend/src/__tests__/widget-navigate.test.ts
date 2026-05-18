@@ -411,7 +411,10 @@ describe('handleWidgetNavigate', () => {
     expect(res.statusCode).toBe(500);
     const parsed = JSON.parse(res.body) as { success: boolean; error: string };
     expect(parsed.success).toBe(false);
-    expect(parsed.error).toBe('navigation exploded');
+    // Error detail stays in server logs; the 500 body returns a generic
+    // message so internal state (DB strings, schema hints) can't leak to the
+    // iOS widget. See handlers/widget-navigate.ts catch block.
+    expect(parsed.error).toBe('Internal server error');
     expect(trackLiveActivityWidgetNavigationMock).toHaveBeenCalledWith({
       userId: USER_ID,
       sessionId: SESSION_ID,

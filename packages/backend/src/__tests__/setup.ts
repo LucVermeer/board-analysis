@@ -19,6 +19,7 @@ let dbAvailable = false;
 // Tables the per-file beforeAll resets so each file starts on a clean slate.
 // Order doesn't matter — TRUNCATE ... CASCADE handles FK edges.
 const TABLES_TO_RESET = [
+  'activity_push_tokens',
   'board_session_queues',
   'board_session_clients',
   'board_session_participants',

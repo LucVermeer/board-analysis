@@ -42,6 +42,19 @@ export type ServerResources = {
   shutdownServices: () => Promise<void>;
 };
 
+/**
+ * Build a Live Activity content snapshot from current room state and dispatch
+ * a debounced APNs push. Pulled out of the queue-event hook so the call site
+ * is a single promise chain whose rejections are explicitly swallowed at the
+ * top — easier to grep, easier to attach a real observability sink to later.
+ */
+async function dispatchLiveActivityForSession(sessionId: string): Promise<void> {
+  const queueState = await roomManager.getQueueState(sessionId);
+  const contentState = buildContentStateFromQueueState(queueState);
+  if (!contentState) return;
+  sendLiveActivityUpdate(sessionId, contentState);
+}
+
 export async function startServer(): Promise<ServerResources> {
   // Initialize PubSub (connects to Redis if configured)
   // This must happen before we start accepting connections
@@ -200,17 +213,16 @@ export async function startServer(): Promise<ServerResources> {
     // mutation when env vars aren't configured.
     if (!isApnsConfigured()) return;
 
-    // Async work wrapped in a void IIFE — never awaited, never throws
-    void (async () => {
-      try {
-        const queueState = await roomManager.getQueueState(sessionId);
-        const contentState = buildContentStateFromQueueState(queueState);
-        if (!contentState) return;
-        sendLiveActivityUpdate(sessionId, contentState);
-      } catch (error) {
-        logger.error(`[APNs Hook] Failed to send Live Activity update for session ${sessionId}:`, error);
-      }
-    })();
+    // Errors are intentionally swallowed: a failed Live Activity dispatch must
+    // not crash the queue-event consumer or surface to the originating GraphQL
+    // request. Stack + sessionId go to the structured logger so a search on
+    // "dispatchLiveActivityForSession failed" surfaces the failure mode.
+    dispatchLiveActivityForSession(sessionId).catch((error: unknown) => {
+      logger.error(
+        `[APNs Hook] dispatchLiveActivityForSession failed for session ${sessionId}:`,
+        error instanceof Error ? (error.stack ?? error.message) : error,
+      );
+    });
   });
 
   const PORT = parseInt(process.env.PORT || '8080', 10);

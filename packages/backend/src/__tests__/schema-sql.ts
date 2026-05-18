@@ -75,6 +75,18 @@ export const schemaSQL = `
     "updated_at" timestamp DEFAULT now() NOT NULL
   );
 
+  DROP TABLE IF EXISTS "activity_push_tokens" CASCADE;
+  CREATE TABLE IF NOT EXISTS "activity_push_tokens" (
+    "token" text PRIMARY KEY NOT NULL,
+    "session_id" text NOT NULL REFERENCES "board_sessions"("id") ON DELETE CASCADE,
+    "user_id" text REFERENCES "users"("id") ON DELETE SET NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS "activity_push_tokens_session_idx" ON "activity_push_tokens" ("session_id");
+  CREATE INDEX IF NOT EXISTS "activity_push_tokens_user_idx" ON "activity_push_tokens" ("user_id");
+  CREATE INDEX IF NOT EXISTS "activity_push_tokens_updated_at_idx" ON "activity_push_tokens" ("updated_at");
+
   CREATE INDEX IF NOT EXISTS "board_sessions_location_idx" ON "board_sessions" ("latitude", "longitude");
   CREATE INDEX IF NOT EXISTS "board_sessions_discoverable_idx" ON "board_sessions" ("discoverable");
   CREATE INDEX IF NOT EXISTS "board_sessions_user_idx" ON "board_sessions" ("created_by_user_id");

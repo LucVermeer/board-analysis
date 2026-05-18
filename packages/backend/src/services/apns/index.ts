@@ -75,15 +75,29 @@ interface DeliveryTrackingInput {
 // 3 retries with growing delays gives ~14 s of total wait before giving up,
 // which is enough to ride out a brief connection-pool blip or Postgres
 // failover without dropping the update.
-const DB_RETRY_DELAYS_MS = [1_000, 3_000, 8_000];
+const DEFAULT_DB_RETRY_DELAYS_MS = [1_000, 3_000, 8_000];
+
+// 1 s debounce. Climb navigation needs to feel responsive on the lock screen;
+// a 5 s window made tapping Next visibly laggy. 1 s still absorbs the most
+// common burst (QueueItemAdded + CurrentClimbChanged emitted back-to-back when
+// a climb is queued). A restart inside this 1 s window can drop the pending
+// update; the heartbeat loop catches up within 90 s.
+const DEFAULT_DEBOUNCE_MS = 1_000;
 
 // ---------------------------------------------------------------------------
 // Module state
 // ---------------------------------------------------------------------------
 
 let provider: apn.Provider | null = null;
-let bundleId: string = 'com.boardsesh.app';
+let bundleId: string = '';
 let configured = false;
+
+// Mutable so tests can shrink the windows to milliseconds rather than awaiting
+// the production-grade 1 s debounce + multi-second retry delays against real
+// timers (faking setTimeout deadlocks postgres-js's connection pool). In prod
+// these stay at DEFAULT_* and are reset by __resetApnsForTests.
+let DEBOUNCE_MS = DEFAULT_DEBOUNCE_MS;
+let DB_RETRY_DELAYS_MS: readonly number[] = DEFAULT_DB_RETRY_DELAYS_MS;
 
 /** Returns true if APNs env vars were present and the provider initialized. */
 export function isApnsConfigured(): boolean {
@@ -92,13 +106,6 @@ export function isApnsConfigured(): boolean {
 
 /** Debounce map: sessionId -> pending send state */
 const pendingSends = new Map<string, DebouncedEntry>();
-
-// 1 s debounce. Climb navigation needs to feel responsive on the lock screen;
-// a 5 s window made tapping Next visibly laggy. 1 s still absorbs the most
-// common burst (QueueItemAdded + CurrentClimbChanged emitted back-to-back when
-// a climb is queued). A restart inside this 1 s window can drop the pending
-// update; the heartbeat loop catches up within 90 s.
-const DEBOUNCE_MS = 1_000;
 
 /** Whether a session currently has a pending debounced send in flight. */
 export function hasPendingSend(sessionId: string): boolean {
@@ -167,17 +174,15 @@ export function initializeApns(): void {
   const envBundleId = process.env.APNS_BUNDLE_ID;
   const production = process.env.APNS_PRODUCTION === 'true';
 
-  if (!keyId || !teamId || !keyContentsBase64) {
+  if (!keyId || !teamId || !keyContentsBase64 || !envBundleId) {
     logger.warn(
-      '[APNs] Missing one or more required env vars (APNS_KEY_ID, APNS_TEAM_ID, APNS_KEY_CONTENTS). ' +
+      '[APNs] Missing one or more required env vars (APNS_KEY_ID, APNS_TEAM_ID, APNS_KEY_CONTENTS, APNS_BUNDLE_ID). ' +
         'Live Activity push notifications are disabled.',
     );
     return;
   }
 
-  if (envBundleId) {
-    bundleId = envBundleId;
-  }
+  bundleId = envBundleId;
 
   const keyContents = Buffer.from(keyContentsBase64, 'base64').toString('utf-8');
 
@@ -640,4 +645,33 @@ export function __resetApnsStateForTests(): void {
   for (const key of Object.keys(metrics) as (keyof ApnsMetrics)[]) {
     metrics[key] = 0;
   }
+}
+
+/**
+ * Test-only utility for fully clearing module state between tests. Matches
+ * the `__reset*ForTests` pattern used by widget-navigate and push-tokens.
+ * Strictly stronger than `__resetApnsStateForTests`: also nulls the provider,
+ * clears bundleId/configured, and restores DEBOUNCE_MS / DB_RETRY_DELAYS_MS
+ * to their production defaults. Tests that call `initializeApns()` should
+ * use this so the next test starts on a clean slate.
+ */
+export function __resetApnsForTests(): void {
+  __resetApnsStateForTests();
+  provider = null;
+  bundleId = '';
+  configured = false;
+  DEBOUNCE_MS = DEFAULT_DEBOUNCE_MS;
+  DB_RETRY_DELAYS_MS = DEFAULT_DB_RETRY_DELAYS_MS;
+}
+
+/**
+ * Test-only override for the debounce and DB-retry windows. Used by
+ * `apns.test.ts` to collapse the 1 s debounce + multi-second retry delays
+ * into a few ms so we don't have to combine fake timers with the real
+ * postgres-js pool (the pool's own setTimeout-based idle/keepalive logic
+ * deadlocks under faked timers). Reset by `__resetApnsForTests`.
+ */
+export function __setApnsTimingForTests(opts: { debounceMs?: number; dbRetryDelaysMs?: readonly number[] }): void {
+  if (opts.debounceMs !== undefined) DEBOUNCE_MS = opts.debounceMs;
+  if (opts.dbRetryDelaysMs !== undefined) DB_RETRY_DELAYS_MS = opts.dbRetryDelaysMs;
 }
