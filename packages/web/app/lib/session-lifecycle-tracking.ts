@@ -17,11 +17,13 @@ const sessionsBySessionId = new Map<string, SessionLifecycleRecord>();
 
 export function registerSessionStart(sessionId: string): void {
   if (!sessionId) return;
+  // Re-register before emit: keep the existing record so peerCount and
+  // climbsAttempted accumulated since the original Session Started aren't
+  // lost on a provider unmount/remount (cookie restore, route shuffle).
   const existing = sessionsBySessionId.get(sessionId);
-  if (existing) {
-    existing.emitted = false;
-    return;
-  }
+  if (existing && !existing.emitted) return;
+  // No record, or the previous one already emitted (and was deleted) — start
+  // a fresh lifecycle.
   sessionsBySessionId.set(sessionId, {
     sessionId,
     startedAt: Date.now(),

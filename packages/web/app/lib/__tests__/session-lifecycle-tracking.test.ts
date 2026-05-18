@@ -39,18 +39,25 @@ describe('session-lifecycle-tracking', () => {
       expect(lifecycle.getActiveTrackedSessionIds()).toEqual(['s1']);
     });
 
-    it('re-registering before emit preserves the original startedAt', async () => {
+    it('re-registering before emit preserves startedAt, peerCount, and climbsAttempted', async () => {
       const lifecycle = await importFresh();
       lifecycle.registerSessionStart('s1');
+      lifecycle.updateSessionPeerCount('s1', 4);
+      lifecycle.incrementSessionClimbsAttempted('s1');
+      lifecycle.incrementSessionClimbsAttempted('s1');
       vi.advanceTimersByTime(10_000);
       // Double-register without an intervening emit (matches the real call
       // pattern where both Session Started and Session Joined fire for a
-      // single session). startedAt must stay pinned to the first call so the
-      // duration reflects the full session age.
+      // single session, or an unmount/remount during cookie restore). The
+      // existing record must survive intact so accumulated peer / climb
+      // counts aren't blown away.
       lifecycle.registerSessionStart('s1');
       vi.advanceTimersByTime(20_000);
       lifecycle.emitSessionEnded('s1', 'user_left');
-      expect(mocks.track).toHaveBeenCalledWith('Session Ended', expect.objectContaining({ durationSec: 30 }));
+      expect(mocks.track).toHaveBeenCalledWith(
+        'Session Ended',
+        expect.objectContaining({ durationSec: 30, peerCount: 4, climbsAttempted: 2 }),
+      );
     });
 
     it('after emit, re-registering creates a fresh record', async () => {

@@ -81,11 +81,7 @@ const BluetoothContext = createContext<BluetoothContextValue | null>(null);
  */
 function countClimbHolds(frames: string | undefined | null): number {
   if (!frames) return 0;
-  let count = 0;
-  for (let i = 0; i < frames.length; i++) {
-    if (frames[i] === 'p') count += 1;
-  }
-  return count;
+  return frames.split('p').length - 1;
 }
 
 function BluetoothAutoSender({

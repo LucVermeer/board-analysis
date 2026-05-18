@@ -448,6 +448,10 @@ export const GraphQLQueueProvider = ({
     const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
     latest.dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item: newItem } });
     const partyMode = latest.isPersistentSessionActive && latest.persistentSession.users.length > 1;
+    // `latest.state.queue.length` reflects the most recent committed render,
+    // so two adds dispatched back-to-back in the same tick will both report
+    // the same `currentQueueLength + 1`. Acceptable for the queue-churn
+    // dashboard tile; the dispatched reducer state will still be correct.
     track('Climb Added to Queue', {
       boardLayout: latest.boardDetails?.layout_name ?? null,
       addedFromTab: source,
