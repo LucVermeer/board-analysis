@@ -37,12 +37,6 @@ export const dispatchOpenPlayDrawer = (climb?: Climb, options?: { wallView?: boo
   window.dispatchEvent(new CustomEvent<PlayDrawerEventDetail>(PLAY_DRAWER_EVENT, { detail }));
 };
 
-export const readPlayDrawerEventClimb = (event: Event): Climb | undefined => {
-  if (!(event instanceof CustomEvent)) return undefined;
-  const detail = event.detail as PlayDrawerEventDetail | undefined;
-  return detail?.climb;
-};
-
 export const readPlayDrawerEventDetail = (event: Event): PlayDrawerEventDetail | undefined => {
   if (!(event instanceof CustomEvent)) return undefined;
   return event.detail as PlayDrawerEventDetail | undefined;

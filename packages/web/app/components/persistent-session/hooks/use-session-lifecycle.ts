@@ -130,7 +130,6 @@ type UseSessionLifecycleArgs = {
   handleQueueEvent: (event: SubscriptionQueueEvent) => void;
   handleSessionEvent: (event: SessionEvent) => void;
   setLastReceivedStateHash: Dispatch<SetStateAction<string | null>>;
-  setSession: Dispatch<SetStateAction<Session | null>>;
   refs: Pick<
     SharedRefs,
     | 'wsAuthTokenRef'
@@ -151,14 +150,7 @@ type UseSessionLifecycleArgs = {
   >;
 };
 
-function createParticipantId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `participant-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export type SessionLifecycleState = {
+type SessionLifecycleState = {
   activeSession: ActiveSessionInfo | null;
   client: Client | null;
   session: Session | null;
@@ -171,7 +163,7 @@ export type SessionLifecycleState = {
   sessionSummaryAutoFinished: boolean;
 };
 
-export type SessionLifecycleActions = {
+type SessionLifecycleActions = {
   activateSession: (info: ActiveSessionInfo) => void;
   deactivateSession: (options?: { notifyServer?: boolean }) => void;
   setInitialQueueForSession: (
@@ -191,7 +183,6 @@ export function useSessionLifecycle({
   handleQueueEvent,
   handleSessionEvent,
   setLastReceivedStateHash,
-  setSession: setSessionExternal,
   refs,
 }: UseSessionLifecycleArgs): SessionLifecycleState & SessionLifecycleActions {
   const {
@@ -214,7 +205,7 @@ export function useSessionLifecycle({
 
   const [activeSession, setActiveSession] = useState<ActiveSessionInfo | null>(null);
   const [client, setClient] = useState<Client | null>(null);
-  const [session, setSessionLocal] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -228,15 +219,6 @@ export function useSessionLifecycle({
   // so session activation and queue seeding can happen in either order without
   // the WebSocket effect capturing a stale null value.
   const pendingInitialQueueRef = useRef<PendingInitialQueue | null>(null);
-
-  // Combined setter that updates both local and external state
-  const setSession = useCallback(
-    (value: SetStateAction<Session | null>) => {
-      setSessionLocal(value);
-      setSessionExternal(value);
-    },
-    [setSessionExternal],
-  );
 
   // Keep refs in sync
   useEffect(() => {
@@ -252,24 +234,16 @@ export function useSessionLifecycle({
   const activateSession = useCallback((info: ActiveSessionInfo) => {
     setActiveSession((prev) => {
       if (prev?.sessionId === info.sessionId && prev?.boardPath === info.boardPath) {
-        if (!prev.participantId) {
-          const nextInfo = { ...prev, participantId: createParticipantId() };
-          setPreference(ACTIVE_SESSION_KEY, nextInfo).catch((err) =>
-            console.error('[PersistentSession] Failed to persist session:', err),
-          );
-          return nextInfo;
-        }
         return prev;
       }
       if (prev) {
         sendLeaveOnCleanupRef.current = true;
       }
-      const nextInfo = { ...info, participantId: info.participantId || createParticipantId() };
       if (DEBUG) console.info('[PersistentSession] Activating session:', info.sessionId);
-      setPreference(ACTIVE_SESSION_KEY, nextInfo).catch((err) =>
+      setPreference(ACTIVE_SESSION_KEY, info).catch((err) =>
         console.error('[PersistentSession] Failed to persist session:', err),
       );
-      return nextInfo;
+      return info;
     });
   }, []);
 
@@ -437,7 +411,6 @@ export function useSessionLifecycle({
           boardPath,
           username: usernameRef.current,
           avatarUrl: avatarUrlRef.current,
-          participantId: activeSessionRef.current?.participantId,
           ...(initialQueueData && {
             initialQueue: initialQueueData.queue.map(toClimbQueueItemInput),
             initialCurrentClimb: initialQueueData.currentClimb

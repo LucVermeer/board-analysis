@@ -67,16 +67,6 @@
     "linkCopied": "Link copied",
     "shareFailed": "Failed to share"
   },
-  "board": {
-    "connect": "Connect to board",
-    "disconnect": "Disconnect from board",
-    "connectError": "Could not connect to board. Make sure Bluetooth is on and the board is nearby.",
-    "lightingUnavailable": "Board lighting unavailable",
-    "lightingUnavailableIos": "Safari doesn't support Bluetooth. Use the Boardsesh app to light up holds on your board.",
-    "lightingUnavailableBrowser": "This browser doesn't support Bluetooth. Switch to Chrome to light up holds on your board.",
-    "dismiss": "Dismiss",
-    "getApp": "Get the app"
-  },
   "angleSelector": {
     "selectAngle": "Select Angle",
     "loadingStats": "Loading stats...",

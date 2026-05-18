@@ -13,7 +13,7 @@ import { isNativeApp } from '@/app/lib/ble/capacitor-utils';
  */
 export const WALL_CONFIRM_TIMEOUT_MS = 2000;
 
-export type WallConfirmFallback = 'auto_connect' | 'picker' | 'already_connected' | 'unsupported';
+type WallConfirmFallback = 'auto_connect' | 'picker' | 'already_connected' | 'unsupported';
 
 type ArmWatcherArgs = {
   climbUuid: string;

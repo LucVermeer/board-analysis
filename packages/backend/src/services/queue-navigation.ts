@@ -2,8 +2,7 @@ import type { ClimbQueueItem } from '@boardsesh/shared-schema';
 import type { RoomManager } from './room-manager/room-manager';
 import { VersionConflictError } from './room-manager/types';
 import type { pubsub as PubSubInstance } from '../pubsub/index';
-
-const MAX_RETRIES = 3;
+import { MAX_RETRIES } from '../graphql/resolvers/shared/types';
 
 /**
  * Set the current climb (optionally appending it to the queue) and publish the

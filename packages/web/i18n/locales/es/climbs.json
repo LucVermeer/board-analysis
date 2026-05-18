@@ -67,16 +67,6 @@
     "linkCopied": "Enlace copiado",
     "shareFailed": "No se pudo compartir"
   },
-  "board": {
-    "connect": "Conectar con la tabla de escalada",
-    "disconnect": "Desconectar de la tabla de escalada",
-    "connectError": "No se pudo conectar con la tabla de escalada. Asegúrate de que el Bluetooth está encendido y la tabla está cerca.",
-    "lightingUnavailable": "Iluminación de la tabla de escalada no disponible",
-    "lightingUnavailableIos": "Safari no soporta Bluetooth. Usa la app de Boardsesh para iluminar las presas de tu tabla de escalada.",
-    "lightingUnavailableBrowser": "Este navegador no soporta Bluetooth. Cambia a Chrome para iluminar las presas de tu tabla de escalada.",
-    "dismiss": "Descartar",
-    "getApp": "Obtener la app"
-  },
   "angleSelector": {
     "selectAngle": "Selecciona el ángulo",
     "loadingStats": "Cargando estadísticas...",

@@ -115,7 +115,6 @@ function createTestBoardDetails(overrides?: Partial<BoardDetails>): BoardDetails
 
 const expectSessionWithParticipant = (actual: unknown, expected: object) => {
   expect(actual).toMatchObject(expected);
-  expect(actual).toEqual(expect.objectContaining({ participantId: expect.any(String) }));
 };
 
 function createWrapper() {

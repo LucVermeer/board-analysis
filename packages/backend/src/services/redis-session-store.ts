@@ -1,6 +1,7 @@
 import type Redis from 'ioredis';
 import type { ClimbQueueItem, SessionUser } from '@boardsesh/shared-schema';
 import { logger } from '../utils/logger';
+import { KEYS } from './distributed-state/constants';
 
 /**
  * Safely parse JSON with fallback for empty strings and malformed data.
@@ -245,17 +246,15 @@ export class RedisSessionStore {
   /**
    * Delete session from Redis (when explicitly ended).
    *
-   * Also clears the `:driver` key set by the queue-control-bar pivot's
-   * `takeControl` mutation, matching `cleanupEmptySession` in
-   * `distributed-state/session-ops.ts`. Without this, the driver key relies
-   * on its session-membership TTL to expire (eventually fine, but
-   * inconsistent with the rest of the cleanup).
+   * Mirrors the per-session keys cleared by `cleanupEmptySession` in
+   * `distributed-state/session-ops.ts` so neither layer leaves orphaned keys.
    */
   async deleteSession(sessionId: string): Promise<void> {
     const multi = this.redis.multi();
     multi.del(`boardsesh:session:${sessionId}`);
     multi.del(`boardsesh:session:${sessionId}:users`);
-    multi.del(`boardsesh:session:${sessionId}:driver`);
+    multi.del(KEYS.sessionDriver(sessionId));
+    multi.del(KEYS.sessionBoardSerial(sessionId));
     multi.srem('boardsesh:session:active', sessionId);
     multi.zrem('boardsesh:session:recent', sessionId);
     await multi.exec();

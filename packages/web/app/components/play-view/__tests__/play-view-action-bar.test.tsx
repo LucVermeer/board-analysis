@@ -18,10 +18,6 @@ vi.mock('react-i18next', () => ({
 // Mock heavy deps that PlayViewActionBar imports transitively.
 // ---------------------------------------------------------------------------
 
-vi.mock('@/app/components/board-page/share-button', () => ({
-  ShareBoardButton: () => React.createElement('button', { 'data-testid': 'share-button' }),
-}));
-
 // MUI icons — keep as simple SVG stubs so we don't need a full MUI theme
 vi.mock('@mui/icons-material/SkipPreviousOutlined', () => ({
   default: () => React.createElement('svg', { 'data-testid': 'icon-skip-prev' }),

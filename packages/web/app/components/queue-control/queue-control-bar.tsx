@@ -75,14 +75,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
 import styles from './queue-control-bar.module.css';
-import { PLAY_DRAWER_EVENT as PLAY_DRAWER_EVENT_INTERNAL, dispatchOpenPlayDrawer } from './play-drawer-event';
+import { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 
 export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
-
-// Re-export the window event so existing imports from this file keep working.
-// The actual definition lives in ./play-drawer-event to keep the import graph
-// light for callsites that only need the dispatch helper.
-export { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 
 const QUEUE_BADGE_SX = { '& .MuiBadge-badge': themeTokens.badge.small } as const;
 
@@ -242,8 +237,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       setDrawerWallView(!!detail?.wallView);
       setActiveDrawer('play');
     };
-    window.addEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
-    return () => window.removeEventListener(PLAY_DRAWER_EVENT_INTERNAL, handler);
+    window.addEventListener(PLAY_DRAWER_EVENT, handler);
+    return () => window.removeEventListener(PLAY_DRAWER_EVENT, handler);
   }, [isPersistentSessionActive]);
 
   const handleCloseDrawer = useCallback(() => {
@@ -334,8 +329,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     !isDisconnected &&
     (connectionState === 'reconnecting' || connectionState === 'stale' || connectionState === 'error');
 
-  const nextClimb = useMemo(() => getNextClimbQueueItem(), [getNextClimbQueueItem]);
-  const previousClimb = useMemo(() => getPreviousClimbQueueItem(), [getPreviousClimbQueueItem]);
+  // Getter is useCallback(..., [])-stable but reads latestRef internally — call
+  // directly so we don't freeze a stale value into a never-invalidated memo.
+  const nextClimb = getNextClimbQueueItem();
+  const previousClimb = getPreviousClimbQueueItem();
 
   // Declared up here (above the `isReconnecting` early return below) so the
   // hook order stays stable across renders.
@@ -949,11 +946,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   let offlineBannerText: string;
   if (!sessionId) {
-    offlineBannerText = 'Offline';
+    offlineBannerText = t('queueBar.offline.idle');
   } else if (users && users.length > 1) {
-    offlineBannerText = 'Offline. Queued climbs will still sync.';
+    offlineBannerText = t('queueBar.offline.party');
   } else {
-    offlineBannerText = 'Offline. Changes will sync when you reconnect.';
+    offlineBannerText = t('queueBar.offline.solo');
   }
 
   return (
@@ -1017,7 +1014,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                       }}
                       role="button"
                       tabIndex={0}
-                      aria-label={participantsExpanded ? 'Hide participants' : 'Show participants'}
+                      aria-label={
+                        participantsExpanded
+                          ? t('queueBar.ariaLabels.hideParticipants')
+                          : t('queueBar.ariaLabels.showParticipants')
+                      }
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.stopPropagation();
@@ -1161,14 +1162,16 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') handleTickBarExpandedChange(!tickBarExpanded);
                     }}
-                    aria-label={tickBarExpanded ? 'Collapse tick bar' : 'Expand tick bar'}
+                    aria-label={tickBarExpanded ? t('queueBar.tickBar.collapseAria') : t('queueBar.tickBar.expandAria')}
                   >
                     {tickBarExpanded ? (
                       <KeyboardArrowDownOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
                     ) : (
                       <KeyboardArrowUpOutlined sx={{ fontSize: 16, opacity: 0.7 }} />
                     )}
-                    <span className={styles.tickExpandLabel}>{tickBarExpanded ? 'Collapse' : 'Expand'}</span>
+                    <span className={styles.tickExpandLabel}>
+                      {tickBarExpanded ? t('queueBar.tickBar.collapse') : t('queueBar.tickBar.expand')}
+                    </span>
                   </div>
                   <div className={styles.tickCloseButton}>
                     <IconButton
@@ -1219,7 +1222,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                           onFocus={handleTickCommentFocus}
                           onBlur={handleTickCommentBlur}
                           slotProps={{
-                            htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                            htmlInput: { maxLength: 2000, 'aria-label': t('queueBar.tickBar.commentAria') },
                             input: {
                               startAdornment: (
                                 <InputAdornment position="start">
@@ -1254,7 +1257,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         onFocus={handleTickCommentFocus}
                         onBlur={handleTickCommentBlur}
                         slotProps={{
-                          htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                          htmlInput: { maxLength: 2000, 'aria-label': t('queueBar.tickBar.commentAria') },
                         }}
                         sx={{
                           '& .MuiOutlinedInput-root': {
@@ -1387,8 +1390,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                     {/* Navigation buttons - desktop only */}
                     <span className={styles.navButtons}>
                       <Stack direction="row" spacing={0.5}>
-                        <PreviousClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
-                        <NextClimbButton navigate={isViewPage || isPlayPage} boardDetails={boardDetails} />
+                        <PreviousClimbButton navigate={shouldNavigate} boardDetails={boardDetails} />
+                        <NextClimbButton navigate={shouldNavigate} boardDetails={boardDetails} />
                       </Stack>
                     </span>
                     {/* Attempt button — visible whenever tick mode is active */}

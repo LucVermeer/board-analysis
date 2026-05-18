@@ -180,7 +180,10 @@
     },
     "tickBar": {
       "collapse": "Réduire",
-      "expand": "Développer"
+      "expand": "Développer",
+      "expandAria": "Développer la barre de tick",
+      "collapseAria": "Réduire la barre de tick",
+      "commentAria": "Commentaire du tick"
     },
     "ariaLabels": {
       "leaveSession": "Quitter la session",
@@ -189,7 +192,14 @@
       "shareSessionLink": "Partager le lien de la session",
       "closeTickBar": "Fermer la barre de tick",
       "enterPlayMode": "Passer en mode jeu",
-      "logAttempt": "Enregistrer un essai"
+      "logAttempt": "Enregistrer un essai",
+      "showParticipants": "Afficher les participants",
+      "hideParticipants": "Masquer les participants"
+    },
+    "offline": {
+      "idle": "Hors ligne",
+      "party": "Hors ligne. Les blocs en file d'attente seront synchronisés.",
+      "solo": "Hors ligne. Les changements seront synchronisés à la reconnexion."
     }
   },
   "queueDrawer": {
@@ -211,6 +221,7 @@
     "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."
   },
   "playView": {
+    "wallViewHeader": "Actuellement sur le mur",
     "yourAscents_one": "Ton ascension ({{count}})",
     "yourAscents_other": "Tes ascensions ({{count}})",
     "triesCount_one": "{{count}} essai",
@@ -221,7 +232,13 @@
     "browseClimbs": "Parcourir les blocs",
     "actionBar": {
       "climbActionsAria": "Actions du bloc",
-      "openQueueAria": "Ouvrir la file d'attente"
+      "openQueueAria": "Ouvrir la file d'attente",
+      "lightbulb": {
+        "drivingNamed": "Tu contrôles «{{name}}». Touche pour relâcher.",
+        "driving": "Tu contrôles. Touche pour relâcher.",
+        "takeNamed": "Prendre le contrôle et envoyer «{{name}}»",
+        "take": "Prendre le contrôle du mur"
+      }
     },
     "tickFab": {
       "logAscentAria": "Enregistrer une ascension"

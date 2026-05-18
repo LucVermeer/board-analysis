@@ -39,10 +39,8 @@ export type Session = {
   /**
    * Backend-resolved participant id for this connection. For authenticated
    * users this is their user UUID; for anonymous users it equals `clientId`.
-   * Compare this (not `ActiveSessionInfo.participantId`, which is a
-   * client-generated preference the backend ignores) against
-   * `driverParticipantId` or any `SessionUser.id` — the server broadcasts
-   * `DriverChanged` with this resolved value.
+   * Compare this against `driverParticipantId` or any `SessionUser.id` — the
+   * server broadcasts `DriverChanged` with this resolved value.
    */
   participantId: string;
   goal?: string | null;
@@ -56,7 +54,6 @@ export type Session = {
 // Active session info stored at root level
 export type ActiveSessionInfo = {
   sessionId: string;
-  participantId?: string;
   sessionName?: string;
   boardPath: string;
   boardDetails: BoardDetails;

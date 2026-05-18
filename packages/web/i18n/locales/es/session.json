@@ -180,7 +180,10 @@
     },
     "tickBar": {
       "collapse": "Contraer",
-      "expand": "Expandir"
+      "expand": "Expandir",
+      "expandAria": "Expandir barra de marca",
+      "collapseAria": "Contraer barra de marca",
+      "commentAria": "Comentario de marca"
     },
     "ariaLabels": {
       "leaveSession": "Salir de la sesión",
@@ -189,7 +192,14 @@
       "shareSessionLink": "Compartir enlace de sesión",
       "closeTickBar": "Cerrar barra de marca",
       "enterPlayMode": "Entrar en modo juego",
-      "logAttempt": "Registrar intento"
+      "logAttempt": "Registrar intento",
+      "showParticipants": "Mostrar participantes",
+      "hideParticipants": "Ocultar participantes"
+    },
+    "offline": {
+      "idle": "Sin conexión",
+      "party": "Sin conexión. Las vías encoladas se sincronizarán.",
+      "solo": "Sin conexión. Los cambios se sincronizarán cuando vuelvas."
     }
   },
   "queueDrawer": {
@@ -211,6 +221,7 @@
     "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías."
   },
   "playView": {
+    "wallViewHeader": "Actualmente en el muro",
     "yourAscents_one": "Tu ascenso ({{count}})",
     "yourAscents_other": "Tus ascensos ({{count}})",
     "triesCount_one": "{{count}} intento",
@@ -221,7 +232,13 @@
     "browseClimbs": "Ver bloques",
     "actionBar": {
       "climbActionsAria": "Acciones del bloque",
-      "openQueueAria": "Abrir cola"
+      "openQueueAria": "Abrir cola",
+      "lightbulb": {
+        "drivingNamed": "Estás controlando “{{name}}”. Toca para soltar.",
+        "driving": "Estás controlando. Toca para soltar.",
+        "takeNamed": "Tomar el control y enviar “{{name}}”",
+        "take": "Tomar el control del muro"
+      }
     },
     "tickFab": {
       "logAscentAria": "Registrar ascenso"

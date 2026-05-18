@@ -133,10 +133,6 @@ vi.mock('@/app/components/logbook/tick-button', () => ({
     }),
 }));
 
-vi.mock('@/app/components/board-page/share-button', () => ({
-  ShareBoardButton: () => null,
-}));
-
 vi.mock('@/app/components/play-view/play-view-drawer', () => ({
   default: () => null,
 }));

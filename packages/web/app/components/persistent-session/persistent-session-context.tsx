@@ -78,11 +78,6 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     avatarUrlRef.current = avatarUrl;
   }, [avatarUrl]);
 
-  // Stable no-op: session is managed internally by lifecycle hook.
-  // MUST be useCallback to avoid recreating on every render, which would
-  // destabilize the lifecycle effect's dependency array and cause infinite reconnects.
-  const noopSetSession = useCallback(() => {}, []);
-
   const refs: SharedRefs = {
     offlineBufferRef,
     wsAuthTokenRef,
@@ -123,7 +118,6 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
     handleQueueEvent: eventProcessor.handleQueueEvent,
     handleSessionEvent: eventProcessor.handleSessionEvent,
     setLastReceivedStateHash: eventProcessor.setLastReceivedStateHash,
-    setSession: noopSetSession, // Session is managed internally by lifecycle
     refs,
   });
 
@@ -222,13 +216,9 @@ export const PersistentSessionProvider: React.FC<{ children: React.ReactNode }> 
       hasConnected: lifecycle.hasConnected,
       error: lifecycle.error,
       clientId: lifecycle.session?.clientId ?? null,
-      // Prefer the backend-resolved participantId (lifecycle.session.participantId)
-      // over the locally-generated activeSession.participantId. The backend
-      // ignores client-supplied participantIds for security and uses
-      // `userId || connectionId` instead — the resolved value is what
-      // DriverChanged events carry, so the driver derivation only works when
-      // we compare against the same identity the server broadcasts.
-      participantId: lifecycle.session?.participantId ?? lifecycle.activeSession?.participantId ?? null,
+      // Backend-resolved participantId from join — server uses this identity
+      // when broadcasting DriverChanged, so driver derivation compares against it.
+      participantId: lifecycle.session?.participantId ?? null,
       isLeader: lifecycle.session?.isLeader ?? false,
       driverParticipantId: lifecycle.session?.driverParticipantId ?? null,
       users: lifecycle.session?.users ?? [],

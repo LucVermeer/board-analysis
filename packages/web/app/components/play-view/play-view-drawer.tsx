@@ -153,18 +153,15 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   angleSelector,
 }: PlayViewActionBarProps) {
   const { t } = useTranslation('session');
-  // Lightbulb aria label per spec — driver vs non-driver framing makes the
-  // action's destructive-vs-additive nature explicit for screen readers.
-  // Toggle semantics: tap when driving releases control; tap when not driving
-  // takes control. Aria mirrors that — otherwise screen readers say "Send to
-  // the wall" but the action is actually "release", confusing AT users.
+  // Lightbulb aria label — driver vs non-driver framing makes the action's
+  // destructive-vs-additive nature explicit for screen readers.
   const lightbulbLabel = displayedClimbName
     ? isDriver
-      ? `You're driving '${displayedClimbName}'. Tap to release control.`
-      : `Take wall control and send '${displayedClimbName}'`
+      ? t('playView.actionBar.lightbulb.drivingNamed', { name: displayedClimbName })
+      : t('playView.actionBar.lightbulb.takeNamed', { name: displayedClimbName })
     : isDriver
-      ? "You're driving. Tap to release control."
-      : 'Take wall control';
+      ? t('playView.actionBar.lightbulb.driving')
+      : t('playView.actionBar.lightbulb.take');
   // Long-press the lightbulb to reach the light-control drawer (and the
   // manual BLE disconnect that lives inside it). Tap stays the take-control
   // gesture; consumeLongPress() in the click handler swallows the synthesized
@@ -581,7 +578,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
   const { currentClimbQueueItem } = isOpen ? currentClimbData : deferredCurrentClimb;
   const { queue } = isOpen ? queueListData : deferredQueue;
-  const { viewOnlyMode, isPersistentSessionActive, isDriver } = isOpen ? sessionData : deferredSession;
+  const { viewOnlyMode, isPersistentSessionActive, isDriver, lastConnectedBoardSerial } = isOpen
+    ? sessionData
+    : deferredSession;
   const {
     mirrorClimb,
     getNextClimbQueueItem,
@@ -591,7 +590,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     releaseControl,
   } = useQueueActions();
   const { isConnected: isBluetoothConnected, isBluetoothSupported, connect: bluetoothConnect } = useBluetoothContext();
-  const { lastConnectedBoardSerial } = isOpen ? sessionData : deferredSession;
 
   // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
   // callers via the open-drawer event payload) takes precedence over the wall

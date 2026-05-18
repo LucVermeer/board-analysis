@@ -180,7 +180,10 @@
     },
     "tickBar": {
       "collapse": "Collapse",
-      "expand": "Expand"
+      "expand": "Expand",
+      "expandAria": "Expand tick bar",
+      "collapseAria": "Collapse tick bar",
+      "commentAria": "Tick comment"
     },
     "ariaLabels": {
       "leaveSession": "Leave session",
@@ -189,7 +192,14 @@
       "shareSessionLink": "Share session link",
       "closeTickBar": "Close tick bar",
       "enterPlayMode": "Enter play mode",
-      "logAttempt": "Log attempt"
+      "logAttempt": "Log attempt",
+      "showParticipants": "Show participants",
+      "hideParticipants": "Hide participants"
+    },
+    "offline": {
+      "idle": "Offline",
+      "party": "Offline. Queued climbs will still sync.",
+      "solo": "Offline. Changes will sync when you reconnect."
     }
   },
   "queueDrawer": {
@@ -222,7 +232,13 @@
     "browseClimbs": "Browse Climbs",
     "actionBar": {
       "climbActionsAria": "Climb actions",
-      "openQueueAria": "Open up next"
+      "openQueueAria": "Open up next",
+      "lightbulb": {
+        "drivingNamed": "You’re driving “{{name}}”. Tap to release control.",
+        "driving": "You’re driving. Tap to release control.",
+        "takeNamed": "Take wall control and send “{{name}}”",
+        "take": "Take wall control"
+      }
     },
     "tickFab": {
       "logAscentAria": "Log ascent"
