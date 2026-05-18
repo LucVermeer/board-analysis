@@ -47,7 +47,7 @@ vi.mock('../services/analytics/live-activity', () => analyticsMocks);
 async function loadApnsModule(): Promise<typeof import('../services/apns')> {
   vi.resetModules();
   const apnsModule = await import('../services/apns');
-  apnsModule.__resetApnsStateForTests();
+  apnsModule.__resetApnsForTests();
   return apnsModule;
 }
 
