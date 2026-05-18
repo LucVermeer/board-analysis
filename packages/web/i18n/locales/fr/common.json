@@ -17,6 +17,7 @@
     "customizeColorsTitle": "Couleurs des LED",
     "customizeColorsHelp": "Choisissez les couleurs des prises pour les mains, les pieds et l'arrivée. Les prises de départ gardent leur vert par défaut.",
     "resetColors": "Réinitialiser",
+    "disconnect": "Déconnecter le board",
     "role": {
       "HAND": "Mains",
       "FOOT": "Pieds",

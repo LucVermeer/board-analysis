@@ -105,7 +105,10 @@
       "somewhatAccurate": "Algo precisa (<0.2)",
       "veryAccurate": "Muy precisa (<0.1)",
       "extremelyAccurate": "Extremadamente precisa (<0.05)",
-      "classicsOnly": "Solo clásicos"
+      "classicsOnly": "Solo clásicos",
+      "minAscentsOption": "{{value}}+",
+      "minRatingOption_one": "{{count}} estrella o más",
+      "minRatingOption_other": "{{count}} estrellas o más"
     },
     "panels": {
       "quality": "Calidad",
@@ -292,6 +295,12 @@
         "updateFailed": "No se pudo actualizar el favorito. Inténtalo de nuevo.",
         "saveFailed": "No se pudo guardar el favorito. Inténtalo de nuevo."
       }
+    },
+    "sendToBoard": {
+      "label": "Enviar al board",
+      "active": "En el muro",
+      "tooltip": "Enviar al board",
+      "activeTooltip": "Ahora en el muro"
     }
   },
   "card": {
@@ -310,7 +319,9 @@
   },
   "detail": {
     "sections": {
-      "beta": "Beta"
+      "beta": "Beta",
+      "similarClimbs": "Bloques similares",
+      "similarClimbsSummary": "Bloques que comparten el 50%+ de estas presas"
     }
   },
   "multiboardList": {
@@ -331,7 +342,9 @@
       "gradeOverride": "Grado personalizado",
       "clearGradeOverride": "Borrar grado personalizado",
       "consensusSuffix": "consenso",
-      "attemptCount": "Número de intentos"
+      "attemptCount": "Número de intentos",
+      "starOption_one": "{{count}} estrella",
+      "starOption_other": "{{count}} estrellas"
     },
     "bar": {
       "logAscent": "Registrar encadene",
@@ -369,7 +382,12 @@
     "alerts": {
       "importFailed": "Importación fallida: {{error}}",
       "importWarnings": "Avisos de importación:",
-      "checkingMoonBoardDuplicate": "Comprobando si este bloque de MoonBoard ya existe..."
+      "checkingMoonBoardDuplicate": "Comprobando si este bloque de MoonBoard ya existe...",
+      "publishDuplicateNamed": "Este patrón de presas coincide con \"{{name}}\". Activa Borrador para guardarlo sin publicar, o cambia una presa.",
+      "publishDuplicateUnnamed": "Este patrón de presas coincide con un bloque existente. Activa Borrador para guardarlo sin publicar, o cambia una presa.",
+      "viewMatchingClimb": "Ver bloque coincidente",
+      "identicalClimbDrawerTitle": "Bloque idéntico",
+      "saveFailedFallback": "No se pudo guardar el bloque. Inténtalo de nuevo."
     },
     "settings": {
       "tooltip": "Ajustes del bloque",
@@ -403,6 +421,14 @@
     "empty": {
       "title": "Aún no hay borradores",
       "subtitle": "Guarda un bloque como borrador para retomarlo más tarde."
+    },
+    "delete": {
+      "tooltip": "Eliminar borrador",
+      "title": "¿Eliminar este borrador?",
+      "description": "Esto elimina el borrador guardado. Los bloques publicados no se ven afectados.",
+      "confirm": "Eliminar",
+      "success": "Borrador eliminado.",
+      "error": "No se pudo eliminar ese borrador. Inténtalo de nuevo."
     }
   },
   "holdTypePicker": {
@@ -488,5 +514,14 @@
     "grade": "Grado: {{grade}}",
     "angle": "Ángulo: {{angle}}°",
     "unknown": "Desconocido"
+  },
+  "similarClimbs": {
+    "loadError": "No se pudieron cargar los bloques similares.",
+    "emptyDefault": "Aún no hay bloques similares.",
+    "emptyOnLayout": "No hay bloques similares en este layout.",
+    "emptyIdentical": "Ahora mismo no se encontraron bloques idénticos.",
+    "untitledClimb": "Bloque sin título",
+    "openActions": "Más acciones",
+    "actionsUnavailable": "No se pueden abrir acciones para este bloque — configuración de la tabla no disponible."
   }
 }

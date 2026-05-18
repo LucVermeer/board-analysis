@@ -246,6 +246,12 @@
         "submit": "Créer"
       }
     },
+    "sendToBoard": {
+      "label": "Envoyer au board",
+      "active": "Sur le mur",
+      "tooltip": "Envoyer au board",
+      "activeTooltip": "Actuellement sur le mur"
+    },
     "tick": {
       "drawer": {
         "signInRequired": "Connexion requise",
