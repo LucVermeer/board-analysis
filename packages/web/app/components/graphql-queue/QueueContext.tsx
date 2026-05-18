@@ -702,8 +702,15 @@ export const GraphQLQueueProvider = ({
     const anchorUuid = options?.from ? options.from.uuid : latest.state.currentClimbQueueItem?.uuid;
     const anchorClimbUuid = options?.from ? options.from.climb?.uuid : latest.state.currentClimbQueueItem?.climb?.uuid;
     if (options?.suggestionsOnly) {
+      // Non-driver swipe-forward: walk the suggestedClimbs array by index so
+      // each tap advances one step. Mirrors the backward branch below — using
+      // `find(c => c.uuid !== anchorClimbUuid)` was position-blind and made
+      // the non-driver oscillate between suggestions[0] and suggestions[1].
       if (!latest.suggestedClimbs || latest.suggestedClimbs.length === 0) return null;
-      const nextClimb = latest.suggestedClimbs.find((climb: Climb) => climb.uuid !== anchorClimbUuid);
+      const anchorIdx = latest.suggestedClimbs.findIndex((climb: Climb) => climb.uuid === anchorClimbUuid);
+      // If the anchor isn't in suggestedClimbs (e.g. anchor is a queue item or
+      // the wall climb chosen by the driver), start from the top of the feed.
+      const nextClimb = anchorIdx < 0 ? latest.suggestedClimbs[0] : (latest.suggestedClimbs[anchorIdx + 1] ?? null);
       return nextClimb ? createClimbQueueItem(nextClimb, latest.clientId, latest.currentUserInfo, true) : null;
     }
     const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
