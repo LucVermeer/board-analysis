@@ -55,6 +55,12 @@ class RoomManager {
   // when running without Redis (single-instance test/dev), the room manager is
   // the sole source of truth and persistence has to live somewhere local.
   private localBoardSerialBySession = new Map<string, string>();
+  // In-memory recent-climbs ring buffer (per session). Same rationale as the
+  // other local shadows: tests and single-instance dev don't have Redis. The
+  // distributed path writes to a bounded Redis LIST; this mirror enforces the
+  // same bound via Array.unshift + slice on every write.
+  private localRecentClimbsBySession = new Map<string, string[]>();
+  private readonly RECENT_CLIMBS_LOCAL_LIMIT = 3;
   private sessionGraceTimers = new Map<string, NodeJS.Timeout>();
   private readonly SESSION_GRACE_PERIOD_MS = 60_000;
   private pendingJoinPersists = new Map<string, Promise<void>>();
@@ -78,6 +84,7 @@ class RoomManager {
     this.sessionParticipants.clear();
     this.localDriverBySession.clear();
     this.localBoardSerialBySession.clear();
+    this.localRecentClimbsBySession.clear();
     this.redisStore = null;
     this.distributedState = null;
 
@@ -552,6 +559,38 @@ class RoomManager {
   }
 
   /**
+   * Record a climbUuid as one of this session's recent authoritative current
+   * climbs. Called from queue-navigation whenever the wall climb changes, so
+   * `confirmClimbOnWall` can accept a confirm that arrives in the small window
+   * between the BLE write completing and the driver quickly navigating on.
+   *
+   * No-op for empty climbUuids (e.g. wall cleared with item: null).
+   */
+  async pushRecentClimb(sessionId: string, climbUuid: string): Promise<void> {
+    if (!climbUuid) return;
+    if (this.distributedState) {
+      await this.distributedState.pushRecentClimb(sessionId, climbUuid);
+      return;
+    }
+    const buffer = this.localRecentClimbsBySession.get(sessionId) ?? [];
+    buffer.unshift(climbUuid);
+    this.localRecentClimbsBySession.set(sessionId, buffer.slice(0, this.RECENT_CLIMBS_LOCAL_LIMIT));
+  }
+
+  /**
+   * Check whether a climbUuid is in this session's recent-climbs ring buffer.
+   * Used by `confirmClimbOnWall`'s correlation check.
+   */
+  async isRecentClimb(sessionId: string, climbUuid: string): Promise<boolean> {
+    if (!climbUuid) return false;
+    if (this.distributedState) {
+      return this.distributedState.isRecentClimb(sessionId, climbUuid);
+    }
+    const buffer = this.localRecentClimbsBySession.get(sessionId);
+    return buffer ? buffer.includes(climbUuid) : false;
+  }
+
+  /**
    * Check if a session is active (has connected users across all instances OR exists in Redis within TTL)
    */
   async isSessionActive(sessionId: string): Promise<boolean> {
@@ -685,6 +724,7 @@ class RoomManager {
     // single-instance / single-process equivalent.
     this.localDriverBySession.delete(sessionId);
     this.localBoardSerialBySession.delete(sessionId);
+    this.localRecentClimbsBySession.delete(sessionId);
     return endSessionFn(
       sessionId,
       this.sessions,

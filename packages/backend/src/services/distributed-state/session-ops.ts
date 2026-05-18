@@ -4,6 +4,7 @@ import {
   KEYS,
   TTL,
   UNSET_SENTINEL,
+  RECENT_CLIMBS_BUFFER_SIZE,
   validateBoardSerial,
   validateConnectionId,
   validateParticipantId,
@@ -550,27 +551,40 @@ export async function clearSessionDriverIf(
   validateParticipantId(expectedParticipantId);
   const key = KEYS.sessionDriver(sessionId);
   await redis.watch(key);
-  const current = await redis.get(key);
-  if (current !== expectedParticipantId) {
-    await redis.unwatch();
-    return false;
+  // WATCH leaves the connection in a state where the next EXEC observes the
+  // watched keys; any throw between WATCH and EXEC/UNWATCH leaks that state to
+  // the next caller on the same connection, causing their unrelated MULTI to
+  // unexpectedly abort. Wrap the WATCH window in try/catch so a throwing
+  // `redis.get` (or anything else mid-flow) always cleans up via UNWATCH.
+  // EXEC discards WATCH automatically, so the happy path doesn't double-unwatch.
+  try {
+    const current = await redis.get(key);
+    if (current !== expectedParticipantId) {
+      await redis.unwatch();
+      return false;
+    }
+    // result === null indicates a WATCH abort (someone else mutated the key
+    // between the GET and EXEC). Treat that as "didn't clear" rather than an
+    // error — the take-control race is the expected reason. Any other error
+    // propagates so the caller can surface or retry.
+    //
+    // WATCH only triggers EXEC abort on explicit key mutations, NOT on TTL
+    // expiry. If the driver key's TTL expires between GET and EXEC, the
+    // transaction still commits but DEL returns 0 (nothing to delete).
+    // Check the actual DEL return value (1 if a key was deleted, 0 if not)
+    // rather than the transaction-committed-something signal. Otherwise we'd
+    // return true and the caller would fire a spurious DriverChanged broadcast.
+    const result = await redis.multi().del(key).exec();
+    if (result === null) return false;
+    const [delErr, delCount] = result[0] as [Error | null, number];
+    if (delErr) throw delErr;
+    return delCount === 1;
+  } catch (err) {
+    // Best-effort cleanup; swallow the UNWATCH failure so the original error
+    // surfaces (a UNWATCH error on top of e.g. a connection drop is noise).
+    await redis.unwatch().catch(() => undefined);
+    throw err;
   }
-  // result === null indicates a WATCH abort (someone else mutated the key
-  // between the GET and EXEC). Treat that as "didn't clear" rather than an
-  // error — the take-control race is the expected reason. Any other error
-  // propagates so the caller can surface or retry.
-  //
-  // WATCH only triggers EXEC abort on explicit key mutations, NOT on TTL
-  // expiry. If the driver key's TTL expires between GET and EXEC, the
-  // transaction still commits but DEL returns 0 (nothing to delete).
-  // Check the actual DEL return value (1 if a key was deleted, 0 if not)
-  // rather than the transaction-committed-something signal. Otherwise we'd
-  // return true and the caller would fire a spurious DriverChanged broadcast.
-  const result = await redis.multi().del(key).exec();
-  if (result === null) return false;
-  const [delErr, delCount] = result[0] as [Error | null, number];
-  if (delErr) throw delErr;
-  return delCount === 1;
 }
 
 /**
@@ -601,6 +615,41 @@ export async function setSessionBoardSerialAndReturnPrevious(
   // Atomic SET + TTL + previous-value read — see setSessionDriverAndReturnPrevious.
   const prev = await redis.set(key, serial, 'EX', TTL.sessionMembership, 'GET');
   return prev ?? null;
+}
+
+/**
+ * Push a climbUuid to the per-session recent-climbs ring buffer. Called on
+ * every authoritative "current climb" write so confirmClimbOnWall can accept
+ * a confirm that arrives after the driver has quickly navigated on. LPUSH +
+ * LTRIM keeps the buffer bounded; EXPIRE aligns lifetime with session
+ * membership so the key doesn't outlive its session.
+ *
+ * Non-empty climbUuid only — clearing the wall (item: null) does not record
+ * an entry. We don't validate climbUuid format here beyond emptiness because
+ * the resolver layer (ClimbUuidSchema) already gates input shape.
+ */
+export async function pushRecentClimb(redis: Redis, sessionId: string, climbUuid: string): Promise<void> {
+  validateSessionId(sessionId);
+  if (!climbUuid) return;
+  const key = KEYS.sessionRecentClimbs(sessionId);
+  await redis
+    .multi()
+    .lpush(key, climbUuid)
+    .ltrim(key, 0, RECENT_CLIMBS_BUFFER_SIZE - 1)
+    .expire(key, TTL.sessionMembership)
+    .exec();
+}
+
+/**
+ * Check whether a climbUuid is in the per-session recent-climbs ring buffer.
+ * Used by confirmClimbOnWall to accept confirms within a small navigation
+ * race window without admitting arbitrary stale or forged UUIDs.
+ */
+export async function isRecentClimb(redis: Redis, sessionId: string, climbUuid: string): Promise<boolean> {
+  validateSessionId(sessionId);
+  if (!climbUuid) return false;
+  const recent = await redis.lrange(KEYS.sessionRecentClimbs(sessionId), 0, -1);
+  return recent.includes(climbUuid);
 }
 
 /**

@@ -531,18 +531,17 @@ export const sessionMutations = {
     }
     const participantId = ctx.participantId;
 
-    // Reject when the climb on the wire doesn't match the session's current
-    // climb. Without this guard, any session member could spam fake confirms
-    // for an unrelated climb UUID and suppress everyone else's 2 s fallback
-    // (the client-side watcher resolves the moment its bus sees a
-    // WallConfirmedClimb with the same climbUuid). The current climb is the
-    // authoritative answer to "what was just sent to the wall" — anything
-    // else must be a stale, racing, or malicious confirm.
-    const queueState = await roomManager.getQueueState(sessionId);
-    const currentClimbUuid = queueState.currentClimbQueueItem?.climb.uuid ?? null;
-    if (currentClimbUuid !== climbUuid) {
+    // Correlate the wire climb against the session's recent-climbs ring
+    // buffer (last RECENT_CLIMBS_BUFFER_SIZE authoritative wall climbs, per
+    // services/distributed-state/constants.ts). Strict equality against
+    // `currentClimbQueueItem` rejects legitimate confirms when the driver
+    // navigates on in the ~hundreds-of-ms window between BLE write and
+    // mutation arrival — the buffer turns over every wall change, so it
+    // still gates against arbitrary stale/forged UUIDs without the race.
+    const isRecent = await roomManager.isRecentClimb(sessionId, climbUuid);
+    if (!isRecent) {
       throw new Error(
-        `confirmClimbOnWall: climbUuid mismatch (got ${climbUuid.slice(0, 8)}, current ${currentClimbUuid ? currentClimbUuid.slice(0, 8) : 'none'})`,
+        `confirmClimbOnWall: climbUuid ${climbUuid.slice(0, 8)} not in session ${sessionId.slice(0, 8)}'s recent climbs`,
       );
     }
 
@@ -556,16 +555,16 @@ export const sessionMutations = {
 
     // Mirror takeControl / releaseControl: return the resolved Session so
     // optimistic-UI callers can apply server-derived state without a
-    // follow-up query. Fan the independent reads out in parallel — these
-    // four queries don't depend on each other, so a sequential chain only
-    // burns latency. `queueState` was already fetched above for the
-    // correlation check; reuse it instead of re-reading.
-    const [users, sessionData, driverParticipantId, lastConnectedBoardSerial] = await Promise.all([
-      roomManager.getSessionUsers(sessionId),
-      roomManager.getSessionById(sessionId),
-      roomManager.getSessionDriverParticipantId(sessionId),
-      roomManager.getSessionBoardSerial(sessionId),
-    ]);
+    // follow-up query. Fan the independent reads out in parallel.
+    const [users, sessionData, queueState, driverParticipantId, lastConnectedBoardSerial, leaderConnectionId] =
+      await Promise.all([
+        roomManager.getSessionUsers(sessionId),
+        roomManager.getSessionById(sessionId),
+        roomManager.getQueueState(sessionId),
+        roomManager.getSessionDriverParticipantId(sessionId),
+        roomManager.getSessionBoardSerial(sessionId),
+        roomManager.getSessionLeaderConnectionId(sessionId),
+      ]);
 
     return {
       id: sessionId,
@@ -578,7 +577,7 @@ export const sessionMutations = {
         queue: queueState.queue,
         currentClimbQueueItem: queueState.currentClimbQueueItem,
       },
-      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      isLeader: leaderConnectionId === ctx.connectionId,
       driverParticipantId,
       lastConnectedBoardSerial,
       clientId: ctx.connectionId,
@@ -628,15 +627,21 @@ export const sessionMutations = {
     const participantId = ctx.participantId;
 
     // Mirror takeControl / releaseControl: return the resolved Session. Fan
-    // the independent reads out in parallel — sequential awaits over five
-    // unrelated lookups burns latency on every wall-pair.
-    const [users, sessionData, queueState, driverParticipantId, leaderConnectionId] = await Promise.all([
-      roomManager.getSessionUsers(sessionId),
-      roomManager.getSessionById(sessionId),
-      roomManager.getQueueState(sessionId),
-      roomManager.getSessionDriverParticipantId(sessionId),
-      roomManager.getSessionLeaderConnectionId(sessionId),
-    ]);
+    // the independent reads out in parallel — sequential awaits over six
+    // unrelated lookups burns latency on every wall-pair. Re-read
+    // `lastConnectedBoardSerial` from the room manager rather than echoing
+    // the input: another writer (different participant on a different board)
+    // can land between our write and this read, and the authoritative
+    // value is what every other Session-returning resolver returns.
+    const [users, sessionData, queueState, driverParticipantId, lastConnectedBoardSerial, leaderConnectionId] =
+      await Promise.all([
+        roomManager.getSessionUsers(sessionId),
+        roomManager.getSessionById(sessionId),
+        roomManager.getQueueState(sessionId),
+        roomManager.getSessionDriverParticipantId(sessionId),
+        roomManager.getSessionBoardSerial(sessionId),
+        roomManager.getSessionLeaderConnectionId(sessionId),
+      ]);
 
     return {
       id: sessionId,
@@ -651,7 +656,7 @@ export const sessionMutations = {
       },
       isLeader: leaderConnectionId === ctx.connectionId,
       driverParticipantId,
-      lastConnectedBoardSerial: serial,
+      lastConnectedBoardSerial,
       clientId: ctx.connectionId,
       participantId,
       goal: sessionData?.goal || null,

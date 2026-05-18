@@ -51,6 +51,12 @@ export async function setCurrentClimbAndPublish(
     }
   }
 
+  // Record the climb as the latest authoritative wall climb so the next
+  // `confirmClimbOnWall` accepts it even if the driver navigates on before
+  // the confirm arrives. Best-effort: don't fail the publish if the recency
+  // record breaks (Redis hiccup), and don't await it before the publish.
+  await roomManager.pushRecentClimb(sessionId, item.climb.uuid).catch(() => undefined);
+
   if (addedToQueue) {
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'FullSync',
@@ -119,6 +125,10 @@ export async function navigateToQueueItem(
   }
 
   if (resultItem) {
+    // Record the climb in the session's recent-climbs ring buffer so a
+    // confirmClimbOnWall arriving after a quick navigate-on still correlates.
+    // See setCurrentClimbAndPublish above for the rationale.
+    await roomManager.pushRecentClimb(sessionId, resultItem.climb.uuid).catch(() => undefined);
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'CurrentClimbChanged',
       sequence: resultSequence,

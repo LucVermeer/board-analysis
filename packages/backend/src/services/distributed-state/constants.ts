@@ -51,6 +51,12 @@ export const KEYS = {
   // `setSessionBoardSerial`; consumed by mobile clients on join so a second
   // phone can auto-pair with the same physical board as the first.
   sessionBoardSerial: (sessionId: string) => `boardsesh:session:${sessionId}:boardSerial`,
+  // LIST: sessionId -> recent climbUuids that have been broadcast as the
+  // session's current climb. Used by `confirmClimbOnWall` to accept confirms
+  // that arrive after a quick navigate (BLE write completes, then the driver
+  // moves on before the mutation reaches the server). LPUSH-ed on every
+  // current-climb write and trimmed to RECENT_CLIMBS_BUFFER_SIZE.
+  sessionRecentClimbs: (sessionId: string) => `boardsesh:session:${sessionId}:recentClimbs`,
   // Set: instanceId -> set of connectionIds owned by this instance
   instanceConnections: (instanceId: string) => `boardsesh:instance:${instanceId}:conns`,
   // String: instanceId -> heartbeat timestamp
@@ -76,6 +82,13 @@ export const TTL = {
 
 // Sentinel value to indicate "don't update this field" in Lua scripts
 export const UNSET_SENTINEL = '__UNSET__';
+
+// Number of recent climbUuids retained per session for confirmClimbOnWall
+// correlation. Three covers a fast-navigate race (driver moves on while a BLE
+// confirm is in flight) without making it cheap for a malicious peer to spam
+// fake confirms against a rolling window — the buffer turns over every time
+// the wall actually changes.
+export const RECENT_CLIMBS_BUFFER_SIZE = 3;
 
 /**
  * Validate connectionId format to prevent Redis key injection.

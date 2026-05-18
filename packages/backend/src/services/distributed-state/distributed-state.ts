@@ -19,6 +19,8 @@ import {
   clearSessionDriverIf,
   getSessionBoardSerial,
   setSessionBoardSerialAndReturnPrevious,
+  pushRecentClimb,
+  isRecentClimb,
   getSessionMemberCount,
   isConnectionInSession,
   refreshConnection,
@@ -208,6 +210,20 @@ export class DistributedStateManager {
    */
   async setSessionBoardSerialAndReturnPrevious(sessionId: string, serial: string): Promise<string | null> {
     return setSessionBoardSerialAndReturnPrevious(this.redis, sessionId, serial);
+  }
+
+  /**
+   * Record a climbUuid in the per-session recent-climbs ring buffer (called on
+   * every authoritative current-climb write). Used by confirmClimbOnWall to
+   * accept confirms that arrive within a small navigate-on race window.
+   */
+  async pushRecentClimb(sessionId: string, climbUuid: string): Promise<void> {
+    return pushRecentClimb(this.redis, sessionId, climbUuid);
+  }
+
+  /** Whether climbUuid is one of the session's last few authoritative climbs. */
+  async isRecentClimb(sessionId: string, climbUuid: string): Promise<boolean> {
+    return isRecentClimb(this.redis, sessionId, climbUuid);
   }
 
   /** Get count of live members in a session. */

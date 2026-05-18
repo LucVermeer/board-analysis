@@ -33,16 +33,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 
-// The current climb on the session queue. confirmClimbOnWall now correlates
-// the confirm's climbUuid against this value, so tests that exercise the
-// happy path mock `getQueueState` to return a queue item with the same UUID.
+// confirmClimbOnWall now correlates the confirm's climbUuid against the
+// per-session recent-climbs ring buffer (last N authoritative wall climbs),
+// not the single current climb. Tests on the happy path arrange for
+// `isRecentClimb` to return true; mismatch tests return false.
 const validClimbUuid = '22222222-2222-2222-2222-222222222222';
 const validSerial = 'KB-AB12-CD34';
 
 vi.mock('../services/room-manager', () => ({
   roomManager: {
     setSessionBoardSerialAndReturnPrevious: vi.fn(),
+    // The setSessionBoardSerial resolver reads `lastConnectedBoardSerial`
+    // back from the room manager rather than echoing the input, so the
+    // happy-path mock returns the value the test under exercise just wrote.
+    // Individual tests override per-call when they want a different
+    // authoritative answer.
     getSessionBoardSerial: vi.fn().mockResolvedValue(null),
+    // Recent-climbs ring buffer used by confirmClimbOnWall.
+    pushRecentClimb: vi.fn().mockResolvedValue(undefined),
+    isRecentClimb: vi.fn().mockResolvedValue(true),
     // Mutations now return Session! (matching takeControl / releaseControl)
     // and call these helpers to build the response payload.
     getSessionUsers: vi.fn().mockResolvedValue([]),
@@ -60,14 +69,7 @@ vi.mock('../services/room-manager', () => ({
       sequence: 0,
       stateHash: 'hash',
       queue: [],
-      // currentClimbQueueItem.climb.uuid must equal the climbUuid the
-      // confirm path will send in order for the correlation check to pass.
-      // Individual tests can override this when they want to exercise the
-      // mismatch branch.
-      currentClimbQueueItem: {
-        uuid: 'queue-item-1',
-        climb: { uuid: '22222222-2222-2222-2222-222222222222' },
-      },
+      currentClimbQueueItem: null,
     }),
     getSessionDriverParticipantId: vi.fn().mockResolvedValue(null),
     getSessionLeaderConnectionId: vi.fn().mockResolvedValue(null),
@@ -119,6 +121,8 @@ const roomManagerMock = roomManager as unknown as {
   setSessionBoardSerialAndReturnPrevious: ReturnType<typeof vi.fn>;
   getSessionBoardSerial: ReturnType<typeof vi.fn>;
   getQueueState: ReturnType<typeof vi.fn>;
+  pushRecentClimb: ReturnType<typeof vi.fn>;
+  isRecentClimb: ReturnType<typeof vi.fn>;
 };
 const pubsubMock = pubsub as unknown as { publishSessionEvent: ReturnType<typeof vi.fn> };
 const requireSessionMemberMock = sharedHelpers.requireSessionMember as unknown as ReturnType<typeof vi.fn>;
@@ -135,30 +139,21 @@ function makeCtx(overrides: Partial<ConnectionContext> = {}): ConnectionContext 
   };
 }
 
-// Resets `getQueueState` to return a queue with `validClimbUuid` as the
-// current climb. The vi.mock setup pre-fills this, but `vi.clearAllMocks`
-// in `beforeEach` blows away the resolved value so each test that exercises
-// the happy path has to re-prime it.
-function primeCurrentClimb(uuid: string = validClimbUuid): void {
-  roomManagerMock.getQueueState.mockResolvedValue({
-    sequence: 0,
-    stateHash: 'hash',
-    queue: [],
-    currentClimbQueueItem: {
-      uuid: 'queue-item-1',
-      climb: { uuid },
-    },
-  });
+// Primes `isRecentClimb` to accept the confirm path's climbUuid. The vi.mock
+// setup pre-fills this with `true`, but `vi.clearAllMocks` in `beforeEach`
+// blows away the resolved value so each happy-path test re-primes it.
+function primeRecentClimb(): void {
+  roomManagerMock.isRecentClimb.mockResolvedValue(true);
 }
 
 describe('confirmClimbOnWall mutation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireSessionMemberMock.mockResolvedValue(undefined);
-    // Default to the happy path: the session's current climb matches the
-    // confirm's climbUuid so the correlation check passes. Tests exercising
-    // the mismatch branch override this explicitly.
-    primeCurrentClimb();
+    // Default to the happy path: the climbUuid is in the session's recent-
+    // climbs ring buffer so the correlation check passes. Tests exercising
+    // the mismatch branch override `isRecentClimb` explicitly.
+    primeRecentClimb();
   });
 
   it('publishes WallConfirmedClimb with the caller as confirmedByParticipantId and a server-stamped timestamp, returning a Session', async () => {
@@ -238,40 +233,38 @@ describe('confirmClimbOnWall mutation', () => {
     );
   });
 
-  it('rejects when climbUuid does not match the session current climb (grief-vector guard)', async () => {
-    // Session is on a different climb than the one being confirmed. Without
-    // this guard any member could spam fake confirms for an unrelated
-    // climbUuid and suppress everyone's 2 s recovery fallback.
-    roomManagerMock.getQueueState.mockResolvedValueOnce({
-      sequence: 0,
-      stateHash: 'hash',
-      queue: [],
-      currentClimbQueueItem: {
-        uuid: 'queue-item-1',
-        climb: { uuid: 'AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA' },
-      },
-    });
+  it('rejects when climbUuid is not in the session recent-climbs buffer (grief-vector guard)', async () => {
+    // Buffer turns over every wall change, so an arbitrary or forged
+    // climbUuid is not in it. Without this guard any member could spam fake
+    // confirms for an unrelated climbUuid and suppress everyone's 2 s
+    // recovery fallback.
+    roomManagerMock.isRecentClimb.mockResolvedValueOnce(false);
     const ctx = makeCtx();
 
     await expect(sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx)).rejects.toThrow(
-      /climbUuid mismatch/i,
+      /not in session .* recent climbs/i,
     );
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
 
-  it('rejects when the session has no current climb (correlation requires a target)', async () => {
-    roomManagerMock.getQueueState.mockResolvedValueOnce({
-      sequence: 0,
-      stateHash: 'hash',
-      queue: [],
-      currentClimbQueueItem: null,
-    });
-    const ctx = makeCtx();
+  it('accepts a confirm for a climb that is no longer current but is still recent (navigate-on race)', async () => {
+    // The driver navigated on between BLE write and mutation arrival: the
+    // session's current climb has moved past the one being confirmed, but the
+    // ring buffer still has the climbUuid because it was authoritative
+    // moments ago. confirmClimbOnWall should accept it.
+    roomManagerMock.isRecentClimb.mockResolvedValueOnce(true);
+    const ctx = makeCtx({ participantId: 'participant-1' });
 
-    await expect(sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx)).rejects.toThrow(
-      /climbUuid mismatch/i,
+    await sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx);
+
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        __typename: 'WallConfirmedClimb',
+        climbUuid: validClimbUuid,
+        confirmedByParticipantId: 'participant-1',
+      }),
     );
-    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
 });
 
@@ -284,6 +277,9 @@ describe('setSessionBoardSerial mutation', () => {
   it('persists the serial and publishes SessionBoardSerialChanged when the value changes, returning a Session', async () => {
     // Previous serial was null → caller sets the first value, an actual transition.
     roomManagerMock.setSessionBoardSerialAndReturnPrevious.mockResolvedValueOnce(null);
+    // The resolver re-reads the authoritative value rather than echoing
+    // input; mock the read to return the value we just wrote.
+    roomManagerMock.getSessionBoardSerial.mockResolvedValueOnce(validSerial);
     const ctx = makeCtx();
 
     const result = await sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx);
@@ -303,6 +299,7 @@ describe('setSessionBoardSerial mutation', () => {
   it('is idempotent — no event fires when the stored serial already matches', async () => {
     // Previous serial equals the incoming value: no transition, no broadcast.
     roomManagerMock.setSessionBoardSerialAndReturnPrevious.mockResolvedValueOnce(validSerial);
+    roomManagerMock.getSessionBoardSerial.mockResolvedValueOnce(validSerial);
     const ctx = makeCtx();
 
     const result = await sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx);
@@ -317,6 +314,7 @@ describe('setSessionBoardSerial mutation', () => {
 
   it('broadcasts when a participant overwrites a different board serial (e.g. moving to a second board)', async () => {
     roomManagerMock.setSessionBoardSerialAndReturnPrevious.mockResolvedValueOnce('KB-OLD-9999');
+    roomManagerMock.getSessionBoardSerial.mockResolvedValueOnce(validSerial);
     const ctx = makeCtx();
 
     await sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx);
@@ -324,6 +322,22 @@ describe('setSessionBoardSerial mutation', () => {
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
       __typename: 'SessionBoardSerialChanged',
       lastConnectedBoardSerial: validSerial,
+    });
+  });
+
+  it('returns the authoritative serial from the room manager, not the input (concurrent-writer race)', async () => {
+    // Another writer landed between our write and our read-back. The
+    // resolver should return what the room manager says is current, not the
+    // value we tried to set — matches takeControl/releaseControl/confirm.
+    roomManagerMock.setSessionBoardSerialAndReturnPrevious.mockResolvedValueOnce(null);
+    roomManagerMock.getSessionBoardSerial.mockResolvedValueOnce('KB-RACER-0001');
+    const ctx = makeCtx();
+
+    const result = await sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx);
+
+    expect(result).toMatchObject({
+      id: 'session-1',
+      lastConnectedBoardSerial: 'KB-RACER-0001',
     });
   });
 
