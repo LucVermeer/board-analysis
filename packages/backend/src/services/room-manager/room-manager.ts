@@ -48,13 +48,11 @@ class RoomManager {
   private sessionParticipants = new Map<string, Map<string, LocalSessionParticipant>>();
   private redisStore: RedisSessionStore | null = null;
   private distributedState: DistributedStateManager | null = null;
-  // In-memory driver shadow: keeps single-instance / non-distributed deploys
-  // consistent with the Redis-backed path. Always written alongside Redis so
-  // `getSessionDriverParticipantId` returns the same answer either way.
+  // In-memory driver fallback for single-instance / no-Redis deploys.
+  // Untouched when `distributedState` is set — Redis is then the only source
+  // of truth, and parallel-writing here just creates read-after-write
+  // skew windows. Same rationale for the board-serial map below.
   private localDriverBySession = new Map<string, string>();
-  // In-memory board-serial shadow. Mirrors `localDriverBySession`'s rationale:
-  // when running without Redis (single-instance test/dev), the room manager is
-  // the sole source of truth and persistence has to live somewhere local.
   private localBoardSerialBySession = new Map<string, string>();
   // In-memory recent-climbs ring buffer (per session). Same rationale as the
   // other local shadows: tests and single-instance dev don't have Redis. The
@@ -477,20 +475,16 @@ class RoomManager {
    * divergent from Redis. Both the distributed (Redis GETSET) and in-memory
    * paths return the previous value to keep callers consistent across modes.
    *
-   * Write ordering: Redis (when present) is the source of truth across
-   * instances, so we await it first. The local shadow is updated only after
-   * the distributed write resolves successfully — otherwise a Redis throw
-   * would leave the in-process shadow ahead of Redis and the next read could
-   * return a phantom driver that no other instance can see.
+   * When `distributedState` is set, Redis is the only source of truth — the
+   * in-memory shadow is a single-instance fallback for no-Redis deploys and is
+   * not touched on the distributed path. Maintaining a parallel shadow under
+   * Redis just creates a window where a read might see the local write before
+   * Redis has acknowledged it; the simpler invariant is "Redis or shadow,
+   * never both."
    */
   async setSessionDriverAndReturnPrevious(sessionId: string, participantId: string): Promise<string | null> {
     if (this.distributedState) {
-      // The Redis GETSET is the authoritative previous value across instances.
-      // Await before mutating the local shadow so any throw rolls the in-process
-      // state back to its pre-call value.
-      const previous = await this.distributedState.setSessionDriverAndReturnPrevious(sessionId, participantId);
-      this.localDriverBySession.set(sessionId, participantId);
-      return previous;
+      return this.distributedState.setSessionDriverAndReturnPrevious(sessionId, participantId);
     }
     // Single-instance (no Redis): the in-memory shadow is the source of truth.
     // Read-then-write is atomic in JS, so no extra ordering guard is needed.
@@ -506,11 +500,7 @@ class RoomManager {
    */
   async clearSessionDriverIf(sessionId: string, expectedParticipantId: string): Promise<boolean> {
     if (this.distributedState) {
-      const cleared = await this.distributedState.clearSessionDriverIf(sessionId, expectedParticipantId);
-      if (cleared && this.localDriverBySession.get(sessionId) === expectedParticipantId) {
-        this.localDriverBySession.delete(sessionId);
-      }
-      return cleared;
+      return this.distributedState.clearSessionDriverIf(sessionId, expectedParticipantId);
     }
     if (this.localDriverBySession.get(sessionId) === expectedParticipantId) {
       this.localDriverBySession.delete(sessionId);
@@ -538,20 +528,13 @@ class RoomManager {
    * new to decide whether to broadcast `SessionBoardSerialChanged`, so
    * concurrent writes can't both fire redundant events for the same value.
    *
-   * Write ordering: Redis (when present) is the source of truth across
-   * instances, so we await it first. The local shadow is updated only after
-   * the distributed write resolves successfully — otherwise a Redis throw
-   * would leave the in-process shadow ahead of Redis and the next read could
-   * return a phantom serial that no other instance can see.
+   * When `distributedState` is set, Redis is the only source of truth — the
+   * in-memory shadow is a single-instance fallback for no-Redis deploys and is
+   * not touched on the distributed path.
    */
   async setSessionBoardSerialAndReturnPrevious(sessionId: string, serial: string): Promise<string | null> {
     if (this.distributedState) {
-      // Distributed-state path is the authoritative previous value when Redis
-      // is wired. Await before mutating the local shadow so any throw rolls
-      // the in-process state back to its pre-call value.
-      const previous = await this.distributedState.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
-      this.localBoardSerialBySession.set(sessionId, serial);
-      return previous;
+      return this.distributedState.setSessionBoardSerialAndReturnPrevious(sessionId, serial);
     }
     // Single-instance (no Redis): the in-memory shadow is the source of truth.
     const previousLocal = this.localBoardSerialBySession.get(sessionId) ?? null;
