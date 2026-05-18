@@ -267,7 +267,7 @@ describe('BluetoothProvider', () => {
       // The useEffect triggers async sendClimb
       await act(async () => {
         await vi.waitFor(() => {
-          expect(mockSendFramesToBoard).toHaveBeenCalledWith('p1r12p2r13', false, expect.any(AbortSignal), 'climb-1');
+          expect(mockSendFramesToBoard).toHaveBeenCalledWith('p1r12p2r13', false, undefined, 'climb-1');
         });
       });
     });
@@ -284,7 +284,7 @@ describe('BluetoothProvider', () => {
 
       await act(async () => {
         await vi.waitFor(() => {
-          expect(mockSendFramesToBoard).toHaveBeenCalledWith('p3r14p4r15', true, expect.any(AbortSignal), 'climb-2');
+          expect(mockSendFramesToBoard).toHaveBeenCalledWith('p3r14p4r15', true, undefined, 'climb-2');
         });
       });
     });
@@ -377,22 +377,27 @@ describe('BluetoothProvider', () => {
     });
   });
 
-  describe('rapid-swiping cancellation', () => {
-    it('passes AbortSignal to sendFramesToBoard and aborts on unmount', async () => {
-      // Simulate a slow send that doesn't resolve
-      let resolveFirstSend: (value: boolean) => void;
+  describe('rapid-swiping serialization', () => {
+    it('queues the latest climb while a write is in flight and sends it after current completes', async () => {
+      // Web BT on Android can't actually cancel an in-flight GATT operation,
+      // so the AutoSender serializes writes via a latest-wins queue instead
+      // of abort-and-restart. While one write is in flight, the most recent
+      // pending climb is stored and sent when the current write resolves.
+      // Intermediate climbs are skipped.
+      let resolveFirstSend: (value: boolean) => void = () => {};
       mockSendFramesToBoard.mockImplementationOnce(
         () =>
           new Promise<boolean>((resolve) => {
             resolveFirstSend = resolve;
           }),
       );
+      mockSendFramesToBoard.mockResolvedValue(true);
       mockCurrentClimbQueueItem = {
         climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
       };
       mockBluetoothState.isConnected = true;
 
-      const { unmount } = renderHook(() => useBluetoothContext(), {
+      const { rerender } = renderHook(() => useBluetoothContext(), {
         wrapper: createWrapper(),
       });
 
@@ -403,22 +408,29 @@ describe('BluetoothProvider', () => {
         });
       });
 
-      // Verify an AbortSignal was passed as the third argument
-      const signal = mockSendFramesToBoard.mock.calls[0][2] as AbortSignal;
-      expect(signal).toBeInstanceOf(AbortSignal);
-      expect(signal.aborted).toBe(false);
+      // Swap in a new climb while the first is in flight — should queue
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-2', frames: 'p3r14', mirrored: false },
+      };
+      rerender();
 
-      // Unmount triggers effect cleanup which aborts the controller
-      unmount();
-      expect(signal.aborted).toBe(true);
+      // And another — should overwrite the queued climb (latest wins)
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-3', frames: 'p5r16', mirrored: false },
+      };
+      rerender();
 
-      // Resolve the send — since signal is aborted, analytics should not be tracked
-      resolveFirstSend!(true);
-      // Give microtasks a chance to flush
+      // Still only one in-flight write so far
+      expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
+
+      // Resolve the first send — drain loop picks up climb-3 (climb-2 skipped)
+      resolveFirstSend(true);
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 10));
+        await vi.waitFor(() => {
+          expect(mockSendFramesToBoard).toHaveBeenCalledTimes(2);
+        });
       });
-      expect(mockTrack).not.toHaveBeenCalled();
+      expect(mockSendFramesToBoard).toHaveBeenLastCalledWith('p5r16', false, undefined, 'climb-3');
     });
 
     it('does not track analytics when send throws after abort', async () => {

@@ -8,6 +8,7 @@ import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import { useBoardBluetooth } from './use-board-bluetooth';
 import { useCurrentClimb } from '../graphql-queue';
 import type { BoardDetails } from '@/app/lib/types';
+import type { ClimbQueueItem } from '../queue-control/types';
 import {
   isCapacitor,
   isCapacitorWebView,
@@ -91,65 +92,79 @@ function BluetoothAutoSender({
   onWallConfirmed: (climbUuid: string) => void;
 }) {
   const { currentClimbQueueItem } = useCurrentClimb();
-  const abortControllerRef = useRef<AbortController | null>(null);
-  // Mirror onWallConfirmed so the send effect doesn't re-run (and abort the
-  // in-flight write) when sessionId-derived callback identity changes
-  // mid-send. Without this, joining/leaving a party while a write is pending
-  // re-fires the GATT operation and triggers Android's "GATT in progress" race.
+  // Mirror onWallConfirmed so the send loop doesn't re-run when
+  // sessionId-derived callback identity changes mid-send.
   const onWallConfirmedRef = useRef(onWallConfirmed);
   useEffect(() => {
     onWallConfirmedRef.current = onWallConfirmed;
   }, [onWallConfirmed]);
 
+  // Serialize BLE writes with a latest-wins queue. Web Bluetooth on Android
+  // can't actually cancel an in-flight GATT operation when the JS AbortSignal
+  // fires — the OS-level write keeps going, so a second adapter.write
+  // started before it completes throws "GATT operation already in progress."
+  // With my recent reducer fix that lets duplicate server broadcasts through
+  // (so the BLE phone re-sends on every CurrentClimbChanged, including
+  // takeControl(currentClimb) re-broadcasts of the same climb), this hits
+  // any time two broadcasts land in quick succession.
+  //
+  // Pattern: while a write is in flight, store the most recent pending
+  // climb. When the current write resolves, the drain loop picks up
+  // whatever's pending and sends that, repeating until pending is empty.
+  // Intermediate climbs that got overwritten are skipped — same end state
+  // as the old abort-and-restart pattern, but no overlapping GATT calls.
+  const isWritingRef = useRef(false);
+  const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
+
   useEffect(() => {
     if (!currentClimbQueueItem) return;
-
-    // Abort any in-flight BLE write from the previous climb
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    const sendClimb = async () => {
+    if (isWritingRef.current) {
+      pendingClimbRef.current = currentClimbQueueItem;
+      return;
+    }
+    isWritingRef.current = true;
+    const drain = async () => {
+      let toSend: ClimbQueueItem | null = currentClimbQueueItem;
       try {
-        const result = await sendFramesToBoard(
-          currentClimbQueueItem.climb.frames,
-          !!currentClimbQueueItem.climb.mirrored,
-          controller.signal,
-          currentClimbQueueItem.climb.uuid,
-        );
-
-        // Skip analytics if this send was aborted (rapid swiping)
-        if (controller.signal.aborted) return;
-
-        if (result === true) {
-          track('Climb Sent to Board Success', {
-            climbUuid: currentClimbQueueItem.climb?.uuid,
-            boardLayout: layoutName,
-          });
-          // Wall actually received the climb — emit confirmation so the
-          // drawer's lightbulb timer dismisses (locally on this phone, and
-          // via WS broadcast for other party members).
-          onWallConfirmedRef.current(currentClimbQueueItem.climb.uuid);
-        } else if (result === false) {
-          track('Climb Sent to Board Failure', {
-            climbUuid: currentClimbQueueItem.climb?.uuid,
-            boardLayout: layoutName,
-          });
+        while (toSend) {
+          const item = toSend;
+          try {
+            const result = await sendFramesToBoard(
+              item.climb.frames,
+              !!item.climb.mirrored,
+              undefined,
+              item.climb.uuid,
+            );
+            if (result === true) {
+              track('Climb Sent to Board Success', {
+                climbUuid: item.climb?.uuid,
+                boardLayout: layoutName,
+              });
+              // Wall actually received the climb — emit confirmation so the
+              // drawer's lightbulb timer dismisses (locally on this phone,
+              // and via WS broadcast for other party members).
+              onWallConfirmedRef.current(item.climb.uuid);
+            } else if (result === false) {
+              track('Climb Sent to Board Failure', {
+                climbUuid: item.climb?.uuid,
+                boardLayout: layoutName,
+              });
+            }
+          } catch (error) {
+            console.error('Error sending climb to board:', error);
+            track('Climb Sent to Board Failure', {
+              climbUuid: item.climb?.uuid,
+              boardLayout: layoutName,
+            });
+          }
+          toSend = pendingClimbRef.current;
+          pendingClimbRef.current = null;
         }
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        console.error('Error sending climb to board:', error);
-        track('Climb Sent to Board Failure', {
-          climbUuid: currentClimbQueueItem.climb?.uuid,
-          boardLayout: layoutName,
-        });
+      } finally {
+        isWritingRef.current = false;
       }
     };
-    void sendClimb();
-
-    return () => {
-      controller.abort();
-    };
+    void drain();
   }, [currentClimbQueueItem, sendFramesToBoard, layoutName]);
 
   return null;
