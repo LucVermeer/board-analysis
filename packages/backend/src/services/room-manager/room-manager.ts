@@ -291,9 +291,12 @@ class RoomManager {
     try {
       const cleared = await this.clearSessionDriverIf(sessionId, participantId);
       if (cleared) {
+        // We just confirmed `participantId` was the driver before the clear,
+        // so it is the previousDriverParticipantId for the resulting event.
         pubsub.publishSessionEvent(sessionId, {
           __typename: 'DriverChanged',
           driverParticipantId: null,
+          previousDriverParticipantId: participantId,
         });
       }
     } catch (error) {

@@ -410,11 +410,15 @@ export const sessionMutations = {
 
     // Broadcast DriverChanged only on transitions. Self-claim while already
     // driving is a no-op for the wire (avoids redundant subscriber work and
-    // keeps the time series clean for the Phase 5 instrumentation).
+    // keeps the time series clean for the Phase 5 instrumentation). The
+    // event carries the previous driver so subscribers can render
+    // "X took the wall from Y" toasts without local bookkeeping (Phase 5
+    // `previousDriver` analytics property).
     if (previousDriverParticipantId !== participantId) {
       pubsub.publishSessionEvent(sessionId, {
         __typename: 'DriverChanged',
         driverParticipantId: participantId,
+        previousDriverParticipantId,
       });
     }
 
@@ -468,20 +472,26 @@ export const sessionMutations = {
    * the BLE-capable phone that handled the send is the source of truth for
    * confirmation, regardless of who holds the driver role. The server stamps
    * `confirmedAt` and derives `confirmedByParticipantId` from the caller's
-   * identity so clients cannot forge either field. Publishes
-   * `WallConfirmedClimb`. Returns `true` once the event is queued for
-   * broadcast.
+   * identity so clients cannot forge either field. The optional
+   * `queueItemUuid` disambiguates the press when the same climb is queued
+   * twice. Publishes `WallConfirmedClimb`. Returns the resolved `Session` so
+   * optimistic-UI callers can apply server-derived state without a follow-up
+   * query (symmetric with `takeControl` / `releaseControl`). Session identity
+   * comes from the WebSocket connection context — no `sessionId` argument.
    */
   confirmClimbOnWall: async (
     _: unknown,
-    { sessionId, climbUuid }: { sessionId: string; climbUuid: string },
+    { climbUuid, queueItemUuid }: { climbUuid: string; queueItemUuid?: string | null },
     ctx: ConnectionContext,
   ) => {
     // Tighter than the default 60/min: a single BLE send produces one
     // confirmation, so 6/min covers worst-case rapid swiping with headroom
     // and chokes off replay storms from a misbehaving client.
     await applyRateLimit(ctx, 6);
-    validateInput(SessionIdSchema, sessionId, 'sessionId');
+    // Session identity comes from the WebSocket connection context (the
+    // "WS-implicit" pattern used by takeControl / releaseControl) — clients
+    // no longer pass `sessionId` as an argument.
+    const sessionId = requireSession(ctx);
     validateInput(ClimbUuidSchema, climbUuid, 'climbUuid');
     await requireSessionMember(ctx, sessionId);
 
@@ -491,8 +501,41 @@ export const sessionMutations = {
       climbUuid,
       confirmedAt: new Date().toISOString(),
       confirmedByParticipantId: participantId,
+      queueItemUuid: queueItemUuid ?? null,
     });
-    return true;
+
+    // Mirror takeControl / releaseControl: return the resolved Session so
+    // optimistic-UI callers can apply server-derived state without a follow-up
+    // query. Build the payload from the same room-manager helpers.
+    const users = await roomManager.getSessionUsers(sessionId);
+    const sessionData = await roomManager.getSessionById(sessionId);
+    const queueState = await roomManager.getQueueState(sessionId);
+    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
+    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
+
+    return {
+      id: sessionId,
+      name: sessionData?.name || null,
+      boardPath: sessionData?.boardPath || '',
+      users,
+      queueState: {
+        sequence: queueState.sequence,
+        stateHash: queueState.stateHash,
+        queue: queueState.queue,
+        currentClimbQueueItem: queueState.currentClimbQueueItem,
+      },
+      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      driverParticipantId,
+      lastConnectedBoardSerial,
+      clientId: ctx.connectionId,
+      participantId,
+      goal: sessionData?.goal || null,
+      isPublic: sessionData?.isPublic ?? true,
+      startedAt: sessionData?.startedAt?.toISOString() || null,
+      endedAt: sessionData?.endedAt?.toISOString() || null,
+      isPermanent: sessionData?.isPermanent ?? false,
+      color: sessionData?.color || null,
+    };
   },
 
   /**
@@ -500,15 +543,17 @@ export const sessionMutations = {
    * stored on the session (Redis when distributed, in-memory otherwise) so
    * other mobile participants can auto-connect to the same physical board.
    * Idempotent: when the stored serial already equals the incoming value, no
-   * `SessionBoardSerialChanged` event is emitted.
+   * `SessionBoardSerialChanged` event is emitted. Returns the resolved
+   * `Session` so optimistic-UI callers can apply server-derived state without
+   * a follow-up query (symmetric with `takeControl` / `releaseControl`).
+   * Session identity comes from the WebSocket connection context — no
+   * `sessionId` argument.
    */
-  setSessionBoardSerial: async (
-    _: unknown,
-    { sessionId, serial }: { sessionId: string; serial: string },
-    ctx: ConnectionContext,
-  ) => {
+  setSessionBoardSerial: async (_: unknown, { serial }: { serial: string }, ctx: ConnectionContext) => {
     await applyRateLimit(ctx);
-    validateInput(SessionIdSchema, sessionId, 'sessionId');
+    // Session identity from the WebSocket context (WS-implicit pattern); no
+    // sessionId argument.
+    const sessionId = requireSession(ctx);
     validateInput(BoardSerialSchema, serial, 'serial');
     await requireSessionMember(ctx, sessionId);
 
@@ -519,7 +564,37 @@ export const sessionMutations = {
         lastConnectedBoardSerial: serial,
       });
     }
-    return true;
+
+    // Mirror takeControl / releaseControl: return the resolved Session.
+    const users = await roomManager.getSessionUsers(sessionId);
+    const sessionData = await roomManager.getSessionById(sessionId);
+    const queueState = await roomManager.getQueueState(sessionId);
+    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
+    const participantId = ctx.participantId || ctx.connectionId;
+
+    return {
+      id: sessionId,
+      name: sessionData?.name || null,
+      boardPath: sessionData?.boardPath || '',
+      users,
+      queueState: {
+        sequence: queueState.sequence,
+        stateHash: queueState.stateHash,
+        queue: queueState.queue,
+        currentClimbQueueItem: queueState.currentClimbQueueItem,
+      },
+      isLeader: (await roomManager.getSessionLeaderConnectionId(sessionId)) === ctx.connectionId,
+      driverParticipantId,
+      lastConnectedBoardSerial: serial,
+      clientId: ctx.connectionId,
+      participantId,
+      goal: sessionData?.goal || null,
+      isPublic: sessionData?.isPublic ?? true,
+      startedAt: sessionData?.startedAt?.toISOString() || null,
+      endedAt: sessionData?.endedAt?.toISOString() || null,
+      isPermanent: sessionData?.isPermanent ?? false,
+      color: sessionData?.color || null,
+    };
   },
 
   /**
@@ -537,9 +612,12 @@ export const sessionMutations = {
     const cleared = await roomManager.clearSessionDriverIf(sessionId, participantId);
 
     if (cleared) {
+      // `cleared = true` means the caller was the driver, so they are also the
+      // previousDriverParticipantId carried on the event.
       pubsub.publishSessionEvent(sessionId, {
         __typename: 'DriverChanged',
         driverParticipantId: null,
+        previousDriverParticipantId: participantId,
       });
     }
 

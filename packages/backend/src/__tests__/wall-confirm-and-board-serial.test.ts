@@ -35,6 +35,27 @@ vi.mock('../services/room-manager', () => ({
   roomManager: {
     setSessionBoardSerialAndReturnPrevious: vi.fn(),
     getSessionBoardSerial: vi.fn().mockResolvedValue(null),
+    // Mutations now return Session! (matching takeControl / releaseControl)
+    // and call these helpers to build the response payload.
+    getSessionUsers: vi.fn().mockResolvedValue([]),
+    getSessionById: vi.fn().mockResolvedValue({
+      name: 'Test Session',
+      boardPath: 'kilter/1/1/1/40',
+      goal: null,
+      isPublic: true,
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      endedAt: null,
+      isPermanent: false,
+      color: null,
+    }),
+    getQueueState: vi.fn().mockResolvedValue({
+      sequence: 0,
+      stateHash: 'hash',
+      queue: [],
+      currentClimbQueueItem: null,
+    }),
+    getSessionDriverParticipantId: vi.fn().mockResolvedValue(null),
+    getSessionLeaderConnectionId: vi.fn().mockResolvedValue(null),
   },
 }));
 
@@ -107,26 +128,33 @@ describe('confirmClimbOnWall mutation', () => {
     requireSessionMemberMock.mockResolvedValue(undefined);
   });
 
-  it('publishes WallConfirmedClimb with the caller as confirmedByParticipantId and a server-stamped timestamp', async () => {
+  it('publishes WallConfirmedClimb with the caller as confirmedByParticipantId and a server-stamped timestamp, returning a Session', async () => {
     const ctx = makeCtx({ participantId: 'participant-1' });
     const before = Date.now();
 
-    const result = await sessionMutations.confirmClimbOnWall(
-      undefined,
-      { sessionId: 'session-1', climbUuid: validClimbUuid },
-      ctx,
-    );
+    const result = await sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx);
 
-    expect(result).toBe(true);
+    // Resolver now returns Session! (mirrors takeControl / releaseControl).
+    expect(result).toMatchObject({
+      id: 'session-1',
+      participantId: 'participant-1',
+    });
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledTimes(1);
     const [publishedSessionId, publishedEvent] = pubsubMock.publishSessionEvent.mock.calls[0] as unknown as [
       string,
-      { __typename: 'WallConfirmedClimb'; climbUuid: string; confirmedAt: string; confirmedByParticipantId: string },
+      {
+        __typename: 'WallConfirmedClimb';
+        climbUuid: string;
+        confirmedAt: string;
+        confirmedByParticipantId: string;
+        queueItemUuid: string | null;
+      },
     ];
     expect(publishedSessionId).toBe('session-1');
     expect(publishedEvent.__typename).toBe('WallConfirmedClimb');
     expect(publishedEvent.climbUuid).toBe(validClimbUuid);
     expect(publishedEvent.confirmedByParticipantId).toBe('participant-1');
+    expect(publishedEvent.queueItemUuid).toBeNull();
     // Server-stamped: confirmedAt is a valid ISO string within a sane window.
     const stampedMs = Date.parse(publishedEvent.confirmedAt);
     expect(Number.isNaN(stampedMs)).toBe(false);
@@ -137,7 +165,7 @@ describe('confirmClimbOnWall mutation', () => {
   it('falls back to connectionId when ctx.participantId is missing (anonymous users)', async () => {
     const ctx = makeCtx({ participantId: undefined, connectionId: 'conn-anon-1' });
 
-    await sessionMutations.confirmClimbOnWall(undefined, { sessionId: 'session-1', climbUuid: validClimbUuid }, ctx);
+    await sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx);
 
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith(
       'session-1',
@@ -152,18 +180,31 @@ describe('confirmClimbOnWall mutation', () => {
     requireSessionMemberMock.mockRejectedValueOnce(new Error('Not a member of session'));
     const ctx = makeCtx();
 
-    await expect(
-      sessionMutations.confirmClimbOnWall(undefined, { sessionId: 'session-1', climbUuid: validClimbUuid }, ctx),
-    ).rejects.toThrow(/Not a member of session/);
+    await expect(sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid }, ctx)).rejects.toThrow(
+      /Not a member of session/,
+    );
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid climb UUID (validation runs before broadcast)', async () => {
     const ctx = makeCtx();
-    await expect(
-      sessionMutations.confirmClimbOnWall(undefined, { sessionId: 'session-1', climbUuid: '' }, ctx),
-    ).rejects.toThrow(/climbUuid/i);
+    await expect(sessionMutations.confirmClimbOnWall(undefined, { climbUuid: '' }, ctx)).rejects.toThrow(/climbUuid/i);
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('forwards the optional queueItemUuid argument when supplied', async () => {
+    const ctx = makeCtx({ participantId: 'participant-1' });
+    const queueItemUuid = '33333333-3333-3333-3333-333333333333';
+
+    await sessionMutations.confirmClimbOnWall(undefined, { climbUuid: validClimbUuid, queueItemUuid }, ctx);
+
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        __typename: 'WallConfirmedClimb',
+        queueItemUuid,
+      }),
+    );
   });
 });
 
@@ -173,18 +214,18 @@ describe('setSessionBoardSerial mutation', () => {
     requireSessionMemberMock.mockResolvedValue(undefined);
   });
 
-  it('persists the serial and publishes SessionBoardSerialChanged when the value changes', async () => {
+  it('persists the serial and publishes SessionBoardSerialChanged when the value changes, returning a Session', async () => {
     // Previous serial was null → caller sets the first value, an actual transition.
     roomManagerMock.setSessionBoardSerialAndReturnPrevious.mockResolvedValueOnce(null);
     const ctx = makeCtx();
 
-    const result = await sessionMutations.setSessionBoardSerial(
-      undefined,
-      { sessionId: 'session-1', serial: validSerial },
-      ctx,
-    );
+    const result = await sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx);
 
-    expect(result).toBe(true);
+    // Resolver now returns Session! (mirrors takeControl / releaseControl).
+    expect(result).toMatchObject({
+      id: 'session-1',
+      lastConnectedBoardSerial: validSerial,
+    });
     expect(roomManagerMock.setSessionBoardSerialAndReturnPrevious).toHaveBeenCalledWith('session-1', validSerial);
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
       __typename: 'SessionBoardSerialChanged',
@@ -197,13 +238,12 @@ describe('setSessionBoardSerial mutation', () => {
     roomManagerMock.setSessionBoardSerialAndReturnPrevious.mockResolvedValueOnce(validSerial);
     const ctx = makeCtx();
 
-    const result = await sessionMutations.setSessionBoardSerial(
-      undefined,
-      { sessionId: 'session-1', serial: validSerial },
-      ctx,
-    );
+    const result = await sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx);
 
-    expect(result).toBe(true);
+    expect(result).toMatchObject({
+      id: 'session-1',
+      lastConnectedBoardSerial: validSerial,
+    });
     expect(roomManagerMock.setSessionBoardSerialAndReturnPrevious).toHaveBeenCalledWith('session-1', validSerial);
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
@@ -212,7 +252,7 @@ describe('setSessionBoardSerial mutation', () => {
     roomManagerMock.setSessionBoardSerialAndReturnPrevious.mockResolvedValueOnce('KB-OLD-9999');
     const ctx = makeCtx();
 
-    await sessionMutations.setSessionBoardSerial(undefined, { sessionId: 'session-1', serial: validSerial }, ctx);
+    await sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx);
 
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
       __typename: 'SessionBoardSerialChanged',
@@ -224,18 +264,18 @@ describe('setSessionBoardSerial mutation', () => {
     requireSessionMemberMock.mockRejectedValueOnce(new Error('Not a member of session'));
     const ctx = makeCtx();
 
-    await expect(
-      sessionMutations.setSessionBoardSerial(undefined, { sessionId: 'session-1', serial: validSerial }, ctx),
-    ).rejects.toThrow(/Not a member of session/);
+    await expect(sessionMutations.setSessionBoardSerial(undefined, { serial: validSerial }, ctx)).rejects.toThrow(
+      /Not a member of session/,
+    );
     expect(roomManagerMock.setSessionBoardSerialAndReturnPrevious).not.toHaveBeenCalled();
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid serial (validation runs before any write)', async () => {
     const ctx = makeCtx();
-    await expect(
-      sessionMutations.setSessionBoardSerial(undefined, { sessionId: 'session-1', serial: 'has spaces!' }, ctx),
-    ).rejects.toThrow(/serial/i);
+    await expect(sessionMutations.setSessionBoardSerial(undefined, { serial: 'has spaces!' }, ctx)).rejects.toThrow(
+      /serial/i,
+    );
     expect(roomManagerMock.setSessionBoardSerialAndReturnPrevious).not.toHaveBeenCalled();
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
