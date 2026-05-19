@@ -145,9 +145,6 @@ vi.mock('../../graphql-queue', () => ({
   useQueueContext: () => ({
     currentClimbQueueItem: mockCurrentClimbQueueItem,
   }),
-  useQueueData: () => ({
-    currentClimbQueueItem: mockCurrentClimbQueueItem,
-  }),
   useCurrentClimb: () => ({
     currentClimbQueueItem: mockCurrentClimbQueueItem,
     currentClimb: mockCurrentClimbQueueItem?.climb ?? null,

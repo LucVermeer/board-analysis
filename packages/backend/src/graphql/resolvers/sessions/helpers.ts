@@ -86,8 +86,12 @@ export async function buildSessionPayload(
 
   return {
     id: sessionId,
-    name: inputs.name !== undefined ? inputs.name : (sessionData?.name ?? null),
-    boardPath: inputs.boardPath !== undefined ? inputs.boardPath : (sessionData?.boardPath ?? ''),
+    // `|| null` (not `??`) on the nullable-string fallback keeps parity with
+    // the pre-helper resolvers, which all coerced empty string to null.
+    // Treats `sessionData.name === ''` the same as `name === null` —
+    // consistent with the `goal` / `color` fields a few lines below.
+    name: inputs.name !== undefined ? inputs.name : sessionData?.name || null,
+    boardPath: inputs.boardPath !== undefined ? inputs.boardPath : sessionData?.boardPath || '',
     users,
     queueState: {
       sequence: queueState.sequence,

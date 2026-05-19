@@ -56,7 +56,6 @@ vi.mock('../../queue-control/queue-bridge-context', () => ({
 
 vi.mock('../../graphql-queue', () => ({
   useQueueContext: () => mockQueueContext,
-  useQueueData: () => mockQueueContext,
   useQueueActions: () => mockQueueContext,
   useCurrentClimb: () => ({ currentClimb: mockQueueContext.currentClimb }),
   useQueueList: () => ({ queue: mockQueueContext.queue, suggestedClimbs: [] }),

@@ -236,7 +236,8 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
 
 /**
  * Wraps QueueControlBar with FavoritesProvider and PlaylistsProvider.
- * Must be rendered inside QueueContext.Provider (via QueueBridge) so useQueueData works.
+ * Must be rendered inside QueueContext.Provider (via QueueBridge) so the
+ * fine-grained hooks below (`useCurrentClimb`, `useQueueList`) resolve.
  * React Query deduplicates API calls with the board route's providers.
  */
 function RootQueueControlBarWithProviders({

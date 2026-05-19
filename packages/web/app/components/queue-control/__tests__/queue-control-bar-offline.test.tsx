@@ -21,7 +21,6 @@ vi.mock('@/app/components/providers/snackbar-provider', () => ({
 let mockQueueContext: Record<string, unknown> = {};
 vi.mock('@/app/components/graphql-queue', () => ({
   useQueueContext: () => mockQueueContext,
-  useQueueData: () => mockQueueContext,
   useQueueActions: () => mockQueueContext,
   useCurrentClimb: () => ({
     currentClimb: mockQueueContext.currentClimb,
