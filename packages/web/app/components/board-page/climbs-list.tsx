@@ -420,6 +420,11 @@ const ClimbsList = ({
     (index: number) => {
       const climb = climbs[index];
       if (!climb) return;
+      // Tap target is inert for climbs the active board can't render — the
+      // row is already greyed via the `unsupported` prop, this aligns the
+      // tap target with the visual state so a user who picks an incompatible
+      // playlist climb doesn't see a generic snackbar.
+      if (unsupportedClimbs?.has(climb.uuid)) return;
       // During the onboarding tour's "climb-list" step, swallow the drawer
       // open and signal the tour — we want the user to just pick a climb so
       // the tour can advance, not fall into the play view.
@@ -442,7 +447,7 @@ const ClimbsList = ({
       }
       track('Climb List Row Clicked', { climbUuid: climb.uuid });
     },
-    [climbs],
+    [climbs, unsupportedClimbs],
   );
 
   const resolveBoardDetails = useCallback(

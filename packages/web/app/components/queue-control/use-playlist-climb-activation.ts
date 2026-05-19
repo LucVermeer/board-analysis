@@ -68,8 +68,15 @@ export function usePlaylistClimbActivation({
           climb.layoutId ?? selectedBoard?.layoutId ?? fallbackLayoutId,
         );
 
+      // Defence-in-depth: incompatible climbs should already be filtered at
+      // the tap target (climbs-list gates on unsupportedClimbs), but if a
+      // playlist row tap somehow reaches the hook without a resolvable board
+      // (e.g., user owns no boards), degrade to a plain activation rather
+      // than failing silently. setCurrentClimb still surfaces a snackbar via
+      // its validator when the active board can't accept the climb.
       if (!targetBoardDetails) {
-        await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
+        const activated = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
+        if (activated) dispatchOpenPlayDrawer();
         return;
       }
 

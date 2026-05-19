@@ -1,9 +1,9 @@
 import { renderHook, act } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
-import type { BoardDetails, Climb, ClimbQueueItem } from '@/app/lib/types';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 import { usePlaylistClimbActivation } from '../use-playlist-climb-activation';
 import { PLAY_DRAWER_EVENT } from '../play-drawer-event';
-import type { PlaylistSuggestionSource, QueueActionsType } from '../types';
+import type { ClimbQueueItem, PlaylistSuggestionSource, QueueActionsType } from '../types';
 import type { QueueBridgeBoardInfo } from '../queue-bridge-board-info-context';
 
 const boardDetails: BoardDetails = {
@@ -47,7 +47,7 @@ function makeQueueActions(
 }
 
 function makeBoardInfo(): QueueBridgeBoardInfo {
-  return { boardDetails, angle: 40, baseBoardPath: '/kilter/1/1/1' } as QueueBridgeBoardInfo;
+  return { boardDetails, angle: 40, hasActiveQueue: true, isHydrated: true };
 }
 
 describe('usePlaylistClimbActivation', () => {
