@@ -118,6 +118,16 @@ vi.mock('@/app/lib/url-utils', async () => {
 // Mock playlist board-config helper so cold-start seeding tests don't pull in
 // the real board constants data. Returns a simple, deterministic BoardDetails
 // shape per board type that the seed helper can stringify into baseBoardPath.
+// QueueBridgeProvider mounts `LiveActivityBridge` via `next/dynamic`. That
+// component's render path pulls in `useLiveActivity` → `useWsAuthToken` →
+// `useSession` (next-auth), which needs a `<SessionProvider>` we don't
+// stand up in these tests. The actual Live Activity behaviour is exercised
+// separately in `use-live-activity.test.ts` — here we just need the bridge
+// tree to mount without crashing on the dynamic import.
+vi.mock('@/app/lib/live-activity/live-activity-bridge', () => ({
+  default: () => null,
+}));
+
 vi.mock('@/app/lib/board-config-for-playlist', () => ({
   getBoardDetailsForPlaylist: (boardType: string, layoutId: number | null | undefined) => {
     if (!layoutId) return null;
