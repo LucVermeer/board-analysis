@@ -110,7 +110,15 @@ export default function SeshSettingsDrawer({
 
       if (angleIndex !== -1) {
         pathSegments[angleIndex] = newAngle.toString();
-        router.push(pathSegments.join('/'));
+        let newPath = pathSegments.join('/');
+        // Read live query string from window.location so filter state
+        // (mirrored to the URL via history.replaceState in QueueContext) is
+        // preserved across the angle change.
+        const queryString = window.location.search.slice(1);
+        if (queryString) {
+          newPath = `${newPath}?${queryString}`;
+        }
+        router.push(newPath);
       }
     },
     [boardDetails, angle, pathname, router],
