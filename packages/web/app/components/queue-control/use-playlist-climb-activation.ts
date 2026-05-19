@@ -5,6 +5,7 @@ import type { BoardDetails, Climb } from '@/app/lib/types';
 import { getBoardDetailsForPlaylist, getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
 import { createPlaylistSuggestionSource } from './playlist-suggestions';
 import { isAbortError } from './playlist-suggestion-refresh';
+import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import type { QueueActionsType } from './types';
 import type { QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 
@@ -85,6 +86,10 @@ export function usePlaylistClimbActivation({
 
       const activeItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: initialSource });
       if (!activeItem) return;
+      // Match the non-playlist browse-tap path (previewClimbFromBrowse) so a
+      // playlist row tap surfaces the play drawer rather than silently
+      // mutating state.
+      dispatchOpenPlayDrawer();
 
       refreshAbortRef.current?.abort();
       const abortController = new AbortController();
