@@ -265,10 +265,13 @@
     },
     "tickBar": {
       "commentPlaceholder": "Comentario...",
+      "commentAria": "Comentario de la marca",
       "closeAria": "Cerrar barra de marca",
       "collapseAria": "Contraer barra de marca",
       "expandAria": "Expandir barra de marca",
       "attemptLabel": "intento",
+      "flashLabel": "flash",
+      "tickLabel": "marca",
       "logAttemptAria": "Registrar intento",
       "saveTickAria": "Guardar marca"
     }
