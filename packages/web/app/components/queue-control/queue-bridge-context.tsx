@@ -129,6 +129,13 @@ function usePersistentSessionQueueAdapter(): {
     if (!profile?.id) return undefined;
     return { id: profile.id, username: username || '', avatarUrl };
   }, [profile?.id, username, avatarUrl]);
+  // NOTE: the main QueueContext keeps `playlistSuggestionSource` inside the
+  // queue reducer (so `INITIAL_QUEUE_DATA` / `UPDATE_QUEUE` clear it for free).
+  // The bridge stores it in component state because the bridge doesn't own a
+  // reducer — full-queue replacement paths in the bridge (FullSync, peer
+  // replace) must remember to call `setPlaylistSuggestionSourceState(null)`
+  // explicitly. If you add a new full-queue reset path to the bridge, plumb
+  // the clear through here too.
   const [playlistSuggestionSource, setPlaylistSuggestionSourceState] = useState<PlaylistSuggestionSource | null>(null);
 
   const isParty = !!ps.activeSession;

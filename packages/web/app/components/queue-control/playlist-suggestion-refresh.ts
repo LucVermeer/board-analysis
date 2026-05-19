@@ -2,6 +2,12 @@ import type { Climb } from '@/app/lib/types';
 
 export const PLAYLIST_SUGGESTION_REFRESH_PAGE_SIZE = 100;
 const MAX_PLAYLIST_SUGGESTION_REFRESH_PAGES = 10;
+// Soft cap on the prefetched next-up swipe buffer per activation. Once the
+// user swipes past the last loaded suggestion, the feed currently goes silent
+// instead of paging the next batch in — tracked for follow-up as
+// https://github.com/boardsesh/boardsesh/issues/2216 (infinite-scroll past
+// the cap). Until then, 250 is enough for a full session for typical playlist
+// sizes without burning a 10-page fetch on every activation.
 const MAX_PLAYLIST_SUGGESTION_REFRESH_CLIMBS_AFTER_ACTIVE = 250;
 
 type FetchPlaylistSuggestionPageArgs = {

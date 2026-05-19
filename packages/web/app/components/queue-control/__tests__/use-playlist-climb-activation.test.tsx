@@ -38,7 +38,10 @@ function makeClimb(uuid: string, overrides: Partial<Climb> = {}): Climb {
 }
 
 function makeQueueActions(
-  setCurrentClimbImpl: (climb: Climb, opts: { playlistSuggestionSource: PlaylistSuggestionSource | null }) => Promise<ClimbQueueItem | null>,
+  setCurrentClimbImpl: (
+    climb: Climb,
+    opts: { playlistSuggestionSource: PlaylistSuggestionSource | null },
+  ) => Promise<ClimbQueueItem | null>,
 ): Pick<QueueActionsType, 'setCurrentClimb' | 'refreshPlaylistSuggestionSource'> {
   return {
     setCurrentClimb: vi.fn(setCurrentClimbImpl),
@@ -60,7 +63,7 @@ describe('usePlaylistClimbActivation', () => {
     const drawerOpenListener = vi.fn();
     window.addEventListener(PLAY_DRAWER_EVENT, drawerOpenListener);
 
-    const queueActions = makeQueueActions(async () => ({ uuid: 'q-1', climb } as ClimbQueueItem));
+    const queueActions = makeQueueActions(async () => ({ uuid: 'q-1', climb }) as ClimbQueueItem);
 
     const { result } = renderHook(() =>
       usePlaylistClimbActivation({
