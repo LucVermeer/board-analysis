@@ -20,10 +20,11 @@ vi.mock('next/navigation', () => ({
 
 // Mutable suggestedClimbs so each test seeds its own walk.
 let mockSuggestedClimbs: Climb[] = [];
+let mockClimbSearchResults: Climb[] | null = null;
 
 vi.mock('../../queue-control/hooks/use-queue-data-fetching', () => ({
   useQueueDataFetching: () => ({
-    climbSearchResults: null,
+    climbSearchResults: mockClimbSearchResults,
     suggestedClimbs: mockSuggestedClimbs,
     totalSearchResultCount: 0,
     hasMoreResults: false,
@@ -201,6 +202,8 @@ function createWrapper() {
 describe('getNextClimbQueueItem with suggestionsOnly (non-driver swipe-forward)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSuggestedClimbs = [];
+    mockClimbSearchResults = null;
   });
 
   // Regression: the forward branch used to call
@@ -338,6 +341,191 @@ describe('getNextClimbQueueItem with suggestionsOnly (non-driver swipe-forward)'
   });
 });
 
-// Silence the unused-import lint by referencing act once (the suggestions
-// helpers are pure and don't mutate state, so we never wrap calls in `act`).
-void act;
+describe('getNextClimbQueueItem main-branch climbSearchResults walk', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSuggestedClimbs = [];
+    mockClimbSearchResults = null;
+  });
+
+  it('advances to results[anchorIdx + 1] when the anchor sits mid-list', () => {
+    const climbs = [
+      makeClimb('search-0', 'A'),
+      makeClimb('search-1', 'B'),
+      makeClimb('search-2', 'C'),
+      makeClimb('search-3', 'D'),
+      makeClimb('search-4', 'E'),
+    ];
+    mockClimbSearchResults = climbs;
+    mockSuggestedClimbs = climbs;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const anchorAtIdx2: ClimbQueueItem = {
+      uuid: 'anchor-queue-item',
+      climb: climbs[2],
+      suggested: false,
+    };
+    const next = result.current.getNextClimbQueueItem({ from: anchorAtIdx2 });
+    expect(next).not.toBeNull();
+    expect(next?.climb.uuid).toBe('search-3');
+    expect(next?.suggested).toBe(true);
+  });
+
+  it('does not oscillate to results[0] on repeated calls with the same anchor', () => {
+    const climbs = [makeClimb('search-0', 'A'), makeClimb('search-1', 'B'), makeClimb('search-2', 'C')];
+    mockClimbSearchResults = climbs;
+    mockSuggestedClimbs = climbs;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const anchorAtIdx1: ClimbQueueItem = {
+      uuid: 'anchor-queue-item',
+      climb: climbs[1],
+      suggested: false,
+    };
+    for (let i = 0; i < 3; i++) {
+      const next = result.current.getNextClimbQueueItem({ from: anchorAtIdx1 });
+      expect(next?.climb.uuid).toBe('search-2');
+    }
+  });
+
+  it('returns null when the anchor is the last item in climbSearchResults', () => {
+    const climbs = [makeClimb('search-0', 'A'), makeClimb('search-1', 'B')];
+    mockClimbSearchResults = climbs;
+    mockSuggestedClimbs = climbs;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const anchorAtEnd: ClimbQueueItem = {
+      uuid: 'anchor-queue-item',
+      climb: climbs[1],
+      suggested: false,
+    };
+    expect(result.current.getNextClimbQueueItem({ from: anchorAtEnd })).toBeNull();
+  });
+
+  it('returns null when the anchor is not in climbSearchResults (playlist case)', () => {
+    const searchList = [makeClimb('search-0', 'A'), makeClimb('search-1', 'B')];
+    mockClimbSearchResults = searchList;
+    mockSuggestedClimbs = searchList;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const playlistAnchor: ClimbQueueItem = {
+      uuid: 'anchor-playlist-item',
+      climb: makeClimb('playlist-only', 'P'),
+      suggested: false,
+    };
+    expect(result.current.getNextClimbQueueItem({ from: playlistAnchor })).toBeNull();
+  });
+
+  it('skips search results that are already in the queue', () => {
+    const climbs = [
+      makeClimb('search-0', 'A'),
+      makeClimb('search-1', 'B'),
+      makeClimb('search-2', 'C'),
+      makeClimb('search-3', 'D'),
+    ];
+    mockClimbSearchResults = climbs;
+    mockSuggestedClimbs = climbs;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    // Seed the queue via setCurrentClimbQueueItem with suggested: true so the
+    // reducer's DELTA_UPDATE_CURRENT_CLIMB path adds it to state.queue.
+    const queuedItem: ClimbQueueItem = {
+      uuid: 'queued-search-1',
+      climb: climbs[1],
+      suggested: true,
+    };
+    act(() => {
+      result.current.setCurrentClimbQueueItem(queuedItem);
+    });
+
+    const anchorAtIdx0: ClimbQueueItem = {
+      uuid: 'anchor-queue-item',
+      climb: climbs[0],
+      suggested: false,
+    };
+    const next = result.current.getNextClimbQueueItem({ from: anchorAtIdx0 });
+    expect(next?.climb.uuid).toBe('search-2');
+  });
+
+  it('returns null when climbSearchResults is null or empty', () => {
+    mockClimbSearchResults = null;
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const anchor: ClimbQueueItem = {
+      uuid: 'anchor-queue-item',
+      climb: makeClimb('any', 'X'),
+      suggested: false,
+    };
+    expect(result.current.getNextClimbQueueItem({ from: anchor })).toBeNull();
+
+    mockClimbSearchResults = [];
+    const { result: result2 } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+    expect(result2.current.getNextClimbQueueItem({ from: anchor })).toBeNull();
+  });
+});
+
+describe('getPreviousClimbQueueItem main-branch climbSearchResults walk', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSuggestedClimbs = [];
+    mockClimbSearchResults = null;
+  });
+
+  it('walks back to results[anchorIdx - 1] when the anchor sits mid-list', () => {
+    const climbs = [
+      makeClimb('search-0', 'A'),
+      makeClimb('search-1', 'B'),
+      makeClimb('search-2', 'C'),
+      makeClimb('search-3', 'D'),
+    ];
+    mockClimbSearchResults = climbs;
+    mockSuggestedClimbs = climbs;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const anchorAtIdx2: ClimbQueueItem = {
+      uuid: 'anchor-queue-item',
+      climb: climbs[2],
+      suggested: false,
+    };
+    const prev = result.current.getPreviousClimbQueueItem({ from: anchorAtIdx2 });
+    expect(prev).not.toBeNull();
+    expect(prev?.climb.uuid).toBe('search-1');
+    expect(prev?.suggested).toBe(true);
+  });
+
+  it('returns null when the anchor is the first item in climbSearchResults', () => {
+    const climbs = [makeClimb('search-0', 'A'), makeClimb('search-1', 'B')];
+    mockClimbSearchResults = climbs;
+    mockSuggestedClimbs = climbs;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const anchorAtStart: ClimbQueueItem = {
+      uuid: 'anchor-queue-item',
+      climb: climbs[0],
+      suggested: false,
+    };
+    expect(result.current.getPreviousClimbQueueItem({ from: anchorAtStart })).toBeNull();
+  });
+
+  it('returns null when the anchor is not in climbSearchResults (playlist case)', () => {
+    const searchList = [makeClimb('search-0', 'A'), makeClimb('search-1', 'B')];
+    mockClimbSearchResults = searchList;
+    mockSuggestedClimbs = searchList;
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    const playlistAnchor: ClimbQueueItem = {
+      uuid: 'anchor-playlist-item',
+      climb: makeClimb('playlist-only', 'P'),
+      suggested: false,
+    };
+    expect(result.current.getPreviousClimbQueueItem({ from: playlistAnchor })).toBeNull();
+  });
+});

@@ -84,6 +84,24 @@ const createClimbQueueItem = (
   suggested: !!suggested,
 });
 
+const findUnqueuedNeighborInSearchResults = (
+  results: readonly Climb[] | null,
+  anchorClimbUuid: string | undefined,
+  queue: readonly ClimbQueueItem[],
+  direction: 1 | -1,
+  buildSuggestedItem: (climb: Climb) => ClimbQueueItem,
+): ClimbQueueItem | null => {
+  if (!results || results.length === 0) return null;
+  const anchorIdx = results.findIndex((climb) => climb.uuid === anchorClimbUuid);
+  if (anchorIdx < 0) return null;
+  for (let i = anchorIdx + direction; i >= 0 && i < results.length; i += direction) {
+    const candidate = results[i];
+    if (queue.some((queueItem) => queueItem.climb?.uuid === candidate.uuid)) continue;
+    return buildSuggestedItem(candidate);
+  }
+  return null;
+};
+
 // Split contexts: actions (stable) vs data (changes frequently)
 export const QueueActionsContext = createContext<GraphQLQueueActionsType | undefined>(undefined);
 export const QueueDataContext = createContext<GraphQLQueueDataType | undefined>(undefined);
@@ -898,19 +916,21 @@ export const GraphQLQueueProvider = ({
       const nextClimb = anchorIdx < 0 ? latest.suggestedClimbs[0] : (latest.suggestedClimbs[anchorIdx + 1] ?? null);
       return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
-    const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
-    if (
-      (latest.state.queue.length === 0 || latest.state.queue.length <= queueItemIndex + 1) &&
-      latest.suggestedClimbs.length > 0
-    ) {
-      const nextClimb = latest.suggestedClimbs.find(
-        (climb: Climb) =>
-          climb.uuid !== anchorClimbUuid &&
-          !latest.state.queue.some((qItem: ClimbQueueItem) => qItem.climb?.uuid === climb.uuid),
-      );
-      return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
+    const queue = latest.state.queue;
+    const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
+    if (queueItemIndex >= 0 && queueItemIndex < queue.length - 1) {
+      return queue[queueItemIndex + 1];
     }
-    return queueItemIndex >= latest.state.queue.length - 1 ? null : latest.state.queue[queueItemIndex + 1];
+    // When the anchor isn't in climbSearchResults (e.g. a playlist climb),
+    // findUnqueuedNeighborInSearchResults returns null so swipe no-ops rather
+    // than jumping to an unrelated results[0].
+    return findUnqueuedNeighborInSearchResults(
+      latest.climbSearchResults,
+      anchorClimbUuid,
+      queue,
+      1,
+      buildSuggestedQueueItem,
+    );
   }, []);
 
   const getPreviousClimbQueueItem = useCallback(
@@ -920,6 +940,12 @@ export const GraphQLQueueProvider = ({
       const anchorClimbUuid = options?.from
         ? options.from.climb?.uuid
         : latest.state.currentClimbQueueItem?.climb?.uuid;
+      const buildSuggestedQueueItem = (climb: Climb): ClimbQueueItem => {
+        const suggestedItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo, true);
+        return latest.state.playlistSuggestionSource
+          ? { ...suggestedItem, uuid: getPlaylistPeekQueueItemUuid(climb.uuid) }
+          : suggestedItem;
+      };
       if (options?.suggestionsOnly) {
         // Non-driver previous: walk the suggestedClimbs array backwards.
         // No fall-through into the queue — that would let a non-driver scrub
@@ -930,10 +956,18 @@ export const GraphQLQueueProvider = ({
         // item, not a suggestion), there's no meaningful "previous suggestion."
         if (anchorIdx <= 0) return null;
         const prevClimb = latest.suggestedClimbs[anchorIdx - 1];
-        return prevClimb ? createClimbQueueItem(prevClimb, latest.clientId, latest.currentUserInfo, true) : null;
+        return prevClimb ? buildSuggestedQueueItem(prevClimb) : null;
       }
-      const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
-      return queueItemIndex > 0 ? latest.state.queue[queueItemIndex - 1] : null;
+      const queue = latest.state.queue;
+      const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
+      if (queueItemIndex > 0) return queue[queueItemIndex - 1];
+      return findUnqueuedNeighborInSearchResults(
+        latest.climbSearchResults,
+        anchorClimbUuid,
+        queue,
+        -1,
+        buildSuggestedQueueItem,
+      );
     },
     [],
   );
