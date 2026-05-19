@@ -24,7 +24,9 @@ export default async function ClimbViewSeoFragment({ climb, boardDetails }: Clim
   const layoutName = boardDetails.layout_name ?? '';
   const ascents = climb.ascensionist_count ?? 0;
 
-  const heading = t('metadata.view.seoHeading', { climbName: climb.name, grade });
+  // Draft climbs can have a null difficulty — fall back to the bare name so we
+  // don't render "{climbName} — " with a dangling em dash.
+  const heading = grade ? t('metadata.view.seoHeading', { climbName: climb.name, grade }) : climb.name;
   const summary = t('metadata.view.seoSummary', { boardName: boardDetails.board_name, layoutName });
   const setterSuffix = setter ? t('metadata.view.seoSetterSuffix', { setter }) : '';
   const ascentsSuffix = ascents > 0 ? t('metadata.view.seoAscentsSuffix', { ascents }) : '';

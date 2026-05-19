@@ -66,16 +66,21 @@ const BoardPageClimbsList = ({
   // subscribe — both components' effects run in the same React commit when
   // the page hydrates, and the listener registration would otherwise race
   // the dispatch. Stash the climb in a ref so the effect deps can key on the
-  // stable uuid identity instead of the object reference.
+  // stable uuid identity instead of the object reference. Track the last
+  // dispatched uuid (rather than a one-shot flag) so soft-navs back to the
+  // same /view/{uuid} after a detour through /list still re-open the drawer.
   const initialOpenClimbUuid = initialOpenClimb?.uuid;
   const initialOpenClimbRef = useRef(initialOpenClimb);
   initialOpenClimbRef.current = initialOpenClimb;
-  const hasDispatchedInitialOpenRef = useRef(false);
+  const lastDispatchedUuidRef = useRef<string | null>(null);
   useEffect(() => {
     const climb = initialOpenClimbRef.current;
-    if (!climb) return;
-    if (hasDispatchedInitialOpenRef.current) return;
-    hasDispatchedInitialOpenRef.current = true;
+    if (!climb) {
+      lastDispatchedUuidRef.current = null;
+      return;
+    }
+    if (lastDispatchedUuidRef.current === climb.uuid) return;
+    lastDispatchedUuidRef.current = climb.uuid;
     queueMicrotask(() => {
       dispatchOpenPlayDrawer(climb);
     });

@@ -134,6 +134,37 @@ describe('useDrawerUrlSync — list-tap flow', () => {
   });
 });
 
+describe('useDrawerUrlSync — enabled=false', () => {
+  it('is fully inert when enabled is false (wall-view mode peek gesture)', () => {
+    const before = window.history.length;
+    const startPath = getPath();
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+          enabled: false,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+    rerender({ isOpen: true, climb: CLIMB_B });
+    rerender({ isOpen: false, climb: CLIMB_B });
+
+    // URL and history must be untouched across the full open → swipe → close cycle.
+    expect(getPath()).toBe(startPath);
+    expect(window.history.length).toBe(before);
+
+    // popstate while disabled must not invoke onClose either.
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(onCloseMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('useDrawerUrlSync — direct-hit flow', () => {
   beforeEach(() => {
     mockPathname = '/kilter/original/12x12/default/40/view/climb-a-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
