@@ -143,6 +143,13 @@ The one SEO regression risk is that the drawer's first-render HTML is positioned
 - The back button works the way users expect: from a drawer-on-list state, back closes the drawer and returns to the list. From a direct-hit drawer, back returns to the previous site or tab.
 - The "full page" climb-view layout (with sidebar, two-column on desktop) disappears. **This is a real visual change on desktop.** Today's view page has a desktop sidebar layout via `ClimbViewActions` + `climb-view-sidebar.tsx`. The drawer is a bottom sheet. On desktop the drawer expands to ~80% viewport height. Confirm with design that this is acceptable; if not, scope a desktop drawer variant (wider, side-anchored) as Phase 3.
 
+## Known regressions
+
+Two intentional regressions on direct hits to `/view/{uuid}` (share-link flow) — both fall out of "the drawer is the first paint, not the list":
+
+- **Climbs list under the drawer is empty on SSR.** The view route passes `initialClimbs=[]` and lets React Query load the list asynchronously after the drawer hydrates. Users only see the list when they close the drawer; before then the empty list is hidden behind the drawer. Crawlers see no list at the view route, but the climb-list rows on `/list` (and the dedicated `ClimbViewSeoFragment`) carry the SEO weight. Acceptable per the pivot's "drawer first, list async" rule.
+- **`communityGrade` is no longer SSR-injected into the header.** The old standalone view page fetched `fetchClimbDetailData()` server-side and rendered the community grade in `ClimbDetailHeader`. The drawer's header reads `communityGrade` from a client-side GraphQL call, so direct-hit users briefly see the board's `difficulty` before the community value arrives. Worth restoring with a Suspense-friendly SSR query if community-grade share-links become a load-bearing surface.
+
 ## Implementation phases
 
 Each phase should ship behind a small, scoped change and be independently verifiable in dev.

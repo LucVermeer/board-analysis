@@ -89,19 +89,23 @@ export default async function ClimbViewPage(props: { params: Promise<BoardRouteP
       const size = sizes.find((s) => s.id === parsedParams.size_id);
       const selectedSets = sets.filter((s) => parsedParams.set_ids.includes(s.id));
 
-      if (layout && size && selectedSets.length > 0) {
-        const newUrl = constructClimbViewUrlWithSlugs(
-          parsedParams.board_name,
-          layout.name,
-          size.name,
-          size.description,
-          selectedSets.map((s) => s.name),
-          parsedParams.angle,
-          parsedParams.climb_uuid,
-          currentClimb.name,
-        );
-        permanentRedirect(newUrl);
+      if (!layout || !size || selectedSets.length === 0) {
+        // A numeric/uuid-only URL whose layout/size/sets can't be resolved
+        // doesn't correspond to a real climb on this board configuration —
+        // 404 rather than silently falling through to render an empty list.
+        notFound();
       }
+      const newUrl = constructClimbViewUrlWithSlugs(
+        parsedParams.board_name,
+        layout.name,
+        size.name,
+        size.description,
+        selectedSets.map((s) => s.name),
+        parsedParams.angle,
+        parsedParams.climb_uuid,
+        currentClimb.name,
+      );
+      permanentRedirect(newUrl);
     }
 
     const boardDetails = getBoardDetailsForBoard(parsedParams);

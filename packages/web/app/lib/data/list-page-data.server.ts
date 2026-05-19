@@ -19,10 +19,11 @@ export type ListPageData = {
 };
 
 /**
- * Shared server-side fetch for any page that renders the board climbs list:
- * the canonical `/list` route, the short `/b/{slug}/{angle}/list` route, and
- * the `/view/{climb_uuid}` routes (which now render the same list with the
- * play drawer pre-opened).
+ * Shared server-side fetch for the board climbs list — used by the canonical
+ * `/list` route and the short `/b/{slug}/{angle}/list` route. The two
+ * `/view/{climb_uuid}` routes intentionally do NOT call this; they pass
+ * `initialClimbs=[]` and let React Query load the list asynchronously so the
+ * drawer can paint immediately on SSR without waiting on the catalog query.
  *
  * Returns `null` if board details can't be resolved — callers should `notFound()`.
  */
