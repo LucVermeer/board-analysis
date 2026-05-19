@@ -12,26 +12,24 @@ export type GraphQLQueueActionsType = {
   dismissSessionSummary: () => void;
 } & QueueActionsType;
 
-// Frequently-changing state data extended with session state. Production
-// consumers should subscribe via the fine-grained `SessionDataType` /
-// `QueueListDataType` / `SearchDataType` / `CurrentClimbDataType` hooks
-// instead of this wide one — the type is still exported so the queue-bridge
-// tests (which assert on the shape) keep compiling without a rewrite.
-export type GraphQLQueueDataType = {
-  isSessionActive: boolean;
-  /** See SessionDataType.isPersistentSessionActive. Mirrored here so consumers
-   *  reading the combined queue context don't need a second hook. */
-  isPersistentSessionActive: boolean;
-  sessionId: string | null;
-  sessionSummary: SessionSummary | null;
-  sessionGoal: string | null;
-  connectionState: ConnectionState;
-  canMutate: boolean;
-  isDisconnected: boolean;
-} & QueueDataType;
-
-// Combined type for the test-only combined hook + the queue-bridge plumbing.
-export type GraphQLQueueContextType = GraphQLQueueActionsType & GraphQLQueueDataType;
+// Combined type for the test-only `useQueueContext` hook + the queue-bridge
+// plumbing. Production consumers should subscribe via the fine-grained
+// `SessionDataType` / `QueueListDataType` / `SearchDataType` /
+// `CurrentClimbDataType` hooks instead of this wide one — those drive the
+// targeted re-render path.
+export type GraphQLQueueContextType = GraphQLQueueActionsType &
+  QueueDataType & {
+    isSessionActive: boolean;
+    /** See SessionDataType.isPersistentSessionActive. Mirrored here so consumers
+     *  reading the combined queue context don't need a second hook. */
+    isPersistentSessionActive: boolean;
+    sessionId: string | null;
+    sessionSummary: SessionSummary | null;
+    sessionGoal: string | null;
+    connectionState: ConnectionState;
+    canMutate: boolean;
+    isDisconnected: boolean;
+  };
 
 // --- Fine-grained context types for targeted subscriptions ---
 

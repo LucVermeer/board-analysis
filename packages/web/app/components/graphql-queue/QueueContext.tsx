@@ -59,7 +59,6 @@ import {
 import type {
   GraphQLQueueContextType,
   GraphQLQueueActionsType,
-  GraphQLQueueDataType,
   GraphQLQueueContextProps,
   CurrentClimbDataType,
   QueueListDataType,
@@ -68,10 +67,8 @@ import type {
 } from './types';
 import type { SetActiveClimbSource } from './set-active-climb-event';
 
-// Re-export types so direct importers still work. `GraphQLQueueDataType` is
-// surfaced for the queue-bridge tests' assertions; production consumers
-// should reach for the fine-grained data types instead.
-export type { GraphQLQueueContextType, GraphQLQueueActionsType, GraphQLQueueDataType } from './types';
+// Re-export types so direct importers still work.
+export type { GraphQLQueueContextType, GraphQLQueueActionsType } from './types';
 export type { CurrentClimbDataType, QueueListDataType, SearchDataType, SessionDataType } from './types';
 
 const createClimbQueueItem = (
@@ -138,13 +135,6 @@ export const QueueActionsContext = createContext<GraphQLQueueActionsType | undef
 // should prefer the fine-grained hooks (`useCurrentClimb`, `useSessionData`,
 // `useQueueList`, `useSearchData`).
 export const QueueContext = createContext<GraphQLQueueContextType | undefined>(undefined);
-// Test-only context. The standalone data context was retired in PR #2198
-// phase 3.6 — no production code subscribes to it, the bridge no longer
-// provides it, and the GraphQLQueueProvider tree doesn't wrap with it. It
-// stays exported as a typed `Context<GraphQLQueueDataType | undefined>` so
-// the `queue-bridge-context` tests (which mock the entire module and supply
-// their own dataCtx) keep compiling without a rewrite.
-export const QueueDataContext = createContext<GraphQLQueueDataType | undefined>(undefined);
 
 // Fine-grained contexts for targeted subscriptions (reduces re-render cascade)
 export const CurrentClimbContext = createContext<CurrentClimbDataType | undefined>(undefined);

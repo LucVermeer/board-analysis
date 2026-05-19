@@ -64,6 +64,16 @@ export async function buildSessionPayload(
   ctx: ConnectionContext,
   inputs: SessionPayloadInputs = {},
 ) {
+  // `leaderConnectionId` only feeds the `isLeader` computation. When the
+  // caller already knows `isLeader` (joinSession, queries.session), the
+  // fetched value would be discarded — short-circuit to skip the Redis
+  // round-trip entirely. Otherwise fall through to the standard override
+  // path (with `inputs.leaderConnectionId` honoured if supplied).
+  const leaderFetch =
+    inputs.isLeader !== undefined
+      ? Promise.resolve<string | null>(null)
+      : override(inputs.leaderConnectionId, () => roomManager.getSessionLeaderConnectionId(sessionId));
+
   const [users, queueState, sessionData, driverParticipantId, lastConnectedBoardSerial, leaderConnectionId] =
     await Promise.all([
       override(inputs.users, () => roomManager.getSessionUsers(sessionId)),
@@ -71,7 +81,7 @@ export async function buildSessionPayload(
       override(inputs.sessionData, () => roomManager.getSessionById(sessionId)),
       override(inputs.driverParticipantId, () => roomManager.getSessionDriverParticipantId(sessionId)),
       override(inputs.lastConnectedBoardSerial, () => roomManager.getSessionBoardSerial(sessionId)),
-      override(inputs.leaderConnectionId, () => roomManager.getSessionLeaderConnectionId(sessionId)),
+      leaderFetch,
     ]);
 
   return {

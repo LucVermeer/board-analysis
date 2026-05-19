@@ -6,11 +6,9 @@ import { createPlaylistSuggestionSource } from '../playlist-suggestions';
 import {
   QueueContext,
   QueueActionsContext,
-  QueueDataContext,
   CurrentClimbUuidContext,
   type GraphQLQueueContextType,
   type GraphQLQueueActionsType,
-  type GraphQLQueueDataType,
 } from '../../graphql-queue/QueueContext';
 import type { BoardDetails, Climb, Angle } from '@/app/lib/types';
 import type { ClimbQueueItem } from '../types';
@@ -69,7 +67,6 @@ vi.mock('../../graphql-queue/QueueContext', () => {
   const React = require('react');
   const ctx = React.createContext(undefined);
   const actionsCtx = React.createContext(undefined);
-  const dataCtx = React.createContext(undefined);
   const currentClimbCtx = React.createContext(undefined);
   const currentClimbUuidCtx = React.createContext(null);
   const queueListCtx = React.createContext(undefined);
@@ -78,14 +75,12 @@ vi.mock('../../graphql-queue/QueueContext', () => {
   return {
     QueueContext: ctx,
     QueueActionsContext: actionsCtx,
-    QueueDataContext: dataCtx,
     CurrentClimbContext: currentClimbCtx,
     CurrentClimbUuidContext: currentClimbUuidCtx,
     QueueListContext: queueListCtx,
     SearchContext: searchCtx,
     SessionContext: sessionCtx,
     useQueueActions: () => React.useContext(actionsCtx),
-    useQueueData: () => React.useContext(dataCtx),
     __esModule: true,
   };
 });
@@ -366,40 +361,6 @@ function extractActions(ctx: GraphQLQueueContextType): GraphQLQueueActionsType {
     disconnect: ctx.disconnect,
     takeControl: ctx.takeControl,
     releaseControl: ctx.releaseControl,
-  };
-}
-
-/** Extract the data slice from a combined context (simulates GraphQLQueueProvider's dataValue) */
-function extractData(ctx: GraphQLQueueContextType): GraphQLQueueDataType {
-  return {
-    queue: ctx.queue,
-    currentClimbQueueItem: ctx.currentClimbQueueItem,
-    currentClimb: ctx.currentClimb,
-    climbSearchParams: ctx.climbSearchParams,
-    climbSearchResults: ctx.climbSearchResults,
-    suggestedClimbs: ctx.suggestedClimbs,
-    playlistSuggestionSource: ctx.playlistSuggestionSource,
-    totalSearchResultCount: ctx.totalSearchResultCount,
-    hasMoreResults: ctx.hasMoreResults,
-    isFetchingClimbs: ctx.isFetchingClimbs,
-    isFetchingNextPage: ctx.isFetchingNextPage,
-    hasDoneFirstFetch: ctx.hasDoneFirstFetch,
-    viewOnlyMode: ctx.viewOnlyMode,
-    connectionState: ctx.connectionState,
-    canMutate: ctx.canMutate,
-    parsedParams: ctx.parsedParams,
-    isSessionActive: ctx.isSessionActive,
-    isPersistentSessionActive: ctx.isPersistentSessionActive,
-    sessionId: ctx.sessionId,
-    sessionSummary: ctx.sessionSummary,
-    sessionGoal: ctx.sessionGoal,
-    users: ctx.users,
-    clientId: ctx.clientId,
-    isLeader: ctx.isLeader,
-    isBackendMode: ctx.isBackendMode,
-    hasConnected: ctx.hasConnected,
-    connectionError: ctx.connectionError,
-    isDisconnected: ctx.isDisconnected,
   };
 }
 
@@ -1446,18 +1407,15 @@ describe('queue-bridge-context', () => {
      */
     function renderInjector(boardRouteCtx: GraphQLQueueContextType | undefined) {
       const actions = boardRouteCtx ? extractActions(boardRouteCtx) : undefined;
-      const data = boardRouteCtx ? extractData(boardRouteCtx) : undefined;
       const wrapper = ({ children }: { children: React.ReactNode }) => (
         <QueueBridgeProvider>
           {/* Hook (children) reads bridge's QueueContext = effectiveContext */}
           {children}
           {/* Inner providers simulate GraphQLQueueProvider on board route */}
           <QueueActionsContext.Provider value={actions}>
-            <QueueDataContext.Provider value={data}>
-              <QueueContext.Provider value={boardRouteCtx}>
-                <QueueBridgeInjector boardDetails={bd} angle={angle} />
-              </QueueContext.Provider>
-            </QueueDataContext.Provider>
+            <QueueContext.Provider value={boardRouteCtx}>
+              <QueueBridgeInjector boardDetails={bd} angle={angle} />
+            </QueueContext.Provider>
           </QueueActionsContext.Provider>
         </QueueBridgeProvider>
       );
@@ -1520,16 +1478,13 @@ describe('queue-bridge-context', () => {
 
       const wrapper = ({ children }: { children: React.ReactNode }) => {
         const actions = boardRouteCtx ? extractActions(boardRouteCtx) : undefined;
-        const data = boardRouteCtx ? extractData(boardRouteCtx) : undefined;
         return (
           <QueueBridgeProvider>
             {children}
             <QueueActionsContext.Provider value={actions}>
-              <QueueDataContext.Provider value={data}>
-                <QueueContext.Provider value={boardRouteCtx}>
-                  <QueueBridgeInjector boardDetails={bd} angle={angle} />
-                </QueueContext.Provider>
-              </QueueDataContext.Provider>
+              <QueueContext.Provider value={boardRouteCtx}>
+                <QueueBridgeInjector boardDetails={bd} angle={angle} />
+              </QueueContext.Provider>
             </QueueActionsContext.Provider>
           </QueueBridgeProvider>
         );
@@ -1560,17 +1515,14 @@ describe('queue-bridge-context', () => {
       const mockDisconnect = vi.fn();
       const fakeCtx = createFakeQueueContext({ disconnect: mockDisconnect });
       const actions = extractActions(fakeCtx);
-      const data = extractData(fakeCtx);
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
         <QueueBridgeProvider>
           {children}
           <QueueActionsContext.Provider value={actions}>
-            <QueueDataContext.Provider value={data}>
-              <QueueContext.Provider value={fakeCtx}>
-                <QueueBridgeInjector boardDetails={bd} angle={angle} />
-              </QueueContext.Provider>
-            </QueueDataContext.Provider>
+            <QueueContext.Provider value={fakeCtx}>
+              <QueueBridgeInjector boardDetails={bd} angle={angle} />
+            </QueueContext.Provider>
           </QueueActionsContext.Provider>
         </QueueBridgeProvider>
       );
@@ -1586,16 +1538,13 @@ describe('queue-bridge-context', () => {
 
       const wrapper = ({ children }: { children: React.ReactNode }) => {
         const actions = boardRouteCtx ? extractActions(boardRouteCtx) : undefined;
-        const data = boardRouteCtx ? extractData(boardRouteCtx) : undefined;
         return (
           <QueueBridgeProvider>
             {children}
             <QueueActionsContext.Provider value={actions}>
-              <QueueDataContext.Provider value={data}>
-                <QueueContext.Provider value={boardRouteCtx}>
-                  <QueueBridgeInjector boardDetails={bd} angle={angle} />
-                </QueueContext.Provider>
-              </QueueDataContext.Provider>
+              <QueueContext.Provider value={boardRouteCtx}>
+                <QueueBridgeInjector boardDetails={bd} angle={angle} />
+              </QueueContext.Provider>
             </QueueActionsContext.Provider>
           </QueueBridgeProvider>
         );
@@ -1651,22 +1600,17 @@ describe('queue-bridge-context', () => {
       };
 
       const fakeCtx1 = createFakeQueueContext({ queue: [], ...stableActions });
-      const data1 = extractData(fakeCtx1);
       const fakeCtx2 = createFakeQueueContext({ queue: [createTestQueueItem()], ...stableActions });
-      const data2 = extractData(fakeCtx2);
 
       let currentCtx = fakeCtx1;
-      let currentData: GraphQLQueueDataType = data1;
 
       const wrapper = ({ children }: { children: React.ReactNode }) => (
         <QueueBridgeProvider>
           {children}
           <QueueActionsContext.Provider value={stableActions}>
-            <QueueDataContext.Provider value={currentData}>
-              <QueueContext.Provider value={currentCtx}>
-                <QueueBridgeInjector boardDetails={bd} angle={angle} />
-              </QueueContext.Provider>
-            </QueueDataContext.Provider>
+            <QueueContext.Provider value={currentCtx}>
+              <QueueBridgeInjector boardDetails={bd} angle={angle} />
+            </QueueContext.Provider>
           </QueueActionsContext.Provider>
         </QueueBridgeProvider>
       );
@@ -1684,7 +1628,6 @@ describe('queue-bridge-context', () => {
 
       // Change only data (queue items changed), keep same actions object
       currentCtx = fakeCtx2;
-      currentData = data2;
       rerender();
 
       const actionsRef2 = result.current.actions;
