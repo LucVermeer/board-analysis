@@ -56,15 +56,28 @@ export async function setCurrentClimbAndPublish(
     }
   }
 
-  if (item !== null) {
-    // Record the climb as the latest authoritative wall climb so the next
-    // `confirmClimbOnWall` accepts it even if the driver navigates on before
-    // the confirm arrives. Best-effort: don't fail the publish if the recency
-    // record breaks (Redis hiccup).
-    await roomManager.pushRecentClimb(sessionId, item.climb.uuid).catch(() => undefined);
+  // Null-item path: queue updated to clear `currentClimbQueueItem`, nothing
+  // to add and no climb uuid to record. Early-return so the rest of the
+  // function can assume `item` is non-null.
+  if (item === null) {
+    pubsub.publishQueueEvent(sessionId, {
+      __typename: 'CurrentClimbChanged',
+      sequence,
+      stateHash,
+      item: null,
+      clientId: clientId ?? null,
+      correlationId: correlationId ?? null,
+    });
+    return { sequence, stateHash, queue: updatedQueue, addedToQueue: false };
   }
 
-  if (addedToQueue && item !== null) {
+  // Record the climb as the latest authoritative wall climb so the next
+  // `confirmClimbOnWall` accepts it even if the driver navigates on before
+  // the confirm arrives. Best-effort: don't fail the publish if the recency
+  // record breaks (Redis hiccup).
+  await roomManager.pushRecentClimb(sessionId, item.climb.uuid).catch(() => undefined);
+
+  if (addedToQueue) {
     pubsub.publishQueueEvent(sessionId, {
       __typename: 'FullSync',
       sequence,

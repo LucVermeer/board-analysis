@@ -766,9 +766,11 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   const [injectedBoardDetails, setInjectedBoardDetails] = useState<BoardDetails | null>(null);
   const [injectedAngle, setInjectedAngle] = useState<Angle>(0);
 
-  // Injected values stored in refs to avoid cleanup/setup cycles. Combined
-  // context now carries every data field, so we no longer need a separate
-  // data ref / version counter.
+  // Injected values stored in refs to avoid cleanup/setup cycles. The combined
+  // context now carries every data field, so the separate `injectedDataRef`
+  // that lived here before is gone — `injectedContextRef` is the single
+  // source. The two version counters below are still needed (they drive the
+  // `effectiveContext` / `effectiveActions` useMemo dep arrays).
   const injectedContextRef = useRef<GraphQLQueueContextType | null>(null);
   const injectedActionsRef = useRef<GraphQLQueueActionsType | null>(null);
   // Board state refs for reading during clear() — can't use state in stable callbacks

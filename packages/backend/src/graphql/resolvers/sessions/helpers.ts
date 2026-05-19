@@ -42,6 +42,17 @@ export type SessionPayloadInputs = {
 };
 
 /**
+ * Use the caller-supplied override when present (including legitimate-null
+ * values like a freshly-cleared driver), otherwise lazily run the fetcher.
+ * Keeps `Promise.all` callsites readable — `inputs.X !== undefined ?
+ * Promise.resolve(inputs.X) : roomManager.getX(...)` repeated six times is
+ * mostly punctuation.
+ */
+function override<T>(value: T | undefined, fetch: () => Promise<T>): Promise<T> {
+  return value !== undefined ? Promise.resolve(value) : fetch();
+}
+
+/**
  * Build the 16-field Session GraphQL payload, fanning the four-to-six
  * independent Redis reads into a single `Promise.all`. Replaces the verbatim
  * `id`/`name`/`boardPath`/`users`/`queueState`/`isLeader`/...-shaped return
@@ -55,18 +66,12 @@ export async function buildSessionPayload(
 ) {
   const [users, queueState, sessionData, driverParticipantId, lastConnectedBoardSerial, leaderConnectionId] =
     await Promise.all([
-      inputs.users !== undefined ? Promise.resolve(inputs.users) : roomManager.getSessionUsers(sessionId),
-      inputs.queueState !== undefined ? Promise.resolve(inputs.queueState) : roomManager.getQueueState(sessionId),
-      inputs.sessionData !== undefined ? Promise.resolve(inputs.sessionData) : roomManager.getSessionById(sessionId),
-      inputs.driverParticipantId !== undefined
-        ? Promise.resolve(inputs.driverParticipantId)
-        : roomManager.getSessionDriverParticipantId(sessionId),
-      inputs.lastConnectedBoardSerial !== undefined
-        ? Promise.resolve(inputs.lastConnectedBoardSerial)
-        : roomManager.getSessionBoardSerial(sessionId),
-      inputs.leaderConnectionId !== undefined
-        ? Promise.resolve(inputs.leaderConnectionId)
-        : roomManager.getSessionLeaderConnectionId(sessionId),
+      override(inputs.users, () => roomManager.getSessionUsers(sessionId)),
+      override(inputs.queueState, () => roomManager.getQueueState(sessionId)),
+      override(inputs.sessionData, () => roomManager.getSessionById(sessionId)),
+      override(inputs.driverParticipantId, () => roomManager.getSessionDriverParticipantId(sessionId)),
+      override(inputs.lastConnectedBoardSerial, () => roomManager.getSessionBoardSerial(sessionId)),
+      override(inputs.leaderConnectionId, () => roomManager.getSessionLeaderConnectionId(sessionId)),
     ]);
 
   return {
@@ -86,6 +91,12 @@ export async function buildSessionPayload(
     clientId: inputs.clientId !== undefined ? inputs.clientId : ctx.connectionId,
     participantId: inputs.participantId ?? ctx.participantId ?? ctx.connectionId ?? '',
     goal: sessionData?.goal || null,
+    // `isPublic` defaults to `true` when `sessionData` is null. The null path
+    // is a brief race during session cleanup (the in-memory session still
+    // exists but the DB row has just been deleted) — defaulting open here
+    // matches the pre-helper behaviour every Session-returning resolver used.
+    // Don't "fix" this to `false`: it would flip visibility for any live
+    // subscriber that observes a Session payload during the cleanup window.
     isPublic: sessionData?.isPublic ?? true,
     startedAt: sessionData?.startedAt?.toISOString() || null,
     endedAt: sessionData?.endedAt?.toISOString() || null,

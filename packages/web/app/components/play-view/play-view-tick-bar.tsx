@@ -167,7 +167,7 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
                     onFocus={handleCommentFocus}
                     onBlur={handleCommentBlur}
                     slotProps={{
-                      htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                      htmlInput: { maxLength: 2000, 'aria-label': t('playView.tickBar.commentAria') },
                       input: {
                         startAdornment: (
                           <InputAdornment position="start">
@@ -202,7 +202,7 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
                   onFocus={handleCommentFocus}
                   onBlur={handleCommentBlur}
                   slotProps={{
-                    htmlInput: { maxLength: 2000, 'aria-label': 'Tick comment' },
+                    htmlInput: { maxLength: 2000, 'aria-label': t('playView.tickBar.commentAria') },
                   }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
@@ -232,7 +232,7 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
                   <PersonFallingIcon />
                 </IconButton>
               </TickButtonWithLabel>
-              <TickButtonWithLabel label={isFlash ? 'flash' : 'tick'}>
+              <TickButtonWithLabel label={isFlash ? t('playView.tickBar.flashLabel') : t('playView.tickBar.tickLabel')}>
                 <IconButton
                   id="button-tick"
                   onClick={(e) => quickTickBarRef.current?.save(e.currentTarget)}
