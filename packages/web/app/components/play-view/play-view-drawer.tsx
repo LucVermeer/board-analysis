@@ -66,6 +66,7 @@ import { getGradeTintColor } from '@/app/lib/grade-colors';
 import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import { getPreference, setPreference } from '@/app/lib/user-preferences-db';
 import QueueDrawer from './queue-drawer';
+import { useDrawerUrlSync } from './use-drawer-url-sync';
 
 /** Window with optional requestIdleCallback (not available in all browsers). */
 type WindowWithIdleCallback = Window & {
@@ -561,6 +562,13 @@ type PlayViewDrawerProps = {
    *  the drawer displays the wall climb directly). */
   drawerDisplayedItem?: ClimbQueueItem | null;
   setDrawerDisplayedItem?: (item: ClimbQueueItem | null) => void;
+  /**
+   * When true, the drawer paints in its open state on first mount with no
+   * slide-in animation. Used on /view/{uuid} hard-refresh so the drawer is
+   * visible immediately on SSR paint. After the first mount this prop is a
+   * no-op — subsequent close/open cycles animate normally.
+   */
+  initialOpenWithoutAnimation?: boolean;
   /** Wall-view mode (queue-control-bar pivot Phase 3). When true the drawer
    *  was opened from the bar body and renders in a read-only navigation
    *  state: hides prev/next, disables swipe, shows the "Currently on the
@@ -576,6 +584,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   onPaperRef,
   drawerDisplayedItem = null,
   setDrawerDisplayedItem,
+  initialOpenWithoutAnimation = false,
   wallView = false,
 }) => {
   const { t } = useTranslation('session');
@@ -702,36 +711,37 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
   useWakeLock(isOpen);
 
-  // Hash-based back button support
-  useEffect(() => {
-    if (!isOpen) return;
-
-    window.history.pushState(null, '', '#playing');
-
-    const handlePopState = () => {
-      setActiveDrawer('none');
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      if (window.location.hash === '#playing') {
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      }
-    };
-  }, [isOpen, setActiveDrawer]);
-
   const handleClose = useCallback(() => {
     if (isActionsOpen || isQueueOpen || isPlaylistSelectorOpen) return;
     setDrawerOpen(false);
     setActiveDrawer('none');
-    if (window.location.hash === '#playing') {
-      window.history.back();
-    }
   }, [setActiveDrawer, isActionsOpen, isQueueOpen, isPlaylistSelectorOpen]);
 
   // Compute ascent info for tick FAB badge
   const currentAngle = typeof angle === 'string' ? parseInt(angle, 10) : angle;
+
+  // Sync the browser URL with the drawer's open state so the address bar
+  // reflects /view/{climb_uuid} while open, replaceState tracks the displayed
+  // climb on prev/next/swipe, and browser back closes the drawer.
+  // Browser back must close unconditionally (don't gate on nested drawers like
+  // handleClose does — back is a hardware affordance that shouldn't be
+  // swallowed silently). The hook also runs in viewOnlyMode — URL sync is a
+  // presentational concern, and read-only spectators should still be able to
+  // copy a shareable link from their address bar.
+  const handleUrlSyncClose = useCallback(() => {
+    setDrawerOpen(false);
+    setActiveDrawer('none');
+  }, [setActiveDrawer]);
+  useDrawerUrlSync({
+    isOpen,
+    displayedClimb: currentClimb,
+    boardDetails,
+    angle: currentAngle,
+    onClose: handleUrlSyncClose,
+    // Wall-view mode is a peek gesture at the wall climb, not a shareable
+    // /view/{uuid} surface — skip the URL push so the address bar stays put.
+    enabled: !wallView,
+  });
   const filteredLogbook = useMemo(() => {
     if (!logbook || !currentClimb) return [];
     return logbook.filter((asc) => asc.climb_uuid === currentClimb.uuid && Number(asc.angle) === currentAngle);
@@ -749,6 +759,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // committed to" and not a non-driver's preview surface (pivot rule 5).
   // Drivers (and solo, where isDriver is always true) get the existing
   // queue → suggestions fall-through.
+  //
+  // When the user enters via a /view/{uuid} direct hit, the climbs list is
+  // empty until React Query resolves — in that window getNextClimbQueueItem
+  // returns null and the `!!nextItem` check below naturally disables nav.
+  // Once `suggestedClimbs` populate, swipe + prev/next light up against them.
   const navigateFromItem = effectiveItem ?? null;
   const swipeSuggestionsOnly = isPersistentSessionActive && !isDriver;
   const nextItem = getNextClimbQueueItem({ from: navigateFromItem, suggestionsOnly: swipeSuggestionsOnly });
@@ -1117,11 +1132,17 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     };
   }, []);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // When opened from a /view/ direct hit (initialOpenWithoutAnimation), seed
+  // drawerOpen synchronously so the SSR-rendered DOM already has the drawer
+  // visible. Otherwise start closed and let the open-effect below drive the
+  // animation as usual.
+  const [drawerOpen, setDrawerOpen] = useState(() => initialOpenWithoutAnimation && isOpen);
   const openRafRef = useRef<number>(0);
-  const hasBeenMountedRef = useRef(false);
+  // Seed `hasBeenMounted` to true when we open synchronously so the open
+  // effect below doesn't try to RAF the transition on the same render.
+  const hasBeenMountedRef = useRef(initialOpenWithoutAnimation && isOpen);
 
-  const [contentReady, setContentReady] = useState(false);
+  const [contentReady, setContentReady] = useState(() => initialOpenWithoutAnimation && isOpen);
   useEffect(() => {
     const setReady = () => {
       setContentReady(true);
@@ -1189,9 +1210,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const handleBoardPullClose = useCallback(() => {
     setDrawerOpen(false);
     setActiveDrawer('none');
-    if (window.location.hash === '#playing') {
-      window.history.back();
-    }
   }, [setActiveDrawer]);
 
   const boardPull = usePullToClose({
@@ -1405,6 +1423,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
       paperRef={combinedPaperRef}
       swipeEnabled={!isActionsOpen && !isQueueOpen && !isPlaylistSelectorOpen}
       showDragHandle
+      disableEnterAnimation={initialOpenWithoutAnimation}
       styles={{
         body: { padding: 0 },
         wrapper: { height: '100%', backgroundColor: 'var(--semantic-background)' },

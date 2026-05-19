@@ -12,12 +12,12 @@ import {
 import { parseRouteParams } from '@/app/lib/url-utils.server';
 
 import type { Metadata } from 'next';
-import { fetchClimbDetailData } from '@/app/lib/data/climb-detail-data.server';
-import ClimbDetailPageServer from '@/app/components/climb-detail/climb-detail-page.server';
+import BoardPageClimbsList from '@/app/components/board-page/board-page-climbs-list';
+import { buildOgBoardRenderUrl, buildOverlayUrl } from '@/app/components/board-renderer/util';
 import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
-import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
 import { getServerTranslation } from '@/app/lib/i18n/server';
 import { createPageMetadata } from '@/app/lib/seo/metadata';
+import ClimbViewSeoFragment from '@/app/components/climb-detail/climb-view-seo-fragment';
 
 export async function generateMetadata(props: { params: Promise<BoardRouteParametersWithUuid> }): Promise<Metadata> {
   const params = await props.params;
@@ -64,72 +64,71 @@ export async function generateMetadata(props: { params: Promise<BoardRouteParame
   }
 }
 
-export default async function DynamicResultsPage(props: { params: Promise<BoardRouteParametersWithUuid> }) {
+export default async function ClimbViewPage(props: { params: Promise<BoardRouteParametersWithUuid> }) {
   const params = await props.params;
 
   try {
     const { parsedParams, isNumericFormat } = await parseRouteParams(params);
+    const needsSlugRedirect = isNumericFormat || isUuidOnly(params.climb_uuid);
 
-    if (isNumericFormat || isUuidOnly(params.climb_uuid)) {
-      const currentClimb = await getClimb(parsedParams);
-      const layouts = await import('@/app/lib/data/queries').then((m) => m.getLayouts(parsedParams.board_name));
-      const sizes = await import('@/app/lib/data/queries').then((m) =>
-        m.getSizes(parsedParams.board_name, parsedParams.layout_id),
-      );
-      const sets = await import('@/app/lib/data/queries').then((m) =>
-        m.getSets(parsedParams.board_name, parsedParams.layout_id, parsedParams.size_id),
-      );
+    // Fetch the climb once. On the redirect path we use its name to build the
+    // slug URL; on the normal path we pass it through to the SEO fragment and
+    // the drawer.
+    const currentClimb = await getClimb(parsedParams);
+    if (!currentClimb) notFound();
+
+    if (needsSlugRedirect) {
+      const queries = await import('@/app/lib/data/queries');
+      const [layouts, sizes, sets] = await Promise.all([
+        queries.getLayouts(parsedParams.board_name),
+        queries.getSizes(parsedParams.board_name, parsedParams.layout_id),
+        queries.getSets(parsedParams.board_name, parsedParams.layout_id, parsedParams.size_id),
+      ]);
 
       const layout = layouts.find((l) => l.id === parsedParams.layout_id);
       const size = sizes.find((s) => s.id === parsedParams.size_id);
       const selectedSets = sets.filter((s) => parsedParams.set_ids.includes(s.id));
 
-      if (layout && size && selectedSets.length > 0) {
-        const newUrl = constructClimbViewUrlWithSlugs(
-          parsedParams.board_name,
-          layout.name,
-          size.name,
-          size.description,
-          selectedSets.map((s) => s.name),
-          parsedParams.angle,
-          parsedParams.climb_uuid,
-          currentClimb.name,
-        );
-        permanentRedirect(newUrl);
+      if (!layout || !size || selectedSets.length === 0) {
+        // A numeric/uuid-only URL whose layout/size/sets can't be resolved
+        // doesn't correspond to a real climb on this board configuration —
+        // 404 rather than silently falling through to render an empty list.
+        notFound();
       }
+      const newUrl = constructClimbViewUrlWithSlugs(
+        parsedParams.board_name,
+        layout.name,
+        size.name,
+        size.description,
+        selectedSets.map((s) => s.name),
+        parsedParams.angle,
+        parsedParams.climb_uuid,
+        currentClimb.name,
+      );
+      permanentRedirect(newUrl);
     }
 
     const boardDetails = getBoardDetailsForBoard(parsedParams);
-    const [currentClimb, detailData] = await Promise.all([
-      getClimb(parsedParams),
-      fetchClimbDetailData({
-        boardName: parsedParams.board_name,
-        climbUuid: parsedParams.climb_uuid,
-        angle: parsedParams.angle,
-      }),
-    ]);
 
-    if (!currentClimb) {
-      notFound();
-    }
-
+    // Warm the full-resolution overlay for the viewed climb so the drawer's
+    // board render appears as soon as possible after hydration. The climbs
+    // list is no longer SSR-fetched here — the drawer is the primary surface
+    // on this route, and React Query loads the list async on mount.
     scheduleOverlayWarming({ boardDetails, climbs: [currentClimb], variant: 'full' });
-
-    const climbWithProcessedData = {
-      ...currentClimb,
-      communityGrade: detailData.communityGrade,
-    };
+    const preloadUrl = currentClimb.frames ? buildOverlayUrl(boardDetails, currentClimb.frames, false) : null;
 
     return (
-      <ClimbDetailPageServer
-        climb={climbWithProcessedData}
-        boardDetails={boardDetails}
-        climbUuid={parsedParams.climb_uuid}
-        boardType={parsedParams.board_name}
-        angle={parsedParams.angle}
-        currentClimbDifficulty={currentClimb.difficulty ?? undefined}
-        boardName={parsedParams.board_name}
-      />
+      <>
+        {preloadUrl && <link rel="preload" as="image" href={preloadUrl} fetchPriority="high" />}
+        <ClimbViewSeoFragment climb={currentClimb} boardDetails={boardDetails} />
+        <BoardPageClimbsList
+          {...parsedParams}
+          boardDetails={boardDetails}
+          initialClimbs={[]}
+          initialHasMore
+          initialOpenClimb={currentClimb}
+        />
+      </>
     );
   } catch (error) {
     // Re-throw Next.js internal errors (permanentRedirect, notFound, etc.) so they

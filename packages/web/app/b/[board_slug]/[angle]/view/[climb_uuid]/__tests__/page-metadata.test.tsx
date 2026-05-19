@@ -74,12 +74,6 @@ vi.mock('@/app/lib/data/queries', () => ({
   })),
 }));
 
-vi.mock('@/app/lib/data/climb-detail-data.server', () => ({
-  fetchClimbDetailData: vi.fn(async () => ({
-    communityGrade: null,
-  })),
-}));
-
 vi.mock('@/app/lib/warm-overlay-cache', () => ({
   scheduleOverlayWarming: vi.fn(),
 }));
@@ -88,12 +82,18 @@ vi.mock('@/app/lib/url-utils', () => ({
   extractUuidFromSlug: vi.fn((value: string) => value),
 }));
 
-vi.mock('@/app/components/climb-detail/climb-detail-page.server', () => ({
-  default: () => null,
-}));
-
 vi.mock('@/app/components/board-renderer/util', () => ({
   buildOgBoardRenderUrl: vi.fn(() => '/api/internal/board-render?board_name=kilter&variant=og&format=png'),
+  buildOverlayUrl: vi.fn(() => '/api/internal/board-render?board_name=kilter&variant=overlay'),
+}));
+
+// Stubs for the page body's imports — generateMetadata never uses them, but
+// importing the page module pulls them in.
+vi.mock('@/app/components/board-page/board-page-climbs-list', () => ({
+  default: () => null,
+}));
+vi.mock('@/app/components/climb-detail/climb-view-seo-fragment', () => ({
+  default: () => null,
 }));
 
 const pageModule = await import('../page');

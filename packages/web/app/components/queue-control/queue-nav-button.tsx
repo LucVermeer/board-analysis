@@ -2,9 +2,8 @@
 
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import LocaleLink from '@/app/components/i18n/locale-link';
 import { useQueueActions, useSessionData } from '../graphql-queue';
-import { constructPlayUrlWithSlugs, getContextAwareClimbViewUrl } from '@/app/lib/url-utils';
+import { constructPlayUrlWithSlugs } from '@/app/lib/url-utils';
 import type { BoardDetails } from '@/app/lib/types';
 import { useResolvedBoardDetails } from '@/app/hooks/use-resolved-board-details';
 import FastForwardOutlined from '@mui/icons-material/FastForwardOutlined';
@@ -40,16 +39,12 @@ export default function QueueNavButton({ direction, navigate, boardDetails }: Qu
   const Icon = ICON[direction];
   const { setCurrentClimbQueueItem, getNextClimbQueueItem, getPreviousClimbQueueItem } = useQueueActions();
   const { viewOnlyMode } = useSessionData();
-  const { rawParams, angle, pathname, searchParams, isPlayPage, resolvedDetails } =
-    useResolvedBoardDetails(boardDetails);
+  const { rawParams, angle, searchParams, isPlayPage, resolvedDetails } = useResolvedBoardDetails(boardDetails);
 
   const target = direction === 'next' ? getNextClimbQueueItem() : getPreviousClimbQueueItem();
 
-  const buildClimbUrl = () => {
+  const buildPlayUrl = () => {
     if (!target) return '';
-    if (!isPlayPage) {
-      return getContextAwareClimbViewUrl(pathname, resolvedDetails, angle, target.climb.uuid, target.climb.name);
-    }
     const slugUrl =
       resolvedDetails.layout_name && resolvedDetails.size_name && resolvedDetails.set_names
         ? constructPlayUrlWithSlugs(
@@ -75,29 +70,21 @@ export default function QueueNavButton({ direction, navigate, boardDetails }: Qu
       method: 'button',
       boardLayout: boardDetails?.layout_name || '',
     });
+    // On /play/ routes the URL is the source of truth — push the new climb's
+    // play URL. On /view/ routes useDrawerUrlSync handles the URL via the
+    // drawer's open lifecycle; pushing here would race the hook's cleanup.
     if (navigate && isPlayPage) {
-      const url = buildClimbUrl();
+      const url = buildPlayUrl();
       if (url) window.history.pushState(null, '', url);
     }
-    // buildClimbUrl is a closure over current state; recreating each fire is
+    // buildPlayUrl is a closure over current state; recreating each fire is
     // intentional. target is the only ref-stable input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, navigate, isPlayPage, viewOnlyMode, setCurrentClimbQueueItem, boardDetails?.layout_name, direction]);
 
-  const button = (
+  return (
     <IconButton aria-label={ariaLabel} onClick={fireAdvance} disabled={!target || viewOnlyMode}>
       <Icon />
     </IconButton>
   );
-
-  if (!viewOnlyMode && navigate && target && !isPlayPage) {
-    return (
-      <LocaleLink href={buildClimbUrl()} prefetch={false} onClick={fireAdvance}>
-        <IconButton aria-label={ariaLabel}>
-          <Icon />
-        </IconButton>
-      </LocaleLink>
-    );
-  }
-  return button;
 }

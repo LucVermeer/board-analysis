@@ -18,7 +18,6 @@ import { track } from '@/app/lib/analytics';
 import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
 import QueueNavButton from './queue-nav-button';
 import { usePathname, useParams, useSearchParams } from 'next/navigation';
-import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import LocaleLink from '@/app/components/i18n/locale-link';
 import {
   constructPlayUrlWithSlugs,
@@ -162,15 +161,23 @@ export type QueueControlBarProps = {
 
 const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }) => {
   const { t } = useTranslation('session');
-  const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>('none');
-  const [startSeshOpen, setStartSeshOpen] = useState(false);
   const pathname = usePathname();
+  // Seed the drawer open on direct hits to /view/{uuid} so the SSR HTML
+  // already includes the open drawer DOM. Paired with
+  // `initialOpenWithoutAnimation` on PlayViewDrawer this means the drawer
+  // paints immediately with no slide-in. The bar reset effect below preserves
+  // this initial open by skipping its first run.
+  const initialPathnameRef = useRef(pathname);
+  const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(() => (pathname.includes('/view/') ? 'play' : 'none'));
+  const [startSeshOpen, setStartSeshOpen] = useState(false);
   const params = useParams<BoardRouteParameters>();
   const searchParams = useSearchParams();
-  const router = useLocaleRouter();
 
-  // Reset activeDrawer on navigation
+  // Reset activeDrawer on navigation. Skip the very first run — when we just
+  // seeded the drawer open from the URL, this would slam it shut before paint.
   useEffect(() => {
+    if (pathname === initialPathnameRef.current) return;
+    initialPathnameRef.current = pathname;
     setActiveDrawer('none');
   }, [pathname]);
 
@@ -222,16 +229,23 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   // Listen for play drawer open requests from climb list items that live
   // outside this component's React tree (board page, liked list, queue
-  // suggestions, queue items). In an active party session, the event's
-  // `detail.climb` payload becomes the drawer's locally-displayed item so
-  // browse does not yank the wall away from other party members. In solo, the
-  // caller pre-mutated state.currentClimbQueueItem via setCurrentClimb (the
-  // previewClimbFromBrowse helper handles the fork).
+  // suggestions, queue items). When the event carries a climb payload, store
+  // it as the drawer's locally-displayed item so the drawer can render the
+  // requested climb. This matters in two cases:
+  //   - Party sessions: browse-doesn't-yank — `previewClimbFromBrowse` uses
+  //     this path so non-drivers don't change the wall climb for others.
+  //   - Solo direct hits to /view/{uuid}: the page dispatches with the SSR-
+  //     fetched climb so the drawer has something to display before the queue
+  //     context's `currentClimbQueueItem` is seeded.
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = readPlayDrawerEventDetail(event);
       const climb = detail?.climb;
-      if (climb && isPersistentSessionActive) {
+      // Always store a climb payload when present — both party mode
+      // (preview-doesn't-yank via previewClimbFromBrowse) and solo direct
+      // hits to /view/{uuid} depend on this so the drawer has something to
+      // display before the queue context's currentClimbQueueItem is seeded.
+      if (climb) {
         setDrawerDisplayedItem({ climb, uuid: uuidv4(), suggested: true });
       } else {
         setDrawerDisplayedItem(null);
@@ -241,7 +255,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     };
     window.addEventListener(PLAY_DRAWER_EVENT, handler);
     return () => window.removeEventListener(PLAY_DRAWER_EVENT, handler);
-  }, [isPersistentSessionActive]);
+  }, []);
 
   const handleCloseDrawer = useCallback(() => {
     setActiveDrawer('none');
@@ -423,7 +437,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     [pathname, boardDetails, angle, params, searchParams, isPlayPage],
   );
 
-  // Handle swipe navigation
+  // Handle swipe navigation. On /play/ the URL is the source of truth — push
+  // the new climb's play URL. On /view/ useDrawerUrlSync owns URL state via
+  // the drawer's open lifecycle; navigating here would race its cleanup and
+  // close the drawer mid-swipe. Other pages (e.g. /list) get queue-only
+  // updates as before.
   const handleSwipeNext = useCallback(() => {
     if (!nextClimb || viewOnlyMode) return;
 
@@ -434,26 +452,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       boardLayout: boardDetails?.layout_name || '',
     });
 
-    if (shouldNavigate) {
+    if (isPlayPage) {
       const url = buildClimbUrl(nextClimb.climb);
-      if (url) {
-        if (isPlayPage) {
-          window.history.pushState(null, '', url);
-        } else {
-          router.push(url);
-        }
-      }
+      if (url) window.history.pushState(null, '', url);
     }
-  }, [
-    nextClimb,
-    viewOnlyMode,
-    setCurrentClimbQueueItem,
-    shouldNavigate,
-    router,
-    buildClimbUrl,
-    boardDetails,
-    isPlayPage,
-  ]);
+  }, [nextClimb, viewOnlyMode, setCurrentClimbQueueItem, buildClimbUrl, boardDetails, isPlayPage]);
 
   const handleSwipePrevious = useCallback(() => {
     if (!previousClimb || viewOnlyMode) return;
@@ -465,26 +468,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       boardLayout: boardDetails?.layout_name || '',
     });
 
-    if (shouldNavigate) {
+    if (isPlayPage) {
       const url = buildClimbUrl(previousClimb.climb);
-      if (url) {
-        if (isPlayPage) {
-          window.history.pushState(null, '', url);
-        } else {
-          router.push(url);
-        }
-      }
+      if (url) window.history.pushState(null, '', url);
     }
-  }, [
-    previousClimb,
-    viewOnlyMode,
-    setCurrentClimbQueueItem,
-    shouldNavigate,
-    router,
-    buildClimbUrl,
-    boardDetails,
-    isPlayPage,
-  ]);
+  }, [previousClimb, viewOnlyMode, setCurrentClimbQueueItem, buildClimbUrl, boardDetails, isPlayPage]);
 
   const tickBarActive = activeDrawer === 'tick';
   const canSwipeNext = !viewOnlyMode && !!nextClimb && !tickBarActive;
@@ -1437,6 +1425,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         angle={angle}
         drawerDisplayedItem={drawerDisplayedItem}
         setDrawerDisplayedItem={setDrawerDisplayedItem}
+        initialOpenWithoutAnimation={isViewPage}
         wallView={drawerWallView}
       />
 

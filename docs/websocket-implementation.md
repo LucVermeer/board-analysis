@@ -280,7 +280,7 @@ The WebSocket connection should remain stable when users navigate within the sam
 The `getBaseBoardPath()` utility in `url-utils.ts` extracts the stable board configuration path by stripping:
 
 - `/play/[climb_uuid]` - climb being viewed
-- `/view/[climb_slug]` - climb detail view
+- `/view/[climb_slug]` - climbs list with the play drawer pre-opened on a specific climb
 - `/list`, `/create` - view type
 - `/{angle}` - board angle (numeric segment at end)
 
