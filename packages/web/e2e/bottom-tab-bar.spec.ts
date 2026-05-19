@@ -1,6 +1,6 @@
 import { type Page, test, expect } from '@playwright/test';
 import { loginAs } from './helpers/auth';
-import { waitForBoardListReady } from './helpers/waits';
+import { clickUntilVisible, waitForBoardListReady } from './helpers/waits';
 
 /**
  * E2E tests for the bottom tab bar navigation.
@@ -132,10 +132,17 @@ test.describe('Bottom Tab Bar - Navigation', () => {
     await page.goto('/');
     await waitForPageReady(page);
 
-    await bottomTabButton(page, 'You').click();
-
-    // The auth modal title is the guard defined at bottom-tab-bar.tsx:322
-    await expect(page.getByText('Sign in to see your progress')).toBeVisible({ timeout: 10000 });
+    // The onClick guard in bottom-tab-bar.tsx only short-circuits the NextLink
+    // navigation when `sessionStatus !== 'loading'`. When CI hits the page
+    // before next-auth's /api/auth/session round-trip completes, the click
+    // falls through to the link's default behaviour and navigates to /you
+    // (the layout then bounces unauthenticated users back to /, but the
+    // modal never opens and this test fails). Re-click until the modal
+    // appears — once useSession resolves the very next click takes the
+    // preventDefault path.
+    const modal = page.getByText('Sign in to see your progress');
+    await clickUntilVisible(page, bottomTabButton(page, 'You'), modal, { waitTimeout: 5_000 });
+    await expect(modal).toBeVisible();
     // Should NOT have navigated away from /
     await expect(page).toHaveURL('/');
   });
@@ -153,7 +160,17 @@ test.describe('Bottom Tab Bar - Navigation', () => {
     await page.goto(boardUrl);
     await waitForPageReady(page);
 
-    await bottomTabButton(page, 'Create').click();
+    // The Create tab has two render branches in bottom-tab-bar.tsx: when
+    // `createClimbUrl` is computable (board context is known) it renders as
+    // a NextLink anchor that navigates to `.../create`; otherwise it falls
+    // back to a button that opens a board-selector drawer. boardDetails on
+    // this route is plumbed through the QueueBridge, not SSR props, so on
+    // a fresh navigation there's a brief window where the fallback button
+    // is rendered. Wait for the link variant specifically so the click
+    // never lands on the drawer-opening fallback.
+    const createLink = page.locator(bottomTabBar).getByRole('link', { name: 'Create' });
+    await expect(createLink).toBeVisible({ timeout: 15_000 });
+    await createLink.click();
 
     await expect(page).toHaveURL(/\/create$/, { timeout: 15000 });
     await expect(page.locator(bottomTabBar)).toBeVisible();

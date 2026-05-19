@@ -42,15 +42,21 @@ test.describe('Grid mode — ascent badge', () => {
     // showOnlyCompleted=true restricts the list to climbs the test user
     // has flashed or sent at the current angle, so every visible card
     // must render an ascent badge.
+    // The badge requires a full client-side chain — next-auth session
+    // resolution → /api/internal/ws-auth → GraphQL `ticks` fetch via
+    // useLogbook → re-render — after a fresh page load. On a slow CI
+    // shard that chain regularly takes >15s, so allow 30s before
+    // declaring the badge missing.
     const listBadges = page.locator(ASCENT_BADGE);
-    await expect(listBadges.first()).toBeVisible({ timeout: 15_000 });
+    await expect(listBadges.first()).toBeVisible({ timeout: 30_000 });
     expect(await listBadges.count()).toBeGreaterThan(0);
 
     // Switch to grid mode
     await page.getByRole('button', { name: 'Grid view' }).click();
     await expect(page.locator(CLIMB_CARD).first()).toBeVisible({ timeout: 15_000 });
 
-    // Grid mode must also show badges
+    // Grid mode must also show badges. Logbook is already hydrated from
+    // the list-mode assertion above, so the default expect timeout is fine.
     const gridBadges = page.locator(CLIMB_CARD).locator(ASCENT_BADGE);
     await expect(gridBadges.first()).toBeVisible({ timeout: 15_000 });
     expect(await gridBadges.count()).toBeGreaterThan(0);
