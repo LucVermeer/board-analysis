@@ -917,13 +917,25 @@ export const GraphQLQueueProvider = ({
       return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
     const queue = latest.state.queue;
+    // With no anchor at all (no current climb, no `from`), Next surfaces queue[0]
+    // so the Queue bar's Next button can start a queue the user has built but
+    // not yet activated. An anchor that just isn't in the queue (drawer
+    // preview, playlist climb) falls through to the search-results walk instead.
+    if (anchorUuid == null) {
+      return queue[0] ?? null;
+    }
     const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
     if (queueItemIndex >= 0 && queueItemIndex < queue.length - 1) {
       return queue[queueItemIndex + 1];
     }
-    // When the anchor isn't in climbSearchResults (e.g. a playlist climb),
-    // findUnqueuedNeighborInSearchResults returns null so swipe no-ops rather
-    // than jumping to an unrelated results[0].
+    // Playlist-suggestion mode: suggestedClimbs is the curated next-up feed
+    // (climbs after the activated one, queued items already filtered out).
+    // The anchor isn't in this feed, so position-based walking doesn't apply —
+    // the next-up is whatever sits at the head.
+    if (latest.state.playlistSuggestionSource) {
+      const nextClimb = latest.suggestedClimbs[0];
+      return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
+    }
     return findUnqueuedNeighborInSearchResults(
       latest.climbSearchResults,
       anchorClimbUuid,
@@ -961,6 +973,11 @@ export const GraphQLQueueProvider = ({
       const queue = latest.state.queue;
       const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
       if (queueItemIndex > 0) return queue[queueItemIndex - 1];
+      // In playlist-suggestion mode there's no "previous playlist climb" once
+      // the activated climb is current — the playlist is consumed forward
+      // only. Don't fall through to climbSearchResults, that would surface
+      // unrelated results.
+      if (latest.state.playlistSuggestionSource) return null;
       return findUnqueuedNeighborInSearchResults(
         latest.climbSearchResults,
         anchorClimbUuid,

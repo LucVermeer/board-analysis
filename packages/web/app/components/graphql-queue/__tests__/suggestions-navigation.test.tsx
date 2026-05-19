@@ -467,6 +467,30 @@ describe('getNextClimbQueueItem main-branch climbSearchResults walk', () => {
     const { result: result2 } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
     expect(result2.current.getNextClimbQueueItem({ from: anchor })).toBeNull();
   });
+
+  // Regression guard: when the user has queued climbs (via the add-to-queue
+  // button) but never activated one, currentClimbQueueItem is null. Without
+  // an explicit queue[0] short-circuit the Queue bar's Next button would be
+  // disabled even though the queue has a climb ready to start.
+  it('returns queue[0] when there is no current climb and the queue has items', () => {
+    const climbA = makeClimb('queued-0', 'A');
+    const climbB = makeClimb('queued-1', 'B');
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    act(() => {
+      result.current.addToQueue(climbA);
+      result.current.addToQueue(climbB);
+    });
+
+    const next = result.current.getNextClimbQueueItem();
+    expect(next).not.toBeNull();
+    expect(next?.climb.uuid).toBe('queued-0');
+  });
+
+  it('returns null when there is no current climb and the queue is empty', () => {
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+    expect(result.current.getNextClimbQueueItem()).toBeNull();
+  });
 });
 
 describe('getPreviousClimbQueueItem main-branch climbSearchResults walk', () => {
