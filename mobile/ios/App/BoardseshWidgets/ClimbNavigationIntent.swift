@@ -29,14 +29,18 @@ enum ClimbNavigationDirection: String {
 enum ClimbNavigationIntent {
     private static let logger = Logger(subsystem: "com.boardsesh.app", category: "LiveActivityIntent")
 
+    /// CorrelationId the backend's `/api/widget/navigate` handler uses when it
+    /// broadcasts `CurrentClimbChanged` after a successful HTTP widget call.
+    /// Kept in sync with `widget-navigate.ts`'s `'widget-navigate'` literal —
+    /// changing one without the other breaks the JS reducer's own-echo
+    /// suppression and causes the BLE-paired phone to re-fire the BLE write.
+    static let httpSuccessCorrelationId = "widget-navigate"
+
     static func perform(direction: ClimbNavigationDirection, label: String) async {
-        #if DEBUG
-        // Lets us confirm in Console.app which process iOS chose to perform
-        // the intent in. Kept under DEBUG so production builds don't log on
-        // every tap, but dev builds surface immediately if Apple ever
-        // changes the routing.
-        logger.debug("\(label).perform() running in bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public)")
-        #endif
+        // One notice per intent firing — production TestFlight builds need
+        // this signal to diagnose "widget UI moved but wall didn't" reports.
+        // Volume is bounded by user taps so the log isn't noisy.
+        logger.notice("\(label).perform() running bundle=\(Bundle.main.bundleIdentifier ?? "unknown", privacy: .public) process=\(ProcessInfo.processInfo.processName, privacy: .public) direction=\(direction.rawValue, privacy: .public)")
 
         guard let defaults = SharedConstants.sharedDefaults else { return }
 
@@ -73,10 +77,24 @@ enum ClimbNavigationIntent {
         #endif
 
         let httpSuccess = await WidgetNetworking.sendNavigation(action: direction.rawValue, currentIndex: newIndex)
-        if !httpSuccess {
+
+        // Always tell the JS side that navigation happened so its reducer can
+        // run the optimistic `dispatchWidgetNavigation` path on board routes.
+        // On HTTP success we use the static correlationId the backend will
+        // echo back; on failure we set pendingActionKey so the Darwin handler
+        // (in the main app) sends a WebSocket mutation fallback with a fresh
+        // UUID before notifying JS.
+        defaults.set(direction.rawValue, forKey: SharedConstants.widgetNavigateActionKey)
+        if httpSuccess {
+            defaults.set(httpSuccessCorrelationId, forKey: SharedConstants.widgetNavigateCorrelationIdKey)
+            defaults.removeObject(forKey: SharedConstants.pendingActionKey)
+        } else {
+            // Mutation-fallback path: handler generates its own UUID, writes
+            // it back to widgetNavigateCorrelationIdKey, then notifies JS.
             defaults.set(direction.rawValue, forKey: SharedConstants.pendingActionKey)
-            postQueueNavigateDarwinNotification()
+            defaults.removeObject(forKey: SharedConstants.widgetNavigateCorrelationIdKey)
         }
+        postQueueNavigateDarwinNotification()
 
         #if !WIDGET_EXTENSION
         await bleWrite
