@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { track } from '@/app/lib/analytics';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import { useQuery } from '@tanstack/react-query';
@@ -42,7 +42,6 @@ export default function AngleSelector({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const router = useLocaleRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const currentAngleRef = useRef<HTMLDivElement>(null);
   const isDark = useIsDarkMode();
 
@@ -91,8 +90,10 @@ export default function AngleSelector({
       if (angleIndex !== -1) {
         pathSegments[angleIndex] = newAngle.toString();
         let newPath = pathSegments.join('/');
-        // Preserve search params when changing angle
-        const queryString = searchParams.toString();
+        // Read live query string from window.location — QueueContext mirrors
+        // filter state via history.replaceState, which Next.js's
+        // useSearchParams() does not observe, so it would otherwise be stale.
+        const queryString = window.location.search.slice(1);
         if (queryString) {
           newPath = `${newPath}?${queryString}`;
         }

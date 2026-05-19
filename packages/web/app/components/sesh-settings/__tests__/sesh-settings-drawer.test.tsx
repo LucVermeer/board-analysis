@@ -296,6 +296,22 @@ describe('SeshSettingsDrawer', () => {
       expect(screen.queryByTestId('angle-controls')).toBeNull();
       expect(mockPush).not.toHaveBeenCalled();
     });
+
+    it('preserves URL query string (live filter state) when changing angle', () => {
+      mockPathname = '/kilter/1/10/1,2/40/list';
+      mockAngle = 40;
+      // Mirrors what QueueContext does via history.replaceState when the user
+      // edits filters — the Next.js router never sees this, but
+      // window.location.search reflects it.
+      window.history.replaceState({}, '', '/kilter/1/10/1,2/40/list?minGrade=10&onlyClassics=true');
+      try {
+        render(<SeshSettingsDrawer open onClose={vi.fn()} />);
+        fireEvent.click(screen.getByTestId('change-angle-45'));
+        expect(mockPush).toHaveBeenCalledWith('/kilter/1/10/1,2/45/list?minGrade=10&onlyClassics=true');
+      } finally {
+        window.history.replaceState({}, '', '/');
+      }
+    });
   });
 
   describe('handleStopSession', () => {
