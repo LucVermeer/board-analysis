@@ -1,5 +1,5 @@
 import type { BoardDetails, Climb } from '@/app/lib/types';
-import type { ClimbQueue, ClimbQueueItem, PlaylistSuggestionSource, SetCurrentClimbOptions } from './types';
+import type { ClimbQueue, ClimbQueueItem, PlaylistSuggestionSource } from './types';
 import { canAddClimbToBoard } from '@/app/lib/board-compatibility';
 
 export function getQueueBoardKey(boardDetails: BoardDetails): string {
@@ -60,14 +60,6 @@ export function playlistSuggestionSourceMatches(
     current?.activatedClimbUuid === next.activatedClimbUuid &&
     current?.boardKey === next.boardKey
   );
-}
-
-export function getPlaylistSuggestionSourceOverride(
-  options?: SetCurrentClimbOptions,
-): PlaylistSuggestionSource | null | undefined {
-  if (!options) return undefined;
-  if ('clearPlaylistSuggestionSource' in options) return null;
-  return options.playlistSuggestionSource;
 }
 
 export function getPlaylistSuggestedClimbs(source: PlaylistSuggestionSource | null, queue: ClimbQueue): Climb[] {

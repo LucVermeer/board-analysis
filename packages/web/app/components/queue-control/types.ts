@@ -31,9 +31,9 @@ export type PlaylistSuggestionSource = {
   climbs: Climb[];
 };
 
-export type SetCurrentClimbOptions =
-  | { playlistSuggestionSource: PlaylistSuggestionSource }
-  | { clearPlaylistSuggestionSource: true };
+export type SetCurrentClimbOptions = {
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
+};
 
 export type QueueState = {
   queue: ClimbQueue;
@@ -116,7 +116,7 @@ export type QueueActionsType = {
    *  so callers can capture its uuid (e.g. the create form tracks this uuid
    *  to later replace the item in place on subsequent saves). Resolves to
    *  null when validation fails or the mutation is guarded. */
-  setCurrentClimb: (climb: Climb, options?: SetCurrentClimbOptions) => Promise<ClimbQueueItem | null>;
+  setCurrentClimb: (climb: Climb, options: SetCurrentClimbOptions) => Promise<ClimbQueueItem | null>;
   setCurrentClimbQueueItem: (item: ClimbQueueItem) => void;
   /** Browse-initiated drawer open. In solo (no active party session) this is
    *  equivalent to setCurrentClimb + opening the play drawer — the climb is

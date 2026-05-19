@@ -5,7 +5,6 @@ import { queueReducer } from '../reducer';
 import {
   createPlaylistSuggestionSource,
   getPlaylistPeekQueueItemUuid,
-  getPlaylistSuggestionSourceOverride,
   getPlaylistSuggestedClimbs,
   insertQueueItemAfterCurrent,
   mergeUniquePlaylistClimbs,
@@ -221,20 +220,6 @@ describe('playlist suggestions', () => {
 
     expect(result).toBe(state);
     expect(result.playlistSuggestionSource).toEqual(currentSource);
-  });
-
-  it('treats omitted playlist source options as preserve and explicit clear as clear', () => {
-    const activated = makeClimb('activated');
-    const source = createPlaylistSuggestionSource({
-      playlistUuid: 'playlist-1',
-      activatedClimb: activated,
-      climbs: [activated],
-      boardDetails,
-    });
-
-    expect(getPlaylistSuggestionSourceOverride()).toBeUndefined();
-    expect(getPlaylistSuggestionSourceOverride({ clearPlaylistSuggestionSource: true })).toBeNull();
-    expect(getPlaylistSuggestionSourceOverride({ playlistSuggestionSource: source })).toEqual(source);
   });
 
   it('uses a deterministic playlist peek queue item id for repeated next peeks', () => {

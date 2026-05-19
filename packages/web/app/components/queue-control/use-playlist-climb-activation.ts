@@ -68,7 +68,7 @@ export function usePlaylistClimbActivation({
         );
 
       if (!targetBoardDetails) {
-        await queueActions.setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
+        await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
         return;
       }
 

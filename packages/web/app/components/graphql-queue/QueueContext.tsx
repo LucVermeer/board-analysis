@@ -16,7 +16,6 @@ import type {
 } from '../queue-control/types';
 import {
   getPlaylistPeekQueueItemUuid,
-  getPlaylistSuggestionSourceOverride,
   getPlaylistSuggestedClimbs,
   insertQueueItemAfterCurrent,
   isPlaylistPeekQueueItemUuid,
@@ -527,12 +526,12 @@ export const GraphQLQueueProvider = ({
   // subsequent edits. Resolves to null when validation fails or the mutation
   // is guarded.
   const setCurrentClimb = useCallback(
-    async (climb: Climb, options?: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
+    async (climb: Climb, options: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
       const startTime = performance.now();
       const latest = latestRef.current;
       if (latest.guardMutation()) return null;
       if (!latest.validateQueueAdd(climb)) return null;
-      const playlistSuggestionSource = getPlaylistSuggestionSourceOverride(options);
+      const { playlistSuggestionSource } = options;
       const previousPlaylistSuggestionSource = latest.state.playlistSuggestionSource;
       const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
       const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
@@ -573,9 +572,7 @@ export const GraphQLQueueProvider = ({
         } catch (error: unknown) {
           console.error('Failed to set current climb:', error);
           if (correlationId) latest.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
-          if (playlistSuggestionSource !== undefined) {
-            latest.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: previousPlaylistSuggestionSource });
-          }
+          latest.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: previousPlaylistSuggestionSource });
           trackQueueOperationError('setCurrentClimb', mode);
         }
       } else {
@@ -603,10 +600,10 @@ export const GraphQLQueueProvider = ({
         return;
       }
       // Solo, or driver in party: pre-mutate state (broadcasts when party
-      // active) then open the drawer. Pass the clearPlaylistSuggestionSource
-      // marker so activating a non-playlist climb clears any stale playlist
-      // source carried over from a prior activation.
-      void setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
+      // active) then open the drawer. Pass `playlistSuggestionSource: null`
+      // so activating a non-playlist climb clears any stale playlist source
+      // carried over from a prior activation.
+      void setCurrentClimb(climb, { playlistSuggestionSource: null });
       dispatchOpenPlayDrawer();
     },
     [setCurrentClimb],
@@ -628,10 +625,12 @@ export const GraphQLQueueProvider = ({
       if (latest.guardMutation()) return null;
 
       // Solo: there's no party server-side driver concept. Fall through to the
-      // existing setCurrentClimb path so BLE still gets the climb.
+      // existing setCurrentClimb path so BLE still gets the climb. Clear the
+      // playlist suggestion source — taking wall-control on a climb that the
+      // caller didn't tag as a playlist activation isn't a playlist context.
       if (!latest.isPersistentSessionActive) {
         if (!climb) return null;
-        return setCurrentClimb(climb);
+        return setCurrentClimb(climb, { playlistSuggestionSource: null });
       }
 
       const startTime = performance.now();

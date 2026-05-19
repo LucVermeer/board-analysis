@@ -266,7 +266,7 @@ describe('QueueContext offline mutations', () => {
       mockSetCurrentClimb.mockClear();
 
       await act(async () => {
-        await result.current.setCurrentClimb(mockClimb3);
+        await result.current.setCurrentClimb(mockClimb3, { playlistSuggestionSource: null });
       });
 
       expect(mockAddQueueItem).toHaveBeenCalledTimes(1);
@@ -296,7 +296,7 @@ describe('QueueContext offline mutations', () => {
       mockSetCurrentClimb.mockClear();
 
       await act(async () => {
-        await result.current.setCurrentClimb(mockClimb2);
+        await result.current.setCurrentClimb(mockClimb2, { playlistSuggestionSource: null });
       });
 
       expect(mockAddQueueItem).toHaveBeenCalledTimes(1);

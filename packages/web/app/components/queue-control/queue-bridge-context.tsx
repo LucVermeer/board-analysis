@@ -40,7 +40,6 @@ import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import { deriveIsDriver } from '../graphql-queue/driver-state';
 import {
-  getPlaylistSuggestionSourceOverride,
   getPlaylistSuggestedClimbs,
   getPlaylistPeekQueueItemUuid,
   insertQueueItemAfterCurrent,
@@ -353,7 +352,7 @@ function usePersistentSessionQueueAdapter(): {
   }, []);
 
   const setCurrentClimb = useCallback(
-    async (climb: Climb, options?: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
+    async (climb: Climb, options: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
       const {
         queue,
         currentClimbQueueItem: current,
@@ -363,15 +362,11 @@ function usePersistentSessionQueueAdapter(): {
         playlistSuggestionSource: previousPlaylistSuggestionSource,
       } = latestRef.current;
       if (!validateClimbForQueue(climb)) return null;
-      const nextPlaylistSuggestionSource = getPlaylistSuggestionSourceOverride(options);
+      const nextPlaylistSuggestionSource = options.playlistSuggestionSource;
       const rollbackPlaylistSuggestionSource = () => {
-        if (nextPlaylistSuggestionSource !== undefined) {
-          setPlaylistSuggestionSourceState(previousPlaylistSuggestionSource);
-        }
+        setPlaylistSuggestionSourceState(previousPlaylistSuggestionSource);
       };
-      if (nextPlaylistSuggestionSource !== undefined) {
-        setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
-      }
+      setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
       if (ps.activeSession) {
         const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
         // If the climb is already in the queue, reuse the existing item
@@ -481,7 +476,7 @@ function usePersistentSessionQueueAdapter(): {
         dispatchOpenPlayDrawer(climb);
         return;
       }
-      void setCurrentClimb(climb, { clearPlaylistSuggestionSource: true });
+      void setCurrentClimb(climb, { playlistSuggestionSource: null });
       dispatchOpenPlayDrawer();
     },
     [setCurrentClimb],
@@ -500,7 +495,7 @@ function usePersistentSessionQueueAdapter(): {
       const { ps } = latestRef.current;
       if (!ps.activeSession) {
         if (!climb) return null;
-        return setCurrentClimb(climb);
+        return setCurrentClimb(climb, { playlistSuggestionSource: null });
       }
       if (!ps.hasConnected) return null;
       if (!climb) {
