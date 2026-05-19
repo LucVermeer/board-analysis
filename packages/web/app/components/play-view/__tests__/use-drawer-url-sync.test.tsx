@@ -107,7 +107,7 @@ describe('useDrawerUrlSync — list-tap flow', () => {
     expect(window.history.length).toBe(pushedLength);
   });
 
-  it('returns to the list URL via history.back() when the drawer closes', () => {
+  it('replaceStates to the list URL when the drawer closes (sync, race-free)', () => {
     const backSpy = vi.spyOn(window.history, 'back');
     const { rerender } = renderHook(
       ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
@@ -126,7 +126,10 @@ describe('useDrawerUrlSync — list-tap flow', () => {
 
     rerender({ isOpen: false, climb: CLIMB_A });
 
-    expect(backSpy).toHaveBeenCalledTimes(1);
+    // Synchronous URL change — history.back() is async per spec, so we use
+    // replaceState to keep the close race-free.
+    expect(getPath()).not.toContain('/view/');
+    expect(backSpy).not.toHaveBeenCalled();
     backSpy.mockRestore();
   });
 });
@@ -226,6 +229,38 @@ describe('useDrawerUrlSync — popstate', () => {
     window.dispatchEvent(new PopStateEvent('popstate'));
 
     expect(onCloseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDrawerUrlSync — close-then-reopen race', () => {
+  it('keeps the URL on /view/ when the drawer is closed and reopened in quick succession', () => {
+    const { rerender } = renderHook(
+      ({ isOpen, climb }: { isOpen: boolean; climb: Climb | null }) =>
+        useDrawerUrlSync({
+          isOpen,
+          displayedClimb: climb,
+          boardDetails: makeBoardDetails(),
+          angle: 40,
+          onClose,
+        }),
+      { initialProps: initialClosed },
+    );
+
+    rerender({ isOpen: true, climb: CLIMB_A });
+    expect(getPath()).toContain('/view/');
+
+    // Close, then reopen — the close cleanup must not asynchronously undo
+    // the fresh push from the reopen.
+    rerender({ isOpen: false, climb: CLIMB_A });
+    rerender({ isOpen: true, climb: CLIMB_A });
+
+    return new Promise<void>((resolve) =>
+      setTimeout(() => {
+        expect(getPath()).toContain('/view/');
+        expect(getPath()).toContain(CLIMB_A.uuid);
+        resolve();
+      }, 0),
+    );
   });
 });
 

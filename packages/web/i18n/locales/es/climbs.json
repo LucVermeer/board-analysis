@@ -15,7 +15,7 @@
       "seoHeading": "{{climbName}} — {{grade}}",
       "seoSummary": "Bloque {{boardName}} {{layoutName}}",
       "seoSetterSuffix": " creado por {{setter}}",
-      "seoAscentsSuffix": ". {{ascents}} encadenes registrados."
+      "seoAscentsSuffix": ". {{ascents}} encadenes registrados"
     },
     "play": {
       "title": "{{climbName}} - {{grade}} | Modo Jugar",

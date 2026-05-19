@@ -15,7 +15,7 @@
       "seoHeading": "{{climbName}} — {{grade}}",
       "seoSummary": "Bloc {{boardName}} {{layoutName}}",
       "seoSetterSuffix": " ouvert par {{setter}}",
-      "seoAscentsSuffix": ". {{ascents}} enchaînements enregistrés."
+      "seoAscentsSuffix": ". {{ascents}} enchaînements enregistrés"
     },
     "play": {
       "title": "{{climbName}} - {{grade}} | Mode Play",

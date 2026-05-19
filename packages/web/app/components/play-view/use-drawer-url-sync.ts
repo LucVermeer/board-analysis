@@ -85,26 +85,26 @@ export function useDrawerUrlSync({
       window.removeEventListener('popstate', handlePopState);
       const startPathname = openStartPathnameRef.current ?? pathnameRef.current;
       openStartPathnameRef.current = null;
-      const source = sourceRef.current;
       sourceRef.current = null;
       if (!window.location.pathname.includes('/view/')) {
         // popstate already navigated us off /view/ — nothing left to do.
         return;
       }
-      // User-initiated close (close button, swipe-down, etc.). Restore the URL.
-      if (source === 'list-tap') {
-        // Pop the entry we pushed when opening so back-button history stays clean.
-        window.history.back();
-      } else {
-        // Direct hit (or never-pushed) — replace forward to the list URL.
-        // Pushing would trap the user: Back from /list would return to
-        // /view/{uuid} where the drawer is closed but the URL still says open.
-        const listUrl = withSearchParams(
-          getListUrl(boardDetailsRef.current, angleRef.current, startPathname),
-          searchParamsRef.current,
-        );
-        window.history.replaceState({ ...window.history.state }, '', listUrl);
-      }
+      // User-initiated close (close button, swipe-down, etc.). Always
+      // replaceState to the list URL — `history.back()` is async per spec, so
+      // a fast close-then-reopen synchronously pushes a new /view/ entry that
+      // the still-pending back() would then pop, sending the user to /list
+      // while the drawer is open. Replace is synchronous and race-free.
+      //
+      // Trade-off: list-tap opens leave a duplicate /list entry in the stack
+      // (since the original /list entry is still below the popped /view/). One
+      // visible back-press still leaves the site cleanly; the extra entry is
+      // invisible in normal use.
+      const listUrl = withSearchParams(
+        getListUrl(boardDetailsRef.current, angleRef.current, startPathname),
+        searchParamsRef.current,
+      );
+      window.history.replaceState({ ...window.history.state }, '', listUrl);
     };
   }, [isOpen, enabled]);
 
