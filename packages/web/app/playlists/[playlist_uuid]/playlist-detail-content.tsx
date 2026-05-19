@@ -24,7 +24,7 @@ import {
 } from '@mui/icons-material';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { Climb } from '@/app/lib/types';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 import { executeGraphQL, createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
   type GetPlaylistQueryResponse,
@@ -62,7 +62,11 @@ import FollowButton from '@/app/components/ui/follow-button';
 import PlaylistPreviewSquare from '@/app/components/library/playlist-preview-square';
 import { recordPlaylistOpen } from '@/app/lib/recent-playlists-db';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
-import { getBoardDetailsForPlaylist, getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
+import {
+  getBoardDetailsForPlaylist,
+  getDefaultAngleForBoard,
+  getUserBoardDetails,
+} from '@/app/lib/board-config-for-playlist';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import BackButton from '@/app/components/back-button';
@@ -70,6 +74,12 @@ import { PlaylistGeneratorDrawer } from '@/app/components/playlist-generator';
 import PlaylistEditDrawer from '@/app/components/library/playlist-edit-drawer';
 import CommentSection from '@/app/components/social/comment-section';
 import MultiboardClimbList from '@/app/components/climb-list/multiboard-climb-list';
+import { PlaylistActivationProvider } from '@/app/components/climb-actions/playlist-activation-context';
+import { useOptionalQueueActions } from '@/app/components/graphql-queue';
+import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
+import { fetchPlaylistSuggestionClimbs } from '@/app/components/queue-control/playlist-suggestion-refresh';
+import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
+import { usePlaylistClimbActivation } from '@/app/components/queue-control/use-playlist-climb-activation';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard, type BoardConfig } from '@/app/lib/find-matching-board';
 import { ssrSeedMatchesQueryKey } from '@/app/lib/graphql/ssr-query-seed';
@@ -151,6 +161,9 @@ export default function PlaylistDetailContent({
     refreshKey: 0,
   });
   const { token, isLoading: tokenLoading } = useWsAuthToken();
+  const queueActions = useOptionalQueueActions();
+  const activeQueueBoardInfo = useQueueBridgeBoardInfo();
+  useClearPlaylistSuggestionSourceOnUnmount(queueActions);
 
   // Fetch user's boards (with SSR initial data to avoid loading skeleton).
   // These boards are forwarded to MultiboardClimbList via the `boards` prop so
@@ -326,6 +339,74 @@ export default function PlaylistDetailContent({
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const selectedBoardDetails = useMemo(
+    () => (selectedBoard ? getUserBoardDetails(selectedBoard) : null),
+    [selectedBoard],
+  );
+
+  const fetchPlaylistClimbsForBoard = useCallback(
+    async ({
+      boardDetails,
+      angle,
+      activatedClimbUuid,
+      signal,
+    }: {
+      boardDetails: BoardDetails;
+      angle: number;
+      activatedClimbUuid: string;
+      signal: AbortSignal;
+    }): Promise<Climb[]> => {
+      const client = createGraphQLHttpClient(token);
+      const setIds = Array.isArray(boardDetails.set_ids)
+        ? boardDetails.set_ids.join(',')
+        : String(boardDetails.set_ids);
+
+      return fetchPlaylistSuggestionClimbs({
+        activatedClimbUuid,
+        signal,
+        fetchPage: async ({ page, pageSize, signal: requestSignal }) => {
+          const response = await client.request<GetPlaylistClimbsQueryResponse, GetPlaylistClimbsQueryVariables>({
+            document: GET_PLAYLIST_CLIMBS,
+            variables: {
+              input: {
+                playlistId: playlistUuid,
+                boardName: boardDetails.board_name,
+                layoutId: boardDetails.layout_id,
+                sizeId: boardDetails.size_id,
+                setIds,
+                angle,
+                page,
+                pageSize,
+              },
+            },
+            signal: requestSignal,
+          });
+
+          return {
+            climbs: response.playlistClimbs.climbs as Climb[],
+            hasMore: response.playlistClimbs.hasMore,
+          };
+        },
+      });
+    },
+    [playlistUuid, token],
+  );
+
+  const activatePlaylistClimb = usePlaylistClimbActivation({
+    queueActions,
+    activeQueueBoardInfo,
+    selectedBoardDetails,
+    selectedBoard,
+    fallbackBoardType: playlist?.boardType,
+    fallbackLayoutId: playlist?.layoutId,
+    sourceId: playlistUuid,
+    allClimbs,
+    fetchClimbsForBoard: fetchPlaylistClimbsForBoard,
+    refreshErrorMessage: 'Failed to refresh playlist suggestions:',
+  });
+
+  const playlistActivationValue = useMemo(() => ({ activatePlaylistClimb }), [activatePlaylistClimb]);
+
   const handleEditSuccess = useCallback((updatedPlaylist: Playlist) => {
     setPlaylist(updatedPlaylist);
   }, []);
@@ -445,6 +526,23 @@ export default function PlaylistDetailContent({
       </div>
     );
   }
+
+  const climbList = (
+    <MultiboardClimbList
+      climbs={allClimbs}
+      isFetching={isFetchingClimbs}
+      isLoading={isClimbsLoading}
+      hasMore={hasNextPage ?? false}
+      onLoadMore={handleLoadMore}
+      showBoardFilter
+      boardTypes={boardTypes}
+      selectedBoard={selectedBoard}
+      onBoardSelect={handleBoardSelect}
+      fallbackBoardTypes={[playlist.boardType]}
+      boards={myBoards}
+      boardsLoading={boardsLoading}
+    />
+  );
 
   return (
     <>
@@ -601,21 +699,10 @@ export default function PlaylistDetailContent({
         <div className={styles.climbsSection}>
           {allClimbs.length === 0 && !isFetchingClimbs && !isClimbsLoading ? (
             <EmptyState description={t('detail.empty')} />
+          ) : queueActions ? (
+            <PlaylistActivationProvider value={playlistActivationValue}>{climbList}</PlaylistActivationProvider>
           ) : (
-            <MultiboardClimbList
-              climbs={allClimbs}
-              isFetching={isFetchingClimbs}
-              isLoading={isClimbsLoading}
-              hasMore={hasNextPage ?? false}
-              onLoadMore={handleLoadMore}
-              showBoardFilter
-              boardTypes={boardTypes}
-              selectedBoard={selectedBoard}
-              onBoardSelect={handleBoardSelect}
-              fallbackBoardTypes={[playlist.boardType]}
-              boards={myBoards}
-              boardsLoading={boardsLoading}
-            />
+            climbList
           )}
         </div>
 

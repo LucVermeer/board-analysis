@@ -300,16 +300,16 @@ describe('QueueList rendering', () => {
     expect(screen.queryAllByTestId('climb-list-item')).toHaveLength(0);
   });
 
-  it('renders suggestions section header when active', () => {
+  it('renders next up section header when active', () => {
     render(<QueueList boardDetails={makeBoardDetails()} active />);
 
-    expect(screen.getByText('Suggestions')).toBeTruthy();
+    expect(screen.getByText('Next up')).toBeTruthy();
   });
 
-  it('does not render suggestions section when active is false', () => {
+  it('does not render next up section when active is false', () => {
     render(<QueueList boardDetails={makeBoardDetails()} active={false} />);
 
-    expect(screen.queryByText('Suggestions')).toBeNull();
+    expect(screen.queryByText('Next up')).toBeNull();
     expect(screen.queryAllByTestId('climb-list-item')).toHaveLength(0);
 
     // Queue items still render

@@ -6,7 +6,21 @@ import { useSearchParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useQueueReducer } from '../queue-control/reducer';
 import { useQueueDataFetching } from '../queue-control/hooks/use-queue-data-fetching';
-import type { ClimbQueueItem, UserName, QueueItemUser, AddToQueueSource } from '../queue-control/types';
+import type {
+  ClimbQueueItem,
+  UserName,
+  QueueItemUser,
+  AddToQueueSource,
+  PlaylistSuggestionSource,
+  SetCurrentClimbOptions,
+} from '../queue-control/types';
+import {
+  getPlaylistPeekQueueItemUuid,
+  getPlaylistSuggestedClimbs,
+  insertQueueItemAfterCurrent,
+  isPlaylistPeekQueueItemUuid,
+  pruneSuggestedQueueItemsAfterCurrent,
+} from '../queue-control/playlist-suggestions';
 import { urlParamsToSearchParams, searchParamsToUrlParams } from '@/app/lib/url-utils';
 import type { Climb, SearchRequestPagination } from '@/app/lib/types';
 import { usePartyProfile } from '../party-manager/party-profile-context';
@@ -315,7 +329,7 @@ export const GraphQLQueueProvider = ({
   // --- Data fetching ---
   const {
     climbSearchResults,
-    suggestedClimbs,
+    suggestedClimbs: searchSuggestedClimbs,
     totalSearchResultCount,
     hasMoreResults,
     isFetchingClimbs,
@@ -330,6 +344,13 @@ export const GraphQLQueueProvider = ({
     hasDoneFirstFetch: state.hasDoneFirstFetch,
     setHasDoneFirstFetch: () => dispatch({ type: 'SET_FIRST_FETCH', payload: true }),
   });
+
+  const playlistSuggestedClimbs = useMemo(
+    () => getPlaylistSuggestedClimbs(state.playlistSuggestionSource, state.queue),
+    [state.playlistSuggestionSource, state.queue],
+  );
+
+  const suggestedClimbs = state.playlistSuggestionSource ? playlistSuggestedClimbs : searchSuggestedClimbs;
 
   const { favoritesProviderProps, playlistsProviderProps } = useClimbActionsData({
     boardName: parsedParams.board_name,
@@ -357,7 +378,7 @@ export const GraphQLQueueProvider = ({
     prev.lastSuggestedCount = suggestedClimbs.length;
     prev.lastQueueLength = state.queue.length;
 
-    if (isFetchingNextPage || !hasMoreResults) return;
+    if (state.playlistSuggestionSource || isFetchingNextPage || !hasMoreResults) return;
     if (
       suggestedClimbs.length < SUGGESTIONS_THRESHOLD &&
       state.hasDoneFirstFetch &&
@@ -373,6 +394,7 @@ export const GraphQLQueueProvider = ({
     isFetchingNextPage,
     fetchMoreClimbs,
     state.hasDoneFirstFetch,
+    state.playlistSuggestionSource,
   ]);
 
   // --- Queue-add compatibility validator ---
@@ -503,41 +525,63 @@ export const GraphQLQueueProvider = ({
   // create form) can capture its uuid and later call replaceQueueItem on
   // subsequent edits. Resolves to null when validation fails or the mutation
   // is guarded.
-  const setCurrentClimb = useCallback(async (climb: Climb): Promise<ClimbQueueItem | null> => {
-    const startTime = performance.now();
-    const latest = latestRef.current;
-    if (latest.guardMutation()) return null;
-    if (!latest.validateQueueAdd(climb)) return null;
-    const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
-    const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
-    const correlationId = nextCorrelationId();
-    latest.dispatch({
-      type: 'DELTA_UPDATE_CURRENT_CLIMB',
-      payload: { item: newItem, shouldAddToQueue: true, insertAfterCurrent: true, correlationId },
-    });
-    if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
-    if (latest.isDisconnected && latest.isPersistentSessionActive) {
-      latest.offlineBuffer.bufferAddition(newItem);
-      trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
-    } else if (latest.hasConnected && latest.isPersistentSessionActive) {
-      const currentIndex = latest.state.currentClimbQueueItem
-        ? latest.state.queue.findIndex((queueItem) => queueItem.uuid === latest.state.currentClimbQueueItem?.uuid)
-        : -1;
-      const position = currentIndex === -1 ? undefined : currentIndex + 1;
-      try {
-        await latest.persistentSession.addQueueItem(newItem, position);
-        await latest.persistentSession.setCurrentClimb(newItem, false, correlationId);
+  const setCurrentClimb = useCallback(
+    async (climb: Climb, options: SetCurrentClimbOptions): Promise<ClimbQueueItem | null> => {
+      const startTime = performance.now();
+      const latest = latestRef.current;
+      if (latest.guardMutation()) return null;
+      if (!latest.validateQueueAdd(climb)) return null;
+      const { playlistSuggestionSource } = options;
+      const previousPlaylistSuggestionSource = latest.state.playlistSuggestionSource;
+      const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
+      const newItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo);
+      const correlationId = nextCorrelationId();
+      latest.dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: {
+          item: newItem,
+          shouldAddToQueue: true,
+          insertAfterCurrent: true,
+          correlationId,
+          playlistSuggestionSource,
+        },
+      });
+      if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
+      if (latest.isDisconnected && latest.isPersistentSessionActive) {
+        latest.offlineBuffer.bufferAddition(newItem);
         trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
-      } catch (error: unknown) {
-        console.error('Failed to set current climb:', error);
-        if (correlationId) latest.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
-        trackQueueOperationError('setCurrentClimb', mode);
+      } else if (latest.hasConnected && latest.isPersistentSessionActive) {
+        const currentIndex = latest.state.currentClimbQueueItem
+          ? latest.state.queue.findIndex((queueItem) => queueItem.uuid === latest.state.currentClimbQueueItem?.uuid)
+          : -1;
+        const position = currentIndex === -1 ? undefined : currentIndex + 1;
+        try {
+          if (playlistSuggestionSource) {
+            const queueWithNewItem = insertQueueItemAfterCurrent(
+              latest.state.queue,
+              latest.state.currentClimbQueueItem,
+              newItem,
+            );
+            const prunedQueue = pruneSuggestedQueueItemsAfterCurrent(queueWithNewItem, newItem);
+            await latest.persistentSession.setQueue(prunedQueue, newItem);
+          } else {
+            await latest.persistentSession.addQueueItem(newItem, position);
+            await latest.persistentSession.setCurrentClimb(newItem, false, correlationId);
+          }
+          trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
+        } catch (error: unknown) {
+          console.error('Failed to set current climb:', error);
+          if (correlationId) latest.dispatch({ type: 'CLEANUP_PENDING_UPDATE', payload: { correlationId } });
+          latest.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: previousPlaylistSuggestionSource });
+          trackQueueOperationError('setCurrentClimb', mode);
+        }
+      } else {
+        trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
       }
-    } else {
-      trackQueueOperation('setCurrentClimb', performance.now() - startTime, mode);
-    }
-    return newItem;
-  }, []);
+      return newItem;
+    },
+    [],
+  );
 
   // Browse-initiated drawer open. The fork between "send to wall" (solo or
   // driver) and "preview only" (party non-driver) lives here so list rows,
@@ -556,8 +600,10 @@ export const GraphQLQueueProvider = ({
         return;
       }
       // Solo, or driver in party: pre-mutate state (broadcasts when party
-      // active) then open the drawer.
-      void setCurrentClimb(climb);
+      // active) then open the drawer. Pass `playlistSuggestionSource: null`
+      // so activating a non-playlist climb clears any stale playlist source
+      // carried over from a prior activation.
+      void setCurrentClimb(climb, { playlistSuggestionSource: null });
       dispatchOpenPlayDrawer();
     },
     [setCurrentClimb],
@@ -579,10 +625,12 @@ export const GraphQLQueueProvider = ({
       if (latest.guardMutation()) return null;
 
       // Solo: there's no party server-side driver concept. Fall through to the
-      // existing setCurrentClimb path so BLE still gets the climb.
+      // existing setCurrentClimb path so BLE still gets the climb. Clear the
+      // playlist suggestion source — taking wall-control on a climb that the
+      // caller didn't tag as a playlist activation isn't a playlist context.
       if (!latest.isPersistentSessionActive) {
         if (!climb) return null;
-        return setCurrentClimb(climb);
+        return setCurrentClimb(climb, { playlistSuggestionSource: null });
       }
 
       const startTime = performance.now();
@@ -736,16 +784,23 @@ export const GraphQLQueueProvider = ({
     const startTime = performance.now();
     const latest = latestRef.current;
     if (latest.guardMutation()) return;
+    // Playlist "peek" items use a deterministic synthetic uuid so repeated
+    // peeks of the same suggestion produce a stable queue uuid. Once a peek
+    // is promoted to the actual current climb, mint a fresh queue-item uuid
+    // so it lives as a regular queue entry rather than a transient peek.
+    const queueItem = isPlaylistPeekQueueItemUuid(item.uuid)
+      ? createClimbQueueItem(item.climb, latest.clientId, latest.currentUserInfo, item.suggested)
+      : item;
     const mode = resolveQueueOperationMode(latest.isPersistentSessionActive, latest.isDisconnected);
     const correlationId = nextCorrelationId();
     latest.dispatch({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
-      payload: { item, shouldAddToQueue: item.suggested, correlationId },
+      payload: { item: queueItem, shouldAddToQueue: queueItem.suggested, correlationId },
     });
     if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
     if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
       latest.persistentSession
-        .setCurrentClimb(item, item.suggested, correlationId)
+        .setCurrentClimb(queueItem, queueItem.suggested, correlationId)
         .then(() => trackQueueOperation('setCurrentClimbQueueItem', performance.now() - startTime, mode))
         .catch((error: unknown) => {
           console.error('Failed to set current climb:', error);
@@ -755,6 +810,14 @@ export const GraphQLQueueProvider = ({
     } else {
       trackQueueOperation('setCurrentClimbQueueItem', performance.now() - startTime, mode);
     }
+  }, []);
+
+  const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
+    latestRef.current.dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: source ?? null });
+  }, []);
+
+  const refreshPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource) => {
+    latestRef.current.dispatch({ type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE', payload: source });
   }, []);
 
   const setClimbSearchParams = useCallback((params: SearchRequestPagination) => {
@@ -817,6 +880,12 @@ export const GraphQLQueueProvider = ({
     // already looking at and is the cleaner preview surface.
     const anchorUuid = options?.from ? options.from.uuid : latest.state.currentClimbQueueItem?.uuid;
     const anchorClimbUuid = options?.from ? options.from.climb?.uuid : latest.state.currentClimbQueueItem?.climb?.uuid;
+    const buildSuggestedQueueItem = (climb: Climb): ClimbQueueItem => {
+      const suggestedItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo, true);
+      return latest.state.playlistSuggestionSource
+        ? { ...suggestedItem, uuid: getPlaylistPeekQueueItemUuid(climb.uuid) }
+        : suggestedItem;
+    };
     if (options?.suggestionsOnly) {
       // Non-driver swipe-forward: walk the suggestedClimbs array by index so
       // each tap advances one step. Mirrors the backward branch below — using
@@ -827,20 +896,19 @@ export const GraphQLQueueProvider = ({
       // If the anchor isn't in suggestedClimbs (e.g. anchor is a queue item or
       // the wall climb chosen by the driver), start from the top of the feed.
       const nextClimb = anchorIdx < 0 ? latest.suggestedClimbs[0] : (latest.suggestedClimbs[anchorIdx + 1] ?? null);
-      return nextClimb ? createClimbQueueItem(nextClimb, latest.clientId, latest.currentUserInfo, true) : null;
+      return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
     const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
     if (
       (latest.state.queue.length === 0 || latest.state.queue.length <= queueItemIndex + 1) &&
-      latest.climbSearchResults &&
-      latest.climbSearchResults.length > 0
+      latest.suggestedClimbs.length > 0
     ) {
       const nextClimb = latest.suggestedClimbs.find(
         (climb: Climb) =>
           climb.uuid !== anchorClimbUuid &&
           !latest.state.queue.some((qItem: ClimbQueueItem) => qItem.climb?.uuid === climb.uuid),
       );
-      return nextClimb ? createClimbQueueItem(nextClimb, latest.clientId, latest.currentUserInfo, true) : null;
+      return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
     return queueItemIndex >= latest.state.queue.length - 1 ? null : latest.state.queue[queueItemIndex + 1];
   }, []);
@@ -915,6 +983,8 @@ export const GraphQLQueueProvider = ({
       previewClimbFromBrowse,
       setQueue,
       setCurrentClimbQueueItem,
+      setPlaylistSuggestionSource,
+      refreshPlaylistSuggestionSource,
       replaceQueueItem,
       setClimbSearchParams,
       setCountSearchParams: setCountSearchParamsAction,
@@ -944,6 +1014,7 @@ export const GraphQLQueueProvider = ({
       climbSearchParams: state.climbSearchParams,
       climbSearchResults,
       suggestedClimbs,
+      playlistSuggestionSource: state.playlistSuggestionSource,
       totalSearchResultCount,
       hasMoreResults,
       isFetchingClimbs,
@@ -974,6 +1045,7 @@ export const GraphQLQueueProvider = ({
       state.queue,
       state.currentClimbQueueItem,
       state.climbSearchParams,
+      state.playlistSuggestionSource,
       state.hasDoneFirstFetch,
       climbSearchResults,
       suggestedClimbs,

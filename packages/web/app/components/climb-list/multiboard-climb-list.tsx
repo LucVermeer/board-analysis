@@ -16,6 +16,7 @@ import { FavoritesProvider } from '@/app/components/climb-actions/favorites-batc
 import { PlaylistsProvider } from '@/app/components/climb-actions/playlists-batch-context';
 import { getDefaultAngleForBoard, type SessionBoardConfig } from '@/app/lib/board-config-for-playlist';
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
+import { useOptionalPlaylistActivation } from '@/app/components/climb-actions/playlist-activation-context';
 import { usePersistentSessionState } from '@/app/components/persistent-session/persistent-session-context';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { Climb } from '@/app/lib/types';
@@ -132,6 +133,7 @@ export default function MultiboardClimbList({
     climbUuids,
   });
   const queueActions = useOptionalQueueActions();
+  const playlistActivation = useOptionalPlaylistActivation();
 
   // Fallback for the rare case with no queue bridge (e.g. mid-hydration): navigate
   // to the climb's view page so the user is never stranded.
@@ -165,14 +167,16 @@ export default function MultiboardClimbList({
   const handleClimbSelect = useCallback(
     (climb: Climb) => {
       setInternalSelectedUuid(climb.uuid);
-      if (queueActions?.previewClimbFromBrowse) {
+      if (playlistActivation) {
+        void playlistActivation.activatePlaylistClimb(climb);
+      } else if (queueActions?.previewClimbFromBrowse) {
         queueActions.previewClimbFromBrowse(climb);
       } else {
         void navigateToClimb(climb);
       }
       onClimbSelect?.(climb);
     },
-    [queueActions, navigateToClimb, onClimbSelect],
+    [playlistActivation, queueActions, navigateToClimb, onClimbSelect],
   );
 
   const handleSortChange = (_: React.MouseEvent<HTMLElement>, value: SortBy | null) => {

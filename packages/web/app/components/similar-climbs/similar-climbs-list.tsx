@@ -170,7 +170,11 @@ export default function SimilarClimbsList({
               viewerBoardDetails={compatible ? viewerBoardDetails : undefined}
               // Disable the card-tap-activates path when the climb won't fit
               // on the viewer's wall. The ellipsis stays live below.
-              onSetActive={queueActions && compatible ? (c) => queueActions.setCurrentClimb(c) : null}
+              onSetActive={
+                queueActions && compatible
+                  ? (c) => queueActions.setCurrentClimb(c, { playlistSuggestionSource: null })
+                  : null
+              }
               onOpenActions={() => setActionsClimb(climb)}
               compatible={compatible}
             />

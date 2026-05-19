@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test'
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GraphQLQueueProvider, useQueueContext } from '../QueueContext';
-import type { Climb } from '@/app/lib/types';
+import { createPlaylistSuggestionSource } from '../../queue-control/playlist-suggestions';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 
 // --- Mocks must be before imports ---
 
@@ -265,7 +266,7 @@ describe('QueueContext offline mutations', () => {
       mockSetCurrentClimb.mockClear();
 
       await act(async () => {
-        await result.current.setCurrentClimb(mockClimb3);
+        await result.current.setCurrentClimb(mockClimb3, { playlistSuggestionSource: null });
       });
 
       expect(mockAddQueueItem).toHaveBeenCalledTimes(1);
@@ -295,7 +296,7 @@ describe('QueueContext offline mutations', () => {
       mockSetCurrentClimb.mockClear();
 
       await act(async () => {
-        await result.current.setCurrentClimb(mockClimb2);
+        await result.current.setCurrentClimb(mockClimb2, { playlistSuggestionSource: null });
       });
 
       expect(mockAddQueueItem).toHaveBeenCalledTimes(1);
@@ -308,6 +309,42 @@ describe('QueueContext offline mutations', () => {
       expect(position).toBeUndefined();
       expect(currentItem).toEqual(addedItem);
       expect(shouldAddToQueue).toBe(false);
+      expect(correlationId).toMatch(/^client-1-\d+$/);
+    });
+
+    it('setCurrentClimbQueueItem promotes playlist peek items before sending to party mode', () => {
+      const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+      const source = createPlaylistSuggestionSource({
+        playlistUuid: 'playlist-1',
+        activatedClimb: mockClimb,
+        climbs: [mockClimb, mockClimb2],
+        boardDetails: defaultProps.boardDetails as BoardDetails,
+      });
+
+      act(() => {
+        result.current.addToQueue(mockClimb);
+      });
+      const currentQueueItem = result.current.queue[0];
+
+      act(() => {
+        result.current.setCurrentClimbQueueItem(currentQueueItem);
+        result.current.setPlaylistSuggestionSource(source);
+      });
+
+      const nextItem = result.current.getNextClimbQueueItem();
+      expect(nextItem?.uuid).toBe('playlist-peek:climb-2');
+
+      mockSetCurrentClimb.mockClear();
+      act(() => {
+        result.current.setCurrentClimbQueueItem(nextItem!);
+      });
+
+      expect(mockSetCurrentClimb).toHaveBeenCalledTimes(1);
+      const [currentItem, shouldAddToQueue, correlationId] = mockSetCurrentClimb.mock.calls[0];
+      expect(currentItem.uuid).not.toBe('playlist-peek:climb-2');
+      expect(currentItem.climb.uuid).toBe('climb-2');
+      expect(currentItem.suggested).toBe(true);
+      expect(shouldAddToQueue).toBe(true);
       expect(correlationId).toMatch(/^client-1-\d+$/);
     });
 

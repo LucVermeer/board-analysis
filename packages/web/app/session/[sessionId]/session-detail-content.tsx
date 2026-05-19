@@ -432,7 +432,7 @@ export default function SessionDetailContent({
           // Solo: keep today's behavior — set as active so BLE sends the
           // climb to the board, and skip navigation when board-compat
           // validation fails (snackbar already surfaced).
-          const result = await queueActions.setCurrentClimb(climb);
+          const result = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
           if (result === null) return;
         }
         // Party: skip setCurrentClimb so we don't yank the wall away from

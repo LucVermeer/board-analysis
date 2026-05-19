@@ -59,6 +59,7 @@ const initialState: QueueState = {
   queue: [],
   currentClimbQueueItem: null,
   climbSearchParams: mockSearchParams,
+  playlistSuggestionSource: null,
   hasDoneFirstFetch: false,
   initialQueueDataReceivedFromPeers: false,
   pendingCurrentClimbUpdates: [],

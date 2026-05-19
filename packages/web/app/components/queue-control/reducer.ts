@@ -2,11 +2,13 @@ import { useReducer } from 'react';
 import type { QueueState, QueueAction } from './types';
 import type { SearchRequestPagination } from '@/app/lib/types';
 import { insertQueueItemIdempotent } from '../persistent-session/event-utils';
+import { playlistSuggestionSourceMatches, pruneSuggestedQueueItemsAfterCurrent } from './playlist-suggestions';
 
 const initialState = (initialSearchParams: SearchRequestPagination): QueueState => ({
   queue: [],
   currentClimbQueueItem: null,
   climbSearchParams: initialSearchParams,
+  playlistSuggestionSource: null,
   hasDoneFirstFetch: false,
   initialQueueDataReceivedFromPeers: false,
   pendingCurrentClimbUpdates: [],
@@ -64,6 +66,7 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
         queue: filteredQueue,
         currentClimbQueueItem: action.payload.currentClimbQueueItem ?? state.currentClimbQueueItem,
         initialQueueDataReceivedFromPeers: true,
+        playlistSuggestionSource: null,
         // Clear pending updates on full sync since we're getting complete server state
         pendingCurrentClimbUpdates: [],
         // Request resync if we filtered out corrupted data
@@ -86,6 +89,7 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
         ...state,
         queue: filteredQueue,
         currentClimbQueueItem: action.payload.currentClimbQueueItem ?? state.currentClimbQueueItem,
+        playlistSuggestionSource: null,
         // Request resync if we filtered out corrupted data
         needsResync: state.needsResync || hadCorruptedData,
       };
@@ -188,6 +192,7 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
         myClientId,
         correlationId,
         serverCorrelationId,
+        playlistSuggestionSource,
       } = action.payload;
 
       // NO MORE TIMESTAMP FILTERING - reducer is now pure!
@@ -256,9 +261,28 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
 
       return {
         ...state,
-        queue: newQueue,
+        queue: playlistSuggestionSource && item ? pruneSuggestedQueueItemsAfterCurrent(newQueue, item) : newQueue,
         currentClimbQueueItem: item,
+        playlistSuggestionSource:
+          playlistSuggestionSource === undefined ? state.playlistSuggestionSource : playlistSuggestionSource,
         pendingCurrentClimbUpdates: pendingUpdates,
+      };
+    }
+
+    case 'SET_PLAYLIST_SUGGESTION_SOURCE': {
+      return {
+        ...state,
+        playlistSuggestionSource: action.payload,
+      };
+    }
+
+    case 'REFRESH_PLAYLIST_SUGGESTION_SOURCE': {
+      if (!playlistSuggestionSourceMatches(state.playlistSuggestionSource, action.payload)) {
+        return state;
+      }
+      return {
+        ...state,
+        playlistSuggestionSource: action.payload,
       };
     }
 

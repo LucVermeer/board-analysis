@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
 import React from 'react';
 import { QueueBridgeProvider, QueueBridgeInjector, useQueueBridgeBoardInfo } from '../queue-bridge-context';
+import { createPlaylistSuggestionSource } from '../playlist-suggestions';
 import {
   QueueContext,
   QueueActionsContext,
@@ -58,6 +59,10 @@ vi.mock('@/app/lib/board-compatibility', () => ({
 
 vi.mock('../../board-lock/queue-add-error-messages', () => ({
   queueAddErrorMessage: () => 'Climb is not compatible with this board',
+}));
+
+vi.mock('@/app/lib/live-activity/live-activity-bridge', () => ({
+  default: () => null,
 }));
 
 vi.mock('../../graphql-queue/QueueContext', () => {
@@ -284,6 +289,8 @@ function createFakeQueueContext(overrides?: Partial<GraphQLQueueContextType>): G
     removeFromQueue: vi.fn(),
     setCurrentClimb: vi.fn(),
     setCurrentClimbQueueItem: vi.fn(),
+    setPlaylistSuggestionSource: vi.fn(),
+    refreshPlaylistSuggestionSource: vi.fn(),
     replaceQueueItem: vi.fn(),
     setClimbSearchParams: vi.fn(),
     mirrorClimb: vi.fn(),
@@ -331,6 +338,8 @@ function extractActions(ctx: GraphQLQueueContextType): GraphQLQueueActionsType {
     setCurrentClimb: ctx.setCurrentClimb,
     previewClimbFromBrowse: ctx.previewClimbFromBrowse,
     setCurrentClimbQueueItem: ctx.setCurrentClimbQueueItem,
+    setPlaylistSuggestionSource: ctx.setPlaylistSuggestionSource,
+    refreshPlaylistSuggestionSource: ctx.refreshPlaylistSuggestionSource,
     replaceQueueItem: ctx.replaceQueueItem,
     setClimbSearchParams: ctx.setClimbSearchParams,
     setCountSearchParams: ctx.setClimbSearchParams,
@@ -358,6 +367,7 @@ function extractData(ctx: GraphQLQueueContextType): GraphQLQueueDataType {
     climbSearchParams: ctx.climbSearchParams,
     climbSearchResults: ctx.climbSearchResults,
     suggestedClimbs: ctx.suggestedClimbs,
+    playlistSuggestionSource: ctx.playlistSuggestionSource,
     totalSearchResultCount: ctx.totalSearchResultCount,
     hasMoreResults: ctx.hasMoreResults,
     isFetchingClimbs: ctx.isFetchingClimbs,
@@ -491,6 +501,7 @@ describe('queue-bridge-context', () => {
       const bd = createTestBoardDetails();
       const climb1 = createTestClimb({ uuid: 'c1', name: 'Climb 1' });
       const climb2 = createTestClimb({ uuid: 'c2', name: 'Climb 2' });
+      const climb3 = createTestClimb({ uuid: 'c3', name: 'Climb 3' });
 
       function renderWithLocalQueue(queue: ClimbQueueItem[], current: ClimbQueueItem | null) {
         mockPersistentSession = createDefaultPersistentSession({
@@ -569,6 +580,26 @@ describe('queue-bridge-context', () => {
         expect(next).toBeNull();
       });
 
+      it('getNextClimbQueueItem falls back to playlist suggestions when at end of queue', () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([item1], item1);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const next = result.current!.getNextClimbQueueItem();
+        expect(next?.climb.uuid).toBe('c2');
+        expect(next?.suggested).toBe(true);
+        expect(next?.uuid).toBe('playlist-peek:c2');
+      });
+
       it('getPreviousClimbQueueItem returns null when at beginning', () => {
         const item1 = createTestQueueItem(climb1, 'u1');
         const { result } = renderWithLocalQueue([item1], item1);
@@ -619,7 +650,7 @@ describe('queue-bridge-context', () => {
         const item1 = createTestQueueItem(climb1, 'u1');
         const { result } = renderWithLocalQueue([item1], item1);
         act(() => {
-          void result.current!.setCurrentClimb(climb2);
+          void result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: null });
         });
         expect(mockSetLocalQueueState).toHaveBeenCalled();
         const [newQueue, newCurrent] = mockSetLocalQueueState.mock.calls[0];
@@ -629,6 +660,74 @@ describe('queue-bridge-context', () => {
         expect(newQueue[1].climb.uuid).toBe('c2');
         // New item becomes current
         expect(newCurrent.climb.uuid).toBe('c2');
+      });
+
+      it('setCurrentClimb with a playlist source prunes future suggested items in local mode', async () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const staleSuggestedItem = {
+          ...createTestQueueItem(createTestClimb({ uuid: 'stale-suggestion' }), 'stale-suggestion-item'),
+          suggested: true,
+        };
+        const manualFutureItem = createTestQueueItem(climb3, 'manual-future-item');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([item1, staleSuggestedItem, manualFutureItem], item1);
+
+        await act(async () => {
+          await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: source });
+        });
+
+        expect(mockSetLocalQueueState).toHaveBeenCalled();
+        const [newQueue, newCurrent] = mockSetLocalQueueState.mock.calls[0];
+        expect(newQueue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c1', 'c2', 'c3']);
+        expect(newQueue.map((item: ClimbQueueItem) => item.uuid)).toEqual(['u1', 'test-uuid-1', 'manual-future-item']);
+        expect(newCurrent.climb.uuid).toBe('c2');
+      });
+
+      it('sets and refreshes playlist suggestion source only when activation identity matches', () => {
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2],
+          boardDetails: bd,
+        });
+        const staleRefresh = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb2, climb3],
+          boardDetails: bd,
+        });
+        const refreshedSource = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([], null);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+        expect(result.current!.playlistSuggestionSource).toEqual(source);
+
+        act(() => {
+          result.current!.refreshPlaylistSuggestionSource(staleRefresh);
+        });
+        expect(result.current!.playlistSuggestionSource).toEqual(source);
+
+        act(() => {
+          result.current!.refreshPlaylistSuggestionSource(refreshedSource);
+        });
+        expect(result.current!.playlistSuggestionSource).toEqual(refreshedSource);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(null);
+        });
+        expect(result.current!.playlistSuggestionSource).toBeNull();
       });
     });
 
@@ -655,7 +754,7 @@ describe('queue-bridge-context', () => {
         const climb = createTestClimb({ uuid: 'c-cold', boardType: 'kilter', layoutId: 1 });
         const { result } = renderWithoutLocalBoard();
         act(() => {
-          void result.current!.setCurrentClimb(climb);
+          void result.current!.setCurrentClimb(climb, { playlistSuggestionSource: null });
         });
         expect(mockSetLocalQueueState).toHaveBeenCalledTimes(1);
         const [newQueue, newCurrent, boardPath, boardDetails] = mockSetLocalQueueState.mock.calls[0];
@@ -671,7 +770,7 @@ describe('queue-bridge-context', () => {
         const climb = createTestClimb({ uuid: 'mb-1', boardType: 'moonboard', layoutId: 99 });
         const { result } = renderWithoutLocalBoard();
         act(() => {
-          void result.current!.setCurrentClimb(climb);
+          void result.current!.setCurrentClimb(climb, { playlistSuggestionSource: null });
         });
         expect(mockSetLocalQueueState).toHaveBeenCalledTimes(1);
         const [, , boardPath, boardDetails] = mockSetLocalQueueState.mock.calls[0];
@@ -697,7 +796,7 @@ describe('queue-bridge-context', () => {
         const climb = createTestClimb({ uuid: 'orphan', boardType: 'kilter', layoutId: null });
         const { result } = renderWithoutLocalBoard();
         act(() => {
-          void result.current!.setCurrentClimb(climb);
+          void result.current!.setCurrentClimb(climb, { playlistSuggestionSource: null });
         });
         expect(mockSetLocalQueueState).not.toHaveBeenCalled();
       });
@@ -706,7 +805,7 @@ describe('queue-bridge-context', () => {
         const climb = createTestClimb({ uuid: 'orphan', boardType: undefined, layoutId: 1 });
         const { result } = renderWithoutLocalBoard();
         act(() => {
-          void result.current!.setCurrentClimb(climb);
+          void result.current!.setCurrentClimb(climb, { playlistSuggestionSource: null });
         });
         expect(mockSetLocalQueueState).not.toHaveBeenCalled();
       });
@@ -721,6 +820,7 @@ describe('queue-bridge-context', () => {
       const bd = createTestBoardDetails();
       const climb1 = createTestClimb({ uuid: 'c1', name: 'Climb 1' });
       const climb2 = createTestClimb({ uuid: 'c2', name: 'Climb 2' });
+      const climb3 = createTestClimb({ uuid: 'c3', name: 'Climb 3' });
       const activeSession = {
         sessionId: 'party-1',
         boardPath: '/kilter/1/10/1,2/40/list',
@@ -757,7 +857,7 @@ describe('queue-bridge-context', () => {
         const item1 = createTestQueueItem(climb1, 'u1');
         const { result } = renderWithPartySession([item1], item1);
         await act(async () => {
-          await result.current!.setCurrentClimb(climb2);
+          await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: null });
         });
         expect(mockSetLocalQueueState).not.toHaveBeenCalled();
         expect(mockPersistentSession.addQueueItem).toHaveBeenCalledTimes(1);
@@ -774,10 +874,67 @@ describe('queue-bridge-context', () => {
         expect(setCurrentCall[2]).toMatch(/^client-abc-/);
       });
 
+      it('setCurrentClimb with a playlist source replaces the party queue for a new item', async () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const staleSuggestedItem = {
+          ...createTestQueueItem(createTestClimb({ uuid: 'stale-suggestion' }), 'stale-suggestion-item'),
+          suggested: true,
+        };
+        const manualFutureItem = createTestQueueItem(climb3, 'manual-future-item');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithPartySession([item1, staleSuggestedItem, manualFutureItem], item1);
+
+        await act(async () => {
+          await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: source });
+        });
+
+        expect(mockPersistentSession.addQueueItem).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setCurrentClimb).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setQueue).toHaveBeenCalledTimes(1);
+        const [newQueue, newCurrent] = (mockPersistentSession.setQueue as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(newQueue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c1', 'c2', 'c3']);
+        expect(newQueue.map((item: ClimbQueueItem) => item.uuid)).toEqual(['u1', 'test-uuid-1', 'manual-future-item']);
+        expect(newCurrent.climb.uuid).toBe('c2');
+      });
+
+      it('setCurrentClimb with a playlist source replaces the party queue for an existing item', async () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const existingItem = createTestQueueItem(climb2, 'u2');
+        const staleSuggestedItem = {
+          ...createTestQueueItem(createTestClimb({ uuid: 'stale-suggestion' }), 'stale-suggestion-item'),
+          suggested: true,
+        };
+        const manualFutureItem = createTestQueueItem(climb3, 'manual-future-item');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb2,
+          climbs: [climb1, climb2, climb3],
+          boardDetails: bd,
+        });
+        const { result } = renderWithPartySession([item1, existingItem, staleSuggestedItem, manualFutureItem], item1);
+
+        await act(async () => {
+          await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: source });
+        });
+
+        expect(mockPersistentSession.addQueueItem).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setCurrentClimb).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setQueue).toHaveBeenCalledTimes(1);
+        const [newQueue, newCurrent] = (mockPersistentSession.setQueue as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(newQueue.map((item: ClimbQueueItem) => item.climb.uuid)).toEqual(['c1', 'c2', 'c3']);
+        expect(newQueue.map((item: ClimbQueueItem) => item.uuid)).toEqual(['u1', 'u2', 'manual-future-item']);
+        expect(newCurrent.uuid).toBe('u2');
+      });
+
       it('setCurrentClimb passes undefined position when no current is set', async () => {
         const { result } = renderWithPartySession([], null);
         await act(async () => {
-          await result.current!.setCurrentClimb(climb1);
+          await result.current!.setCurrentClimb(climb1, { playlistSuggestionSource: null });
         });
         expect(mockPersistentSession.addQueueItem).toHaveBeenCalledTimes(1);
         const addCall = (mockPersistentSession.addQueueItem as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -797,6 +954,78 @@ describe('queue-bridge-context', () => {
         expect(call[0].uuid).toBe('u2');
         // shouldAddToQueue uses item.suggested
         expect(call[1]).toBe(false);
+      });
+
+      it('setCurrentClimbQueueItem promotes playlist peek items before sending to party mode', () => {
+        const item1 = createTestQueueItem(climb1, 'u1');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climb1,
+          climbs: [climb1, climb2],
+          boardDetails: bd,
+        });
+        const { result } = renderWithPartySession([item1], item1);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const nextItem = result.current!.getNextClimbQueueItem();
+        expect(nextItem?.uuid).toBe('playlist-peek:c2');
+
+        act(() => {
+          result.current!.setCurrentClimbQueueItem(nextItem!);
+        });
+
+        expect(mockSetLocalQueueState).not.toHaveBeenCalled();
+        expect(mockPersistentSession.setCurrentClimb).toHaveBeenCalledTimes(1);
+        const call = (mockPersistentSession.setCurrentClimb as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(call[0].uuid).toBe('test-uuid-1');
+        expect(call[0].uuid).not.toBe('playlist-peek:c2');
+        expect(call[0].climb.uuid).toBe('c2');
+        expect(call[0].suggested).toBe(true);
+        expect(call[1]).toBe(true);
+      });
+
+      it('setCurrentClimb rolls back playlist source when party queue replacement fails', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+          const item1 = createTestQueueItem(climb1, 'u1');
+          const previousSource = createPlaylistSuggestionSource({
+            playlistUuid: 'playlist-1',
+            activatedClimb: climb1,
+            climbs: [climb1, climb2],
+            boardDetails: bd,
+          });
+          const nextSource = createPlaylistSuggestionSource({
+            playlistUuid: 'playlist-1',
+            activatedClimb: climb2,
+            climbs: [climb2, climb3],
+            boardDetails: bd,
+          });
+          const { result } = renderWithPartySession([item1], item1, {
+            setQueue: vi.fn(() => Promise.reject(new Error('ws queue failed'))),
+          });
+
+          act(() => {
+            result.current!.setPlaylistSuggestionSource(previousSource);
+          });
+          expect(result.current!.playlistSuggestionSource).toEqual(previousSource);
+
+          let returnValue: ClimbQueueItem | null | undefined;
+          await act(async () => {
+            returnValue = await result.current!.setCurrentClimb(climb2, { playlistSuggestionSource: nextSource });
+          });
+
+          expect(returnValue).toBeNull();
+          expect(result.current!.playlistSuggestionSource).toEqual(previousSource);
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Failed to replace queue before setting playlist current:',
+            expect.any(Error),
+          );
+        } finally {
+          consoleErrorSpy.mockRestore();
+        }
       });
 
       it('addToQueue delegates to ps.addQueueItem in party mode', () => {
@@ -869,7 +1098,7 @@ describe('queue-bridge-context', () => {
         await act(async () => {
           // Click the same climb that's already in the queue at u1 — should
           // NOT add a duplicate; should call setCurrentClimb on the existing item.
-          await result.current!.setCurrentClimb(climb1);
+          await result.current!.setCurrentClimb(climb1, { playlistSuggestionSource: null });
         });
         expect(mockPersistentSession.addQueueItem).not.toHaveBeenCalled();
         expect(mockPersistentSession.setCurrentClimb).toHaveBeenCalledTimes(1);
@@ -886,7 +1115,7 @@ describe('queue-bridge-context', () => {
         };
         const { result } = renderWithPartySession([], null);
         await act(async () => {
-          await result.current!.setCurrentClimb(climb1);
+          await result.current!.setCurrentClimb(climb1, { playlistSuggestionSource: null });
         });
         const addCall = (mockPersistentSession.addQueueItem as ReturnType<typeof vi.fn>).mock.calls[0];
         const newItem = addCall[0];
@@ -948,7 +1177,7 @@ describe('queue-bridge-context', () => {
           const { result } = renderHook(() => useTestQueueContext(), { wrapper });
           let returnValue: ClimbQueueItem | null | undefined;
           await act(async () => {
-            returnValue = await result.current!.setCurrentClimb(climb1);
+            returnValue = await result.current!.setCurrentClimb(climb1, { playlistSuggestionSource: null });
           });
           // addQueueItem rejected, so nothing landed on the server. Return
           // null so callers (e.g. navigateToClimb) skip downstream side
@@ -986,7 +1215,7 @@ describe('queue-bridge-context', () => {
           const { result } = renderHook(() => useTestQueueContext(), { wrapper });
           let returnValue: ClimbQueueItem | null | undefined;
           await act(async () => {
-            returnValue = await result.current!.setCurrentClimb(climb1);
+            returnValue = await result.current!.setCurrentClimb(climb1, { playlistSuggestionSource: null });
           });
           expect(returnValue).toBeNull();
           expect(mockPersistentSession.addQueueItem).toHaveBeenCalledTimes(1);
@@ -1020,7 +1249,7 @@ describe('queue-bridge-context', () => {
           await act(async () => {
             // climb1 already exists in the queue as item1, so the dedupe
             // path is taken — setCurrentClimb on the existing item.
-            returnValue = await result.current!.setCurrentClimb(climb1);
+            returnValue = await result.current!.setCurrentClimb(climb1, { playlistSuggestionSource: null });
           });
           expect(returnValue).toBeNull();
           expect(mockPersistentSession.addQueueItem).not.toHaveBeenCalled();
@@ -1068,7 +1297,7 @@ describe('queue-bridge-context', () => {
         const { result } = renderWithLocalBoard();
         let returned: unknown;
         await act(async () => {
-          returned = await result.current!.setCurrentClimb(climb1);
+          returned = await result.current!.setCurrentClimb(climb1, { playlistSuggestionSource: null });
         });
         expect(returned).toBeNull();
         expect(mockShowMessage).toHaveBeenCalledWith('Climb is not compatible with this board', 'error');
@@ -1391,6 +1620,8 @@ describe('queue-bridge-context', () => {
         setCurrentClimb: vi.fn(),
         previewClimbFromBrowse: vi.fn(),
         setCurrentClimbQueueItem: vi.fn(),
+        setPlaylistSuggestionSource: vi.fn(),
+        refreshPlaylistSuggestionSource: vi.fn(),
         replaceQueueItem: vi.fn(),
         setClimbSearchParams: vi.fn(),
         setCountSearchParams: vi.fn(),

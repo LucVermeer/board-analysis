@@ -59,6 +59,7 @@ const initialState: QueueState = {
   queue: [],
   currentClimbQueueItem: null,
   climbSearchParams: mockSearchParams,
+  playlistSuggestionSource: null,
   hasDoneFirstFetch: false,
   initialQueueDataReceivedFromPeers: false,
   pendingCurrentClimbUpdates: [],
@@ -687,6 +688,56 @@ describe('queueReducer', () => {
       const result = queueReducer(stateWithCurrentClimb, action);
 
       expect(result.currentClimbQueueItem).toBeNull();
+    });
+
+    it('sets playlist suggestions while preserving queue history and manual future items', () => {
+      const historyItem: ClimbQueueItem = { ...mockClimbQueueItem, uuid: 'history-item' };
+      const currentItem: ClimbQueueItem = { ...mockClimbQueueItem, uuid: 'current-item' };
+      const oldSuggestedItem: ClimbQueueItem = {
+        ...mockClimbQueueItem,
+        uuid: 'old-suggested-item',
+        suggested: true,
+      };
+      const manualFutureItem: ClimbQueueItem = {
+        ...mockClimbQueueItem,
+        uuid: 'manual-future-item',
+        suggested: false,
+      };
+      const activatedItem: ClimbQueueItem = {
+        ...mockClimbQueueItem,
+        uuid: 'activated-item',
+        climb: { ...mockClimb, uuid: 'activated-climb' },
+      };
+      const playlistSuggestionSource = {
+        playlistUuid: 'playlist-1',
+        activatedClimbUuid: activatedItem.climb.uuid,
+        boardKey: 'kilter:1:12:1',
+        climbs: [activatedItem.climb],
+      };
+      const stateWithQueue: QueueState = {
+        ...initialState,
+        queue: [historyItem, currentItem, oldSuggestedItem, manualFutureItem],
+        currentClimbQueueItem: currentItem,
+      };
+
+      const result = queueReducer(stateWithQueue, {
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: {
+          item: activatedItem,
+          shouldAddToQueue: true,
+          insertAfterCurrent: true,
+          playlistSuggestionSource,
+        },
+      });
+
+      expect(result.queue.map((item) => item.uuid)).toEqual([
+        'history-item',
+        'current-item',
+        'activated-item',
+        'manual-future-item',
+      ]);
+      expect(result.currentClimbQueueItem).toEqual(activatedItem);
+      expect(result.playlistSuggestionSource).toEqual(playlistSuggestionSource);
     });
   });
 

@@ -7,7 +7,7 @@ import MuiButton from '@mui/material/Button';
 import { IosShare, SentimentDissatisfiedOutlined } from '@mui/icons-material';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { Climb } from '@/app/lib/types';
+import type { BoardDetails, Climb } from '@/app/lib/types';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
@@ -30,8 +30,15 @@ import { LoadingSpinner } from '@/app/components/ui/loading-spinner';
 import { EmptyState } from '@/app/components/ui/empty-state';
 import PlaylistPreviewSquare from '@/app/components/library/playlist-preview-square';
 import MultiboardClimbList from '@/app/components/climb-list/multiboard-climb-list';
+import { PlaylistActivationProvider } from '@/app/components/climb-actions/playlist-activation-context';
+import { useOptionalQueueActions } from '@/app/components/graphql-queue';
+import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-bridge-context';
+import { fetchPlaylistSuggestionClimbs } from '@/app/components/queue-control/playlist-suggestion-refresh';
+import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
+import { usePlaylistClimbActivation } from '@/app/components/queue-control/use-playlist-climb-activation';
 import BackButton from '@/app/components/back-button';
 import LocaleLink from '@/app/components/i18n/locale-link';
+import { getUserBoardDetails } from '@/app/lib/board-config-for-playlist';
 import styles from '@/app/components/library/playlist-view.module.css';
 
 type Props = {
@@ -53,9 +60,12 @@ export default function SmartPlaylistContent({
   const { t } = useTranslation('playlists');
   const { showMessage } = useSnackbar();
   const { token, isLoading: tokenLoading } = useWsAuthToken();
+  const queueActions = useOptionalQueueActions();
+  const activeQueueBoardInfo = useQueueBridgeBoardInfo();
   const preset = smartPlaylistByType(smartPlaylistType);
 
   const [selectedBoard, setSelectedBoard] = useState<UserBoard | null>(() => findMatchingBoard(initialMyBoards));
+  useClearPlaylistSuggestionSourceOnUnmount(queueActions);
   const { boards: myBoards, isLoading: boardsLoading } = useMyBoards(true, 50, initialMyBoards);
   // Mark SSR data fresh so react-query honours staleTime instead of triggering
   // an immediate refetch (initialDataUpdatedAt defaults to 0 = epoch).
@@ -135,6 +145,70 @@ export default function SmartPlaylistContent({
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const selectedBoardDetails = useMemo(
+    () => (selectedBoard ? getUserBoardDetails(selectedBoard) : null),
+    [selectedBoard],
+  );
+
+  const fetchSmartPlaylistClimbsForBoard = useCallback(
+    async ({
+      boardDetails,
+      activatedClimbUuid,
+      signal,
+    }: {
+      boardDetails: BoardDetails;
+      angle: number;
+      activatedClimbUuid: string;
+      signal: AbortSignal;
+    }): Promise<Climb[]> => {
+      const client = createGraphQLHttpClient(token);
+
+      return fetchPlaylistSuggestionClimbs({
+        activatedClimbUuid,
+        signal,
+        fetchPage: async ({ page, pageSize, signal: requestSignal }) => {
+          const response = await client.request<GetSmartPlaylistQueryResponse, GetSmartPlaylistQueryVariables>({
+            document: GET_SMART_PLAYLIST,
+            variables: {
+              input: {
+                type: smartPlaylistType,
+                userId,
+                boardName: boardDetails.board_name,
+                page,
+                pageSize,
+              },
+            },
+            signal: requestSignal,
+          });
+
+          return {
+            climbs: response.smartPlaylist.climbs as Climb[],
+            hasMore: response.smartPlaylist.hasMore,
+          };
+        },
+      });
+    },
+    [smartPlaylistType, token, userId],
+  );
+
+  const activateSmartPlaylistClimb = usePlaylistClimbActivation({
+    queueActions,
+    activeQueueBoardInfo,
+    selectedBoardDetails,
+    selectedBoard,
+    fallbackBoardType: selectedBoard?.boardType,
+    fallbackLayoutId: selectedBoard?.layoutId,
+    sourceId: `smart:${smartPlaylistType}:${userId}`,
+    allClimbs,
+    fetchClimbsForBoard: fetchSmartPlaylistClimbsForBoard,
+    refreshErrorMessage: 'Failed to refresh smart playlist suggestions:',
+  });
+
+  const playlistActivationValue = useMemo(
+    () => ({ activatePlaylistClimb: activateSmartPlaylistClimb }),
+    [activateSmartPlaylistClimb],
+  );
+
   const handleShare = useCallback(async () => {
     const url = `${window.location.origin}/discover/${smartPlaylistSlug}/${encodeURIComponent(userId)}`;
     await shareWithFallback({
@@ -179,6 +253,25 @@ export default function SmartPlaylistContent({
     );
   }
 
+  const climbList =
+    allClimbs.length === 0 && !isFetching ? (
+      <EmptyState description={t('library.smart.empty')} />
+    ) : (
+      <MultiboardClimbList
+        climbs={allClimbs}
+        isFetching={isFetching}
+        isLoading={isLoading}
+        hasMore={hasNextPage ?? false}
+        onLoadMore={handleLoadMore}
+        showBoardFilter
+        boardTypes={boardTypes}
+        selectedBoard={selectedBoard}
+        onBoardSelect={setSelectedBoard}
+        boards={myBoards}
+        boardsLoading={boardsLoading}
+      />
+    );
+
   return (
     <>
       <div className={styles.actionsSection}>
@@ -220,22 +313,10 @@ export default function SmartPlaylistContent({
         </div>
 
         <div className={styles.climbsSection}>
-          {allClimbs.length === 0 && !isFetching ? (
-            <EmptyState description={t('library.smart.empty')} />
+          {queueActions ? (
+            <PlaylistActivationProvider value={playlistActivationValue}>{climbList}</PlaylistActivationProvider>
           ) : (
-            <MultiboardClimbList
-              climbs={allClimbs}
-              isFetching={isFetching}
-              isLoading={isLoading}
-              hasMore={hasNextPage ?? false}
-              onLoadMore={handleLoadMore}
-              showBoardFilter
-              boardTypes={boardTypes}
-              selectedBoard={selectedBoard}
-              onBoardSelect={setSelectedBoard}
-              boards={myBoards}
-              boardsLoading={boardsLoading}
-            />
+            climbList
           )}
         </div>
       </div>
