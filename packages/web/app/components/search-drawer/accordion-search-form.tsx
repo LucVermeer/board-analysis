@@ -15,7 +15,7 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
-import { InlineGradePicker } from '@/app/components/grade-picker/inline-grade-picker';
+import { GradeRangeSlider } from '@/app/components/grade-picker/grade-range-slider';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
@@ -25,7 +25,6 @@ import SearchClimbNameInput from './search-climb-name-input';
 import SetterNameSelect from './setter-name-select';
 import ClimbSearchForm from './climb-search-form';
 import type { BoardDetails } from '@/app/lib/types';
-import { buildGradeRangeUpdate } from './grade-range-utils';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import {
   getQualityPanelSummary,
@@ -75,18 +74,31 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     statusValue = 'established';
   }
 
-  const { lastUsedGrade, rememberGrade } = useLastUsedGrade();
-
-  // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips
-  // `undefined` from updates, so we must explicitly pass `0` (not `undefined`)
-  // when the user clears a grade — otherwise the clear action is a silent no-op.
-  const handleGradeChange = (type: 'min' | 'max', value: number | undefined) => {
-    updateFilters(buildGradeRangeUpdate(type, value ?? 0, uiSearchParams.minGrade, uiSearchParams.maxGrade));
-    rememberGrade(value);
-  };
+  const { rememberGrade } = useLastUsedGrade();
 
   const minGradeForPicker = uiSearchParams.minGrade > 0 ? uiSearchParams.minGrade : undefined;
   const maxGradeForPicker = uiSearchParams.maxGrade > 0 ? uiSearchParams.maxGrade : undefined;
+
+  // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips
+  // `undefined` from updates, so we coerce both bounds to concrete numbers
+  // (`0` when the slider is at the extreme) before sending. The slider's
+  // `disableSwap` already prevents min > max, so no further clamping needed.
+  const handleGradeRangeChange = ({
+    minGradeId,
+    maxGradeId,
+  }: {
+    minGradeId: number | undefined;
+    maxGradeId: number | undefined;
+  }) => {
+    updateFilters({ minGrade: minGradeId ?? 0, maxGrade: maxGradeId ?? 0 });
+    // Persist whichever bound the user just moved off the extreme so the
+    // next "open the filter" pre-scrolls to a useful grade.
+    if (minGradeId !== undefined && minGradeId !== minGradeForPicker) {
+      rememberGrade(minGradeId);
+    } else if (maxGradeId !== undefined && maxGradeId !== maxGradeForPicker) {
+      rememberGrade(maxGradeId);
+    }
+  };
 
   const climbContent = (
     <div className={styles.panelContent}>
@@ -96,26 +108,12 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       </div>
 
       <div className={styles.inputGroup}>
-        <span className={styles.fieldLabel}>{t('search.fields.minGrade')}</span>
-        <InlineGradePicker
+        <GradeRangeSlider
           grades={grades}
-          currentGradeId={minGradeForPicker}
-          scrollToGradeId={lastUsedGrade}
-          onSelect={(value) => handleGradeChange('min', value)}
-          ariaLabel={t('search.fields.minGrade')}
-          clearLabel={t('search.fields.any')}
-        />
-      </div>
-
-      <div className={styles.inputGroup}>
-        <span className={styles.fieldLabel}>{t('search.fields.maxGrade')}</span>
-        <InlineGradePicker
-          grades={grades}
-          currentGradeId={maxGradeForPicker}
-          scrollToGradeId={lastUsedGrade}
-          onSelect={(value) => handleGradeChange('max', value)}
-          ariaLabel={t('search.fields.maxGrade')}
-          clearLabel={t('search.fields.any')}
+          minGradeId={minGradeForPicker}
+          maxGradeId={maxGradeForPicker}
+          onChange={handleGradeRangeChange}
+          ariaLabel={t('search.fields.gradeRange')}
         />
       </div>
 

@@ -97,6 +97,8 @@
       "climbName": "Nom du bloc",
       "minGrade": "Min",
       "maxGrade": "Max",
+      "gradeRange": "Plage de cotation",
+      "gradeRangeSummary": "{{min}} – {{max}}",
       "setter": "Ouvreur",
       "minAscents": "Enchaînements min",
       "minRating": "Note min",

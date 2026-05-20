@@ -97,6 +97,8 @@
       "climbName": "Nombre del bloque",
       "minGrade": "Mín",
       "maxGrade": "Máx",
+      "gradeRange": "Rango de grado",
+      "gradeRangeSummary": "{{min}} – {{max}}",
       "setter": "Aperturista",
       "minAscents": "Encadenes mín.",
       "minRating": "Valoración mín.",

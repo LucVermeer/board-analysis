@@ -97,6 +97,8 @@
       "climbName": "Climb Name",
       "minGrade": "Min",
       "maxGrade": "Max",
+      "gradeRange": "Grade range",
+      "gradeRangeSummary": "{{min}} – {{max}}",
       "setter": "Setter",
       "minAscents": "Min Ascents",
       "minRating": "Min Rating",

@@ -1,0 +1,43 @@
+/* Wrapper around the MUI Slider — gives us padding control + room for the
+   summary label without leaking sx through every consumer. */
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summaryRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summaryValue {
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.summaryHint {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--neutral-500, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Reserve horizontal space so the pill thumbs don't get clipped by the
+   container's edges. The thumbs are ~36px wide, so half a pill on each side. */
+.sliderHost {
+  padding: 0 18px;
+}
+
+/* Color the thumb's grade label via --grade-color (set inline per-thumb). */
+.thumbLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--grade-color, inherit);
+  pointer-events: none;
+  white-space: nowrap;
+}
