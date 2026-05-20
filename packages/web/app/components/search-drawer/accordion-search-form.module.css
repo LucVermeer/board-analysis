@@ -47,13 +47,6 @@
   width: 100%;
 }
 
-/* Grade range row */
-.gradeRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
 /* Sort controls row */
 .sortRow {
   display: grid;
