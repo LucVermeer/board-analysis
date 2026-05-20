@@ -75,7 +75,7 @@ describe('sliderValueToGradeIds', () => {
 });
 
 describe('<GradeRangeSlider />', () => {
-  it('renders summary "Any" when both bounds are unset', () => {
+  it('renders two slider thumbs anchored to the grade extents when bounds are unset', () => {
     render(
       <GradeRangeSlider
         grades={kilterGrades}
@@ -84,10 +84,13 @@ describe('<GradeRangeSlider />', () => {
         onChange={() => undefined}
       />,
     );
-    expect(screen.getByText('Any')).toBeDefined();
+    const inputs = screen.getAllByRole('slider') as HTMLInputElement[];
+    expect(inputs.length).toBe(2);
+    expect(inputs[0].value).toBe('0');
+    expect(inputs[1].value).toBe(String(kilterGrades.length - 1));
   });
 
-  it('renders the formatted summary when both bounds are set', () => {
+  it('positions the thumbs at the matching grade indices when both bounds are set', () => {
     render(
       <GradeRangeSlider
         grades={kilterGrades}
@@ -96,8 +99,9 @@ describe('<GradeRangeSlider />', () => {
         onChange={() => undefined}
       />,
     );
-    // gradeRangeSummary catalog template: "{{min}} – {{max}}"
-    expect(screen.getByText('V6 – V11')).toBeDefined();
+    const inputs = screen.getAllByRole('slider') as HTMLInputElement[];
+    expect(inputs[0].value).toBe(String(kilterGrades.findIndex((g) => g.difficulty_id === 22)));
+    expect(inputs[1].value).toBe(String(kilterGrades.findIndex((g) => g.difficulty_id === 28)));
   });
 
   it('emits undefined for both bounds when the slider is reset to the full extent', () => {
@@ -132,6 +136,42 @@ describe('<GradeRangeSlider />', () => {
 
     const lastCall = onChange.mock.calls.at(-1)?.[0];
     expect(lastCall).toEqual({ minGradeId: undefined, maxGradeId: undefined });
+  });
+
+  it('shows "Any" in the summary when both bounds are unset', () => {
+    render(
+      <GradeRangeSlider
+        grades={kilterGrades}
+        minGradeId={undefined}
+        maxGradeId={undefined}
+        onChange={() => undefined}
+      />,
+    );
+    expect(screen.getByText('Any')).toBeDefined();
+  });
+
+  it('shows "V6 to V11" when both bounds are set to distinct grades', () => {
+    render(<GradeRangeSlider grades={kilterGrades} minGradeId={22} maxGradeId={28} onChange={() => undefined} />);
+    expect(screen.getByText('V6 to V11')).toBeDefined();
+  });
+
+  it('shows "V6 only" when both bounds collapse to the same grade', () => {
+    render(<GradeRangeSlider grades={kilterGrades} minGradeId={22} maxGradeId={22} onChange={() => undefined} />);
+    expect(screen.getByText('V6 only')).toBeDefined();
+  });
+
+  it('shows "Up to V11" when only the upper bound is set', () => {
+    render(
+      <GradeRangeSlider grades={kilterGrades} minGradeId={undefined} maxGradeId={28} onChange={() => undefined} />,
+    );
+    expect(screen.getByText('Up to V11')).toBeDefined();
+  });
+
+  it('shows "V6 and up" when only the lower bound is set', () => {
+    render(
+      <GradeRangeSlider grades={kilterGrades} minGradeId={22} maxGradeId={undefined} onChange={() => undefined} />,
+    );
+    expect(screen.getByText('V6 and up')).toBeDefined();
   });
 
   it('emits a concrete max difficulty_id when the upper thumb leaves the extreme', () => {

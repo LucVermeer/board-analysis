@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useId, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import MuiSlider from '@mui/material/Slider';
 import { useTranslation } from 'react-i18next';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
@@ -62,17 +62,18 @@ export function gradeIdsToSliderValue(
 }
 
 /**
- * Picks a sparse subset of grade indices to label below the track. Labelling
- * all grades crowds the rail on narrow screens; the endpoints plus every
- * Nth interior grade gives a readable reference axis.
+ * `useGradeFormat`'s dark-mode color is tuned for TEXT readability
+ * (`hsl(h, 80%, 77%)`), which reads as washed-out when painted as a fill on
+ * the dark slider rail. This helper keeps the light-mode color as-is and,
+ * in dark mode, extracts the hue from the HSL string and re-renders it at
+ * a punchier saturation/lightness suitable for a filled shape.
  */
-function pickMarkIndices(length: number): number[] {
-  if (length <= 1) return [0];
-  if (length <= 6) return Array.from({ length }, (_, i) => i);
-  const stride = Math.ceil(length / 5);
-  const indices = new Set<number>([0, length - 1]);
-  for (let i = stride; i < length - 1; i += stride) indices.add(i);
-  return [...indices].sort((a, b) => a - b);
+function saturateFill(color: string | undefined, isDark: boolean): string | undefined {
+  if (!color || !isDark) return color;
+  const match = color.match(/hsl\(\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) return color;
+  const hue = Math.round(Number.parseFloat(match[1]));
+  return `hsl(${hue}, 85%, 62%)`;
 }
 
 export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
@@ -85,18 +86,9 @@ export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
   const { t } = useTranslation('climbs');
   const { formatGrade, getGradeColor } = useGradeFormat();
   const isDark = useIsDarkMode();
-  const labelId = useId();
 
   const value = useMemo(() => gradeIdsToSliderValue(minGradeId, maxGradeId, grades), [minGradeId, maxGradeId, grades]);
   const lastIdx = grades.length - 1;
-
-  const marks = useMemo(() => {
-    return pickMarkIndices(grades.length).map((idx) => {
-      const grade = grades[idx];
-      const label = formatGrade(grade.difficulty_name) ?? grade.v_grade;
-      return { value: idx, label };
-    });
-  }, [grades, formatGrade]);
 
   const lowGrade = grades[value[0]];
   const highGrade = grades[value[1]];
@@ -104,30 +96,55 @@ export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
   const highLabel = highGrade ? (formatGrade(highGrade.difficulty_name) ?? highGrade.v_grade) : '';
   const lowColor = lowGrade ? getGradeColor(lowGrade.difficulty_name, isDark) : undefined;
   const highColor = highGrade ? getGradeColor(highGrade.difficulty_name, isDark) : undefined;
+  // `getGradeColor` returns a text-readable variant — in dark mode that's
+  // hsl(h, 80%, 77%), which is intentionally pale so it reads against a dark
+  // background as TYPE. For a filled track/thumb on the same dark surface,
+  // that's too washed out. Pull the hue and re-render at lower lightness so
+  // the gradient and thumbs actually pop.
+  const lowFill = saturateFill(lowColor, isDark);
+  const highFill = saturateFill(highColor, isDark);
+  // Paint the selected band as a sweep from the low thumb's grade color to
+  // the high thumb's — so the visible range looks like the band it represents.
+  const trackGradient = lowFill && highFill ? `linear-gradient(to right, ${lowFill}, ${highFill})` : undefined;
+  const lowThumbFill = lowFill ?? 'rgba(175, 45, 60, 0.95)';
+  const highThumbFill = highFill ?? 'rgba(175, 45, 60, 0.95)';
 
-  const isUnbounded = minGradeId === undefined && maxGradeId === undefined;
-  const summary = isUnbounded
-    ? t('search.fields.any')
-    : t('search.fields.gradeRangeSummary', { min: lowLabel, max: highLabel });
+  // Dynamic summary so the row's label tells the user the *current* filter
+  // state. Distinguishes "Any" from "V0 to V16" — important because the
+  // slider naturally anchors its thumbs at the extremes when nothing is
+  // filtered, which would otherwise read identically to "all grades selected".
+  const summary = useMemo(() => {
+    if (minGradeId === undefined && maxGradeId === undefined) return t('search.fields.any');
+    if (minGradeId !== undefined && maxGradeId !== undefined) {
+      if (minGradeId === maxGradeId) return t('search.fields.gradeRangeOnly', { grade: lowLabel });
+      return t('search.fields.gradeRangeBetween', { min: lowLabel, max: highLabel });
+    }
+    if (minGradeId !== undefined) return t('search.fields.gradeRangeAndUp', { grade: lowLabel });
+    return t('search.fields.gradeRangeUpTo', { grade: highLabel });
+  }, [minGradeId, maxGradeId, lowLabel, highLabel, t]);
 
   const handleChange = (_: Event, next: number | number[]) => {
     const tuple = Array.isArray(next) ? (next as [number, number]) : [next, next];
     onChange(sliderValueToGradeIds([tuple[0], tuple[1]], grades));
   };
 
-  const formatValueLabel = (idx: number): string => {
+  const ariaValueText = (idx: number): string => {
     const grade = grades[idx];
     if (!grade) return '';
     return formatGrade(grade.difficulty_name) ?? grade.v_grade;
   };
 
+  // Outer halo on the thumb in the panel's surface color so the colored
+  // thumb doesn't blend into the equally-colored gradient track. Resolves
+  // to a light tone on light surfaces and a dark tone on dark surfaces via
+  // the theme.
+  const thumbHalo = 'var(--semantic-surface, #ffffff)';
+
   return (
     <div className={styles.wrapper}>
-      <div className={styles.summaryRow}>
-        <span id={labelId} className={styles.summaryHint}>
-          {t('search.fields.gradeRange')}
-        </span>
-        <span className={styles.summaryValue}>{summary}</span>
+      <div className={styles.labelRow}>
+        <span className={styles.fieldLabel}>{t('search.fields.gradeRange')}</span>
+        <span className={styles.fieldSummary}>{summary}</span>
       </div>
       <div className={styles.sliderHost}>
         <MuiSlider
@@ -136,84 +153,51 @@ export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
           min={0}
           max={lastIdx > 0 ? lastIdx : 1}
           step={1}
-          marks={marks}
           disableSwap
-          valueLabelDisplay="on"
-          valueLabelFormat={formatValueLabel}
-          aria-labelledby={labelId}
           aria-label={ariaLabel ?? t('search.fields.gradeRange')}
-          getAriaValueText={formatValueLabel}
+          getAriaValueText={ariaValueText}
           sx={{
-            // Match the inline picker's brand-rose selected tint.
             color: 'rgba(175, 45, 60, 0.85)',
             height: 6,
-            padding: '20px 0',
-            marginTop: '28px',
+            padding: '14px 0',
             '& .MuiSlider-rail': {
               opacity: 1,
               backgroundColor: 'rgba(128, 128, 128, 0.25)',
             },
             '& .MuiSlider-track': {
               border: 'none',
-              backgroundColor: 'rgba(175, 45, 60, 0.45)',
+              background: trackGradient ?? 'rgba(175, 45, 60, 0.45)',
             },
             '& .MuiSlider-thumb': {
               width: 22,
               height: 22,
               borderRadius: '50%',
-              backgroundColor: 'rgba(175, 45, 60, 0.95)',
-              boxShadow: '0 0 0 2px #8c4a52',
-              transition: 'box-shadow 150ms ease',
-              '&:hover, &.Mui-focusVisible, &.Mui-active': {
-                boxShadow: '0 0 0 2px #8c4a52, 0 0 0 8px rgba(175, 45, 60, 0.16)',
+              boxShadow: `0 0 0 2px ${thumbHalo}`,
+              '&:hover, &.Mui-active': {
+                boxShadow: `0 0 0 2px ${thumbHalo}`,
+              },
+              '&.Mui-focusVisible': {
+                boxShadow: `0 0 0 2px ${thumbHalo}, 0 0 0 5px rgba(175, 45, 60, 0.32)`,
               },
               '&::before': { display: 'none' },
             },
-            '& .MuiSlider-mark': {
-              backgroundColor: 'rgba(128, 128, 128, 0.45)',
-              height: 6,
-              width: 2,
+            '& .MuiSlider-thumb[data-index="0"]': {
+              backgroundColor: lowThumbFill,
             },
-            '& .MuiSlider-markActive': {
-              backgroundColor: 'rgba(175, 45, 60, 0.6)',
+            '& .MuiSlider-thumb[data-index="1"]': {
+              backgroundColor: highThumbFill,
             },
-            '& .MuiSlider-markLabel': {
-              fontSize: 11,
-              opacity: 0.6,
-              top: 22,
-            },
-            // ValueLabel tooltip styling — pill-shaped, brand-rose ring, grade-colored text.
-            '& .MuiSlider-valueLabel': {
-              top: -2,
-              backgroundColor: 'rgba(175, 45, 60, 0.32)',
-              color: 'inherit',
-              fontSize: 13,
-              fontWeight: 700,
-              padding: '4px 10px',
-              minWidth: 36,
-              borderRadius: 8,
-              boxShadow: 'inset 0 0 0 2px #8c4a52',
-              '&::before': { display: 'none' },
-            },
-            // Color each value label's text by which thumb it sits above.
-            '& [data-index="0"] .MuiSlider-valueLabelLabel': {
-              color: lowColor ?? 'inherit',
-            },
-            '& [data-index="1"] .MuiSlider-valueLabelLabel': {
-              color: highColor ?? 'inherit',
-            },
-            // Dark mode: white-tint fill behind the rose ring (mirrors
-            // inline-grade-picker.module.css `.pickerItemSelected` dark override).
             ...(isDark && {
               '& .MuiSlider-rail': {
                 backgroundColor: 'rgba(255, 255, 255, 0.18)',
               },
               '& .MuiSlider-track': {
-                backgroundColor: 'rgba(175, 45, 60, 0.55)',
+                background: trackGradient ?? 'rgba(175, 45, 60, 0.55)',
               },
-              '& .MuiSlider-valueLabel': {
-                backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                boxShadow: 'inset 0 0 0 2px #8c4a52',
+              '& .MuiSlider-thumb': {
+                '&.Mui-focusVisible': {
+                  boxShadow: `0 0 0 2px ${thumbHalo}, 0 0 0 5px rgba(175, 45, 60, 0.55)`,
+                },
               },
             }),
           }}

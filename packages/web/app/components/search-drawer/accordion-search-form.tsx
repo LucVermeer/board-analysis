@@ -17,7 +17,6 @@ import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
 import { GradeRangeSlider } from '@/app/components/grade-picker/grade-range-slider';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
-import { useLastUsedGrade } from '@/app/hooks/use-last-used-grade';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
 import { formatMinAscentsFilterCount, getMinRatingPickerValue } from '@/app/lib/climb-quality-filter-options';
@@ -74,8 +73,6 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     statusValue = 'established';
   }
 
-  const { rememberGrade } = useLastUsedGrade();
-
   const minGradeForPicker = uiSearchParams.minGrade > 0 ? uiSearchParams.minGrade : undefined;
   const maxGradeForPicker = uiSearchParams.maxGrade > 0 ? uiSearchParams.maxGrade : undefined;
 
@@ -91,13 +88,6 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     maxGradeId: number | undefined;
   }) => {
     updateFilters({ minGrade: minGradeId ?? 0, maxGrade: maxGradeId ?? 0 });
-    // Persist whichever bound the user just moved off the extreme so the
-    // next "open the filter" pre-scrolls to a useful grade.
-    if (minGradeId !== undefined && minGradeId !== minGradeForPicker) {
-      rememberGrade(minGradeId);
-    } else if (maxGradeId !== undefined && maxGradeId !== maxGradeForPicker) {
-      rememberGrade(maxGradeId);
-    }
   };
 
   const climbContent = (

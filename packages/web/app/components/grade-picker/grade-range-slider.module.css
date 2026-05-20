@@ -1,43 +1,38 @@
-/* Wrapper around the MUI Slider — gives us padding control + room for the
-   summary label without leaking sx through every consumer. */
 .wrapper {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.summaryRow {
+/* Label row sits above the slider — matches the form's `fieldLabel`
+   typography on the left, current-range summary on the right. */
+.labelRow {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
-.summaryValue {
-  font-size: 14px;
+.fieldLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--neutral-500, #6b7280);
+  flex: 0 0 auto;
+}
+
+.fieldSummary {
+  font-size: 13px;
   font-weight: 600;
   color: inherit;
+  flex: 0 1 auto;
+  text-align: right;
 }
 
-.summaryHint {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--neutral-500, #6b7280);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-/* Reserve horizontal space so the pill thumbs don't get clipped by the
-   container's edges. The thumbs are ~36px wide, so half a pill on each side. */
+/* Reserve horizontal space so the thumb halo doesn't get clipped by the
+   container's edges. Thumb (22px) + 2px halo + room for the focus halo. */
 .sliderHost {
-  padding: 0 18px;
-}
-
-/* Color the thumb's grade label via --grade-color (set inline per-thumb). */
-.thumbLabel {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--grade-color, inherit);
-  pointer-events: none;
-  white-space: nowrap;
+  padding: 0 14px;
 }

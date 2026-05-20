@@ -302,20 +302,14 @@ describe('AccordionSearchForm — quality filter controls', () => {
       expect(lastCall?.maxGrade).toBe(0);
     });
 
-    it('persists the picked grade via setLastUsedGrade when a thumb leaves its extreme', () => {
+    it('does not persist a "last used grade" — the URL params already capture the range', () => {
+      // Regression guard: an earlier draft persisted the moved thumb via the
+      // single-grade `useLastUsedGrade` hook, which has the wrong semantics
+      // for a range filter (and corrupts the "last used grade" signal the
+      // tick-menu picker reads).
       render(<AccordionSearchForm boardDetails={boardDetails} />);
       const [lowInput] = findSliders();
       fireEvent.change(lowInput, { target: { value: '12' } });
-      expect(mockSetLastUsedGrade).toHaveBeenCalledWith(22);
-    });
-
-    it('does not persist when both thumbs are at the extremes (full clear)', () => {
-      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
-      render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const [lowInput, highInput] = findSliders();
-      fireEvent.change(lowInput, { target: { value: '0' } });
-      mockSetLastUsedGrade.mockClear();
-      fireEvent.change(highInput, { target: { value: String(kilterLastIdx) } });
       expect(mockSetLastUsedGrade).not.toHaveBeenCalled();
     });
   });
