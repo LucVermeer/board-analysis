@@ -102,9 +102,8 @@ const findUnqueuedNeighborInSearchResults = (
   return null;
 };
 
-// First unqueued climb in `suggestedClimbs` whose uuid isn't the anchor. Named
-// helper rather than an inlined `find(...)` to make the cross-search-session
-// continuity intent explicit at the call site.
+// Used by the forward fallback for cross-search-session continuity: anchor
+// isn't in current climbSearchResults, surface a suggestion that isn't queued.
 const pickUnqueuedSuggestion = (
   suggestedClimbs: readonly Climb[],
   queue: readonly ClimbQueueItem[],
@@ -116,9 +115,7 @@ const pickUnqueuedSuggestion = (
 
 // Factory that captures the per-render `latest` snapshot so the returned
 // closure has the right clientId / user / playlist mode without taking those
-// as positional args at every call. Used by both forward and backward getters
-// to build a suggested ClimbQueueItem from a Climb, applying the playlist
-// peek-uuid rewrite when a playlist suggestion source is active.
+// as positional args at every call site.
 const makeBuildSuggestedQueueItem =
   (latest: {
     clientId: UserName;
@@ -997,6 +994,11 @@ export const GraphQLQueueProvider = ({
         const prevClimb = latest.suggestedClimbs[anchorIdx - 1];
         return prevClimb ? buildSuggestedQueueItem(prevClimb) : null;
       }
+      // No anchor (no current climb, no `from`): backward navigation has no
+      // semantic answer — don't fabricate one from suggestions. Forward
+      // surfaces queue[0] to start an unactivated queue; backward has no
+      // symmetric "start" semantics.
+      if (anchorUuid == null) return null;
       const queue = latest.state.queue;
       const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
       if (queueItemIndex > 0) return queue[queueItemIndex - 1];
@@ -1005,19 +1007,17 @@ export const GraphQLQueueProvider = ({
       // only. Don't fall through to climbSearchResults, that would surface
       // unrelated results.
       if (latest.state.playlistSuggestionSource) return null;
-      const fromSearch = findUnqueuedNeighborInSearchResults(
+      // Backward navigation is history-oriented: the queue walk above is the
+      // history step. When neither queue nor search results yield a backward
+      // neighbour, don't fall through to suggestedClimbs — that's discovery
+      // (the forward direction).
+      return findUnqueuedNeighborInSearchResults(
         latest.climbSearchResults,
         anchorClimbUuid,
         queue,
         -1,
         buildSuggestedQueueItem,
       );
-      if (fromSearch) return fromSearch;
-      // Cross-search-session continuity (symmetric to forward): surface the
-      // first unqueued suggestion when the anchor isn't in current search
-      // results.
-      const fallback = pickUnqueuedSuggestion(latest.suggestedClimbs, queue, anchorClimbUuid);
-      return fallback ? buildSuggestedQueueItem(fallback) : null;
     },
     [],
   );
