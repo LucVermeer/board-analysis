@@ -257,67 +257,59 @@ describe('AccordionSearchForm — quality filter controls', () => {
     }
   });
 
-  describe('grade range picker', () => {
-    // V6 = difficulty_id 22 (7a) and V11 = 28 (8a) are the easiest grades to
-    // target unambiguously because both v_grade labels are unique across the
-    // Kilter grade table.
+  describe('grade range slider', () => {
+    // The Kilter grade table runs from difficulty_id 10..33 (24 grades),
+    // so the slider's lower thumb spans indices 0..23 and the upper thumb
+    // spans 0..23 too. Indices map directly to difficulty_ids: idx 12 = 22,
+    // idx 13 = 23, idx 18 = 28, etc.
+    const kilterLastIdx = 23;
+    const findSliders = () => screen.getAllByRole('slider') as HTMLInputElement[];
 
-    it('selecting a grade in the Min picker emits the difficulty_id', () => {
+    it('moving the lower thumb off the bottom emits a concrete minGrade difficulty_id', () => {
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const minListbox = screen.getByRole('listbox', { name: 'Min' });
-      fireEvent.click(within(minListbox).getByRole('option', { name: 'V6' }));
-      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 22 });
+      const [lowInput] = findSliders();
+      // idx 12 = difficulty_id 22 (V6 / 7a)
+      fireEvent.change(lowInput, { target: { value: '12' } });
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 22, maxGrade: 0 });
     });
 
-    it('tapping the "Any" clear chip emits the 0 sentinel (not undefined)', () => {
-      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22 };
+    it('moving the lower thumb back to the bottom emits the 0 sentinel (not undefined)', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const minListbox = screen.getByRole('listbox', { name: 'Min' });
-      fireEvent.click(within(minListbox).getByRole('option', { name: 'Any' }));
+      const [lowInput] = findSliders();
+      fireEvent.change(lowInput, { target: { value: '0' } });
       const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
-      expect(lastCall).toEqual({ minGrade: 0 });
       // Regression guard: updateFilters strips undefined fields, so emitting
-      // undefined here would silently no-op the clear. The handler must coerce
-      // to the 0 sentinel.
+      // undefined here would silently no-op the clear. The handler coerces to 0.
+      expect(lastCall?.minGrade).toBe(0);
       expect(lastCall?.minGrade).not.toBeUndefined();
     });
 
-    it('tapping the already-selected grade chip deselects (emits the 0 sentinel)', () => {
-      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22 };
+    it('moving the upper thumb off the top emits a concrete maxGrade difficulty_id', () => {
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const minListbox = screen.getByRole('listbox', { name: 'Min' });
-      fireEvent.click(within(minListbox).getByRole('option', { name: 'V6' }));
-      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 0 });
+      const [, highInput] = findSliders();
+      // idx 18 = difficulty_id 28 (V11 / 8a)
+      fireEvent.change(highInput, { target: { value: '18' } });
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 0, maxGrade: 28 });
     });
 
-    it('picking a min grade higher than the current max swaps both', () => {
-      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 0, maxGrade: 22 };
+    it('moving the upper thumb back to the top clears maxGrade to the 0 sentinel', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const minListbox = screen.getByRole('listbox', { name: 'Min' });
-      fireEvent.click(within(minListbox).getByRole('option', { name: 'V11' }));
-      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 28, maxGrade: 28 });
+      const [, highInput] = findSliders();
+      fireEvent.change(highInput, { target: { value: String(kilterLastIdx) } });
+      const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
+      expect(lastCall?.maxGrade).toBe(0);
     });
 
-    it('picking a max grade lower than the current min swaps both', () => {
-      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 28, maxGrade: 33 };
+    it('does not persist a "last used grade" — the URL params already capture the range', () => {
+      // Regression guard: an earlier draft persisted the moved thumb via the
+      // single-grade `useLastUsedGrade` hook, which has the wrong semantics
+      // for a range filter (and corrupts the "last used grade" signal the
+      // tick-menu picker reads).
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const maxListbox = screen.getByRole('listbox', { name: 'Max' });
-      fireEvent.click(within(maxListbox).getByRole('option', { name: 'V6' }));
-      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 22, maxGrade: 22 });
-    });
-
-    it('persists the picked grade via setLastUsedGrade', () => {
-      render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const minListbox = screen.getByRole('listbox', { name: 'Min' });
-      fireEvent.click(within(minListbox).getByRole('option', { name: 'V6' }));
-      expect(mockSetLastUsedGrade).toHaveBeenCalledWith(22);
-    });
-
-    it('does not persist when clearing the grade', () => {
-      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22 };
-      render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const minListbox = screen.getByRole('listbox', { name: 'Min' });
-      fireEvent.click(within(minListbox).getByRole('option', { name: 'Any' }));
+      const [lowInput] = findSliders();
+      fireEvent.change(lowInput, { target: { value: '12' } });
       expect(mockSetLastUsedGrade).not.toHaveBeenCalled();
     });
   });
