@@ -13,8 +13,9 @@ export default defineConfig({
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  /* 3 retries in CI to absorb infra timing noise; 1 locally to catch genuine flakes */
-  retries: process.env.CI ? 3 : 1,
+  /* 1 retry in CI and locally — enough to absorb a single transient infra blip,
+   * but not enough to bury a hard-broken test the way `retries: 3` did before. */
+  retries: 1,
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 2 : undefined,
   /* Global per-test timeout — some tests (zoom, login flows) need more than Playwright's 30 s default */

@@ -26,17 +26,20 @@ export {
 export const USER_CLIMB_PERCENTILE_CACHE_TAG = 'user-climb-percentile';
 
 /**
- * Execute a GraphQL query via HTTP (non-cached version for internal use)
+ * Execute a GraphQL query via HTTP (non-cached version for internal use).
+ * Pass `signal` to enforce a deadline via `AbortController`.
  */
-async function executeGraphQLInternal<T = unknown, V extends Variables = Variables>(
+export async function executeGraphQLInternal<T = unknown, V extends Variables = Variables>(
   document: RequestDocument,
   variables?: V,
+  signal?: AbortSignal,
 ): Promise<T> {
   const url = getGraphQLHttpUrl();
   const client = new GraphQLClient(url, {
     headers: {
       'Content-Type': 'application/json',
     },
+    signal,
   });
 
   return client.request<T>(document, variables);

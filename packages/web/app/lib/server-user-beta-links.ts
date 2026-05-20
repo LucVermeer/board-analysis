@@ -1,45 +1,45 @@
-import React from 'react';
 import 'server-only';
-import { GraphQLClient } from 'graphql-request';
-import { getGraphQLHttpUrl } from '@/app/lib/graphql/client';
+import { unstable_cache } from 'next/cache';
 import { GET_USER_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
+import { executeGraphQLInternal } from '@/app/lib/graphql/server-cached-client';
 import type { RecentBetaLinkRow } from '@/app/lib/server-recent-beta-links';
 
 type UserBetaLinksResponse = {
   userBetaLinks: RecentBetaLinkRow[];
 };
 
-/**
- * Fetches a single user's beta videos for the profile-page slider. Same
- * shape as the home slider (RecentBetaLinkRow) — the only difference is
- * the resolver filters by user instead of capping per-poster. Errors and
- * timeouts fall back to `[]` so a backend hiccup doesn't fail the page
- * render; the client section will retry on mount.
- */
-export const getUserBetaLinks = React.cache(async (userId: string, limit = 50): Promise<RecentBetaLinkRow[]> => {
-  let url: string;
-  try {
-    url = getGraphQLHttpUrl();
-  } catch {
-    return [];
-  }
+const REVALIDATE_SECONDS = 300;
+const FETCH_TIMEOUT_MS = 3000;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1000);
+function buildFetcher(userId: string, limit: number) {
+  const tag = `user-beta-links-${userId}`;
+  return unstable_cache(
+    async (): Promise<RecentBetaLinkRow[]> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const result = await executeGraphQLInternal<UserBetaLinksResponse>(
+          GET_USER_BETA_LINKS,
+          { userId, limit },
+          controller.signal,
+        );
+        return result.userBetaLinks;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    ['user-beta-links', userId, String(limit)],
+    { revalidate: REVALIDATE_SECONDS, tags: [tag] },
+  );
+}
+
+export async function getUserBetaLinks(userId: string, limit = 50): Promise<RecentBetaLinkRow[]> {
   try {
-    const client = new GraphQLClient(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-    });
-    const result = await client.request<UserBetaLinksResponse>(GET_USER_BETA_LINKS, { userId, limit });
-    return result.userBetaLinks;
+    return await buildFetcher(userId, limit)();
   } catch (err) {
-    // Surface the failure in Vercel logs so a future regression names
-    // itself. Same observability rationale as server-recent-beta-links.ts
-    // and server-popular-configs.ts.
-    console.error('[home-page-ssr] userBetaLinks fetch failed:', err instanceof Error ? err.message : err);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[home-page-ssr] userBetaLinks fetch failed:', err instanceof Error ? err.message : err);
+    }
     return [];
-  } finally {
-    clearTimeout(timer);
   }
-});
+}
