@@ -84,6 +84,52 @@ const createClimbQueueItem = (
   suggested: !!suggested,
 });
 
+const findUnqueuedNeighborInSearchResults = (
+  results: readonly Climb[] | null,
+  anchorClimbUuid: string | undefined,
+  queue: readonly ClimbQueueItem[],
+  direction: 1 | -1,
+  buildSuggestedItem: (climb: Climb) => ClimbQueueItem,
+): ClimbQueueItem | null => {
+  if (!results || results.length === 0) return null;
+  const anchorIdx = results.findIndex((climb) => climb.uuid === anchorClimbUuid);
+  if (anchorIdx < 0) return null;
+  for (let i = anchorIdx + direction; i >= 0 && i < results.length; i += direction) {
+    const candidate = results[i];
+    if (queue.some((queueItem) => queueItem.climb?.uuid === candidate.uuid)) continue;
+    return buildSuggestedItem(candidate);
+  }
+  return null;
+};
+
+// First unqueued climb in `suggestedClimbs` whose uuid isn't the anchor. Named
+// helper rather than an inlined `find(...)` to make the cross-search-session
+// continuity intent explicit at the call site.
+const pickUnqueuedSuggestion = (
+  suggestedClimbs: readonly Climb[],
+  queue: readonly ClimbQueueItem[],
+  excludeClimbUuid: string | undefined,
+): Climb | undefined =>
+  suggestedClimbs.find(
+    (climb) => climb.uuid !== excludeClimbUuid && !queue.some((queueItem) => queueItem.climb?.uuid === climb.uuid),
+  );
+
+// Factory that captures the per-render `latest` snapshot so the returned
+// closure has the right clientId / user / playlist mode without taking those
+// as positional args at every call. Used by both forward and backward getters
+// to build a suggested ClimbQueueItem from a Climb, applying the playlist
+// peek-uuid rewrite when a playlist suggestion source is active.
+const makeBuildSuggestedQueueItem =
+  (latest: {
+    clientId: UserName;
+    currentUserInfo: QueueItemUser | undefined;
+    state: { playlistSuggestionSource: PlaylistSuggestionSource | null };
+  }) =>
+  (climb: Climb): ClimbQueueItem => {
+    const item = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo, true);
+    return latest.state.playlistSuggestionSource ? { ...item, uuid: getPlaylistPeekQueueItemUuid(climb.uuid) } : item;
+  };
+
 // Split contexts: actions (stable) vs data (changes frequently)
 export const QueueActionsContext = createContext<GraphQLQueueActionsType | undefined>(undefined);
 export const QueueDataContext = createContext<GraphQLQueueDataType | undefined>(undefined);
@@ -880,12 +926,7 @@ export const GraphQLQueueProvider = ({
     // already looking at and is the cleaner preview surface.
     const anchorUuid = options?.from ? options.from.uuid : latest.state.currentClimbQueueItem?.uuid;
     const anchorClimbUuid = options?.from ? options.from.climb?.uuid : latest.state.currentClimbQueueItem?.climb?.uuid;
-    const buildSuggestedQueueItem = (climb: Climb): ClimbQueueItem => {
-      const suggestedItem = createClimbQueueItem(climb, latest.clientId, latest.currentUserInfo, true);
-      return latest.state.playlistSuggestionSource
-        ? { ...suggestedItem, uuid: getPlaylistPeekQueueItemUuid(climb.uuid) }
-        : suggestedItem;
-    };
+    const buildSuggestedQueueItem = makeBuildSuggestedQueueItem(latest);
     if (options?.suggestionsOnly) {
       // Non-driver swipe-forward: walk the suggestedClimbs array by index so
       // each tap advances one step. Mirrors the backward branch below — using
@@ -898,19 +939,42 @@ export const GraphQLQueueProvider = ({
       const nextClimb = anchorIdx < 0 ? latest.suggestedClimbs[0] : (latest.suggestedClimbs[anchorIdx + 1] ?? null);
       return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
-    const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
-    if (
-      (latest.state.queue.length === 0 || latest.state.queue.length <= queueItemIndex + 1) &&
-      latest.suggestedClimbs.length > 0
-    ) {
-      const nextClimb = latest.suggestedClimbs.find(
-        (climb: Climb) =>
-          climb.uuid !== anchorClimbUuid &&
-          !latest.state.queue.some((qItem: ClimbQueueItem) => qItem.climb?.uuid === climb.uuid),
-      );
+    const queue = latest.state.queue;
+    // With no anchor at all (no current climb, no `from`), Next surfaces queue[0]
+    // so the Queue bar's Next button can start a queue the user has built but
+    // not yet activated. If the queue is also empty, fall through to
+    // suggestedClimbs[0] so a fresh load with populated suggestions still
+    // exposes a Next.
+    if (anchorUuid == null) {
+      if (queue[0]) return queue[0];
+      const firstSuggestion = latest.suggestedClimbs[0];
+      return firstSuggestion ? buildSuggestedQueueItem(firstSuggestion) : null;
+    }
+    const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
+    if (queueItemIndex >= 0 && queueItemIndex < queue.length - 1) {
+      return queue[queueItemIndex + 1];
+    }
+    // Playlist-suggestion mode: suggestedClimbs is the curated next-up feed
+    // (climbs after the activated one, queued items already filtered out).
+    // The anchor isn't in this feed, so position-based walking doesn't apply —
+    // the next-up is whatever sits at the head.
+    if (latest.state.playlistSuggestionSource) {
+      const nextClimb = latest.suggestedClimbs[0];
       return nextClimb ? buildSuggestedQueueItem(nextClimb) : null;
     }
-    return queueItemIndex >= latest.state.queue.length - 1 ? null : latest.state.queue[queueItemIndex + 1];
+    const fromSearch = findUnqueuedNeighborInSearchResults(
+      latest.climbSearchResults,
+      anchorClimbUuid,
+      queue,
+      1,
+      buildSuggestedQueueItem,
+    );
+    if (fromSearch) return fromSearch;
+    // Cross-search-session continuity: anchor isn't in current
+    // climbSearchResults (e.g. queue was built from a previous search). Surface
+    // the first unqueued suggestion rather than dead-ending the Next button.
+    const fallback = pickUnqueuedSuggestion(latest.suggestedClimbs, queue, anchorClimbUuid);
+    return fallback ? buildSuggestedQueueItem(fallback) : null;
   }, []);
 
   const getPreviousClimbQueueItem = useCallback(
@@ -920,6 +984,7 @@ export const GraphQLQueueProvider = ({
       const anchorClimbUuid = options?.from
         ? options.from.climb?.uuid
         : latest.state.currentClimbQueueItem?.climb?.uuid;
+      const buildSuggestedQueueItem = makeBuildSuggestedQueueItem(latest);
       if (options?.suggestionsOnly) {
         // Non-driver previous: walk the suggestedClimbs array backwards.
         // No fall-through into the queue — that would let a non-driver scrub
@@ -930,10 +995,29 @@ export const GraphQLQueueProvider = ({
         // item, not a suggestion), there's no meaningful "previous suggestion."
         if (anchorIdx <= 0) return null;
         const prevClimb = latest.suggestedClimbs[anchorIdx - 1];
-        return prevClimb ? createClimbQueueItem(prevClimb, latest.clientId, latest.currentUserInfo, true) : null;
+        return prevClimb ? buildSuggestedQueueItem(prevClimb) : null;
       }
-      const queueItemIndex = latest.state.queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
-      return queueItemIndex > 0 ? latest.state.queue[queueItemIndex - 1] : null;
+      const queue = latest.state.queue;
+      const queueItemIndex = queue.findIndex((queueItem: ClimbQueueItem) => queueItem.uuid === anchorUuid);
+      if (queueItemIndex > 0) return queue[queueItemIndex - 1];
+      // In playlist-suggestion mode there's no "previous playlist climb" once
+      // the activated climb is current — the playlist is consumed forward
+      // only. Don't fall through to climbSearchResults, that would surface
+      // unrelated results.
+      if (latest.state.playlistSuggestionSource) return null;
+      const fromSearch = findUnqueuedNeighborInSearchResults(
+        latest.climbSearchResults,
+        anchorClimbUuid,
+        queue,
+        -1,
+        buildSuggestedQueueItem,
+      );
+      if (fromSearch) return fromSearch;
+      // Cross-search-session continuity (symmetric to forward): surface the
+      // first unqueued suggestion when the anchor isn't in current search
+      // results.
+      const fallback = pickUnqueuedSuggestion(latest.suggestedClimbs, queue, anchorClimbUuid);
+      return fallback ? buildSuggestedQueueItem(fallback) : null;
     },
     [],
   );
