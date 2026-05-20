@@ -1,42 +1,39 @@
-import React from 'react';
 import 'server-only';
-import { getGraphQLHttpUrl } from '@/app/lib/graphql/client';
+import { unstable_cache } from 'next/cache';
 import { GET_POPULAR_BOARD_CONFIGS, type GetPopularBoardConfigsQueryResponse } from '@/app/lib/graphql/operations';
-import { GraphQLClient } from 'graphql-request';
+import { executeGraphQLInternal } from '@/app/lib/graphql/server-cached-client';
 import type { PopularBoardConfig } from '@boardsesh/shared-schema';
 
-/**
- * Fetches popular board configurations server-side via the GraphQL backend.
- * Uses React.cache() for request deduplication within a single server render.
- * Returns empty array if the backend is unavailable (graceful fallback —
- * the client-side hook will fetch on mount).
- */
-export const getPopularBoardConfigs = React.cache(async (): Promise<PopularBoardConfig[]> => {
-  let url: string;
-  try {
-    url = getGraphQLHttpUrl();
-  } catch {
-    // Backend URL not configured (e.g., local dev without backend running)
-    return [];
-  }
+const CACHE_TAG = 'popular-board-configs';
+const REVALIDATE_SECONDS = 300;
+const FETCH_TIMEOUT_MS = 3000;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1000);
+const fetchPopularBoardConfigs = unstable_cache(
+  async (): Promise<PopularBoardConfig[]> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const result = await executeGraphQLInternal<GetPopularBoardConfigsQueryResponse>(
+        GET_POPULAR_BOARD_CONFIGS,
+        { input: { limit: 12, offset: 0 } },
+        controller.signal,
+      );
+      return result.popularBoardConfigs.configs;
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+  ['popular-board-configs'],
+  { revalidate: REVALIDATE_SECONDS, tags: [CACHE_TAG] },
+);
+
+export async function getPopularBoardConfigs(): Promise<PopularBoardConfig[]> {
   try {
-    const client = new GraphQLClient(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-    });
-    const result = await client.request<GetPopularBoardConfigsQueryResponse>(GET_POPULAR_BOARD_CONFIGS, {
-      input: { limit: 12, offset: 0 },
-    });
-    return result.popularBoardConfigs.configs;
+    return await fetchPopularBoardConfigs();
   } catch (err) {
-    // Backend unreachable or timed out — client-side hook will retry.
-    // Log the failure so a future regression names itself in Vercel logs.
-    console.error('[home-page-ssr] popularBoardConfigs fetch failed:', err instanceof Error ? err.message : err);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[home-page-ssr] popularBoardConfigs fetch failed:', err instanceof Error ? err.message : err);
+    }
     return [];
-  } finally {
-    clearTimeout(timer);
   }
-});
+}

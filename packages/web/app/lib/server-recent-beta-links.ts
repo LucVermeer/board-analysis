@@ -1,8 +1,7 @@
-import React from 'react';
 import 'server-only';
-import { GraphQLClient } from 'graphql-request';
-import { getGraphQLHttpUrl } from '@/app/lib/graphql/client';
+import { unstable_cache } from 'next/cache';
 import { GET_RECENT_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
+import { executeGraphQLInternal } from '@/app/lib/graphql/server-cached-client';
 import type { BetaLinksGqlRow } from '@/app/lib/beta-video-url';
 
 export type RecentBetaLinkRow = {
@@ -15,36 +14,38 @@ type RecentBetaLinksResponse = {
   recentBetaLinks: RecentBetaLinkRow[];
 };
 
-/**
- * Fetches the latest cross-climb beta videos for the home-screen slider.
- * Mirrors `server-popular-configs.ts`: React.cache for request dedupe, a
- * 1s timeout, and a silent fall back to `[]` so a backend hiccup doesn't
- * fail the page render — the client section will retry on mount.
- */
-export const getRecentBetaLinks = React.cache(async (limit = 20): Promise<RecentBetaLinkRow[]> => {
-  let url: string;
-  try {
-    url = getGraphQLHttpUrl();
-  } catch {
-    return [];
-  }
+const CACHE_TAG = 'recent-beta-links';
+const REVALIDATE_SECONDS = 300;
+const FETCH_TIMEOUT_MS = 3000;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1000);
+function buildFetcher(limit: number) {
+  return unstable_cache(
+    async (): Promise<RecentBetaLinkRow[]> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const result = await executeGraphQLInternal<RecentBetaLinksResponse>(
+          GET_RECENT_BETA_LINKS,
+          { limit },
+          controller.signal,
+        );
+        return result.recentBetaLinks;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    ['recent-beta-links', String(limit)],
+    { revalidate: REVALIDATE_SECONDS, tags: [CACHE_TAG] },
+  );
+}
+
+export async function getRecentBetaLinks(limit = 20): Promise<RecentBetaLinkRow[]> {
   try {
-    const client = new GraphQLClient(url, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-    });
-    const result = await client.request<RecentBetaLinksResponse>(GET_RECENT_BETA_LINKS, { limit });
-    return result.recentBetaLinks;
+    return await buildFetcher(limit)();
   } catch (err) {
-    // Log the failure so a future regression names itself in Vercel logs.
-    // PR #2119 broke this section in prod and the missing log made root
-    // cause analysis slow — keep this line even if cheap.
-    console.error('[home-page-ssr] recentBetaLinks fetch failed:', err instanceof Error ? err.message : err);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[home-page-ssr] recentBetaLinks fetch failed:', err instanceof Error ? err.message : err);
+    }
     return [];
-  } finally {
-    clearTimeout(timer);
   }
-});
+}

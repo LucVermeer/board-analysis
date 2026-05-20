@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -81,6 +81,11 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
   const [isCustomBoardOpen, setIsCustomBoardOpen] = useState(false);
   const [isCustomBoardRendered, setIsCustomBoardRendered] = useState(false);
   const [isCreateClimbFlow, setIsCreateClimbFlow] = useState(false);
+  // Synchronous fallback href for the Create tab: read once from IndexedDB on
+  // mount so the tab can render a stable <a> even before QueueBridge has
+  // populated `effectiveBoardDetails`. Mirrors the climbs-tab pattern that
+  // routes via getLastUsedBoard when no board context is in scope.
+  const [lastUsedCreateHref, setLastUsedCreateHref] = useState<string | null>(null);
 
   // Stable callbacks for drawer unmount-after-close-animation pattern.
   // Avoids invalidating MUI's SlideProps memo on every parent render.
@@ -152,6 +157,31 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
       return `/${board_name}/${generateLayoutSlug(layout_name)}/${generateSizeSlug(size_name, size_description)}/${generateSetSlug(set_names)}/${effectiveAngle}/create`;
     }
     return null;
+  })();
+
+  useEffect(() => {
+    let cancelled = false;
+    void getLastUsedBoard().then((lastUsed) => {
+      if (cancelled || !lastUsed?.url) return;
+      setLastUsedCreateHref(listUrlToCreateUrl(lastUsed.url));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Stable href for the Create tab so it always renders as a real <a> when
+  // we have any signal about what board to create on. Prefer the in-scope
+  // board details; otherwise use the last-used board the user visited.
+  // Only when both are unknown do we fall through to the drawer picker.
+  const createClimbHref = (() => {
+    if (createClimbUrl) return createClimbUrl;
+    if (!lastUsedCreateHref) return null;
+    if (activeSession?.sessionId) {
+      const separator = lastUsedCreateHref.includes('?') ? '&' : '?';
+      return `${lastUsedCreateHref}${separator}session=${activeSession.sessionId}`;
+    }
+    return lastUsedCreateHref;
   })();
 
   const playlistsUrl = getPlaylistsBasePath(pathname);
@@ -346,13 +376,13 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
           onClick={() => track('Bottom Tab Bar', { tab: 'feed' })}
           sx={actionSx}
         />
-        {createClimbUrl ? (
+        {createClimbHref ? (
           <BottomNavigationAction
             label={t('bottomTabBar.create')}
             icon={<AddOutlined sx={{ fontSize: 20 }} />}
             value="create"
             component={LocaleLink}
-            href={createClimbUrl}
+            href={createClimbHref}
             onClick={() => track('Bottom Tab Bar', { tab: 'create' })}
             sx={actionSx}
           />
@@ -362,7 +392,7 @@ function BottomTabBar({ boardDetails, angle, boardConfigs }: BottomTabBarProps) 
             icon={<AddOutlined sx={{ fontSize: 20 }} />}
             value="create"
             onClick={() => {
-              track('Bottom Tab Bar', { tab: 'create' });
+              track('Bottom Tab Bar', { tab: 'create', action: 'open_selector' });
               handleCreateFallback();
             }}
             sx={actionSx}

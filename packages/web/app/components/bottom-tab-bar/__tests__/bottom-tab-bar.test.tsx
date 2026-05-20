@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import type { BoardDetails } from '@/app/lib/types';
 import type { BoardConfigData } from '@/app/lib/server-board-configs';
@@ -165,8 +165,16 @@ vi.mock('../../persistent-session', () => ({
   usePersistentSessionActions: () => ({}),
 }));
 
+let mockLastUsedBoard: {
+  url: string;
+  boardName: string;
+  layoutName: string;
+  sizeName: string;
+  setNames: string[];
+  angle: number;
+} | null = null;
 vi.mock('@/app/lib/last-used-board-db', () => ({
-  getLastUsedBoard: () => Promise.resolve(null),
+  getLastUsedBoard: () => Promise.resolve(mockLastUsedBoard),
 }));
 
 vi.mock('@/app/components/board-lock/use-board-switch-guard', () => ({
@@ -272,6 +280,7 @@ describe('BottomTabBar create flow', () => {
     mockSessionData = null;
     mockSessionStatus = 'unauthenticated';
     mockLanguage = 'en-US';
+    mockLastUsedBoard = null;
   });
 
   it('renders a link to the create climb URL when board details are available', () => {
@@ -315,6 +324,26 @@ describe('BottomTabBar create flow', () => {
 
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.queryByTestId('drawer-Pick a board')).toBeNull();
+  });
+
+  it('renders a link to last-used-board /create URL when board details are unavailable', async () => {
+    // Slow-network race: QueueBridge hasn't populated effectiveBoardDetails
+    // yet, but the user previously visited a board so IndexedDB has it.
+    // The Create tab must promote to a real <a> rather than waiting on the
+    // drawer-opening button branch.
+    mockLastUsedBoard = {
+      url: '/kilter/original/12x12-square/screw_bolt/40/list',
+      boardName: 'kilter',
+      layoutName: 'Original',
+      sizeName: '12x12',
+      setNames: ['Screw Bolt'],
+      angle: 40,
+    };
+
+    render(<BottomTabBar boardConfigs={boardConfigs} />);
+
+    const createLink = await waitFor(() => screen.getByRole('link', { name: 'Create' }));
+    expect(createLink.getAttribute('href')).toBe('/kilter/original/12x12-square/screw_bolt/40/create');
   });
 });
 
