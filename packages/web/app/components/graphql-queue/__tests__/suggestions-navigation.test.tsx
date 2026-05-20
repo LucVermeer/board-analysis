@@ -665,9 +665,10 @@ describe('getPreviousClimbQueueItem main-branch climbSearchResults walk', () => 
     expect(result.current.getPreviousClimbQueueItem({ from: anchorAtStart })).toBeNull();
   });
 
-  it('falls back to the first unqueued suggestion when the anchor is not in climbSearchResults', () => {
-    // Symmetric with the forward branch: cross-search-session anchor surfaces
-    // the first unqueued suggestion rather than dead-ending.
+  it('returns null when the anchor is not in climbSearchResults (no suggestion fallback)', () => {
+    // Backward navigation is history-oriented: walking off the queue + search
+    // walk means we have nothing in history to step back to. Don't fall
+    // through to suggestedClimbs — that's discovery (the forward direction).
     const searchList = [makeClimb('search-0', 'A'), makeClimb('search-1', 'B')];
     mockClimbSearchResults = searchList;
     mockSuggestedClimbs = searchList;
@@ -679,9 +680,19 @@ describe('getPreviousClimbQueueItem main-branch climbSearchResults walk', () => 
       climb: makeClimb('not-in-results', 'P'),
       suggested: false,
     };
-    const prev = result.current.getPreviousClimbQueueItem({ from: orphanAnchor });
-    expect(prev?.climb.uuid).toBe('search-0');
-    expect(prev?.suggested).toBe(true);
+    expect(result.current.getPreviousClimbQueueItem({ from: orphanAnchor })).toBeNull();
+  });
+
+  it('returns null when there is no current climb and suggestions are populated', () => {
+    // Regression guard: backward had no null-anchor short-circuit and would
+    // silently surface suggestedClimbs[0] (the same forward-looking discovery
+    // climb as Next). "Previous" with no active climb has no semantic answer.
+    const suggestion = makeClimb('first-suggestion', 'S');
+    mockSuggestedClimbs = [suggestion];
+
+    const { result } = renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    expect(result.current.getPreviousClimbQueueItem()).toBeNull();
   });
 
   it('falls through to climbSearchResults when the anchor is the queue head', () => {
