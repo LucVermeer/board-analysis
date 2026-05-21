@@ -25,6 +25,7 @@ import SetterNameSelect from './setter-name-select';
 import ClimbSearchForm from './climb-search-form';
 import type { BoardDetails } from '@/app/lib/types';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
+import { track } from '@/app/lib/analytics';
 import {
   getQualityPanelSummary,
   getStatusPanelSummary,
@@ -78,8 +79,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
 
   // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips
   // `undefined` from updates, so we coerce both bounds to concrete numbers
-  // (`0` when the slider is at the extreme) before sending. The slider's
-  // `disableSwap` already prevents min > max, so no further clamping needed.
+  // (`0` when the picker is at the extreme) before sending.
   const handleGradeRangeChange = ({
     minGradeId,
     maxGradeId,
@@ -88,6 +88,32 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     maxGradeId: number | undefined;
   }) => {
     updateFilters({ minGrade: minGradeId ?? 0, maxGrade: maxGradeId ?? 0 });
+
+    // Track shape of the filter so we can iterate on the picker UX —
+    // chiefly, learn how big a range users typically pick. `range_size`
+    // counts inclusive grade slots (1 = single grade, N = N-grade range,
+    // null = unbounded on at least one side).
+    let filterKind: 'any' | 'single' | 'range' | 'lower_only' | 'upper_only';
+    if (minGradeId === undefined && maxGradeId === undefined) filterKind = 'any';
+    else if (minGradeId !== undefined && maxGradeId !== undefined)
+      filterKind = minGradeId === maxGradeId ? 'single' : 'range';
+    else if (minGradeId !== undefined) filterKind = 'lower_only';
+    else filterKind = 'upper_only';
+
+    let rangeSize: number | null = null;
+    if (minGradeId !== undefined && maxGradeId !== undefined) {
+      const minIdx = grades.findIndex((g) => g.difficulty_id === minGradeId);
+      const maxIdx = grades.findIndex((g) => g.difficulty_id === maxGradeId);
+      if (minIdx >= 0 && maxIdx >= 0) rangeSize = maxIdx - minIdx + 1;
+    }
+
+    track('Grade Filter Changed', {
+      filter_kind: filterKind,
+      min_grade_id: minGradeId ?? null,
+      max_grade_id: maxGradeId ?? null,
+      range_size: rangeSize,
+      board_name: boardDetails.board_name,
+    });
   };
 
   const climbContent = (

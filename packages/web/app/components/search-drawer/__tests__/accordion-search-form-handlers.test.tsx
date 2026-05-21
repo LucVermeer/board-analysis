@@ -46,6 +46,11 @@ vi.mock('@/app/components/board-provider/board-provider-context', () => ({
   useBoardProvider: () => ({ isAuthenticated: false }),
 }));
 
+const mockTrack = vi.fn();
+vi.mock('@/app/lib/analytics', () => ({
+  track: (name: string, properties?: Record<string, unknown>) => mockTrack(name, properties),
+}));
+
 vi.mock('@/app/components/providers/auth-modal-provider', () => ({
   useAuthModal: () => ({ openAuthModal: vi.fn() }),
 }));
@@ -112,6 +117,7 @@ const makeBoardDetails = (overrides: Partial<BoardDetails>): BoardDetails =>
 describe('AccordionSearchForm — quality filter controls', () => {
   beforeEach(() => {
     mockUpdateFilters.mockClear();
+    mockTrack.mockClear();
     mockGetLastUsedGrade.mockReset().mockResolvedValue(undefined);
     mockSetLastUsedGrade.mockReset().mockResolvedValue(undefined);
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
@@ -298,6 +304,45 @@ describe('AccordionSearchForm — quality filter controls', () => {
       tapChip('V8');
       // V8 → difficulty_id 24 (7b)
       expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 24, maxGrade: 24 });
+    });
+
+    it('fires "Grade Filter Changed" analytics with single-grade properties on a one-tap collapse', () => {
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      tapChip('V6');
+      expect(mockTrack).toHaveBeenCalledWith('Grade Filter Changed', {
+        filter_kind: 'single',
+        min_grade_id: 22,
+        max_grade_id: 22,
+        range_size: 1,
+        board_name: 'kilter',
+      });
+    });
+
+    it('fires "Grade Filter Changed" with filter_kind="range" + range_size when extending', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 22 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      tapChip('V11');
+      // V6..V11 spans difficulty_ids 22..28 → indices 12..18 in Kilter → 7 grades.
+      expect(mockTrack).toHaveBeenCalledWith('Grade Filter Changed', {
+        filter_kind: 'range',
+        min_grade_id: 22,
+        max_grade_id: 28,
+        range_size: 7,
+        board_name: 'kilter',
+      });
+    });
+
+    it('fires "Grade Filter Changed" with filter_kind="any" on clear', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      tapChip('Any');
+      expect(mockTrack).toHaveBeenCalledWith('Grade Filter Changed', {
+        filter_kind: 'any',
+        min_grade_id: null,
+        max_grade_id: null,
+        range_size: null,
+        board_name: 'kilter',
+      });
     });
 
     it('does not persist a "last used grade" — the URL params already capture the range', () => {
