@@ -15,7 +15,7 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
-import { GradeRangeSlider } from '@/app/components/grade-picker/grade-range-slider';
+import { GradeRangePicker } from '@/app/components/grade-picker/grade-range-picker';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
@@ -98,7 +98,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       </div>
 
       <div className={styles.inputGroup}>
-        <GradeRangeSlider
+        <GradeRangePicker
           grades={grades}
           minGradeId={minGradeForPicker}
           maxGradeId={maxGradeForPicker}
