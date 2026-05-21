@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import type { BoardDetails, SearchRequestPagination } from '@/app/lib/types';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
+import { getGradesForBoard } from '@/app/lib/board-data';
 
 vi.mock('react-i18next', () => ({
   useTranslation: (ns?: string) => ({
@@ -258,11 +259,11 @@ describe('AccordionSearchForm — quality filter controls', () => {
   });
 
   describe('grade range slider', () => {
-    // The Kilter grade table runs from difficulty_id 10..33 (24 grades),
-    // so the slider's lower thumb spans indices 0..23 and the upper thumb
-    // spans 0..23 too. Indices map directly to difficulty_ids: idx 12 = 22,
-    // idx 13 = 23, idx 18 = 28, etc.
-    const kilterLastIdx = 23;
+    // Kilter grades start at difficulty_id 10 (V0), so array index N maps to
+    // difficulty_id N + 10: idx 12 = 22 (V6), idx 18 = 28 (V11), etc. We
+    // derive the last index from the live grade table so this doesn't go
+    // stale if the table grows.
+    const kilterLastIdx = getGradesForBoard('kilter').length - 1;
     const findSliders = () => screen.getAllByRole('slider') as HTMLInputElement[];
 
     it('moving the lower thumb off the bottom emits a concrete minGrade difficulty_id', () => {

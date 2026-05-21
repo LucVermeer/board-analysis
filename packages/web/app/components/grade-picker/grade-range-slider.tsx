@@ -106,8 +106,10 @@ export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
   // Paint the selected band as a sweep from the low thumb's grade color to
   // the high thumb's — so the visible range looks like the band it represents.
   const trackGradient = lowFill && highFill ? `linear-gradient(to right, ${lowFill}, ${highFill})` : undefined;
-  const lowThumbFill = lowFill ?? 'rgba(175, 45, 60, 0.95)';
-  const highThumbFill = highFill ?? 'rgba(175, 45, 60, 0.95)';
+  // Brief fallback for the IDB-load window before `useGradeFormat` resolves.
+  const brandFill = 'color-mix(in srgb, var(--color-primary) 95%, transparent)';
+  const lowThumbFill = lowFill ?? brandFill;
+  const highThumbFill = highFill ?? brandFill;
 
   // Dynamic summary so the row's label tells the user the *current* filter
   // state. Distinguishes "Any" from "V0 to V16" — important because the
@@ -157,16 +159,18 @@ export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
           aria-label={ariaLabel ?? t('search.fields.gradeRange')}
           getAriaValueText={ariaValueText}
           sx={{
-            color: 'rgba(175, 45, 60, 0.85)',
+            color: 'var(--color-primary)',
             height: 6,
             padding: '14px 0',
             '& .MuiSlider-rail': {
               opacity: 1,
-              backgroundColor: 'rgba(128, 128, 128, 0.25)',
+              // `--neutral-500` switches itself between modes via the theme,
+              // so one rule covers both.
+              backgroundColor: 'color-mix(in srgb, var(--neutral-500) 25%, transparent)',
             },
             '& .MuiSlider-track': {
               border: 'none',
-              background: trackGradient ?? 'rgba(175, 45, 60, 0.45)',
+              background: trackGradient ?? 'color-mix(in srgb, var(--color-primary) 45%, transparent)',
             },
             '& .MuiSlider-thumb': {
               width: 22,
@@ -177,7 +181,7 @@ export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
                 boxShadow: `0 0 0 2px ${thumbHalo}`,
               },
               '&.Mui-focusVisible': {
-                boxShadow: `0 0 0 2px ${thumbHalo}, 0 0 0 5px rgba(175, 45, 60, 0.32)`,
+                boxShadow: `0 0 0 2px ${thumbHalo}, 0 0 0 5px color-mix(in srgb, var(--color-primary) 32%, transparent)`,
               },
               '&::before': { display: 'none' },
             },
@@ -187,16 +191,11 @@ export const GradeRangeSlider: React.FC<GradeRangeSliderProps> = ({
             '& .MuiSlider-thumb[data-index="1"]': {
               backgroundColor: highThumbFill,
             },
+            // Dark mode wants a more visible focus halo on the lighter rail.
             ...(isDark && {
-              '& .MuiSlider-rail': {
-                backgroundColor: 'rgba(255, 255, 255, 0.18)',
-              },
-              '& .MuiSlider-track': {
-                background: trackGradient ?? 'rgba(175, 45, 60, 0.55)',
-              },
               '& .MuiSlider-thumb': {
                 '&.Mui-focusVisible': {
-                  boxShadow: `0 0 0 2px ${thumbHalo}, 0 0 0 5px rgba(175, 45, 60, 0.55)`,
+                  boxShadow: `0 0 0 2px ${thumbHalo}, 0 0 0 5px color-mix(in srgb, var(--color-primary) 55%, transparent)`,
                 },
               },
             }),
