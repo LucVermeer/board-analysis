@@ -29,6 +29,7 @@ type RecentBetaLinkResult = {
   betaLink: BetaLinkResult;
   climbName: string | null;
   boardType: string;
+  layoutId: number | null;
 };
 
 const RECENT_BETA_LINKS_MAX_LIMIT = 50;
@@ -275,6 +276,7 @@ type CachedRecentBetaLinkRow = {
   is_listed: boolean | null;
   created_at: string | null;
   climb_name: string | null;
+  layout_id: number | null;
 };
 
 /**
@@ -296,6 +298,7 @@ async function runRecentBetaLinksQuery(): Promise<CachedRecentBetaLinkRow[]> {
         bl.is_listed,
         bl.created_at,
         bc.name AS climb_name,
+        bc.layout_id AS layout_id,
         ROW_NUMBER() OVER (
           PARTITION BY bl.foreign_username
           ORDER BY bl.created_at DESC
@@ -307,7 +310,7 @@ async function runRecentBetaLinksQuery(): Promise<CachedRecentBetaLinkRow[]> {
         AND bl.thumbnail IS NOT NULL
         AND bl.thumbnail LIKE ${`${STATIC_THUMBNAIL_PREFIX}%`}
     )
-    SELECT board_type, climb_uuid, link, foreign_username, angle, thumbnail, is_listed, created_at, climb_name
+    SELECT board_type, climb_uuid, link, foreign_username, angle, thumbnail, is_listed, created_at, climb_name, layout_id
     FROM ranked
     WHERE foreign_username IS NULL OR user_rank <= ${HOME_PER_USER_CAP}
     ORDER BY created_at DESC
@@ -461,6 +464,7 @@ export const betaLinkQueries = {
         },
         climbName: r.climb_name,
         boardType: r.board_type,
+        layoutId: r.layout_id ?? null,
       });
       if (filtered.length >= cappedLimit) break;
     }
@@ -495,7 +499,11 @@ export const betaLinkQueries = {
     const igHandle = extractInstagramHandle(profileRows[0]?.instagramUrl ?? null);
 
     const rows = await db
-      .select({ betaLink: dbSchema.boardBetaLinks, climbName: dbSchema.boardClimbs.name })
+      .select({
+        betaLink: dbSchema.boardBetaLinks,
+        climbName: dbSchema.boardClimbs.name,
+        layoutId: dbSchema.boardClimbs.layoutId,
+      })
       .from(dbSchema.boardBetaLinks)
       .leftJoin(
         dbSchema.boardClimbs,
@@ -526,6 +534,7 @@ export const betaLinkQueries = {
         betaLink: passthroughResult(r.betaLink),
         climbName: r.climbName,
         boardType: r.betaLink.boardType,
+        layoutId: r.layoutId ?? null,
       }));
   },
 };

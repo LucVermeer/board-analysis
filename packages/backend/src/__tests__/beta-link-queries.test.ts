@@ -319,6 +319,7 @@ describe('recentBetaLinks resolver', () => {
     is_listed: boolean | null;
     created_at: string | null;
     climb_name: string | null;
+    layout_id: number | null;
   };
 
   function cteRow(overrides: Partial<CteRow> = {}, climbName: string | null = 'Test Climb'): CteRow {
@@ -332,6 +333,7 @@ describe('recentBetaLinks resolver', () => {
       is_listed: true,
       created_at: '2026-04-26T00:00:00Z',
       climb_name: climbName,
+      layout_id: 1,
       ...overrides,
     };
   }
@@ -419,6 +421,7 @@ describe('userBetaLinks resolver', () => {
         ...overrides,
       }),
       climbName,
+      layoutId: 1,
     };
   }
 
@@ -498,6 +501,7 @@ describe('recentBetaLinks Redis cache', () => {
     is_listed: boolean | null;
     created_at: string | null;
     climb_name: string | null;
+    layout_id: number | null;
   };
 
   function cachedRow(overrides: Partial<CachedRow> = {}): CachedRow {
@@ -511,6 +515,7 @@ describe('recentBetaLinks Redis cache', () => {
       is_listed: true,
       created_at: '2026-04-26T00:00:00Z',
       climb_name: 'Test Climb',
+      layout_id: 1,
       ...overrides,
     };
   }

@@ -9,6 +9,8 @@ import { themeTokens } from '@/app/theme/theme-config';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_RECENT_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
 import { mapBetaLinkRow } from '@/app/lib/beta-video-url';
+import { getDefaultClimbViewPath } from '@/app/lib/default-board-configs';
+import type { BoardName } from '@/app/lib/types';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
 import type { RecentBetaLinkRow } from '@/app/lib/server-recent-beta-links';
 import BoardseshBetaList from './boardsesh-beta-list';
@@ -38,15 +40,27 @@ export default function HomeRecentBetaSection({ initialRecentBeta }: HomeRecentB
     staleTime: RECENT_BETA_STALE_TIME_MS,
   });
 
-  const { links, climbNameByLink } = useMemo(() => {
+  const { links, climbNameByLink, climbHrefByLink } = useMemo(() => {
     const mapped: BetaLink[] = [];
     const nameByLink = new Map<string, string | null>();
+    const hrefByLink = new Map<string, string | null>();
     for (const row of rows) {
       const link = mapBetaLinkRow(row.betaLink);
       mapped.push(link);
       nameByLink.set(link.link, row.climbName);
+      const href =
+        row.layoutId != null && link.angle != null
+          ? getDefaultClimbViewPath(
+              row.boardType as BoardName,
+              row.layoutId,
+              link.angle,
+              link.climb_uuid,
+              row.climbName ?? undefined,
+            )
+          : null;
+      hrefByLink.set(link.link, href);
     }
-    return { links: mapped, climbNameByLink: nameByLink };
+    return { links: mapped, climbNameByLink: nameByLink, climbHrefByLink: hrefByLink };
   }, [rows]);
 
   if (links.length === 0) return null;
@@ -71,6 +85,7 @@ export default function HomeRecentBetaSection({ initialRecentBeta }: HomeRecentB
         isLoading={false}
         source="home"
         getClimbName={(link) => climbNameByLink.get(link.link)}
+        getClimbHref={(link) => climbHrefByLink.get(link.link)}
       />
     </Box>
   );

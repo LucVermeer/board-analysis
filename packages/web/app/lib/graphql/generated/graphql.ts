@@ -3708,6 +3708,7 @@ export type RecentBetaLink = {
   betaLink: BetaLink;
   boardType: Scalars['String']['output'];
   climbName?: Maybe<Scalars['String']['output']>;
+  layoutId?: Maybe<Scalars['Int']['output']>;
 };
 
 export type RegisterControllerInput = {
@@ -5070,6 +5071,7 @@ export type GetRecentBetaLinksQuery = {
     __typename?: 'RecentBetaLink';
     climbName?: string | null;
     boardType: string;
+    layoutId?: number | null;
     betaLink: {
       __typename?: 'BetaLink';
       climbUuid: string;
@@ -5094,6 +5096,7 @@ export type GetUserBetaLinksQuery = {
     __typename?: 'RecentBetaLink';
     climbName?: string | null;
     boardType: string;
+    layoutId?: number | null;
     betaLink: {
       __typename?: 'BetaLink';
       climbUuid: string;
@@ -7346,6 +7349,7 @@ export const GetRecentBetaLinksDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'betaLink' },
@@ -7412,6 +7416,7 @@ export const GetUserBetaLinksDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'climbName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'boardType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'layoutId' } },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'betaLink' },
