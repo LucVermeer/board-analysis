@@ -84,21 +84,3 @@
 :global(html[data-theme='dark']) .inRange {
   background-color: color-mix(in srgb, #ffffff 8%, transparent);
 }
-
-/* Anchored chip — first chip of a pending range (long-press). Subtle pulse
-   so users see "we're waiting for the second tap". */
-.anchored {
-  animation: anchored-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes anchored-pulse {
-  0%,
-  100% {
-    box-shadow: inset 0 0 0 2px var(--color-primary, #8c4a52);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 0 2px var(--color-primary, #8c4a52),
-      0 0 0 4px color-mix(in srgb, var(--color-primary) 32%, transparent);
-  }
-}

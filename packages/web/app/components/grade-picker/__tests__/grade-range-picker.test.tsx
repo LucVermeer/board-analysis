@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import { GradeRangePicker } from '../grade-range-picker';
@@ -38,14 +38,6 @@ function getChip(label: string) {
 }
 
 describe('<GradeRangePicker />', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('shows "Any" in the summary when both bounds are unset', () => {
     render(
       <GradeRangePicker
@@ -67,14 +59,12 @@ describe('<GradeRangePicker />', () => {
         onChange={() => undefined}
       />,
     );
-    // The "Any" chip is the role=option labelled "Any" (the search summary
-    // also uses the string "Any" but the chip is a button).
     const options = screen.getAllByRole('option');
-    // Grades + 1 clear chip.
     expect(options.length).toBe(kilterGrades.length + 1);
   });
 
-  it('tapping a grade chip collapses to that single grade', () => {
+  // Rule 1: from "Any", tap collapses to that single grade.
+  it('from "Any" — tap V6 collapses to "V6 only"', () => {
     const onChange = vi.fn();
     render(
       <GradeRangePicker grades={kilterGrades} minGradeId={undefined} maxGradeId={undefined} onChange={onChange} />,
@@ -83,11 +73,44 @@ describe('<GradeRangePicker />', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V6 });
   });
 
-  it('tapping the currently-selected single-grade chip clears the filter', () => {
+  // Rule 2: from single grade, tap the SAME chip clears.
+  it('from "V6 only" — tap V6 clears to "Any"', () => {
     const onChange = vi.fn();
     render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V6} onChange={onChange} />);
     fireEvent.click(getChip('V6'));
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: undefined, maxGradeId: undefined });
+  });
+
+  // Rule 3a: from single grade, tap a higher chip extends to range.
+  it('from "V6 only" — tap V11 extends to "V6 to V11"', () => {
+    const onChange = vi.fn();
+    render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V6} onChange={onChange} />);
+    fireEvent.click(getChip('V11'));
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V11 });
+  });
+
+  // Rule 3b: from single grade, tap a lower chip sorts the range correctly.
+  it('from "V11 only" — tap V6 extends to "V6 to V11" (sorted)', () => {
+    const onChange = vi.fn();
+    render(<GradeRangePicker grades={kilterGrades} minGradeId={V11} maxGradeId={V11} onChange={onChange} />);
+    fireEvent.click(getChip('V6'));
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V11 });
+  });
+
+  // Rule 4: from a range, any chip tap collapses to that single grade.
+  it('from "V6 to V11" range — tap V8 collapses to "V8 only"', () => {
+    const onChange = vi.fn();
+    render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V11} onChange={onChange} />);
+    fireEvent.click(getChip('V8'));
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V8, maxGradeId: V8 });
+  });
+
+  // Rule 4 also covers tapping an endpoint of the current range.
+  it('from "V6 to V11" range — tap V6 (the lower endpoint) collapses to "V6 only"', () => {
+    const onChange = vi.fn();
+    render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V11} onChange={onChange} />);
+    fireEvent.click(getChip('V6'));
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V6 });
   });
 
   it('tapping the "Any" chip clears the filter', () => {
@@ -95,58 +118,6 @@ describe('<GradeRangePicker />', () => {
     render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V6} onChange={onChange} />);
     fireEvent.click(getChip('Any'));
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: undefined, maxGradeId: undefined });
-  });
-
-  it('tapping a different grade chip while a range is set collapses to that single grade', () => {
-    const onChange = vi.fn();
-    render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V11} onChange={onChange} />);
-    fireEvent.click(getChip('V8'));
-    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V8, maxGradeId: V8 });
-  });
-
-  it('long-press + tap of a second chip emits a range', () => {
-    const onChange = vi.fn();
-    render(
-      <GradeRangePicker grades={kilterGrades} minGradeId={undefined} maxGradeId={undefined} onChange={onChange} />,
-    );
-
-    // Pointer down on V6, advance past the long-press threshold → enters
-    // anchor mode silently (no filter change yet).
-    fireEvent.pointerDown(getChip('V6'));
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
-    expect(onChange).not.toHaveBeenCalled();
-
-    // Tap V11 → range set as [V6, V11] in one shot.
-    fireEvent.click(getChip('V11'));
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V11 });
-  });
-
-  it('long-press + tap of an earlier chip sorts the bounds', () => {
-    const onChange = vi.fn();
-    render(
-      <GradeRangePicker grades={kilterGrades} minGradeId={undefined} maxGradeId={undefined} onChange={onChange} />,
-    );
-    fireEvent.pointerDown(getChip('V11'));
-    act(() => {
-      vi.advanceTimersByTime(400);
-    });
-    fireEvent.click(getChip('V6'));
-    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V11 });
-  });
-
-  it('short tap (no long-press) just collapses to that grade', () => {
-    const onChange = vi.fn();
-    render(
-      <GradeRangePicker grades={kilterGrades} minGradeId={undefined} maxGradeId={undefined} onChange={onChange} />,
-    );
-    const chipV6 = getChip('V6');
-    fireEvent.pointerDown(chipV6);
-    fireEvent.pointerUp(chipV6);
-    fireEvent.click(chipV6);
-    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V6 });
   });
 
   it('MoonBoard board — V0 grades (kilter-only) are not rendered', () => {

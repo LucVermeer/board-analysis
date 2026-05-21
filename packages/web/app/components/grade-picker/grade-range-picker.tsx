@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { useTranslation } from 'react-i18next';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
@@ -24,8 +24,6 @@ export type GradeRangePickerProps = {
   onChange: (next: { minGradeId: number | undefined; maxGradeId: number | undefined }) => void;
   ariaLabel?: string;
 };
-
-const LONG_PRESS_MS = 350;
 
 /**
  * In dark mode `getGradeColor` returns a pale text-readable variant. Pull the
@@ -51,18 +49,13 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
   const { formatGrade, getGradeColor } = useGradeFormat();
   const isDark = useIsDarkMode();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [anchorGradeId, setAnchorGradeId] = useState<number | undefined>(undefined);
 
   useStopHorizontalTouchPropagation(containerRef);
   const { canScrollLeft, canScrollRight } = useScrollIndicators(containerRef);
 
-  // Note: `anchorGradeId` is purely local state. We don't reset it when
-  // bounds change externally — if the user is mid-interaction, their pending
-  // anchor should outlive an unrelated URL update. The tap handlers below
-  // clear it when the user resolves the gesture (set range / clear / tap-out).
-
   const isAny = minGradeId === undefined && maxGradeId === undefined;
   const isSingleGrade = minGradeId !== undefined && maxGradeId !== undefined && minGradeId === maxGradeId;
+  const isRange = minGradeId !== undefined && maxGradeId !== undefined && minGradeId !== maxGradeId;
 
   const lowGrade = minGradeId !== undefined ? grades.find((g) => g.difficulty_id === minGradeId) : undefined;
   const highGrade = maxGradeId !== undefined ? grades.find((g) => g.difficulty_id === maxGradeId) : undefined;
@@ -80,7 +73,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
     return t('search.fields.gradeRangeUpTo', { grade: highLabel });
   }, [isAny, minGradeId, maxGradeId, lowLabel, highLabel, t]);
 
-  // Scroll a chip into view on mount when the slider opens with a bound set.
+  // Scroll a chip into view on mount when the picker opens with a bound set.
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -126,81 +119,37 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
 
   const handleClear = useCallback(() => {
     onChange({ minGradeId: undefined, maxGradeId: undefined });
-    setAnchorGradeId(undefined);
   }, [onChange]);
 
-  // Tap a chip — single-grade primary gesture. When in anchor mode (after a
-  // long-press), the second tap sets the range instead.
+  // Tap rules (all no-modifier single taps):
+  //   1. From "Any" → "V_X only" (collapse to single grade).
+  //   2. From "V_X only", tap V_X → "Any" (clear). Matches inline picker.
+  //   3. From "V_X only", tap V_Y (different chip) → range [min, max].
+  //   4. From a range → "V_X only" (collapse to that single grade).
+  // No long-press, no double-tap. Range is built by tapping two chips in
+  // sequence; switching single grade from a range is one tap.
   const handleChipTap = useCallback(
     (gradeId: number) => {
-      if (anchorGradeId !== undefined) {
-        const lo = Math.min(anchorGradeId, gradeId);
-        const hi = Math.max(anchorGradeId, gradeId);
+      if (isRange) {
+        onChange({ minGradeId: gradeId, maxGradeId: gradeId });
+        return;
+      }
+      if (isSingleGrade) {
+        if (minGradeId === gradeId) {
+          handleClear();
+          return;
+        }
+        const otherId = minGradeId as number;
+        const lo = Math.min(otherId, gradeId);
+        const hi = Math.max(otherId, gradeId);
         onChange({ minGradeId: lo, maxGradeId: hi });
-        setAnchorGradeId(undefined);
         return;
       }
-      // Tap the currently-selected single chip → clear (matches the inline
-      // grade picker's "tap selected to deselect" muscle memory).
-      if (isSingleGrade && minGradeId === gradeId) {
-        handleClear();
-        return;
-      }
-      // Default: collapse to that single grade.
+      // "Any" or any other state — collapse to single grade.
       onChange({ minGradeId: gradeId, maxGradeId: gradeId });
     },
-    [anchorGradeId, isSingleGrade, minGradeId, onChange, handleClear],
+    [isRange, isSingleGrade, minGradeId, onChange, handleClear],
   );
-
-  // Long-press → anchor mode. Subtle pulse on the chip; second tap on a
-  // different chip sets the range. Useful for users who want a range without
-  // a precision drag.
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tracks which chip the long-press fired on, so we only suppress the
-  // synthesized click on THAT chip (the long-press of V6 shouldn't swallow
-  // a subsequent tap on V11).
-  const longPressedChipRef = useRef<number | null>(null);
-
-  const cancelLongPress = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-
-  const handlePointerDown = useCallback(
-    (gradeId: number) => {
-      cancelLongPress();
-      longPressTimerRef.current = setTimeout(() => {
-        longPressedChipRef.current = gradeId;
-        setAnchorGradeId(gradeId);
-        // Anchor mode is purely UI — the filter doesn't change until the
-        // user taps a second chip. Avoids a flash of "V6 only" filtering
-        // between the long-press and the second tap.
-      }, LONG_PRESS_MS);
-    },
-    [cancelLongPress],
-  );
-
-  const handleChipClick = useCallback(
-    (gradeId: number) => {
-      cancelLongPress();
-      if (longPressedChipRef.current === gradeId) {
-        // The long-press just fired on this chip; the synthesized click
-        // that follows would re-process the same tap. Suppress it.
-        longPressedChipRef.current = null;
-        return;
-      }
-      // A click on a *different* chip — long-press's chip flag is stale,
-      // clear it so future taps on its chip aren't suppressed.
-      longPressedChipRef.current = null;
-      handleChipTap(gradeId);
-    },
-    [cancelLongPress, handleChipTap],
-  );
-
-  // Cleanup the timer on unmount.
-  useEffect(() => () => cancelLongPress(), [cancelLongPress]);
 
   const inRange = (gradeId: number): boolean => {
     if (minGradeId === undefined || maxGradeId === undefined) return false;
@@ -237,12 +186,10 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
             const color = getGradeColor(grade.difficulty_name, isDark);
             const endpoint = isEndpoint(grade.difficulty_id);
             const inside = !endpoint && inRange(grade.difficulty_id);
-            const anchored = anchorGradeId === grade.difficulty_id;
             const className = [
               baseStyles.pickerItem,
               endpoint ? baseStyles.pickerItemSelected : '',
               inside ? styles.inRange : '',
-              anchored ? styles.anchored : '',
             ]
               .filter(Boolean)
               .join(' ');
@@ -250,11 +197,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
               <ButtonBase
                 key={grade.difficulty_id}
                 data-grade-id={grade.difficulty_id}
-                onPointerDown={() => handlePointerDown(grade.difficulty_id)}
-                onPointerUp={cancelLongPress}
-                onPointerLeave={cancelLongPress}
-                onPointerCancel={cancelLongPress}
-                onClick={() => handleChipClick(grade.difficulty_id)}
+                onClick={() => handleChipTap(grade.difficulty_id)}
                 className={className}
                 aria-label={formatted}
                 aria-selected={endpoint}
