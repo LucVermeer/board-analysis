@@ -3,7 +3,6 @@
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined';
-import { track } from '@/app/lib/analytics';
 import type { ClimbActionProps, ClimbActionResult } from '../types';
 import { useOptionalQueueActions, useOptionalQueueData } from '../../graphql-queue';
 import { themeTokens } from '@/app/theme/theme-config';
@@ -12,7 +11,6 @@ import { useOptionalPlaylistActivation } from '../playlist-activation-context';
 
 export function SetActiveAction({
   climb,
-  boardDetails,
   viewMode,
   size = 'default',
   showLabel,
@@ -35,24 +33,19 @@ export function SetActiveAction({
 
       if ((!queueActions && !playlistActivation) || isCurrentClimb) return;
 
+      // The PostHog "Set Active Climb" event is fired centrally from the
+      // queue context's setCurrentClimb / setCurrentClimbQueueItem, so we
+      // don't fire it here — that would double-count clicks. The funnel was
+      // dropping to ~6% because the button used to be the only firing site.
       if (playlistActivation) {
         void playlistActivation.activatePlaylistClimb(climb);
       } else {
         void queueActions?.setCurrentClimb(climb, { playlistSuggestionSource: null });
       }
 
-      // PostHog event name stays "Set Active Climb" for analytics continuity
-      // — the time series spans the rename and we don't want to break it.
-      // The user-facing label changes to "Send to board" per the
-      // queue-control-bar pivot (Phase 2 PR3).
-      track('Set Active Climb', {
-        boardLayout: boardDetails.layout_name || '',
-        climbUuid: climb.uuid,
-      });
-
       onComplete?.();
     },
-    [queueActions, playlistActivation, isCurrentClimb, climb, boardDetails.layout_name, onComplete],
+    [queueActions, playlistActivation, isCurrentClimb, climb, onComplete],
   );
 
   const label = isCurrentClimb ? t('actions.sendToBoard.active') : t('actions.sendToBoard.label');

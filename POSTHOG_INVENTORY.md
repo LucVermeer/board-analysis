@@ -84,7 +84,7 @@ Boardsesh has comprehensive PostHog instrumentation across both web (Next.js) an
 | Climb Info Viewed                 | use-climb-actions.ts:88       | `climbUuid`, `boardLayout`                              | User opened climb details         |
 | Climb Shared                      | use-climb-actions.ts:196,204  | `climbUuid`, `boardLayout`, `method` (native/clipboard) | User shared via web share or copy |
 | Mirror Climb                      | use-climb-actions.ts:174      | `climbUuid`, `boardLayout`                              | User flipped climb horizontally   |
-| Set Active Climb                  | set-active-action.tsx:36      | `climbUuid`, `boardLayout`                              | User marked as current climb      |
+| Set Active Climb                  | QueueContext.tsx:598,740,862; queue-bridge-context.tsx:270,389,536 | `climbUuid`, `boardType`, `layoutId`, `source` (setCurrentClimb / setCurrentClimbQueueItem / takeControl / bridge.*) | User activated a climb (any UI path — button, queue nav, list tap, swipe, playlist, browse). Fired centrally from queue context mutators. |
 | Climb List Row Clicked            | climbs-list.tsx:419           | `climbUuid`                                             | User tapped climb in list view    |
 | Open in Aurora App                | use-climb-actions.ts:160      | `climbUuid`, `boardLayout`                              | User clicked "open in app"        |
 | Create Climb Set Active           | create-climb-form.tsx:747     | `boardLayout`                                           | User toggled active during create |
