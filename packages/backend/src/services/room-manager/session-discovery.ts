@@ -24,15 +24,21 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
  * the update actually mutated state. Lets the caller skip publishing a
  * SessionBoardPathChanged event on no-op writes.
  *
- * Uses a single-statement update with a conditional WHERE so concurrent
- * writers can't both observe the same "previous" value and double-publish.
+ * **Not atomic.** Two queries: SELECT the existing boardPath, then UPDATE
+ * if it differs. Two concurrent callers can both read the same prior
+ * value and both publish `SessionBoardPathChanged`. We accept this because
+ * the event is idempotent on the client (`router.replace` to the same URL
+ * is a no-op) and the realistic write pressure is one angle-selector tap
+ * at a time per device. If a future caller can't tolerate double-publish,
+ * tighten to a single-statement CTE
+ * (`UPDATE sessions SET boardPath = $2, ... FROM (SELECT boardPath AS prev FROM sessions WHERE id = $1) sub WHERE id = $1 AND sub.prev <> $2 RETURNING sub.prev`)
+ * or use Redis-backed CAS the same way `setSessionDriverAndReturnPrevious`
+ * does.
  */
 export async function updateSessionBoardPathIfChanged(sessionId: string, boardPath: string): Promise<string | null> {
   // Read-then-write — simpler than a CTE and matches the
-  // setSessionBoardSerialAndReturnPrevious shape elsewhere. Concurrent
-  // writers under the same sessionId are rare (one angle-selector tap at a
-  // time per device), and the event is idempotent on the client anyway:
-  // `router.replace` to the same URL is a no-op.
+  // setSessionBoardSerialAndReturnPrevious shape elsewhere. See the outer
+  // JSDoc for the non-atomicity contract this consciously accepts.
   const existing = await db
     .select({ boardPath: sessions.boardPath })
     .from(sessions)

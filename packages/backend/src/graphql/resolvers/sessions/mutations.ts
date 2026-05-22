@@ -711,10 +711,21 @@ export const sessionMutations = {
         roomManager.getSessionLeaderConnectionId(sessionId),
       ]);
 
+    // `requireSessionMember` above already verified the session exists.
+    // If the row vanished between membership check and this read we have
+    // a deeper bug (race between leaveSession + setSessionBoardPath, etc.)
+    // — surface it explicitly instead of returning a Session with empty-
+    // string boardPath next to nullable fields (the rest of the response
+    // uses `null` as "no data," not `''`). Throwing also keeps the field
+    // accesses on `sessionData.X` consistent below.
+    if (!sessionData) {
+      throw new Error(`setSessionBoardPath: session ${sessionId} not found after membership check`);
+    }
+
     return {
       id: sessionId,
-      name: sessionData?.name || null,
-      boardPath: sessionData?.boardPath || '',
+      name: sessionData.name || null,
+      boardPath: sessionData.boardPath,
       users,
       queueState: {
         sequence: queueState.sequence,
@@ -727,12 +738,12 @@ export const sessionMutations = {
       lastConnectedBoardSerial,
       clientId: ctx.connectionId,
       participantId,
-      goal: sessionData?.goal || null,
-      isPublic: sessionData?.isPublic ?? true,
-      startedAt: sessionData?.startedAt?.toISOString() || null,
-      endedAt: sessionData?.endedAt?.toISOString() || null,
-      isPermanent: sessionData?.isPermanent ?? false,
-      color: sessionData?.color || null,
+      goal: sessionData.goal || null,
+      isPublic: sessionData.isPublic ?? true,
+      startedAt: sessionData.startedAt?.toISOString() || null,
+      endedAt: sessionData.endedAt?.toISOString() || null,
+      isPermanent: sessionData.isPermanent ?? false,
+      color: sessionData.color || null,
     };
   },
 

@@ -433,4 +433,24 @@ describe('setSessionBoardPath mutation', () => {
     );
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
   });
+
+  it('throws when the session row vanished between membership check and the response read', async () => {
+    // Race scenario: leaveSession (or a sweep) deletes the row after
+    // requireSessionMember passed but before the response builder reads
+    // sessionData. The resolver throws explicitly rather than returning
+    // a malformed Session with an empty-string boardPath next to nullable
+    // fields filled with null.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockResolvedValueOnce(oldPath);
+    roomManagerMock.getSessionById.mockResolvedValueOnce(null);
+    const ctx = makeCtx({ participantId: 'participant-1' });
+
+    await expect(sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx)).rejects.toThrow(
+      /not found after membership check/,
+    );
+    // The publish already happened (we successfully wrote and broadcast
+    // before the read). That's an acceptable outcome — clients receive
+    // the new boardPath; the throw only prevents serving back a malformed
+    // Session payload to the caller.
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalled();
+  });
 });
