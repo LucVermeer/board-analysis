@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import { GradeRangePicker } from '../grade-range-picker';
@@ -81,20 +81,64 @@ describe('<GradeRangePicker />', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: undefined, maxGradeId: undefined });
   });
 
-  // Rule 3a: from single grade, tap a higher chip extends to range.
-  it('from "V6 only" — tap V11 extends to "V6 to V11"', () => {
+  // Rule 3a: from single grade, tap a higher chip within the 3s window
+  // extends to range.
+  it('from "V6 only" within the 3s window — tap V11 extends to "V6 to V11"', () => {
     const onChange = vi.fn();
     render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V6} onChange={onChange} />);
     fireEvent.click(getChip('V11'));
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V11 });
+    // Meta tells the call site this WAS a range extension (vs. a single
+    // switch via the window expiring).
+    expect(onChange.mock.calls.at(-1)?.[1]).toEqual({ extendedRangeWithinWindow: true });
   });
 
   // Rule 3b: from single grade, tap a lower chip sorts the range correctly.
-  it('from "V11 only" — tap V6 extends to "V6 to V11" (sorted)', () => {
+  it('from "V11 only" within the window — tap V6 extends to "V6 to V11" (sorted)', () => {
     const onChange = vi.fn();
     render(<GradeRangePicker grades={kilterGrades} minGradeId={V11} maxGradeId={V11} onChange={onChange} />);
     fireEvent.click(getChip('V6'));
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V11 });
+  });
+
+  // The 3-second window: rapid taps build a range, slow taps switch single
+  // grade. Wrapped in its own describe so fake timers don't leak.
+  describe('Rule 3 — 3-second window for range extension', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('inside the window: tap V8 extends "V6 only" to "V6 to V8" with meta extendedRangeWithinWindow=true', () => {
+      const onChange = vi.fn();
+      render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V6} onChange={onChange} />);
+      // Advance ~2s — still inside the 3s window.
+      vi.advanceTimersByTime(2000);
+      fireEvent.click(getChip('V8'));
+      expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V8 });
+      expect(onChange.mock.calls.at(-1)?.[1]).toEqual({ extendedRangeWithinWindow: true });
+    });
+
+    it('outside the window: tap V8 switches "V6 only" → "V8 only" with meta extendedRangeWithinWindow=false', () => {
+      const onChange = vi.fn();
+      render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V6} onChange={onChange} />);
+      // Advance past the 3s window.
+      vi.advanceTimersByTime(4000);
+      fireEvent.click(getChip('V8'));
+      // Switched to V8 only, NOT a V6-V8 range.
+      expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V8, maxGradeId: V8 });
+      expect(onChange.mock.calls.at(-1)?.[1]).toEqual({ extendedRangeWithinWindow: false });
+    });
+
+    it('Rule 2 (tap selected to clear) is not gated by the window — works after expiry', () => {
+      const onChange = vi.fn();
+      render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V6} onChange={onChange} />);
+      vi.advanceTimersByTime(10000);
+      fireEvent.click(getChip('V6'));
+      expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: undefined, maxGradeId: undefined });
+    });
   });
 
   // Rule 4: from a range, any chip tap collapses to that single grade.

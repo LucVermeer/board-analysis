@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { useTranslation } from 'react-i18next';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
@@ -14,6 +14,22 @@ import type { BoulderGrade } from '@/app/lib/board-data';
 import baseStyles from './inline-grade-picker.module.css';
 import styles from './grade-range-picker.module.css';
 
+/**
+ * Optional metadata emitted with `onChange` calls. Lets the call site fold
+ * picker-internal context into analytics without the picker itself knowing
+ * about the analytics layer.
+ */
+export type GradeRangeChangeMeta = {
+  /**
+   * Set only when the user tapped a different chip from the currently-selected
+   * single grade. `true` = the second tap landed inside the
+   * RANGE_EXTEND_WINDOW_MS window from the first tap and was treated as range
+   * extension. `false` = the window had expired so we switched single grade
+   * (avoiding an accidental range). Undefined for all other rules.
+   */
+  extendedRangeWithinWindow?: boolean;
+};
+
 export type GradeRangePickerProps = {
   grades: readonly BoulderGrade[];
   /** undefined = "no lower bound" (filter clears that side). */
@@ -21,9 +37,21 @@ export type GradeRangePickerProps = {
   /** undefined = "no upper bound". */
   maxGradeId: number | undefined;
   /** Both undefined = "Any" (filter cleared). */
-  onChange: (next: { minGradeId: number | undefined; maxGradeId: number | undefined }) => void;
+  onChange: (
+    next: { minGradeId: number | undefined; maxGradeId: number | undefined },
+    meta?: GradeRangeChangeMeta,
+  ) => void;
   ariaLabel?: string;
 };
+
+/**
+ * Tapping a different chip while a single grade is selected only extends to
+ * a range when the second tap lands within this window. Past it, the tap is
+ * treated as a single-grade switch instead — matches user intent (rapid
+ * taps = "I'm building a range", slow taps over a session = "I'm switching
+ * grades").
+ */
+const RANGE_EXTEND_WINDOW_MS = 3000;
 
 /**
  * In dark mode `getGradeColor` returns a pale text-readable variant. Pull the
@@ -56,6 +84,16 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
   const isAny = minGradeId === undefined && maxGradeId === undefined;
   const isSingleGrade = minGradeId !== undefined && maxGradeId !== undefined && minGradeId === maxGradeId;
   const isRange = minGradeId !== undefined && maxGradeId !== undefined && minGradeId !== maxGradeId;
+
+  // Timestamp of the most recent transition INTO a single-grade state.
+  // Re-stamps on every bounds change so each fresh single-grade selection
+  // starts its own 3-second extension window. Cleared when state is not a
+  // single grade so we don't accidentally extend from a stale window after
+  // the user explored a range and came back.
+  const singleGradeSelectedAtRef = useRef<number | undefined>(isSingleGrade ? Date.now() : undefined);
+  useEffect(() => {
+    singleGradeSelectedAtRef.current = isSingleGrade ? Date.now() : undefined;
+  }, [minGradeId, maxGradeId, isSingleGrade]);
 
   const lowGrade = minGradeId !== undefined ? grades.find((g) => g.difficulty_id === minGradeId) : undefined;
   const highGrade = maxGradeId !== undefined ? grades.find((g) => g.difficulty_id === maxGradeId) : undefined;
@@ -182,10 +220,21 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
           handleClear();
           return;
         }
-        const otherId = minGradeId as number;
-        const lo = Math.min(otherId, gradeId);
-        const hi = Math.max(otherId, gradeId);
-        onChange({ minGradeId: lo, maxGradeId: hi });
+        // Rule 3 is time-gated: rapid taps after a fresh single-grade pick
+        // build a range; slow taps switch single grade. Avoids accidentally
+        // creating a range during the user's primary single-grade workflow
+        // (warm-up V4, then climb V6 30s later — V6 should *replace*, not
+        // extend).
+        const selectedAt = singleGradeSelectedAtRef.current;
+        const withinWindow = selectedAt !== undefined && Date.now() - selectedAt < RANGE_EXTEND_WINDOW_MS;
+        if (withinWindow) {
+          const otherId = minGradeId as number;
+          const lo = Math.min(otherId, gradeId);
+          const hi = Math.max(otherId, gradeId);
+          onChange({ minGradeId: lo, maxGradeId: hi }, { extendedRangeWithinWindow: true });
+        } else {
+          onChange({ minGradeId: gradeId, maxGradeId: gradeId }, { extendedRangeWithinWindow: false });
+        }
         return;
       }
       // "Any" or any other state — collapse to single grade.
