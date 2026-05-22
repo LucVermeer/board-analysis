@@ -15,7 +15,7 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
-import { GradeRangePicker } from '@/app/components/grade-picker/grade-range-picker';
+import { GradeRangePicker, type GradeRangeChangeMeta } from '@/app/components/grade-picker/grade-range-picker';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
@@ -77,41 +77,55 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const minGradeForPicker = uiSearchParams.minGrade > 0 ? uiSearchParams.minGrade : undefined;
   const maxGradeForPicker = uiSearchParams.maxGrade > 0 ? uiSearchParams.maxGrade : undefined;
 
+  // Describe a (min, max) pair as a filter shape — used to populate both
+  // the current and previous state on the analytics event without duplicating
+  // the branching logic.
+  const describeFilter = (min: number | undefined, max: number | undefined) => {
+    let kind: 'any' | 'single' | 'range' | 'lower_only' | 'upper_only';
+    if (min === undefined && max === undefined) kind = 'any';
+    else if (min !== undefined && max !== undefined) kind = min === max ? 'single' : 'range';
+    else if (min !== undefined) kind = 'lower_only';
+    else kind = 'upper_only';
+
+    let size: number | null = null;
+    if (min !== undefined && max !== undefined) {
+      const minIdx = grades.findIndex((g) => g.difficulty_id === min);
+      const maxIdx = grades.findIndex((g) => g.difficulty_id === max);
+      if (minIdx >= 0 && maxIdx >= 0) size = maxIdx - minIdx + 1;
+    }
+
+    return { kind, size };
+  };
+
   // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips
   // `undefined` from updates, so we coerce both bounds to concrete numbers
   // (`0` when the picker is at the extreme) before sending.
-  const handleGradeRangeChange = ({
-    minGradeId,
-    maxGradeId,
-  }: {
-    minGradeId: number | undefined;
-    maxGradeId: number | undefined;
-  }) => {
+  const handleGradeRangeChange = (
+    { minGradeId, maxGradeId }: { minGradeId: number | undefined; maxGradeId: number | undefined },
+    meta?: GradeRangeChangeMeta,
+  ) => {
+    // `minGradeForPicker` / `maxGradeForPicker` still reflect the PREVIOUS
+    // state here — updateFilters() below kicks off the re-render that will
+    // refresh them. Capture them now so the analytics event carries the
+    // before/after for funnel/rage-pattern analysis later.
+    const previous = describeFilter(minGradeForPicker, maxGradeForPicker);
+    const next = describeFilter(minGradeId, maxGradeId);
+
     updateFilters({ minGrade: minGradeId ?? 0, maxGrade: maxGradeId ?? 0 });
 
-    // Track shape of the filter so we can iterate on the picker UX —
-    // chiefly, learn how big a range users typically pick. `range_size`
-    // counts inclusive grade slots (1 = single grade, N = N-grade range,
-    // null = unbounded on at least one side).
-    let filterKind: 'any' | 'single' | 'range' | 'lower_only' | 'upper_only';
-    if (minGradeId === undefined && maxGradeId === undefined) filterKind = 'any';
-    else if (minGradeId !== undefined && maxGradeId !== undefined)
-      filterKind = minGradeId === maxGradeId ? 'single' : 'range';
-    else if (minGradeId !== undefined) filterKind = 'lower_only';
-    else filterKind = 'upper_only';
-
-    let rangeSize: number | null = null;
-    if (minGradeId !== undefined && maxGradeId !== undefined) {
-      const minIdx = grades.findIndex((g) => g.difficulty_id === minGradeId);
-      const maxIdx = grades.findIndex((g) => g.difficulty_id === maxGradeId);
-      if (minIdx >= 0 && maxIdx >= 0) rangeSize = maxIdx - minIdx + 1;
-    }
-
     track('Grade Filter Changed', {
-      filter_kind: filterKind,
+      filter_kind: next.kind,
       min_grade_id: minGradeId ?? null,
       max_grade_id: maxGradeId ?? null,
-      range_size: rangeSize,
+      range_size: next.size,
+      previous_filter_kind: previous.kind,
+      previous_min_grade_id: minGradeForPicker ?? null,
+      previous_max_grade_id: maxGradeForPicker ?? null,
+      // Set only when the picker fired Rule 3 (tap-from-single-grade).
+      // true  = range extended within the 3s window.
+      // false = window expired, switched single grade instead (no accidental range).
+      // null  = Rule 3 didn't fire.
+      extended_range_within_window: meta?.extendedRangeWithinWindow ?? null,
       board_name: boardDetails.board_name,
     });
   };

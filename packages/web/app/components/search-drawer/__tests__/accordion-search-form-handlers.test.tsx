@@ -314,11 +314,15 @@ describe('AccordionSearchForm — quality filter controls', () => {
         min_grade_id: 22,
         max_grade_id: 22,
         range_size: 1,
+        previous_filter_kind: 'any',
+        previous_min_grade_id: null,
+        previous_max_grade_id: null,
+        extended_range_within_window: null,
         board_name: 'kilter',
       });
     });
 
-    it('fires "Grade Filter Changed" with filter_kind="range" + range_size when extending', () => {
+    it('fires "Grade Filter Changed" with filter_kind="range" + extended_range_within_window=true when extending within window', () => {
       mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 22 };
       render(<AccordionSearchForm boardDetails={boardDetails} />);
       tapChip('V11');
@@ -328,11 +332,15 @@ describe('AccordionSearchForm — quality filter controls', () => {
         min_grade_id: 22,
         max_grade_id: 28,
         range_size: 7,
+        previous_filter_kind: 'single',
+        previous_min_grade_id: 22,
+        previous_max_grade_id: 22,
+        extended_range_within_window: true,
         board_name: 'kilter',
       });
     });
 
-    it('fires "Grade Filter Changed" with filter_kind="any" on clear', () => {
+    it('fires "Grade Filter Changed" with filter_kind="any" + previous_filter_kind="range" on clear', () => {
       mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
       render(<AccordionSearchForm boardDetails={boardDetails} />);
       tapChip('Any');
@@ -341,6 +349,10 @@ describe('AccordionSearchForm — quality filter controls', () => {
         min_grade_id: null,
         max_grade_id: null,
         range_size: null,
+        previous_filter_kind: 'range',
+        previous_min_grade_id: 22,
+        previous_max_grade_id: 28,
+        extended_range_within_window: null,
         board_name: 'kilter',
       });
     });
