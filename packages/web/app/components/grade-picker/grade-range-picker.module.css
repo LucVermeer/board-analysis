@@ -23,10 +23,27 @@
 
 .fieldSummary {
   font-size: 13px;
-  font-weight: 600;
-  color: inherit;
+  font-weight: 500;
+  color: var(--neutral-500, #6b7280);
   flex: 0 1 auto;
   text-align: right;
+}
+
+/* "Any" / clear chip — visually separated from the grade chips with a
+   right-side divider so it reads as a meta action, not a grade option.
+   Stays inside the scrollable row so it scrolls with everything else. */
+.clearChip {
+  margin-right: 6px;
+  padding-right: 6px;
+  border-right: 1px solid var(--neutral-300, #d1d5db);
+  /* Override the inline picker's `pickerItemSelected` rose ring when
+     active — the divider already differentiates it from a grade. */
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+:global(html[data-theme='dark']) .clearChip {
+  border-right-color: var(--neutral-300, #3a3a3a);
 }
 
 /* The picker row is a horizontally-scrollable flex container. Mirrors

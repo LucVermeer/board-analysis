@@ -73,7 +73,10 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
     return t('search.fields.gradeRangeUpTo', { grade: highLabel });
   }, [isAny, minGradeId, maxGradeId, lowLabel, highLabel, t]);
 
-  // Scroll a chip into view on mount when the picker opens with a bound set.
+  // Centre the selected chip when it's not visible. Runs on mount and on
+  // external bounds changes (URL nav, "Clear all" then reapply) — but skips
+  // when the user just tapped a visible chip, so the row doesn't jump under
+  // their finger.
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -81,12 +84,14 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
     if (targetId === undefined) return;
     const targetEl = container.querySelector(`[data-grade-id="${targetId}"]`) as HTMLElement | null;
     if (!targetEl) return;
+    const isOffscreen =
+      targetEl.offsetLeft + targetEl.offsetWidth < container.scrollLeft ||
+      targetEl.offsetLeft > container.scrollLeft + container.clientWidth;
+    if (!isOffscreen) return;
     const center = container.clientWidth / 2;
     const targetCenter = targetEl.offsetLeft + targetEl.offsetWidth / 2;
     container.scrollLeft = Math.max(0, Math.min(targetCenter - center, container.scrollWidth - container.clientWidth));
-    // Run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [minGradeId, maxGradeId]);
 
   // Compute the gradient band's left/width within the scrollable row. Only
   // visible when a true range is set — for a single-grade selection the chip
@@ -131,12 +136,44 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
   //   1. From "Any" → "V_X only" (collapse to single grade).
   //   2. From "V_X only", tap V_X → "Any" (clear). Matches inline picker.
   //   3. From "V_X only", tap V_Y (different chip) → range [min, max].
-  //   4. From a range → "V_X only" (collapse to that single grade).
+  //   4. From a range, tap an *endpoint* → trim the range (drop that endpoint
+  //      and shrink). When the trim collapses to one grade, leave it as a
+  //      single-grade selection.
+  //   5. From a range, tap an *interior* chip → "V_X only" (collapse).
+  //   6. From a range, tap a chip outside the range → "V_X only" (collapse).
   // No long-press, no double-tap. Range is built by tapping two chips in
   // sequence; switching single grade from a range is one tap.
   const handleChipTap = useCallback(
     (gradeId: number) => {
-      if (isRange) {
+      if (isRange && minGradeId !== undefined && maxGradeId !== undefined) {
+        // Rule 4: tapping an endpoint of a range trims it. The other
+        // endpoint is preserved; the tapped endpoint moves inward by one
+        // grade (still within the range). If the trim collapses min > max,
+        // settle on the surviving endpoint as a single grade.
+        if (gradeId === minGradeId) {
+          const minIdx = grades.findIndex((g) => g.difficulty_id === minGradeId);
+          const nextMinIdx = minIdx + 1;
+          if (nextMinIdx >= 0 && nextMinIdx < grades.length && grades[nextMinIdx].difficulty_id <= maxGradeId) {
+            const newMin = grades[nextMinIdx].difficulty_id;
+            onChange({ minGradeId: newMin, maxGradeId });
+            return;
+          }
+          // Trim would invert; collapse to the surviving (max) endpoint.
+          onChange({ minGradeId: maxGradeId, maxGradeId });
+          return;
+        }
+        if (gradeId === maxGradeId) {
+          const maxIdx = grades.findIndex((g) => g.difficulty_id === maxGradeId);
+          const nextMaxIdx = maxIdx - 1;
+          if (nextMaxIdx >= 0 && grades[nextMaxIdx].difficulty_id >= minGradeId) {
+            const newMax = grades[nextMaxIdx].difficulty_id;
+            onChange({ minGradeId, maxGradeId: newMax });
+            return;
+          }
+          onChange({ minGradeId, maxGradeId: minGradeId });
+          return;
+        }
+        // Rules 5 & 6: interior or outside — collapse to the tapped grade.
         onChange({ minGradeId: gradeId, maxGradeId: gradeId });
         return;
       }
@@ -154,7 +191,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
       // "Any" or any other state — collapse to single grade.
       onChange({ minGradeId: gradeId, maxGradeId: gradeId });
     },
-    [isRange, isSingleGrade, minGradeId, onChange, handleClear],
+    [isRange, isSingleGrade, minGradeId, maxGradeId, grades, onChange, handleClear],
   );
 
   const inRange = (gradeId: number): boolean => {
@@ -180,7 +217,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
           <div className={styles.gradientBand} style={bandStyle} aria-hidden="true" />
           <ButtonBase
             onClick={handleClear}
-            className={`${baseStyles.pickerItem} ${isAny ? baseStyles.pickerItemSelected : ''}`}
+            className={`${baseStyles.pickerItem} ${styles.clearChip}`}
             aria-label={t('search.fields.any')}
             aria-selected={isAny}
             role="option"

@@ -105,11 +105,32 @@ describe('<GradeRangePicker />', () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V8, maxGradeId: V8 });
   });
 
-  // Rule 4 also covers tapping an endpoint of the current range.
-  it('from "V6 to V11" range — tap V6 (the lower endpoint) collapses to "V6 only"', () => {
+  // Rule 4: tapping an endpoint trims the range (drops that endpoint and
+  // shrinks toward the other). Replaces an earlier draft where endpoint-tap
+  // collapsed destructively; that was flagged in UX review as a foot-gun.
+  it('from "V6 to V11" range — tap V6 (the lower endpoint) trims to "V7 to V11"', () => {
     const onChange = vi.fn();
     render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V11} onChange={onChange} />);
     fireEvent.click(getChip('V6'));
+    // V6 = idx 12 → next idx 13 = V7 = id 23.
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: 23, maxGradeId: V11 });
+  });
+
+  it('from "V6 to V11" range — tap V11 (the upper endpoint) trims to "V6 to V10"', () => {
+    const onChange = vi.fn();
+    render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={V11} onChange={onChange} />);
+    fireEvent.click(getChip('V11'));
+    // V11 = idx 18 → prev idx 17 = V10 = id 27.
+    expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: 27 });
+  });
+
+  it('from a two-grade range — tapping the upper endpoint collapses to the lower as a single grade', () => {
+    const onChange = vi.fn();
+    // V6 (id 22) → V7 (id 23) is a two-grade range. Tapping V7 trims but the
+    // trim would invert (next-max = V6 = current min), so it collapses to
+    // "V6 only".
+    render(<GradeRangePicker grades={kilterGrades} minGradeId={V6} maxGradeId={23} onChange={onChange} />);
+    fireEvent.click(getChip('V7'));
     expect(onChange.mock.calls.at(-1)?.[0]).toEqual({ minGradeId: V6, maxGradeId: V6 });
   });
 
