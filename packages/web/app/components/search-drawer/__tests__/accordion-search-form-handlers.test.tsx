@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import type { BoardDetails, SearchRequestPagination } from '@/app/lib/types';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
-import { getGradesForBoard } from '@/app/lib/board-data';
 
 vi.mock('react-i18next', () => ({
   useTranslation: (ns?: string) => ({
@@ -45,6 +44,11 @@ vi.mock('@/app/components/queue-control/ui-searchparams-provider', () => ({
 
 vi.mock('@/app/components/board-provider/board-provider-context', () => ({
   useBoardProvider: () => ({ isAuthenticated: false }),
+}));
+
+const mockTrack = vi.fn();
+vi.mock('@/app/lib/analytics', () => ({
+  track: (name: string, properties?: Record<string, unknown>) => mockTrack(name, properties),
 }));
 
 vi.mock('@/app/components/providers/auth-modal-provider', () => ({
@@ -113,6 +117,7 @@ const makeBoardDetails = (overrides: Partial<BoardDetails>): BoardDetails =>
 describe('AccordionSearchForm — quality filter controls', () => {
   beforeEach(() => {
     mockUpdateFilters.mockClear();
+    mockTrack.mockClear();
     mockGetLastUsedGrade.mockReset().mockResolvedValue(undefined);
     mockSetLastUsedGrade.mockReset().mockResolvedValue(undefined);
     mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS };
@@ -258,59 +263,103 @@ describe('AccordionSearchForm — quality filter controls', () => {
     }
   });
 
-  describe('grade range slider', () => {
-    // Kilter grades start at difficulty_id 10 (V0), so array index N maps to
-    // difficulty_id N + 10: idx 12 = 22 (V6), idx 18 = 28 (V11), etc. We
-    // derive the last index from the live grade table so this doesn't go
-    // stale if the table grows.
-    const kilterLastIdx = getGradesForBoard('kilter').length - 1;
-    const findSliders = () => screen.getAllByRole('slider') as HTMLInputElement[];
+  describe('grade range picker (chip row)', () => {
+    // V6 = 7a = difficulty_id 22. V11 = 8a = 28.
+    // Scope chip lookup to the picker's listbox so "Any" doesn't collide with
+    // the Min Rating picker's "Any" option, which lives in a separate listbox.
+    const tapChip = (label: string) => {
+      const listbox = screen.getByRole('listbox', { name: 'Grade range' });
+      const chip = within(listbox).getByRole('option', { name: label });
+      fireEvent.click(chip);
+    };
 
-    it('moving the lower thumb off the bottom emits a concrete minGrade difficulty_id', () => {
+    it('tapping a grade chip collapses both bounds to that grade', () => {
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const [lowInput] = findSliders();
-      // idx 12 = difficulty_id 22 (V6 / 7a)
-      fireEvent.change(lowInput, { target: { value: '12' } });
-      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 22, maxGrade: 0 });
+      tapChip('V6');
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 22, maxGrade: 22 });
     });
 
-    it('moving the lower thumb back to the bottom emits the 0 sentinel (not undefined)', () => {
-      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
+    it('tapping the currently-selected single chip clears both bounds (0 sentinel)', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 22 };
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const [lowInput] = findSliders();
-      fireEvent.change(lowInput, { target: { value: '0' } });
+      tapChip('V6');
       const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
       // Regression guard: updateFilters strips undefined fields, so emitting
       // undefined here would silently no-op the clear. The handler coerces to 0.
-      expect(lastCall?.minGrade).toBe(0);
+      expect(lastCall).toEqual({ minGrade: 0, maxGrade: 0 });
       expect(lastCall?.minGrade).not.toBeUndefined();
+      expect(lastCall?.maxGrade).not.toBeUndefined();
     });
 
-    it('moving the upper thumb off the top emits a concrete maxGrade difficulty_id', () => {
-      render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const [, highInput] = findSliders();
-      // idx 18 = difficulty_id 28 (V11 / 8a)
-      fireEvent.change(highInput, { target: { value: '18' } });
-      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 0, maxGrade: 28 });
-    });
-
-    it('moving the upper thumb back to the top clears maxGrade to the 0 sentinel', () => {
+    it('tapping the "Any" clear chip clears both bounds', () => {
       mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const [, highInput] = findSliders();
-      fireEvent.change(highInput, { target: { value: String(kilterLastIdx) } });
-      const lastCall = mockUpdateFilters.mock.calls.at(-1)?.[0];
-      expect(lastCall?.maxGrade).toBe(0);
+      tapChip('Any');
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 0, maxGrade: 0 });
+    });
+
+    it('tapping a different grade while a range is set collapses to that single grade', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      tapChip('V8');
+      // V8 → difficulty_id 24 (7b)
+      expect(mockUpdateFilters.mock.calls.at(-1)?.[0]).toEqual({ minGrade: 24, maxGrade: 24 });
+    });
+
+    it('fires "Grade Filter Changed" analytics with single-grade properties on a one-tap collapse', () => {
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      tapChip('V6');
+      expect(mockTrack).toHaveBeenCalledWith('Grade Filter Changed', {
+        filter_kind: 'single',
+        min_grade_id: 22,
+        max_grade_id: 22,
+        range_size: 1,
+        previous_filter_kind: 'any',
+        previous_min_grade_id: null,
+        previous_max_grade_id: null,
+        extended_range_within_window: null,
+        board_name: 'kilter',
+      });
+    });
+
+    it('fires "Grade Filter Changed" with filter_kind="range" + extended_range_within_window=true when extending within window', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 22 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      tapChip('V11');
+      // V6..V11 spans difficulty_ids 22..28 → indices 12..18 in Kilter → 7 grades.
+      expect(mockTrack).toHaveBeenCalledWith('Grade Filter Changed', {
+        filter_kind: 'range',
+        min_grade_id: 22,
+        max_grade_id: 28,
+        range_size: 7,
+        previous_filter_kind: 'single',
+        previous_min_grade_id: 22,
+        previous_max_grade_id: 22,
+        extended_range_within_window: true,
+        board_name: 'kilter',
+      });
+    });
+
+    it('fires "Grade Filter Changed" with filter_kind="any" + previous_filter_kind="range" on clear', () => {
+      mockUISearchParams = { ...DEFAULT_SEARCH_PARAMS, minGrade: 22, maxGrade: 28 };
+      render(<AccordionSearchForm boardDetails={boardDetails} />);
+      tapChip('Any');
+      expect(mockTrack).toHaveBeenCalledWith('Grade Filter Changed', {
+        filter_kind: 'any',
+        min_grade_id: null,
+        max_grade_id: null,
+        range_size: null,
+        previous_filter_kind: 'range',
+        previous_min_grade_id: 22,
+        previous_max_grade_id: 28,
+        extended_range_within_window: null,
+        board_name: 'kilter',
+      });
     });
 
     it('does not persist a "last used grade" — the URL params already capture the range', () => {
-      // Regression guard: an earlier draft persisted the moved thumb via the
-      // single-grade `useLastUsedGrade` hook, which has the wrong semantics
-      // for a range filter (and corrupts the "last used grade" signal the
-      // tick-menu picker reads).
       render(<AccordionSearchForm boardDetails={boardDetails} />);
-      const [lowInput] = findSliders();
-      fireEvent.change(lowInput, { target: { value: '12' } });
+      tapChip('V6');
       expect(mockSetLastUsedGrade).not.toHaveBeenCalled();
     });
   });

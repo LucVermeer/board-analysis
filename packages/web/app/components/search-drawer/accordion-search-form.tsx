@@ -15,7 +15,7 @@ import LoginOutlined from '@mui/icons-material/LoginOutlined';
 import ArrowUpwardOutlined from '@mui/icons-material/ArrowUpwardOutlined';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import MinAscentsBucketPicker from '@/app/components/climb-quality-filter/min-ascents-bucket-picker';
-import { GradeRangeSlider } from '@/app/components/grade-picker/grade-range-slider';
+import { GradeRangePicker, type GradeRangeChangeMeta } from '@/app/components/grade-picker/grade-range-picker';
 import { InlineStarPicker } from '@/app/components/logbook/tick-controls';
 import { useUISearchParams } from '@/app/components/queue-control/ui-searchparams-provider';
 import { useBoardProvider } from '@/app/components/board-provider/board-provider-context';
@@ -25,6 +25,7 @@ import SetterNameSelect from './setter-name-select';
 import ClimbSearchForm from './climb-search-form';
 import type { BoardDetails } from '@/app/lib/types';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
+import { track } from '@/app/lib/analytics';
 import {
   getQualityPanelSummary,
   getStatusPanelSummary,
@@ -76,18 +77,57 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
   const minGradeForPicker = uiSearchParams.minGrade > 0 ? uiSearchParams.minGrade : undefined;
   const maxGradeForPicker = uiSearchParams.maxGrade > 0 ? uiSearchParams.maxGrade : undefined;
 
+  // Describe a (min, max) pair as a filter shape — used to populate both
+  // the current and previous state on the analytics event without duplicating
+  // the branching logic. The chip picker only ever emits both bounds defined
+  // together or both undefined, so only three kinds are produced. Legacy
+  // one-sided URL bookmarks (from the old slider) fall through to `range`
+  // with null size — rare and acceptable for analytics.
+  const describeFilter = (min: number | undefined, max: number | undefined) => {
+    if (min === undefined && max === undefined) {
+      return { kind: 'any' as const, size: null };
+    }
+    if (min !== undefined && max !== undefined) {
+      if (min === max) return { kind: 'single' as const, size: 1 };
+      const minIdx = grades.findIndex((g) => g.difficulty_id === min);
+      const maxIdx = grades.findIndex((g) => g.difficulty_id === max);
+      const size = minIdx >= 0 && maxIdx >= 0 ? maxIdx - minIdx + 1 : null;
+      return { kind: 'range' as const, size };
+    }
+    return { kind: 'range' as const, size: null };
+  };
+
   // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips
   // `undefined` from updates, so we coerce both bounds to concrete numbers
-  // (`0` when the slider is at the extreme) before sending. The slider's
-  // `disableSwap` already prevents min > max, so no further clamping needed.
-  const handleGradeRangeChange = ({
-    minGradeId,
-    maxGradeId,
-  }: {
-    minGradeId: number | undefined;
-    maxGradeId: number | undefined;
-  }) => {
+  // (`0` when the picker is at the extreme) before sending.
+  const handleGradeRangeChange = (
+    { minGradeId, maxGradeId }: { minGradeId: number | undefined; maxGradeId: number | undefined },
+    meta?: GradeRangeChangeMeta,
+  ) => {
+    // `minGradeForPicker` / `maxGradeForPicker` still reflect the PREVIOUS
+    // state here — updateFilters() below kicks off the re-render that will
+    // refresh them. Capture them now so the analytics event carries the
+    // before/after for funnel/rage-pattern analysis later.
+    const previous = describeFilter(minGradeForPicker, maxGradeForPicker);
+    const next = describeFilter(minGradeId, maxGradeId);
+
     updateFilters({ minGrade: minGradeId ?? 0, maxGrade: maxGradeId ?? 0 });
+
+    track('Grade Filter Changed', {
+      filter_kind: next.kind,
+      min_grade_id: minGradeId ?? null,
+      max_grade_id: maxGradeId ?? null,
+      range_size: next.size,
+      previous_filter_kind: previous.kind,
+      previous_min_grade_id: minGradeForPicker ?? null,
+      previous_max_grade_id: maxGradeForPicker ?? null,
+      // Set only when the picker fired Rule 3 (tap-from-single-grade).
+      // true  = range extended within the 3s window.
+      // false = window expired, switched single grade instead (no accidental range).
+      // null  = Rule 3 didn't fire.
+      extended_range_within_window: meta?.extendedRangeWithinWindow ?? null,
+      board_name: boardDetails.board_name,
+    });
   };
 
   const climbContent = (
@@ -98,7 +138,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
       </div>
 
       <div className={styles.inputGroup}>
-        <GradeRangeSlider
+        <GradeRangePicker
           grades={grades}
           minGradeId={minGradeForPicker}
           maxGradeId={maxGradeForPicker}
