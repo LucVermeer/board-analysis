@@ -88,11 +88,14 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Compute the gradient band's left/width within the scrollable row.
+  // Compute the gradient band's left/width within the scrollable row. Only
+  // visible when a true range is set — for a single-grade selection the chip
+  // ring + tint already carries the identity; a 1-chip-wide band underneath
+  // reads as a render glitch.
   const [bandStyle, setBandStyle] = useState<React.CSSProperties>({ display: 'none' });
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container || isAny || minGradeId === undefined || maxGradeId === undefined) {
+    if (!container || !isRange || minGradeId === undefined || maxGradeId === undefined) {
       setBandStyle({ display: 'none' });
       return;
     }
@@ -102,8 +105,11 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
       setBandStyle({ display: 'none' });
       return;
     }
-    const left = minEl.offsetLeft;
-    const width = maxEl.offsetLeft + maxEl.offsetWidth - left;
+    // Inset by the chip's horizontal padding (8px each side) so the band
+    // aligns with the visible glyph, not the ButtonBase bounding box.
+    const CHIP_HORIZONTAL_INSET = 6;
+    const left = minEl.offsetLeft + CHIP_HORIZONTAL_INSET;
+    const width = maxEl.offsetLeft + maxEl.offsetWidth - left - CHIP_HORIZONTAL_INSET;
 
     const lowColor = lowGrade ? getGradeColor(lowGrade.difficulty_name, isDark) : undefined;
     const highColor = highGrade ? getGradeColor(highGrade.difficulty_name, isDark) : undefined;
@@ -115,7 +121,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
         : (lowFill ?? highFill ?? 'color-mix(in srgb, var(--color-primary) 45%, transparent)');
 
     setBandStyle({ left, width, background });
-  }, [minGradeId, maxGradeId, isAny, lowGrade, highGrade, getGradeColor, isDark, grades]);
+  }, [minGradeId, maxGradeId, isRange, lowGrade, highGrade, getGradeColor, isDark, grades]);
 
   const handleClear = useCallback(() => {
     onChange({ minGradeId: undefined, maxGradeId: undefined });

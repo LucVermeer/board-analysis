@@ -54,18 +54,17 @@
 
 /* Translucent gradient band painted behind the chips between the two
    selected bounds. Sits inside the scrolling content so it scrolls with
-   the chips. `pointer-events: none` so taps still land on the chips. */
+   the chips. `pointer-events: none` so taps still land on the chips.
+   Only `background` transitions — geometry transitions would visibly
+   crawl when the row scrolls or the second endpoint is picked. */
 .gradientBand {
   position: absolute;
-  top: 4px;
-  bottom: 4px;
+  top: 6px;
+  bottom: 6px;
   border-radius: 999px;
   opacity: 0.32;
   pointer-events: none;
-  transition:
-    left 180ms ease,
-    width 180ms ease,
-    background 240ms ease;
+  transition: background 240ms ease;
 }
 
 :global(html[data-theme='dark']) .gradientBand {
