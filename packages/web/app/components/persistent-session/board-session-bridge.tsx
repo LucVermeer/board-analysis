@@ -103,6 +103,13 @@ const BoardSessionBridge: React.FC<BoardSessionBridgeProps> = ({ boardDetails, p
     const unsubscribe = subscribeToSessionEvents((event) => {
       if (event.__typename !== 'SessionBoardPathChanged') return;
       if (event.changedByParticipantId && event.changedByParticipantId === participantId) return;
+      // Defensive: if the SESSION_UPDATES subscription's selection set
+      // ever drops the `boardPath` field, the event arrives with
+      // `__typename` set but the payload undefined. Bail rather than
+      // call `router.replace(undefined)` and crash the locale router
+      // (the entire session-event fan-out runs inline; one throw kills
+      // every other subscriber on the same notify pass).
+      if (!event.boardPath) return;
       const queryString = window.location.search.slice(1);
       const target = queryString ? `${event.boardPath}?${queryString}` : event.boardPath;
       // `router.replace` not `push` — this is a remote-driven sync, not a

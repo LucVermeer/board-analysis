@@ -334,6 +334,10 @@ export const SESSION_UPDATES = `
       ... on SessionBoardSerialChanged {
         lastConnectedBoardSerial
       }
+      ... on SessionBoardPathChanged {
+        boardPath
+        changedByParticipantId
+      }
       ... on SessionEnded {
         reason
         newPath
