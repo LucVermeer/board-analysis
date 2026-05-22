@@ -4,11 +4,6 @@ import { SetActiveAction } from '../set-active-action';
 import type { ClimbActionProps } from '../../types';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 
-// Mock dependencies before importing the module
-vi.mock('@/app/lib/analytics', () => ({
-  track: vi.fn(),
-}));
-
 // Stub i18n so the test asserts against the English string the user sees,
 // not the bare key. Tests live outside the i18next provider tree; the real
 // label comes from `packages/web/i18n/locales/en-US/climbs.json:actions.sendToBoard`.

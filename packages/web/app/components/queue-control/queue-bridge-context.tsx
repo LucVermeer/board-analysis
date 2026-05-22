@@ -39,6 +39,7 @@ import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import { deriveIsDriver } from '../graphql-queue/driver-state';
+import type { SetActiveClimbSource } from '../graphql-queue/set-active-climb-event';
 import { track } from '@/app/lib/analytics';
 import {
   getPlaylistSuggestedClimbs,
@@ -265,7 +266,7 @@ function usePersistentSessionQueueAdapter(): {
         ? { ...buildQueueItem(item.climb), suggested: item.suggested }
         : item;
       const alreadyInQueue = queue.some((q) => q.uuid === item.uuid);
-      const fireSetActive = (source: string) => {
+      const fireSetActive = (source: SetActiveClimbSource) => {
         if (!queueItem.climb) return;
         track('Set Active Climb', {
           climbUuid: queueItem.climb.uuid,
@@ -390,7 +391,7 @@ function usePersistentSessionQueueAdapter(): {
         climbUuid: climb.uuid,
         boardType: climb.boardType ?? null,
         layoutId: climb.layoutId ?? null,
-        source: 'bridge.setCurrentClimb',
+        source: 'bridge.setCurrentClimb' satisfies SetActiveClimbSource,
       });
       if (ps.activeSession) {
         const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
@@ -537,7 +538,7 @@ function usePersistentSessionQueueAdapter(): {
         climbUuid: climb.uuid,
         boardType: climb.boardType ?? null,
         layoutId: climb.layoutId ?? null,
-        source: 'bridge.takeControl',
+        source: 'bridge.takeControl' satisfies SetActiveClimbSource,
       });
       try {
         await ps.takeControl(newItem);

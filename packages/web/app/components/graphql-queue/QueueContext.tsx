@@ -66,6 +66,7 @@ import type {
   SearchDataType,
   SessionDataType,
 } from './types';
+import type { SetActiveClimbSource } from './set-active-climb-event';
 
 // Re-export types so direct importers still work
 export type { GraphQLQueueContextType, GraphQLQueueActionsType, GraphQLQueueDataType } from './types';
@@ -599,7 +600,7 @@ export const GraphQLQueueProvider = ({
         climbUuid: climb.uuid,
         boardType: climb.boardType ?? null,
         layoutId: climb.layoutId ?? null,
-        source: 'setCurrentClimb',
+        source: 'setCurrentClimb' satisfies SetActiveClimbSource,
       });
       if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
       if (latest.isDisconnected && latest.isPersistentSessionActive) {
@@ -741,7 +742,7 @@ export const GraphQLQueueProvider = ({
         climbUuid: climb.uuid,
         boardType: climb.boardType ?? null,
         layoutId: climb.layoutId ?? null,
-        source: 'takeControl',
+        source: 'takeControl' satisfies SetActiveClimbSource,
       });
 
       if (latest.isDisconnected) {
@@ -863,7 +864,7 @@ export const GraphQLQueueProvider = ({
         climbUuid: queueItem.climb.uuid,
         boardType: queueItem.climb.boardType ?? null,
         layoutId: queueItem.climb.layoutId ?? null,
-        source: 'setCurrentClimbQueueItem',
+        source: 'setCurrentClimbQueueItem' satisfies SetActiveClimbSource,
       });
     }
     if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
