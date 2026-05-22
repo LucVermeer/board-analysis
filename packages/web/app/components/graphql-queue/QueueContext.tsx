@@ -66,6 +66,7 @@ import type {
   SearchDataType,
   SessionDataType,
 } from './types';
+import type { SetActiveClimbSource } from './set-active-climb-event';
 
 // Re-export types so direct importers still work
 export type { GraphQLQueueContextType, GraphQLQueueActionsType, GraphQLQueueDataType } from './types';
@@ -589,6 +590,18 @@ export const GraphQLQueueProvider = ({
           playlistSuggestionSource,
         },
       });
+      // Central funnel instrumentation — fires from every UI path that
+      // activates a new climb (queue list tap, browse preview, playlist
+      // activation, SetActiveAction button, solo takeControl). Previously
+      // this event only fired from the SetActiveAction button, missing the
+      // ~7 other entry points and dropping the "Session Started → Set
+      // Active Climb" funnel conversion to ~6%.
+      track('Set Active Climb', {
+        climbUuid: climb.uuid,
+        boardType: climb.boardType ?? null,
+        layoutId: climb.layoutId ?? null,
+        source: 'setCurrentClimb' satisfies SetActiveClimbSource,
+      });
       if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
       if (latest.isDisconnected && latest.isPersistentSessionActive) {
         latest.offlineBuffer.bufferAddition(newItem);
@@ -725,6 +738,12 @@ export const GraphQLQueueProvider = ({
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
         payload: { item: newItem, shouldAddToQueue: true, insertAfterCurrent: true, correlationId },
       });
+      track('Set Active Climb', {
+        climbUuid: climb.uuid,
+        boardType: climb.boardType ?? null,
+        layoutId: climb.layoutId ?? null,
+        source: 'takeControl' satisfies SetActiveClimbSource,
+      });
 
       if (latest.isDisconnected) {
         latest.offlineBuffer.bufferAddition(newItem);
@@ -840,6 +859,14 @@ export const GraphQLQueueProvider = ({
       type: 'DELTA_UPDATE_CURRENT_CLIMB',
       payload: { item: queueItem, shouldAddToQueue: queueItem.suggested, correlationId },
     });
+    if (queueItem.climb) {
+      track('Set Active Climb', {
+        climbUuid: queueItem.climb.uuid,
+        boardType: queueItem.climb.boardType ?? null,
+        layoutId: queueItem.climb.layoutId ?? null,
+        source: 'setCurrentClimbQueueItem' satisfies SetActiveClimbSource,
+      });
+    }
     if (latest.sessionId) incrementSessionClimbsAttempted(latest.sessionId);
     if (!latest.isDisconnected && latest.hasConnected && latest.isPersistentSessionActive) {
       latest.persistentSession

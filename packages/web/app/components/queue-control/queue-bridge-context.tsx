@@ -39,6 +39,8 @@ import { queueAddErrorMessage } from '../board-lock/queue-add-error-messages';
 import { QueueBridgeBoardInfoContext, type QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import { deriveIsDriver } from '../graphql-queue/driver-state';
+import type { SetActiveClimbSource } from '../graphql-queue/set-active-climb-event';
+import { track } from '@/app/lib/analytics';
 import {
   getPlaylistSuggestedClimbs,
   getPlaylistPeekQueueItemUuid,
@@ -264,6 +266,15 @@ function usePersistentSessionQueueAdapter(): {
         ? { ...buildQueueItem(item.climb), suggested: item.suggested }
         : item;
       const alreadyInQueue = queue.some((q) => q.uuid === item.uuid);
+      const fireSetActive = (source: SetActiveClimbSource) => {
+        if (!queueItem.climb) return;
+        track('Set Active Climb', {
+          climbUuid: queueItem.climb.uuid,
+          boardType: queueItem.climb.boardType ?? null,
+          layoutId: queueItem.climb.layoutId ?? null,
+          source,
+        });
+      };
       if (ps.activeSession) {
         // Don't bail on the "already current" optimistic state in party mode —
         // a peer may have moved the current climb away and our local view
@@ -272,12 +283,14 @@ function usePersistentSessionQueueAdapter(): {
         ps.setCurrentClimb(queueItem, queueItem.suggested, correlationId).catch((err: unknown) => {
           console.error('Failed to set current climb queue item:', err);
         });
+        fireSetActive('bridge.setCurrentClimbQueueItem.party');
         return;
       }
       if (alreadyInQueue && current?.uuid === queueItem.uuid) return;
       if (!boardDetails) return;
       const newQueue = alreadyInQueue ? queue : [...queue, queueItem];
       ps.setLocalQueueState(newQueue, queueItem, baseBoardPath, boardDetails);
+      fireSetActive('bridge.setCurrentClimbQueueItem.solo');
     },
     [buildQueueItem],
   );
@@ -374,6 +387,12 @@ function usePersistentSessionQueueAdapter(): {
         setPlaylistSuggestionSourceState(previousPlaylistSuggestionSource);
       };
       setPlaylistSuggestionSourceState(nextPlaylistSuggestionSource);
+      track('Set Active Climb', {
+        climbUuid: climb.uuid,
+        boardType: climb.boardType ?? null,
+        layoutId: climb.layoutId ?? null,
+        source: 'bridge.setCurrentClimb' satisfies SetActiveClimbSource,
+      });
       if (ps.activeSession) {
         const correlationId = ps.clientId ? `${ps.clientId}-${++correlationCounterRef.current}` : undefined;
         // If the climb is already in the queue, reuse the existing item
@@ -515,6 +534,12 @@ function usePersistentSessionQueueAdapter(): {
       }
       if (!validateClimbForQueue(climb)) return null;
       const newItem = buildQueueItem(climb);
+      track('Set Active Climb', {
+        climbUuid: climb.uuid,
+        boardType: climb.boardType ?? null,
+        layoutId: climb.layoutId ?? null,
+        source: 'bridge.takeControl' satisfies SetActiveClimbSource,
+      });
       try {
         await ps.takeControl(newItem);
         return newItem;
