@@ -79,22 +79,22 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
 
   // Describe a (min, max) pair as a filter shape — used to populate both
   // the current and previous state on the analytics event without duplicating
-  // the branching logic.
+  // the branching logic. The chip picker only ever emits both bounds defined
+  // together or both undefined, so only three kinds are produced. Legacy
+  // one-sided URL bookmarks (from the old slider) fall through to `range`
+  // with null size — rare and acceptable for analytics.
   const describeFilter = (min: number | undefined, max: number | undefined) => {
-    let kind: 'any' | 'single' | 'range' | 'lower_only' | 'upper_only';
-    if (min === undefined && max === undefined) kind = 'any';
-    else if (min !== undefined && max !== undefined) kind = min === max ? 'single' : 'range';
-    else if (min !== undefined) kind = 'lower_only';
-    else kind = 'upper_only';
-
-    let size: number | null = null;
+    if (min === undefined && max === undefined) {
+      return { kind: 'any' as const, size: null };
+    }
     if (min !== undefined && max !== undefined) {
+      if (min === max) return { kind: 'single' as const, size: 1 };
       const minIdx = grades.findIndex((g) => g.difficulty_id === min);
       const maxIdx = grades.findIndex((g) => g.difficulty_id === max);
-      if (minIdx >= 0 && maxIdx >= 0) size = maxIdx - minIdx + 1;
+      const size = minIdx >= 0 && maxIdx >= 0 ? maxIdx - minIdx + 1 : null;
+      return { kind: 'range' as const, size };
     }
-
-    return { kind, size };
+    return { kind: 'range' as const, size: null };
   };
 
   // The filter shape uses `0` as the "no grade" sentinel. `updateFilters` strips

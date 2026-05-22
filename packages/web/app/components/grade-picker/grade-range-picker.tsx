@@ -148,11 +148,11 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
       setBandStyle({ display: 'none' });
       return;
     }
-    // Inset by the chip's horizontal padding (8px each side) so the band
-    // aligns with the visible glyph, not the ButtonBase bounding box.
-    const CHIP_HORIZONTAL_INSET = 6;
-    const left = minEl.offsetLeft + CHIP_HORIZONTAL_INSET;
-    const width = maxEl.offsetLeft + maxEl.offsetWidth - left - CHIP_HORIZONTAL_INSET;
+    // Extend the band to the chips' outer edges so it visually abuts the
+    // endpoint chips' rose ring (the ring is `inset 0 0 0 2px` on the chip,
+    // so the band's edge sliding under the chip lands right at the ring).
+    const left = minEl.offsetLeft;
+    const width = maxEl.offsetLeft + maxEl.offsetWidth - left;
 
     const lowColor = lowGrade ? getGradeColor(lowGrade.difficulty_name, isDark) : undefined;
     const highColor = highGrade ? getGradeColor(highGrade.difficulty_name, isDark) : undefined;
@@ -191,7 +191,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
         if (gradeId === minGradeId) {
           const minIdx = grades.findIndex((g) => g.difficulty_id === minGradeId);
           const nextMinIdx = minIdx + 1;
-          if (nextMinIdx >= 0 && nextMinIdx < grades.length && grades[nextMinIdx].difficulty_id <= maxGradeId) {
+          if (nextMinIdx < grades.length && grades[nextMinIdx].difficulty_id <= maxGradeId) {
             const newMin = grades[nextMinIdx].difficulty_id;
             onChange({ minGradeId: newMin, maxGradeId });
             return;
@@ -266,7 +266,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
           <div className={styles.gradientBand} style={bandStyle} aria-hidden="true" />
           <ButtonBase
             onClick={handleClear}
-            className={`${baseStyles.pickerItem} ${styles.clearChip}`}
+            className={`${baseStyles.pickerItem} ${styles.chip} ${styles.clearChip}`}
             aria-label={t('search.fields.any')}
             aria-selected={isAny}
             role="option"
@@ -280,6 +280,7 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
             const inside = !endpoint && inRange(grade.difficulty_id);
             const className = [
               baseStyles.pickerItem,
+              styles.chip,
               endpoint ? baseStyles.pickerItemSelected : '',
               inside ? styles.inRange : '',
             ]
