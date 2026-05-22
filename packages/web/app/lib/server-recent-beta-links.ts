@@ -7,6 +7,7 @@ import type { BetaLinksGqlRow } from '@/app/lib/beta-video-url';
 export type RecentBetaLinkRow = {
   climbName: string | null;
   boardType: string;
+  layoutId: number | null;
   betaLink: BetaLinksGqlRow;
 };
 

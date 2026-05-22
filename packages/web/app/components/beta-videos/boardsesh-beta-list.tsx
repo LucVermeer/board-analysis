@@ -18,10 +18,21 @@ type BoardseshBetaListProps = {
    * come from many different climbs.
    */
   getClimbName?: (link: BetaLink) => string | null | undefined;
+  /**
+   * When set, the climb-name chip becomes a link to the climb's view
+   * page. Falls back to a plain label when this returns null/undefined.
+   */
+  getClimbHref?: (link: BetaLink) => string | null | undefined;
   source?: BoardseshBetaListSource;
 };
 
-const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({ links, isLoading, getClimbName, source = 'drawer' }) => {
+const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({
+  links,
+  isLoading,
+  getClimbName,
+  getClimbHref,
+  source = 'drawer',
+}) => {
   const { t } = useTranslation('common');
   return (
     <div className={styles.section}>
@@ -37,7 +48,13 @@ const BoardseshBetaList: React.FC<BoardseshBetaListProps> = ({ links, isLoading,
         ) : (
           <>
             {links.map((link) => (
-              <BoardseshBetaCard key={link.link} link={link} climbName={getClimbName?.(link) ?? null} source={source} />
+              <BoardseshBetaCard
+                key={link.link}
+                link={link}
+                climbName={getClimbName?.(link) ?? null}
+                climbHref={getClimbHref?.(link) ?? null}
+                source={source}
+              />
             ))}
             {links.length === 0 && <span className={styles.emptyText}>{t('betaVideos.empty')}</span>}
           </>

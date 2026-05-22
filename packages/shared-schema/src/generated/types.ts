@@ -3711,6 +3711,7 @@ export type RecentBetaLink = {
   betaLink: BetaLink;
   boardType: Scalars['String']['output'];
   climbName?: Maybe<Scalars['String']['output']>;
+  layoutId?: Maybe<Scalars['Int']['output']>;
 };
 
 export type RegisterControllerInput = {
@@ -7794,6 +7795,7 @@ export type RecentBetaLinkResolvers<
   betaLink?: Resolver<ResolversTypes['BetaLink'], ParentType, ContextType>;
   boardType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   climbName?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  layoutId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 

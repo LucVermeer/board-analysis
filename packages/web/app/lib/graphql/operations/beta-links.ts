@@ -19,6 +19,7 @@ export const GET_RECENT_BETA_LINKS = gql`
     recentBetaLinks(limit: $limit, boardType: $boardType) {
       climbName
       boardType
+      layoutId
       betaLink {
         climbUuid
         link
@@ -37,6 +38,7 @@ export const GET_USER_BETA_LINKS = gql`
     userBetaLinks(userId: $userId, limit: $limit) {
       climbName
       boardType
+      layoutId
       betaLink {
         climbUuid
         link

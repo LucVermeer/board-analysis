@@ -21,5 +21,6 @@ export const betaLinksTypeDefs = /* GraphQL */ `
     betaLink: BetaLink!
     climbName: String
     boardType: String!
+    layoutId: Int
   }
 `;

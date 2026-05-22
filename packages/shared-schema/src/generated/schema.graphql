@@ -3435,6 +3435,7 @@ type RecentBetaLink {
   betaLink: BetaLink!
   climbName: String
   boardType: String!
+  layoutId: Int
 }
 
 """

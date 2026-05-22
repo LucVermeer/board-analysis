@@ -59,10 +59,16 @@ vi.mock('../boardsesh-beta-list', () => ({
 
 import HomeRecentBetaSection from '../home-recent-beta-section';
 
-function makeRow(overrides: { link: string; climbUuid?: string; climbName?: string | null }): RecentBetaLinkRow {
+function makeRow(overrides: {
+  link: string;
+  climbUuid?: string;
+  climbName?: string | null;
+  layoutId?: number | null;
+}): RecentBetaLinkRow {
   return {
     climbName: overrides.climbName ?? null,
     boardType: 'kilter',
+    layoutId: overrides.layoutId ?? null,
     betaLink: {
       climbUuid: overrides.climbUuid ?? 'climb-uuid-1',
       link: overrides.link,
