@@ -860,17 +860,36 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     [getNextClimbQueueItem, getPreviousClimbQueueItem, navigateFromItem, swipeSuggestionsOnly, viewOnlyMode, advanceTo],
   );
 
+  // When a non-driver has swiped off the wall climb in browse mode, the
+  // most-recent "previous" climb in their mental model is the wall climb
+  // itself (where they just came from). Snap-back via swipe-left mirrors
+  // the mini session bar's "return to wall climb" button so both gestures
+  // resolve drift the same way.
+  const isDriftedFromWall =
+    !isDriver &&
+    isPersistentSessionActive &&
+    drawerDisplayedItem != null &&
+    currentClimbQueueItem != null &&
+    drawerDisplayedItem.climb.uuid !== currentClimbQueueItem.climb.uuid;
+
   const handleSwipeNext = useCallback(() => {
     maybeArmPreviewCoachmark();
     navigate('next', 'swipePlayViewDrawer');
   }, [navigate, maybeArmPreviewCoachmark]);
   const handleSwipePrevious = useCallback(() => {
+    if (isDriftedFromWall) {
+      setDrawerDisplayedItem?.(null);
+      return;
+    }
     maybeArmPreviewCoachmark();
     navigate('previous', 'swipePlayViewDrawer');
-  }, [navigate, maybeArmPreviewCoachmark]);
+  }, [navigate, maybeArmPreviewCoachmark, isDriftedFromWall, setDrawerDisplayedItem]);
 
   const canSwipeNext = !viewOnlyMode && !!nextItem;
-  const canSwipePrevious = !viewOnlyMode && !!prevItem;
+  // While drifted from the wall, "previous" always resolves to the wall climb
+  // (handleSwipePrevious snap-back path), so swipe-back is always enabled even
+  // if the suggestions feed has no further previous item.
+  const canSwipePrevious = !viewOnlyMode && (isDriftedFromWall || !!prevItem);
 
   // Tick FAB → inline tick bar
   const handleTickFabClick = useCallback(() => {
@@ -891,7 +910,13 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     showMessage(t('playView.tickError'), 'error');
   }, [showMessage, t]);
 
-  const handlePrevNavClick = useCallback(() => navigate('previous', 'playViewDrawer'), [navigate]);
+  const handlePrevNavClick = useCallback(() => {
+    if (isDriftedFromWall) {
+      setDrawerDisplayedItem?.(null);
+      return;
+    }
+    navigate('previous', 'playViewDrawer');
+  }, [navigate, isDriftedFromWall, setDrawerDisplayedItem]);
   // Wall-confirm watcher: armed by handleLightbulbClick, dismissed by the
   // local wall-confirm bus or fires a connect fallback after 2 s. Owns its
   // own unmount cleanup so the drawer doesn't need to thread that wiring.
@@ -1301,7 +1326,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
               boardDetails={boardDetails}
               currentClimb={currentClimb}
               nextClimb={nextItem?.climb}
-              previousClimb={prevItem?.climb}
+              previousClimb={isDriftedFromWall ? (currentClimbQueueItem?.climb ?? prevItem?.climb) : prevItem?.climb}
               onSwipeNext={handleSwipeNext}
               onSwipePrevious={handleSwipePrevious}
               canSwipeNext={canSwipeNext}
