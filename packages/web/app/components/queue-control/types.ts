@@ -2,27 +2,16 @@ import type { Climb, SearchRequestPagination, ParsedBoardRouteParameters } from 
 import type { SessionUser } from '@boardsesh/shared-schema';
 import type { ConnectionState } from '../connection-manager/websocket-connection-manager';
 
-export type AddToQueueSource = 'search' | 'playlist' | 'climb_detail' | 'peer_broadcast' | 'unknown';
-
-export type PeerId = string | null;
-export type UserName = PeerId;
-
-export type QueueItemUser = {
-  id: string;
-  username: string;
-  avatarUrl?: string;
-};
-
-export type ClimbQueueItem = {
-  addedBy?: UserName;
-  addedByUser?: QueueItemUser;
-  tickedBy?: UserName[];
-  climb: Climb;
-  uuid: string;
-  suggested?: boolean;
-};
-
-export type ClimbQueue = ClimbQueueItem[];
+// Re-export pure value types from the shared package for backward compatibility.
+// Types that embed Climb (PlaylistSuggestionSource, SetCurrentClimbOptions) are
+// defined locally because the web's Climb type is slightly narrower than
+// shared-schema's (e.g. description?: string vs string | null).
+export type {
+  QueueSearchParams,
+  AddToQueueSource,
+  PeerId,
+  UserName,
+} from '@boardsesh/queue';
 
 export type PlaylistSuggestionSource = {
   playlistUuid: string;
@@ -34,6 +23,23 @@ export type PlaylistSuggestionSource = {
 export type SetCurrentClimbOptions = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
 };
+
+export type QueueItemUser = {
+  id: string;
+  username: string;
+  avatarUrl?: string;
+};
+
+export type ClimbQueueItem = {
+  addedBy?: string | null;
+  addedByUser?: QueueItemUser;
+  tickedBy?: (string | null)[];
+  climb: Climb;
+  uuid: string;
+  suggested?: boolean;
+};
+
+export type ClimbQueue = ClimbQueueItem[];
 
 export type QueueState = {
   queue: ClimbQueue;
@@ -175,6 +181,9 @@ export type QueueActionsType = {
    *  isn't currently the driver. In solo, a no-op. */
   releaseControl: () => Promise<void>;
 };
+
+// Import type for inline usage
+type AddToQueueSource = import('@boardsesh/queue').AddToQueueSource;
 
 // Frequently-changing state data
 export type QueueDataType = {

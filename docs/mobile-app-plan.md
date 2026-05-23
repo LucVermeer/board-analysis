@@ -1,694 +1,473 @@
-# Boardsesh Mobile App Distribution Plan (Capacitor) — v9.0
+# Boardsesh Mobile App Plan — v10.0
 
 ## What this document is
 
-A working plan for the Capacitor mobile app and the parallel work to make it usable offline. v9.0 commits to two direction changes from v8.0:
+A working plan for the native mobile app. v10.0 is a direction change from v9.x:
 
-1. **Migrate the web from Next.js to Vite + TanStack Start.** The dual-build mechanism in v8.0 (parallel `page.tsx` / `page.bundled.tsx` driven by `pageExtensions`) was the ugliest part of that plan. A Vite SPA with route-level SSR opt-in deletes the entire problem: one build by default, SSR added only on the SEO surfaces that need it. The Capacitor app loads the Vite SPA build directly.
-2. **Self-host on Railway. No Vercel, no Cloudflare Pages, no Netlify.** Railway is a thin PaaS that runs Docker / Node containers and gets out of the way. Cloudflare stays as a CDN in front of Railway, but only for caching and not for compute. Image optimization, OG image generation, cron, scheduled jobs all run as Node services on Railway. The cost is owning operational concerns Vercel handled silently; the benefit is no framework gravity.
+1. **Build a React Native (Expo) app for mobile.** The Capacitor WebView approach from v9.x had two structural problems: WebView scroll/animation performance can't match native, and every new iOS/Android capability requires a Capacitor plugin that may not exist. With mobile becoming the primary surface, the app needs to be genuinely native.
+2. **Keep Next.js for web.** The 14-week Vite + TanStack Start migration from v9.x was motivated by enabling the Capacitor bundle switch. Without Capacitor, that motivation disappears. Next.js stays deployed on Vercel. No framework migration, no hosting migration, no auth migration on the web side.
+3. **Share business logic, not UI.** BLE protocol encoding, queue state machine, GraphQL schema, board configuration, and type definitions live in shared packages. Web and mobile each get the UI layer that's best for their platform.
 
-Everything else from v8.0's offline-first design — bearer-token auth in bundled mode, the query router shape contract, the mutation queue with idempotency keys, refdata SQLite measurement spike, App Store Plan B, remote-config kill switch, single WebView with client routing — carries forward.
+Everything from v9.x's offline-first design — the query router shape, mutation queue with idempotency keys, refdata SQLite, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView.
 
 ## Pinned user story
 
-A user opens Boardsesh in airplane mode at the gym. They launch the app, browse and search climbs for their board, build a queue, connect via BLE, send climbs to the board (LEDs light up), and tick the ones they sent. Real-time-only features (party mode, comments, others' profiles) show a "needs network" state. When the user reconnects, queued ticks and edits sync to the server. Phase 5 is the milestone where this end-to-end story works.
+A user opens Boardsesh in airplane mode at the gym. They launch the app, browse and search climbs for their board, build a queue, connect via BLE, send climbs to the board (LEDs light up), and tick the ones they sent. Real-time-only features (party mode, comments, others' profiles) show a "needs network" state. When the user reconnects, queued ticks and edits sync to the server. This end-to-end story is the terminal milestone.
+
+## Why React Native (not Capacitor, not Flutter)
+
+### vs Capacitor (v9.x approach)
+
+- **Native UI components** instead of WebView rendering. No scroll jank, no animation limits, no "almost native" feel.
+- **Direct platform access.** New iOS/Android features (interactive widgets, app intents, SharePlay, background processing) are available immediately through native modules, not gated on plugin availability.
+- **App Store guideline 4.2 risk largely disappears.** A React Native app is genuinely native — there's no WebView wrapper to trigger review flags.
+- **Faster path to App Store.** The v9.x plan required completing a 14-week framework migration before the Capacitor bundle switch even started. React Native ships independently of the web.
+
+### vs Flutter
+
+- **Same language and ecosystem.** The team already knows React and TypeScript. No Dart learning curve.
+- **Shared business logic.** BLE protocol encoding, queue state machine, GraphQL schema — all existing TypeScript that transfers directly to shared packages. Flutter would require rewriting everything in Dart.
+- **Flutter web is not viable** for SEO-heavy pages. We'd still maintain Next.js separately with zero shared code. React Native shares types, logic, and API definitions.
+
+### What we lose
+
+- **Two UI codebases.** Web uses MUI + React DOM; mobile uses React Native Paper/Tamagui + React Native. No component sharing between them.
+- **Existing Capacitor work is abandoned.** BLE adapters (~200 lines), Live Activity widget (~500 lines Swift), HealthKit bridge (~100 lines) need reimplementation. This is accepted — the code is small relative to the full app.
 
 ## Current state (verified against `main`)
 
-| Area                                   | Status                                                                                                                                                                                                                                                                                               |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Capacitor shell at `mobile/`           | Capacitor 8. iOS + Android projects, `capacitor.config.ts`, `BoardseshWidgets` LiveActivity extension. Loads `https://www.boardsesh.com` in hosted mode today.                                                                                                                                       |
-| iOS app-bound domains                  | `boardsesh.com`, `*.boardsesh.com`, `*.ts.net` declared in `WKAppBoundDomains`. `limitsNavigationsToAppBoundDomains: true`.                                                                                                                                                                          |
-| BLE adapter                            | `packages/web/app/lib/ble/{capacitor-adapter,web-adapter,adapter-factory,types,...}.ts` with tests.                                                                                                                                                                                                  |
-| Native plugins installed               | `@capacitor-community/{bluetooth-le, in-app-review, keep-awake, safe-area}`, `@capacitor/{app, browser, core, geolocation, motion}`.                                                                                                                                                                 |
-| Native plugins not installed           | `@capacitor-community/sqlite`, `@capacitor/{push-notifications, network, haptics, keyboard, status-bar, splash-screen}`.                                                                                                                                                                             |
-| Backend GraphQL                        | 14 resolver domains under `packages/backend/src/graphql/resolvers/` (board, ticks, users, social, queue, sessions, playlists, favorites, controller, climbs, ...).                                                                                                                                   |
-| Web framework                          | Next.js 16.1.6 + NextAuth 4.24.13. 47 `page.tsx` files. 68 dynamic route files. 102 files importing from `next/{link,navigation,image}`. 21 files using `generateMetadata` / `generateStaticParams`. `middleware.ts` for PHP-block, board-name validation, list-page caching, climb-session cookies. |
-| REST routes in `packages/web/app/api/` | 44 `route.ts` files.                                                                                                                                                                                                                                                                                 |
-| Hosting                                | Vercel (web) + Railway (Postgres) + backend on its current host.                                                                                                                                                                                                                                     |
-| TanStack already in use                | `@tanstack/react-query`, `@tanstack/react-virtual`. Adding `@tanstack/react-router` + `@tanstack/start` is incremental.                                                                                                                                                                              |
+| Area                | Status                                                                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Web app             | Next.js 16.1.6 on Vercel. 47 routes, 68 dynamic route files. Stays as-is.                                                              |
+| Backend             | GraphQL-WS + Hono on Railway. 14 resolver domains. Stays as-is.                                                                        |
+| Database            | Postgres + PostGIS on Railway. Drizzle ORM. Stays as-is.                                                                               |
+| Shared schema       | `packages/shared-schema/` with GraphQL types. Already extracted.                                                                       |
+| Board constants     | `packages/board-constants/` with product metadata, LED placements, hold states, grade colors. Already extracted.                       |
+| BLE protocol (web)  | Aurora v2/v3 encoding, MoonBoard UART framing in `packages/web/app/components/board-bluetooth-control/`. Pure TypeScript, extractable. |
+| Queue reducer (web) | 30+ action handlers, delta-based updates in `packages/web/app/components/queue-control/reducer.ts`. Pure TypeScript, extractable.      |
+| Board data (web)    | Board metadata, compatibility checks in `packages/web/app/lib/board-data.ts`, `board-compatibility.ts`. Pure TypeScript, extractable.  |
+| Capacitor shell     | `mobile/` directory with iOS + Android projects, BLE adapter, Live Activity widget. Will be replaced.                                  |
+| App store metadata  | Full iOS + Android listing text in `mobile/metadata/`. Reusable.                                                                       |
+| APNs backend        | Token-based push infrastructure in `packages/backend/src/services/apns/`. Reusable by RN.                                              |
 
-The Next.js surface is large but tractable: ~47 route files to port, ~100 import sites to swap. The existing TanStack Query usage means data-fetching patterns transfer with little change.
-
-## Architecture target
+## Architecture
 
 ```
-   ┌───────────────── boardsesh.com (Railway) ─────────────────┐
-   │                                                            │
-   │  packages/web (Vite + TanStack Start, Node SSR server)     │
-   │   • SSR routes: /, /b/<board>, /b/<board>/.../view/<uuid>, │
-   │     /profile/<id>, /setter/<name>, /playlists/<uuid>       │
-   │   • SPA routes: everything else (client-rendered, hydrated │
-   │     against in-memory router state)                        │
-   │   • `vite build` produces both `dist/server/` (SSR Node    │
-   │     bundle) and `dist/client/` (browser assets)            │
-   │                                                            │
-   │  packages/backend (Hono + graphql-ws + Yoga)               │
-   │   • GraphQL queries, mutations, subscriptions              │
-   │   • Auth: arctic (OAuth) + lucia (sessions) replace        │
-   │     NextAuth. Bearer tokens for native, cookies for web.   │
-   │   • OG image rendering (satori + @resvg/resvg-js)          │
-   │                                                            │
-   │  packages/scheduler (small Node service)                   │
-   │   • Replaces Vercel Cron. node-cron triggers internal      │
-   │     GraphQL mutations or Hono endpoints with shared-secret │
-   │   • Aurora sync, cleanup, prewarm-heatmap, etc.            │
-   │                                                            │
-   │  Postgres + PostGIS + Redis (all on Railway)               │
-   │                                                            │
-   │  Cloudflare in front: CDN cache for static assets, R2 for  │
-   │  refdata snapshots, optionally Cloudflare Images for       │
-   │  user-uploaded photos                                      │
-   │                                                            │
-   │  During Phase 1 only:                                      │
-   │   • boardsesh.com → Next.js Railway service (existing)     │
-   │   • beta.boardsesh.com → Vite Railway service (new)        │
-   │   • DNS flip at end of Phase 1 swaps the apex to Vite      │
-   └────────────────────────────────────────────────────────────┘
-                              ▲
-                              │ HTTPS GraphQL + WebSocket
-                              │
-   ┌───────────────── mobile/ (Capacitor 8) ───────────────────┐
-   │                                                            │
-   │  iOS WKWebView / Android WebView                           │
-   │   • Loads SPA bundle from capacitor://localhost            │
-   │     (the same `dist/client/` assets, no SSR)               │
-   │   • Bearer-token auth, no cookie reliance cross-origin     │
-   │                                                            │
-   │  Local data:                                               │
-   │   • Refdata SQLite per board (ODR / Asset Pack)            │
-   │   • cached_ticks, cached_playlists, cached_profile         │
-   │   • pending_mutations (write queue)                        │
-   │                                                            │
-   │  Native: BLE central, LiveActivity, connectivity monitor   │
-   └────────────────────────────────────────────────────────────┘
+packages/
+  web/              # Next.js (stays as-is — web, SEO, desktop)
+  mobile/           # React Native (Expo) — NEW, replaces Capacitor
+  backend/          # GraphQL-WS + Hono backend (unchanged)
+  db/               # Drizzle schema + migrations (unchanged)
+  shared-schema/    # GraphQL types (unchanged, enhanced)
+  board-constants/  # Board metadata, LED placements (unchanged)
+  shared/           # NEW: extracted business logic
+    ble-protocol/   #   Aurora/MoonBoard encoding, chunking, checksums
+    queue/          #   Queue reducer, playlist suggestions
+    board-config/   #   Board metadata, compatibility, hold layouts
 ```
 
-The same `dist/client/` assets serve the web SPA hydration AND the Capacitor bundle. No parallel builds. No `pageExtensions` trick.
+### Data flow
 
-## Why Vite + TanStack Start
-
-Considered: TanStack Start, Vike, plain Vite + a custom prerender step, React Router 7, Astro.
-
-**Chosen: TanStack Start.**
-
-- **Same renderer for SSR and SPA.** `vite build` produces a Node SSR bundle + client bundle. Mark routes as `ssr: true` or `ssr: false` per route. Capacitor uses the client bundle directly.
-- **TanStack Router is type-safe and file-based.** Route loaders are explicit functions; no implicit server-component / client-component split.
-- **TanStack Query is already in the project.** TanStack Router integrates with it natively for data preloading.
-- **Vite means fast dev.** The current Next.js dev cycle is the slowest part of the project; Vite typically cuts cold start by 10x for projects this size.
-- **Runs anywhere Node runs.** No Vercel-specific runtime, no edge-function gymnastics, no `next/image` infrastructure to replicate.
-
-Rejected:
-
-- **Vike** is more flexible and battle-tested but requires choosing a router separately. We already use TanStack Query; pairing with TanStack Router is the lower-friction choice. Worth revisiting only if TanStack Start's maturity becomes blocking.
-- **React Router 7 (Remix-merged).** SSR-first model is less natural for our SPA-first goal. Strong project, wrong shape.
-- **Astro.** Great for content sites; in-app SPA experience is a separate concern handled via "islands" of React. Two mental models for one app.
-- **Next.js dual-build with `pageExtensions`** (v8.0). Works, but the parallel `page.bundled.tsx` files and `output: 'export'` constraints are friction every team member pays forever.
-
-The maturity risk on TanStack Start is real (1.x, evolving fast). Mitigation: pin minor versions, follow the migration guides, and budget a dedicated 1-week buffer per quarter for upgrade churn during the migration year.
-
-## Why self-host on Railway (no Vercel)
-
-Railway is a thin PaaS. It runs Docker containers, Node services, scheduled jobs, and a managed Postgres / Redis. It does not impose a deployment shape, runtime, or SDK. Compared with Vercel:
-
-| Concern            | Vercel                              | Railway (chosen)                                                                                   |
-| ------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Compute model      | Serverless functions, edge runtime  | Long-lived Node containers                                                                         |
-| Image optimization | Built-in `next/image` endpoint      | We provide our own (`@image-optim/sharp` route or Cloudflare Images)                               |
-| Cron               | Vercel Cron triggers HTTP endpoints | `packages/scheduler` runs node-cron in a long-lived container                                      |
-| Edge cache         | Automatic for static assets         | Cloudflare in front of Railway origin                                                              |
-| OG image rendering | Edge runtime with `@vercel/og`      | Hono route in `packages/backend` with `satori` + `@resvg/resvg-js`                                 |
-| Logs / metrics     | Vercel-native                       | Railway logs piped to OpenTelemetry collector → ClickHouse / Axiom (or stay with Sentry / PostHog) |
-| Deploy             | `vercel deploy` or git-push         | Railway git integration or GitHub Actions → `railway up`                                           |
-
-What we lose: instant-rollback button, framework-aware build optimization, free DDoS protection (kept via Cloudflare), some preview-deployment ergonomics.
-
-What we gain: portability. Anything we run on Railway can move to Fly.io, AWS ECS, Hetzner with Coolify, or bare metal. No code changes required.
-
-What we own that Vercel handled silently:
-
-- **Connection pool tuning.** Long-lived Node + `postgres-js` pool max + Postgres `max_connections` need explicit numbers, not auto-scale.
-- **Pod scaling.** Single Node process by default; vertical scale before horizontal. If horizontal, sticky sessions for SSR (or fully stateless SSR with an external session store — we're already using Redis for the backend).
-- **Health checks and graceful shutdown.** Railway pings; Node service must respond and drain in-flight requests on SIGTERM.
-- **Build cache.** Railway caches Docker layers; the project's Dockerfile must structure layers so `bun install` is cached separately from source.
-- **Backups.** Railway Postgres takes daily backups by default; verify retention and cost.
-
-These are tractable and well-understood operational items. The plan budgets explicit time for them in Phase 0a.
-
-## Hosted vs bundled mode
-
-Today the WebView loads `https://www.boardsesh.com` (hosted mode). After the migration + offline-first work, it loads `dist/client/` from `capacitor://localhost` (bundled mode). The same Vite client bundle ships to both. The differences:
-
-|                          | Hosted (today)                          | Bundled (Phase 2+)                                                        |
-| ------------------------ | --------------------------------------- | ------------------------------------------------------------------------- |
-| Initial load             | Network round-trip on every cold start  | Local files, no network                                                   |
-| Update cadence           | Every Railway deploy ships to all users | OTA bundle swap (preferred) OR app store update                           |
-| Auth                     | Cookie inside same-origin WebView       | Bearer token (no cross-origin cookie reliance)                            |
-| App Store "wrapper" risk | Higher                                  | Lower (clear native value: bundled assets + offline + BLE + LiveActivity) |
-
-## Build mechanism (drops out)
-
-`vite build` produces `dist/server/` (Node SSR bundle, deployed to Railway) and `dist/client/` (browser assets, served by SSR for hydration AND copied into the Capacitor app verbatim). One source tree, one build command, one set of route files. No conditional `pageExtensions`.
-
-For the Capacitor app, `mobile/` runs a small script during its sync step:
-
-```bash
-# mobile/scripts/sync-bundle.sh
-bun run --filter=@boardsesh/web build:client
-rm -rf mobile/dist
-cp -r packages/web/dist/client mobile/dist
-bunx cap sync
+```
+┌────────────────── boardsesh.com (Vercel) ──────────────────┐
+│  packages/web (Next.js, unchanged)                         │
+│   • SSR for SEO surfaces, client components for in-app     │
+│   • Imports from packages/shared/ for business logic       │
+└────────────────────────────────────────────────────────────┘
+         │                                    │
+         │ HTTPS GraphQL                      │ WebSocket
+         │                                    │
+┌────────┴────────── Railway ────────────────┴──────────────┐
+│  packages/backend (Hono + graphql-ws, unchanged)          │
+│   • GraphQL queries, mutations, subscriptions             │
+│   • APNs push (reused by RN via device token registration)│
+│   • Auth: NextAuth for web cookies, bearer tokens for RN  │
+│                                                            │
+│  Postgres + PostGIS + Redis                                │
+└───────────────────────────────────────────────────────────┘
+         ▲                                    ▲
+         │ HTTPS GraphQL                      │ WebSocket
+         │                                    │
+┌────────┴────────── Mobile ────────────────┴──────────────┐
+│  packages/mobile (React Native / Expo)                    │
+│   • Native UI (React Native Paper or Tamagui)             │
+│   • BLE via react-native-ble-plx + shared protocol logic  │
+│   • Board rendering via @shopify/react-native-skia        │
+│   • Offline: expo-sqlite for climb data, MMKV for prefs   │
+│   • Auth: bearer tokens via expo-auth-session             │
+│   • Live Activity via react-native-live-activity           │
+│                                                            │
+│  Local data:                                               │
+│   • Refdata SQLite per board                               │
+│   • Cached ticks, playlists, profile                       │
+│   • Pending mutations (write queue)                        │
+└───────────────────────────────────────────────────────────┘
 ```
 
-The Vite config sets `base: '/'` for web hydration and `base: './'` for Capacitor. A single env var (`VITE_BUILD_TARGET=capacitor`) flips it. No second config file.
+## Shared business logic — what transfers
 
-Routes that use server-only code (DB access, secrets) declare it via TanStack Start's `createServerFn`. Calling a server function from a client-rendered route is a typed RPC; calling it from an SSR-rendered route inlines the call. The same component code works in both modes.
+These are pure TypeScript modules with no DOM, React DOM, or platform-specific dependencies. They move to `packages/shared/` and are imported by both web and mobile.
 
-## Auth (bearer tokens for native, cookies for web)
+### BLE protocol encoding (100% shareable)
 
-NextAuth is replaced. `packages/backend` becomes the auth host using **arctic** (OAuth provider library) + **lucia** (session library) + a thin schema in Postgres. The current NextAuth tables (`accounts`, `sessions`, `users`, `verification_tokens`) map cleanly; a one-time migration script copies existing sessions. Existing Aurora-credential proxy logic stays in `packages/web` (now a Vite Node SSR endpoint or a backend Hono route — either works; we'll pick during Phase 0b).
+**Source files:** `packages/web/app/components/board-bluetooth-control/bluetooth-aurora.ts`, `bluetooth-moonboard.ts`, `bluetooth-shared.ts` (constants + `splitMessages` only)
 
-### Two paths from one source
+- Aurora v2/v3 LED position encoding, color quantization, power budget scaling
+- MoonBoard hold-to-serial-position mapping, UART frame construction
+- Packet wrapping with checksums, message chunking
+- Device name parsing (API level, serial number, board type detection)
 
-1. **Web (browser).** Standard cookie session. arctic redirects to OAuth provider, lucia issues a session cookie, the SSR layer reads it. `Authorization` header optional.
-2. **Native (Capacitor).** Bearer token.
-   - WebView opens `/auth/native-start` in the Capacitor Browser plugin (SFSafariViewController / Custom Tabs).
-   - OAuth runs in the system browser context.
-   - Provider redirects to `/auth/callback` on `boardsesh.com` (system browser cookie context).
-   - Backend issues a short-lived (5min) HMAC transfer token, redirects to `com.boardsesh.app://auth/callback?token=...`.
-   - Native code intercepts the deep link, closes the browser tab, POSTs the transfer token to `/auth/native/exchange`.
-   - Backend validates, issues a long-lived JWT (30d, refreshable) + refresh token, both stored via `@capacitor/preferences` (Keychain on iOS, encrypted SharedPreferences on Android).
-   - A fetch interceptor in `packages/web/app/lib/auth/native-token.ts` attaches `Authorization: Bearer <jwt>` to every GraphQL request.
-   - WebSocket connection params include the token.
+The `BluetoothAdapter` interface (connect, disconnect, write) stays platform-specific. Web implements it with Web Bluetooth; React Native implements it with `react-native-ble-plx`.
 
-Refresh: when JWT is within 24h of expiry, the interceptor uses the refresh token to mint a new pair. Refresh failures (revoked, expired) trigger a re-auth via the Browser plugin.
+### Queue state machine (100% shareable)
 
-`useSession`-equivalent: a small `SessionProvider` reads from `@capacitor/preferences` (native) or from cookies via a server function (web). Components consume the same hook.
+**Source files:** `packages/web/app/components/queue-control/reducer.ts`, `types.ts`, `playlist-suggestions.ts`
 
-### NextAuth → lucia cookie shim
+- `queueReducer` function — 30+ action handlers, pure reducer
+- Delta-based queue updates with idempotent insertion
+- Optimistic update tracking via correlation IDs
+- Playlist suggestion source management, suggestion pruning
 
-Existing logged-in users (web + hosted-mode native iOS) must not be logged out at the Phase 1 cutover. The lucia middleware in `packages/backend` accepts both cookie shapes during a 90-day overlap window:
+The `useQueueReducer` React hook wrapper stays in each platform's code. The reducer function itself is framework-agnostic.
 
-1. Incoming request with a lucia session cookie → validated normally.
-2. Incoming request with a NextAuth JWT cookie (`__Secure-next-auth.session-token` or `next-auth.session-token`) and no lucia cookie → the middleware validates the JWT using the existing `NEXTAUTH_SECRET`, looks up the user, mints a lucia session, sets the lucia cookie, and clears the NextAuth cookie. One-time upgrade per user.
-3. Both cookies present → lucia wins; NextAuth cookie cleared.
-4. After 90 days post-cutover, the NextAuth-acceptance branch is deleted. Stale cookies force re-auth.
+### Board configuration (100% shareable)
 
-See "Migration strategy: beta subdomain → single cutover" for the wider cutover mechanics.
+**Source files:** `packages/web/app/lib/board-data.ts`, `board-compatibility.ts`, `moonboard-config.ts`
 
-What this is NOT:
+- Board metadata (names, layout IDs, size IDs, image dimensions)
+- Climb-to-board compatibility checks
+- MoonBoard grid configuration (11 columns x 18 rows)
 
-- Not a hand-rolled crypto stack. arctic + lucia handle the OAuth and session primitives; we own the schema and the bearer-token issuance.
-- Not a Next.js shim. Once `packages/web` is migrated, NextAuth code is deleted entirely.
+### Already extracted
 
-Estimate: 4 weeks for the auth re-implementation (Phase 0c, runs parallel to 0a/0b).
+- `packages/shared-schema/` — GraphQL schema, TypeScript types (Climb, ClimbQueueItem, SessionUser, etc.)
+- `packages/board-constants/` — Product sizes, LED placements, hold state maps, grade colors
 
-## Query router and shape contract
+## What gets rebuilt for React Native
 
-Unchanged from v8.0. Reproduced for completeness.
+### Board renderer
 
-```ts
-// packages/web/src/lib/data/query-router.ts
+**Current (web):** SVG + Canvas/WASM with Web Worker pool (2-5 workers), LRU bitmap cache (150 items), lazy loading. Files: `board-renderer.tsx`, `board-canvas-renderer.tsx`, `board-image-layers.tsx`, `worker-manager.ts`, `board-render.worker.ts`.
 
-export type QuerySource = 'local' | 'remote' | 'remote-fresh';
+**React Native:** `@shopify/react-native-skia` for GPU-accelerated hold circle rendering + image compositing. The rendering math (hold position coordinates, color mapping via `HOLD_STATE_MAP`, mirroring transforms) is shareable from `packages/board-constants/` and `packages/shared/`. The rendering engine is new.
 
-export interface QueryResult<T> {
-  data: T;
-  source: QuerySource;
-  stripped?: ReadonlyArray<keyof T>;
-  fetchedAt: number;
-}
+**Risk:** This is the highest-complexity rebuild (~40% of total UI effort). Start in Phase 2 and validate early. Fallback: `react-native-svg` for simpler but adequate rendering.
 
-export interface RouteSpec<TArgs, T> {
-  local?: (args: TArgs) => Promise<{ data: T; stripped: ReadonlyArray<keyof T> }>;
-  remote: (args: TArgs) => Promise<T>;
-  prefer: 'local-first' | 'cache-first' | 'remote-only';
-  staleAfterMs?: number;
-}
+### BLE transport adapter
+
+**Current (web):** `capacitor-adapter.ts` (~200 lines), `native-ios-adapter.ts` (~300 lines), `web-adapter.ts` (~150 lines).
+
+**React Native:** New `BluetoothAdapter` implementation using `react-native-ble-plx`. The adapter is thin — it implements the `requestAndConnect`, `disconnect`, `write` interface. All protocol logic (packet construction, chunking, checksums) comes from `packages/shared/ble-protocol/`.
+
+### Navigation
+
+**Current (web):** Next.js App Router with deeply nested dynamic routes (`/[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/...`).
+
+**React Native:** Expo Router (file-based routing, similar mental model). The route structure will be flatter — native apps don't expose URL-style deep nesting to users. Deep links (`boardsesh://climb/<uuid>`, `boardsesh://party/join/<id>`) map to specific screens.
+
+### Auth
+
+**Current (web):** NextAuth with cookie sessions.
+
+**React Native:** `expo-auth-session` for OAuth flows. Bearer token exchange via a new backend endpoint. Tokens stored in `expo-secure-store` (iOS Keychain, Android Keystore). Fetch interceptor attaches `Authorization: Bearer <jwt>`.
+
+The backend already supports bearer token auth for the existing Capacitor native OAuth flow (`/auth/native-start`, `/auth/native/callback`). This infrastructure is reusable.
+
+### Offline storage
+
+**Current (web):** IndexedDB via `idb` package for preferences, drafts, session history, etc.
+
+**React Native:**
+
+- `react-native-mmkv` for key-value preferences (fastest KV store on mobile)
+- `expo-sqlite` for offline climb database (replaces the planned `@capacitor-community/sqlite`)
+- Same data schema, different storage engine
+
+### Platform features
+
+| Feature            | Current (Capacitor)                  | React Native                                       |
+| ------------------ | ------------------------------------ | -------------------------------------------------- |
+| Live Activity      | Custom Swift widget (~500 lines)     | `react-native-live-activity` or Expo native module |
+| HealthKit          | Custom bridge (~100 lines)           | `react-native-health`                              |
+| Push notifications | APNs backend (reused)                | `expo-notifications` + existing APNs backend       |
+| In-app review      | `@capacitor-community/in-app-review` | `expo-store-review`                                |
+| Wake lock          | `@capacitor-community/keep-awake`    | `expo-keep-awake`                                  |
+| Geolocation        | `@capacitor/geolocation`             | `expo-location`                                    |
+| Shake detection    | `@capacitor/motion`                  | `expo-sensors`                                     |
+
+## What gets deleted
+
+- `mobile/` — Entire Capacitor directory (iOS/Android projects, config, Swift widgets)
+- `packages/web/app/lib/ble/capacitor-adapter.ts` — Capacitor BLE adapter
+- `packages/web/app/lib/ble/native-ios-adapter.ts` — Native iOS BLE adapter
+- `packages/web/app/lib/ble/capacitor-browser.ts` — Platform detection for Capacitor
+- `packages/web/app/lib/capacitor.ts` — `isCapacitor()`, `isNativeApp()` detection
+- All Capacitor-specific code paths gated on `isNativeApp()`
+
+The web app's `web-adapter.ts` (Web Bluetooth) stays for browser-based BLE on Chrome desktop.
+
+## What stays unchanged
+
+- `packages/web/` — Next.js on Vercel, all routes, all features. No migration.
+- `packages/backend/` — GraphQL-WS backend on Railway. No changes except adding RN-specific auth endpoints if needed.
+- `packages/db/` — Drizzle schema + migrations. No changes.
+- `packages/shared-schema/` — Types. Enhanced with any new types RN needs.
+- `packages/board-constants/` — Board metadata. No changes.
+
+## Phase plan
+
+```
+0 Shared extraction ──→ 1 Foundation ──→ 2 Core experience ──→ 3 BLE ──→ 4 Social ──→ 5 Platform ──→ 6 Polish
 ```
 
-Per-route table (same as v8.0): `climbs.search` and `climbs.byUuid` are `local-first` in bundled mode and strip user-specific fields; `ticks.forUser`, `playlists.forUser`, `profile.me` are `cache-first`; party state, feed, comments are `remote-only`. Components type-gate on `source` for online-only fields.
-
-Cache priming runs after first online-launch-after-auth, surfaces a "Syncing your climbs" indicator, and refreshes deltas on subsequent launches.
-
-## Mutation queue
-
-Unchanged from v8.0. Client-generated UUID v7 idempotency keys, server-side `mutation_dedup` table (entries expire after 30 days), single-concurrency drainer in `createdAt` order, transient vs terminal error classification, per-mutation conflict resolution:
-
-- `tick.create`: server-wins existence check, idempotent.
-- `playlist.addClimb` / `removeClimb`: idempotent set ops.
-- `playlist.rename`: last-write-wins with server `updated_at` check; conflict prompts user.
-- Queue / party operations: never queued, real-time only.
-
-The "needs attention" UI ships with Phase 5, not as polish.
-
-## Embedded SQLite (refdata)
-
-Unchanged from v8.0.
-
-- **Phase 3 starts with a one-week measurement spike.** Run `bun run packages/db/scripts/measure-mobile-export.ts` against a current dev DB snapshot. Commit to ODR / Asset Pack only if compressed Kilter fits under 200 MB. Fallback: per-layout split, or `frames` lazy-fetch on first view.
-- Tables: `board_climbs`, `board_climb_stats`, `board_difficulty_grades`, `board_holes`, `board_layouts`, `board_product_sizes`, `board_products`, `board_sets`, `board_product_sizes_layouts_sets`.
-- Indexes: `idx_climbs_search`, `idx_climbs_edges`, `idx_stats_lookup` on `(climb_uuid, angle)` — `board_type` lives on `board_climbs` not `board_climb_stats` — `idx_stats_difficulty`, `idx_climbs_name_nocase`, `idx_climbs_setter`.
-- Two sync channels: new climbs (24h cadence) and stats refresh (weekly, separate endpoint, "stats updated N days ago" UI when stale).
-- Build pipeline: GitHub Action runs `export-mobile-sqlite.ts` weekly, uploads zstd snapshots to Cloudflare R2, triggers ODR / Asset Pack manifest refresh. Mobile shell version is **not** bumped per snapshot.
+### Phase 0: Shared package extraction (2 weeks)
+
+Extract pure business logic from `packages/web/` to `packages/shared/`:
+
+- `packages/shared/ble-protocol/` — Aurora v2/v3 + MoonBoard protocol encoding, message chunking, device name parsing
+- `packages/shared/queue/` — Queue reducer, playlist suggestions, queue types
+- `packages/shared/board-config/` — Board data, compatibility checks, MoonBoard config
+
+Update `packages/web/` imports to reference the shared packages. Run `vp check` and `vp run typecheck` to verify nothing breaks. Web app behavior is unchanged.
+
+### Phase 1: Foundation (3 weeks)
 
-## Hosting migration to Railway (Phase 0a)
-
-| Component                                       | From                                                                                                                                                                                                                    | To                                                                                                                 | Notes                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Postgres                                        | Neon                                                                                                                                                                                                                    | Railway Postgres + PostGIS 3.4+                                                                                    | Verify `ST_HexagonGrid` for heatmap                                                                                                                                                                                                                                                                                                                                                                                    |
-| DB driver                                       | `drizzle-orm/neon-serverless`                                                                                                                                                                                           | `drizzle-orm/postgres-js`                                                                                          | Local dev already on this driver                                                                                                                                                                                                                                                                                                                                                                                       |
-| Backend                                         | Existing host                                                                                                                                                                                                           | Railway, co-located with DB                                                                                        | Subscription reconnect during cutover                                                                                                                                                                                                                                                                                                                                                                                  |
-| Web (Next.js, then Vite)                        | Vercel                                                                                                                                                                                                                  | Railway long-lived Node container                                                                                  | See Phase 1 for the framework swap                                                                                                                                                                                                                                                                                                                                                                                     |
-| OG images                                       | Vercel Edge                                                                                                                                                                                                             | Backend Hono with `satori` + `@resvg/resvg-js`                                                                     | Same URL shape preserved                                                                                                                                                                                                                                                                                                                                                                                               |
-| Image optimization                              | Vercel                                                                                                                                                                                                                  | Cloudflare Images OR self-hosted `sharp` route                                                                     | Decide during Phase 0a, not assumed                                                                                                                                                                                                                                                                                                                                                                                    |
-| Cron                                            | Vercel Cron                                                                                                                                                                                                             | `packages/scheduler` (new), node-cron, shared-secret `CRON_TOKEN`                                                  | Targets existing internal endpoints                                                                                                                                                                                                                                                                                                                                                                                    |
-| Aurora sync                                     | Vercel-triggered runner                                                                                                                                                                                                 | Same `packages/aurora-sync` runner, deployed as Railway service                                                    | `DATABASE_URL` re-pointed only                                                                                                                                                                                                                                                                                                                                                                                         |
-| Web analytics                                   | `@vercel/analytics`, `@vercel/speed-insights`                                                                                                                                                                           | PostHog (`posthog-js` + `posthog-node`)                                                                            | See "Analytics and observability"; ~60 call-site rewrite. 14-day dual-write before decommission.                                                                                                                                                                                                                                                                                                                       |
-| Feature flags                                   | `@flags-sdk/vercel` (empty today)                                                                                                                                                                                       | PostHog feature flags                                                                                              | Hook signature unchanged; provider impl swaps.                                                                                                                                                                                                                                                                                                                                                                         |
-| Dev toolbar                                     | `@vercel/toolbar`                                                                                                                                                                                                       | Delete                                                                                                             | No replacement needed.                                                                                                                                                                                                                                                                                                                                                                                                 |
-| CDN cache header name                           | `Vercel-CDN-Cache-Control` (37 sites incl. `middleware.ts:82-91`, OG routes, board grades, slugs)                                                                                                                       | `CDN-Cache-Control` (Cloudflare-honoured) plus `Cache-Control` for browser                                         | Single grep-and-replace; verify Cloudflare cache rules pick up the new header.                                                                                                                                                                                                                                                                                                                                         |
-| Sentry cron monitors                            | `automaticVercelMonitors: true` in `next.config.mjs:135`                                                                                                                                                                | Manual `Sentry.withMonitor()` wrapping each job in `packages/scheduler`                                            | Auto-instrumentation only works on Vercel deploy metadata; will silently stop on Railway.                                                                                                                                                                                                                                                                                                                              |
-| Route timeouts                                  | `export const maxDuration = 300` on 7 long-running cron / sync routes                                                                                                                                                   | Delete the export — long-lived Node has no per-request timeout                                                     | Routes: `user-sync-cron`, `profile-percentiles`, `inferred-sessions-backfill`, `prewarm-heatmap/[board_name]`, `shared-sync/[board_name]`, `aurora-import`, `cleanup`.                                                                                                                                                                                                                                                 |
-| Env-var audit                                   | `VERCEL_ENV`, `VERCEL_URL` reads in 13 files                                                                                                                                                                            | New `BOARDSESH_ENV` (production / preview / development) and `BOARDSESH_BASE_URL`                                  | Files: `sentry.{edge,server}.config.ts`, `app/api/og/setter/route.tsx:56`, `app/lib/auth/auth-options.ts:142`, `app/lib/warm-overlay-cache.ts:5`, `app/lib/api-docs/generate-openapi.ts:91-92`, `packages/backend/src/handlers/cors.ts:18-20`, `packages/db/drizzle.config.ts:23`, `packages/db/src/client/config.ts:10`, `packages/crypto/src/env.ts:21`, `vercel.json:3`, `.github/workflows/branch-deploy.yml:183`. |
-| Preview-deploy CORS regex                       | `^https://boardsesh-[a-z0-9]+-marcodejonghs-projects\.vercel\.app$` in `packages/backend/src/handlers/cors.ts:18-20`                                                                                                    | Railway preview hostname pattern (or Cloudflare-routed `*.preview.boardsesh.com`)                                  | Same regex shape; new domain.                                                                                                                                                                                                                                                                                                                                                                                          |
-| Rate limiter                                    | In-memory map in `packages/web/app/lib/auth/rate-limiter.ts`                                                                                                                                                            | Redis-backed (Railway-managed Redis already used by `packages/backend`)                                            | In-memory was tolerable on Vercel because each cold-start was a fresh process. Multi-instance Railway makes it both wrong (cross-instance bypass) and right (single instance won't lose counter on restart) — choose Redis for multi-instance correctness.                                                                                                                                                             |
-| OG cache warming                                | `warm-overlay-cache.ts:5` derives URL from `VERCEL_URL`                                                                                                                                                                 | `BOARDSESH_BASE_URL` env var                                                                                       | Same logic, new source.                                                                                                                                                                                                                                                                                                                                                                                                |
-| CI preview env signal                           | `.github/workflows/branch-deploy.yml:183` sets `VERCEL_ENV=preview`                                                                                                                                                     | `BOARDSESH_ENV=preview` (or Railway's native env discrimination)                                                   | Cascade with the env-var audit.                                                                                                                                                                                                                                                                                                                                                                                        |
-| `vercel.json`                                   | Cron block (8 jobs), build command, framework                                                                                                                                                                           | Delete file                                                                                                        | Crons move to `packages/scheduler`; build command moves to `Dockerfile`.                                                                                                                                                                                                                                                                                                                                               |
-| Sleeper cron                                    | `user-sync-cron` (`maxDuration = 300`, dev-mode auth bypass) is **not** listed in `vercel.json` — triggered some other way today                                                                                        | Decide intent before migration: keep as on-demand via `packages/scheduler` API, or schedule it explicitly          | Without resolving this, the route silently disappears from the schedule on Railway.                                                                                                                                                                                                                                                                                                                                    |
-| Next.js standalone build                        | `output: 'standalone'` in `next.config.mjs:9`                                                                                                                                                                           | Delete with Next.js                                                                                                | Vercel-specific lambda packaging; irrelevant once Vite SSR runs in a container.                                                                                                                                                                                                                                                                                                                                        |
-| Next.js data cache                              | `unstable_cache()` (5 sites: `server-cached-client.ts:67,112`, `holds-heatmap-cache.ts:55`, `search-climbs.ts:109`) + `revalidateTag()` (2 sites: `profile-percentiles/route.ts:78`, `climb-search-cache.server.ts:25`) | Backend-side cache layer (Redis with explicit TTLs) or Cloudflare cache-tag purge headers                          | Phase 1 work, called out here so the cache-tag semantics aren't silently lost.                                                                                                                                                                                                                                                                                                                                         |
-| Next.js redirects / headers / transpilePackages | `next.config.mjs:74-103` (5 permanent redirects), `:57-73` (apple-app-site-association + 4 security headers), `:15-21` (5 monorepo packages)                                                                            | TanStack Start route-level redirects, Hono pre-request middleware for headers, native Vite TS support for monorepo | Phase 1 work; explicit list ensures none are dropped.                                                                                                                                                                                                                                                                                                                                                                  |
-| WASM bundling                                   | `outputFileTracingIncludes` in `next.config.mjs:50-56` ships `@boardsesh/board-renderer-wasm/pkg/*.wasm` and `./public/images/**` for `/api/internal/board-render`                                                      | Vite asset handling (verify WASM is bundled into `dist/server` or copied at build)                                 | Verify on first Phase 1 board-render build; failure mode is silent (route 500s in production).                                                                                                                                                                                                                                                                                                                         |
-| Sentry tunnel                                   | `tunnelRoute: '/monitoring'` in `next.config.mjs:128`, excluded from middleware in `middleware.ts:101`                                                                                                                  | Hono route in `packages/backend` proxying to Sentry                                                                | Phase 1 work; without it, Sentry events are blocked by ad-blockers.                                                                                                                                                                                                                                                                                                                                                    |
-| SWC GraphQL codegen plugin                      | `@swc-contrib/plugin-graphql-codegen-client-preset` in `next.config.mjs:35-42`                                                                                                                                          | Vite plugin equivalent or build-time codegen step                                                                  | Phase 1 work.                                                                                                                                                                                                                                                                                                                                                                                                          |
+- Expo project setup in `packages/mobile/` with Expo Router
+- Auth flow: `expo-auth-session` + backend bearer token endpoint (reuse existing `/auth/native-start` flow)
+- GraphQL client: TanStack Query + `graphql-request` (same pattern as web)
+- Navigation skeleton: board selection, climb list, climb detail, queue, settings, profile
+- Basic design system: React Native Paper with theme tokens matching web
 
-### Cutover sequence
+### Phase 2: Core climb experience (4-5 weeks)
 
-1. Stand up Railway Postgres + PostGIS. Restore from Neon snapshot. Verify heatmap and PostGIS test queries.
-2. Stand up Railway backend pointing at Railway DB. Run e2e suite at staging hostname.
-3. Stand up Railway Next.js (still Next, pre-migration) pointing at Railway DB. Run e2e suite.
-4. Add `CRON_TOKEN` to all `/api/internal/*-cron` endpoints. Stand up `packages/scheduler` on Railway.
-5. Move Aurora sync runner.
-6. DNS flip for `boardsesh.com`. Keep Vercel project warm for 7 days as instant rollback.
-7. Decommission Vercel + Neon.
+- Climb browsing, search, filtering with `@shopify/flash-list`
+- Board renderer with `@shopify/react-native-skia` — hold circles, colors, mirroring, image backgrounds
+- Climb detail view with board visualization
+- Queue management using shared reducer from `packages/shared/queue/`
+- Climb create form
 
-Estimate: 4 weeks for the hosting cutover. The PostHog migration (analytics, feature flags, ingest proxy) and the Vercel-platform residue items (CDN-header rename, Sentry cron monitor rewiring, env-var audit, rate-limiter Redis backing, CORS regex, OG cache-warming URL source, `vercel.json` deletion) run as a parallel sub-track on the same 4-week wall-clock. Combined budget for the parallel sub-track: ~2 dev-weeks, sequenced so the dual-write window for analytics straddles the DNS flip.
+### Phase 3: BLE + board control (3 weeks)
 
-## Migration strategy: beta subdomain → single cutover
+- `react-native-ble-plx` integration
+- `BluetoothAdapter` implementation using shared protocol from `packages/shared/ble-protocol/`
+- Device scanning UI, connection management, LED control
+- Test against physical Kilter, Tension, and MoonBoard hardware
+- Background BLE persistence (iOS `CBCentralManager` restoration, Android foreground service)
 
-The web migrates from Next.js to Vite via a parallel deploy. **Both stacks run in production simultaneously** during Phase 1, on different hostnames:
+### Phase 4: Real-time + social (3 weeks)
 
-- `boardsesh.com` and `www.boardsesh.com` — Next.js (existing).
-- `beta.boardsesh.com` — Vite (new), shipping route batches as Phase 1 progresses.
+- WebSocket GraphQL subscriptions (party mode, queue sync)
+- Notifications via `expo-notifications` + existing APNs backend
+- Feed, profiles, comments
+- Party session join/create flow
 
-The two stacks share the same backend, the same database, and the same origin storage scope (`*.boardsesh.com` cookies + IndexedDB on the apex). When all routes are ported and burn-in is clean, Cloudflare swaps which Railway service `boardsesh.com` points at. `beta.boardsesh.com` either stays as a permanent staging slot or is decommissioned.
+### Phase 5: Platform features (3 weeks)
 
-**Why this beats route-by-route URL flipping**: route flipping splits a single app's runtime state (auth, IndexedDB, query cache, in-memory router) across two frameworks at the same origin, making debugging and rollback miserable. One framework per URL keeps the boundaries clean. The cost is that Phase 1 ships no public user-visible value until cutover; we accept this in exchange for a single, atomic switch.
+- Live Activity widget (iOS lock screen queue navigation)
+- HealthKit integration (`react-native-health`)
+- Offline climb database via `expo-sqlite`
+- Push notification token management (reuse existing backend schema)
+- Offline mutation queue
 
-### What `beta.boardsesh.com` looks like during Phase 1
+### Phase 6: Polish + App Store (2 weeks)
 
-- Persistent banner: "You're on the Boardsesh beta. Some features are still being moved over. Switch back at boardsesh.com."
-- Internal team and opt-in users only initially. A "Try the new Boardsesh" link appears in `boardsesh.com` settings once a meaningful surface (auth + skeleton batches) ships.
-- Each route batch ships to beta first, gets at least 7 days of dogfooding, then is signed off as "ready for cutover." No public traffic is moved until the cutover itself.
-- Cookie domain set to `.boardsesh.com` so a session created on `boardsesh.com` is valid on `beta.boardsesh.com` and vice versa. This lets a beta tester cross-link without re-authenticating.
+- Performance optimization (startup time, list scrolling, board rendering)
+- App store submission (metadata already exists in `mobile/metadata/`)
+- TestFlight / Play Store beta testing
+- Error tracking with Sentry (React Native SDK)
 
-### Hosted-mode Capacitor compatibility (existing iOS fleet)
+### Timeline
 
-The iOS apps in users' hands today load `https://www.boardsesh.com` in hosted mode. After the Phase 1 cutover, that URL serves Vite instead of Next.js. **The native fleet must keep working without an app store update.** This requires the Vite app to support every native-bridge integration the Next.js app uses today.
+| Phase               | Duration  | Cumulative  |
+| ------------------- | --------- | ----------- |
+| 0 Shared extraction | 2 weeks   | 2 weeks     |
+| 1 Foundation        | 3 weeks   | 5 weeks     |
+| 2 Core experience   | 4-5 weeks | 9-10 weeks  |
+| 3 BLE               | 3 weeks   | 12-13 weeks |
+| 4 Social            | 3 weeks   | 15-16 weeks |
+| 5 Platform features | 3 weeks   | 18-19 weeks |
+| 6 Polish            | 2 weeks   | 20-21 weeks |
 
-Inventory of native bridges the Vite app must implement before cutover:
+**Total: ~20 weeks (~5 months) to App Store submission.**
 
-| Bridge                                                      | Current Next.js code                                                 | Port target                                                                   |
-| ----------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `isCapacitor()` / `isNativeApp()` / `getPlatform()`         | `packages/web/app/lib/capacitor.ts`                                  | 1:1 port; same `window.Capacitor` detection                                   |
-| BLE plugin                                                  | `packages/web/app/lib/ble/capacitor-adapter.ts`                      | 1:1 — `BleClient` import works through Vite's bundler unchanged               |
-| LiveActivity bridge                                         | Custom event dispatch (`window.dispatchEvent`) and listeners         | Same event names; subscribe in TanStack Query mutation hooks or React effects |
-| Deep link handling                                          | `App.addListener('appUrlOpen', ...)` calling Next.js `router.push()` | Same listener; calls TanStack Router `router.navigate()`                      |
-| `@capacitor/preferences` (token storage)                    | Used during native OAuth                                             | 1:1                                                                           |
-| `@capacitor-community/safe-area` insets                     | CSS variables already set by the plugin                              | No change                                                                     |
-| Bluefy banner suppression                                   | Gated on `isNativeApp()`                                             | 1:1                                                                           |
-| Native tab bar (PR #1509, if it ships before cutover)       | `window.Capacitor.Plugins.NativeTabBar` events                       | Same plugin API; bind in the Vite app shell                                   |
-| In-app review prompt (`@capacitor-community/in-app-review`) | Triggered after N session completions                                | 1:1                                                                           |
+Compare with v9.x: ~37 weeks (~9 months) before the Capacitor bundle switch even happened.
 
-A **hosted-mode integration test suite** runs against `beta.boardsesh.com` from a real iOS Simulator (and an Android emulator) using the existing Capacitor shell pointed at the beta URL. This runs nightly during Phase 1 and gates every batch's beta promotion. Tests cover:
+## Key libraries
 
-1. Cold launch: app loads, `window.Capacitor` detected, no JS errors in the WebView.
-2. BLE: native plugin invoked, scan + connect to a mock peripheral, send + verify packet bytes.
-3. Deep link: open `boardsesh://climb/<uuid>` while app is running and while killed; verify navigation lands on the correct route.
-4. Auth: complete native OAuth flow, verify session cookie / token persistence across cold restart.
-5. LiveActivity: trigger a queue update, verify the lock screen UI updates (event-dispatch test on the JS side; visual check is manual on iOS).
-6. App-bound domains: confirm `beta.boardsesh.com` is reachable from the WebView (it falls under the `*.boardsesh.com` entry in the existing `WKAppBoundDomains`).
+| Capability      | Library                                     | Notes                                                      |
+| --------------- | ------------------------------------------- | ---------------------------------------------------------- |
+| Navigation      | `expo-router`                               | File-based, similar to Next.js App Router                  |
+| BLE             | `react-native-ble-plx`                      | Mature, 5k+ GitHub stars, direct CoreBluetooth/Android BLE |
+| Board rendering | `@shopify/react-native-skia`                | GPU-accelerated 2D graphics, Shopify-maintained            |
+| Lists           | `@shopify/flash-list`                       | Drop-in FlatList replacement, 60fps scrolling              |
+| Storage (KV)    | `react-native-mmkv`                         | Fastest KV store on mobile, JSI-based                      |
+| Storage (SQL)   | `expo-sqlite`                               | For offline climb database                                 |
+| Auth            | `expo-auth-session`                         | Standard OAuth flows                                       |
+| Secure storage  | `expo-secure-store`                         | iOS Keychain, Android Keystore                             |
+| Live Activity   | `react-native-live-activity`                | iOS lock screen widgets                                    |
+| HealthKit       | `react-native-health`                       | Workout logging                                            |
+| Push            | `expo-notifications`                        | APNs + FCM                                                 |
+| UI components   | `react-native-paper` or `tamagui`           | Material Design / cross-platform                           |
+| GraphQL         | `@tanstack/react-query` + `graphql-request` | Same pattern as web                                        |
+| Error tracking  | `@sentry/react-native`                      | Crash reporting + performance                              |
 
-The test harness lives at `mobile/integration-tests/` and runs in CI on every Phase 1 batch merge.
+## Auth design
 
-### Auth cookie compatibility during cutover
+### Mobile (React Native)
 
-The Vite app uses lucia sessions. The Next.js app uses NextAuth. Cookie names, formats, and signing keys differ. **Existing logged-in users (web AND hosted-mode native iOS) would be logged out on cutover** unless we ship a shim.
+1. User taps "Sign in" → `expo-auth-session` opens system browser for OAuth
+2. OAuth provider redirects to `boardsesh.com/auth/callback` (in system browser)
+3. Backend issues a short-lived HMAC transfer token, redirects to `boardsesh://auth/callback?token=...`
+4. Expo app intercepts the deep link, POSTs the transfer token to `/auth/native/exchange`
+5. Backend validates, issues JWT (30d) + refresh token
+6. Tokens stored in `expo-secure-store` (Keychain/Keystore)
+7. Fetch interceptor attaches `Authorization: Bearer <jwt>` to every request
+8. WebSocket `connectionParams` includes the token
 
-The shim, part of Phase 0c:
+**Refresh:** When JWT is within 24h of expiry, the interceptor uses the refresh token to mint a new pair. Failed refresh triggers re-auth.
 
-1. The lucia auth middleware in `packages/backend` accepts both lucia session cookies AND NextAuth JWT cookies (`__Secure-next-auth.session-token` and `next-auth.session-token`) during a 90-day overlap window.
-2. On a successful NextAuth-cookie request, the middleware validates the JWT (using the existing `NEXTAUTH_SECRET`), looks up the user, mints a lucia session, sets the lucia cookie, and clears the NextAuth cookie. One-time upgrade per user.
-3. After 90 days post-cutover, the NextAuth-acceptance branch is removed. Any user still on a stale NextAuth cookie is forced to re-auth.
-4. Users on bundled-mode Capacitor apps (Phase 2 onward) are unaffected — they use bearer tokens, not cookies.
+### Web (unchanged)
 
-### IndexedDB and origin storage compatibility
+NextAuth cookie sessions. No changes to the web auth flow.
 
-Per `CLAUDE.md`, the app uses IndexedDB for offline state (queue, user preferences, recent searches, party profile, onboarding status, tab navigation). All scoped to the `boardsesh.com` origin. When Vite takes over the same origin, it inherits these IDB databases.
+### Backend
 
-**Compatibility requirement**: the Vite app's IDB schema must be identical to the Next.js app's schema, or apply migrations on first open. Phase 1's "Settings" batch includes an explicit pass to verify each `*-db.ts` file under `packages/web/app/lib/` opens existing data correctly when running in the Vite stack. Migration logic, if needed, follows the existing localStorage → IDB pattern.
+The existing bearer token infrastructure (used by the current Capacitor native OAuth flow) is reused. The backend already handles:
 
-### DNS flip
+- Transfer token generation at `/auth/native-start`
+- Token exchange at `/auth/native/exchange`
+- Bearer token validation in GraphQL resolvers
+- WebSocket auth via connection params
 
-1. After all batches are on beta and have passed at least 7 days of clean dogfooding, the team picks a Tuesday for cutover (low-traffic day; full week of business-hours coverage).
-2. Cloudflare swap: the Origin Pool for `boardsesh.com` and `www.boardsesh.com` points to the Vite Railway service. Cache purged.
-3. Next.js Railway service stays running for 7 days as warm rollback. If anything explodes, swap the pool back; the cookie shim ensures lucia-issued cookies are not visible to Next.js but the user's underlying session in Postgres is preserved (lucia and NextAuth read the same `users` table).
-4. Monitor: Sentry (JS errors), PostHog (session counts, feature usage), Axiom (request latency, 5xx rate), the hosted-mode integration test suite (now running against the cut-over URL nightly).
-5. After 7 days clean, decommission the Next.js Railway service. Delete `packages/web` (the old one). Rename `packages/app` to `packages/web`.
+New work: ensure the token exchange endpoint returns a proper JWT + refresh token pair (may already be implemented; verify).
 
-### Bundled-mode iOS fleet and the Phase 2 cutover
+## Offline design
 
-Bundled mode (Phase 2 onward) is **separate from this hosted-mode cutover**. The native shell at the time of the Phase 1 cutover still loads the URL — it doesn't yet ship its own bundled assets. Phase 2 ships a new native shell version that loads `dist/client/` from `capacitor://localhost` and uses bearer tokens. Existing hosted-mode shells continue to work indefinitely on cookie auth; users only get bundled mode by updating from the App Store / Play Store. No forced update.
+### Refdata SQLite (Phase 5)
 
-## Framework migration (Phase 1) — the big new phase
+Same design as v9.x, implemented natively:
 
-Replaces v8.0's "dual-build pipeline" entirely. This is the largest single phase in the plan. The cutover mechanics live in the previous section ("Migration strategy"); this section covers what gets built.
+- `expo-sqlite` stores climb data per board
+- Tables: `board_climbs`, `board_climb_stats`, `board_difficulty_grades`, `board_holes`, `board_layouts`, `board_product_sizes`, `board_products`, `board_sets`, `board_product_sizes_layouts_sets`
+- Sync: new climbs on 24h cadence, stats refresh weekly
+- Build pipeline: GitHub Action exports SQLite snapshots to Cloudflare R2
+- Download on first board selection; "Syncing climbs" progress indicator
 
-### Approach
+**Measurement spike (start of Phase 5):** Run the export script against the dev DB. If compressed Kilter data exceeds 200 MB, fall back to per-layout split or lazy-fetch frames on first view.
 
-Create `packages/app/` with the Vite + TanStack Start skeleton, deploy config, auth scaffold pointing at `packages/backend`, and the hosted-mode bridge inventory ported. Deploy to `beta.boardsesh.com` on Railway. Migrate routes in batches; ship each batch to beta and run the hosted-mode integration suite before promoting the next batch.
+### Mutation queue (Phase 5)
 
-After all routes are on beta and burn-in is clean, the team executes the DNS flip per the Migration strategy section.
+Same design as v9.x:
 
-### Migration batches (approximate)
+- Client-generated UUID v7 idempotency keys
+- Server-side `mutation_dedup` table (30-day expiry)
+- Single-concurrency drainer in `createdAt` order
+- Per-mutation conflict resolution (tick.create: idempotent, playlist ops: set ops, playlist.rename: last-write-wins)
 
-| Batch                       | Routes                                                                                                                                                                                                                                   | Notes                                                                                                                                                                                                                       |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Skeleton                    | `/`, `/about`, `/legal`, `/privacy`, `/help`, `/docs`, `/development`, `/aurora-migration`                                                                                                                                               | Static-ish, low risk. Shakes out build + deploy + Railway pipeline. Bridges (BLE, LiveActivity, deep link) ported in this batch even though the static pages don't use them, so the integration tests can run from batch 1. |
-| Auth                        | `/auth/login`, `/auth/native-start`, `/auth/error`, `/auth/verify-request`                                                                                                                                                               | Lands with the arctic + lucia rollout from Phase 0c. Cookie shim verified end-to-end here.                                                                                                                                  |
-| In-app — board              | `/b/[board_slug]`, `/b/[board_slug]/[angle]/{list,liked,playlists,logbook,create,import}`, `/b/[board_slug]/[angle]/view/[climb_uuid]`, `/b/[board_slug]/[angle]/play/[climb_uuid]`, `/b/[board_slug]/[angle]/playlists/[playlist_uuid]` | The largest batch. Mostly client-rendered with TanStack Query.                                                                                                                                                              |
-| In-app — full board path    | `/[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/...`                                                                                                                                                                              | Long path, deep dynamic routes; same conversion pattern.                                                                                                                                                                    |
-| Profile / setter / playlist | `/profile/[user_id]`, `/profile/[user_id]/{statistics,sessions,climbs}`, `/setter/[setter_username]`, `/playlists`, `/playlists/[playlist_uuid]`                                                                                         | SEO surfaces — SSR routes in TanStack Start with Cloudflare cache headers.                                                                                                                                                  |
-| Session / party             | `/session/[sessionId]`, `/join/[sessionId]`, `/notifications`, `/feed`                                                                                                                                                                   | Real-time-heavy, mostly SPA.                                                                                                                                                                                                |
-| Settings                    | `/settings`, `/you`, `/you/{sessions,logbook}`                                                                                                                                                                                           | Auth-gated SPA. Includes the IndexedDB compatibility verification pass.                                                                                                                                                     |
+### User data cache (Phase 5)
 
-### Things deleted with NextAuth and Next.js
-
-- `packages/web/middleware.ts` — PHP-block becomes a Hono pre-request handler in the SSR server; board-name validation moves to TanStack Router route loaders; list-page caching becomes a backend `Cache-Control` header on the GraphQL response; climb-session cookie handling moves to a small `serverFn`.
-- `next/image` — replaced with `<img>` + `srcset` for the few responsive cases. Image optimization, where actually needed, hits the Cloudflare Images URL or the self-hosted `sharp` route.
-- `generateMetadata` — TanStack Router `head` option per route.
-- `generateStaticParams` — irrelevant; routes are SSR or SPA, not statically generated. (Public climb-view pages get SSR-with-cache rather than SSG. Cloudflare caches the SSR response.)
-- All `/api/auth/*` routes — replaced by backend auth endpoints under `packages/backend/src/auth/`.
-- Most `/api/internal/*` and `/api/v1/*` routes — replaced by GraphQL from `packages/backend` (Phase 0b finishes this).
-
-### What stays as Vite Node SSR endpoints (not GraphQL)
-
-- The auth callback for the native deep-link flow (`/auth/native/exchange`) — needs to mint bearer tokens server-side.
-- Refdata sync endpoints (`/internal/climb-sync`, `/internal/stats-sync`) — bulk JSON streaming is friendlier as plain HTTP than GraphQL.
-- A redirect endpoint for shortened climb links (`/internal/climb-redirect`) — needs to issue a 301.
-
-These live as Hono routes in `packages/backend` (preferred) or as TanStack Start `serverFn` calls (acceptable, but only when the logic is genuinely web-only).
-
-### Estimate
-
-- Skeleton + first route batch (auth + static): 3 weeks (the new build/deploy pipeline takes most of this time, not the routes).
-- In-app batches: 5-6 weeks across all in-app surface (~30 routes), pair-programmed if possible to keep velocity.
-- SEO batches (profile, setter, playlist, climb view): 3 weeks. SSR + cache headers + metadata.
-- Cutover + decommission: 2 weeks (DNS flip per batch, monitoring, Next.js retirement).
-- Buffer for surprises: 2 weeks.
-
-**Total Phase 1: ~14 weeks.** Larger than v8.0's "Phase 1: 6 weeks" but more honest, and Phase 2 (Capacitor bundle switch) becomes nearly free since the SPA build already exists.
-
-## REST → GraphQL completion (Phase 0b)
-
-Same shape as v8.0; the destination is unchanged by the framework move:
-
-- `/api/internal/*` data ops → GraphQL in backend (most resolvers exist; ~8 net-new).
-- `/api/v1/[board_name]/*` → GraphQL with same shape; URL kept via thin SSR-side proxies during overlap.
-- `/api/v1/[board_name]/proxy/*` (Aurora) → GraphQL mutations.
-- `/api/auth/*` → `packages/backend` auth (replaced as part of the NextAuth → arctic/lucia migration).
-- `/api/og/*` → backend Hono with `satori`. URL shape preserved by the SSR server proxying `/api/og/*` to backend during overlap, then the URL is served by the backend directly after Phase 1 cutover.
-- `/api/internal/*-cron` → endpoints stay (now in `packages/backend` or as SSR routes), wrapped with `CRON_TOKEN`. `packages/scheduler` calls them.
-
-Estimate: 6 weeks. Runs parallel to Phase 0a and Phase 0c.
-
-## Bluetooth (status quo)
-
-The adapter abstraction at `packages/web/app/lib/ble/` ports as-is to `packages/app/`. Capacitor 8 MTU semantics on Android need a one-day verification on a physical Pixel before Phase 2. Bluefy banner suppression is already gated on `isNativeApp()`.
-
-## Native polish (incremental)
-
-Add as needed: `@capacitor/haptics` when the first haptic interaction is requested; `@capacitor/network` in Phase 6; status-bar / splash-screen / keyboard plugins only if specific issues surface.
-
-Deep links (`boardsesh://party/*`, `/invite/*` Universal / App Links) continue working post-migration. The TanStack Router `notFound` route handles unknown deep-link paths.
-
-## Analytics and observability
-
-### Today's stack to retire
-
-`@vercel/analytics` (one mount in `app/layout.tsx:73`, ~60 `track('EventName', { props })` call sites across the client), `@vercel/speed-insights` (one mount in `app/layout.tsx:99`), `@vercel/toolbar` (dev-only, `app/layout.tsx:15` plus `next.config.mjs:2`), `@flags-sdk/vercel` + `app/flags.ts` + `app/.well-known/vercel/flags/route.ts` (empty scaffold today, but the SDK ships in production bundles).
-
-### PostHog migration
-
-- **Stack.** PostHog Cloud (region TBD; default US). `posthog-js` in the Vite client. `posthog-node` in `packages/backend` for server-side capture and feature-flag evaluation. PostHog feature flags replace `@flags-sdk/vercel`: the `useFeatureFlag` hook signature in `packages/web/app/components/providers/feature-flags-provider.tsx` stays, the implementation switches.
-- **Reverse-proxy ingest path.** PostHog is commonly served through `/ingest/*` to bypass ad-blockers. The project has no rewrite for this today. Add the equivalent in TanStack Start (a `serverFn`-backed proxy in the SSR server, or a Hono route in `packages/backend`). Decide during Phase 0a. Cloudflare WAF rule allowlisting `/ingest/*` lands at the same time.
-- **`distinct_id` storage.** The codebase is IndexedDB-only (`no-restricted-globals` lint rule per CLAUDE.md). PostHog defaults to localStorage + cookies; configure `persistence: 'memory'` plus an IDB-backed shim that bootstraps `distinct_id` from `@capacitor/device.identifier` in bundled mode and from a UUID stored in `user-preferences-db.ts` on web.
-- **Identify / alias lifecycle.** `posthog.identify()` fires inside `SessionProvider` after lucia issues a session. `posthog.alias()` runs once on first authed event after a previously-anonymous session, carrying over the anonymous `distinct_id`. Wired during Phase 0c so it lands with `useSession`.
-- **Server-side capture.** `packages/backend` already has Axiom for ESP32 logs (`packages/backend/src/services/axiom.ts`); keep it. Add `posthog-node` alongside, used for resolver-level events (e.g. `tick.created`, `playlist.shared`) where the client is unreliable.
-- **Session recording.** Off by default. Add an opt-in toggle in `/settings`. No recording before legal review of the privacy policy text.
-- **Event-call-site rewrite.** ~60 `track('EventName', props)` sites become `posthog.capture('EventName', props)`. Mechanical — codemod-able with a small `jscodeshift` script that targets the existing `track` import. Estimate 1 dev-day of mechanical change + 2 days of dashboard rebuild in PostHog.
-- **Dashboards / funnels.** Rebuild existing Vercel Analytics dashboards in PostHog before cutover. Side-by-side dual-write for 14 days so historical comparisons are possible. After 14 days, drop `@vercel/analytics` and `@vercel/speed-insights`.
-
-### Sentry, source maps, logs
-
-Sentry for JS + native (iOS/Android SDKs added in Phase 2). Source maps uploaded for Vite builds (web client + SSR server) and native dSYMs / ProGuard. The Sentry tunnel route currently at `/monitoring` (`next.config.mjs:128`, excluded from middleware in `middleware.ts:101`) ports to a Hono route in `packages/backend` proxying to Sentry — without it, Sentry events are blocked by ad-blockers.
-
-`automaticVercelMonitors: true` (`next.config.mjs:135`) only works on Vercel's deploy metadata; on Railway, each `packages/scheduler` job wraps execution in `Sentry.withMonitor(slug, ...)` and emits a heartbeat. Alert if a heartbeat is absent for >2× the expected interval.
-
-Logs: backend + SSR server emit structured JSON to stdout. Railway's log forwarder ships to Axiom (already in use per `packages/backend/src/services/axiom.ts`; keep it).
-
-Cross-cutting; the PostHog migration is sequenced inside Phase 0a, the rest is not phased.
+- Profile, ticks, playlists cached in MMKV after first online load
+- SWR refresh on next online launch
+- "Needs network" state for real-time features (party, comments, feed)
 
 ## App Store distribution
 
-### Review notes (committed text)
+### Review notes
 
-> Boardsesh controls climbing-board hardware via Bluetooth Low Energy. The app embeds a per-board climb database (~150 MB, downloaded on first board selection) so users can search and browse climbs without internet. Reviewers cannot pair to a physical Kilter or Tension board, so the demo flow below shows the offline-only functionality:
+> Boardsesh controls climbing-board hardware via Bluetooth Low Energy. The app is built with React Native and provides native performance for climb browsing, board visualization, and hardware control. Key native features:
 >
-> 1. Open the app. Select "Kilter" → wait for board data download.
-> 2. Without an account: tap "Browse climbs." Search for "Crimpy" — results render from the local database.
-> 3. Tap any climb → the climb detail page renders with hold positions and grade.
-> 4. Tap the BLE icon → device picker appears (will not find a board in the test environment, but proves native BLE is active).
+> 1. CoreBluetooth integration for BLE board control (Kilter, Tension, MoonBoard)
+> 2. Offline climb database (~150 MB per board, stored in SQLite)
+> 3. Live Activity widget showing current climb on the lock screen
+> 4. HealthKit workout logging for climbing sessions
 >
-> The app is not a web wrapper. The offline climb database, BLE control, and LiveActivity (visible from the lock screen during a session) are native features unavailable to a website.
+> Demo flow (no physical board needed):
+>
+> 1. Open the app, select "Kilter"
+> 2. Browse and search climbs — results render from the local database
+> 3. Tap any climb — detail page shows hold positions and grade
+> 4. Tap the BLE icon — device picker appears (won't find a board in test environment)
 
 ### Plan B if iOS rejected on guideline 4.2
 
-1. Ship Android first via Play Store internal testing.
-2. Activate the dormant native onboarding flow (3 native screens before the WebView opens).
-3. Make the LiveActivity always-on during a session.
-4. Re-submit with explicit reply citing each native feature.
+This is much less likely with a genuinely native app (no WebView wrapper), but if it happens:
 
-### Rollback
+1. Ship Android first via Play Store
+2. Add native onboarding screens highlighting BLE + offline + Live Activity
+3. Resubmit with explicit per-feature citations
 
-- **OTA evaluation at the start of Phase 2.** Compare Capacitor Live Updates (Ionic), Capgo, and a self-hosted bundle-swap. Decision committed before Phase 2 ships.
-- **Remote-config kill switch is a hard requirement of Phase 2.** A small `app-config.json` on Cloudflare R2 can flip the WebView back to `server.url: 'https://www.boardsesh.com'` within minutes, no app store update.
+## Risks
 
-## Phase plan (with explicit dependencies)
+| Risk                                            | Likelihood | Impact | Mitigation                                                                                              |
+| ----------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| Board renderer complexity (Canvas/WASM to Skia) | Medium     | High   | Start early in Phase 2. Fallback: react-native-svg for adequate rendering.                              |
+| Two UI codebases to maintain                    | Certain    | Medium | Share everything below UI. Intentional divergence — each platform gets its best experience.             |
+| react-native-ble-plx gaps                       | Low        | High   | Protocol logic is shared; only the transport adapter differs. Can write a thin native module if needed. |
+| Expo ecosystem churn                            | Low        | Medium | Pin SDK versions. Expo's continuous native generation (CNG) handles native project updates.             |
+| Refdata SQLite > 200 MB                         | Medium     | Medium | Phase 5 measurement spike. Fallback: per-layout split or frames lazy-fetch.                             |
+| Bearer token refresh edge cases                 | Medium     | High   | Dedicated test suite. Failed refresh triggers re-auth, not silent failure.                              |
+| Live Activity reimplementation complexity       | Medium     | Medium | Defer to Phase 5. Existing Swift widget logic serves as reference.                                      |
+| Apple 4.2 rejection                             | Low        | High   | Native RN app has minimal risk. Plan B above if needed.                                                 |
 
-```
-0a Hosting cutover ─┐
-                    │
-0b GraphQL cleanup ─┼─→ 1 Vite migration ─→ 2 Bundle switch ─→ 3 Refdata SQLite ─┐
-                    │                                                              │
-0c Auth (arctic) ───┘                                          4 User-data cache ─┴─→ 5 Mutation queue ─→ 6 Connectivity polish
-```
+## Performance targets
 
-| Phase                              | Estimate                     | Hard deps                  | Done when                                                                                                  |
-| ---------------------------------- | ---------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 0a Hosting → Railway               | 4w                           | none                       | Postgres + backend + Next.js web all on Railway. Vercel + Neon decommissioned.                             |
-| 0b GraphQL completion              | 6w                           | none                       | Non-auth REST routes have GraphQL equivalents.                                                             |
-| 0c Auth: NextAuth → arctic + lucia | 4w                           | 0b largely done            | Backend issues bearer tokens for native + cookie sessions for web. Existing user sessions migrated.        |
-| 1 Vite + TanStack Start migration  | 14w                          | 0c (auth must be portable) | All routes ported, Next.js decommissioned, `packages/web` is Vite. SSR for SEO surfaces, SPA for in-app.   |
-| 2 Capacitor bundle switch          | 3w                           | 1                          | App launches in airplane mode, bearer auth works, kill-switch verified. The bundle is just `dist/client/`. |
-| 3 Refdata SQLite                   | 4w (incl. measurement spike) | 2                          | Search and climb detail render from local DB offline.                                                      |
-| 4 User-data cache                  | 5w                           | 2                          | Profile, ticks, playlists render offline after one online session.                                         |
-| 5 Mutation queue                   | 5w                           | 4                          | Pinned user story end-to-end. `mutation_dedup` server-side. "Needs attention" UI ships.                    |
-| 6 Connectivity polish              | 2w                           | 5                          | Online/offline banner, sync count, retry UI, onboarding.                                                   |
+| Metric                      | Target                             |
+| --------------------------- | ---------------------------------- |
+| Cold start to interactive   | < 1.5s on a 2022 mid-tier Android  |
+| Climb search (local SQLite) | < 100ms p95                        |
+| Board renderer FPS          | 60fps during interaction           |
+| BLE connection              | < 5s                               |
+| BLE LED send                | < 1s after connect                 |
+| App binary size             | < 30 MB without refdata            |
+| List scrolling              | 60fps with 1000+ items (FlashList) |
 
-Critical path for the pinned user story: 0a / 0b / 0c (parallel) → 1 → 2 → 3 → 4 → 5. With one full-time engineer and reasonable parallelism on 0a–0c, the chain is roughly: 6w (longest of 0a/0b/0c) + 14w + 3w + 4w + 5w + 5w = 37 weeks ≈ **9 months calendar**.
+## Platform requirements
 
-The realistic range is **9–14 months** depending on shared engineering capacity, surprises in the Vite migration (typical: 30-40% over estimate for framework migrations of this surface area), and store review cycles. The framework migration is the single largest risk; if Phase 1 slips, everything downstream slips.
-
-## Risks (the ones that change behavior)
-
-| Risk                                                                            | Likelihood | Impact | Mitigation                                                                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------------------- | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TanStack Start API churn during 14-week migration                               | Medium     | Medium | Pin minor versions; budget 1w/quarter for upgrade churn; subscribe to TanStack release notes.                                                                                                                                                                                                                   |
-| arctic + lucia migration loses existing sessions                                | Medium     | High   | Migration script copies `accounts` / `sessions` schema; run against a Neon snapshot in staging; users may re-auth on cutover but should not lose accounts.                                                                                                                                                      |
-| OAuth flows differ subtly between NextAuth and arctic (Apple, Google specifics) | High       | Medium | Each provider gets a paired Playwright e2e + manual smoke before its cutover batch.                                                                                                                                                                                                                             |
-| SSR cache invalidation for climb-view pages misbehaves                          | Medium     | Medium | Use ETag + short `s-maxage` (60s) at Cloudflare; backend emits `Cache-Tag` headers and purges on climb edit.                                                                                                                                                                                                    |
-| Self-hosted image optimization adds latency                                     | Medium     | Low    | Cloudflare Images is the default; `sharp` self-host is fallback only. Decide in Phase 0a.                                                                                                                                                                                                                       |
-| `packages/scheduler` cron drift / missed jobs                                   | Medium     | Medium | Each cron logs a heartbeat to Sentry; alert if absent for >2× expected interval.                                                                                                                                                                                                                                |
-| Phase 1 page-conversion velocity is below estimate                              | Medium     | High   | First two batches (skeleton + auth) timeboxed; reassess Phase 1 schedule after they ship.                                                                                                                                                                                                                       |
-| Bearer-token refresh edge cases                                                 | Medium     | High   | Refresh logic gets its own test suite; failed refresh triggers re-auth via Browser plugin, not silent failure.                                                                                                                                                                                                  |
-| Refdata SQLite > 200 MB compressed                                              | Medium     | Medium | Phase 3 measurement spike. Fallback: per-layout split or `frames` lazy-fetch.                                                                                                                                                                                                                                   |
-| `mutation_dedup` table grows unbounded                                          | Low        | Medium | Server expires entries >30d; client never replays mutations >30d.                                                                                                                                                                                                                                               |
-| OTA solutions all unacceptable; bundle regressions stuck on app store cycle     | Medium     | High   | Remote-config kill switch flips to hosted mode without an app store update.                                                                                                                                                                                                                                     |
-| Apple 4.2 rejection                                                             | Medium     | High   | Plan B above.                                                                                                                                                                                                                                                                                                   |
-| Railway region outage                                                           | Low        | High   | Postgres backups daily; backend stateless; one-day RTO with manual restore. Consider warm replica in Phase 6+ if outages prove material.                                                                                                                                                                        |
-| PostHog event volume / cost surprise                                            | Medium     | Low    | Start with sampled capture on the chattiest events (`Heatmap Hold Clicked`, `Climb List Row Clicked`, `Queue Operation`); tune after 30 days of real volume.                                                                                                                                                    |
-| PostHog reverse-proxy blocked by Cloudflare WAF                                 | Medium     | Medium | Add an explicit Cloudflare rule allowlisting `/ingest/*`; verify in staging before cutover.                                                                                                                                                                                                                     |
-| Removing `automaticVercelMonitors` leaves crons silently untracked              | Medium     | Medium | Each `packages/scheduler` job wraps execution in `Sentry.withMonitor(slug, ...)` and emits a heartbeat; alert if absent for >2× expected interval. (Strengthens the existing `packages/scheduler` cron-drift mitigation by tying cron monitoring to manual instrumentation rather than Vercel deploy metadata.) |
-| Vercel Analytics historical data lost at cutover                                | Medium     | Low    | 14-day dual-write; export Vercel Analytics raw events to CSV before decommissioning.                                                                                                                                                                                                                            |
-| In-memory rate-limiter behaviour change once on Redis                           | Low        | Medium | Redis-backed limiter has stricter bounds than in-memory; surface a `429`-rate dashboard during the first 7 days post-cutover.                                                                                                                                                                                   |
-
-## Tab bar
-
-The plan does not ship per-tab WKWebView. A single WebView with TanStack Router client-side routing matches bundled mode best. Revisit only if WebView gesture/scroll perf becomes a real complaint after Phase 5, and only for the board canvas.
+|         | Minimum                                    |
+| ------- | ------------------------------------------ |
+| iOS     | 15.0 (Expo SDK 53 minimum)                 |
+| Android | API 24 / Android 7.0 (Expo SDK 53 minimum) |
 
 ## Success criteria
 
-| Layer          | Done when                                                                                                               |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Hosting        | `boardsesh.com`, backend, Postgres, scheduler all on Railway. Vercel + Neon shut down.                                  |
-| GraphQL        | Non-auth REST routes have GraphQL equivalents.                                                                          |
-| Auth           | arctic + lucia in backend. NextAuth code deleted. Bearer tokens for native, cookies for web.                            |
-| Framework      | Vite + TanStack Start. Next.js code deleted. Both SSR (SEO) and SPA modes ship from one source tree.                    |
-| Bundle switch  | Bundled iOS + Android launch in airplane mode, complete bearer-token auth from a fresh install, kill-switch verified.   |
-| Refdata        | Search and climb detail render from local SQLite. Stat deltas apply on next online launch.                              |
-| User data      | Ticks, playlists, profile render offline after one online session. SWR refresh < 2s on online transition.               |
-| Mutation queue | Pinned user story passes in CI on Capacitor simulator with network simulation. No duplicate ticks under failure replay. |
-| Polish         | Online/offline banner, sync count, retry UI, onboarding line about offline.                                             |
+| Layer             | Done when                                                                                                |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| Shared extraction | BLE protocol, queue reducer, board config in `packages/shared/`. Web imports updated. `vp check` passes. |
+| Foundation        | Expo project builds, auth works, navigation skeleton complete, GraphQL queries return data.              |
+| Core experience   | Climb browsing, search, board visualization, queue management work end-to-end on iOS + Android.          |
+| BLE               | Connect to physical Kilter/Tension/MoonBoard, send climbs, LEDs light up correctly.                      |
+| Social            | Party mode, notifications, feed work via WebSocket subscriptions.                                        |
+| Platform          | Live Activity, HealthKit, offline SQLite, push notifications, mutation queue all functional.             |
+| App Store         | Accepted on iOS App Store and Google Play Store. TestFlight beta with 10+ testers.                       |
 
-### Performance targets
+## Considered alternatives
 
-| Metric                              | Target                              |
-| ----------------------------------- | ----------------------------------- |
-| Cold start to interactive (bundled) | < 1.5s on a 2022 mid-tier Android   |
-| Climb search latency (local SQLite) | < 100ms p95                         |
-| BLE connection                      | < 5s                                |
-| BLE LED send                        | < 1s after connect                  |
-| Native shell binary                 | < 15 MB without refdata             |
-| Refdata per-board download          | target < 200 MB compressed (gating) |
-| SSR page TTFB at edge cache hit     | < 100ms p95                         |
-| Vite dev cold start                 | < 5s                                |
+**Stay on Capacitor (v9.x).** Avoids the React Native learning curve and reuses existing native code. Rejected because WebView performance and native feature access are structural limitations. The 14-week Vite migration was primarily motivated by enabling the Capacitor bundle switch — removing that motivation removes the justification for the migration.
 
-### Platform requirements
+**Flutter.** Best raw performance and excellent BLE support. Rejected because Dart is a completely different language with zero code sharing from the existing TypeScript codebase. Team would need to learn new ecosystem, state management, and testing tools.
 
-|         | Minimum                                      |
-| ------- | -------------------------------------------- |
-| iOS     | 14.0 (Capacitor 8 minimum)                   |
-| Android | API 23 (Capacitor 8 minimum); target API 34+ |
+**Keep Capacitor, skip Vite migration.** Ship the existing hosted WebView to the App Store. Rejected because hosted mode has the worst App Store rejection risk (guideline 4.2) and the worst offline story.
 
-## Considered alternatives (one paragraph each)
-
-**Stay on Next.js with the v8.0 dual-build mechanism.** Workable. Avoids 14 weeks of framework migration. Costs: parallel `page.tsx` / `page.bundled.tsx` files forever, `pageExtensions` toggling, slow Next.js dev cycle, ongoing Vercel-shaped patterns even if hosted on Railway. Rejected because the team plans to spend years in this codebase and the migration pays off across that horizon.
-
-**Vike instead of TanStack Start.** Vike is more mature and more flexible; you choose the router separately. Rejected only because TanStack Router pairs naturally with the TanStack Query usage already in the project. Worth revisiting if TanStack Start's maturity becomes blocking during Phase 1.
-
-**React Router 7 (Remix-merged).** Strong project, SSR-first model. Rejected because SPA-first is the posture this plan needs and we'd be fighting the grain.
-
-**Astro for SEO + plain Vite for the app.** Two mental models for one app. Rejected because the offline-first surface IS the app, and Astro's content-site strengths don't carry there.
-
-**Stay on Vercel.** The deploy ergonomics are excellent. Rejected because the team's preference is to escape framework gravity; once you're on Vercel, every architectural choice gets routed through "what does Vercel reward." Railway is the thinnest PaaS that still handles Postgres, Redis, and cron without forcing a deployment shape.
-
-## Appendix
-
-### Capacitor 8 dependencies (current `mobile/package.json`)
-
-```json
-{
-  "dependencies": {
-    "@capacitor-community/bluetooth-le": "^8",
-    "@capacitor-community/in-app-review": "^8.0.0",
-    "@capacitor-community/keep-awake": "^8",
-    "@capacitor-community/safe-area": "^8",
-    "@capacitor/android": "^8",
-    "@capacitor/app": "^8",
-    "@capacitor/browser": "^8",
-    "@capacitor/core": "^8",
-    "@capacitor/geolocation": "8.1.0",
-    "@capacitor/ios": "^8",
-    "@capacitor/motion": "^8"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^8.3.1",
-    "typescript": "^5.9.3"
-  }
-}
-```
-
-Phases 3/4 add `@capacitor-community/sqlite`. Phase 6 adds `@capacitor/network`. Other plugins added on demand.
-
-### Permissions
-
-iOS `Info.plist`:
-
-```xml
-<key>NSBluetoothAlwaysUsageDescription</key>
-<string>Boardsesh connects to your climbing board to control LED holds.</string>
-<key>NSBluetoothPeripheralUsageDescription</key>
-<string>Connect to your climbing board to control LED holds.</string>
-```
-
-Android `AndroidManifest.xml`:
-
-```xml
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-<uses-permission android:name="android.permission.BLUETOOTH_SCAN"
-    android:usesPermissionFlags="neverForLocation" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.BLUETOOTH" />
-<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-```
-
-### Deep links
-
-Custom scheme:
-
-- `boardsesh://party/join/{sessionId}` — join party session
-- `boardsesh://climb/{uuid}` — open climb detail
-- `boardsesh://board/{boardName}/{layoutId}/{sizeId}/{setIds}/{angle}` — open board config
-
-Universal / App Links: scoped paths only (`/party/*`, `/invite/*`). Not the entire `boardsesh.com` domain.
-
-### Capacitor vs web feature matrix (post-Phase 2)
-
-| Feature                   | Web (Chrome)         | Web (Safari iOS) | Capacitor (bundled)       |
-| ------------------------- | -------------------- | ---------------- | ------------------------- |
-| BLE                       | Web Bluetooth        | Not supported    | Native plugin             |
-| Offline climb search      | Not available        | Not available    | Local SQLite              |
-| Offline user data         | Not available        | Not available    | Local SQLite cache        |
-| Offline writes            | Not available        | Not available    | Mutation queue            |
-| Push notifications        | Web Push             | Limited          | APNs / FCM (when shipped) |
-| Haptics                   | Not available        | Not available    | Native (when added)       |
-| Wake lock                 | Screen Wake Lock API | Not supported    | KeepAwake plugin          |
-| Cold start to interactive | < 2s cached          | < 2s cached      | < 1.5s (bundled)          |
+**React Native + migrate web to Vite anyway.** The Vite migration has independent value (dev speed, no Vercel lock-in). Deferred — the web works fine on Next.js/Vercel today, and the mobile app is higher priority. Can revisit the web framework later if pain accumulates.
 
 ---
 
 ## Changelog
 
-**v9.2 — current.** Closes Vercel-platform inventory gaps in Phase 0a:
+**v10.0 — current.** Direction change from Capacitor to React Native (Expo):
 
-- PostHog migration sub-plan replaces the one-paragraph mention. Covers Vercel Analytics retirement, `@flags-sdk/vercel` swap, `/ingest/*` reverse proxy, IDB-only `distinct_id`, `posthog-node` server capture, identify/alias lifecycle tied to Phase 0c lucia auth, ~60 `track()` call-site rewrite, 14-day dual-write before decommission.
-- Hosting cutover table extended with rows for `Vercel-CDN-Cache-Control` rename, `automaticVercelMonitors` Sentry rewiring, `maxDuration` route-export deletion, `VERCEL_ENV`/`VERCEL_URL` audit (13 files → `BOARDSESH_ENV` / `BOARDSESH_BASE_URL`), preview CORS regex update, rate-limiter Redis backing, OG cache-warming URL source, CI preview env signal, `vercel.json` deletion, sleeper `user-sync-cron` resolution, `output: 'standalone'` removal, `unstable_cache`/`revalidateTag` replacement, redirects/headers/transpilePackages port, WASM bundling verification, Sentry tunnel route port, SWC GraphQL codegen plugin replacement.
-- Five new risk rows: PostHog cost, ingest WAF, cron monitor regression, analytics historical data loss, rate-limiter step change.
-- Phase 0a reframed as "4-week hosting cutover + parallel ~2-week analytics/platform sub-track on the same wall-clock."
+- Drop the Vite + TanStack Start migration (Phase 1 from v9.x)
+- Drop the Vercel-to-Railway hosting migration for web (Phase 0a from v9.x)
+- Drop the NextAuth-to-arctic+lucia auth migration for web (Phase 0c from v9.x)
+- Replace `mobile/` Capacitor project with `packages/mobile/` Expo project
+- Extract shared business logic to `packages/shared/` (BLE protocol, queue reducer, board config)
+- Timeline reduced from ~37 weeks (v9.x) to ~20 weeks
+- Keep Next.js on Vercel for web, unchanged
 
-**v9.1.** Adds the migration cutover strategy and explicit hosted-mode Capacitor compatibility:
+**v9.2.** PostHog migration sub-plan, Vercel platform inventory gaps.
 
-- Migration runs through `beta.boardsesh.com` rather than Cloudflare path-based traffic splitting. Single atomic DNS flip at the end of Phase 1, not a gradual route-by-route move.
-- Hosted-mode Capacitor compatibility is now a formal Phase 1 deliverable, with a per-bridge inventory and a nightly integration test suite at `mobile/integration-tests/` that runs the existing Capacitor shell against the beta URL on iOS Simulator + Android emulator.
-- Auth cookie shim added to Phase 0c: lucia accepts NextAuth cookies for a 90-day overlap and upgrades them in place, so existing logged-in web users (and hosted-mode native users) don't get logged out at cutover.
-- IndexedDB compatibility verification pass added to the Settings batch: the Vite app must open existing `*-db.ts` data correctly since it inherits the same origin storage.
-- Bundled-mode iOS rollout (Phase 2) is explicitly decoupled from the Phase 1 cutover: existing hosted-mode shells continue to work indefinitely on cookie auth.
+**v9.1.** Beta subdomain migration strategy, hosted-mode Capacitor compatibility.
 
-**v9.0.** Committed to migrating from Next.js to Vite + TanStack Start, self-hosting on Railway (no Vercel), and replacing NextAuth with arctic + lucia. New Phase 0c (auth migration, 4 weeks parallel to 0a/0b). New Phase 1 framework migration (~14 weeks). Critical path ~9 months calendar best case, 9–14 months realistic. Carried forward from v8.0: pinned user story, query router shape contract, mutation queue idempotency, refdata SQLite measurement spike, App Store Plan B, remote-config kill switch, single WebView with client routing.
+**v9.0 — superseded by v10.0.** Committed to Vite + TanStack Start, Railway self-hosting, arctic + lucia auth. 14-week framework migration. 37-week critical path.
 
-**v8.0 — superseded by v9.0.** Same offline-first direction, but kept Next.js with a dual-build (`pageExtensions`) mechanism. Workable but ugly forever. v9.0 deletes that constraint by changing frameworks.
-
-**v7.0 and earlier — see git history of this file.**
+**v8.0 and earlier — see git history of this file.**
