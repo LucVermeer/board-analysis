@@ -62,6 +62,10 @@ Both `/auth/native/exchange` and `/auth/native/refresh` share an IP-based rate l
 
 Expired entries are cleaned up every 60 seconds.
 
+The `/auth/native/revoke` endpoint is exempt from rate limiting because it requires a valid refresh token (a secret) and exempting it prevents aggressive retry loops from locking a user out of sign-out.
+
+> **Note:** Rate limiting is per-instance. With N backend instances behind a load balancer, the effective limit is 10 x N requests per minute per IP. The high-risk replay prevention path uses Redis and is multi-instance safe.
+
 ## Transfer token replay prevention
 
 After a transfer token is verified, its signature is stored in an in-memory `Map<string, number>` keyed by the base64url signature portion of the token, with the consumption timestamp as the value.
@@ -180,10 +184,9 @@ Revoke all refresh tokens for the user associated with the submitted token (full
 |--------|--------------------------------------------|--------------------------------------------|
 | 400    | `{ "error": "refreshToken is required" }`  | Missing or empty `refreshToken`            |
 | 401    | `{ "error": "Invalid refresh token" }`     | Unknown or already-revoked token           |
-| 429    | `{ "error": "Rate limit exceeded..." }`    | IP rate limit hit                          |
-| 503    | `{ "error": "Service temporarily overloaded" }` | Internal map capacity exceeded       |
 
 ## Known limitations
 
 - **JWTs cannot be revoked before expiry (7-day window).** Once issued, a JWT is valid until it expires. If a JWT is stolen, it can be used for up to 7 days. Mitigation: short lifetime (7 days instead of 30) combined with refresh token rotation means the window is bounded and a revoke call invalidates future refreshes immediately.
+- **Token validation results are cached for up to 60 seconds.** Successful validation results are cached in-process for up to 60 seconds. A revoked JWT may continue to authenticate for up to 60 seconds after revocation. This is standard for JWT-based systems and is the trade-off for avoiding cryptographic verification on every request. Failed validations are not cached, so transient errors (e.g. secret unset during restart) resolve as soon as the underlying issue is fixed.
 - **Rate limiting is per-instance when not behind a single proxy.** The IP-based rate limiter uses an in-memory map, so each backend instance maintains its own counters. In a multi-instance deployment without a shared proxy, an attacker could spread requests across instances to exceed the intended limit. Mitigation: Redis-backed replay prevention covers the highest-risk path (transfer token exchange), and refresh token rotation is inherently safe against replay.

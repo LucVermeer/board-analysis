@@ -11,6 +11,13 @@ import { logger } from '../utils/logger';
 /** Clock skew tolerance when verifying transfer token expiry (seconds). */
 const CLOCK_SKEW_TOLERANCE_SECONDS = 5;
 
+/**
+ * Maximum allowed lifetime for a transfer token (seconds).
+ * Transfer tokens are intended to live 120s. This cap (120s + 5s tolerance)
+ * prevents a compromised web issuer from embedding an arbitrarily long exp.
+ */
+const MAX_TRANSFER_TOKEN_LIFETIME_SECONDS = 125;
+
 /** JWT lifetime for mobile sessions. */
 const JWT_EXPIRY = '7d';
 const JWT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
@@ -291,6 +298,12 @@ function verifyTransferToken(token: string): { userId: string } | null {
     return null;
   }
 
+  // Reject tokens with an unreasonably long lifetime (e.g. a compromised
+  // web issuer embedding a far-future exp).
+  if (payload.exp - payload.iat > MAX_TRANSFER_TOKEN_LIFETIME_SECONDS) {
+    return null;
+  }
+
   return { userId: payload.userId };
 }
 
@@ -515,18 +528,9 @@ export async function handleNativeAuthRevoke(req: IncomingMessage, res: ServerRe
     return;
   }
 
-  // Rate limit by IP
-  const clientIp = getClientIp(req);
-  const retryAfter = checkAuthRateLimit(clientIp);
-  if (retryAfter === -1) {
-    sendJson(res, 503, { error: 'Service temporarily overloaded' });
-    return;
-  }
-  if (retryAfter !== null) {
-    res.setHeader('Retry-After', String(retryAfter));
-    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
-    return;
-  }
+  // No rate limiting for revoke — the endpoint requires a valid refresh token
+  // (a secret), so it's already gated. Exempting it prevents aggressive retry
+  // loops from locking a user out of sign-out.
 
   let body: unknown;
   try {

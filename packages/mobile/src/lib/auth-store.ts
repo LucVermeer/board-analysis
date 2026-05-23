@@ -18,11 +18,9 @@ export async function getTokenExpiresAt(): Promise<Date | null> {
 }
 
 export async function storeTokens(jwt: string, refreshToken: string, expiresAt: string): Promise<void> {
-  await Promise.all([
-    SecureStore.setItemAsync(JWT_KEY, jwt),
-    SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken),
-    SecureStore.setItemAsync(EXPIRES_AT_KEY, expiresAt),
-  ]);
+  await SecureStore.setItemAsync(JWT_KEY, jwt);
+  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+  await SecureStore.setItemAsync(EXPIRES_AT_KEY, expiresAt);
 }
 
 export async function clearTokens(): Promise<void> {

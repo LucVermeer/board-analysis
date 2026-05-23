@@ -4,9 +4,9 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "start": "npx expo start",
-    "ios": "npx expo run:ios",
-    "android": "npx expo run:android",
+    "start": "bunx expo start",
+    "ios": "bunx expo run:ios",
+    "android": "bunx expo run:android",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
