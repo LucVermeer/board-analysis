@@ -35,6 +35,21 @@ import { endLiveActivity } from '../../../services/apns';
 import { setCurrentClimbAndPublish } from '../../../services/queue-navigation';
 
 /**
+ * Queue-control-bar pivot — `isLeader` audit (2026-05-23):
+ * Confirmed that no `isLeader` / `leaderId` / `leaderConnectionId` /
+ * `LeaderChanged` site in this file gates wall-control. The only
+ * authorization use is `endSession` (line 870), which checks
+ * `isCreator || isLeader` to authorize SESSION TERMINATION — not driver /
+ * wall-control. Every other `isLeader` reference here is presentation:
+ * passed back through the `Session.isLeader` field so clients can show the
+ * legacy host-crown badge without a refetch. Wall-control authority lives
+ * exclusively on `driverParticipantId` (added in PR #2198) and is gated by
+ * `takeControl` / `releaseControl`. Web, iOS, and shared-schema searches
+ * also turned up nothing wall-control-gated by `isLeader`. See
+ * `docs/queue-control-bar-pivot.md` (What shipped vs spec) for details.
+ */
+
+/**
  * Auto-authorize all controllers owned by a user for a session.
  * Called when user joins a session to allow their ESP32 devices to connect.
  */

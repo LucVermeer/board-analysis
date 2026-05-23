@@ -219,10 +219,18 @@
     "editClimb": "Modifier ce bloc",
     "addedViaBluetooth": "Ajouté via Bluetooth",
     "nextUpHeader": "À suivre",
-    "endMessage": "C'est tout pour l'instant"
+    "endMessage": "C'est tout pour l'instant",
+    "showFullHistory_one": "Afficher l'historique complet ({{count}} de plus)",
+    "showFullHistory_other": "Afficher l'historique complet ({{count}} de plus)",
+    "tickHistoryClimb": "Enregistrer une croix pour {{name}}"
   },
   "queueProvider": {
     "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."
+  },
+  "driverToast": {
+    "firstDriver": "{{newDriver}} pilote le mur.",
+    "tookFromOther": "{{newDriver}} a pris le mur à {{previousDriver}}.",
+    "tookFromYou": "{{newDriver}} t'a pris le mur."
   },
   "playView": {
     "onWallChip": "SUR LE MUR · {{username}}",

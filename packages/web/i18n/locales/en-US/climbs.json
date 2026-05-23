@@ -277,8 +277,8 @@
       }
     },
     "navigation": {
-      "nextClimb": "Next climb",
-      "previousClimb": "Previous climb"
+      "nextClimb": "Next climb on the wall",
+      "previousClimb": "Previous climb on the wall"
     },
     "mirror": {
       "label": {

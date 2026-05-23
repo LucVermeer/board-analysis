@@ -271,8 +271,8 @@
       }
     },
     "navigation": {
-      "nextClimb": "Bloque siguiente",
-      "previousClimb": "Bloque anterior"
+      "nextClimb": "Bloque siguiente en la pared",
+      "previousClimb": "Bloque anterior en la pared"
     },
     "mirror": {
       "label": {

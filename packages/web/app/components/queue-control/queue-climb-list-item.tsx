@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next';
 import MuiTooltip from '@mui/material/Tooltip';
 import MuiAvatar from '@mui/material/Avatar';
+import MuiBadge from '@mui/material/Badge';
 import MuiCheckbox from '@mui/material/Checkbox';
 import MuiIconButton from '@mui/material/IconButton';
 import MuiStack from '@mui/material/Stack';
@@ -22,6 +23,8 @@ import ClimbListItem, { type SwipeActionOverride } from '../climb-card/climb-lis
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import { themeTokens } from '@/app/theme/theme-config';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
+import { TickIcon } from '../logbook/tick-icon';
+import { useOptionalBoardProvider } from '../board-provider/board-provider-context';
 
 type QueueClimbListItemProps = {
   item: ClimbQueueItem;
@@ -101,27 +104,81 @@ const QueueClimbListItem: React.FC<QueueClimbListItemProps> = ({
     [onEditClimb, item.climb],
   );
 
-  // "Added by" avatar slot (plus an Edit affordance for editable climbs)
-  const afterTitleSlot = useMemo(() => {
-    const avatarStyle = { width: 24, height: 24 };
-    const avatarBluetoothStyle = { width: 24, height: 24, backgroundColor: 'transparent' };
-
-    const avatar = item.addedByUser ? (
-      <MuiTooltip title={item.addedByUser.username}>
-        <MuiAvatar sx={avatarStyle} src={item.addedByUser.avatarUrl ?? undefined}>
-          <PersonOutlined />
-        </MuiAvatar>
-      </MuiTooltip>
-    ) : (
-      <MuiTooltip title={t('queueList.addedViaBluetooth')}>
-        <MuiAvatar sx={avatarBluetoothStyle}>
-          <BluetoothIcon style={{ color: 'var(--neutral-400)' }} />
-        </MuiAvatar>
-      </MuiTooltip>
+  // Per-climb ascent counts for the history-row tick badge. Uses the optional
+  // BoardProvider hook because queue rows render in surfaces (e.g. the list
+  // view route) that aren't always wrapped in one — fall through to no badge
+  // rather than throwing.
+  const logbook = useOptionalBoardProvider()?.logbook ?? [];
+  const { badgeCount, hasSuccessfulAscent } = useMemo(() => {
+    const filtered = logbook.filter(
+      (ascent) => ascent.climb_uuid === item.climb.uuid && Number(ascent.angle) === item.climb.angle,
     );
+    return {
+      badgeCount: filtered.length,
+      hasSuccessfulAscent: filtered.some((ascent) => ascent.is_ascent),
+    };
+  }, [logbook, item.climb.uuid, item.climb.angle]);
+
+  const handleTickButtonClick = useCallback(
+    (event: React.MouseEvent) => {
+      // Stop bubbling so the row's double-tap-to-set-current handler doesn't
+      // re-broadcast a history climb when the user just wants to log a tick.
+      event.stopPropagation();
+      onTickClick(item.climb);
+    },
+    [onTickClick, item.climb],
+  );
+
+  // After-title slot: history rows get the canonical tick button (same
+  // TickIcon + MuiBadge styling as `TickButton` in the queue control bar);
+  // current + upcoming rows keep the "added by" avatar so attribution stays
+  // visible while the climb is still in the queue.
+  const afterTitleSlot = useMemo(() => {
+    let trailing: React.ReactNode;
+    if (isHistory) {
+      trailing = (
+        <MuiTooltip title={t('queueList.tickHistoryClimb', { name: item.climb.name })}>
+          <MuiBadge
+            badgeContent={badgeCount > 0 ? badgeCount : 0}
+            max={100}
+            sx={{
+              '& .MuiBadge-badge': {
+                backgroundColor: hasSuccessfulAscent ? themeTokens.colors.success : themeTokens.colors.error,
+                color: 'common.white',
+              },
+            }}
+          >
+            <MuiIconButton
+              size="small"
+              onClick={handleTickButtonClick}
+              aria-label={t('queueList.tickHistoryClimb', { name: item.climb.name })}
+              sx={{ width: 24, height: 24, opacity: themeTokens.opacity.subtle }}
+            >
+              <TickIcon isFlash={false} />
+            </MuiIconButton>
+          </MuiBadge>
+        </MuiTooltip>
+      );
+    } else {
+      const avatarStyle = { width: 24, height: 24 };
+      const avatarBluetoothStyle = { width: 24, height: 24, backgroundColor: 'transparent' };
+      trailing = item.addedByUser ? (
+        <MuiTooltip title={item.addedByUser.username}>
+          <MuiAvatar sx={avatarStyle} src={item.addedByUser.avatarUrl ?? undefined}>
+            <PersonOutlined />
+          </MuiAvatar>
+        </MuiTooltip>
+      ) : (
+        <MuiTooltip title={t('queueList.addedViaBluetooth')}>
+          <MuiAvatar sx={avatarBluetoothStyle}>
+            <BluetoothIcon style={{ color: 'var(--neutral-400)' }} />
+          </MuiAvatar>
+        </MuiTooltip>
+      );
+    }
 
     if (!isEditable || !onEditClimb) {
-      return avatar;
+      return trailing;
     }
 
     return (
@@ -131,10 +188,21 @@ const QueueClimbListItem: React.FC<QueueClimbListItemProps> = ({
             <EditOutlined sx={{ fontSize: 16 }} />
           </MuiIconButton>
         </MuiTooltip>
-        {avatar}
+        {trailing}
       </MuiStack>
     );
-  }, [item.addedByUser, isEditable, onEditClimb, handleEditClick, t]);
+  }, [
+    isHistory,
+    item.addedByUser,
+    item.climb.name,
+    badgeCount,
+    hasSuccessfulAscent,
+    handleTickButtonClick,
+    isEditable,
+    onEditClimb,
+    handleEditClick,
+    t,
+  ]);
 
   // onSelect handler — double-tap sets current climb
   const handleSelect = useCallback(() => {

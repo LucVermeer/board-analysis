@@ -116,6 +116,7 @@ vi.mock('@/app/theme/theme-config', () => ({
     spacing: { 0: 0, 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 16: 64 },
     colors: { error: '#B8524C', primary: '#8C4A52', success: '#6B9080' },
     neutral: { 200: '#E5E7EB', 400: '#9CA3AF', 500: '#6B7280' },
+    opacity: { subtle: 0.6 },
     typography: {
       fontSize: { xs: 12, sm: 14, base: 16, xl: 20, '2xl': 24 },
       fontWeight: { normal: 400, semibold: 600, bold: 700 },
@@ -226,6 +227,53 @@ describe('QueueClimbListItem', () => {
       // Should render an SVG bluetooth icon (the custom BluetoothIcon component)
       const svg = document.querySelector('svg');
       expect(svg).toBeTruthy();
+    });
+  });
+
+  describe('history-row tick button', () => {
+    it('renders the tick button in place of the avatar for history rows', () => {
+      const props = defaultProps();
+      props.item = makeQueueItem({
+        addedByUser: { id: 'user-1', username: 'alice', avatarUrl: 'https://example.com/alice.jpg' },
+      });
+      render(<QueueClimbListItem {...props} isHistory />);
+
+      // Tick button is reachable via aria-label
+      const tick = screen.getByRole('button', { name: /Log a tick for/i });
+      expect(tick).toBeTruthy();
+      // Avatar img is no longer rendered for history rows
+      expect(screen.queryByRole('img')).toBeNull();
+    });
+
+    it('calls onTickClick with the climb when the history-row tick is pressed', () => {
+      const props = defaultProps();
+      render(<QueueClimbListItem {...props} isHistory />);
+
+      const tick = screen.getByRole('button', { name: /Log a tick for/i });
+      fireEvent.click(tick);
+
+      expect(props.onTickClick).toHaveBeenCalledWith(props.item.climb);
+    });
+
+    it('does not bubble the tick click up to the row select handler', () => {
+      const props = defaultProps();
+      render(<QueueClimbListItem {...props} isHistory />);
+
+      const tick = screen.getByRole('button', { name: /Log a tick for/i });
+      fireEvent.click(tick);
+
+      expect(props.setCurrentClimbQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('keeps the avatar (not the tick button) for non-history rows', () => {
+      const props = defaultProps();
+      props.item = makeQueueItem({
+        addedByUser: { id: 'user-1', username: 'alice', avatarUrl: 'https://example.com/alice.jpg' },
+      });
+      render(<QueueClimbListItem {...props} isHistory={false} />);
+
+      expect(screen.queryByRole('button', { name: /Log a tick for/i })).toBeNull();
+      expect(screen.getByRole('img').getAttribute('src')).toBe('https://example.com/alice.jpg');
     });
   });
 

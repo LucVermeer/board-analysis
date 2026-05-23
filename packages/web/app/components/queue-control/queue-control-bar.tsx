@@ -362,33 +362,70 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     if (!nextClimb || viewOnlyMode) return;
 
     setCurrentClimbQueueItem(nextClimb);
+    const boardLayout = boardDetails?.layout_name || '';
     track('Queue Navigation', {
       direction: 'next',
       method: 'swipeQueueBar',
-      boardLayout: boardDetails?.layout_name || '',
+      boardLayout,
+    });
+    // Pivot Phase 5: bar swipe is a broadcast advance just like the bar
+    // button. Same semantics — anyone in the session can swipe; the presser
+    // stays in their current role.
+    track('Wall Advance', {
+      source: 'bar_swipe',
+      pressedByRole: isPersistentSessionActive && !isDriver ? 'non_driver' : 'driver',
+      direction: 'next',
+      mode: isPersistentSessionActive ? 'party' : 'solo',
+      boardLayout,
     });
 
     if (isPlayPage) {
       const url = buildClimbUrl(nextClimb.climb);
       if (url) window.history.pushState(null, '', url);
     }
-  }, [nextClimb, viewOnlyMode, setCurrentClimbQueueItem, buildClimbUrl, boardDetails, isPlayPage]);
+  }, [
+    nextClimb,
+    viewOnlyMode,
+    setCurrentClimbQueueItem,
+    buildClimbUrl,
+    boardDetails,
+    isPlayPage,
+    isPersistentSessionActive,
+    isDriver,
+  ]);
 
   const handleSwipePrevious = useCallback(() => {
     if (!previousClimb || viewOnlyMode) return;
 
     setCurrentClimbQueueItem(previousClimb);
+    const boardLayout = boardDetails?.layout_name || '';
     track('Queue Navigation', {
       direction: 'previous',
       method: 'swipeQueueBar',
-      boardLayout: boardDetails?.layout_name || '',
+      boardLayout,
+    });
+    track('Wall Advance', {
+      source: 'bar_swipe',
+      pressedByRole: isPersistentSessionActive && !isDriver ? 'non_driver' : 'driver',
+      direction: 'previous',
+      mode: isPersistentSessionActive ? 'party' : 'solo',
+      boardLayout,
     });
 
     if (isPlayPage) {
       const url = buildClimbUrl(previousClimb.climb);
       if (url) window.history.pushState(null, '', url);
     }
-  }, [previousClimb, viewOnlyMode, setCurrentClimbQueueItem, buildClimbUrl, boardDetails, isPlayPage]);
+  }, [
+    previousClimb,
+    viewOnlyMode,
+    setCurrentClimbQueueItem,
+    buildClimbUrl,
+    boardDetails,
+    isPlayPage,
+    isPersistentSessionActive,
+    isDriver,
+  ]);
 
   const tickBarActive = activeDrawer === 'tick';
   const canSwipeNext = !viewOnlyMode && !!nextClimb && !tickBarActive;

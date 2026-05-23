@@ -141,8 +141,11 @@ describe('recomputeClimbStats', () => {
     // Hard invariants the delete-last-tick path depends on:
     // 1. boardsesh_ascensionist_count defaults to 0 when no senders remain.
     expect(sql).toMatch(/boardsesh_ascensionist_count\s*=\s*COALESCE\(agg\.distinct_senders,\s*0\)/);
-    // 2. ascensionist_count is the materialized sum (defaulted to 0 on each side).
+    // 2. ascensionist_count is the materialized sum across all three writers
+    //    (Aurora, Kilter, Boardsesh), each defaulted to 0 so the sum never
+    //    NULLs out even when a board hasn't synced its column yet.
     expect(sql).toContain('COALESCE(s.aurora_ascensionist_count, 0)');
+    expect(sql).toContain('COALESCE(s.kilter_ascensionist_count, 0)');
     expect(sql).toContain('COALESCE(agg.distinct_senders, 0)');
     // 3. The ticks filter is sargable — predicate on WHERE, not FILTER.
     expect(sql).toMatch(/WHERE[\s\S]*bt\.status IN \('flash','send'\)/);
