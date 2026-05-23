@@ -66,27 +66,39 @@ describe('isMoonboardDeviceName', () => {
 describe('getMoonboardBluetoothPacket', () => {
   it('produces correct output format for a single hold', () => {
     // Role 42 = 'S' (start), placement 1 -> serial position 0
-    const packet = getMoonboardBluetoothPacket('p1r42');
-    const decoded = new TextDecoder().decode(packet);
+    const result = getMoonboardBluetoothPacket('p1r42');
+    const decoded = new TextDecoder().decode(result.packet);
     expect(decoded).toBe('l#S0#');
   });
 
   it('produces correct output for multiple holds', () => {
     // Role 42='S', 43='P', 44='E'
     // placement 1 -> position 0, placement 2 -> position 35
-    const packet = getMoonboardBluetoothPacket('p1r42p2r43');
-    const decoded = new TextDecoder().decode(packet);
+    const result = getMoonboardBluetoothPacket('p1r42p2r43');
+    const decoded = new TextDecoder().decode(result.packet);
     expect(decoded).toBe('l#S0,P35#');
   });
 
   it('includes end hold type', () => {
     // Role 44='E', placement 198 -> position 197
-    const packet = getMoonboardBluetoothPacket('p198r44');
-    const decoded = new TextDecoder().decode(packet);
+    const result = getMoonboardBluetoothPacket('p198r44');
+    const decoded = new TextDecoder().decode(result.packet);
     expect(decoded).toBe('l#E197#');
   });
 
-  it('throws for unsupported role code', () => {
-    expect(() => getMoonboardBluetoothPacket('p1r99')).toThrow('Unsupported MoonBoard hold state code');
+  it('skips unsupported role codes gracefully', () => {
+    const result = getMoonboardBluetoothPacket('p1r99');
+    const decoded = new TextDecoder().decode(result.packet);
+    expect(decoded).toBe('l##');
+    expect(result.skippedRoleCount).toBe(1);
+  });
+
+  it('encodes valid holds and skips invalid role codes', () => {
+    // role 42='S' is valid, role 99 is invalid
+    const result = getMoonboardBluetoothPacket('p1r42p2r99');
+    const decoded = new TextDecoder().decode(result.packet);
+    expect(decoded).toBe('l#S0#');
+    expect(result.skippedRoleCount).toBe(1);
+    expect(result.totalPlacements).toBe(2);
   });
 });

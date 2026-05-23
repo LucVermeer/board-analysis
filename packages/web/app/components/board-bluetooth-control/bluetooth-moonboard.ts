@@ -3,6 +3,7 @@ export {
   isMoonboardDeviceName,
   getMoonboardSerialPosition,
   getMoonboardBluetoothPacket,
+  type MoonboardPacketResult,
 } from '@boardsesh/ble-protocol/moonboard';
 
 import { UART_SERVICE_UUID } from '@boardsesh/ble-protocol/transport';

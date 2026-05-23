@@ -1,6 +1,9 @@
 import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
-import { AURORA_BOARDS, type AuroraBoardName, type HoldState } from '@boardsesh/shared-schema';
 import { MESSAGE_BODY_MAX_LENGTH } from './transport';
+
+export const AURORA_BOARDS = ['kilter', 'tension', 'decoy', 'touchstone', 'grasshopper', 'soill'] as const;
+export type AuroraBoardName = (typeof AURORA_BOARDS)[number];
+export type HoldState = 'OFF' | 'STARTING' | 'FINISH' | 'HAND' | 'FOOT' | 'ANY' | 'NOT' | 'AUX';
 
 /** LED placement positions: maps placement ID to LED position index. */
 export type LedPlacements = Record<number, number>;

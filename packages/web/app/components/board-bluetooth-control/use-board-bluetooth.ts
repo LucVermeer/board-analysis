@@ -212,7 +212,7 @@ export function useBoardBluetooth({
           // empty frame string — skip the write rather than send a malformed
           // packet to the board.
           if (!frames) return;
-          const bluetoothPacket = getMoonboardBluetoothPacket(frames);
+          const { packet: bluetoothPacket } = getMoonboardBluetoothPacket(frames);
           await adapterRef.current.write(bluetoothPacket, signal);
           void incrementBluetoothSends().then(maybeFireFeedbackPromptEvent);
           return true;

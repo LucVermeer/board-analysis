@@ -174,7 +174,6 @@
       "version": "1.0.0",
       "dependencies": {
         "@boardsesh/board-constants": "*",
-        "@boardsesh/shared-schema": "*",
       },
       "devDependencies": {
         "typescript": "^5.9.3",
@@ -183,9 +182,6 @@
     "packages/shared/queue": {
       "name": "@boardsesh/queue",
       "version": "1.0.0",
-      "dependencies": {
-        "@boardsesh/shared-schema": "*",
-      },
       "devDependencies": {
         "typescript": "^5.9.3",
       },
