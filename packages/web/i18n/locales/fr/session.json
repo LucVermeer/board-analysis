@@ -227,6 +227,7 @@
   "playView": {
     "onWallChip": "SUR LE MUR · {{username}}",
     "onWallChipNoDriver": "SUR LE MUR",
+    "drivingChip": "AU CONTRÔLE",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Aperçu. Touche l'ampoule pour envoyer au mur.",
     "yourAscents_one": "Ton ascension ({{count}})",

@@ -227,6 +227,7 @@
   "playView": {
     "onWallChip": "EN EL MURO · {{username}}",
     "onWallChipNoDriver": "EN EL MURO",
+    "drivingChip": "AL MANDO",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Vista previa. Toca la bombilla para enviar al muro.",
     "yourAscents_one": "Tu ascenso ({{count}})",

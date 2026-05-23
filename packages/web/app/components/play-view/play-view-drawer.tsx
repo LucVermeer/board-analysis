@@ -1311,6 +1311,29 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     if (!currentClimb) return null;
     return (
       <>
+        {isDriver && isPersistentSessionActive && currentClimbQueueItem != null && (
+          // Driver chip: counterpart to the non-driver ON WALL chip below.
+          // Sits in the same slot at the top of the drawer so both roles get
+          // the same anchoring cue — for the driver, the cue is "your taps
+          // here move the wall."
+          <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, pt: 1 }}>
+            <MuiChip
+              size="small"
+              variant="outlined"
+              color="warning"
+              role="status"
+              icon={<Lightbulb sx={{ fontSize: 14, color: themeTokens.colors.warning }} aria-hidden="true" />}
+              label={t('playView.drivingChip')}
+              sx={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                maxWidth: '100%',
+                '& .MuiChip-label': { px: 0.75 },
+              }}
+            />
+          </Box>
+        )}
         {showWallContextChip && wallClimb && (
           // Wall-context chip: always visible for a non-driver in a party
           // session while the drawer is open, so the wall-climb identity is
@@ -1523,6 +1546,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     t,
     isPersistentSessionActive,
     isBluetoothConnected,
+    currentClimbQueueItem,
     driverUser,
     showWallContextChip,
     driftedFromWall,
