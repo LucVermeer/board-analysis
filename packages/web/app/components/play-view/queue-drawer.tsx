@@ -35,9 +35,12 @@ export type QueueDrawerProps = {
   onTransitionEnd?: (open: boolean) => void;
   boardDetails: BoardDetails;
   /**
-   * When true, history (climbs queued before the current one) is visible on
-   * mount. Useful for the onboarding tour so the user sees every climb they
-   * queued regardless of which one is currently active.
+   * Controls whether history is rendered when the drawer mounts. Defaults to
+   * true so the queue-control-bar pivot's three-region layout (History /
+   * Current / Up next) shows out of the box — the 5-item cap + "Show full
+   * history" toggle inside QueueList handle the long-tail UX. The history
+   * icon button in the drawer header still lets users collapse history if
+   * they want a queue-only view.
    */
   initialShowHistory?: boolean;
 };
@@ -47,7 +50,7 @@ const QueueDrawer: React.FC<QueueDrawerProps> = ({
   onClose,
   onTransitionEnd,
   boardDetails,
-  initialShowHistory = false,
+  initialShowHistory = true,
 }) => {
   const { t } = useTranslation('session');
   // Internal state
@@ -97,9 +100,11 @@ const QueueDrawer: React.FC<QueueDrawerProps> = ({
   const closeDrawer = useCallback(() => {
     setIsEditMode(false);
     setSelectedItems(new Set());
-    setShowHistory(false);
+    // Match the new mount default — next open starts with history visible
+    // and the 5-item cap active (via QueueList's internal showFullHistory).
+    setShowHistory(initialShowHistory);
     onClose();
-  }, [onClose]);
+  }, [onClose, initialShowHistory]);
 
   const { paperRef: queuePaperRef, dragHandlers } = useDrawerDragResize({
     open,
