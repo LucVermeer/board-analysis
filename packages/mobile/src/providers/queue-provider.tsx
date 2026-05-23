@@ -1,0 +1,292 @@
+import {
+  createContext,
+  useContext,
+  useReducer,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from 'react';
+import { queueReducer, initialState } from '@boardsesh/queue';
+import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from '@boardsesh/queue';
+import { getWsClient } from '../lib/graphql/ws-client';
+import { QUEUE_UPDATES_SUBSCRIPTION } from '../lib/graphql/operations';
+
+type QueueContextValue = {
+  state: QueueState;
+  dispatch: React.Dispatch<QueueAction>;
+  sessionId: string | null;
+  setSessionId: (id: string | null) => void;
+  addToQueue: (item: ClimbQueueItem) => void;
+  removeFromQueue: (uuid: string) => void;
+  setCurrentClimb: (item: ClimbQueueItem) => void;
+  nextClimb: () => void;
+  previousClimb: () => void;
+};
+
+const QueueContext = createContext<QueueContextValue | null>(null);
+
+export function useQueue(): QueueContextValue {
+  const context = useContext(QueueContext);
+  if (!context) throw new Error('useQueue must be used within QueueProvider');
+  return context;
+}
+
+const defaultSearchParams: QueueSearchParams = {};
+
+// -- Subscription event types matching the QUEUE_UPDATES_SUBSCRIPTION shape --
+
+type SubscriptionClimb = {
+  uuid: string;
+  name: string;
+  frames: string;
+};
+
+type SubscriptionQueueItem = {
+  uuid: string;
+  climb: SubscriptionClimb;
+};
+
+type FullSyncEvent = {
+  __typename: 'FullSync';
+  sequence: number;
+  state: {
+    sequence: number;
+    stateHash: string;
+    queue: SubscriptionQueueItem[];
+    currentClimbQueueItem: SubscriptionQueueItem | null;
+  };
+};
+
+type QueueItemAddedEvent = {
+  __typename: 'QueueItemAdded';
+  sequence: number;
+  stateHash: string;
+  item: SubscriptionQueueItem;
+  position: number | null;
+};
+
+type QueueItemRemovedEvent = {
+  __typename: 'QueueItemRemoved';
+  sequence: number;
+  stateHash: string;
+  uuid: string;
+};
+
+type CurrentClimbChangedEvent = {
+  __typename: 'CurrentClimbChanged';
+  sequence: number;
+  stateHash: string;
+  item: SubscriptionQueueItem | null;
+};
+
+type QueueUpdateEvent = FullSyncEvent | QueueItemAddedEvent | QueueItemRemovedEvent | CurrentClimbChangedEvent;
+
+/**
+ * Convert a subscription queue item to a ClimbQueueItem compatible with the
+ * shared reducer. The subscription only sends a subset of climb fields
+ * (uuid, name, frames), so we fill in defaults for the rest.
+ */
+function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): ClimbQueueItem {
+  return {
+    uuid: subscriptionItem.uuid,
+    climb: {
+      uuid: subscriptionItem.climb.uuid,
+      name: subscriptionItem.climb.name,
+      frames: subscriptionItem.climb.frames,
+      setter_username: '',
+      angle: 0,
+      ascensionist_count: 0,
+      difficulty: '',
+      quality_average: '',
+      stars: 0,
+      difficulty_error: '',
+      benchmark_difficulty: null,
+    },
+  };
+}
+
+export function QueueProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Subscribe to queue updates when a session is active
+  useEffect(() => {
+    if (!sessionId) {
+      // Tear down any existing subscription
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+      return;
+    }
+
+    const wsClient = getWsClient();
+
+    // Use the graphql-ws subscribe API
+    const cleanup = wsClient.subscribe<{ queueUpdates: QueueUpdateEvent }>(
+      {
+        query: QUEUE_UPDATES_SUBSCRIPTION,
+        variables: { sessionId },
+      },
+      {
+        next: ({ data }) => {
+          if (!data?.queueUpdates) return;
+          const event = data.queueUpdates;
+
+          switch (event.__typename) {
+            case 'FullSync': {
+              const queueItems = event.state.queue.map(toClimbQueueItem);
+              const currentItem = event.state.currentClimbQueueItem
+                ? toClimbQueueItem(event.state.currentClimbQueueItem)
+                : null;
+
+              dispatch({
+                type: 'INITIAL_QUEUE_DATA',
+                payload: {
+                  queue: queueItems,
+                  currentClimbQueueItem: currentItem,
+                },
+              });
+              break;
+            }
+
+            case 'QueueItemAdded': {
+              const addedItem = toClimbQueueItem(event.item);
+              dispatch({
+                type: 'DELTA_ADD_QUEUE_ITEM',
+                payload: {
+                  item: addedItem,
+                  position: event.position ?? undefined,
+                },
+              });
+              break;
+            }
+
+            case 'QueueItemRemoved': {
+              dispatch({
+                type: 'DELTA_REMOVE_QUEUE_ITEM',
+                payload: { uuid: event.uuid },
+              });
+              break;
+            }
+
+            case 'CurrentClimbChanged': {
+              const changedItem = event.item ? toClimbQueueItem(event.item) : null;
+              dispatch({
+                type: 'DELTA_UPDATE_CURRENT_CLIMB',
+                payload: {
+                  item: changedItem,
+                  isServerEvent: true,
+                  shouldAddToQueue: true,
+                },
+              });
+              break;
+            }
+          }
+        },
+        error: (error) => {
+          console.error('[QueueProvider] Subscription error:', error);
+        },
+        complete: () => {
+          // Subscription ended (server closed it, session ended, etc.)
+        },
+      },
+    );
+
+    unsubscribeRef.current = cleanup;
+
+    return () => {
+      cleanup();
+      unsubscribeRef.current = null;
+    };
+  }, [sessionId]);
+
+  const addToQueue = useCallback(
+    (item: ClimbQueueItem) => {
+      // Optimistic local dispatch
+      dispatch({ type: 'ADD_TO_QUEUE', payload: item });
+
+      // TODO: Send mutation to server when mutation operations are wired up
+    },
+    [],
+  );
+
+  const removeFromQueue = useCallback(
+    (uuid: string) => {
+      dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+
+      // TODO: Send mutation to server when mutation operations are wired up
+    },
+    [],
+  );
+
+  const setCurrentClimb = useCallback(
+    (item: ClimbQueueItem) => {
+      dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: {
+          item,
+          shouldAddToQueue: true,
+          isServerEvent: false,
+        },
+      });
+
+      // TODO: Send mutation to server when mutation operations are wired up
+    },
+    [],
+  );
+
+  const nextClimb = useCallback(() => {
+    const { queue, currentClimbQueueItem } = state;
+    if (queue.length === 0) return;
+
+    if (!currentClimbQueueItem) {
+      // No current climb: go to the first item
+      dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: { item: queue[0], isServerEvent: false },
+      });
+      return;
+    }
+
+    const currentIndex = queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
+    const nextIndex = currentIndex + 1;
+
+    if (nextIndex < queue.length) {
+      dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: { item: queue[nextIndex], isServerEvent: false },
+      });
+    }
+  }, [state]);
+
+  const previousClimb = useCallback(() => {
+    const { queue, currentClimbQueueItem } = state;
+    if (queue.length === 0 || !currentClimbQueueItem) return;
+
+    const currentIndex = queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
+    const prevIndex = currentIndex - 1;
+
+    if (prevIndex >= 0) {
+      dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: { item: queue[prevIndex], isServerEvent: false },
+      });
+    }
+  }, [state]);
+
+  const contextValue: QueueContextValue = {
+    state,
+    dispatch,
+    sessionId,
+    setSessionId,
+    addToQueue,
+    removeFromQueue,
+    setCurrentClimb,
+    nextClimb,
+    previousClimb,
+  };
+
+  return <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>;
+}

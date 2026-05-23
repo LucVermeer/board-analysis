@@ -31,5 +31,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: 'com.boardsesh.app',
     permissions: ['BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'ACCESS_FINE_LOCATION'],
   },
-  plugins: ['expo-router', 'expo-secure-store'],
+  plugins: [
+    'expo-router',
+    'expo-secure-store',
+    'expo-haptics',
+    'expo-symbols',
+    'expo-localization',
+    ['react-native-reanimated/plugin'],
+  ],
 });

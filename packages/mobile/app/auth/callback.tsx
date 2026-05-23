@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { exchangeTransferToken } from '../../src/lib/auth';
-import { colors } from '../../src/theme/tokens';
+import { brandColors } from '../../src/theme/colors';
 import { useAuth } from '../../src/providers/auth-provider';
 
 export default function AuthCallback() {
@@ -51,5 +50,5 @@ export default function AuthCallback() {
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
   text: { marginTop: 16, fontSize: 16 },
-  errorText: { fontSize: 16, color: colors.error, textAlign: 'center' },
+  errorText: { fontSize: 16, color: brandColors.error, textAlign: 'center' },
 });
