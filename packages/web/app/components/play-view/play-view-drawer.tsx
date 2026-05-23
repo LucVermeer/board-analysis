@@ -1371,7 +1371,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                     />
                   ) : undefined
                 }
-                label={driverUser ? t('playView.onWallChip', { username: driverUser.username }) : t('queueBar.onWall')}
+                label={driverUser ? t('playView.onWallChip', { username: driverUser.username }) : t('playView.onWallChipNoDriver')}
                 sx={{
                   fontSize: 10,
                   fontWeight: 600,

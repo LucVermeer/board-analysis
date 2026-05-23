@@ -166,7 +166,6 @@
   "queueBar": {
     "cancelReconnectConfirm": "Cancelar te sacará de la sesión. ¿Es lo que quieres?",
     "shellMessage": "Sin bloque seleccionado",
-    "onWall": "EN EL MURO",
     "startSesh": "Empezar sesh",
     "linkCopied": "¡Enlace copiado!",
     "shareFailed": "Error al compartir",
@@ -227,6 +226,7 @@
   },
   "playView": {
     "onWallChip": "EN EL MURO · {{username}}",
+    "onWallChipNoDriver": "EN EL MURO",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Vista previa. Toca la bombilla para enviar al muro.",
     "yourAscents_one": "Tu ascenso ({{count}})",

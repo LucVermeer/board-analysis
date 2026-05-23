@@ -167,7 +167,6 @@
     "cancelReconnectConfirm": "Annuler quittera la session. C'est ce que tu veux ?",
     "shellMessage": "Aucun bloc sélectionné",
     "startSesh": "Lancer la sesh",
-    "onWall": "SUR LE MUR",
     "linkCopied": "Lien copié !",
     "shareFailed": "Échec du partage",
     "leaveFailed": "Impossible de quitter la session. Réessaie.",
@@ -227,6 +226,7 @@
   },
   "playView": {
     "onWallChip": "SUR LE MUR · {{username}}",
+    "onWallChipNoDriver": "SUR LE MUR",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Aperçu. Touche l'ampoule pour envoyer au mur.",
     "yourAscents_one": "Ton ascension ({{count}})",

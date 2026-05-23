@@ -52,7 +52,6 @@ import ChatBubbleOutlineOutlined from '@mui/icons-material/ChatBubbleOutlineOutl
 import InputAdornment from '@mui/material/InputAdornment';
 import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
-import MuiChip from '@mui/material/Chip';
 import Badge from '@mui/material/Badge';
 import Lightbulb from '@mui/icons-material/Lightbulb';
 import Typography from '@mui/material/Typography';
@@ -529,14 +528,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     const me = sessionUsers.find((u) => u.id === clientId);
     return me?.userId ?? clientId;
   }, [sessionUsers, clientId]);
-
-  // Resolve the driver's session-user record so the bar's ON WALL chip
-  // can show their avatar. Null when there is no driver or when the
-  // driver participant isn't in the users list yet (claim race).
-  const driverUser = useMemo(() => {
-    if (!driverParticipantId) return null;
-    return sessionUsers.find((u) => u.id === driverParticipantId) ?? null;
-  }, [sessionUsers, driverParticipantId]);
 
   // Track which participants have ticked the current climb.
   // Merges backend-provided tickedBy with locally tracked ticks.
@@ -1270,40 +1261,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                 {/* Left section: Thumbnail and climb info */}
                 <Box sx={{ flex: 1 }} className={styles.climbInfoCol}>
                   <div className={styles.climbInfoInner} style={{ gap: themeTokens.spacing[2] }}>
-                    {/* ON WALL chip — visible in any active party session for
-                        a non-driver. When a driver is set, the chip carries
-                        their avatar; without a driver (nobody's hands on the
-                        wheel right now), just the ON WALL label. Anchors the
-                        bar visually as "this climb is on the wall" so the
-                        wall-climb identity lives on the bar (always visible)
-                        rather than inside the drawer. */}
-                    {!isDriver && isPersistentSessionActive && currentClimb && (
-                      <MuiChip
-                        size="small"
-                        variant="outlined"
-                        color="info"
-                        role="status"
-                        avatar={
-                          driverUser ? (
-                            <Avatar
-                              alt={driverUser.username}
-                              src={driverUser.avatarUrl ?? undefined}
-                              sx={{ width: 18, height: 18 }}
-                            />
-                          ) : undefined
-                        }
-                        label={t('queueBar.onWall')}
-                        sx={{
-                          flexShrink: 0,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          letterSpacing: 0.5,
-                          height: 22,
-                          '& .MuiChip-label': { px: 0.75 },
-                        }}
-                      />
-                    )}
-
                     {/* Board preview — STATIC, with crossfade on enter */}
                     <div className={`${styles.boardPreviewContainer} ${enterDirection ? styles.thumbnailEnter : ''}`}>
                       <ClimbThumbnail
