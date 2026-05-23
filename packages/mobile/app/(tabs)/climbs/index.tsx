@@ -12,6 +12,7 @@ import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { useDefaultBoard, useSearchClimbs } from '../../../src/lib/graphql/hooks';
 import { hapticSelection } from '../../../src/lib/haptics';
+import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -130,16 +131,7 @@ export default function ClimbList() {
 
     isLoadingMoreRef.current = false;
 
-    if (pageNumber === 1) {
-      setAccumulatedClimbs(searchResult.climbs);
-    } else {
-      setAccumulatedClimbs((previous) => {
-        // Deduplicate by uuid
-        const existingUuids = new Set(previous.map((climb) => climb.uuid));
-        const newClimbs = searchResult.climbs.filter((climb) => !existingUuids.has(climb.uuid));
-        return [...previous, ...newClimbs];
-      });
-    }
+    setAccumulatedClimbs((previous) => accumulateClimbs(previous, searchResult.climbs, pageNumber));
   }, [searchResult?.climbs, pageNumber]);
 
   const handleRefresh = useCallback(() => {

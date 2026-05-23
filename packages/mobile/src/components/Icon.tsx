@@ -5,10 +5,9 @@ type IconProps = {
   name: IconName;
   size?: number;
   color?: string;
-  weight?: 'ultraLight' | 'thin' | 'light' | 'regular' | 'medium' | 'semibold' | 'bold' | 'heavy' | 'black';
 };
 
-export function Icon({ name, size = 24, color, weight: _weight }: IconProps) {
+export function Icon({ name, size = 24, color }: IconProps) {
   const mapping = iconMap[name];
 
   // TODO: Use expo-symbols (SymbolView) on iOS once we have a dev client build.

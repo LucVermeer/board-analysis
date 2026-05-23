@@ -1,4 +1,5 @@
 import { View, Text, Image, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
@@ -7,6 +8,7 @@ export default function Profile() {
   const { data: profile, isLoading } = useProfile();
   const { signOut } = useAuth();
   const { systemColors } = useTheme();
+  const { t } = useTranslation('profile');
 
   if (isLoading) {
     return (
@@ -33,7 +35,7 @@ export default function Profile() {
           </View>
         )}
         <Text style={[styles.name, { color: systemColors.label }]}>
-          {profile?.displayName ?? 'Unknown'}
+          {profile?.displayName ?? t('mobile.unknownName')}
         </Text>
         <Text style={[styles.email, { color: systemColors.secondaryLabel }]}>
           {profile?.email ?? ''}
@@ -44,7 +46,7 @@ export default function Profile() {
         style={[styles.signOutButton, { borderColor: systemColors.separator }]}
         onPress={signOut}
       >
-        <Text style={styles.signOutText}>Sign out</Text>
+        <Text style={styles.signOutText}>{t('mobile.signOut')}</Text>
       </Pressable>
     </ScrollView>
   );

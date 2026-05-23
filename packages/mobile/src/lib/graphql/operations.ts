@@ -534,6 +534,105 @@ export type ToggleFavoriteMutationResponse = {
 };
 
 // ============================================
+// Queue Mutations
+// ============================================
+
+export const ADD_QUEUE_ITEM = gql`
+  mutation AddQueueItem($item: ClimbQueueItemInput!, $position: Int) {
+    addQueueItem(item: $item, position: $position) {
+      uuid
+      climb {
+        uuid
+        name
+        frames
+      }
+    }
+  }
+`;
+
+export type AddQueueItemMutationVariables = {
+  item: {
+    uuid: string;
+    climb: {
+      uuid: string;
+      name: string;
+      frames: string;
+      setter_username: string;
+      angle: number;
+      ascensionist_count: number;
+      difficulty: string;
+      quality_average: string;
+      stars: number;
+      difficulty_error: string;
+      benchmark_difficulty: string | null;
+    };
+  };
+  position?: number;
+};
+
+export type AddQueueItemMutationResponse = {
+  addQueueItem: {
+    uuid: string;
+    climb: { uuid: string; name: string; frames: string };
+  };
+};
+
+export const REMOVE_QUEUE_ITEM = gql`
+  mutation RemoveQueueItem($uuid: ID!) {
+    removeQueueItem(uuid: $uuid)
+  }
+`;
+
+export type RemoveQueueItemMutationVariables = {
+  uuid: string;
+};
+
+export type RemoveQueueItemMutationResponse = {
+  removeQueueItem: boolean;
+};
+
+export const SET_CURRENT_CLIMB = gql`
+  mutation SetCurrentClimb($item: ClimbQueueItemInput, $shouldAddToQueue: Boolean, $correlationId: ID) {
+    setCurrentClimb(item: $item, shouldAddToQueue: $shouldAddToQueue, correlationId: $correlationId) {
+      uuid
+      climb {
+        uuid
+        name
+        frames
+      }
+    }
+  }
+`;
+
+export type SetCurrentClimbMutationVariables = {
+  item: {
+    uuid: string;
+    climb: {
+      uuid: string;
+      name: string;
+      frames: string;
+      setter_username: string;
+      angle: number;
+      ascensionist_count: number;
+      difficulty: string;
+      quality_average: string;
+      stars: number;
+      difficulty_error: string;
+      benchmark_difficulty: string | null;
+    };
+  } | null;
+  shouldAddToQueue?: boolean;
+  correlationId?: string;
+};
+
+export type SetCurrentClimbMutationResponse = {
+  setCurrentClimb: {
+    uuid: string;
+    climb: { uuid: string; name: string; frames: string };
+  } | null;
+};
+
+// ============================================
 // Social Queries
 // ============================================
 

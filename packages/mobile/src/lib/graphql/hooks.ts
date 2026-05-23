@@ -26,6 +26,9 @@ import {
   GET_CLIMB,
   GET_SESSION_SUMMARY,
   TOGGLE_FAVORITE,
+  ADD_QUEUE_ITEM,
+  REMOVE_QUEUE_ITEM,
+  SET_CURRENT_CLIMB,
   type GetProfileQueryResponse,
   type GetMyBoardsQueryResponse,
   type GetDefaultBoardQueryResponse,
@@ -42,6 +45,12 @@ import {
   type GetSessionSummaryQueryVariables,
   type ToggleFavoriteMutationVariables,
   type ToggleFavoriteMutationResponse,
+  type AddQueueItemMutationVariables,
+  type AddQueueItemMutationResponse,
+  type RemoveQueueItemMutationVariables,
+  type RemoveQueueItemMutationResponse,
+  type SetCurrentClimbMutationVariables,
+  type SetCurrentClimbMutationResponse,
 } from './operations';
 
 // ============================================
@@ -186,5 +195,26 @@ export function useToggleFavorite() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
     },
+  });
+}
+
+export function useAddQueueItem() {
+  return useMutation({
+    mutationFn: (variables: AddQueueItemMutationVariables) =>
+      getHttpClient().request<AddQueueItemMutationResponse>(ADD_QUEUE_ITEM, variables),
+  });
+}
+
+export function useRemoveQueueItem() {
+  return useMutation({
+    mutationFn: (variables: RemoveQueueItemMutationVariables) =>
+      getHttpClient().request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, variables),
+  });
+}
+
+export function useSetCurrentClimb() {
+  return useMutation({
+    mutationFn: (variables: SetCurrentClimbMutationVariables) =>
+      getHttpClient().request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, variables),
   });
 }

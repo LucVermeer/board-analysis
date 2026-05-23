@@ -13,6 +13,8 @@ import { queueReducer, initialState } from '@boardsesh/queue';
 import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from '@boardsesh/queue';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { QUEUE_UPDATES_SUBSCRIPTION } from '../lib/graphql/operations';
+import { findNextQueueItem, findPreviousQueueItem } from '../lib/queue-navigation';
+import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 
 type QueueContextValue = {
   state: QueueState;
@@ -36,18 +38,7 @@ export function useQueue(): QueueContextValue {
 
 const defaultSearchParams: QueueSearchParams = {};
 
-// -- Subscription event types matching the QUEUE_UPDATES_SUBSCRIPTION shape --
-
-type SubscriptionClimb = {
-  uuid: string;
-  name: string;
-  frames: string;
-};
-
-type SubscriptionQueueItem = {
-  uuid: string;
-  climb: SubscriptionClimb;
-};
+// -- Subscription event types (used only for the event discriminated union) --
 
 type FullSyncEvent = {
   __typename: 'FullSync';
@@ -83,36 +74,6 @@ type CurrentClimbChangedEvent = {
 };
 
 type QueueUpdateEvent = FullSyncEvent | QueueItemAddedEvent | QueueItemRemovedEvent | CurrentClimbChangedEvent;
-
-/**
- * Convert a subscription queue item to a ClimbQueueItem compatible with the
- * shared reducer. The subscription only sends a subset of climb fields
- * (uuid, name, frames), so we fill in defaults for the rest.
- *
- * The Climb type requires these fields as non-nullable primitives, so we use
- * zero/empty defaults. The UI should prefer optional chaining (e.g.
- * `difficulty || null`) when distinguishing "no data" from a real value.
- */
-function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): ClimbQueueItem {
-  return {
-    uuid: subscriptionItem.uuid,
-    climb: {
-      uuid: subscriptionItem.climb.uuid,
-      name: subscriptionItem.climb.name,
-      frames: subscriptionItem.climb.frames,
-      // Subscription-only stubs: the WS payload doesn't include these fields.
-      // Non-nullable in the Climb type, so we use zero/empty defaults.
-      setter_username: '',
-      angle: 0,
-      ascensionist_count: 0,
-      difficulty: '',
-      quality_average: '',
-      stars: 0,
-      difficulty_error: '',
-      benchmark_difficulty: null,
-    },
-  };
-}
 
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
@@ -217,7 +178,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // so a WS echo of the same item won't create a duplicate
       dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
 
-      // TODO: Send mutation to server when mutation operations are wired up
+      // Phase 2 gap: server mutation not yet wired. Local-only until
+      // GraphQL mutations for queue operations are implemented. Changes
+      // are visible locally but not synced to other session participants.
     },
     [],
   );
@@ -226,7 +189,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     (uuid: string) => {
       dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
 
-      // TODO: Send mutation to server when mutation operations are wired up
+      // Phase 2 gap: server mutation not yet wired. Local-only until
+      // GraphQL mutations for queue operations are implemented. Changes
+      // are visible locally but not synced to other session participants.
     },
     [],
   );
@@ -242,46 +207,31 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      // TODO: Send mutation to server when mutation operations are wired up
+      // Phase 2 gap: server mutation not yet wired. Local-only until
+      // GraphQL mutations for queue operations are implemented. Changes
+      // are visible locally but not synced to other session participants.
     },
     [],
   );
 
   const nextClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
-    if (queue.length === 0) return;
-
-    if (!currentClimbQueueItem) {
-      // No current climb: go to the first item
+    const nextItem = findNextQueueItem(queue, currentClimbQueueItem);
+    if (nextItem) {
       dispatch({
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: { item: queue[0], isServerEvent: false },
-      });
-      return;
-    }
-
-    const currentIndex = queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
-    const nextIndex = currentIndex + 1;
-
-    if (nextIndex < queue.length) {
-      dispatch({
-        type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: { item: queue[nextIndex], isServerEvent: false },
+        payload: { item: nextItem, isServerEvent: false },
       });
     }
   }, []);
 
   const previousClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
-    if (queue.length === 0 || !currentClimbQueueItem) return;
-
-    const currentIndex = queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
-    const prevIndex = currentIndex - 1;
-
-    if (prevIndex >= 0) {
+    const prevItem = findPreviousQueueItem(queue, currentClimbQueueItem);
+    if (prevItem) {
       dispatch({
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: { item: queue[prevIndex], isServerEvent: false },
+        payload: { item: prevItem, isServerEvent: false },
       });
     }
   }, []);

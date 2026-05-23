@@ -209,6 +209,10 @@
       }
     }
   },
+  "mobile": {
+    "unknownName": "Desconocido",
+    "signOut": "Cerrar sesión"
+  },
   "setter": {
     "notFoundTitle": "Aperturista no encontrado",
     "notFoundMessage": "Este perfil de aperturista puede no existir o haber sido eliminado.",

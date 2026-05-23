@@ -1,4 +1,6 @@
 import { View, Text, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
 import { useTheme } from '../../../src/providers/theme-provider';
 
@@ -6,6 +8,8 @@ export default function BoardSelection() {
   const { data: boardConnection, isLoading } = useMyBoards();
   const boards = boardConnection?.boards ?? [];
   const { systemColors } = useTheme();
+  const router = useRouter();
+  const { t } = useTranslation('boards');
 
   if (isLoading) {
     return (
@@ -21,9 +25,9 @@ export default function BoardSelection() {
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.centered}
       >
-        <Text style={[styles.emptyTitle, { color: systemColors.label }]}>No boards yet</Text>
+        <Text style={[styles.emptyTitle, { color: systemColors.label }]}>{t('mobile.emptyTitle')}</Text>
         <Text style={[styles.emptySubtitle, { color: systemColors.secondaryLabel }]}>
-          Search for a board to get started
+          {t('mobile.emptySubtitle')}
         </Text>
       </ScrollView>
     );
@@ -38,6 +42,7 @@ export default function BoardSelection() {
       {boards.map((board) => (
         <Pressable
           key={board.uuid}
+          onPress={() => router.navigate('/(tabs)/climbs')}
           style={[
             styles.card,
             {

@@ -233,6 +233,17 @@
     "tookFromYou": "{{newDriver}} t'a pris le mur.",
     "unknownDriver": "Quelqu'un"
   },
+  "mobile": {
+    "queue": {
+      "noSessionTitle": "Lance une session pour utiliser la file",
+      "noSessionSubtitle": "Rejoins ou crée une session depuis l'onglet Boards pour organiser tes blocs avec ta crew.",
+      "emptyTitle": "Aucun bloc dans la file",
+      "emptySubtitle": "Parcours les blocs et ajoute-les à ta file pour commencer.",
+      "browseClimbs": "Parcourir les blocs",
+      "noClimbSelected": "Aucun bloc sélectionné",
+      "unknownClimb": "Bloc inconnu"
+    }
+  },
   "playView": {
     "onWallChip": "SUR LE MUR · {{username}}",
     "onWallChipNoDriver": "SUR LE MUR",

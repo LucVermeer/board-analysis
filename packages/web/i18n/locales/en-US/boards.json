@@ -29,6 +29,10 @@
       "idle": "Quick start"
     }
   },
+  "mobile": {
+    "emptyTitle": "No boards yet",
+    "emptySubtitle": "Search for a board to get started"
+  },
   "boardEntity": {
     "notFound": "Board not found",
     "chips": {

@@ -200,6 +200,11 @@
   "board": {
     "resetZoom": "Restablecer zoom"
   },
+  "mobile": {
+    "more": {
+      "title": "Más"
+    }
+  },
   "lightControl": {
     "title": "Luces",
     "turnOffAll": "Apagar todas las luces",

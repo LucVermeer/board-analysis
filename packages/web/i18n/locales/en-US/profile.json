@@ -209,6 +209,10 @@
       }
     }
   },
+  "mobile": {
+    "unknownName": "Unknown",
+    "signOut": "Sign out"
+  },
   "setter": {
     "notFoundTitle": "Setter Not Found",
     "notFoundMessage": "This setter profile may not exist or may have been removed.",

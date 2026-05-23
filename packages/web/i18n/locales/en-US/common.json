@@ -2,6 +2,11 @@
   "languageSwitcher": {
     "ariaLabelWithCurrent": "Language: {{language}}"
   },
+  "mobile": {
+    "more": {
+      "title": "More"
+    }
+  },
   "lightControl": {
     "title": "Lights",
     "turnOffAll": "Turn off all lights",

@@ -3,6 +3,8 @@ import { View, Pressable, StyleSheet, RefreshControl, useColorScheme } from 'rea
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { QueueItemRow } from '../../../src/components/QueueItemRow';
 import { Text } from '../../../src/components/Text';
@@ -20,6 +22,8 @@ export default function QueueScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { t } = useTranslation('session');
 
   const navBarBackground = isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)';
   const navBarBottomPadding = insets.bottom + TAB_BAR_HEIGHT;
@@ -83,10 +87,10 @@ export default function QueueScreen() {
         <Animated.View entering={FadeIn.duration(300)} style={styles.emptyContent}>
           <Icon name="people" size={48} color={systemColors.secondaryLabel} />
           <Text variant="title3" color={systemColors.label} style={styles.emptyTitle}>
-            Start a session to use the queue
+            {t('mobile.queue.noSessionTitle')}
           </Text>
           <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptySubtitle}>
-            Join or create a session from the Boards tab to line up climbs with your crew.
+            {t('mobile.queue.noSessionSubtitle')}
           </Text>
         </Animated.View>
       </View>
@@ -100,18 +104,18 @@ export default function QueueScreen() {
         <Animated.View entering={FadeIn.duration(300)} style={styles.emptyContent}>
           <Icon name="queue" size={48} color={systemColors.secondaryLabel} />
           <Text variant="title3" color={systemColors.label} style={styles.emptyTitle}>
-            No climbs in the queue
+            {t('mobile.queue.emptyTitle')}
           </Text>
           <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptySubtitle}>
-            Browse climbs and add them to your queue to get started.
+            {t('mobile.queue.emptySubtitle')}
           </Text>
           <Button
-            title="Browse climbs"
+            title={t('mobile.queue.browseClimbs')}
             variant="filled"
             size="medium"
             icon="search"
             onPress={() => {
-              // TODO: Navigate to climbs tab
+              router.navigate('/(tabs)/climbs');
             }}
             style={styles.browseButton}
           />
@@ -177,7 +181,7 @@ export default function QueueScreen() {
                 color={systemColors.label}
                 style={styles.navClimbName}
               >
-                {currentClimbQueueItem.climb?.name ?? 'Unknown climb'}
+                {currentClimbQueueItem.climb?.name ?? t('mobile.queue.unknownClimb')}
               </Text>
               {currentClimbQueueItem.climb?.difficulty ? (
                 <Text variant="caption1" color={systemColors.secondaryLabel}>
@@ -187,7 +191,7 @@ export default function QueueScreen() {
             </>
           ) : (
             <Text variant="subheadline" color={systemColors.secondaryLabel}>
-              No climb selected
+              {t('mobile.queue.noClimbSelected')}
             </Text>
           )}
         </View>

@@ -22,7 +22,6 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "m.jongh88@gmail.com",
         "ascAppId": "com.boardsesh.app"
       }
     }

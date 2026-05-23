@@ -3,7 +3,6 @@ import { Platform, StyleSheet } from 'react-native';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
-  type BottomSheetProps,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
