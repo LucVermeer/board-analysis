@@ -53,7 +53,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
 import Badge from '@mui/material/Badge';
-import Lightbulb from '@mui/icons-material/Lightbulb';
+import { TickBadgeAvatar } from '@/app/components/session/tick-badge-avatar';
 import Typography from '@mui/material/Typography';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
 import { useColorMode } from '@/app/hooks/use-color-mode';
@@ -74,85 +74,8 @@ export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
 
 const QUEUE_BADGE_SX = { '& .MuiBadge-badge': themeTokens.badge.small } as const;
 
-const TICK_BADGE_SX = {
-  '& .MuiBadge-badge': {
-    backgroundColor: themeTokens.colors.success,
-    color: 'common.white',
-    width: 16,
-    height: 16,
-    minWidth: 16,
-    borderRadius: '50%',
-    border: '2px solid transparent',
-  },
-} as const;
-
-const DRIVER_BADGE_SX = {
-  '& .MuiBadge-badge': {
-    ...themeTokens.badge.small,
-    backgroundColor: themeTokens.colors.primary,
-    color: 'common.white',
-    borderRadius: '50%',
-    border: '2px solid transparent',
-  },
-} as const;
-
-function TickBadgeAvatar({
-  user,
-  hasTicked,
-  size = 28,
-  isDriver = false,
-}: {
-  user: { id: string; username: string; avatarUrl?: string };
-  hasTicked: boolean;
-  size?: number;
-  /** Queue-control-bar pivot: when true, overlay a small lit lightbulb badge
-   *  on the top-right corner of the avatar so the driver is unambiguous in
-   *  the bar's AvatarGroup. Composes with the tick badge (which lives
-   *  bottom-right) so a driver who has also ticked the current climb shows
-   *  both. */
-  isDriver?: boolean;
-}) {
-  const { t } = useTranslation('session');
-  // Accessible label: when the user is driving, screen readers should hear
-  // "<username> is driving" — relying on `alt` is invisible because Avatar
-  // without `src` renders the username initial as text, not an <img>. Apply
-  // aria-label to the Avatar root so the SR sees it regardless of the
-  // src/initials branch.
-  const driverAriaLabel = isDriver ? t('queueBar.ariaLabels.userIsDriving', { username: user.username }) : undefined;
-  const baseAvatar = (
-    <Avatar
-      alt={user.username}
-      src={user.avatarUrl ?? undefined}
-      aria-label={driverAriaLabel}
-      sx={size !== 28 ? { width: size, height: size } : undefined}
-    />
-  );
-  // Compose tick badge (bottom-right) inside driver badge (top-right) so both
-  // can show on the same avatar without overlapping.
-  const withTick = hasTicked ? (
-    <Badge
-      overlap="circular"
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      badgeContent={<CheckOutlined sx={{ fontSize: 10 }} />}
-      sx={TICK_BADGE_SX}
-    >
-      {baseAvatar}
-    </Badge>
-  ) : (
-    baseAvatar
-  );
-  if (!isDriver) return withTick;
-  return (
-    <Badge
-      overlap="circular"
-      anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      badgeContent={<Lightbulb sx={{ fontSize: 10 }} />}
-      sx={DRIVER_BADGE_SX}
-    >
-      {withTick}
-    </Badge>
-  );
-}
+// `TickBadgeAvatar` extracted to `@/app/components/session/tick-badge-avatar`
+// so the play-view drawer's mini session bar uses the same component.
 
 export type QueueControlBarProps = {
   boardDetails: BoardDetails;

@@ -7,6 +7,8 @@ import MuiBadge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import MuiAvatar from '@mui/material/Avatar';
+import AvatarGroup from '@mui/material/AvatarGroup';
+import { TickBadgeAvatar } from '@/app/components/session/tick-badge-avatar';
 import MuiChip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import TextField from '@mui/material/TextField';
@@ -874,18 +876,26 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     setDrawerDisplayedItem?.(null);
   }, [setDrawerDisplayedItem]);
 
-  // Audience count for the mini session bar's co-watcher dots. Excludes the
-  // local user always, and excludes the driver from a non-driver's count
-  // (the driver is already represented by their own avatar in the bar).
-  // Drivers see the count of everyone else in the session.
-  const audienceCount = useMemo(() => {
-    if (!isPersistentSessionActive) return 0;
-    const total = sessionUsers.length;
-    if (total <= 1) return 0;
-    if (isDriver) return total - 1;
-    if (driverUser) return Math.max(0, total - 2);
-    return total - 1;
-  }, [isPersistentSessionActive, sessionUsers, isDriver, driverUser]);
+  // Audience for the mini session bar's AvatarGroup. Everyone in the session
+  // except the local user; the driver-first sort keeps them at position 0 of
+  // the stack so the driver's lit-bulb badge anchors the strip. Tick badges
+  // are sourced from `effectiveItem.tickedBy` so the audience reflects "who
+  // has done THIS climb" (matching what the user is currently looking at,
+  // which may be the wall climb or a non-driver preview).
+  const tickedBySet = useMemo(() => {
+    return new Set(effectiveItem?.tickedBy ?? []);
+  }, [effectiveItem]);
+  const audienceUsers = useMemo(() => {
+    if (!isPersistentSessionActive) return [];
+    const others = sessionUsers.filter((u) => u.id !== participantId);
+    if (!driverParticipantId) return others;
+    const driverIdx = others.findIndex((u) => u.id === driverParticipantId);
+    if (driverIdx <= 0) return others;
+    const reordered = [...others];
+    const [driver] = reordered.splice(driverIdx, 1);
+    reordered.unshift(driver);
+    return reordered;
+  }, [isPersistentSessionActive, sessionUsers, participantId, driverParticipantId]);
 
   const navigate = useCallback(
     (direction: 'next' | 'previous', source: 'swipePlayViewDrawer' | 'playViewDrawer') => {
@@ -1406,6 +1416,13 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
               px: 2,
               py: 0.75,
               borderTop: '1px solid var(--neutral-200)',
+              // Warm whisper tint — gives the band a reason to exist visually
+              // without painting it. The IA/iOS-HIG designers' pick:
+              // signals "this row is about who's here," not just chrome.
+              // Uses theme `warning` (the same amber the driver chip used)
+              // at ~5% opacity so it sits between the neutral climb area and
+              // the neutral action bar without competing with either.
+              backgroundColor: `color-mix(in srgb, ${themeTokens.colors.warning} 5%, transparent)`,
               minHeight: 36,
             }}
           >
@@ -1497,31 +1514,34 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 </Box>
               </>
             )}
-            {audienceCount > 0 && (
+            {audienceUsers.length > 0 && (
               <Box
-                component="span"
-                aria-label={t('playView.audienceCount', { count: audienceCount })}
-                sx={{
-                  ml: 'auto',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 0.25,
-                  fontSize: 12,
-                  color: 'text.secondary',
-                  letterSpacing: 1,
-                  flexShrink: 0,
-                }}
+                sx={{ ml: 'auto', flexShrink: 0 }}
+                aria-label={t('playView.audienceCount', { count: audienceUsers.length })}
               >
-                {Array.from({ length: Math.min(audienceCount, 5) }).map((_, i) => (
-                  <Box key={i} component="span" aria-hidden="true">
-                    •
-                  </Box>
-                ))}
-                {audienceCount > 5 && (
-                  <Box component="span" sx={{ ml: 0.25, fontSize: 10, letterSpacing: 0 }} aria-hidden="true">
-                    +{audienceCount - 5}
-                  </Box>
-                )}
+                <AvatarGroup
+                  max={3}
+                  sx={{
+                    '& .MuiAvatar-root': {
+                      width: 22,
+                      height: 22,
+                      fontSize: 10,
+                      border: '2px solid transparent',
+                    },
+                  }}
+                >
+                  {audienceUsers.map((user) => (
+                    <TickBadgeAvatar
+                      key={user.id}
+                      user={user}
+                      hasTicked={
+                        tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
+                      }
+                      isDriver={driverParticipantId != null && user.id === driverParticipantId}
+                      size={22}
+                    />
+                  ))}
+                </AvatarGroup>
               </Box>
             )}
           </Box>
@@ -1607,7 +1627,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     driftedFromWall,
     wallClimb,
     handleReturnToWallClimb,
-    audienceCount,
+    audienceUsers,
+    tickedBySet,
+    driverParticipantId,
     lightbulbCoachmarkText,
   ]);
 
