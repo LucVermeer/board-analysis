@@ -1751,4 +1751,45 @@ describe('extractAngleFromPathname', () => {
     expect(extractAngleFromPathname('/kilter/8/25/28,29,26,27/-5/list')).toBe(-5);
     expect(extractAngleFromPathname('/b/marcos-wall/-5/list')).toBe(-5);
   });
+
+  // `usePathname()` in Next.js returns the pre-rewrite URL including the
+  // locale prefix for Spanish + French users. Before stripping the prefix,
+  // the 5-segment regex matched the locale + board + layout + size + sets
+  // shape and bailed at the comma-separated set IDs, returning null — the
+  // angle then fell back to the session-creation value, reintroducing the
+  // exact "angle reverts to 40°" bug this PR fixes, but only for non-
+  // English users.
+  describe('locale-prefixed pathnames', () => {
+    it('handles /es/{board}/.../{angle}/... paths', () => {
+      expect(extractAngleFromPathname('/es/kilter/8/25/28,29,26,27/35/play/abc-123')).toBe(35);
+      expect(extractAngleFromPathname('/es/kilter/original/12x12/default/45/list')).toBe(45);
+    });
+
+    it('handles /fr/{board}/.../{angle}/... paths', () => {
+      expect(extractAngleFromPathname('/fr/kilter/8/25/28,29,26,27/35/play/abc-123')).toBe(35);
+      expect(extractAngleFromPathname('/fr/tension/two-zone/10x12/main_aux/40/list')).toBe(40);
+    });
+
+    it('handles /es/b/{slug}/{angle}/... slug routes', () => {
+      expect(extractAngleFromPathname('/es/b/marcos-wall/40/list')).toBe(40);
+      expect(extractAngleFromPathname('/fr/b/marcos-wall/-5/list')).toBe(-5);
+    });
+
+    it('handles 0° on locale-prefixed paths (vertical board, real angle)', () => {
+      expect(extractAngleFromPathname('/es/kilter/8/25/28,29,26,27/0/list')).toBe(0);
+      expect(extractAngleFromPathname('/fr/b/marcos-wall/0/list')).toBe(0);
+    });
+
+    it('does not strip the default en-US prefix (root paths only)', () => {
+      // The default locale is served at root in this app — there is no
+      // /en-US/ shape in production. If a stray /en-US/ ever appears the
+      // helper should NOT silently strip it.
+      expect(extractAngleFromPathname('/en-US/kilter/8/25/28,29,26,27/35/list')).toBeNull();
+    });
+
+    it('returns null for locale-prefixed off-board paths', () => {
+      expect(extractAngleFromPathname('/es/you')).toBeNull();
+      expect(extractAngleFromPathname('/fr/playlists')).toBeNull();
+    });
+  });
 });

@@ -18,6 +18,7 @@ import { BOARD_NAME_PREFIX_REGEX } from '@/app/lib/board-constants';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { MOONBOARD_LAYOUTS } from '@/app/lib/moonboard-config';
 import { normalizeMinAscentsFilter, normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
+import { detectLocale } from '@/app/lib/i18n/detect-locale';
 import { PAGE_LIMIT } from '../components/board-page/constants';
 
 export const DEFAULT_ZONE_MODE: ZoneMatchMode = 'allHolds';
@@ -888,17 +889,27 @@ export function getBaseBoardPath(pathname: string): string {
  * Supports both URL shapes:
  *   /{board}/{layout}/{size}/{sets}/{angle}/...
  *   /b/{slug}/{angle}/...
+ *
+ * Locale-aware: `usePathname()` in Next.js returns the original pre-rewrite
+ * path including a `/es/` or `/fr/` prefix for non-English users (middleware
+ * rewrites internally but the hook sees the user-facing URL). Strip the
+ * locale prefix before matching so Spanish/French speakers don't fall back
+ * to the session-creation angle on every navigation — the 40°-revert bug
+ * this fix exists to prevent. Reads `SUPPORTED_LOCALES` so adding a new
+ * locale to i18n config is sufficient; no edit here required.
  */
 export function extractAngleFromPathname(pathname: string): number | null {
+  const { strippedPath } = detectLocale(pathname);
+
   // /b/{slug}/{angle}/... — angle is the third segment.
-  const slugMatch = pathname.match(/^\/b\/[^/]+\/(-?\d+)(?:\/|$)/);
+  const slugMatch = strippedPath.match(/^\/b\/[^/]+\/(-?\d+)(?:\/|$)/);
   if (slugMatch) {
     const angle = Number(slugMatch[1]);
     return Number.isFinite(angle) ? angle : null;
   }
 
   // /{board}/{layout}/{size}/{sets}/{angle}/... — angle is the fifth segment.
-  const fullMatch = pathname.match(/^\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/(-?\d+)(?:\/|$)/);
+  const fullMatch = strippedPath.match(/^\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/(-?\d+)(?:\/|$)/);
   if (fullMatch) {
     const angle = Number(fullMatch[1]);
     return Number.isFinite(angle) ? angle : null;
