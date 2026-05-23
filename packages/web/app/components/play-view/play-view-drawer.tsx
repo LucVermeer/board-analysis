@@ -10,7 +10,6 @@ import MuiButton from '@mui/material/Button';
 import MuiAvatar from '@mui/material/Avatar';
 import MuiChip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import SyncOutlined from '@mui/icons-material/SyncOutlined';
@@ -928,12 +927,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     return sessionUsers.find((u) => u.id === driverParticipantId) ?? null;
   }, [driverParticipantId, sessionUsers]);
 
-  // The wall-view strip's "Browse from here →" button competes for width
-  // with the driver username on narrow phones (UI review E). Collapse to
-  // an icon-only IconButton below the sm breakpoint so the username
-  // doesn't ellipsis-to-a-letter while the button keeps its label.
-  const isNarrowViewport = useMediaQuery('(max-width: 480px)', { noSsr: true });
-
   const navigate = useCallback(
     (direction: 'next' | 'previous', source: 'swipePlayViewDrawer' | 'playViewDrawer') => {
       const getter = direction === 'next' ? getNextClimbQueueItem : getPreviousClimbQueueItem;
@@ -1436,9 +1429,14 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 </Box>
               )}
             </Box>
-            {wallViewLocked &&
-              onExitWallView &&
-              (isNarrowViewport ? (
+            {wallViewLocked && onExitWallView && (
+              <>
+                {/* CSS-driven responsive swap (per CLAUDE.md — JS
+                    breakpoint detection is prohibited). The text button
+                    competes for width with the driver username on narrow
+                    phones; below the MUI `sm` breakpoint we collapse to
+                    an icon-only IconButton. Render both, let the cascade
+                    pick. */}
                 <IconButton
                   size="small"
                   onClick={() => {
@@ -1446,10 +1444,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                     onExitWallView();
                   }}
                   aria-label={t('playView.wallViewBrowseFromHere')}
+                  sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
                 >
                   <ArrowForwardOutlined sx={{ fontSize: 18 }} />
                 </IconButton>
-              ) : (
                 <MuiButton
                   size="medium"
                   variant="text"
@@ -1458,11 +1456,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                     handleWallViewHintSeen();
                     onExitWallView();
                   }}
-                  sx={{ textTransform: 'none', fontSize: 12 }}
+                  sx={{
+                    textTransform: 'none',
+                    fontSize: 12,
+                    display: { xs: 'none', sm: 'inline-flex' },
+                  }}
                 >
                   {t('playView.wallViewBrowseFromHere')}
                 </MuiButton>
-              ))}
+              </>
+            )}
           </Box>
         )}
         {/* Header: Grade | Name */}
@@ -1633,7 +1636,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     onExitWallView,
     swipeSuggestionsOnly,
     wallViewLocked,
-    isNarrowViewport,
     lightbulbCoachmarkText,
   ]);
 

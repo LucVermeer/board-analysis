@@ -908,11 +908,47 @@ export function extractAngleFromPathname(pathname: string): number | null {
     return Number.isFinite(angle) ? angle : null;
   }
 
-  // /{board}/{layout}/{size}/{sets}/{angle}/... — angle is the fifth segment.
+  // /{board}/{layout}/{size}/{sets}/{angle}/... — angle is the fifth path
+  // segment (six counting the leading empty string from split('/')).
   const fullMatch = strippedPath.match(/^\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/(-?\d+)(?:\/|$)/);
   if (fullMatch) {
     const angle = Number(fullMatch[1]);
     return Number.isFinite(angle) ? angle : null;
+  }
+
+  return null;
+}
+
+/**
+ * Replace the angle segment in a board route pathname with `newAngle`,
+ * preserving the locale prefix when present and the rest of the path
+ * (the /play/{uuid}, /view/{slug}, /list, /create, /playlists/{uuid}
+ * suffix). Returns `null` if the pathname isn't a recognised board
+ * route — callers should treat that as "don't navigate."
+ *
+ * **Positional, not pattern-matched.** Splitting the path and using
+ * `findIndex(s => s === currentAngle.toString())` (the previous
+ * implementation in angle-selector.tsx) would match the first segment
+ * with the angle's string value — for `/kilter/1/10/1/40/list` with
+ * `currentAngle=1` that hits the layout id, not the angle slot. This
+ * helper indexes by the known position instead.
+ */
+export function replaceAngleInPathname(pathname: string, newAngle: number): string | null {
+  const { strippedPath, locale, needsRewrite } = detectLocale(pathname);
+  const localePrefix = needsRewrite ? `/${locale}` : '';
+  const segments = strippedPath.split('/');
+  // segments[0] is '' (leading slash), so the first real segment is at index 1.
+
+  // /b/{slug}/{angle}/... — angle is at index 3.
+  if (segments[1] === 'b' && segments.length >= 4 && /^-?\d+$/.test(segments[3])) {
+    segments[3] = String(newAngle);
+    return `${localePrefix}${segments.join('/')}`;
+  }
+
+  // /{board}/{layout}/{size}/{sets}/{angle}/... — angle is at index 5.
+  if (segments.length >= 6 && /^-?\d+$/.test(segments[5])) {
+    segments[5] = String(newAngle);
+    return `${localePrefix}${segments.join('/')}`;
   }
 
   return null;

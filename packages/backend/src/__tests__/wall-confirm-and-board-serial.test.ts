@@ -373,6 +373,12 @@ describe('setSessionBoardPath mutation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // `clearAllMocks` only clears call history; queued
+    // `mockResolvedValueOnce` from tests that throw early (e.g. the
+    // missing-participantId hard-error) survive into the next test and
+    // get consumed in the wrong place. Reset implementation explicitly
+    // for the mocks this block sets per-test so each test starts clean.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockReset();
     requireSessionMemberMock.mockResolvedValue(undefined);
     // Default: the read-back returns the new boardPath that the test wrote.
     roomManagerMock.getSessionById.mockResolvedValue({
@@ -452,5 +458,51 @@ describe('setSessionBoardPath mutation', () => {
     // the new boardPath; the throw only prevents serving back a malformed
     // Session payload to the caller.
     expect(pubsubMock.publishSessionEvent).toHaveBeenCalled();
+  });
+
+  it('propagates the room-manager not-found throw without publishing', async () => {
+    // `updateSessionBoardPathIfChanged` now distinguishes "not found"
+    // (throws) from "unchanged" (returns null). Reaching the throw
+    // branch means a race between `requireSessionMember` and the
+    // helper's SELECT — surface it cleanly rather than silently
+    // dropping the broadcast. No event fires.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockRejectedValueOnce(
+      new Error('updateSessionBoardPathIfChanged: session session-1 not found'),
+    );
+    const ctx = makeCtx({ participantId: 'participant-1' });
+
+    await expect(sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx)).rejects.toThrow(
+      /not found/,
+    );
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('pins the concurrent double-publish contract — two interleaved writes both broadcast', async () => {
+    // The helper is non-atomic (read-then-write per `session-discovery.ts`).
+    // Two callers landing concurrently can both read the same prior value
+    // and both publish `SessionBoardPathChanged`. The client tolerates this
+    // because `router.replace(newPath)` is a no-op when the URL is already
+    // at `newPath`. Pin the contract so a future de-dup change here doesn't
+    // silently invalidate the client's assumption.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockResolvedValue(oldPath);
+    const ctxA = makeCtx({ participantId: 'participant-a', connectionId: 'conn-a' });
+    const ctxB = makeCtx({ participantId: 'participant-b', connectionId: 'conn-b' });
+
+    await Promise.all([
+      sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctxA),
+      sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctxB),
+    ]);
+
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledTimes(2);
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
+      __typename: 'SessionBoardPathChanged',
+      boardPath: newPath,
+      changedByParticipantId: 'participant-a',
+    });
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
+      __typename: 'SessionBoardPathChanged',
+      boardPath: newPath,
+      changedByParticipantId: 'participant-b',
+    });
   });
 });

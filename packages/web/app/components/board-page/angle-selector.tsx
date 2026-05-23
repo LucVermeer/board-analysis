@@ -20,6 +20,7 @@ import { useIsDarkMode } from '@/app/hooks/use-is-dark-mode';
 import DrawerClimbHeader from '../climb-card/drawer-climb-header';
 import { useTranslation } from 'react-i18next';
 import { usePersistentSession } from '../persistent-session';
+import { replaceAngleInPathname } from '@/app/lib/url-utils';
 import styles from './angle-selector.module.css';
 
 type AngleSelectorProps = {
@@ -85,20 +86,19 @@ export default function AngleSelector({
     if (onAngleChangeProp) {
       onAngleChangeProp(newAngle);
     } else {
-      // Replace the current angle in the URL with the new one
-      const pathSegments = pathname.split('/');
-      const angleIndex = pathSegments.findIndex((segment) => segment === currentAngle.toString());
-
-      if (angleIndex !== -1) {
-        pathSegments[angleIndex] = newAngle.toString();
-        let newPath = pathSegments.join('/');
+      // Replace the angle segment by *position*, not by string match.
+      // Previous `findIndex(s => s === currentAngle.toString())` would hit
+      // the layout id when it happened to equal the angle string (e.g.
+      // /kilter/1/10/1/40/list with currentAngle=1 found the layout slot
+      // before the angle slot). `replaceAngleInPathname` indexes the path
+      // by its known shape and preserves any /es/ or /fr/ locale prefix.
+      const newPathWithoutQuery = replaceAngleInPathname(pathname, newAngle);
+      if (newPathWithoutQuery !== null) {
         // Read live query string from window.location — QueueContext mirrors
         // filter state via history.replaceState, which Next.js's
         // useSearchParams() does not observe, so it would otherwise be stale.
         const queryString = window.location.search.slice(1);
-        if (queryString) {
-          newPath = `${newPath}?${queryString}`;
-        }
+        const newPath = queryString ? `${newPathWithoutQuery}?${queryString}` : newPathWithoutQuery;
         // Optimistic local URL push for instant feedback.
         router.push(newPath);
         // In party mode, broadcast the boardPath so every member's URL follows
@@ -107,7 +107,7 @@ export default function AngleSelector({
         // session. Strip the query string for the broadcast — the boardPath
         // canonically describes the board, not filter state.
         if (activeSession) {
-          void setSessionBoardPath(pathSegments.join('/'));
+          void setSessionBoardPath(newPathWithoutQuery);
         }
       }
     }
