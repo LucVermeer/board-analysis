@@ -820,6 +820,32 @@ describe('BluetoothProvider', () => {
       expect(mockSetSessionBoardSerial).toHaveBeenCalledWith('KB-NEW');
     });
 
+    it('does not re-fire setSessionBoardSerial on a back-to-back reconnect to the same board (cache updated synchronously)', async () => {
+      // Reproduces the race the in-memory ref guards against: session state
+      // still holds the old serial because SessionBoardSerialChanged hasn't
+      // landed yet, but the user disconnects + reconnects to the same board.
+      // Without the synchronous ref update, the second onConnectSuccess would
+      // see previousSerial=null and re-fire the mutation + analytics event.
+      mockPersistentSessionState = { session: { id: 'session-1', lastConnectedBoardSerial: null } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+      // Second reconnect to the same board before the WS event lands.
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+
+      expect(mockSetSessionBoardSerial).toHaveBeenCalledTimes(1);
+      expect(mockTrack.mock.calls.filter((args) => args[0] === 'Session Board Serial Set')).toHaveLength(1);
+    });
+
     it("fires Session Board Serial Set with previousSerialKnown=false on the session's first pairing", async () => {
       mockPersistentSessionState = { session: { id: 'session-1', lastConnectedBoardSerial: null } };
 

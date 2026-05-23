@@ -272,6 +272,12 @@ export function BluetoothProvider({
       // new serial matches what the session already has (and skip the
       // analytics emit too — same-serial reconnect isn't a state change).
       if (previousSerial === serial) return;
+      // Update the ref synchronously so back-to-back reconnects (a quick
+      // disconnect → reconnect to the same board before the WS round-trip
+      // lands SessionBoardSerialChanged) don't re-fire the mutation. The
+      // useEffect above will re-sync once the event arrives — same value,
+      // safe no-op.
+      lastConnectedBoardSerialRef.current = serial;
       void setSessionBoardSerial(serial);
       // Pivot Phase 5: sanity check that the field gets populated on real
       // sessions. Always 'party' here — the surrounding sessionIdRef gate
