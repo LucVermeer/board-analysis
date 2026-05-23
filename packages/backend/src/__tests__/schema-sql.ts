@@ -99,6 +99,7 @@ export const schemaSQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS "mobile_refresh_tokens_token_hash_idx" ON "mobile_refresh_tokens" ("token_hash");
   CREATE INDEX IF NOT EXISTS "mobile_refresh_tokens_user_id_idx" ON "mobile_refresh_tokens" ("user_id");
   CREATE INDEX IF NOT EXISTS "mobile_refresh_tokens_expires_at_idx" ON "mobile_refresh_tokens" ("expires_at");
+  CREATE INDEX IF NOT EXISTS "mobile_refresh_tokens_revoked_at_partial_idx" ON "mobile_refresh_tokens" ("revoked_at") WHERE "revoked_at" IS NOT NULL;
 
   CREATE INDEX IF NOT EXISTS "board_sessions_location_idx" ON "board_sessions" ("latitude", "longitude");
   CREATE INDEX IF NOT EXISTS "board_sessions_discoverable_idx" ON "board_sessions" ("discoverable");

@@ -32,5 +32,6 @@ export const mobileRefreshTokens = pgTable(
     tokenHashIdx: uniqueIndex('mobile_refresh_tokens_token_hash_idx').on(table.tokenHash),
     userIdIdx: index('mobile_refresh_tokens_user_id_idx').on(table.userId),
     expiresAtIdx: index('mobile_refresh_tokens_expires_at_idx').on(table.expiresAt),
+    revokedAtIdx: index('mobile_refresh_tokens_revoked_at_partial_idx').on(table.revokedAt),
   }),
 );

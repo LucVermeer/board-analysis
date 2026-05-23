@@ -8,7 +8,9 @@ import { redisClientManager } from '../redis/client';
 import { applyCorsHeaders } from './cors';
 import { logger } from '../utils/logger';
 
-/** Clock skew tolerance when verifying transfer token expiry (seconds). */
+// Transfer tokens are short-lived (120s) and exchanged between our own
+// servers, so 5s tolerance is sufficient. Long-lived JWTs use 60s in
+// jose's clockTolerance to handle mobile device clock drift.
 const CLOCK_SKEW_TOLERANCE_SECONDS = 5;
 
 /**
@@ -128,6 +130,11 @@ async function isTokenConsumed(tokenSignature: string): Promise<boolean> {
 
 // ---------------------------------------------------------------------------
 // IP-based rate limiting for auth endpoints
+//
+// Per-instance only — with N backend instances the effective limit is
+// AUTH_RATE_LIMIT_MAX × N per IP. Redis-backed rate limiting would add
+// a round-trip to every auth request for marginal benefit given that
+// the high-risk replay path is already Redis-backed (SET NX EX).
 // ---------------------------------------------------------------------------
 
 type AuthRateLimitEntry = {

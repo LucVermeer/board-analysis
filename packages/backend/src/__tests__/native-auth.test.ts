@@ -714,3 +714,53 @@ describe('validateToken', () => {
     expect(result).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// MAX_BODY_BYTES enforcement
+// ---------------------------------------------------------------------------
+
+describe('MAX_BODY_BYTES enforcement', () => {
+  it('rejects exchange request body exceeding 4096 bytes', async () => {
+    __resetNativeAuthStateForTests();
+    const oversizedBody = 'x'.repeat(5000);
+    const req = new EventEmitter() as MockReq;
+    req.method = 'POST';
+    req.headers = {};
+    req.socket = { remoteAddress: '10.99.0.1' };
+    req.destroy = vi.fn();
+
+    setImmediate(() => {
+      req.emit('data', Buffer.from(oversizedBody, 'utf8'));
+    });
+
+    const res = makeResponse();
+    await handleNativeAuthExchange(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WebSocket auth path verification
+// ---------------------------------------------------------------------------
+
+describe('WebSocket auth path', () => {
+  it('validateToken accepts mobile JWTs (same path used by WS connectionParams)', async () => {
+    // The WebSocket setup extracts authToken from connectionParams and passes
+    // it to validateToken (formerly validateNextAuthToken). This test confirms
+    // mobile JWTs (3-segment JWS) are accepted through that unified path.
+    const secret = new TextEncoder().encode(TEST_SECRET);
+    const jwt = await new SignJWT({ sub: 'ws-test-user' })
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer('boardsesh')
+      .setAudience('boardsesh-mobile')
+      .sign(secret);
+
+    const result = await validateToken(jwt);
+    expect(result).not.toBeNull();
+    expect(result?.userId).toBe('ws-test-user');
+    expect(result?.isAuthenticated).toBe(true);
+  });
+});
