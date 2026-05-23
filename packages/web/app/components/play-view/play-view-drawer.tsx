@@ -345,10 +345,7 @@ export const PlayViewTickBar = React.memo<PlayViewTickBarProps>(function PlayVie
   const [tickBarExpanded, setTickBarExpanded] = useState(false);
   const quickTickBarRef = useRef<QuickTickBarHandle>(null);
   const isDark = useIsDarkMode();
-  // Match queue control bar tint — 'default' variant.
-  // In dark mode the tint is semi-transparent, so the backdrop-filter blur
-  // fills in behind it. The fallback uses surfaceElevated (#121212) which
-  // is visibly distinct from pure black.
+  // Opaque surface base + grade tint overlay (matches queue control bar pattern).
   const gradeTintColor = useMemo(
     () => getGradeTintColor(currentClimb.difficulty, 'default', isDark),
     [currentClimb.difficulty, isDark],

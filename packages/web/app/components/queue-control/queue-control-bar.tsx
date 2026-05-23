@@ -1120,7 +1120,8 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
               {...(tickBarActive ? tickDismissHandlers : {})}
               className={`${styles.tickRow} ${tickBarActive ? styles.tickRowExpanded : ''} ${tickSwipeOffset > 0 ? styles.tickRowSwiping : ''}`}
               style={{
-                backgroundColor: gradeTintColor ?? (isDark ? 'transparent' : 'var(--semantic-surface)'),
+                backgroundColor: isDark ? 'var(--semantic-surfaceElevated)' : 'var(--semantic-surface)',
+                ...(gradeTintColor ? { backgroundImage: `linear-gradient(${gradeTintColor}, ${gradeTintColor})` } : {}),
                 ...tickDismissStyle,
               }}
             >
