@@ -53,7 +53,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
 import Badge from '@mui/material/Badge';
-import Lightbulb from '@mui/icons-material/Lightbulb';
+import { TickBadgeAvatar } from '@/app/components/session/tick-badge-avatar';
 import Typography from '@mui/material/Typography';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
 import { useColorMode } from '@/app/hooks/use-color-mode';
@@ -73,86 +73,6 @@ import { PLAY_DRAWER_EVENT, dispatchOpenPlayDrawer } from './play-drawer-event';
 export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
 
 const QUEUE_BADGE_SX = { '& .MuiBadge-badge': themeTokens.badge.small } as const;
-
-const TICK_BADGE_SX = {
-  '& .MuiBadge-badge': {
-    backgroundColor: themeTokens.colors.success,
-    color: 'common.white',
-    width: 16,
-    height: 16,
-    minWidth: 16,
-    borderRadius: '50%',
-    border: '2px solid transparent',
-  },
-} as const;
-
-const DRIVER_BADGE_SX = {
-  '& .MuiBadge-badge': {
-    ...themeTokens.badge.small,
-    backgroundColor: themeTokens.colors.primary,
-    color: 'common.white',
-    borderRadius: '50%',
-    border: '2px solid transparent',
-  },
-} as const;
-
-function TickBadgeAvatar({
-  user,
-  hasTicked,
-  size = 28,
-  isDriver = false,
-}: {
-  user: { id: string; username: string; avatarUrl?: string };
-  hasTicked: boolean;
-  size?: number;
-  /** Queue-control-bar pivot: when true, overlay a small lit lightbulb badge
-   *  on the top-right corner of the avatar so the driver is unambiguous in
-   *  the bar's AvatarGroup. Composes with the tick badge (which lives
-   *  bottom-right) so a driver who has also ticked the current climb shows
-   *  both. */
-  isDriver?: boolean;
-}) {
-  const { t } = useTranslation('session');
-  // Accessible label: when the user is driving, screen readers should hear
-  // "<username> is driving" — relying on `alt` is invisible because Avatar
-  // without `src` renders the username initial as text, not an <img>. Apply
-  // aria-label to the Avatar root so the SR sees it regardless of the
-  // src/initials branch.
-  const driverAriaLabel = isDriver ? t('queueBar.ariaLabels.userIsDriving', { username: user.username }) : undefined;
-  const baseAvatar = (
-    <Avatar
-      alt={user.username}
-      src={user.avatarUrl ?? undefined}
-      aria-label={driverAriaLabel}
-      sx={size !== 28 ? { width: size, height: size } : undefined}
-    />
-  );
-  // Compose tick badge (bottom-right) inside driver badge (top-right) so both
-  // can show on the same avatar without overlapping.
-  const withTick = hasTicked ? (
-    <Badge
-      overlap="circular"
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      badgeContent={<CheckOutlined sx={{ fontSize: 10 }} />}
-      sx={TICK_BADGE_SX}
-    >
-      {baseAvatar}
-    </Badge>
-  ) : (
-    baseAvatar
-  );
-  if (!isDriver) return withTick;
-  return (
-    <Badge
-      overlap="circular"
-      anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      badgeContent={<Lightbulb sx={{ fontSize: 10 }} />}
-      sx={DRIVER_BADGE_SX}
-    >
-      {withTick}
-    </Badge>
-  );
-}
 
 export type QueueControlBarProps = {
   boardDetails: BoardDetails;
@@ -188,7 +108,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   useEffect(() => {
     if (activeDrawer !== 'play') {
       setDrawerDisplayedItem(null);
-      setDrawerWallView(false);
     }
   }, [activeDrawer]);
 
@@ -223,10 +142,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // tapped (drawer also reads the wall climb in that case). Reset to null on
   // drawer close.
   const [drawerDisplayedItem, setDrawerDisplayedItem] = useState<ClimbQueueItem | null>(null);
-  // Wall-view mode (pivot Phase 3): set by the bar's body-tap handler. When
-  // true the drawer hides prev/next, disables swipe, and shows the
-  // "Currently on the wall" header. Reset on close.
-  const [drawerWallView, setDrawerWallView] = useState(false);
 
   // Listen for play drawer open requests from climb list items that live
   // outside this component's React tree (board page, liked list, queue
@@ -251,7 +166,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       } else {
         setDrawerDisplayedItem(null);
       }
-      setDrawerWallView(!!detail?.wallView);
       setActiveDrawer('play');
     };
     window.addEventListener(PLAY_DRAWER_EVENT, handler);
@@ -272,16 +186,13 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   } = useQueueActions();
   const handleThumbnailClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
-    // No-payload dispatch + wallView flag: drawer falls back to the wall
-    // climb (the bar's own thumbnail mirrors the wall). The wall-view
-    // mode adds the locked "Currently on the wall" treatment for
-    // non-drivers — for drivers there's nothing to lock (they're already
-    // controlling the wall), so they skip wallView entirely and open the
-    // normal browse drawer on the wall climb. Group-session feedback
-    // fix; the prior follow-up commit kept wallView=true for drivers
-    // and the mode paid no rent on top of the normal drawer.
-    dispatchOpenPlayDrawer(undefined, { wallView: !isDriver });
-  }, [currentClimb, viewOnlyMode, isDriver]);
+    // No-payload dispatch: drawer falls back to `currentClimbQueueItem` (the
+    // wall climb) via the `effectiveItem` derivation. Drawer is always in
+    // browse mode now — swipe works, and the bar's ON WALL chip + the
+    // drawer's drift pill carry the "who's driving / where the wall is"
+    // wayfinding.
+    dispatchOpenPlayDrawer();
+  }, [currentClimb, viewOnlyMode]);
 
   const { showMessage } = useSnackbar();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -787,12 +698,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   const handleClimbInfoClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
-    // Route through dispatchOpenPlayDrawer with wallView:true so the title
-    // region matches the thumbnail's path. The previous direct setActiveDrawer
-    // call skipped the drawer-local wallView wiring and opened the normal
-    // browse drawer, even though the title region is the dominant tap target
-    // for "show me what's on the wall right now."
-    dispatchOpenPlayDrawer(undefined, { wallView: true });
+    // Routes through the same no-payload dispatch as the thumbnail. Drawer
+    // opens in browse mode on the wall climb; the bar's ON WALL chip stays
+    // visible behind it so wall-climb identity is never hidden.
+    dispatchOpenPlayDrawer();
     track('Play Drawer Opened', {
       boardLayout: boardDetails.layout_name || '',
       source: 'bar_tap',
@@ -1305,7 +1214,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         }
                         role={tickBarActive ? undefined : 'button'}
                         tabIndex={tickBarActive ? undefined : 0}
-                        aria-label={tickBarActive ? undefined : t('queueBar.ariaLabels.openWallView')}
+                        aria-label={tickBarActive ? undefined : t('queueBar.ariaLabels.openPlayDrawer')}
                         className={styles.queueToggle}
                         style={{
                           transform: tickBarActive ? undefined : `translateX(${swipeOffset}px)`,
@@ -1432,8 +1341,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         drawerDisplayedItem={drawerDisplayedItem}
         setDrawerDisplayedItem={setDrawerDisplayedItem}
         initialOpenWithoutAnimation={isViewPage}
-        wallView={drawerWallView}
-        onExitWallView={() => setDrawerWallView(false)}
       />
 
       <StartSeshDrawer open={startSeshOpen} onClose={() => setStartSeshOpen(false)} />

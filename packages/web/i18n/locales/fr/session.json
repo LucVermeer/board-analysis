@@ -195,8 +195,10 @@
       "logAttempt": "Enregistrer un essai",
       "showParticipants": "Afficher les participants",
       "hideParticipants": "Masquer les participants",
-      "openWallView": "Show what's on the wall",
-      "userIsDriving": "{{username}} is driving"
+      "openPlayDrawer": "Ouvrir le bloc du mur",
+      "userIsDriving": "{{username}} est au contrôle",
+      "returnToWallClimb": "Revenir au bloc de {{username}}",
+      "returnToWallClimbNoDriver": "Revenir au bloc du mur"
     },
     "offline": {
       "idle": "Hors ligne",
@@ -223,11 +225,12 @@
     "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."
   },
   "playView": {
-    "wallViewHeader": "Actuellement sur le mur",
-    "wallViewHeaderDriver": "{{username}} est sur le mur",
-    "wallViewHint": "Verrouillé sur le bloc du mur. Ferme pour explorer.",
-    "wallViewBrowseFromHere": "Explorer depuis ici",
-    "previewChip": "Aperçu",
+    "onWallChip": "SUR LE MUR · {{username}}",
+    "onWallChipNoDriver": "SUR LE MUR",
+    "drivingChip": "AU CONTRÔLE",
+    "audienceCount_one": "{{count}} autre en train de regarder",
+    "audienceCount_other": "{{count}} autres en train de regarder",
+    "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Aperçu. Touche l'ampoule pour envoyer au mur.",
     "yourAscents_one": "Ton ascension ({{count}})",
     "yourAscents_other": "Tes ascensions ({{count}})",

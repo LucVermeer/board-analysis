@@ -195,8 +195,10 @@
       "logAttempt": "Registrar intento",
       "showParticipants": "Mostrar participantes",
       "hideParticipants": "Ocultar participantes",
-      "openWallView": "Show what's on the wall",
-      "userIsDriving": "{{username}} is driving"
+      "openPlayDrawer": "Abrir el bloque del muro",
+      "userIsDriving": "{{username}} está al mando",
+      "returnToWallClimb": "Volver al bloque de {{username}}",
+      "returnToWallClimbNoDriver": "Volver al bloque del muro"
     },
     "offline": {
       "idle": "Sin conexión",
@@ -223,11 +225,12 @@
     "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías."
   },
   "playView": {
-    "wallViewHeader": "Actualmente en el muro",
-    "wallViewHeaderDriver": "{{username}} está en el muro",
-    "wallViewHint": "Anclado al bloque del muro. Cierra para explorar.",
-    "wallViewBrowseFromHere": "Explorar desde aquí",
-    "previewChip": "Vista previa",
+    "onWallChip": "EN EL MURO · {{username}}",
+    "onWallChipNoDriver": "EN EL MURO",
+    "drivingChip": "AL MANDO",
+    "audienceCount_one": "{{count}} más mirando",
+    "audienceCount_other": "{{count}} más mirando",
+    "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Vista previa. Toca la bombilla para enviar al muro.",
     "yourAscents_one": "Tu ascenso ({{count}})",
     "yourAscents_other": "Tus ascensos ({{count}})",

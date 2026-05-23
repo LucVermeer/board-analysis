@@ -195,8 +195,10 @@
       "logAttempt": "Log attempt",
       "showParticipants": "Show participants",
       "hideParticipants": "Hide participants",
-      "openWallView": "Show what's on the wall",
-      "userIsDriving": "{{username}} is driving"
+      "openPlayDrawer": "Open the wall climb",
+      "userIsDriving": "{{username}} is driving",
+      "returnToWallClimb": "Return to {{username}}'s wall climb",
+      "returnToWallClimbNoDriver": "Return to the wall climb"
     },
     "offline": {
       "idle": "Offline",
@@ -223,11 +225,12 @@
     "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs."
   },
   "playView": {
-    "wallViewHeader": "Currently on the wall",
-    "wallViewHeaderDriver": "{{username}} is on the wall",
-    "wallViewHint": "Locked to the wall climb. Close to browse.",
-    "wallViewBrowseFromHere": "Browse from here",
-    "previewChip": "Preview",
+    "onWallChip": "ON WALL · {{username}}",
+    "onWallChipNoDriver": "ON WALL",
+    "drivingChip": "DRIVING",
+    "audienceCount_one": "{{count}} other watching",
+    "audienceCount_other": "{{count}} others watching",
+    "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Previewing. Tap the lightbulb to send it to the wall.",
     "yourAscents_one": "Your Ascent ({{count}})",
     "yourAscents_other": "Your Ascents ({{count}})",
