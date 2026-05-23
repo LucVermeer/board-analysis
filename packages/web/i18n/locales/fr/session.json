@@ -221,7 +221,8 @@
     "nextUpHeader": "À suivre",
     "endMessage": "C'est tout pour l'instant",
     "showFullHistory_one": "Afficher l'historique complet ({{count}} de plus)",
-    "showFullHistory_other": "Afficher l'historique complet ({{count}} de plus)"
+    "showFullHistory_other": "Afficher l'historique complet ({{count}} de plus)",
+    "tickHistoryClimb": "Enregistrer une croix pour {{name}}"
   },
   "queueProvider": {
     "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."

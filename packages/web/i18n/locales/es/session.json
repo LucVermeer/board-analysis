@@ -221,7 +221,8 @@
     "nextUpHeader": "A continuación",
     "endMessage": "Eso es todo por ahora",
     "showFullHistory_one": "Mostrar historial completo ({{count}} más)",
-    "showFullHistory_other": "Mostrar historial completo ({{count}} más)"
+    "showFullHistory_other": "Mostrar historial completo ({{count}} más)",
+    "tickHistoryClimb": "Registrar un tick para {{name}}"
   },
   "queueProvider": {
     "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías."
