@@ -151,8 +151,6 @@
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
   touch-action: pan-x;
   transition: padding 200ms ease-out;
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
 }
 
 .tickBarContainerActive .tickBarInner {
