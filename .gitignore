@@ -98,3 +98,6 @@ packages/mobile/android/
 packages/mobile/dist/
 packages/mobile/.bundle-check-output/
 .claude/worktrees/
+
+# Local analysis workspace (out-of-tree artifacts, not source)
+.local-work/
