@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { applyCorsHeaders } from './cors';
-import { validateNextAuthToken } from '../middleware/auth';
+import { validateToken } from '../middleware/auth';
 import { isAuroraBoardType } from '../services/user-data-export-format';
 import {
   getDownloadableUserDataExport,
@@ -24,7 +24,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse): Promise<
     return null;
   }
 
-  const authResult = await validateNextAuthToken(token);
+  const authResult = await validateToken(token);
   if (!authResult) {
     sendJson(res, 401, { error: 'Invalid or expired token' });
     return null;

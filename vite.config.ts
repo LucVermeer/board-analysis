@@ -11,7 +11,7 @@ export default defineConfig({
     ignore: ['design/**', '**/generated/**'],
   },
   lint: {
-    ignorePatterns: ['**/board-controller/**', 'mobile/**'],
+    ignorePatterns: ['**/board-controller/**', 'mobile/**', 'packages/mobile/**'],
     options: {
       typeAware: true,
       typeCheck: true,
@@ -40,6 +40,7 @@ export default defineConfig({
       './packages/aurora-sync/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
+      './packages/mobile/vite.config.ts',
     ],
   },
   staged: {
@@ -181,6 +182,12 @@ export default defineConfig({
       'typecheck:queue': {
         command: 'bun run --filter=@boardsesh/queue typecheck',
       },
+      'typecheck:board-config': {
+        command: 'bun run --filter=@boardsesh/board-config typecheck',
+      },
+      'typecheck:mobile': {
+        command: 'bun run --filter=@boardsesh/mobile typecheck',
+      },
       typecheck: {
         command: 'true',
         dependsOn: [
@@ -190,10 +197,16 @@ export default defineConfig({
           'typecheck:web',
           'typecheck:ble-protocol',
           'typecheck:queue',
+          'typecheck:board-config',
+          'typecheck:mobile',
         ],
       },
 
       // --- Dev servers ---
+      'dev:mobile': {
+        command: 'bun run --filter=@boardsesh/mobile start',
+        cache: false,
+      },
       'dev:backend': {
         command: 'bun run --filter=boardsesh-backend dev',
         dependsOn: ['db:up'],

@@ -1,4 +1,4 @@
-import { jwtDecrypt } from 'jose';
+import { jwtDecrypt, jwtVerify } from 'jose';
 import { hkdf } from '@panva/hkdf';
 import { db } from '../db/client';
 import { esp32Controllers } from '@boardsesh/db/schema/app';
@@ -39,7 +39,7 @@ async function deriveEncryptionKey(secret: string): Promise<Uint8Array> {
 // Avoids repeated JWE decryption for the same token across rapid requests.
 const TOKEN_CACHE_TTL_MS = 60_000; // 60 seconds
 type TokenCacheEntry = {
-  result: AuthResult | null;
+  result: AuthResult;
   expiresAt: number;
 };
 const tokenCache = new Map<string, TokenCacheEntry>();
@@ -56,8 +56,9 @@ setInterval(() => {
  * Validate a NextAuth JWT token.
  * NextAuth tokens are encrypted JWTs (JWE) using the NEXTAUTH_SECRET.
  *
- * Results are cached in-process for 60 seconds to avoid repeated HKDF + JWE
- * decryption on every request when many connections share the same token.
+ * Successful results are cached in-process for 60 seconds to avoid repeated
+ * HKDF + JWE decryption on every request when many connections share the same
+ * token. Failed validations are not cached so transient errors don't persist.
  *
  * @param token - The JWT token from the client
  * @returns Auth result with userId if valid, null if invalid
@@ -85,7 +86,6 @@ export async function validateNextAuthToken(token: string): Promise<AuthResult |
     const userId = payload.sub;
     if (!userId) {
       logger.warn('[Auth] Token missing sub claim');
-      tokenCache.set(token, { result: null, expiresAt: now + TOKEN_CACHE_TTL_MS });
       return null;
     }
 
@@ -96,9 +96,86 @@ export async function validateNextAuthToken(token: string): Promise<AuthResult |
     if (error instanceof Error) {
       logger.warn('[Auth] Token validation failed:', error.message);
     }
-    tokenCache.set(token, { result: null, expiresAt: now + TOKEN_CACHE_TTL_MS });
     return null;
   }
+}
+
+/**
+ * Validate a mobile JWT (JWS) token.
+ * Mobile tokens are standard signed JWTs (3 dot-separated segments) created
+ * by the native auth exchange/refresh endpoints, signed with NEXTAUTH_SECRET.
+ *
+ * @param token - The JWS token from the mobile client
+ * @returns Auth result with userId if valid, null if invalid
+ */
+export async function validateMobileJwt(token: string): Promise<AuthResult | null> {
+  try {
+    const secret = process.env.NEXTAUTH_SECRET;
+    if (!secret) {
+      logger.warn('[Auth] NEXTAUTH_SECRET not configured');
+      return null;
+    }
+
+    const secretKey = new TextEncoder().encode(secret);
+    const { payload } = await jwtVerify(token, secretKey, {
+      clockTolerance: 60,
+      issuer: 'boardsesh',
+      audience: 'boardsesh-mobile',
+    });
+
+    const userId = payload.sub;
+    if (!userId) {
+      logger.warn('[Auth] Mobile JWT missing sub claim');
+      return null;
+    }
+
+    return { userId, isAuthenticated: true };
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.warn('[Auth] Mobile JWT validation failed:', error.message);
+    }
+    return null;
+  }
+}
+
+/**
+ * Validate any auth token — NextAuth JWE (5 segments) or mobile JWS (3 segments).
+ *
+ * Successful results are cached in-process for 60 seconds to avoid repeated
+ * cryptographic operations on every request when many connections share the
+ * same token. Failed validations are not cached so transient errors don't
+ * persist.
+ *
+ * @param token - The token from the client (JWE or JWS)
+ * @returns Auth result with userId if valid, null if invalid
+ */
+export async function validateToken(token: string): Promise<AuthResult | null> {
+  const now = Date.now();
+  const cached = tokenCache.get(token);
+  if (cached && cached.expiresAt > now) {
+    return cached.result;
+  }
+
+  let result: AuthResult | null = null;
+
+  // JWE tokens (NextAuth) have 5 dot-separated segments,
+  // JWS tokens (mobile JWT) have 3 segments.
+  const segments = token.split('.').length;
+  if (segments === 5) {
+    result = await validateNextAuthToken(token);
+  } else if (segments === 3) {
+    result = await validateMobileJwt(token);
+  }
+
+  // Cache successful results only (validateNextAuthToken already caches
+  // internally, but for mobile JWTs this is the only caching layer).
+  // Null results are not cached so transient failures (e.g. secret unset
+  // during restart) don't persist as permanent rejections.
+  if (segments === 3 && result) {
+    tokenCache.set(token, { result, expiresAt: now + TOKEN_CACHE_TTL_MS });
+  }
+
+  return result;
 }
 
 /**

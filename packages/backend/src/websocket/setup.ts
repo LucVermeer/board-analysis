@@ -9,12 +9,7 @@ import { createContext, removeContext, getContext } from '../graphql/context';
 import { validateQueryDepth } from '../graphql/query-depth';
 import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
-import {
-  validateNextAuthToken,
-  extractAuthToken,
-  extractControllerApiKey,
-  validateControllerApiKey,
-} from '../middleware/auth';
+import { validateToken, extractAuthToken, extractControllerApiKey, validateControllerApiKey } from '../middleware/auth';
 import { isOriginAllowed } from '../handlers/cors';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { logger } from '../utils/logger';
@@ -91,7 +86,7 @@ export function setupWebSocketServer(httpServer: HttpServer): {
         let authenticatedUserId: string | undefined;
 
         if (token) {
-          const authResult = await validateNextAuthToken(token);
+          const authResult = await validateToken(token);
           if (authResult) {
             isAuthenticated = true;
             authenticatedUserId = authResult.userId;

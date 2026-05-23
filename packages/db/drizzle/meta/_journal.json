@@ -729,6 +729,34 @@
       "when": 1779527446609,
       "tag": "0103_thick_puck",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1779528025494,
+      "tag": "0104_faulty_secret_warriors",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1779530224310,
+      "tag": "0105_goofy_shotgun",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1779536500667,
+      "tag": "0106_bored_mister_fear",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1779580000000,
+      "tag": "0107_revoked_at_index",
+      "breakpoints": true
     }
   ]
 }

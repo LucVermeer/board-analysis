@@ -3,7 +3,7 @@ import Busboy from 'busboy';
 import path from 'path';
 import { mkdir, writeFile, unlink, access } from 'fs/promises';
 import { applyCorsHeaders } from './cors';
-import { validateNextAuthToken } from '../middleware/auth';
+import { validateToken } from '../middleware/auth';
 import { isS3Configured, uploadToS3, deleteUserAvatarsFromS3 } from '../storage/s3';
 import { logger } from '../utils/logger';
 
@@ -97,7 +97,7 @@ export async function handleAvatarUpload(req: IncomingMessage, res: ServerRespon
     return;
   }
 
-  const authResult = await validateNextAuthToken(token);
+  const authResult = await validateToken(token);
   if (!authResult) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Invalid or expired token' }));

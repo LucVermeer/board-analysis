@@ -150,12 +150,7 @@ describe('MiniSessionBar', () => {
     render(
       <MiniSessionBar
         {...defaultProps({
-          sessionUsers: [
-            user('me', 'me'),
-            user('sara', 'Sara'),
-            user('jules', 'Jules'),
-            user('driver', 'Marco'),
-          ],
+          sessionUsers: [user('me', 'me'), user('sara', 'Sara'), user('jules', 'Jules'), user('driver', 'Marco')],
           driverParticipantId: 'driver',
           participantId: 'me',
         })}
