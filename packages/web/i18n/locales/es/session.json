@@ -228,6 +228,8 @@
     "onWallChip": "EN EL MURO · {{username}}",
     "onWallChipNoDriver": "EN EL MURO",
     "drivingChip": "AL MANDO",
+    "audienceCount_one": "{{count}} más mirando",
+    "audienceCount_other": "{{count}} más mirando",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Vista previa. Toca la bombilla para enviar al muro.",
     "yourAscents_one": "Tu ascenso ({{count}})",

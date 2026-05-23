@@ -228,6 +228,8 @@
     "onWallChip": "SUR LE MUR · {{username}}",
     "onWallChipNoDriver": "SUR LE MUR",
     "drivingChip": "AU CONTRÔLE",
+    "audienceCount_one": "{{count}} autre en train de regarder",
+    "audienceCount_other": "{{count}} autres en train de regarder",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Aperçu. Touche l'ampoule pour envoyer au mur.",
     "yourAscents_one": "Ton ascension ({{count}})",

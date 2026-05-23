@@ -228,6 +228,8 @@
     "onWallChip": "ON WALL · {{username}}",
     "onWallChipNoDriver": "ON WALL",
     "drivingChip": "DRIVING",
+    "audienceCount_one": "{{count}} other watching",
+    "audienceCount_other": "{{count}} others watching",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Previewing. Tap the lightbulb to send it to the wall.",
     "yourAscents_one": "Your Ascent ({{count}})",
