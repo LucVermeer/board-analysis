@@ -198,7 +198,8 @@
       "hideParticipants": "Masquer les participants",
       "openWallView": "Show what's on the wall",
       "userIsDriving": "{{username}} is driving",
-      "returnToWallClimb": "Revenir au bloc de {{username}}"
+      "returnToWallClimb": "Revenir au bloc de {{username}}",
+      "returnToWallClimbNoDriver": "Revenir au bloc du mur"
     },
     "offline": {
       "idle": "Hors ligne",

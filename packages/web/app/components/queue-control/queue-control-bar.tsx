@@ -1270,22 +1270,27 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                 {/* Left section: Thumbnail and climb info */}
                 <Box sx={{ flex: 1 }} className={styles.climbInfoCol}>
                   <div className={styles.climbInfoInner} style={{ gap: themeTokens.spacing[2] }}>
-                    {/* ON WALL chip — non-drivers only, when a driver is set.
-                        Anchors the bar visually as "this climb is on the wall,
-                        driven by {driver}" so the wall-climb identity lives on
-                        the bar (always visible) rather than inside the drawer. */}
-                    {!isDriver && driverUser && currentClimb && (
+                    {/* ON WALL chip — visible in any active party session for
+                        a non-driver. When a driver is set, the chip carries
+                        their avatar; without a driver (nobody's hands on the
+                        wheel right now), just the ON WALL label. Anchors the
+                        bar visually as "this climb is on the wall" so the
+                        wall-climb identity lives on the bar (always visible)
+                        rather than inside the drawer. */}
+                    {!isDriver && isPersistentSessionActive && currentClimb && (
                       <MuiChip
                         size="small"
                         variant="outlined"
                         color="info"
                         role="status"
                         avatar={
-                          <Avatar
-                            alt={driverUser.username}
-                            src={driverUser.avatarUrl ?? undefined}
-                            sx={{ width: 18, height: 18 }}
-                          />
+                          driverUser ? (
+                            <Avatar
+                              alt={driverUser.username}
+                              src={driverUser.avatarUrl ?? undefined}
+                              sx={{ width: 18, height: 18 }}
+                            />
+                          ) : undefined
                         }
                         label={t('queueBar.onWall')}
                         sx={{

@@ -1311,14 +1311,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     if (!currentClimb) return null;
     return (
       <>
-        {showWallContextChip && driverUser && wallClimb && (
+        {showWallContextChip && wallClimb && (
           // Wall-context chip: always visible for a non-driver in a party
           // session while the drawer is open, so the wall-climb identity is
           // never hidden behind the drawer (the bar's ON WALL chip is
           // covered while this drawer is on top). Morphs by drift state:
-          //   - On the wall climb: informational "ON WALL · {driver}".
+          //   - On the wall climb: informational "ON WALL · {driver}" (or
+          //     plain "ON WALL" when no driver is set yet).
           //   - Drifted (after a local swipe): clickable
-          //     "← {driver} · {wallClimb}" that snaps back to the wall climb.
+          //     "← {driver} · {wallClimb}" that snaps back, or
+          //     "← {wallClimb}" when no driver.
           <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, pt: 1 }}>
             {driftedFromWall ? (
               <MuiChip
@@ -1328,22 +1330,30 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 variant="outlined"
                 color="info"
                 avatar={
-                  <MuiAvatar
-                    alt={driverUser.username}
-                    src={driverUser.avatarUrl ?? undefined}
-                    sx={{ width: 20, height: 20 }}
-                  />
+                  driverUser ? (
+                    <MuiAvatar
+                      alt={driverUser.username}
+                      src={driverUser.avatarUrl ?? undefined}
+                      sx={{ width: 20, height: 20 }}
+                    />
+                  ) : undefined
                 }
                 label={
                   <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                     <ArrowBackOutlined sx={{ fontSize: 14 }} aria-hidden="true" />
-                    {t('playView.returnToWallPill', {
-                      username: driverUser.username,
-                      climbName: wallClimb.name,
-                    })}
+                    {driverUser
+                      ? t('playView.returnToWallPill', {
+                          username: driverUser.username,
+                          climbName: wallClimb.name,
+                        })
+                      : wallClimb.name}
                   </Box>
                 }
-                aria-label={t('queueBar.ariaLabels.returnToWallClimb', { username: driverUser.username })}
+                aria-label={
+                  driverUser
+                    ? t('queueBar.ariaLabels.returnToWallClimb', { username: driverUser.username })
+                    : t('queueBar.ariaLabels.returnToWallClimbNoDriver')
+                }
                 sx={{ fontSize: 12, maxWidth: '100%' }}
               />
             ) : (
@@ -1353,13 +1363,15 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 color="info"
                 role="status"
                 avatar={
-                  <MuiAvatar
-                    alt={driverUser.username}
-                    src={driverUser.avatarUrl ?? undefined}
-                    sx={{ width: 20, height: 20 }}
-                  />
+                  driverUser ? (
+                    <MuiAvatar
+                      alt={driverUser.username}
+                      src={driverUser.avatarUrl ?? undefined}
+                      sx={{ width: 20, height: 20 }}
+                    />
+                  ) : undefined
                 }
-                label={t('playView.onWallChip', { username: driverUser.username })}
+                label={driverUser ? t('playView.onWallChip', { username: driverUser.username }) : t('queueBar.onWall')}
                 sx={{
                   fontSize: 10,
                   fontWeight: 600,
