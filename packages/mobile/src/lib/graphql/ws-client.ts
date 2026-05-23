@@ -23,7 +23,7 @@ export function getWsClient(): Client {
       },
       lazy: true,
       retryAttempts: 10,
-      shouldRetry: () => true,
+      shouldRetry: (errOrCloseEvent) => !(errOrCloseEvent instanceof CloseEvent && errOrCloseEvent.code === 4401),
     });
   }
   return wsClient;

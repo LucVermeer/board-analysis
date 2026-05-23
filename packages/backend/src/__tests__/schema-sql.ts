@@ -98,6 +98,7 @@ export const schemaSQL = `
   );
   CREATE UNIQUE INDEX IF NOT EXISTS "mobile_refresh_tokens_token_hash_idx" ON "mobile_refresh_tokens" ("token_hash");
   CREATE INDEX IF NOT EXISTS "mobile_refresh_tokens_user_id_idx" ON "mobile_refresh_tokens" ("user_id");
+  CREATE INDEX IF NOT EXISTS "mobile_refresh_tokens_expires_at_idx" ON "mobile_refresh_tokens" ("expires_at");
 
   CREATE INDEX IF NOT EXISTS "board_sessions_location_idx" ON "board_sessions" ("latitude", "longitude");
   CREATE INDEX IF NOT EXISTS "board_sessions_discoverable_idx" ON "board_sessions" ("discoverable");
@@ -127,6 +128,7 @@ export const schemaSQL = `
   CREATE INDEX IF NOT EXISTS "esp32_controllers_api_key_idx" ON "esp32_controllers" ("api_key");
   CREATE INDEX IF NOT EXISTS "esp32_controllers_session_idx" ON "esp32_controllers" ("authorized_session_id");
 
+  DROP TABLE IF EXISTS "board_climb_aliases" CASCADE;
   DROP TABLE IF EXISTS "board_climb_stats" CASCADE;
   DROP TABLE IF EXISTS "board_climbs" CASCADE;
   DROP TABLE IF EXISTS "board_difficulty_grades" CASCADE;
@@ -165,8 +167,24 @@ export const schemaSQL = `
     "user_id" text REFERENCES "users"("id") ON DELETE SET NULL,
     "required_set_ids" integer[],
     "compatible_size_ids" integer[],
-    "published_at" text
+    "published_at" text,
+    "hold_fingerprint" text
   );
+
+  CREATE INDEX IF NOT EXISTS "board_climbs_hold_fingerprint_idx" ON "board_climbs" ("board_type", "layout_id", "hold_fingerprint");
+
+  CREATE TABLE IF NOT EXISTS "board_climb_aliases" (
+    "board_type" text NOT NULL,
+    "alias_uuid" text NOT NULL,
+    "canonical_uuid" text NOT NULL,
+    "source" text NOT NULL,
+    "first_seen_at" timestamp DEFAULT now() NOT NULL,
+    "last_seen_at" timestamp DEFAULT now() NOT NULL,
+    CONSTRAINT "board_climb_aliases_board_type_alias_uuid_pk" PRIMARY KEY("board_type","alias_uuid"),
+    CONSTRAINT "board_climb_aliases_uuids_non_empty" CHECK ("board_climb_aliases"."alias_uuid" <> '' AND "board_climb_aliases"."canonical_uuid" <> ''),
+    CONSTRAINT "board_climb_aliases_canonical_fk" FOREIGN KEY ("canonical_uuid") REFERENCES "board_climbs"("uuid") ON DELETE CASCADE ON UPDATE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS "board_climb_aliases_canonical_idx" ON "board_climb_aliases" ("board_type","canonical_uuid");
 
   CREATE TABLE IF NOT EXISTS "board_climb_stats" (
     "board_type" text NOT NULL,

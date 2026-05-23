@@ -67,7 +67,8 @@ function evictStaleConsumedTokens(): void {
 }
 
 // Periodically evict stale consumed-token entries so the map doesn't grow unbounded.
-setInterval(evictStaleConsumedTokens, CONSUMED_TOKEN_CLEANUP_INTERVAL_MS);
+const consumedTokenEvictionHandle = setInterval(evictStaleConsumedTokens, CONSUMED_TOKEN_CLEANUP_INTERVAL_MS);
+if (typeof consumedTokenEvictionHandle.unref === 'function') consumedTokenEvictionHandle.unref();
 
 /**
  * Attempt to mark a transfer token signature as consumed.
@@ -155,7 +156,8 @@ function evictExpiredRateLimitEntries(): void {
 }
 
 // Periodically clean up expired rate limit entries.
-setInterval(evictExpiredRateLimitEntries, AUTH_RATE_LIMIT_WINDOW_MS);
+const rateLimitEvictionHandle = setInterval(evictExpiredRateLimitEntries, AUTH_RATE_LIMIT_WINDOW_MS);
+if (typeof rateLimitEvictionHandle.unref === 'function') rateLimitEvictionHandle.unref();
 
 /**
  * Check if an IP address has exceeded the auth endpoint rate limit.
