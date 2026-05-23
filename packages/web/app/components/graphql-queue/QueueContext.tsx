@@ -345,13 +345,23 @@ export const GraphQLQueueProvider = ({
               latest.showMessage(latest.t('driverToast.tookFromYou', { newDriver: newDriverName }), 'info');
             } else {
               const previousDriverName = latest.users.find((user) => user.id === previousDriverId)?.username ?? '';
-              latest.showMessage(
-                latest.t('driverToast.tookFromOther', {
-                  newDriver: newDriverName,
-                  previousDriver: previousDriverName,
-                }),
-                'info',
-              );
+              // The previous driver can be gone from `users` by the time the
+              // event arrives (left the session in the same tick they were
+              // yanked, or distributed-state propagation reordered).
+              // Surfacing "X took the wall from ." is worse than dropping the
+              // attribution — fall through to the simpler firstDriver copy so
+              // the toast still names the new driver and reads cleanly.
+              if (previousDriverName) {
+                latest.showMessage(
+                  latest.t('driverToast.tookFromOther', {
+                    newDriver: newDriverName,
+                    previousDriver: previousDriverName,
+                  }),
+                  'info',
+                );
+              } else {
+                latest.showMessage(latest.t('driverToast.firstDriver', { newDriver: newDriverName }), 'info');
+              }
             }
           }
         }

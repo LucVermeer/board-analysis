@@ -75,6 +75,13 @@ export default function QueueNavButton({ direction, navigate, boardDetails }: Qu
     // Bar prev/next is always a broadcast (any participant can advance the
     // wall climb) and never transfers the driver — so pressedByRole reflects
     // the presser's current role rather than implying a take-control.
+    //
+    // Fired BEFORE the mutation acks — matches the existing `Queue Navigation`
+    // fire-on-call pattern (above). Means a transient network failure can
+    // produce a `Wall Advance` event without a corresponding wall change.
+    // Consistent with other queue analytics and intentional: we'd rather
+    // count user intent than gate on round-trip success. Watch the ratio of
+    // `Wall Advance` to `Wall Confirmed` if this becomes a misleading signal.
     track('Wall Advance', {
       source: 'bar_button',
       pressedByRole: isPersistentSessionActive && !isDriver ? 'non_driver' : 'driver',

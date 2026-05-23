@@ -126,7 +126,10 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
 
     // Toggled by the "Show full history" row at the top of the history region.
     // Local to each list mount — resets when the drawer remounts so a freshly-
-    // opened list always starts on the 5-item view.
+    // opened list always starts on the 5-item view. Depends on QueueDrawer NOT
+    // passing `keepMounted={true}` to the underlying SwipeableDrawer (default
+    // is false); if a caller starts keeping the drawer mounted, the state will
+    // stick across sessions and this expectation breaks.
     const [showFullHistory, setShowFullHistory] = useState(false);
 
     const handleOpenActions = useCallback((climb: Climb) => {

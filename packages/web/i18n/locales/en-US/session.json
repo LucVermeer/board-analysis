@@ -230,7 +230,7 @@
   "driverToast": {
     "firstDriver": "{{newDriver}} is driving the wall.",
     "tookFromOther": "{{newDriver}} took the wall from {{previousDriver}}.",
-    "tookFromYou": "{{newDriver}} took the wall."
+    "tookFromYou": "{{newDriver}} took the wall from you."
   },
   "playView": {
     "onWallChip": "ON WALL · {{username}}",

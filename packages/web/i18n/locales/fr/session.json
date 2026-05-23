@@ -230,7 +230,7 @@
   "driverToast": {
     "firstDriver": "{{newDriver}} pilote le mur.",
     "tookFromOther": "{{newDriver}} a pris le mur à {{previousDriver}}.",
-    "tookFromYou": "{{newDriver}} a pris le mur."
+    "tookFromYou": "{{newDriver}} t'a pris le mur."
   },
   "playView": {
     "onWallChip": "SUR LE MUR · {{username}}",

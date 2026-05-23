@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { SessionEvent } from '@boardsesh/shared-schema';
+import type { BoardDetails, ParsedBoardRouteParameters } from '@/app/lib/types';
 
 // --- Mocks must come before importing GraphQLQueueProvider ---
 
@@ -185,7 +186,7 @@ const defaultProps = {
     size_id: '1',
     set_ids: ['1'],
     angle: '40',
-  } as never,
+  } as unknown as ParsedBoardRouteParameters,
   boardDetails: {
     board_name: 'kilter',
     layout_id: 1,
@@ -200,7 +201,7 @@ const defaultProps = {
     edge_right: 0,
     edge_bottom: 0,
     edge_top: 0,
-  } as never,
+  } as unknown as BoardDetails,
 };
 
 function createWrapper() {
@@ -305,5 +306,30 @@ describe('driver hand-off toast', () => {
     });
 
     expect(mockShowMessage).not.toHaveBeenCalled();
+  });
+
+  it('falls back to firstDriver copy when the previous driver is no longer in the users list', () => {
+    renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    // previousDriverParticipantId references a user who has already left the
+    // session — `users.find()` returns undefined and the resolved name is
+    // empty. The toast must drop the attribution rather than render "X took
+    // the wall from ." See bug triage on PR #2249.
+    act(() => {
+      emitSessionEvent({
+        __typename: 'DriverChanged',
+        driverParticipantId: 'participant-2',
+        previousDriverParticipantId: 'participant-ghost',
+      });
+    });
+
+    expect(mockShowMessage).toHaveBeenCalledWith(
+      expect.stringContaining('driverToast.firstDriver|newDriver=Bob'),
+      'info',
+    );
+    expect(mockShowMessage).not.toHaveBeenCalledWith(
+      expect.stringContaining('driverToast.tookFromOther'),
+      expect.anything(),
+    );
   });
 });
