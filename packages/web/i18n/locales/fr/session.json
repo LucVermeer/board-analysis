@@ -225,6 +225,7 @@
     "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."
   },
   "playView": {
+    "onWallChip": "SUR LE MUR · {{username}}",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Aperçu. Touche l'ampoule pour envoyer au mur.",
     "yourAscents_one": "Ton ascension ({{count}})",

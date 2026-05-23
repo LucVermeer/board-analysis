@@ -856,12 +856,17 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // user is back on the wall climb (no drift). Until they swipe, the
   // drawer auto-follows the wall via the `effectiveItem` fallback at the
   // top of the component, so no pill is needed.
+  // Non-driver-in-party gate for the wall-context chip. Always shown while
+  // open so the user always knows what's on the wall right now (the bar's
+  // ON WALL chip is hidden behind the drawer when it's open). The chip
+  // morphs based on drift: on the wall climb, it's an informational
+  // "ON WALL · {driver}" badge; once they swipe off, it becomes a
+  // clickable "← {driver} · {wallClimb}" return-pill.
+  const showWallContextChip = !isDriver && isPersistentSessionActive && currentClimbQueueItem != null;
   const driftedFromWall =
-    !isDriver &&
-    isPersistentSessionActive &&
+    showWallContextChip &&
     drawerDisplayedItem != null &&
-    currentClimbQueueItem != null &&
-    drawerDisplayedItem.climb.uuid !== currentClimbQueueItem.climb.uuid;
+    drawerDisplayedItem.climb.uuid !== currentClimbQueueItem!.climb.uuid;
   const wallClimb = currentClimbQueueItem?.climb ?? null;
   const handleReturnToWallClimb = useCallback(() => {
     setDrawerDisplayedItem?.(null);
@@ -1306,32 +1311,60 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     if (!currentClimb) return null;
     return (
       <>
-        {driftedFromWall && driverUser && wallClimb && (
-          // Return-to-wall pill: visible only when a non-driver has actively
-          // swiped off the wall climb in browse mode. Tap snaps the drawer
-          // back to the wall climb (clears drawerDisplayedItem). The bar
-          // beneath the drawer carries the persistent "ON WALL" cue —
-          // this pill is the bridge for when drawer-view and bar-view have
-          // drifted apart.
+        {showWallContextChip && driverUser && wallClimb && (
+          // Wall-context chip: always visible for a non-driver in a party
+          // session while the drawer is open, so the wall-climb identity is
+          // never hidden behind the drawer (the bar's ON WALL chip is
+          // covered while this drawer is on top). Morphs by drift state:
+          //   - On the wall climb: informational "ON WALL · {driver}".
+          //   - Drifted (after a local swipe): clickable
+          //     "← {driver} · {wallClimb}" that snaps back to the wall climb.
           <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, pt: 1 }}>
-            <MuiChip
-              clickable
-              onClick={handleReturnToWallClimb}
-              size="small"
-              variant="outlined"
-              color="info"
-              icon={<ArrowBackOutlined sx={{ fontSize: 14, ml: 0.5 }} />}
-              avatar={
-                <MuiAvatar
-                  alt={driverUser.username}
-                  src={driverUser.avatarUrl ?? undefined}
-                  sx={{ width: 20, height: 20 }}
-                />
-              }
-              label={t('playView.returnToWallPill', { username: driverUser.username, climbName: wallClimb.name })}
-              aria-label={t('queueBar.ariaLabels.returnToWallClimb', { username: driverUser.username })}
-              sx={{ fontSize: 12, maxWidth: '100%' }}
-            />
+            {driftedFromWall ? (
+              <MuiChip
+                clickable
+                onClick={handleReturnToWallClimb}
+                size="small"
+                variant="outlined"
+                color="info"
+                icon={<ArrowBackOutlined sx={{ fontSize: 14, ml: 0.5 }} />}
+                avatar={
+                  <MuiAvatar
+                    alt={driverUser.username}
+                    src={driverUser.avatarUrl ?? undefined}
+                    sx={{ width: 20, height: 20 }}
+                  />
+                }
+                label={t('playView.returnToWallPill', {
+                  username: driverUser.username,
+                  climbName: wallClimb.name,
+                })}
+                aria-label={t('queueBar.ariaLabels.returnToWallClimb', { username: driverUser.username })}
+                sx={{ fontSize: 12, maxWidth: '100%' }}
+              />
+            ) : (
+              <MuiChip
+                size="small"
+                variant="outlined"
+                color="info"
+                role="status"
+                avatar={
+                  <MuiAvatar
+                    alt={driverUser.username}
+                    src={driverUser.avatarUrl ?? undefined}
+                    sx={{ width: 20, height: 20 }}
+                  />
+                }
+                label={t('playView.onWallChip', { username: driverUser.username })}
+                sx={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: 0.5,
+                  maxWidth: '100%',
+                  '& .MuiChip-label': { px: 0.75 },
+                }}
+              />
+            )}
           </Box>
         )}
         {/* Header: Grade | Name */}
@@ -1475,6 +1508,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     isPersistentSessionActive,
     isBluetoothConnected,
     driverUser,
+    showWallContextChip,
     driftedFromWall,
     wallClimb,
     handleReturnToWallClimb,

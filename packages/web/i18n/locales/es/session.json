@@ -225,6 +225,7 @@
     "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías."
   },
   "playView": {
+    "onWallChip": "EN EL MURO · {{username}}",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Vista previa. Toca la bombilla para enviar al muro.",
     "yourAscents_one": "Tu ascenso ({{count}})",

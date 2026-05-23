@@ -225,6 +225,7 @@
     "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs."
   },
   "playView": {
+    "onWallChip": "ON WALL · {{username}}",
     "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Previewing. Tap the lightbulb to send it to the wall.",
     "yourAscents_one": "Your Ascent ({{count}})",
