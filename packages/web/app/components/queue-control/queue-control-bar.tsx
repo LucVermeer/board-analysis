@@ -1216,7 +1216,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         }
                         role={tickBarActive ? undefined : 'button'}
                         tabIndex={tickBarActive ? undefined : 0}
-                        aria-label={tickBarActive ? undefined : t('queueBar.ariaLabels.openWallView')}
+                        aria-label={tickBarActive ? undefined : t('queueBar.ariaLabels.openPlayDrawer')}
                         className={styles.queueToggle}
                         style={{
                           transform: tickBarActive ? undefined : `translateX(${swipeOffset}px)`,

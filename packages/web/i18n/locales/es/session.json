@@ -195,7 +195,7 @@
       "logAttempt": "Registrar intento",
       "showParticipants": "Mostrar participantes",
       "hideParticipants": "Ocultar participantes",
-      "openWallView": "Show what's on the wall",
+      "openPlayDrawer": "Abrir el bloque del muro",
       "userIsDriving": "{{username}} is driving",
       "returnToWallClimb": "Volver al bloque de {{username}}",
       "returnToWallClimbNoDriver": "Volver al bloque del muro"

@@ -429,7 +429,7 @@ describe('QueueControlBar pivot', () => {
     expect(title).toBeTruthy();
     expect(title!.getAttribute('role')).toBe('button');
     expect(title!.getAttribute('tabindex')).toBe('0');
-    expect(title!.getAttribute('aria-label')).toBe("Show what's on the wall");
+    expect(title!.getAttribute('aria-label')).toBe('Open the wall climb');
   });
 
   // --- Driver-first ordering (P1-C) ----------------------------------------

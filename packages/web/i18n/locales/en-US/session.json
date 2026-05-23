@@ -195,7 +195,7 @@
       "logAttempt": "Log attempt",
       "showParticipants": "Show participants",
       "hideParticipants": "Hide participants",
-      "openWallView": "Show what's on the wall",
+      "openPlayDrawer": "Open the wall climb",
       "userIsDriving": "{{username}} is driving",
       "returnToWallClimb": "Return to {{username}}'s wall climb",
       "returnToWallClimbNoDriver": "Return to the wall climb"

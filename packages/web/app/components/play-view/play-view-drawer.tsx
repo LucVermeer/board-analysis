@@ -6,10 +6,8 @@ import { track } from '@/app/lib/analytics';
 import MuiBadge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
-import MuiAvatar from '@mui/material/Avatar';
-import AvatarGroup from '@mui/material/AvatarGroup';
 import { TickBadgeAvatar } from '@/app/components/session/tick-badge-avatar';
-import MuiChip from '@mui/material/Chip';
+import { MiniSessionBar } from './mini-session-bar';
 import Tooltip from '@mui/material/Tooltip';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -20,7 +18,6 @@ import SkipPreviousOutlined from '@mui/icons-material/SkipPreviousOutlined';
 import SkipNextOutlined from '@mui/icons-material/SkipNextOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import Lightbulb from '@mui/icons-material/Lightbulb';
-import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
 import MoreHorizOutlined from '@mui/icons-material/MoreHorizOutlined';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import KeyboardArrowUpOutlined from '@mui/icons-material/KeyboardArrowUpOutlined';
@@ -842,60 +839,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     });
   }, [swipeSuggestionsOnly, t]);
 
-  // Resolve the driver's user record so the "return to wall climb" pill
-  // can show their avatar + name when a non-driver has drifted off the
-  // wall climb in browse mode. Falls back gracefully — if we can't find
-  // the user (driver dropped, optimistic-claim race, etc.) the pill
-  // skips rendering.
+  // Resolve the driver's user record for the grabber-row peripheral cue.
+  // The mini session bar resolves its own copy from the same fields.
   const driverUser = useMemo(() => {
     if (!driverParticipantId) return null;
     return sessionUsers.find((u) => u.id === driverParticipantId) ?? null;
   }, [driverParticipantId, sessionUsers]);
 
-  // Drift detection: a non-driver in a party session has actively swiped
-  // off the wall climb in browse mode. `drawerDisplayedItem` is non-null
-  // only after a local swipe; if it matches `currentClimbQueueItem` the
-  // user is back on the wall climb (no drift). Until they swipe, the
-  // drawer auto-follows the wall via the `effectiveItem` fallback at the
-  // top of the component, so no pill is needed.
-  // Non-driver-in-party gate for the wall-context chip. Always shown while
-  // Drift detection feeds the mini session bar's back-button morph: a
-  // non-driver has actively swiped off the wall climb in browse mode.
-  // `drawerDisplayedItem` is non-null only after a local swipe; if it matches
-  // `currentClimbQueueItem` the user is back on the wall climb (no drift).
-  // Until they swipe, the drawer auto-follows the wall via the
-  // `effectiveItem` fallback at the top of the component.
-  const driftedFromWall =
-    !isDriver &&
-    isPersistentSessionActive &&
-    drawerDisplayedItem != null &&
-    currentClimbQueueItem != null &&
-    drawerDisplayedItem.climb.uuid !== currentClimbQueueItem.climb.uuid;
-  const wallClimb = currentClimbQueueItem?.climb ?? null;
   const handleReturnToWallClimb = useCallback(() => {
     setDrawerDisplayedItem?.(null);
   }, [setDrawerDisplayedItem]);
-
-  // Audience for the mini session bar's AvatarGroup. Everyone in the session
-  // except the local user; the driver-first sort keeps them at position 0 of
-  // the stack so the driver's lit-bulb badge anchors the strip. Tick badges
-  // are sourced from `effectiveItem.tickedBy` so the audience reflects "who
-  // has done THIS climb" (matching what the user is currently looking at,
-  // which may be the wall climb or a non-driver preview).
-  const tickedBySet = useMemo(() => {
-    return new Set(effectiveItem?.tickedBy ?? []);
-  }, [effectiveItem]);
-  const audienceUsers = useMemo(() => {
-    if (!isPersistentSessionActive) return [];
-    const others = sessionUsers.filter((u) => u.id !== participantId);
-    if (!driverParticipantId) return others;
-    const driverIdx = others.findIndex((u) => u.id === driverParticipantId);
-    if (driverIdx <= 0) return others;
-    const reordered = [...others];
-    const [driver] = reordered.splice(driverIdx, 1);
-    reordered.unshift(driver);
-    return reordered;
-  }, [isPersistentSessionActive, sessionUsers, participantId, driverParticipantId]);
 
   const navigate = useCallback(
     (direction: 'next' | 'previous', source: 'swipePlayViewDrawer' | 'playViewDrawer') => {
@@ -1401,151 +1354,16 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
           )}
         </div>
 
-        {/* Mini session bar — sits between the board and the action bar. One
-            slot that morphs by role + drift, so the climb-header above never
-            reflows when the local user takes/releases control (the moment
-            that should feel smooth). Visible in party sessions only — solo
-            users get no row. Audience is rendered as quiet dots (one dot per
-            co-watcher) capped at 5 with a +N overflow. */}
-        {isPersistentSessionActive && currentClimbQueueItem != null && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              px: 2,
-              py: 0.75,
-              borderTop: '1px solid var(--neutral-200)',
-              // Warm whisper tint — gives the band a reason to exist visually
-              // without painting it. The IA/iOS-HIG designers' pick:
-              // signals "this row is about who's here," not just chrome.
-              // Uses theme `warning` (the same amber the driver chip used)
-              // at ~5% opacity so it sits between the neutral climb area and
-              // the neutral action bar without competing with either.
-              backgroundColor: `color-mix(in srgb, ${themeTokens.colors.warning} 5%, transparent)`,
-              minHeight: 36,
-            }}
-          >
-            {isDriver ? (
-              <>
-                <Lightbulb sx={{ fontSize: 16, color: themeTokens.colors.warning }} aria-hidden="true" />
-                <Box
-                  component="span"
-                  sx={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5, color: themeTokens.colors.warning }}
-                >
-                  {t('playView.drivingChip')}
-                </Box>
-              </>
-            ) : driftedFromWall && wallClimb ? (
-              <Box
-                component="button"
-                onClick={handleReturnToWallClimb}
-                aria-label={
-                  driverUser
-                    ? t('queueBar.ariaLabels.returnToWallClimb', { username: driverUser.username })
-                    : t('queueBar.ariaLabels.returnToWallClimbNoDriver')
-                }
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 0.75,
-                  flex: 1,
-                  minWidth: 0,
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  cursor: 'pointer',
-                  color: 'inherit',
-                  textAlign: 'left',
-                }}
-              >
-                <ArrowBackOutlined sx={{ fontSize: 16, color: 'text.secondary' }} aria-hidden="true" />
-                {driverUser && (
-                  <MuiAvatar
-                    alt={driverUser.username}
-                    src={driverUser.avatarUrl ?? undefined}
-                    sx={{ width: 20, height: 20 }}
-                  />
-                )}
-                <Box
-                  component="span"
-                  sx={{
-                    fontSize: 12,
-                    fontWeight: 500,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    minWidth: 0,
-                  }}
-                >
-                  {driverUser
-                    ? t('playView.returnToWallPill', {
-                        username: driverUser.username,
-                        climbName: wallClimb.name,
-                      })
-                    : wallClimb.name}
-                </Box>
-              </Box>
-            ) : (
-              <>
-                {driverUser && (
-                  <MuiAvatar
-                    alt={driverUser.username}
-                    src={driverUser.avatarUrl ?? undefined}
-                    sx={{ width: 20, height: 20 }}
-                  />
-                )}
-                <Box
-                  component="span"
-                  sx={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: 0.5,
-                    color: 'text.secondary',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    minWidth: 0,
-                  }}
-                >
-                  {driverUser
-                    ? t('playView.onWallChip', { username: driverUser.username })
-                    : t('playView.onWallChipNoDriver')}
-                </Box>
-              </>
-            )}
-            {audienceUsers.length > 0 && (
-              <Box
-                sx={{ ml: 'auto', flexShrink: 0 }}
-                aria-label={t('playView.audienceCount', { count: audienceUsers.length })}
-              >
-                <AvatarGroup
-                  max={3}
-                  sx={{
-                    '& .MuiAvatar-root': {
-                      width: 22,
-                      height: 22,
-                      fontSize: 10,
-                      border: '2px solid transparent',
-                    },
-                  }}
-                >
-                  {audienceUsers.map((user) => (
-                    <TickBadgeAvatar
-                      key={user.id}
-                      user={user}
-                      hasTicked={
-                        tickedBySet.has(user.id) || (user.userId != null && tickedBySet.has(user.userId))
-                      }
-                      isDriver={driverParticipantId != null && user.id === driverParticipantId}
-                      size={22}
-                    />
-                  ))}
-                </AvatarGroup>
-              </Box>
-            )}
-          </Box>
-        )}
+        <MiniSessionBar
+          isDriver={isDriver}
+          isPersistentSessionActive={isPersistentSessionActive}
+          sessionUsers={sessionUsers}
+          participantId={participantId}
+          driverParticipantId={driverParticipantId}
+          currentClimbQueueItem={currentClimbQueueItem}
+          drawerDisplayedItem={drawerDisplayedItem}
+          onReturnToWallClimb={handleReturnToWallClimb}
+        />
 
         {/* Action bar */}
         {isOpen && (
@@ -1623,13 +1441,11 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     isPersistentSessionActive,
     isBluetoothConnected,
     currentClimbQueueItem,
-    driverUser,
-    driftedFromWall,
-    wallClimb,
-    handleReturnToWallClimb,
-    audienceUsers,
-    tickedBySet,
+    sessionUsers,
+    participantId,
     driverParticipantId,
+    drawerDisplayedItem,
+    handleReturnToWallClimb,
     lightbulbCoachmarkText,
   ]);
 
@@ -1688,12 +1504,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 gap: 0.5,
                 pointerEvents: 'none',
               }}
-              aria-label={t('queueBar.ariaLabels.userIsDriving', { username: driverUser.username })}
             >
-              <MuiAvatar
-                alt={driverUser.username}
-                src={driverUser.avatarUrl ?? undefined}
-                sx={{ width: 18, height: 18 }}
+              <TickBadgeAvatar user={driverUser} hasTicked={false} isDriver size={18}
               />
             </Box>
           )}
