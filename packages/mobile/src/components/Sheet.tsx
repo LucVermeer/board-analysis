@@ -1,10 +1,6 @@
 import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
 import { Platform, StyleSheet } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
 
 type SheetProps = {
@@ -16,13 +12,7 @@ type SheetProps = {
 };
 
 export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
-  {
-    children,
-    snapPoints: customSnapPoints,
-    enableDynamicSizing = false,
-    onClose,
-    enablePanDownToClose = true,
-  },
+  { children, snapPoints: customSnapPoints, enableDynamicSizing = false, onClose, enablePanDownToClose = true },
   ref,
 ) {
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
@@ -34,12 +24,9 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [],
   );
 
-  const handleChange = useCallback(
-    (index: number) => {
-      if (index >= 0) hapticMedium();
-    },
-    [],
-  );
+  const handleChange = useCallback((index: number) => {
+    if (index >= 0) hapticMedium();
+  }, []);
 
   return (
     <BottomSheet

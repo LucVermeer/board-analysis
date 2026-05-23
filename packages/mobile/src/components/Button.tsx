@@ -78,8 +78,7 @@ export function Button({
     ...(variant === 'outlined' && { borderWidth: 1, borderColor: tintColor }),
   };
 
-  const textColor =
-    variant === 'filled' ? '#FFFFFF' : tintColor;
+  const textColor = variant === 'filled' ? '#FFFFFF' : tintColor;
 
   return (
     <AnimatedPressable

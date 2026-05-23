@@ -496,6 +496,20 @@ export const SAVE_TICK = gql`
   }
 `;
 
+export type SaveTickMutationVariables = {
+  input: {
+    climbUuid: string;
+    angle: number;
+    isMirror: boolean;
+    status: string;
+    attemptCount: number;
+    quality?: number | null;
+    difficulty?: number | null;
+    comment?: string;
+    boardName: string;
+  };
+};
+
 export type SaveTickMutationResponse = {
   saveTick: {
     uuid: string;

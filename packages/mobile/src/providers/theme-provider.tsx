@@ -54,9 +54,7 @@ function resolveSystemColors(colorScheme: ColorScheme): ResolvedSystemColors {
   }
 
   // Android: resolve from the single source of truth for fallback colors.
-  const fallback = colorScheme === 'dark'
-    ? androidFallbackColors.dark
-    : androidFallbackColors.light;
+  const fallback = colorScheme === 'dark' ? androidFallbackColors.dark : androidFallbackColors.light;
 
   return {
     background: fallback.background,
@@ -96,11 +94,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     };
   }, [colorScheme]);
 
-  return (
-    <ThemeContext value={theme}>
-      {children}
-    </ThemeContext>
-  );
+  return <ThemeContext value={theme}>{children}</ThemeContext>;
 }
 
 /**

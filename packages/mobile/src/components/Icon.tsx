@@ -4,7 +4,7 @@ import { iconMap, type IconName } from './icon-map';
 type IconProps = {
   name: IconName;
   size?: number;
-  color?: string;
+  color?: string | import('react-native').OpaqueColorValue;
 };
 
 export function Icon({ name, size = 24, color }: IconProps) {

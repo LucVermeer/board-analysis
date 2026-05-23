@@ -21,24 +21,15 @@ export default function BoardSelection() {
 
   if (boards.length === 0) {
     return (
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.centered}
-      >
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.centered}>
         <Text style={[styles.emptyTitle, { color: systemColors.label }]}>{t('mobile.emptyTitle')}</Text>
-        <Text style={[styles.emptySubtitle, { color: systemColors.secondaryLabel }]}>
-          {t('mobile.emptySubtitle')}
-        </Text>
+        <Text style={[styles.emptySubtitle, { color: systemColors.secondaryLabel }]}>{t('mobile.emptySubtitle')}</Text>
       </ScrollView>
     );
   }
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      style={styles.flex}
-      contentContainerStyle={styles.container}
-    >
+    <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.flex} contentContainerStyle={styles.container}>
       {boards.map((board) => (
         <Pressable
           key={board.uuid}

@@ -6,13 +6,7 @@ import { brandColors } from '../../src/theme/colors';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-function SignInButton({
-  title,
-  onPress,
-}: {
-  title: string;
-  onPress: () => void;
-}) {
+function SignInButton({ title, onPress }: { title: string; onPress: () => void }) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -49,9 +43,7 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.buttons}>
-        {Platform.OS === 'ios' && (
-          <SignInButton title="Sign in with Apple" onPress={() => signIn('apple')} />
-        )}
+        {Platform.OS === 'ios' && <SignInButton title="Sign in with Apple" onPress={() => signIn('apple')} />}
         <SignInButton title="Sign in with Google" onPress={() => signIn('google')} />
       </View>
     </View>

@@ -13,11 +13,7 @@ import type { BoardHold, HoldPlacement } from './types';
  * This hook resolves each hold ID to its (cx, cy, r) position from `holdsData`,
  * and maps the state code to a display color via HOLD_STATE_MAP.
  */
-export function useParseFrames(
-  frames: string,
-  boardName: BoardName,
-  holdsData: HoldPlacement[],
-): BoardHold[] {
+export function useParseFrames(frames: string, boardName: BoardName, holdsData: HoldPlacement[]): BoardHold[] {
   return useMemo(() => {
     if (!frames) return [];
 

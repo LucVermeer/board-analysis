@@ -8,17 +8,20 @@ import { Platform, PlatformColor, type ColorValue } from 'react-native';
  * colors from `androidFallbackColors` instead. All color access should go
  * through `useTheme().systemColors` — never consume this directly.
  */
-export const iosSystemColors: Record<string, ColorValue> | null = Platform.OS === 'ios' ? {
-  background: PlatformColor('systemBackground'),
-  secondaryBackground: PlatformColor('secondarySystemBackground'),
-  tertiaryBackground: PlatformColor('tertiarySystemBackground'),
-  groupedBackground: PlatformColor('systemGroupedBackground'),
-  label: PlatformColor('label'),
-  secondaryLabel: PlatformColor('secondaryLabel'),
-  tertiaryLabel: PlatformColor('tertiaryLabel'),
-  separator: PlatformColor('separator'),
-  fill: PlatformColor('systemFill'),
-} : null;
+export const iosSystemColors: Record<string, ColorValue> | null =
+  Platform.OS === 'ios'
+    ? {
+        background: PlatformColor('systemBackground'),
+        secondaryBackground: PlatformColor('secondarySystemBackground'),
+        tertiaryBackground: PlatformColor('tertiarySystemBackground'),
+        groupedBackground: PlatformColor('systemGroupedBackground'),
+        label: PlatformColor('label'),
+        secondaryLabel: PlatformColor('secondaryLabel'),
+        tertiaryLabel: PlatformColor('tertiaryLabel'),
+        separator: PlatformColor('separator'),
+        fill: PlatformColor('systemFill'),
+      }
+    : null;
 
 /**
  * Brand colors are the same on all platforms and in all color schemes.

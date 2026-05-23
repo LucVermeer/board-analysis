@@ -172,47 +172,38 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     };
   }, [sessionId]);
 
-  const addToQueue = useCallback(
-    (item: ClimbQueueItem) => {
-      // Optimistic local dispatch — use DELTA_ADD_QUEUE_ITEM for idempotency
-      // so a WS echo of the same item won't create a duplicate
-      dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
+  const addToQueue = useCallback((item: ClimbQueueItem) => {
+    // Optimistic local dispatch — use DELTA_ADD_QUEUE_ITEM for idempotency
+    // so a WS echo of the same item won't create a duplicate
+    dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
 
-      // Phase 2 gap: server mutation not yet wired. Local-only until
-      // GraphQL mutations for queue operations are implemented. Changes
-      // are visible locally but not synced to other session participants.
-    },
-    [],
-  );
+    // Phase 2 gap: server mutation not yet wired. Local-only until
+    // GraphQL mutations for queue operations are implemented. Changes
+    // are visible locally but not synced to other session participants.
+  }, []);
 
-  const removeFromQueue = useCallback(
-    (uuid: string) => {
-      dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+  const removeFromQueue = useCallback((uuid: string) => {
+    dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
 
-      // Phase 2 gap: server mutation not yet wired. Local-only until
-      // GraphQL mutations for queue operations are implemented. Changes
-      // are visible locally but not synced to other session participants.
-    },
-    [],
-  );
+    // Phase 2 gap: server mutation not yet wired. Local-only until
+    // GraphQL mutations for queue operations are implemented. Changes
+    // are visible locally but not synced to other session participants.
+  }, []);
 
-  const setCurrentClimb = useCallback(
-    (item: ClimbQueueItem) => {
-      dispatch({
-        type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: {
-          item,
-          shouldAddToQueue: true,
-          isServerEvent: false,
-        },
-      });
+  const setCurrentClimb = useCallback((item: ClimbQueueItem) => {
+    dispatch({
+      type: 'DELTA_UPDATE_CURRENT_CLIMB',
+      payload: {
+        item,
+        shouldAddToQueue: true,
+        isServerEvent: false,
+      },
+    });
 
-      // Phase 2 gap: server mutation not yet wired. Local-only until
-      // GraphQL mutations for queue operations are implemented. Changes
-      // are visible locally but not synced to other session participants.
-    },
-    [],
-  );
+    // Phase 2 gap: server mutation not yet wired. Local-only until
+    // GraphQL mutations for queue operations are implemented. Changes
+    // are visible locally but not synced to other session participants.
+  }, []);
 
   const nextClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;

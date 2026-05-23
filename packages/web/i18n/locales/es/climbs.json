@@ -563,6 +563,20 @@
       "attempt_other": "intentos",
       "send_one": "encadene",
       "send_other": "encadenes"
+    },
+    "logAscent": {
+      "title": "Registrar encadene",
+      "flash": "Flash",
+      "send": "Encadene",
+      "attempt": "Intento",
+      "attempts": "Intentos",
+      "quality": "Calidad",
+      "gradeOpinion": "Tu grado",
+      "comment": "Notas",
+      "commentPlaceholder": "¿Cómo se sintió?",
+      "save": "Guardar",
+      "decreaseAttempts": "Disminuir intentos",
+      "increaseAttempts": "Aumentar intentos"
     }
   }
 }

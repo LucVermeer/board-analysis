@@ -19,11 +19,7 @@ export default function Profile() {
   }
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      style={styles.flex}
-      contentContainerStyle={styles.container}
-    >
+    <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.flex} contentContainerStyle={styles.container}>
       <View style={styles.header}>
         {profile?.avatarUrl ? (
           <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
@@ -37,15 +33,10 @@ export default function Profile() {
         <Text style={[styles.name, { color: systemColors.label }]}>
           {profile?.displayName ?? t('mobile.unknownName')}
         </Text>
-        <Text style={[styles.email, { color: systemColors.secondaryLabel }]}>
-          {profile?.email ?? ''}
-        </Text>
+        <Text style={[styles.email, { color: systemColors.secondaryLabel }]}>{profile?.email ?? ''}</Text>
       </View>
 
-      <Pressable
-        style={[styles.signOutButton, { borderColor: systemColors.separator }]}
-        onPress={signOut}
-      >
+      <Pressable style={[styles.signOutButton, { borderColor: systemColors.separator }]} onPress={signOut}>
         <Text style={styles.signOutText}>{t('mobile.signOut')}</Text>
       </Pressable>
     </ScrollView>

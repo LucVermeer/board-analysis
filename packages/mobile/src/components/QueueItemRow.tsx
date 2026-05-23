@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector, type GestureUpdateEvent, type PanGestureHandlerEventPayload } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
+import {
+  Gesture,
+  GestureDetector,
+  type GestureUpdateEvent,
+  type PanGestureHandlerEventPayload,
+} from 'react-native-gesture-handler';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { Text } from './Text';
 import { Icon } from './Icon';
@@ -122,11 +121,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
         <GestureDetector gesture={panGesture}>
           <AnimatedPressable
             onPress={handlePress}
-            style={[
-              styles.row,
-              isCurrentClimb && styles.currentClimbRow,
-              rowAnimatedStyle,
-            ]}
+            style={[styles.row, isCurrentClimb && styles.currentClimbRow, rowAnimatedStyle]}
           >
             {/* Position number */}
             <View style={styles.positionContainer}>
@@ -141,11 +136,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
 
             {/* Climb info */}
             <View style={styles.climbInfo}>
-              <Text
-                variant="body"
-                numberOfLines={1}
-                style={isCurrentClimb ? styles.currentClimbText : undefined}
-              >
+              <Text variant="body" numberOfLines={1} style={isCurrentClimb ? styles.currentClimbText : undefined}>
                 {climbName}
               </Text>
             </View>

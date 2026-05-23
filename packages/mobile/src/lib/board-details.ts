@@ -59,9 +59,7 @@ export function getBoardRenderData(params: {
       r: xSpacing * 4,
     }));
 
-  const imageUrls = imageFilenames.map(
-    (filename) => `https://www.boardsesh.com/images/${boardName}/${filename}`,
-  );
+  const imageUrls = imageFilenames.map((filename) => `https://www.boardsesh.com/images/${boardName}/${filename}`);
 
   return { boardWidth, boardHeight, imageUrls, holdsData };
 }

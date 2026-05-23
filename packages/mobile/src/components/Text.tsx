@@ -1,4 +1,4 @@
-import { Text as RNText, type TextProps as RNTextProps, StyleSheet } from 'react-native';
+import { Text as RNText, type TextProps as RNTextProps, type ColorValue, StyleSheet } from 'react-native';
 
 export type TextVariant =
   | 'largeTitle'
@@ -15,7 +15,7 @@ export type TextVariant =
 
 type TextProps = RNTextProps & {
   variant?: TextVariant;
-  color?: string;
+  color?: ColorValue;
 };
 
 const variantStyles = StyleSheet.create({

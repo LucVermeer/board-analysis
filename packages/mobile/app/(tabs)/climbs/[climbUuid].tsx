@@ -116,9 +116,7 @@ export default function ClimbDetail() {
           {showStars && (
             <View style={styles.statItem}>
               <Icon name="star.fill" size={14} color="#FFB800" />
-              <Text variant="footnote">
-                {climb.stars > 0 ? climb.stars.toFixed(1) : qualityNum.toFixed(1)}
-              </Text>
+              <Text variant="footnote">{climb.stars > 0 ? climb.stars.toFixed(1) : qualityNum.toFixed(1)}</Text>
             </View>
           )}
 
@@ -139,7 +137,7 @@ export default function ClimbDetail() {
         </View>
 
         {/* User progress */}
-        {(climb.userAscents != null && climb.userAscents > 0) && (
+        {climb.userAscents != null && climb.userAscents > 0 && (
           <View style={styles.progressRow}>
             <Icon name="tick" size={16} color={brandColors.success} />
             <Text variant="footnote" style={styles.progressText}>

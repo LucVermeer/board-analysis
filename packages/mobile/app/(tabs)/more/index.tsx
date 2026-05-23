@@ -7,10 +7,7 @@ export default function MoreScreen() {
   const { t } = useTranslation('common');
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.container}
-    >
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <Text style={[styles.text, { color: systemColors.secondaryLabel }]}>{t('mobile.more.title')}</Text>
     </ScrollView>
   );

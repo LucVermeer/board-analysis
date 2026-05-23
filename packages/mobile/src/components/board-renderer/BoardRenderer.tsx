@@ -50,18 +50,11 @@ const BoardRenderer = React.memo(function BoardRenderer({
   };
 
   // Mirror transform: flip horizontally around the center
-  const mirrorTransform = mirrored
-    ? `translate(${boardWidth}, 0) scale(-1, 1)`
-    : undefined;
+  const mirrorTransform = mirrored ? `translate(${boardWidth}, 0) scale(-1, 1)` : undefined;
 
   return (
     <View style={containerStyle}>
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox={viewBox}
-        preserveAspectRatio="xMidYMid meet"
-      >
+      <Svg width="100%" height="100%" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
         <G transform={mirrorTransform}>
           {/* Background board image(s) — layered in order */}
           {imageUrls.map((url) => (

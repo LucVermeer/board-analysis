@@ -165,22 +165,13 @@ export default function QueueScreen() {
           style={[styles.navButton, !hasPrevious && styles.navButtonDisabled]}
           hitSlop={8}
         >
-          <Icon
-            name="chevron.left"
-            size={22}
-            color={hasPrevious ? brandColors.primary : systemColors.secondaryLabel}
-          />
+          <Icon name="chevron.left" size={22} color={hasPrevious ? brandColors.primary : systemColors.secondaryLabel} />
         </Pressable>
 
         <View style={styles.navClimbInfo}>
           {currentClimbQueueItem ? (
             <>
-              <Text
-                variant="subheadline"
-                numberOfLines={1}
-                color={systemColors.label}
-                style={styles.navClimbName}
-              >
+              <Text variant="subheadline" numberOfLines={1} color={systemColors.label} style={styles.navClimbName}>
                 {currentClimbQueueItem.climb?.name ?? t('mobile.queue.unknownClimb')}
               </Text>
               {currentClimbQueueItem.climb?.difficulty ? (
@@ -202,11 +193,7 @@ export default function QueueScreen() {
           style={[styles.navButton, !hasNext && styles.navButtonDisabled]}
           hitSlop={8}
         >
-          <Icon
-            name="chevron.right"
-            size={22}
-            color={hasNext ? brandColors.primary : systemColors.secondaryLabel}
-          />
+          <Icon name="chevron.right" size={22} color={hasNext ? brandColors.primary : systemColors.secondaryLabel} />
         </Pressable>
       </Animated.View>
     </View>

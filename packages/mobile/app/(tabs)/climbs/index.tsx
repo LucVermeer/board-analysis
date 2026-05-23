@@ -183,13 +183,12 @@ export default function ClimbList() {
   );
 
   const contextMenuActions = useMemo(
-    () =>
-      [
-        { title: t('mobile.contextMenu.addToQueue'), systemIcon: 'list.bullet' },
-        { title: t('actions.favorite.label.favorite'), systemIcon: 'heart' },
-        { title: t('share.actionLabel'), systemIcon: 'square.and.arrow.up' },
-        { title: t('mobile.contextMenu.viewSetter'), systemIcon: 'person' },
-      ],
+    () => [
+      { title: t('mobile.contextMenu.addToQueue'), systemIcon: 'list.bullet' },
+      { title: t('actions.favorite.label.favorite'), systemIcon: 'heart' },
+      { title: t('share.actionLabel'), systemIcon: 'square.and.arrow.up' },
+      { title: t('mobile.contextMenu.viewSetter'), systemIcon: 'person' },
+    ],
     [t],
   );
 

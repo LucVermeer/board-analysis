@@ -73,9 +73,7 @@ export function ListRow({
           </View>
         )}
       </View>
-      {showSeparator && (
-        <View style={[styles.separator, { marginLeft: separatorInset + (leading ? 48 : 0) }]} />
-      )}
+      {showSeparator && <View style={[styles.separator, { marginLeft: separatorInset + (leading ? 48 : 0) }]} />}
     </>
   );
 
