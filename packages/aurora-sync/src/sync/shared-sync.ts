@@ -413,9 +413,11 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
   const climbStatHistorySchema = UNIFIED_TABLES.climbStatsHistory;
 
   await processBatches(data, async (batch) => {
-    // Two cooperating writers feed this row: Aurora sync (here) and the
-    // Boardsesh tick recompute (recomputeClimbStats). Each owns its own count
-    // column; ascensionist_count is the materialized sum kept in lockstep.
+    // Three cooperating writers feed this row: Aurora sync (here), Kilter sync
+    // (packages/kilter-sync), and the Boardsesh tick recompute
+    // (recomputeClimbStats). Each owns its own count column; ascensionist_count
+    // is the materialized sum kept in lockstep — every writer touching its own
+    // share also recomputes the sum in the same statement.
     //
     // FA fields are written verbatim from Aurora's payload — including null,
     // which is how Aurora signals a correction (revoked / re-attributed FA).
@@ -449,7 +451,7 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
           displayDifficulty: sql`excluded.display_difficulty`,
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
           auroraAscensionistCount: sql`excluded.aurora_ascensionist_count`,
-          ascensionistCount: sql`COALESCE(excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
+          ascensionistCount: sql`COALESCE(excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.kilterAscensionistCount}, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
           faUsername: sql`excluded.fa_username`,
