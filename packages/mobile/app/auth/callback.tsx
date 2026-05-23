@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,12 +10,16 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { refreshAuthState } = useAuth();
+  const exchangedRef = useRef(false);
 
   useEffect(() => {
     if (!transferToken) {
       setError('No transfer token received');
       return;
     }
+
+    if (exchangedRef.current) return;
+    exchangedRef.current = true;
 
     exchangeTransferToken(transferToken).then(async (result) => {
       if (result.success) {

@@ -29,7 +29,7 @@ async function refreshTokens(): Promise<boolean> {
 }
 
 // Deduplicate concurrent refresh attempts
-async function ensureFreshToken(): Promise<boolean> {
+export async function ensureFreshToken(): Promise<boolean> {
   const expiring = await isTokenExpiringSoon();
   if (!expiring) return true;
 
@@ -41,7 +41,7 @@ async function ensureFreshToken(): Promise<boolean> {
   return refreshPromise;
 }
 
-export async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function authenticatedFetch(url: string | URL | Request, options: RequestInit = {}): Promise<Response> {
   await ensureFreshToken();
 
   const token = await getAuthToken();
@@ -52,14 +52,18 @@ export async function authenticatedFetch(url: string, options: RequestInit = {})
 
   const response = await fetch(url, { ...options, headers });
 
-  // If 401, try refresh once then retry
+  // If 401, try refresh once then retry (use ensureFreshToken for deduplication)
   if (response.status === 401 && token) {
-    const refreshed = await refreshTokens();
+    const refreshed = await ensureFreshToken();
     if (refreshed) {
       const newToken = await getAuthToken();
-      headers.set('Authorization', `Bearer ${newToken}`);
-      return fetch(url, { ...options, headers });
+      if (newToken) {
+        headers.set('Authorization', `Bearer ${newToken}`);
+        return fetch(url, { ...options, headers });
+      }
     }
+    // Refresh failed or no new token — clear stale credentials
+    await clearTokens();
   }
 
   return response;

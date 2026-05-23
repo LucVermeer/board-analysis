@@ -722,6 +722,13 @@
       "when": 1779528025494,
       "tag": "0102_faulty_secret_warriors",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1779530224310,
+      "tag": "0103_goofy_shotgun",
+      "breakpoints": true
     }
   ]
 }

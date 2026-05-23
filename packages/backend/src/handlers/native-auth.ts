@@ -20,6 +20,88 @@ const REFRESH_TOKEN_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000;
 /** Maximum request body size for these endpoints. */
 const MAX_BODY_BYTES = 4096;
 
+/** JWT issuer claim for mobile tokens. */
+const JWT_ISSUER = 'boardsesh';
+
+/** JWT audience claim for mobile tokens. */
+const JWT_AUDIENCE = 'boardsesh-mobile';
+
+// ---------------------------------------------------------------------------
+// Transfer token replay prevention
+// ---------------------------------------------------------------------------
+
+/** Map of consumed transfer token signatures → consumption timestamp (ms). */
+const consumedTransferTokens = new Map<string, number>();
+
+/** TTL for consumed token entries (125s — slightly longer than the 120s token TTL). */
+const CONSUMED_TOKEN_TTL_MS = 125_000;
+
+/** Cleanup interval for expired consumed token entries. */
+const CONSUMED_TOKEN_CLEANUP_INTERVAL_MS = 60_000;
+
+// Periodically evict stale consumed-token entries so the map doesn't grow unbounded.
+setInterval(() => {
+  const cutoff = Date.now() - CONSUMED_TOKEN_TTL_MS;
+  for (const [signature, timestamp] of consumedTransferTokens) {
+    if (timestamp < cutoff) consumedTransferTokens.delete(signature);
+  }
+}, CONSUMED_TOKEN_CLEANUP_INTERVAL_MS);
+
+// ---------------------------------------------------------------------------
+// IP-based rate limiting for auth endpoints
+// ---------------------------------------------------------------------------
+
+type AuthRateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+/** Rate limit state per IP address. */
+const authRateLimitMap = new Map<string, AuthRateLimitEntry>();
+
+/** Maximum auth requests per IP per minute. */
+const AUTH_RATE_LIMIT_MAX = 10;
+
+/** Rate limit window in milliseconds (1 minute). */
+const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
+
+// Periodically clean up expired rate limit entries.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ipAddress, entry] of authRateLimitMap) {
+    if (now > entry.resetAt) authRateLimitMap.delete(ipAddress);
+  }
+}, AUTH_RATE_LIMIT_WINDOW_MS);
+
+/**
+ * Check if an IP address has exceeded the auth endpoint rate limit.
+ * Returns the number of seconds until the limit resets, or null if allowed.
+ */
+function checkAuthRateLimit(ipAddress: string): number | null {
+  const now = Date.now();
+  const entry = authRateLimitMap.get(ipAddress);
+
+  if (!entry || now > entry.resetAt) {
+    authRateLimitMap.set(ipAddress, { count: 1, resetAt: now + AUTH_RATE_LIMIT_WINDOW_MS });
+    return null;
+  }
+
+  if (entry.count >= AUTH_RATE_LIMIT_MAX) {
+    return Math.ceil((entry.resetAt - now) / 1000);
+  }
+
+  entry.count++;
+  return null;
+}
+
+/** Extract the client IP from an incoming request. */
+function getClientIp(req: IncomingMessage): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  if (Array.isArray(forwarded) && forwarded.length > 0) return forwarded[0].split(',')[0].trim();
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -138,6 +220,8 @@ async function generateTokenPair(userId: string): Promise<{
   const jwt = await new SignJWT({ sub: userId })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt()
+    .setIssuer(JWT_ISSUER)
+    .setAudience(JWT_AUDIENCE)
     .setExpirationTime(JWT_EXPIRY)
     .sign(signingSecret);
 
@@ -170,6 +254,15 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
     return;
   }
 
+  // Rate limit by IP
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
+    return;
+  }
+
   let body: unknown;
   try {
     const raw = await readBody(req);
@@ -190,6 +283,21 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
     return;
   }
 
+  // Extract the signature before verification so we can check for replay
+  const tokenParts = transferToken.split('.');
+  if (tokenParts.length !== 2 || !tokenParts[1]) {
+    sendJson(res, 401, { error: 'Invalid or expired transfer token' });
+    return;
+  }
+  const tokenSignature = tokenParts[1];
+
+  // Check if this transfer token has already been consumed (replay prevention)
+  if (consumedTransferTokens.has(tokenSignature)) {
+    logger.warn('[NativeAuth] Transfer token replay attempt detected');
+    sendJson(res, 401, { error: 'Invalid or expired transfer token' });
+    return;
+  }
+
   // Verify the HMAC transfer token
   const verified = verifyTransferToken(transferToken);
   if (!verified) {
@@ -197,6 +305,9 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
     sendJson(res, 401, { error: 'Invalid or expired transfer token' });
     return;
   }
+
+  // Mark token as consumed to prevent replay within the TTL window
+  consumedTransferTokens.set(tokenSignature, Date.now());
 
   try {
     const tokenPair = await generateTokenPair(verified.userId);
@@ -217,6 +328,15 @@ export async function handleNativeAuthRefresh(req: IncomingMessage, res: ServerR
 
   if (req.method !== 'POST') {
     sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  // Rate limit by IP
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
     return;
   }
 
@@ -243,37 +363,32 @@ export async function handleNativeAuthRefresh(req: IncomingMessage, res: ServerR
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
   try {
-    // Find matching, non-revoked, non-expired refresh token
-    const [existingToken] = await db
-      .select()
-      .from(mobileRefreshTokens)
+    // Atomically revoke the token and return it in a single query.
+    // This prevents TOCTOU races: if two concurrent requests present the same
+    // refresh token, only one will get the row back — the other gets an empty
+    // result because the WHERE clause requires revoked_at IS NULL.
+    const revokedRows = await db
+      .update(mobileRefreshTokens)
+      .set({ revokedAt: new Date() })
       .where(and(eq(mobileRefreshTokens.tokenHash, tokenHash), isNull(mobileRefreshTokens.revokedAt)))
-      .limit(1);
+      .returning();
 
-    if (!existingToken) {
+    const revokedToken = revokedRows[0];
+
+    if (!revokedToken) {
       sendJson(res, 401, { error: 'Invalid refresh token' });
       return;
     }
 
-    if (existingToken.expiresAt < new Date()) {
-      // Revoke the expired token for hygiene
-      await db
-        .update(mobileRefreshTokens)
-        .set({ revokedAt: new Date() })
-        .where(eq(mobileRefreshTokens.id, existingToken.id));
+    if (revokedToken.expiresAt < new Date()) {
+      // Token was already expired — we revoked it for hygiene but won't issue new tokens
       sendJson(res, 401, { error: 'Refresh token expired' });
       return;
     }
 
-    // Revoke old token (rotation)
-    await db
-      .update(mobileRefreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(mobileRefreshTokens.id, existingToken.id));
-
     // Issue new token pair
-    const tokenPair = await generateTokenPair(existingToken.userId);
-    logger.info(`[NativeAuth] Token refresh successful for user ${existingToken.userId}`);
+    const tokenPair = await generateTokenPair(revokedToken.userId);
+    logger.info(`[NativeAuth] Token refresh successful for user ${revokedToken.userId}`);
     sendJson(res, 200, tokenPair);
   } catch (error) {
     logger.error('[NativeAuth] Token refresh failed:', error);

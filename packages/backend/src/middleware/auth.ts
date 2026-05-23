@@ -120,6 +120,8 @@ export async function validateMobileJwt(token: string): Promise<AuthResult | nul
     const secretKey = new TextEncoder().encode(secret);
     const { payload } = await jwtVerify(token, secretKey, {
       clockTolerance: 60,
+      issuer: 'boardsesh',
+      audience: 'boardsesh-mobile',
     });
 
     const userId = payload.sub;

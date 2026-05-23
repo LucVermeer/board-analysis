@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 /**
@@ -13,16 +13,23 @@ import { users } from './users';
  * token sets `revokedAt` rather than deleting the row so we can audit token
  * rotation chains after the fact.
  */
-export const mobileRefreshTokens = pgTable('mobile_refresh_tokens', {
-  id: text('id')
-    .notNull()
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull(),
-  expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
-  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-  revokedAt: timestamp('revoked_at', { mode: 'date' }),
-});
+export const mobileRefreshTokens = pgTable(
+  'mobile_refresh_tokens',
+  {
+    id: text('id')
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    revokedAt: timestamp('revoked_at', { mode: 'date' }),
+  },
+  (table) => ({
+    tokenHashIdx: uniqueIndex('mobile_refresh_tokens_token_hash_idx').on(table.tokenHash),
+    userIdIdx: index('mobile_refresh_tokens_user_id_idx').on(table.userId),
+  }),
+);

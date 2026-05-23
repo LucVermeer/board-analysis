@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { useRouter, useSegments } from 'expo-router';
 import { getAuthToken } from '../lib/auth-store';
 import { startSignIn, signOut as authSignOut, type AuthProvider as AuthProviderType } from '../lib/auth';
+import { resetHttpClient } from '../lib/graphql/client';
+import { disposeWsClient } from '../lib/graphql/ws-client';
 
 type AuthState = {
   isAuthenticated: boolean;
@@ -53,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await authSignOut();
+    resetHttpClient();
+    disposeWsClient();
     setIsAuthenticated(false);
   }, []);
 
