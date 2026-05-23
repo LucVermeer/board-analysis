@@ -1527,8 +1527,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 pointerEvents: 'none',
               }}
             >
-              <TickBadgeAvatar user={driverUser} hasTicked={false} isDriver size={18}
-              />
+              <TickBadgeAvatar user={driverUser} hasTicked={false} isDriver size={18} />
             </Box>
           )}
           <div

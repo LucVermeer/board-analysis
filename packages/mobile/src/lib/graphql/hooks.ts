@@ -1,0 +1,190 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type {
+  UserBoard,
+  UserBoardConnection,
+  Climb,
+  ClimbSearchInput,
+  Grade,
+  Angle,
+  MyBoardsInput,
+  SearchBoardsInput,
+  UserProfile,
+  SessionSummary,
+} from '@boardsesh/shared-schema';
+import { getHttpClient } from './client';
+import {
+  GET_PROFILE,
+  GET_MY_BOARDS,
+  GET_DEFAULT_BOARD,
+  GET_BOARD,
+  SEARCH_BOARDS,
+  GET_BOARDS_BY_SERIAL_NUMBERS,
+  GET_GRADES,
+  GET_ANGLES,
+  SEARCH_CLIMBS,
+  SEARCH_CLIMBS_COUNT,
+  GET_CLIMB,
+  GET_SESSION_SUMMARY,
+  TOGGLE_FAVORITE,
+  type GetProfileQueryResponse,
+  type GetMyBoardsQueryResponse,
+  type GetDefaultBoardQueryResponse,
+  type GetBoardQueryResponse,
+  type SearchBoardsQueryResponse,
+  type GetBoardsBySerialNumbersQueryResponse,
+  type GetGradesQueryResponse,
+  type GetAnglesQueryResponse,
+  type SearchClimbsQueryResponse,
+  type SearchClimbsCountQueryResponse,
+  type GetClimbQueryResponse,
+  type GetClimbQueryVariables,
+  type GetSessionSummaryQueryResponse,
+  type GetSessionSummaryQueryVariables,
+  type ToggleFavoriteMutationVariables,
+  type ToggleFavoriteMutationResponse,
+} from './operations';
+
+// ============================================
+// User Profile
+// ============================================
+
+export function useProfile() {
+  return useQuery({
+    queryKey: ['profile'],
+    queryFn: () => getHttpClient().request<GetProfileQueryResponse>(GET_PROFILE),
+    select: (data) => data.profile,
+  });
+}
+
+// ============================================
+// Board Queries
+// ============================================
+
+export function useMyBoards(input?: MyBoardsInput) {
+  return useQuery({
+    queryKey: ['myBoards', input],
+    queryFn: () => getHttpClient().request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, { input }),
+    select: (data) => data.myBoards,
+  });
+}
+
+export function useDefaultBoard() {
+  return useQuery({
+    queryKey: ['defaultBoard'],
+    queryFn: () => getHttpClient().request<GetDefaultBoardQueryResponse>(GET_DEFAULT_BOARD),
+    select: (data) => data.defaultBoard,
+  });
+}
+
+export function useBoard(boardUuid: string | null) {
+  return useQuery({
+    queryKey: ['board', boardUuid],
+    queryFn: () => getHttpClient().request<GetBoardQueryResponse>(GET_BOARD, { boardUuid }),
+    select: (data) => data.board,
+    enabled: !!boardUuid,
+  });
+}
+
+export function useSearchBoards(input: SearchBoardsInput, enabled = true) {
+  return useQuery({
+    queryKey: ['searchBoards', input],
+    queryFn: () => getHttpClient().request<SearchBoardsQueryResponse>(SEARCH_BOARDS, { input }),
+    select: (data) => data.searchBoards,
+    enabled,
+  });
+}
+
+export function useBoardsBySerialNumbers(serialNumbers: string[]) {
+  return useQuery({
+    queryKey: ['boardsBySerialNumbers', serialNumbers],
+    queryFn: () =>
+      getHttpClient().request<GetBoardsBySerialNumbersQueryResponse>(GET_BOARDS_BY_SERIAL_NUMBERS, { serialNumbers }),
+    select: (data) => data.boardsBySerialNumbers,
+    enabled: serialNumbers.length > 0,
+  });
+}
+
+// ============================================
+// Board Configuration
+// ============================================
+
+export function useGrades(boardName: string) {
+  return useQuery({
+    queryKey: ['grades', boardName],
+    queryFn: () => getHttpClient().request<GetGradesQueryResponse>(GET_GRADES, { boardName }),
+    select: (data) => data.grades,
+    staleTime: 24 * 60 * 60 * 1000, // Grades rarely change
+  });
+}
+
+export function useAngles(boardName: string, layoutId: number) {
+  return useQuery({
+    queryKey: ['angles', boardName, layoutId],
+    queryFn: () => getHttpClient().request<GetAnglesQueryResponse>(GET_ANGLES, { boardName, layoutId }),
+    select: (data) => data.angles,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+}
+
+// ============================================
+// Climb Queries
+// ============================================
+
+export function useSearchClimbs(input: ClimbSearchInput, enabled = true) {
+  return useQuery({
+    queryKey: ['searchClimbs', input],
+    queryFn: () => getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input }),
+    select: (data) => data.searchClimbs,
+    enabled,
+  });
+}
+
+export function useSearchClimbsCount(input: ClimbSearchInput, enabled = true) {
+  return useQuery({
+    queryKey: ['searchClimbsCount', input],
+    queryFn: () => getHttpClient().request<SearchClimbsCountQueryResponse>(SEARCH_CLIMBS_COUNT, { input }),
+    select: (data) => data.searchClimbs.totalCount,
+    enabled,
+  });
+}
+
+export function useClimb(variables: GetClimbQueryVariables | null) {
+  return useQuery({
+    queryKey: ['climb', variables],
+    queryFn: () => getHttpClient().request<GetClimbQueryResponse>(GET_CLIMB, variables!),
+    select: (data) => data.climb,
+    enabled: !!variables,
+  });
+}
+
+// ============================================
+// Session Queries
+// ============================================
+
+export function useSessionSummary(sessionId: string | null) {
+  return useQuery({
+    queryKey: ['sessionSummary', sessionId],
+    queryFn: () =>
+      getHttpClient().request<GetSessionSummaryQueryResponse>(GET_SESSION_SUMMARY, {
+        sessionId,
+      } as GetSessionSummaryQueryVariables),
+    select: (data) => data.sessionSummary,
+    enabled: !!sessionId,
+  });
+}
+
+// ============================================
+// Mutations
+// ============================================
+
+export function useToggleFavorite() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: ToggleFavoriteMutationVariables) =>
+      getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, variables),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+    },
+  });
+}

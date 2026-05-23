@@ -1,4 +1,4 @@
-import { jwtDecrypt } from 'jose';
+import { jwtDecrypt, jwtVerify } from 'jose';
 import { hkdf } from '@panva/hkdf';
 import { db } from '../db/client';
 import { esp32Controllers } from '@boardsesh/db/schema/app';
@@ -99,6 +99,78 @@ export async function validateNextAuthToken(token: string): Promise<AuthResult |
     tokenCache.set(token, { result: null, expiresAt: now + TOKEN_CACHE_TTL_MS });
     return null;
   }
+}
+
+/**
+ * Validate a mobile JWT (JWS) token.
+ * Mobile tokens are standard signed JWTs (3 dot-separated segments) created
+ * by the native auth exchange/refresh endpoints, signed with NEXTAUTH_SECRET.
+ *
+ * @param token - The JWS token from the mobile client
+ * @returns Auth result with userId if valid, null if invalid
+ */
+export async function validateMobileJwt(token: string): Promise<AuthResult | null> {
+  try {
+    const secret = process.env.NEXTAUTH_SECRET;
+    if (!secret) {
+      logger.warn('[Auth] NEXTAUTH_SECRET not configured');
+      return null;
+    }
+
+    const secretKey = new TextEncoder().encode(secret);
+    const { payload } = await jwtVerify(token, secretKey, {
+      clockTolerance: 60,
+    });
+
+    const userId = payload.sub;
+    if (!userId) {
+      logger.warn('[Auth] Mobile JWT missing sub claim');
+      return null;
+    }
+
+    return { userId, isAuthenticated: true };
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.warn('[Auth] Mobile JWT validation failed:', error.message);
+    }
+    return null;
+  }
+}
+
+/**
+ * Validate any auth token — NextAuth JWE (5 segments) or mobile JWS (3 segments).
+ *
+ * Results are cached in-process for 60 seconds to avoid repeated cryptographic
+ * operations on every request when many connections share the same token.
+ *
+ * @param token - The token from the client (JWE or JWS)
+ * @returns Auth result with userId if valid, null if invalid
+ */
+export async function validateToken(token: string): Promise<AuthResult | null> {
+  const now = Date.now();
+  const cached = tokenCache.get(token);
+  if (cached && cached.expiresAt > now) {
+    return cached.result;
+  }
+
+  let result: AuthResult | null = null;
+
+  // JWE tokens (NextAuth) have 5 dot-separated segments,
+  // JWS tokens (mobile JWT) have 3 segments.
+  const segments = token.split('.').length;
+  if (segments === 5) {
+    result = await validateNextAuthToken(token);
+  } else if (segments === 3) {
+    result = await validateMobileJwt(token);
+  }
+
+  // Cache the result (validateNextAuthToken already caches internally,
+  // but for mobile JWTs this is the only caching layer)
+  if (segments === 3) {
+    tokenCache.set(token, { result, expiresAt: now + TOKEN_CACHE_TTL_MS });
+  }
+
+  return result;
 }
 
 /**

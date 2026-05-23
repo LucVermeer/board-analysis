@@ -16,6 +16,7 @@ import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
+import { handleNativeAuthExchange, handleNativeAuthRefresh } from './handlers/native-auth';
 import { handleApnsStats } from './handlers/apns-stats';
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
@@ -326,6 +327,17 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      // Native auth endpoints for React Native mobile app
+      if (pathname === '/auth/native/exchange' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleNativeAuthExchange(req, res);
+        return;
+      }
+
+      if (pathname === '/auth/native/refresh' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleNativeAuthRefresh(req, res);
+        return;
+      }
+
       // Sync cron endpoint (triggered by external cron service)
       if (pathname === '/sync-cron' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleSyncCron(req, res);
@@ -390,6 +402,8 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  PostHog proxy: ${httpScheme}://0.0.0.0:${PORT}/api/posthog/*`);
     logger.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
     logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
+    logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
+    logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);
     logger.info(`  Sync cron: ${httpScheme}://0.0.0.0:${PORT}/sync-cron`);
 
     // Warm up popular board configs cache in the background.

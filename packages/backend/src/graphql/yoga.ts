@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GraphQLError } from 'graphql';
 import * as Sentry from '@sentry/node';
 import { schema } from './index';
-import { validateNextAuthToken } from '../middleware/auth';
+import { validateToken } from '../middleware/auth';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { maxDepthPlugin } from '@escape.tech/graphql-armor-max-depth';
 import { costLimitPlugin } from '@escape.tech/graphql-armor-cost-limit';
@@ -36,7 +36,7 @@ export function createYogaInstance() {
 
       if (authHeader?.startsWith('Bearer ')) {
         const token = authHeader.slice(7);
-        const authResult = await validateNextAuthToken(token);
+        const authResult = await validateToken(token);
 
         if (authResult) {
           return {

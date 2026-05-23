@@ -89,3 +89,9 @@ packages/db/docker/tmp/
 .env.local
 .boardsesh/
 eng.traineddata
+
+# React Native / Expo
+packages/mobile/.expo/
+packages/mobile/ios/
+packages/mobile/android/
+packages/mobile/dist/
