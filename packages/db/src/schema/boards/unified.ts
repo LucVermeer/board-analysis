@@ -10,6 +10,7 @@ import {
   timestamp,
   primaryKey,
   index,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from '../auth/users';
@@ -332,9 +333,23 @@ export const boardClimbs = pgTable(
     requiredSetIds: integer('required_set_ids').array(),
     // Denormalized: which product_size IDs can display this climb? (from edge comparison)
     compatibleSizeIds: integer('compatible_size_ids').array(),
+    // SHA-256 fingerprint of the climb's hold layout. Sorted
+    // (hold_id:hold_state:frame_number) tuples joined with '|' then hashed.
+    // Two climbs with the same fingerprint at the same (board_type, layout_id)
+    // are duplicates; the dedup path in kilter-sync writes one canonical
+    // board_climbs row and routes additional UUIDs through board_climb_aliases.
+    holdFingerprint: text('hold_fingerprint'),
   },
   (table) => ({
     boardTypeIdx: index('board_climbs_board_type_idx').on(table.boardType),
+    // Dedup hot path: look up an existing canonical row for an incoming climb
+    // by (board_type, layout_id, fingerprint) before deciding whether to
+    // insert as canonical or upsert as an alias.
+    holdFingerprintIdx: index('board_climbs_hold_fingerprint_idx').on(
+      table.boardType,
+      table.layoutId,
+      table.holdFingerprint,
+    ),
     // Combined index covering the full WHERE clause of the main climb search query
     // Replaces separate layout_filter and edges indexes to avoid bitmap AND merges
     searchFilterIdx: index('board_climbs_search_filter_idx').on(
@@ -355,6 +370,60 @@ export const boardClimbs = pgTable(
     // Index for climb name lookups (used by JSON import to resolve names to UUIDs)
     nameIdx: index('board_climbs_name_idx').on(table.boardType, table.name),
     // Note: No FK to board_layouts - climbs may reference layouts that don't exist during sync
+  }),
+);
+
+// board_climb_aliases maps duplicate Kilter UUIDs onto a single canonical
+// board_climbs row. The Kilter catalog occasionally publishes the same
+// physical climb (same holds, same layout) under multiple UUIDs with
+// different names or setters; without this table each duplicate would
+// fracture per-climb stats across separate rows.
+//
+// Every climb has at least a self-alias (alias_uuid = canonical_uuid)
+// inserted during ingest so downstream lookups never miss. The dedup logic
+// lives in packages/kilter-sync; this table is just the storage layer.
+//
+// FK asymmetry — by design:
+//   - canonical_uuid → board_climbs.uuid is a hard FK. Canonical rows always
+//     exist in board_climbs; if a canonical climb gets deleted we want the
+//     alias rows that point at it to go too (ON DELETE CASCADE).
+//   - alias_uuid has no FK to board_climbs.uuid. The whole point of the
+//     dedup path is that we skip inserting a board_climbs row for duplicate
+//     UUIDs — the alias_uuid is precisely the UUID we did NOT promote to
+//     board_climbs. A FK would block every non-canonical insert.
+//
+// last_seen_at is refreshed on every ingest via ON CONFLICT DO UPDATE
+// (`source` and `last_seen_at` are the only mutable columns); first_seen_at
+// is stamped on insert and never touched again.
+//
+// Resolving a UUID to its canonical: see resolveCanonicalClimbUuid() in
+// packages/db/src/queries/aliases.ts.
+export const boardClimbAliases = pgTable(
+  'board_climb_aliases',
+  {
+    boardType: text('board_type').notNull(),
+    aliasUuid: text('alias_uuid').notNull(),
+    canonicalUuid: text('canonical_uuid').notNull(),
+    // 'kilter' | 'aurora' | 'backfill' | … — origin of the alias. Lets us
+    // reason about why a row exists without parsing UUID formats.
+    source: text('source').notNull(),
+    firstSeenAt: timestamp('first_seen_at').defaultNow().notNull(),
+    lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.boardType, table.aliasUuid] }),
+    canonicalIdx: index('board_climb_aliases_canonical_idx').on(table.boardType, table.canonicalUuid),
+    canonicalFk: foreignKey({
+      columns: [table.canonicalUuid],
+      foreignColumns: [boardClimbs.uuid],
+      name: 'board_climb_aliases_canonical_fk',
+    })
+      .onUpdate('cascade')
+      .onDelete('cascade'),
+    uuidsNonEmpty: check(
+      'board_climb_aliases_uuids_non_empty',
+      sql`${table.aliasUuid} <> '' AND ${table.canonicalUuid} <> ''`,
+    ),
   }),
 );
 
@@ -744,3 +813,6 @@ export type NewBoardSharedSync = typeof boardSharedSyncs.$inferInsert;
 
 export type BoardKit = typeof boardKits.$inferSelect;
 export type NewBoardKit = typeof boardKits.$inferInsert;
+
+export type BoardClimbAlias = typeof boardClimbAliases.$inferSelect;
+export type NewBoardClimbAlias = typeof boardClimbAliases.$inferInsert;
