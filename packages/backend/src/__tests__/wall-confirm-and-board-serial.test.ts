@@ -49,6 +49,9 @@ vi.mock('../services/room-manager', () => ({
     // Individual tests override per-call when they want a different
     // authoritative answer.
     getSessionBoardSerial: vi.fn().mockResolvedValue(null),
+    // Used by the setSessionBoardPath mutation. Returns the previous
+    // boardPath when the value changed; null on no-op writes.
+    updateSessionBoardPathIfChanged: vi.fn(),
     // Recent-climbs ring buffer used by confirmClimbOnWall.
     pushRecentClimb: vi.fn().mockResolvedValue(undefined),
     isRecentClimb: vi.fn().mockResolvedValue(true),
@@ -123,6 +126,8 @@ const roomManagerMock = roomManager as unknown as {
   getQueueState: ReturnType<typeof vi.fn>;
   pushRecentClimb: ReturnType<typeof vi.fn>;
   isRecentClimb: ReturnType<typeof vi.fn>;
+  updateSessionBoardPathIfChanged: ReturnType<typeof vi.fn>;
+  getSessionById: ReturnType<typeof vi.fn>;
 };
 const pubsubMock = pubsub as unknown as { publishSessionEvent: ReturnType<typeof vi.fn> };
 const requireSessionMemberMock = sharedHelpers.requireSessionMember as unknown as ReturnType<typeof vi.fn>;
@@ -359,5 +364,145 @@ describe('setSessionBoardSerial mutation', () => {
     );
     expect(roomManagerMock.setSessionBoardSerialAndReturnPrevious).not.toHaveBeenCalled();
     expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('setSessionBoardPath mutation', () => {
+  const newPath = '/kilter/1/1/1/35/play/abc-123';
+  const oldPath = '/kilter/1/1/1/40/play/abc-123';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // `clearAllMocks` only clears call history; queued
+    // `mockResolvedValueOnce` from tests that throw early (e.g. the
+    // missing-participantId hard-error) survive into the next test and
+    // get consumed in the wrong place. Reset implementation explicitly
+    // for the mocks this block sets per-test so each test starts clean.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockReset();
+    requireSessionMemberMock.mockResolvedValue(undefined);
+    // Default: the read-back returns the new boardPath that the test wrote.
+    roomManagerMock.getSessionById.mockResolvedValue({
+      name: 'Test Session',
+      boardPath: newPath,
+      goal: null,
+      isPublic: true,
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      endedAt: null,
+      isPermanent: false,
+      color: null,
+    });
+  });
+
+  it('persists the boardPath and publishes SessionBoardPathChanged when it changes, returning a Session', async () => {
+    roomManagerMock.updateSessionBoardPathIfChanged.mockResolvedValueOnce(oldPath);
+    const ctx = makeCtx({ participantId: 'participant-1' });
+
+    const result = await sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx);
+
+    expect(result).toMatchObject({ id: 'session-1', boardPath: newPath });
+    expect(roomManagerMock.updateSessionBoardPathIfChanged).toHaveBeenCalledWith('session-1', newPath);
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
+      __typename: 'SessionBoardPathChanged',
+      boardPath: newPath,
+      changedByParticipantId: 'participant-1',
+    });
+  });
+
+  it('is idempotent — no event fires when the stored boardPath already matches', async () => {
+    // Room manager reports null = no change.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockResolvedValueOnce(null);
+    const ctx = makeCtx({ participantId: 'participant-1' });
+
+    await sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx);
+
+    expect(roomManagerMock.updateSessionBoardPathIfChanged).toHaveBeenCalledWith('session-1', newPath);
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-members and does not write to the room manager', async () => {
+    requireSessionMemberMock.mockRejectedValueOnce(new Error('Not a member of session'));
+    const ctx = makeCtx({ participantId: 'participant-1' });
+
+    await expect(sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx)).rejects.toThrow(
+      /Not a member of session/,
+    );
+    expect(roomManagerMock.updateSessionBoardPathIfChanged).not.toHaveBeenCalled();
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('hard-errors when ctx.participantId is missing (refuses to fall back to connectionId)', async () => {
+    const ctx = makeCtx({ participantId: undefined });
+    roomManagerMock.updateSessionBoardPathIfChanged.mockResolvedValueOnce(oldPath);
+
+    await expect(sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx)).rejects.toThrow(
+      /requires ctx.participantId/,
+    );
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('throws when the session row vanished between membership check and the response read', async () => {
+    // Race scenario: leaveSession (or a sweep) deletes the row after
+    // requireSessionMember passed but before the response builder reads
+    // sessionData. The resolver throws explicitly rather than returning
+    // a malformed Session with an empty-string boardPath next to nullable
+    // fields filled with null.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockResolvedValueOnce(oldPath);
+    roomManagerMock.getSessionById.mockResolvedValueOnce(null);
+    const ctx = makeCtx({ participantId: 'participant-1' });
+
+    await expect(sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx)).rejects.toThrow(
+      /not found after membership check/,
+    );
+    // The publish already happened (we successfully wrote and broadcast
+    // before the read). That's an acceptable outcome — clients receive
+    // the new boardPath; the throw only prevents serving back a malformed
+    // Session payload to the caller.
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalled();
+  });
+
+  it('propagates the room-manager not-found throw without publishing', async () => {
+    // `updateSessionBoardPathIfChanged` now distinguishes "not found"
+    // (throws) from "unchanged" (returns null). Reaching the throw
+    // branch means a race between `requireSessionMember` and the
+    // helper's SELECT — surface it cleanly rather than silently
+    // dropping the broadcast. No event fires.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockRejectedValueOnce(
+      new Error('updateSessionBoardPathIfChanged: session session-1 not found'),
+    );
+    const ctx = makeCtx({ participantId: 'participant-1' });
+
+    await expect(sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctx)).rejects.toThrow(
+      /not found/,
+    );
+    expect(pubsubMock.publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it('pins the concurrent double-publish contract — two interleaved writes both broadcast', async () => {
+    // The helper is non-atomic (read-then-write per `session-discovery.ts`).
+    // Two callers landing concurrently can both read the same prior value
+    // and both publish `SessionBoardPathChanged`. The client tolerates this
+    // because `router.replace(newPath)` is a no-op when the URL is already
+    // at `newPath`. Pin the contract so a future de-dup change here doesn't
+    // silently invalidate the client's assumption.
+    roomManagerMock.updateSessionBoardPathIfChanged.mockResolvedValue(oldPath);
+    const ctxA = makeCtx({ participantId: 'participant-a', connectionId: 'conn-a' });
+    const ctxB = makeCtx({ participantId: 'participant-b', connectionId: 'conn-b' });
+
+    await Promise.all([
+      sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctxA),
+      sessionMutations.setSessionBoardPath(undefined, { boardPath: newPath }, ctxB),
+    ]);
+
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledTimes(2);
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
+      __typename: 'SessionBoardPathChanged',
+      boardPath: newPath,
+      changedByParticipantId: 'participant-a',
+    });
+    expect(pubsubMock.publishSessionEvent).toHaveBeenCalledWith('session-1', {
+      __typename: 'SessionBoardPathChanged',
+      boardPath: newPath,
+      changedByParticipantId: 'participant-b',
+    });
   });
 });

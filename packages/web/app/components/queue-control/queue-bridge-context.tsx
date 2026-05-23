@@ -27,7 +27,7 @@ import {
 import type { CurrentClimbDataType, QueueListDataType, SearchDataType, SessionDataType } from '../graphql-queue/types';
 import { usePersistentSession } from '../persistent-session';
 import { usePartyProfile } from '../party-manager/party-profile-context';
-import { getBaseBoardPath, DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
+import { getBaseBoardPath, extractAngleFromPathname, DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import type { BoardDetails, Angle, Climb, SearchRequestPagination } from '@/app/lib/types';
 import type { ClimbQueueItem, QueueItemUser, PlaylistSuggestionSource, SetCurrentClimbOptions } from './types';
 import { usePathname } from 'next/navigation';
@@ -117,6 +117,7 @@ function usePersistentSessionQueueAdapter(): {
   dataValue: GraphQLQueueDataType;
   boardDetails: BoardDetails | null;
   angle: Angle;
+  hasResolvedAngle: boolean;
   hasActiveQueue: boolean;
   isHydrated: boolean;
   syncFromInjected: (q: ClimbQueueItem[], current: ClimbQueueItem | null, boardPath: string, bd: BoardDetails) => void;
@@ -144,9 +145,30 @@ function usePersistentSessionQueueAdapter(): {
   const queue = isParty ? ps.queue : ps.localQueue;
   const currentClimbQueueItem = isParty ? ps.currentClimbQueueItem : ps.localCurrentClimbQueueItem;
   const boardDetails = isParty ? ps.activeSession!.boardDetails : ps.localBoardDetails;
-  const angle: Angle = isParty
-    ? ps.activeSession!.parsedParams.angle
-    : (ps.localCurrentClimbQueueItem?.climb?.angle ?? 0);
+
+  // Read angle live from the URL when the user is on a board route. The
+  // session's `parsedParams.angle` is parsed from `Session.boardPath` at
+  // activate-time and doesn't follow subsequent URL changes — using it
+  // directly was making the angle revert to whatever the session started
+  // with whenever `useDrawerUrlSync` rewrote the URL (see queue-control-bar
+  // pivot — group-session feedback fix). Off-board surfaces (home, /you,
+  // /playlists) get no route angle, so they still fall through to the
+  // session angle (party) or the current local climb's angle (solo).
+  //
+  // `resolvedAngle` is null when nothing in the chain produced a value —
+  // distinct from numeric 0 (a real angle on vertical-board configs).
+  // `angle` keeps the existing `Angle` (number) contract for consumers
+  // that pass it down to components needing a numeric prop; we only
+  // surface the null vs 0 distinction through `hasResolvedAngle`, which
+  // `useEffectiveAngle` (the log paths) gates on. This keeps the bridge
+  // type backward-compatible across the 8+ existing consumers.
+  const pathnameForAngle = usePathname();
+  const routeAngle = extractAngleFromPathname(pathnameForAngle ?? '');
+  const resolvedAngle: Angle | null = isParty
+    ? (routeAngle ?? ps.activeSession!.parsedParams.angle)
+    : (routeAngle ?? ps.localCurrentClimbQueueItem?.climb?.angle ?? null);
+  const hasResolvedAngle = resolvedAngle != null;
+  const angle: Angle = resolvedAngle ?? 0;
 
   const baseBoardPath = useMemo(() => {
     if (isParty && ps.activeSession?.boardPath) {
@@ -734,6 +756,7 @@ function usePersistentSessionQueueAdapter(): {
     dataValue,
     boardDetails,
     angle,
+    hasResolvedAngle,
     hasActiveQueue,
     isHydrated: ps.isLocalQueueLoaded,
     syncFromInjected,
@@ -794,6 +817,9 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
 
   const effectiveBoardDetails = isInjected ? injectedBoardDetails : adapter.boardDetails;
   const effectiveAngle = isInjected ? injectedAngle : adapter.angle;
+  // The injector path passes a fully-resolved angle from the board route
+  // segment, so injected => resolved by definition.
+  const effectiveHasResolvedAngle = isInjected ? true : adapter.hasResolvedAngle;
   const effectiveHasActiveQueue = isInjected
     ? true // If injected, a board route is active — always show bar
     : adapter.hasActiveQueue;
@@ -805,10 +831,11 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     () => ({
       boardDetails: effectiveBoardDetails,
       angle: effectiveAngle,
+      hasResolvedAngle: effectiveHasResolvedAngle,
       hasActiveQueue: effectiveHasActiveQueue,
       isHydrated: effectiveIsHydrated,
     }),
-    [effectiveBoardDetails, effectiveAngle, effectiveHasActiveQueue, effectiveIsHydrated],
+    [effectiveBoardDetails, effectiveAngle, effectiveHasResolvedAngle, effectiveHasActiveQueue, effectiveIsHydrated],
   );
 
   const inject = useCallback(

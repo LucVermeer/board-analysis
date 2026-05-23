@@ -18,6 +18,48 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
 }
 
 /**
+ * Update the session's stored boardPath. Returns the previous value when
+ * the update actually mutated state, or `null` when the row was already
+ * at `boardPath` (idempotent no-op). Throws when the session row doesn't
+ * exist — distinguishing "not found" from "unchanged" lets the caller
+ * publish `SessionBoardPathChanged` strictly on real transitions instead
+ * of overloading `null` across both meanings.
+ *
+ * **Not atomic.** Two queries: SELECT the existing boardPath, then UPDATE
+ * if it differs. Two concurrent callers can both read the same prior
+ * value and both publish `SessionBoardPathChanged`. We accept this because
+ * the event is idempotent on the client (`router.replace` to the same URL
+ * is a no-op) and the realistic write pressure is one angle-selector tap
+ * at a time per device. If a future caller can't tolerate double-publish,
+ * tighten to a single-statement CTE
+ * (`UPDATE sessions SET boardPath = $2, ... FROM (SELECT boardPath AS prev FROM sessions WHERE id = $1) sub WHERE id = $1 AND sub.prev <> $2 RETURNING sub.prev`)
+ * or use Redis-backed CAS the same way `setSessionDriverAndReturnPrevious`
+ * does. The concurrent double-publish path is pinned in
+ * `wall-confirm-and-board-serial.test.ts`'s `setSessionBoardPath` block.
+ */
+export async function updateSessionBoardPathIfChanged(sessionId: string, boardPath: string): Promise<string | null> {
+  // Read-then-write — simpler than a CTE and matches the
+  // setSessionBoardSerialAndReturnPrevious shape elsewhere. See the outer
+  // JSDoc for the non-atomicity contract this consciously accepts.
+  const existing = await db
+    .select({ boardPath: sessions.boardPath })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  if (existing.length === 0) {
+    // Resolvers should reach the helper only after `requireSessionMember`,
+    // which already throws when the row is missing. Reaching this branch
+    // means a race between leave/sweep and the boardPath write — surface
+    // it explicitly rather than returning `null` (the "unchanged" signal).
+    throw new Error(`updateSessionBoardPathIfChanged: session ${sessionId} not found`);
+  }
+  const previous = existing[0].boardPath;
+  if (previous === boardPath) return null;
+  await db.update(sessions).set({ boardPath, lastActivity: new Date() }).where(eq(sessions.id, sessionId));
+  return previous;
+}
+
+/**
  * Create a discoverable session with GPS coordinates.
  */
 export async function createDiscoverableSession(

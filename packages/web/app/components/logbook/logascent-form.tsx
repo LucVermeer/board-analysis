@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import MuiRating from '@mui/material/Rating';
 import Chip from '@mui/material/Chip';
@@ -11,8 +11,11 @@ import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
+import MuiAlert from '@mui/material/Alert';
 import MuiSelect from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
@@ -22,6 +25,8 @@ import type { Climb, BoardDetails } from '@/app/lib/types';
 import { type TickStatus, useBoardProvider } from '../board-provider/board-provider-context';
 import { getGradesForBoard, ANGLES } from '@/app/lib/board-data';
 import { isBetaVideoUrl, BETA_VIDEO_URL_VALIDATION_MESSAGE } from '@/app/lib/beta-video-url';
+import { useEffectiveAngle } from '@/app/hooks/use-effective-angle';
+import { useOptionalCurrentClimb } from '../graphql-queue/QueueContext';
 
 import dayjs from 'dayjs';
 
@@ -29,7 +34,11 @@ type LogType = 'ascent' | 'attempt';
 
 type LogAscentFormValues = {
   date: dayjs.Dayjs;
-  angle: number;
+  // `null` means "user hasn't picked an angle yet" — distinct from 0°, which
+  // is a real selectable angle on vertical-board configs (see `ANGLES` in
+  // board-data.ts). Truthy checks on this field would block legitimate 0°
+  // logs; always compare against `null`/`undefined` explicitly.
+  angle: number | null;
   attempts: number;
   quality: number;
   // `undefined` means "no personal grade override; use the climb's consensus".
@@ -56,18 +65,28 @@ type LogAscentFormProps = {
   currentClimb: Climb;
   boardDetails: BoardDetails;
   onClose: () => void;
+  /**
+   * Called when the user accepts the "wall moved" banner's offer to switch
+   * to logging the new wall climb. The drawer re-snapshots and re-keys this
+   * form, which remounts with the new climb's initial values.
+   */
+  onSwitchClimb?: (climb: Climb) => void;
 };
 
-export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boardDetails, onClose }) => {
+export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boardDetails, onClose, onSwitchClimb }) => {
   const { t } = useTranslation('climbs');
   const { t: tProfile } = useTranslation('profile');
   const { saveTick, isAuthenticated } = useBoardProvider();
   const grades = useMemo(() => getGradesForBoard(boardDetails.board_name), [boardDetails.board_name]);
   const angleOptions = ANGLES[boardDetails.board_name];
+  // Resolve the wall's current angle (route → party session → climb record).
+  // Never `|| 0` here — group-session feedback fix. If nothing resolves the
+  // submit button is disabled until the user picks one in the angle Select.
+  const effectiveAngle = useEffectiveAngle(currentClimb);
 
   const getInitialValues = (): LogAscentFormValues => ({
     date: dayjs(),
-    angle: currentClimb?.angle || 0,
+    angle: effectiveAngle,
     attempts: 1,
     quality: 0,
     difficulty: grades.find((grade) => grade.difficulty_name === currentClimb?.difficulty)?.difficulty_id,
@@ -77,21 +96,36 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
   const [isMirrored, setIsMirrored] = useState(!!currentClimb?.mirrored);
   const [isSaving, setIsSaving] = useState(false);
   const [logType, setLogType] = useState<LogType>('ascent');
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // TODO: Tension spray doesnt support mirroring
   const showMirrorTag = boardDetails.supportsMirroring;
 
-  useEffect(() => {
-    setFormValues((prev) => ({
-      ...prev,
-      date: dayjs(),
-      angle: currentClimb?.angle || prev.angle,
-      difficulty:
-        grades.find((grade) => grade.difficulty_name === currentClimb?.difficulty)?.difficulty_id ?? prev.difficulty,
-      attempts: 1,
-    }));
-    setIsMirrored(!!currentClimb?.mirrored);
-  }, [currentClimb, grades]);
+  // Detect wall drift — the form is locked to the climb the user opened it
+  // on (see LogAscentDrawer), but the party's wall may have moved on while
+  // they typed. Read the live wall climb from the queue context and show a
+  // banner offering to switch when it diverges. Optional context so the form
+  // still renders fine outside of a queue provider.
+  const liveCurrentClimb = useOptionalCurrentClimb();
+  const wallClimb = liveCurrentClimb?.currentClimbQueueItem?.climb ?? null;
+  const wallHasMoved = !!wallClimb && wallClimb.uuid !== currentClimb.uuid;
+  const showDriftBanner = wallHasMoved && !bannerDismissed;
+
+  const isFormDirty = formValues.notes != null && formValues.notes.length > 0;
+
+  const handleSwitch = () => {
+    if (!wallClimb || !onSwitchClimb) return;
+    if (isFormDirty) {
+      // We intentionally use window.confirm here — the form is inside a
+      // SwipeableDrawer and MUI Dialog stacks awkwardly above it; a native
+      // confirm gives the user the same "are you sure?" beat without that
+      // visual jank. If we add a custom modal stack later this can graduate.
+      if (typeof window !== 'undefined' && !window.confirm(tProfile('logbook.form.switchDirtyConfirm'))) {
+        return;
+      }
+    }
+    onSwitchClimb(wallClimb);
+  };
 
   const handleMirrorToggle = () => {
     setIsMirrored((prev) => !prev);
@@ -132,6 +166,13 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
     if (!currentClimb?.uuid || !isAuthenticated) {
       return;
     }
+    // Guard against a programmatic submit slipping past the disabled
+    // button — never send `angle: null` (would coerce to 0° on the wire
+    // and silently miscredit the climb).
+    if (values.angle == null) {
+      console.error('Validation error: angle is required before logging');
+      return;
+    }
 
     // Client-side validation
     const validationError = validateTickInput(values);
@@ -148,7 +189,7 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
       const trimmedVideoUrl = values.videoUrl?.trim();
       await saveTick({
         climbUuid: currentClimb.uuid,
-        angle: Number(values.angle),
+        angle: values.angle,
         isMirror: isMirrored,
         status,
         attemptCount: values.attempts,
@@ -189,6 +230,29 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
         void handleSubmit(formValues);
       }}
     >
+      {showDriftBanner && wallClimb && (
+        // severity="warning" — wall-drift is a decide-what-to-do event,
+        // not ambient FYI. The Switch button renders under the body so
+        // long climb names (Aurora's "Tortured Soul on Sloping Crystal"
+        // shape) don't wrap awkwardly inside MuiAlert's right-aligned
+        // action slot on narrow phones (UI review E).
+        <MuiAlert severity="warning" sx={{ mb: 2 }} onClose={() => setBannerDismissed(true)}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+            <Box component="span">
+              {tProfile('logbook.form.wallMoved', {
+                wallClimb: wallClimb.name,
+                loggingClimb: currentClimb.name,
+              })}
+            </Box>
+            {onSwitchClimb && (
+              <Button color="inherit" size="small" variant="outlined" onClick={handleSwitch}>
+                {tProfile('logbook.form.switchClimb', { climbName: wallClimb.name })}
+              </Button>
+            )}
+          </Box>
+        </MuiAlert>
+      )}
+
       <Box sx={{ mb: 2 }}>
         <ToggleButtonGroup exclusive fullWidth value={logType} onChange={(_, val) => val && setLogType(val as LogType)}>
           <ToggleButton value="ascent">{tProfile('logbook.form.ascent')}</ToggleButton>
@@ -231,21 +295,33 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
         </Box>
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-        <Typography sx={{ width: 120, flexShrink: 0 }}>{tProfile('logbook.form.angle')}</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.5 }}>
+        <Typography sx={{ width: 120, flexShrink: 0, pt: 1 }}>{tProfile('logbook.form.angle')}</Typography>
         <Box sx={{ flex: 1 }}>
-          <MuiSelect
-            value={formValues.angle}
-            onChange={(e) => setFormValues((prev) => ({ ...prev, angle: Number(e.target.value) }))}
-            size="small"
-            sx={{ width: 80 }}
-          >
-            {angleOptions.map((angle) => (
-              <MenuItem key={angle} value={angle}>
-                {angle}
+          {/* FormControl + FormHelperText so screen readers hear *why* the
+              Select is in an error state ("Pick an angle") rather than only
+              "field is invalid" (UI review C). */}
+          <FormControl error={formValues.angle == null} size="small">
+            <MuiSelect
+              // `?? ''` not `|| ''` — 0° is a real selectable angle on
+              // vertical boards. Truthy fallthrough here would have rendered
+              // the "Pick an angle" placeholder over a valid 0° selection.
+              value={formValues.angle ?? ''}
+              onChange={(e) => setFormValues((prev) => ({ ...prev, angle: Number(e.target.value) }))}
+              sx={{ width: 100 }}
+              displayEmpty
+            >
+              <MenuItem value="" disabled>
+                <em>{tProfile('logbook.form.pickAngle')}</em>
               </MenuItem>
-            ))}
-          </MuiSelect>
+              {angleOptions.map((angle) => (
+                <MenuItem key={angle} value={angle}>
+                  {angle}°
+                </MenuItem>
+              ))}
+            </MuiSelect>
+            {formValues.angle == null && <FormHelperText>{tProfile('logbook.form.pickAngle')}</FormHelperText>}
+          </FormControl>
         </Box>
       </Box>
 
@@ -342,12 +418,14 @@ export const LogAscentForm: React.FC<LogAscentFormProps> = ({ currentClimb, boar
         <Button
           variant="contained"
           type="submit"
-          disabled={isSaving || !!videoUrlError}
+          disabled={isSaving || !!videoUrlError || formValues.angle == null}
           startIcon={isSaving ? <CircularProgress size={16} /> : undefined}
           fullWidth
           size="large"
         >
-          {tProfile('logbook.form.submit')}
+          {formValues.angle != null
+            ? tProfile('logbook.form.submitAtAngle', { angle: formValues.angle })
+            : tProfile('logbook.form.submit')}
         </Button>
       </Box>
 

@@ -18,6 +18,7 @@ import { BOARD_NAME_PREFIX_REGEX } from '@/app/lib/board-constants';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { MOONBOARD_LAYOUTS } from '@/app/lib/moonboard-config';
 import { normalizeMinAscentsFilter, normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
+import { detectLocale } from '@/app/lib/i18n/detect-locale';
 import { PAGE_LIMIT } from '../components/board-page/constants';
 
 export const DEFAULT_ZONE_MODE: ZoneMatchMode = 'allHolds';
@@ -877,6 +878,80 @@ export function getBaseBoardPath(pathname: string): string {
   }
 
   return path;
+}
+
+/**
+ * Extract the angle segment from a board route pathname. Returns null when the
+ * path isn't a board route (home, /you, /playlists, etc.). Used to read the
+ * user's live angle off the URL, since party-mode state holds a session-creation
+ * angle that doesn't follow URL changes — see queue-bridge-context.
+ *
+ * Supports both URL shapes:
+ *   /{board}/{layout}/{size}/{sets}/{angle}/...
+ *   /b/{slug}/{angle}/...
+ *
+ * Locale-aware: `usePathname()` in Next.js returns the original pre-rewrite
+ * path including a `/es/` or `/fr/` prefix for non-English users (middleware
+ * rewrites internally but the hook sees the user-facing URL). Strip the
+ * locale prefix before matching so Spanish/French speakers don't fall back
+ * to the session-creation angle on every navigation — the 40°-revert bug
+ * this fix exists to prevent. Reads `SUPPORTED_LOCALES` so adding a new
+ * locale to i18n config is sufficient; no edit here required.
+ */
+export function extractAngleFromPathname(pathname: string): number | null {
+  const { strippedPath } = detectLocale(pathname);
+
+  // /b/{slug}/{angle}/... — angle is the third segment.
+  const slugMatch = strippedPath.match(/^\/b\/[^/]+\/(-?\d+)(?:\/|$)/);
+  if (slugMatch) {
+    const angle = Number(slugMatch[1]);
+    return Number.isFinite(angle) ? angle : null;
+  }
+
+  // /{board}/{layout}/{size}/{sets}/{angle}/... — angle is the fifth path
+  // segment (six counting the leading empty string from split('/')).
+  const fullMatch = strippedPath.match(/^\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/(-?\d+)(?:\/|$)/);
+  if (fullMatch) {
+    const angle = Number(fullMatch[1]);
+    return Number.isFinite(angle) ? angle : null;
+  }
+
+  return null;
+}
+
+/**
+ * Replace the angle segment in a board route pathname with `newAngle`,
+ * preserving the locale prefix when present and the rest of the path
+ * (the /play/{uuid}, /view/{slug}, /list, /create, /playlists/{uuid}
+ * suffix). Returns `null` if the pathname isn't a recognised board
+ * route — callers should treat that as "don't navigate."
+ *
+ * **Positional, not pattern-matched.** Splitting the path and using
+ * `findIndex(s => s === currentAngle.toString())` (the previous
+ * implementation in angle-selector.tsx) would match the first segment
+ * with the angle's string value — for `/kilter/1/10/1/40/list` with
+ * `currentAngle=1` that hits the layout id, not the angle slot. This
+ * helper indexes by the known position instead.
+ */
+export function replaceAngleInPathname(pathname: string, newAngle: number): string | null {
+  const { strippedPath, locale, needsRewrite } = detectLocale(pathname);
+  const localePrefix = needsRewrite ? `/${locale}` : '';
+  const segments = strippedPath.split('/');
+  // segments[0] is '' (leading slash), so the first real segment is at index 1.
+
+  // /b/{slug}/{angle}/... — angle is at index 3.
+  if (segments[1] === 'b' && segments.length >= 4 && /^-?\d+$/.test(segments[3])) {
+    segments[3] = String(newAngle);
+    return `${localePrefix}${segments.join('/')}`;
+  }
+
+  // /{board}/{layout}/{size}/{sets}/{angle}/... — angle is at index 5.
+  if (segments.length >= 6 && /^-?\d+$/.test(segments[5])) {
+    segments[5] = String(newAngle);
+    return `${localePrefix}${segments.join('/')}`;
+  }
+
+  return null;
 }
 
 // ============================================

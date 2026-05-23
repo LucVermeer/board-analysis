@@ -1939,6 +1939,20 @@ export type Mutation = {
    */
   setQueue: QueueState;
   /**
+   * Update the session's stored boardPath so every participant follows the same
+   * angle (and any future presentational route-segment changes). Today the
+   * angle is the only route-level dimension that members observe as a group;
+   * climb URLs are managed by setCurrentClimb. Any participant may call —
+   * angle is presentational and doesn't drive BLE (hold positions are sent
+   * per-climb), so the queue-control-bar pivot's "only driver moves the wall"
+   * rule doesn't apply. Idempotent: when the stored boardPath already matches,
+   * no event fires. Publishes `SessionBoardPathChanged` on change. Returns
+   * the resolved Session for optimistic-UI symmetry with takeControl /
+   * releaseControl. Session identity is resolved from the WebSocket connection
+   * context — no `sessionId` argument is required.
+   */
+  setSessionBoardPath: Session;
+  /**
    * Record the BLE board serial that this client paired with so other (mobile)
    * participants can auto-connect to the same physical board. Any session participant
    * may call. Idempotent: when the stored serial already matches, no event fires.
@@ -2346,6 +2360,11 @@ export type MutationSetInferredSessionHealthKitWorkoutIdArgs = {
 export type MutationSetQueueArgs = {
   currentClimbQueueItem?: InputMaybe<ClimbQueueItemInput>;
   queue: Array<ClimbQueueItemInput>;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationSetSessionBoardPathArgs = {
+  boardPath: Scalars['String']['input'];
 };
 
 /** Root mutation type for all write operations. */
@@ -3956,6 +3975,22 @@ export type Session = {
 };
 
 /**
+ * Event when the session's stored boardPath changes — today carries angle
+ * changes from any participant's angle selector. Recipients update their
+ * local URL (`router.replace`) so all members stay on the same angle
+ * view. Skipped when the originating client's own participant id matches
+ * `changedByParticipantId` (the optimistic URL push already happened
+ * locally). `boardPath` is the full route string (`/<board>/<layout>/<size>/<sets>/<angle>/...`).
+ */
+export type SessionBoardPathChanged = {
+  __typename?: 'SessionBoardPathChanged';
+  /** New full boardPath for the session */
+  boardPath: Scalars['String']['output'];
+  /** Participant id of the member who triggered the change, or null for system-initiated updates */
+  changedByParticipantId?: Maybe<Scalars['ID']['output']>;
+};
+
+/**
  * Event when the session's last-connected BLE board serial changes.
  * Used by mobile participants to auto-connect to the same board another
  * member is already paired with — saves the chooser step on the second
@@ -4038,6 +4073,7 @@ export type SessionEnded = {
 export type SessionEvent =
   | DriverChanged
   | LeaderChanged
+  | SessionBoardPathChanged
   | SessionBoardSerialChanged
   | SessionEnded
   | SessionStatsUpdated
@@ -5112,6 +5148,7 @@ export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = Reso
   SessionEvent:
     | DriverChanged
     | LeaderChanged
+    | SessionBoardPathChanged
     | SessionBoardSerialChanged
     | SessionEnded
     | SessionStatsUpdated
@@ -5308,6 +5345,7 @@ export type ResolversTypes = ResolversObject<{
   SendDeviceLogsInput: SendDeviceLogsInput;
   SendDeviceLogsResponse: ResolverTypeWrapper<SendDeviceLogsResponse>;
   Session: ResolverTypeWrapper<Session>;
+  SessionBoardPathChanged: ResolverTypeWrapper<SessionBoardPathChanged>;
   SessionBoardSerialChanged: ResolverTypeWrapper<SessionBoardSerialChanged>;
   SessionConnectionState: SessionConnectionState;
   SessionDetail: ResolverTypeWrapper<SessionDetail>;
@@ -5557,6 +5595,7 @@ export type ResolversParentTypes = ResolversObject<{
   SendDeviceLogsInput: SendDeviceLogsInput;
   SendDeviceLogsResponse: SendDeviceLogsResponse;
   Session: Session;
+  SessionBoardPathChanged: SessionBoardPathChanged;
   SessionBoardSerialChanged: SessionBoardSerialChanged;
   SessionDetail: SessionDetail;
   SessionDetailTick: SessionDetailTick;
@@ -6828,6 +6867,12 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationSetQueueArgs, 'queue'>
   >;
+  setSessionBoardPath?: Resolver<
+    ResolversTypes['Session'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationSetSessionBoardPathArgs, 'boardPath'>
+  >;
   setSessionBoardSerial?: Resolver<
     ResolversTypes['Session'],
     ParentType,
@@ -7852,6 +7897,15 @@ export type SessionResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type SessionBoardPathChangedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SessionBoardPathChanged'] = ResolversParentTypes['SessionBoardPathChanged'],
+> = ResolversObject<{
+  boardPath?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  changedByParticipantId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SessionBoardSerialChangedResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SessionBoardSerialChanged'] =
@@ -7934,6 +7988,7 @@ export type SessionEventResolvers<
   __resolveType: TypeResolveFn<
     | 'DriverChanged'
     | 'LeaderChanged'
+    | 'SessionBoardPathChanged'
     | 'SessionBoardSerialChanged'
     | 'SessionEnded'
     | 'SessionStatsUpdated'
@@ -8553,6 +8608,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SearchPlaylistsResult?: SearchPlaylistsResultResolvers<ContextType>;
   SendDeviceLogsResponse?: SendDeviceLogsResponseResolvers<ContextType>;
   Session?: SessionResolvers<ContextType>;
+  SessionBoardPathChanged?: SessionBoardPathChangedResolvers<ContextType>;
   SessionBoardSerialChanged?: SessionBoardSerialChangedResolvers<ContextType>;
   SessionDetail?: SessionDetailResolvers<ContextType>;
   SessionDetailTick?: SessionDetailTickResolvers<ContextType>;

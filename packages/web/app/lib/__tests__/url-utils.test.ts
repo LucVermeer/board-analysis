@@ -20,6 +20,8 @@ import {
   isNumericId,
   hasOnlyNumericBoardRouteSegments,
   getBaseBoardPath,
+  extractAngleFromPathname,
+  replaceAngleInPathname,
   getPlaylistsBasePath,
   getContextAwarePlaylistUrl,
   getContextAwareClimbViewUrl,
@@ -1710,5 +1712,143 @@ describe('constructCreateClimbUrl', () => {
       name: 'Fork',
     });
     expect(url).not.toContain('editClimbUuid');
+  });
+});
+
+describe('extractAngleFromPathname', () => {
+  it('reads the angle from /{board}/{layout}/{size}/{sets}/{angle}/play/{uuid}', () => {
+    expect(extractAngleFromPathname('/kilter/8/25/28,29,26,27/35/play/abc-123')).toBe(35);
+  });
+
+  it('reads the angle from /{board}/{layout}/{size}/{sets}/{angle}/list', () => {
+    expect(extractAngleFromPathname('/kilter/original/12x12/default/45/list')).toBe(45);
+  });
+
+  it('reads the angle from /b/{slug}/{angle}/...', () => {
+    expect(extractAngleFromPathname('/b/marcos-wall/40/list')).toBe(40);
+    expect(extractAngleFromPathname('/b/marcos-wall/35/play/xyz-789')).toBe(35);
+  });
+
+  it('handles slug-form paths terminating at the angle', () => {
+    expect(extractAngleFromPathname('/b/marcos-wall/30')).toBe(30);
+  });
+
+  it('returns null for non-board routes', () => {
+    expect(extractAngleFromPathname('/')).toBeNull();
+    expect(extractAngleFromPathname('/you')).toBeNull();
+    expect(extractAngleFromPathname('/playlists')).toBeNull();
+    expect(extractAngleFromPathname('/playlists/abc-uuid')).toBeNull();
+    expect(extractAngleFromPathname('/profile/marco')).toBeNull();
+  });
+
+  it('returns null when the angle segment is missing or non-numeric', () => {
+    expect(extractAngleFromPathname('/kilter/8/25/28,29,26,27')).toBeNull();
+    expect(extractAngleFromPathname('/kilter/8/25/28,29,26,27/notanangle/list')).toBeNull();
+    expect(extractAngleFromPathname('/b/marcos-wall')).toBeNull();
+    expect(extractAngleFromPathname('/b/marcos-wall/notanangle/list')).toBeNull();
+  });
+
+  it('handles negative angles (Aurora supports negative tilt readings on some boards)', () => {
+    expect(extractAngleFromPathname('/kilter/8/25/28,29,26,27/-5/list')).toBe(-5);
+    expect(extractAngleFromPathname('/b/marcos-wall/-5/list')).toBe(-5);
+  });
+
+  // `usePathname()` in Next.js returns the pre-rewrite URL including the
+  // locale prefix for Spanish + French users. Before stripping the prefix,
+  // the 5-segment regex matched the locale + board + layout + size + sets
+  // shape and bailed at the comma-separated set IDs, returning null — the
+  // angle then fell back to the session-creation value, reintroducing the
+  // exact "angle reverts to 40°" bug this PR fixes, but only for non-
+  // English users.
+  describe('locale-prefixed pathnames', () => {
+    it('handles /es/{board}/.../{angle}/... paths', () => {
+      expect(extractAngleFromPathname('/es/kilter/8/25/28,29,26,27/35/play/abc-123')).toBe(35);
+      expect(extractAngleFromPathname('/es/kilter/original/12x12/default/45/list')).toBe(45);
+    });
+
+    it('handles /fr/{board}/.../{angle}/... paths', () => {
+      expect(extractAngleFromPathname('/fr/kilter/8/25/28,29,26,27/35/play/abc-123')).toBe(35);
+      expect(extractAngleFromPathname('/fr/tension/two-zone/10x12/main_aux/40/list')).toBe(40);
+    });
+
+    it('handles /es/b/{slug}/{angle}/... slug routes', () => {
+      expect(extractAngleFromPathname('/es/b/marcos-wall/40/list')).toBe(40);
+      expect(extractAngleFromPathname('/fr/b/marcos-wall/-5/list')).toBe(-5);
+    });
+
+    it('handles 0° on locale-prefixed paths (vertical board, real angle)', () => {
+      expect(extractAngleFromPathname('/es/kilter/8/25/28,29,26,27/0/list')).toBe(0);
+      expect(extractAngleFromPathname('/fr/b/marcos-wall/0/list')).toBe(0);
+    });
+
+    it('does not strip the default en-US prefix (root paths only)', () => {
+      // The default locale is served at root in this app — there is no
+      // /en-US/ shape in production. If a stray /en-US/ ever appears the
+      // helper should NOT silently strip it.
+      expect(extractAngleFromPathname('/en-US/kilter/8/25/28,29,26,27/35/list')).toBeNull();
+    });
+
+    it('returns null for locale-prefixed off-board paths', () => {
+      expect(extractAngleFromPathname('/es/you')).toBeNull();
+      expect(extractAngleFromPathname('/fr/playlists')).toBeNull();
+    });
+  });
+});
+
+describe('replaceAngleInPathname', () => {
+  it('replaces the angle on a canonical /{board}/.../{angle}/play/{uuid} path', () => {
+    expect(replaceAngleInPathname('/kilter/8/25/28,29,26,27/35/play/abc-123', 40)).toBe(
+      '/kilter/8/25/28,29,26,27/40/play/abc-123',
+    );
+  });
+
+  it('replaces the angle on a /{board}/.../{angle}/list path', () => {
+    expect(replaceAngleInPathname('/kilter/original/12x12/default/35/list', 45)).toBe(
+      '/kilter/original/12x12/default/45/list',
+    );
+  });
+
+  it('replaces the angle on a /b/{slug}/{angle}/... path', () => {
+    expect(replaceAngleInPathname('/b/marcos-wall/35/list', 40)).toBe('/b/marcos-wall/40/list');
+    expect(replaceAngleInPathname('/b/marcos-wall/35/play/abc-123', 25)).toBe('/b/marcos-wall/25/play/abc-123');
+  });
+
+  // Regression for the angle-selector linear-search bug: a path where the
+  // layout id happens to equal the current angle would match the layout
+  // segment first, producing /kilter/40/10/1/40/list (wrong) instead of
+  // /kilter/1/10/1/40/list (right). Positional replacement avoids this.
+  it('replaces only the angle slot when the layout id has the same numeric value', () => {
+    expect(replaceAngleInPathname('/kilter/1/10/1/40/list', 25)).toBe('/kilter/1/10/1/25/list');
+    expect(replaceAngleInPathname('/kilter/40/10/1/40/play/abc-123', 25)).toBe('/kilter/40/10/1/25/play/abc-123');
+  });
+
+  it('preserves the /es/ locale prefix while replacing the angle', () => {
+    expect(replaceAngleInPathname('/es/kilter/8/25/28,29,26,27/35/play/abc-123', 40)).toBe(
+      '/es/kilter/8/25/28,29,26,27/40/play/abc-123',
+    );
+    expect(replaceAngleInPathname('/es/b/marcos-wall/35/list', 40)).toBe('/es/b/marcos-wall/40/list');
+  });
+
+  it('preserves the /fr/ locale prefix while replacing the angle', () => {
+    expect(replaceAngleInPathname('/fr/tension/two-zone/10x12/main_aux/40/list', 35)).toBe(
+      '/fr/tension/two-zone/10x12/main_aux/35/list',
+    );
+  });
+
+  it('handles 0° on both shapes (vertical board)', () => {
+    expect(replaceAngleInPathname('/kilter/8/25/28,29,26,27/35/list', 0)).toBe('/kilter/8/25/28,29,26,27/0/list');
+    expect(replaceAngleInPathname('/b/marcos-wall/35/list', 0)).toBe('/b/marcos-wall/0/list');
+  });
+
+  it('handles negative angles', () => {
+    expect(replaceAngleInPathname('/kilter/8/25/28,29,26,27/35/list', -5)).toBe('/kilter/8/25/28,29,26,27/-5/list');
+  });
+
+  it('returns null for non-board paths (caller treats as "do not navigate")', () => {
+    expect(replaceAngleInPathname('/you', 40)).toBeNull();
+    expect(replaceAngleInPathname('/playlists', 40)).toBeNull();
+    expect(replaceAngleInPathname('/kilter/8/25/28,29,26,27', 40)).toBeNull(); // no angle segment
+    expect(replaceAngleInPathname('/b/marcos-wall', 40)).toBeNull(); // no angle segment
+    expect(replaceAngleInPathname('/kilter/8/25/28,29,26,27/notanangle/list', 40)).toBeNull();
   });
 });
