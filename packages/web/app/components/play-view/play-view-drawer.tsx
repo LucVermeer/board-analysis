@@ -1327,7 +1327,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                 size="small"
                 variant="outlined"
                 color="info"
-                icon={<ArrowBackOutlined sx={{ fontSize: 14, ml: 0.5 }} />}
                 avatar={
                   <MuiAvatar
                     alt={driverUser.username}
@@ -1335,10 +1334,15 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
                     sx={{ width: 20, height: 20 }}
                   />
                 }
-                label={t('playView.returnToWallPill', {
-                  username: driverUser.username,
-                  climbName: wallClimb.name,
-                })}
+                label={
+                  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                    <ArrowBackOutlined sx={{ fontSize: 14 }} aria-hidden="true" />
+                    {t('playView.returnToWallPill', {
+                      username: driverUser.username,
+                      climbName: wallClimb.name,
+                    })}
+                  </Box>
+                }
                 aria-label={t('queueBar.ariaLabels.returnToWallClimb', { username: driverUser.username })}
                 sx={{ fontSize: 12, maxWidth: '100%' }}
               />
