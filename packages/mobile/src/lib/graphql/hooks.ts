@@ -26,6 +26,7 @@ import {
   GET_CLIMB,
   GET_SESSION_SUMMARY,
   TOGGLE_FAVORITE,
+  SAVE_TICK,
   ADD_QUEUE_ITEM,
   REMOVE_QUEUE_ITEM,
   SET_CURRENT_CLIMB,
@@ -45,6 +46,8 @@ import {
   type GetSessionSummaryQueryVariables,
   type ToggleFavoriteMutationVariables,
   type ToggleFavoriteMutationResponse,
+  type SaveTickMutationVariables,
+  type SaveTickMutationResponse,
   type AddQueueItemMutationVariables,
   type AddQueueItemMutationResponse,
   type RemoveQueueItemMutationVariables,
@@ -193,6 +196,19 @@ export function useToggleFavorite() {
     mutationFn: (variables: ToggleFavoriteMutationVariables) =>
       getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, variables),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+    },
+  });
+}
+
+export function useSaveTick() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: SaveTickMutationVariables) =>
+      getHttpClient().request<SaveTickMutationResponse>(SAVE_TICK, variables),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['climb'] });
       queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
     },
   });

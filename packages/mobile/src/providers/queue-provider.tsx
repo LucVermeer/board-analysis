@@ -12,7 +12,20 @@ import {
 import { queueReducer, initialState } from '@boardsesh/queue';
 import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from '@boardsesh/queue';
 import { getWsClient } from '../lib/graphql/ws-client';
-import { QUEUE_UPDATES_SUBSCRIPTION } from '../lib/graphql/operations';
+import { getHttpClient } from '../lib/graphql/client';
+import {
+  QUEUE_UPDATES_SUBSCRIPTION,
+  ADD_QUEUE_ITEM,
+  REMOVE_QUEUE_ITEM,
+  SET_CURRENT_CLIMB,
+  CREATE_SESSION,
+  type AddQueueItemMutationResponse,
+  type RemoveQueueItemMutationResponse,
+  type SetCurrentClimbMutationResponse,
+  type CreateSessionMutationResponse,
+} from '../lib/graphql/operations';
+import { getStoredBoardConfig } from '../lib/board-store';
+import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
 import { findNextQueueItem, findPreviousQueueItem } from '../lib/queue-navigation';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 
@@ -26,6 +39,7 @@ type QueueContextValue = {
   setCurrentClimb: (item: ClimbQueueItem) => void;
   nextClimb: () => void;
   previousClimb: () => void;
+  clearSession: () => Promise<void>;
 };
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -81,11 +95,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const sessionCreationRef = useRef<Promise<string | null> | null>(null);
 
-  // Subscribe to queue updates when a session is active
+  useEffect(() => {
+    getStoredSessionId().then((storedId) => {
+      if (storedId) setSessionId(storedId);
+    });
+  }, []);
+
   useEffect(() => {
     if (!sessionId) {
-      // Tear down any existing subscription
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       return;
@@ -93,7 +112,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     const wsClient = getWsClient();
 
-    // Use the graphql-ws subscribe API
     const cleanup = wsClient.subscribe<{ queueUpdates: QueueUpdateEvent }>(
       {
         query: QUEUE_UPDATES_SUBSCRIPTION,
@@ -158,9 +176,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         error: (error) => {
           console.error('[QueueProvider] Subscription error:', error);
         },
-        complete: () => {
-          // Subscription ended (server closed it, session ended, etc.)
-        },
+        complete: () => {},
       },
     );
 
@@ -172,38 +188,90 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     };
   }, [sessionId]);
 
-  const addToQueue = useCallback((item: ClimbQueueItem) => {
-    // Optimistic local dispatch — use DELTA_ADD_QUEUE_ITEM for idempotency
-    // so a WS echo of the same item won't create a duplicate
-    dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
+  const ensureSession = useCallback(async (): Promise<string | null> => {
+    if (sessionId) return sessionId;
+    if (sessionCreationRef.current) return sessionCreationRef.current;
 
-    // Phase 2 gap: server mutation not yet wired. Local-only until
-    // GraphQL mutations for queue operations are implemented. Changes
-    // are visible locally but not synced to other session participants.
-  }, []);
+    const createPromise = (async () => {
+      const boardConfig = await getStoredBoardConfig();
+      if (!boardConfig) return null;
 
-  const removeFromQueue = useCallback((uuid: string) => {
-    dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+      const boardPath = `${boardConfig.boardName}/${boardConfig.layoutId}/${boardConfig.sizeId}/${boardConfig.setIds}/${boardConfig.angle}`;
 
-    // Phase 2 gap: server mutation not yet wired. Local-only until
-    // GraphQL mutations for queue operations are implemented. Changes
-    // are visible locally but not synced to other session participants.
-  }, []);
+      try {
+        const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {
+          input: { boardPath, latitude: 0, longitude: 0, discoverable: false },
+        });
+        const newId = response.createSession.id;
+        setSessionId(newId);
+        await setStoredSessionId(newId);
+        return newId;
+      } catch (error: unknown) {
+        console.error('[QueueProvider] session creation failed:', error);
+        return null;
+      } finally {
+        sessionCreationRef.current = null;
+      }
+    })();
 
-  const setCurrentClimb = useCallback((item: ClimbQueueItem) => {
-    dispatch({
-      type: 'DELTA_UPDATE_CURRENT_CLIMB',
-      payload: {
-        item,
-        shouldAddToQueue: true,
-        isServerEvent: false,
-      },
-    });
+    sessionCreationRef.current = createPromise;
+    return createPromise;
+  }, [sessionId]);
 
-    // Phase 2 gap: server mutation not yet wired. Local-only until
-    // GraphQL mutations for queue operations are implemented. Changes
-    // are visible locally but not synced to other session participants.
-  }, []);
+  const addToQueue = useCallback(
+    (item: ClimbQueueItem) => {
+      dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
+
+      ensureSession().then((activeSessionId) => {
+        if (activeSessionId) {
+          getHttpClient()
+            .request<AddQueueItemMutationResponse>(ADD_QUEUE_ITEM, {
+              item: { uuid: item.uuid, climb: item.climb },
+            })
+            .catch((error: unknown) => console.error('[QueueProvider] addQueueItem failed:', error));
+        }
+      });
+    },
+    [ensureSession],
+  );
+
+  const removeFromQueue = useCallback(
+    (uuid: string) => {
+      dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+
+      if (sessionId) {
+        getHttpClient()
+          .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid })
+          .catch((error: unknown) => console.error('[QueueProvider] removeQueueItem failed:', error));
+      }
+    },
+    [sessionId],
+  );
+
+  const setCurrentClimb = useCallback(
+    (item: ClimbQueueItem) => {
+      dispatch({
+        type: 'DELTA_UPDATE_CURRENT_CLIMB',
+        payload: {
+          item,
+          shouldAddToQueue: true,
+          isServerEvent: false,
+        },
+      });
+
+      ensureSession().then((activeSessionId) => {
+        if (activeSessionId) {
+          getHttpClient()
+            .request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, {
+              item: { uuid: item.uuid, climb: item.climb },
+              shouldAddToQueue: true,
+            })
+            .catch((error: unknown) => console.error('[QueueProvider] setCurrentClimb failed:', error));
+        }
+      });
+    },
+    [ensureSession],
+  );
 
   const nextClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
@@ -227,6 +295,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearSession = useCallback(async () => {
+    setSessionId(null);
+    await clearStoredSessionId();
+  }, []);
+
   const contextValue = useMemo<QueueContextValue>(
     () => ({
       state,
@@ -238,8 +311,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setCurrentClimb,
       nextClimb,
       previousClimb,
+      clearSession,
     }),
-    [state, sessionId, addToQueue, removeFromQueue, setCurrentClimb, nextClimb, previousClimb],
+    [state, sessionId, addToQueue, removeFromQueue, setCurrentClimb, nextClimb, previousClimb, clearSession],
   );
 
   return <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>;

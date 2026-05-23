@@ -31,7 +31,8 @@
   },
   "mobile": {
     "emptyTitle": "Aucun board pour le moment",
-    "emptySubtitle": "Cherche un board pour commencer"
+    "emptySubtitle": "Cherche un board pour commencer",
+    "activeBoard": "Board actif"
   },
   "boardEntity": {
     "notFound": "Board introuvable",

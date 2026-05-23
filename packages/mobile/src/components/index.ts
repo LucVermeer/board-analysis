@@ -14,3 +14,4 @@ export { ClimbListRow } from './ClimbListRow';
 export { BoardRenderer, BoardHoldOverlay, useParseFrames } from './board-renderer';
 export type { BoardRendererProps, BoardHold, HoldPlacement } from './board-renderer';
 export { QueueItemRow } from './QueueItemRow';
+export { ClimbFilterSheet, hasActiveFilters, DEFAULT_FILTERS, type ClimbFilters } from './ClimbFilterSheet';

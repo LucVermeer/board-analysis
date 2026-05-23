@@ -241,7 +241,8 @@
       "emptySubtitle": "Busca bloques y añádelos a tu cola para empezar.",
       "browseClimbs": "Buscar bloques",
       "noClimbSelected": "Sin bloque seleccionado",
-      "unknownClimb": "Bloque desconocido"
+      "unknownClimb": "Bloque desconocido",
+      "logAscent": "Registrar ascenso"
     }
   },
   "playView": {

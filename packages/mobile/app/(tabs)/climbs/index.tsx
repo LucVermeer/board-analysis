@@ -1,18 +1,22 @@
 import { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react';
-import { View, StyleSheet, RefreshControl } from 'react-native';
+import { View, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useRouter } from 'expo-router';
 import ContextMenu from 'react-native-context-menu-view';
 import { useTranslation } from 'react-i18next';
+import { randomUUID } from 'expo-crypto';
 import type { Climb } from '@boardsesh/shared-schema';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
-import { useDefaultBoard, useSearchClimbs } from '../../../src/lib/graphql/hooks';
-import { hapticSelection } from '../../../src/lib/haptics';
+import { ClimbFilterSheet, hasActiveFilters, DEFAULT_FILTERS, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
+import { useDefaultBoard, useSearchClimbs, useToggleFavorite } from '../../../src/lib/graphql/hooks';
+import { hapticSelection, hapticSuccess } from '../../../src/lib/haptics';
+import { useQueue } from '../../../src/providers/queue-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
+import { brandColors } from '../../../src/theme/colors';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -52,8 +56,25 @@ export default function ClimbList() {
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [filters, setFilters] = useState<ClimbFilters>(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Wire up the native search bar's onChangeText
+  const filtersActive = hasActiveFilters(filters);
+
+  const handleOpenFilters = useCallback(() => {
+    setShowFilters(true);
+  }, []);
+
+  const handleDismissFilters = useCallback(() => {
+    setShowFilters(false);
+  }, []);
+
+  const handleApplyFilters = useCallback((newFilters: ClimbFilters) => {
+    setFilters(newFilters);
+    setShowFilters(false);
+  }, []);
+
+  // Wire up the native search bar's onChangeText and header right filter button
   useEffect(() => {
     navigation.setOptions({
       headerSearchBarOptions: {
@@ -71,6 +92,15 @@ export default function ClimbList() {
           }, SEARCH_DEBOUNCE_MS);
         },
       },
+      headerRight: () => (
+        <Pressable onPress={handleOpenFilters} hitSlop={8} accessibilityRole="button">
+          <Icon
+            name="filter"
+            size={22}
+            color={filtersActive ? brandColors.primary : '#8E8E93'}
+          />
+        </Pressable>
+      ),
     });
 
     return () => {
@@ -78,8 +108,10 @@ export default function ClimbList() {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [navigation, t]);
+  }, [navigation, t, filtersActive, handleOpenFilters]);
 
+  const { addToQueue } = useQueue();
+  const toggleFavorite = useToggleFavorite();
   const { data: defaultBoard, isLoading: isBoardLoading } = useDefaultBoard();
 
   const boardName = defaultBoard?.boardType ?? '';
@@ -95,11 +127,11 @@ export default function ClimbList() {
   // Accumulate climbs across pages for infinite scroll
   const [accumulatedClimbs, setAccumulatedClimbs] = useState<Climb[]>([]);
 
-  // Combined search-reset effect: clear accumulated climbs and reset page when search changes
+  // Clear accumulated climbs and reset page when search or filters change
   useEffect(() => {
     setAccumulatedClimbs([]);
     setPageNumber(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, filters]);
 
   const searchInput = useMemo(
     () => ({
@@ -111,10 +143,14 @@ export default function ClimbList() {
       ...(debouncedSearch.length > 0 ? { name: debouncedSearch } : {}),
       page: pageNumber,
       pageSize: PAGE_SIZE,
-      sortBy: 'popular',
-      sortOrder: 'desc',
+      sortBy: filters.sortBy,
+      sortOrder: filters.sortOrder,
+      ...(filters.minGrade != null ? { minGrade: filters.minGrade } : {}),
+      ...(filters.maxGrade != null ? { maxGrade: filters.maxGrade } : {}),
+      ...(filters.minAscents != null ? { minAscents: filters.minAscents } : {}),
+      ...(filters.minRating != null ? { minRating: filters.minRating } : {}),
     }),
-    [boardName, layoutId, sizeId, setIds, angle, debouncedSearch, pageNumber],
+    [boardName, layoutId, sizeId, setIds, angle, debouncedSearch, pageNumber, filters],
   );
 
   const {
@@ -166,20 +202,45 @@ export default function ClimbList() {
 
   const handleContextAction = useCallback(
     (actionTitle: string, _climb: Climb) => {
-      hapticSelection();
-      // Context actions will be wired up as features are built
       switch (actionTitle) {
-        case t('mobile.contextMenu.addToQueue'):
+        case t('mobile.contextMenu.addToQueue'): {
+          hapticSuccess();
+          addToQueue({
+            uuid: randomUUID(),
+            climb: {
+              uuid: _climb.uuid,
+              name: _climb.name,
+              frames: _climb.frames,
+              setter_username: _climb.setter_username,
+              angle: _climb.angle,
+              ascensionist_count: _climb.ascensionist_count,
+              difficulty: _climb.difficulty,
+              quality_average: _climb.quality_average,
+              stars: _climb.stars,
+              difficulty_error: _climb.difficulty_error,
+              benchmark_difficulty: _climb.benchmark_difficulty,
+            },
+          });
           break;
-        case t('actions.favorite.label.favorite'):
+        }
+        case t('actions.favorite.label.favorite'): {
+          hapticSelection();
+          if (boardName) {
+            toggleFavorite.mutate({
+              input: { boardName, climbUuid: _climb.uuid, angle },
+            });
+          }
           break;
+        }
         case t('share.actionLabel'):
+          hapticSelection();
           break;
         case t('mobile.contextMenu.viewSetter'):
+          hapticSelection();
           break;
       }
     },
-    [t],
+    [t, addToQueue, boardName, angle, toggleFavorite],
   );
 
   const contextMenuActions = useMemo(
@@ -270,6 +331,13 @@ export default function ClimbList() {
             </View>
           ) : null
         }
+      />
+      <ClimbFilterSheet
+        visible={showFilters}
+        onDismiss={handleDismissFilters}
+        boardName={boardName}
+        currentFilters={filters}
+        onApply={handleApplyFilters}
       />
     </View>
   );

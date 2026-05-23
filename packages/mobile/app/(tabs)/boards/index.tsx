@@ -1,15 +1,50 @@
-import { View, Text, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import type { UserBoard } from '@boardsesh/shared-schema';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
-import { useTheme } from '../../../src/providers/theme-provider';
+import { useTheme, type ResolvedSystemColors } from '../../../src/providers/theme-provider';
+import { setStoredBoardConfig, getStoredBoardConfig } from '../../../src/lib/board-store';
+import { hapticSelection } from '../../../src/lib/haptics';
+import { Text } from '../../../src/components/Text';
+import { Card } from '../../../src/components/Card';
+import { Icon } from '../../../src/components/Icon';
+import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
+import { brandColors } from '../../../src/theme/colors';
+import { spacing } from '../../../src/theme/tokens';
 
 export default function BoardSelection() {
   const { data: boardConnection, isLoading } = useMyBoards();
   const boards = boardConnection?.boards ?? [];
   const { systemColors } = useTheme();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { t } = useTranslation('boards');
+
+  const [activeBoardUuid, setActiveBoardUuid] = useState<string | null>(null);
+
+  useEffect(() => {
+    getStoredBoardConfig().then((config) => {
+      if (config) setActiveBoardUuid(config.boardUuid);
+    });
+  }, []);
+
+  const handleBoardPress = async (board: UserBoard) => {
+    hapticSelection();
+    await setStoredBoardConfig({
+      boardUuid: board.uuid,
+      boardName: board.boardType,
+      layoutId: board.layoutId,
+      sizeId: board.sizeId,
+      setIds: board.setIds,
+      angle: board.angle,
+    });
+    setActiveBoardUuid(board.uuid);
+    queryClient.setQueryData(['defaultBoard'], { defaultBoard: board });
+    router.navigate('/(tabs)/climbs');
+  };
 
   if (isLoading) {
     return (
@@ -22,34 +57,45 @@ export default function BoardSelection() {
   if (boards.length === 0) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.centered}>
-        <Text style={[styles.emptyTitle, { color: systemColors.label }]}>{t('mobile.emptyTitle')}</Text>
-        <Text style={[styles.emptySubtitle, { color: systemColors.secondaryLabel }]}>{t('mobile.emptySubtitle')}</Text>
+        <Text variant="headline" style={styles.emptyTitle}>
+          {t('mobile.emptyTitle')}
+        </Text>
+        <Text variant="subheadline" style={styles.emptySubtitle}>
+          {t('mobile.emptySubtitle')}
+        </Text>
       </ScrollView>
     );
   }
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.flex} contentContainerStyle={styles.container}>
-      {boards.map((board) => (
-        <Pressable
-          key={board.uuid}
-          onPress={() => router.navigate('/(tabs)/climbs')}
-          style={[
-            styles.card,
-            {
-              backgroundColor: systemColors.secondaryBackground,
-              borderColor: systemColors.separator,
-            },
-          ]}
-        >
-          <Text style={[styles.cardTitle, { color: systemColors.label }]}>{board.name}</Text>
-          <Text style={[styles.cardSubtitle, { color: systemColors.secondaryLabel }]}>
-            {board.boardType} · {board.sizeName ?? ''}
-          </Text>
-        </Pressable>
-      ))}
+      {boards.map((board) => {
+        const isActive = board.uuid === activeBoardUuid;
+
+        return (
+          <Card key={board.uuid} onPress={() => handleBoardPress(board)} style={cardStyle(systemColors, isActive)}>
+            <View style={styles.cardContent}>
+              <View style={styles.cardTextContent}>
+                <Text variant="headline">{board.name}</Text>
+                <Text variant="subheadline" style={styles.cardSubtitle}>
+                  {board.boardType} · {board.sizeName ?? ''}
+                </Text>
+              </View>
+              {isActive && <Icon name="tick" size={22} color={brandColors.primary} />}
+            </View>
+          </Card>
+        );
+      })}
     </ScrollView>
   );
+}
+
+function cardStyle(systemColors: ResolvedSystemColors, isActive: boolean) {
+  return {
+    backgroundColor: systemColors.secondaryBackground,
+    borderWidth: isActive ? 2 : StyleSheet.hairlineWidth,
+    borderColor: isActive ? brandColors.primary : systemColors.separator,
+  } as const;
 }
 
 const styles = StyleSheet.create({
@@ -57,8 +103,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    padding: 16,
-    gap: 12,
+    padding: spacing[4],
+    gap: spacing[3],
   },
   centered: {
     flexGrow: 1,
@@ -66,25 +112,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    opacity: 0.6,
   },
   emptySubtitle: {
-    fontSize: 15,
-    marginTop: 8,
+    marginTop: spacing[2],
+    opacity: 0.4,
   },
-  card: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 8,
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '600',
+  cardTextContent: {
+    flex: 1,
   },
   cardSubtitle: {
-    fontSize: 15,
-    marginTop: 4,
+    marginTop: spacing[1],
+    opacity: 0.6,
   },
 });

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl, useColorScheme } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -10,15 +10,19 @@ import { QueueItemRow } from '../../../src/components/QueueItemRow';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
+import { LogAscentSheet } from '../../../src/components/LogAscentSheet';
 import { hapticSelection } from '../../../src/lib/haptics';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { useDefaultBoard } from '../../../src/lib/graphql/hooks';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 
 const TAB_BAR_HEIGHT = 49;
 
 export default function QueueScreen() {
   const { state, sessionId, removeFromQueue, setCurrentClimb, nextClimb, previousClimb } = useQueue();
+  const { data: defaultBoard } = useDefaultBoard();
   const { systemColors, brandColors } = useTheme();
+  const [showLogAscent, setShowLogAscent] = useState(false);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
@@ -47,6 +51,11 @@ export default function QueueScreen() {
     hapticSelection();
     nextClimb();
   }, [nextClimb]);
+
+  const handleLogAscent = useCallback(() => {
+    hapticSelection();
+    setShowLogAscent(true);
+  }, []);
 
   const handleItemPress = useCallback(
     (item: ClimbQueueItem) => {
@@ -195,7 +204,38 @@ export default function QueueScreen() {
         >
           <Icon name="chevron.right" size={22} color={hasNext ? brandColors.primary : systemColors.secondaryLabel} />
         </Pressable>
+
+        <Pressable
+          onPress={handleLogAscent}
+          disabled={!currentClimbQueueItem}
+          accessibilityLabel={t('mobile.queue.logAscent')}
+          style={[styles.navButton, !currentClimbQueueItem && styles.navButtonDisabled]}
+          hitSlop={8}
+        >
+          <Icon
+            name="tick"
+            size={22}
+            color={currentClimbQueueItem ? brandColors.primary : systemColors.secondaryLabel}
+          />
+        </Pressable>
       </Animated.View>
+
+      {currentClimbQueueItem && defaultBoard && (
+        <LogAscentSheet
+          visible={showLogAscent}
+          onDismiss={() => setShowLogAscent(false)}
+          climbUuid={currentClimbQueueItem.climb.uuid}
+          climbName={currentClimbQueueItem.climb.name}
+          boardName={defaultBoard.boardType}
+          angle={currentClimbQueueItem.climb.angle}
+          isMirror={currentClimbQueueItem.climb.mirrored === true}
+          isBenchmark={currentClimbQueueItem.climb.benchmark_difficulty != null}
+          layoutId={defaultBoard.layoutId}
+          sizeId={defaultBoard.sizeId}
+          setIds={defaultBoard.setIds}
+          sessionId={sessionId}
+        />
+      )}
     </View>
   );
 }

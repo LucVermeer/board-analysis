@@ -31,7 +31,8 @@
   },
   "mobile": {
     "emptyTitle": "No boards yet",
-    "emptySubtitle": "Search for a board to get started"
+    "emptySubtitle": "Search for a board to get started",
+    "activeBoard": "Active board"
   },
   "boardEntity": {
     "notFound": "Board not found",

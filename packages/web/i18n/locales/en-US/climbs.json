@@ -577,6 +577,23 @@
       "save": "Save",
       "decreaseAttempts": "Decrease attempts",
       "increaseAttempts": "Increase attempts"
+    },
+    "filter": {
+      "title": "Filters",
+      "sortBy": "Sort by",
+      "popular": "Popular",
+      "quality": "Quality",
+      "difficulty": "Difficulty",
+      "newest": "Newest",
+      "gradeRange": "Grade range",
+      "minGrade": "Min",
+      "maxGrade": "Max",
+      "minAscents": "Min ascents",
+      "anyAscents": "Any",
+      "minRating": "Min rating",
+      "anyRating": "Any",
+      "apply": "Apply filters",
+      "reset": "Reset"
     }
   }
 }

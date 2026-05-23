@@ -241,7 +241,8 @@
       "emptySubtitle": "Parcours les blocs et ajoute-les à ta file pour commencer.",
       "browseClimbs": "Parcourir les blocs",
       "noClimbSelected": "Aucun bloc sélectionné",
-      "unknownClimb": "Bloc inconnu"
+      "unknownClimb": "Bloc inconnu",
+      "logAscent": "Enregistrer l'ascension"
     }
   },
   "playView": {
