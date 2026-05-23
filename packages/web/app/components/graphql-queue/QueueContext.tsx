@@ -333,36 +333,33 @@ export const GraphQLQueueProvider = ({
         // i18n-keep session:driverToast.firstDriver
         // i18n-keep session:driverToast.tookFromYou
         // i18n-keep session:driverToast.tookFromOther
+        // i18n-keep session:driverToast.unknownDriver
         // (The orphan-key checker can't resolve `latest.t(...)` to a
         // useTranslation binding; the keys are statically used here.)
         if (newDriverId && newDriverId !== localParticipantId) {
-          const newDriverName = latest.users.find((user) => user.id === newDriverId)?.username ?? '';
+          // The new driver can arrive before they show up in `latest.users`
+          // (distributed-state propagation reordering). Falling back to
+          // "Someone" keeps the toast firing — losing the wall to an
+          // unnamed peer is still better than the local user silently
+          // discovering it on their next interaction.
+          const newDriverName =
+            latest.users.find((user) => user.id === newDriverId)?.username ?? latest.t('driverToast.unknownDriver');
           const previousDriverId = event.previousDriverParticipantId ?? null;
-          if (newDriverName) {
-            if (!previousDriverId) {
-              latest.showMessage(latest.t('driverToast.firstDriver', { newDriver: newDriverName }), 'info');
-            } else if (previousDriverId === localParticipantId) {
-              latest.showMessage(latest.t('driverToast.tookFromYou', { newDriver: newDriverName }), 'info');
-            } else {
-              const previousDriverName = latest.users.find((user) => user.id === previousDriverId)?.username ?? '';
-              // The previous driver can be gone from `users` by the time the
-              // event arrives (left the session in the same tick they were
-              // yanked, or distributed-state propagation reordered).
-              // Surfacing "X took the wall from ." is worse than dropping the
-              // attribution — fall through to the simpler firstDriver copy so
-              // the toast still names the new driver and reads cleanly.
-              if (previousDriverName) {
-                latest.showMessage(
-                  latest.t('driverToast.tookFromOther', {
-                    newDriver: newDriverName,
-                    previousDriver: previousDriverName,
-                  }),
-                  'info',
-                );
-              } else {
-                latest.showMessage(latest.t('driverToast.firstDriver', { newDriver: newDriverName }), 'info');
-              }
-            }
+          if (!previousDriverId) {
+            latest.showMessage(latest.t('driverToast.firstDriver', { newDriver: newDriverName }), 'info');
+          } else if (previousDriverId === localParticipantId) {
+            latest.showMessage(latest.t('driverToast.tookFromYou', { newDriver: newDriverName }), 'info');
+          } else {
+            const previousDriverName =
+              latest.users.find((user) => user.id === previousDriverId)?.username ??
+              latest.t('driverToast.unknownDriver');
+            latest.showMessage(
+              latest.t('driverToast.tookFromOther', {
+                newDriver: newDriverName,
+                previousDriver: previousDriverName,
+              }),
+              'info',
+            );
           }
         }
       }
