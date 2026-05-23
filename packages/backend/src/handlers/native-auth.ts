@@ -341,7 +341,7 @@ async function generateTokenPair(userId: string): Promise<{
     .sign(signingSecret);
 
   // Generate refresh token and store its hash
-  const refreshToken = crypto.randomUUID();
+  const refreshToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
   await db.insert(mobileRefreshTokens).values({

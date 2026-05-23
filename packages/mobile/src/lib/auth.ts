@@ -20,6 +20,7 @@ export async function exchangeTransferToken(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transferToken }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {
