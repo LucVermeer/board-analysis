@@ -108,7 +108,7 @@ const QueueClimbListItem: React.FC<QueueClimbListItemProps> = ({
 
     const avatar = item.addedByUser ? (
       <MuiTooltip title={item.addedByUser.username}>
-        <MuiAvatar sx={avatarStyle} src={item.addedByUser.avatarUrl}>
+        <MuiAvatar sx={avatarStyle} src={item.addedByUser.avatarUrl ?? undefined}>
           <PersonOutlined />
         </MuiAvatar>
       </MuiTooltip>

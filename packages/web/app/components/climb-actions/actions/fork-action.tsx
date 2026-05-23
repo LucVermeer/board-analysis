@@ -47,7 +47,7 @@ export function ForkAction({
           ? {
               frames: climb.frames,
               name: climb.name,
-              description: climb.description,
+              description: climb.description ?? undefined,
               editClimbUuid: climb.uuid,
             }
           : { frames: climb.frames, name: climb.name },

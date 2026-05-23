@@ -13,7 +13,7 @@ import styles from './swipe-board-carousel.module.css';
 
 type ClimbBoardData = {
   frames: string;
-  mirrored?: boolean;
+  mirrored?: boolean | null;
 };
 
 export type SwipeBoardCarouselProps = {

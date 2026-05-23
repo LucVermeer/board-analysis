@@ -12,7 +12,7 @@ export type Climb = {
   // Edit affordance in queue-list) instead of the mutable setter_username.
   userId?: string | null;
   name: string;
-  description?: string;
+  description?: string | null;
   frames: string;
   angle: number;
   ascensionist_count: number;
@@ -20,12 +20,12 @@ export type Climb = {
   quality_average: string;
   stars: number;
   difficulty_error: string;
-  mirrored?: boolean;
+  mirrored?: boolean | null;
   benchmark_difficulty: string | null; // Benchmark difficulty, can be null
-  is_draft?: boolean;
-  is_no_match?: boolean;
-  userAscents?: number;
-  userAttempts?: number;
+  is_draft?: boolean | null;
+  is_no_match?: boolean | null;
+  userAscents?: number | null;
+  userAttempts?: number | null;
   // ISO timestamp of when this climb row was created
   created_at?: string | null;
   // ISO timestamp of when this climb was first published (null while still a draft)

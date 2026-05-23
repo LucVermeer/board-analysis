@@ -169,6 +169,27 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/shared/ble-protocol": {
+      "name": "@boardsesh/ble-protocol",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/board-constants": "*",
+        "@boardsesh/shared-schema": "*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
+    "packages/shared/queue": {
+      "name": "@boardsesh/queue",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/shared-schema": "*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/web": {
       "name": "@boardsesh/web",
       "version": "0.1.0",
@@ -180,10 +201,12 @@
         "@atlaskit/pragmatic-drag-and-drop-react-drop-indicator": "^3.2.12",
         "@auth/drizzle-adapter": "^1.11.1",
         "@aws-sdk/client-s3": "^3.1000.0",
+        "@boardsesh/ble-protocol": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/board-renderer-wasm": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
+        "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",
         "@emoji-mart/data": "^1.2.1",
         "@emoji-mart/react": "^1.1.1",
@@ -463,6 +486,8 @@
 
     "@boardsesh/aurora-sync": ["@boardsesh/aurora-sync@workspace:packages/aurora-sync"],
 
+    "@boardsesh/ble-protocol": ["@boardsesh/ble-protocol@workspace:packages/shared/ble-protocol"],
+
     "@boardsesh/board-constants": ["@boardsesh/board-constants@workspace:packages/board-constants"],
 
     "@boardsesh/board-renderer-wasm": ["@boardsesh/board-renderer-wasm@workspace:packages/board-renderer-wasm"],
@@ -472,6 +497,8 @@
     "@boardsesh/db": ["@boardsesh/db@workspace:packages/db"],
 
     "@boardsesh/moonboard-ocr": ["@boardsesh/moonboard-ocr@workspace:packages/moonboard-ocr"],
+
+    "@boardsesh/queue": ["@boardsesh/queue@workspace:packages/shared/queue"],
 
     "@boardsesh/shared-schema": ["@boardsesh/shared-schema@workspace:packages/shared-schema"],
 

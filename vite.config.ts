@@ -38,6 +38,8 @@ export default defineConfig({
       './packages/moonboard-ocr/vite.config.ts',
       './packages/board-constants/vite.config.ts',
       './packages/aurora-sync/vite.config.ts',
+      './packages/shared/ble-protocol/vite.config.ts',
+      './packages/shared/queue/vite.config.ts',
     ],
   },
   staged: {
@@ -173,9 +175,22 @@ export default defineConfig({
         command: 'bun run --filter=@boardsesh/web typecheck',
         dependsOn: ['build:web'],
       },
+      'typecheck:ble-protocol': {
+        command: 'bun run --filter=@boardsesh/ble-protocol typecheck',
+      },
+      'typecheck:queue': {
+        command: 'bun run --filter=@boardsesh/queue typecheck',
+      },
       typecheck: {
         command: 'true',
-        dependsOn: ['typecheck:shared', 'typecheck:db', 'typecheck:backend', 'typecheck:web'],
+        dependsOn: [
+          'typecheck:shared',
+          'typecheck:db',
+          'typecheck:backend',
+          'typecheck:web',
+          'typecheck:ble-protocol',
+          'typecheck:queue',
+        ],
       },
 
       // --- Dev servers ---

@@ -7,6 +7,7 @@ on:
     paths:
       - 'packages/backend/**'
       - 'packages/shared-schema/**'
+      - 'packages/shared/**'
       - 'packages/db/**'
       - 'packages/crypto/**'
       - 'packages/aurora-sync/**'

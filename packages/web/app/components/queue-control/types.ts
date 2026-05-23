@@ -1,28 +1,17 @@
 import type { Climb, SearchRequestPagination, ParsedBoardRouteParameters } from '@/app/lib/types';
 import type { SessionUser } from '@boardsesh/shared-schema';
 import type { ConnectionState } from '../connection-manager/websocket-connection-manager';
+import type {
+  QueueState as SharedQueueState,
+  QueueAction as SharedQueueAction,
+  AddToQueueSource,
+} from '@boardsesh/queue';
 
-export type AddToQueueSource = 'search' | 'playlist' | 'climb_detail' | 'peer_broadcast' | 'unknown';
-
-export type PeerId = string | null;
-export type UserName = PeerId;
-
-export type QueueItemUser = {
-  id: string;
-  username: string;
-  avatarUrl?: string;
-};
-
-export type ClimbQueueItem = {
-  addedBy?: UserName;
-  addedByUser?: QueueItemUser;
-  tickedBy?: UserName[];
-  climb: Climb;
-  uuid: string;
-  suggested?: boolean;
-};
-
-export type ClimbQueue = ClimbQueueItem[];
+// Re-export pure value types from the shared package for backward compatibility.
+// Types that embed Climb (PlaylistSuggestionSource, SetCurrentClimbOptions) are
+// defined locally because they reference the web's Climb type (which carries
+// web-specific fields like boardType).
+export type { QueueSearchParams, AddToQueueSource, PeerId, UserName } from '@boardsesh/queue';
 
 export type PlaylistSuggestionSource = {
   playlistUuid: string;
@@ -35,78 +24,26 @@ export type SetCurrentClimbOptions = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
 };
 
-export type QueueState = {
-  queue: ClimbQueue;
-  currentClimbQueueItem: ClimbQueueItem | null;
-  climbSearchParams: SearchRequestPagination;
-  playlistSuggestionSource: PlaylistSuggestionSource | null;
-  hasDoneFirstFetch: boolean;
-  initialQueueDataReceivedFromPeers: boolean;
-  // Track locally-initiated current climb updates by correlation ID to skip server echoes
-  // Correlation IDs enable precise echo detection without time-based logic in the reducer
-  pendingCurrentClimbUpdates: string[];
-  // Sequence tracking for gap detection and state verification
-  lastReceivedSequence: number | null;
-  lastReceivedStateHash: string | null;
-  // Flag to indicate corrupted data was filtered and a resync is needed
-  needsResync: boolean;
-  // Optimistic driver participant id, used between `takeControl` firing and the
-  // server's `DriverChanged` broadcast landing. When set, the QueueContext
-  // prefers this over `persistentSession.driverParticipantId` so the lightbulb
-  // flips visual state instantly. Cleared on the next `DriverChanged` event
-  // (idempotent if the server agrees; corrects the UI if we lost a race).
-  optimisticDriverParticipantId: string | null;
+export type QueueItemUser = {
+  id: string;
+  username: string;
+  avatarUrl?: string | null;
 };
 
-export type QueueAction =
-  | { type: 'ADD_TO_QUEUE'; payload: ClimbQueueItem }
-  | { type: 'REMOVE_FROM_QUEUE'; payload: ClimbQueueItem[] }
-  | { type: 'SET_CURRENT_CLIMB'; payload: ClimbQueueItem }
-  | { type: 'SET_CURRENT_CLIMB_QUEUE_ITEM'; payload: ClimbQueueItem }
-  | { type: 'SET_CLIMB_SEARCH_PARAMS'; payload: SearchRequestPagination }
-  | {
-      type: 'UPDATE_QUEUE';
-      payload: { queue: ClimbQueue; currentClimbQueueItem?: ClimbQueueItem | null };
-    }
-  | {
-      type: 'INITIAL_QUEUE_DATA';
-      payload: { queue: ClimbQueue; currentClimbQueueItem?: ClimbQueueItem | null };
-    }
-  | { type: 'SET_FIRST_FETCH'; payload: boolean }
-  | { type: 'MIRROR_CLIMB' }
-  // Delta-specific actions
-  | { type: 'DELTA_ADD_QUEUE_ITEM'; payload: { item: ClimbQueueItem; position?: number } }
-  | { type: 'DELTA_REMOVE_QUEUE_ITEM'; payload: { uuid: string } }
-  | {
-      type: 'DELTA_REORDER_QUEUE_ITEM';
-      payload: { uuid: string; oldIndex: number; newIndex: number };
-    }
-  | {
-      type: 'DELTA_UPDATE_CURRENT_CLIMB';
-      payload: {
-        item: ClimbQueueItem | null;
-        shouldAddToQueue?: boolean;
-        insertAfterCurrent?: boolean;
-        isServerEvent?: boolean;
-        eventClientId?: string;
-        myClientId?: string;
-        correlationId?: string;
-        serverCorrelationId?: string;
-        playlistSuggestionSource?: PlaylistSuggestionSource | null;
-      };
-    }
-  | { type: 'DELTA_MIRROR_CURRENT_CLIMB'; payload: { mirrored: boolean; mirroredUuid: string | null } }
-  | { type: 'DELTA_REPLACE_QUEUE_ITEM'; payload: { uuid: string; item: ClimbQueueItem } }
-  | { type: 'SET_PLAYLIST_SUGGESTION_SOURCE'; payload: PlaylistSuggestionSource | null }
-  | { type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE'; payload: PlaylistSuggestionSource }
-  | { type: 'CLEANUP_PENDING_UPDATE'; payload: { correlationId: string } }
-  | { type: 'CLEANUP_PENDING_UPDATES_BATCH'; payload: { correlationIds: string[] } }
-  | { type: 'CLEAR_RESYNC_FLAG' }
-  // Optimistic driver claim — applied immediately when the local user fires
-  // `takeControl`, cleared on the authoritative `DriverChanged` broadcast.
-  // Lets the bar/drawer lightbulb flip visual state before the server round-trip.
-  | { type: 'OPTIMISTIC_SET_DRIVER'; payload: { participantId: string } }
-  | { type: 'OPTIMISTIC_CLEAR_DRIVER' };
+export type ClimbQueueItem = {
+  addedBy?: string | null;
+  addedByUser?: QueueItemUser;
+  tickedBy?: (string | null)[];
+  climb: Climb;
+  uuid: string;
+  suggested?: boolean;
+};
+
+export type ClimbQueue = ClimbQueueItem[];
+
+export type QueueState = SharedQueueState<SearchRequestPagination>;
+
+export type QueueAction = SharedQueueAction<SearchRequestPagination>;
 
 // Stable action functions — identity rarely changes
 export type QueueActionsType = {

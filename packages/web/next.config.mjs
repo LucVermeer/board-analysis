@@ -18,6 +18,8 @@ const nextConfig = {
     '@boardsesh/db',
     '@boardsesh/crypto',
     '@boardsesh/moonboard-ocr',
+    '@boardsesh/ble-protocol',
+    '@boardsesh/queue',
   ],
   // Empty turbopack config to silence warning about webpack config
   turbopack: {},

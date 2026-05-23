@@ -20,9 +20,9 @@ export type ClimbTitleData = {
   angle?: number | string;
   setter_username?: string;
   ascensionist_count?: number;
-  is_draft?: boolean;
+  is_draft?: boolean | null;
   communityGrade?: string | null;
-  is_no_match?: boolean;
+  is_no_match?: boolean | null;
 };
 
 export type ClimbTitleProps = {

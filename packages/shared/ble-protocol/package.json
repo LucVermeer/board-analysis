@@ -1,0 +1,39 @@
+{
+  "name": "@boardsesh/ble-protocol",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./aurora": {
+      "types": "./src/aurora.ts",
+      "import": "./src/aurora.ts",
+      "default": "./src/aurora.ts"
+    },
+    "./moonboard": {
+      "types": "./src/moonboard.ts",
+      "import": "./src/moonboard.ts",
+      "default": "./src/moonboard.ts"
+    },
+    "./transport": {
+      "types": "./src/transport.ts",
+      "import": "./src/transport.ts",
+      "default": "./src/transport.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@boardsesh/board-constants": "*",
+    "@boardsesh/shared-schema": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

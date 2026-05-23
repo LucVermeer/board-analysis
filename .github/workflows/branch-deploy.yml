@@ -52,7 +52,7 @@ jobs:
           BACKEND_CHANGED=false
           for file in $CHANGED_FILES; do
             case "$file" in
-              packages/backend/*|packages/shared-schema/*|packages/db/*|packages/crypto/*|packages/aurora-sync/*|Dockerfile.backend|bun.lock|package.json)
+              packages/backend/*|packages/shared-schema/*|packages/shared/*|packages/db/*|packages/crypto/*|packages/aurora-sync/*|Dockerfile.backend|bun.lock|package.json)
                 BACKEND_CHANGED=true
                 break
                 ;;
