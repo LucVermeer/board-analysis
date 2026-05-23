@@ -9,7 +9,9 @@ import * as dbSchema from '@boardsesh/db/schema';
  *
  * What this writes:
  *   - boardsesh_ascensionist_count = COUNT(DISTINCT user_id) over flash/send ticks
- *   - ascensionist_count = COALESCE(aurora_ascensionist_count, 0) + boardsesh_*
+ *   - ascensionist_count = COALESCE(aurora_ascensionist_count, 0)
+ *                         + COALESCE(kilter_ascensionist_count, 0)
+ *                         + COALESCE(boardsesh_ascensionist_count, 0)
  *     (the materialized sum the search hot path reads through the covering
  *     index from migration 0067)
  *   - fa_username / fa_at:
@@ -46,10 +48,11 @@ import * as dbSchema from '@boardsesh/db/schema';
  */
 export async function recomputeClimbStats(boardType: string, climbUuid: string, angle: number): Promise<void> {
   await db.transaction(async (tx) => {
-    // Defensive seed: set aurora_ascensionist_count to 0 explicitly so the
-    // subsequent sum (COALESCE(aurora,0) + COALESCE(boardsesh,0)) and any
-    // later Aurora upsert both see a sensible baseline. Without it, freshly
-    // seeded rows would carry NULL aurora_count until Aurora first synced.
+    // Defensive seed: set aurora_/kilter_ascensionist_count to 0 explicitly so
+    // the subsequent sum (COALESCE(aurora,0) + COALESCE(kilter,0) +
+    // COALESCE(boardsesh,0)) and any later Aurora/Kilter upsert both see a
+    // sensible baseline. Without it, freshly seeded rows would carry NULL
+    // counts until those syncs first ran.
     await tx
       .insert(dbSchema.boardClimbStats)
       .values({
@@ -58,6 +61,7 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
         angle,
         ascensionistCount: 0,
         auroraAscensionistCount: 0,
+        kilterAscensionistCount: 0,
         boardseshAscensionistCount: 0,
       })
       .onConflictDoNothing({
@@ -100,6 +104,7 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
       UPDATE board_climb_stats s
          SET boardsesh_ascensionist_count = COALESCE(agg.distinct_senders, 0),
              ascensionist_count           = COALESCE(s.aurora_ascensionist_count, 0)
+                                          + COALESCE(s.kilter_ascensionist_count, 0)
                                           + COALESCE(agg.distinct_senders, 0),
              fa_username = CASE
                WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
