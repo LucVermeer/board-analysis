@@ -156,6 +156,10 @@ describe('parseBoardTypeFromDeviceName', () => {
     expect(parseBoardTypeFromDeviceName('So iLL Board#42@3')).toBe('soill');
   });
 
+  it('parses "So-iLL Board#42@3" as soill (strips hyphens)', () => {
+    expect(parseBoardTypeFromDeviceName('So-iLL Board#42@3')).toBe('soill');
+  });
+
   it('returns undefined for undefined input', () => {
     expect(parseBoardTypeFromDeviceName(undefined)).toBeUndefined();
   });

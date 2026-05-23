@@ -212,8 +212,42 @@ export function useBoardBluetooth({
           // empty frame string — skip the write rather than send a malformed
           // packet to the board.
           if (!frames) return;
-          const { packet: bluetoothPacket } = getMoonboardBluetoothPacket(frames);
-          await adapterRef.current.write(bluetoothPacket, signal);
+          const moonResult = getMoonboardBluetoothPacket(frames);
+          const moonSkipped = moonResult.skippedRoleCount + moonResult.skippedPositionCount;
+
+          if (moonSkipped > 0 && moonResult.totalPlacements === moonSkipped) {
+            Sentry.captureMessage(
+              `[BLE] All ${moonResult.totalPlacements} MoonBoard placements skipped — climb data may be corrupted`,
+              {
+                level: 'warning',
+                tags: { board: 'moonboard' },
+                extra: {
+                  climbUuid,
+                  skippedRoleCount: moonResult.skippedRoleCount,
+                  skippedPositionCount: moonResult.skippedPositionCount,
+                },
+              },
+            );
+            showMessage('This climb has unrecognised hold data and cannot be sent to the board.', 'error');
+            return false;
+          }
+
+          if (moonSkipped > 0) {
+            Sentry.captureMessage(
+              `[BLE] ${moonSkipped} of ${moonResult.totalPlacements} MoonBoard placements skipped`,
+              {
+                level: 'warning',
+                tags: { board: 'moonboard' },
+                extra: {
+                  climbUuid,
+                  skippedRoleCount: moonResult.skippedRoleCount,
+                  skippedPositionCount: moonResult.skippedPositionCount,
+                },
+              },
+            );
+          }
+
+          await adapterRef.current.write(moonResult.packet, signal);
           void incrementBluetoothSends().then(maybeFireFeedbackPromptEvent);
           return true;
         }

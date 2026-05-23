@@ -1,6 +1,9 @@
 import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 import { MESSAGE_BODY_MAX_LENGTH } from './transport';
 
+// Canonical source: @boardsesh/shared-schema (board-config.ts, climb.ts).
+// Duplicated here so ble-protocol stays portable without pulling in
+// shared-schema's full type tree. Keep in sync when adding a new board.
 export const AURORA_BOARDS = ['kilter', 'tension', 'decoy', 'touchstone', 'grasshopper', 'soill'] as const;
 export type AuroraBoardName = (typeof AURORA_BOARDS)[number];
 export type HoldState = 'OFF' | 'STARTING' | 'FINISH' | 'HAND' | 'FOOT' | 'ANY' | 'NOT' | 'AUX';
