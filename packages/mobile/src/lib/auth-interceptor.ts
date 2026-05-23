@@ -17,7 +17,6 @@ async function refreshTokens(): Promise<boolean> {
 
     if (!response.ok) {
       console.warn(`[Auth] Token refresh failed: HTTP ${response.status}`);
-      await clearTokens();
       return false;
     }
 

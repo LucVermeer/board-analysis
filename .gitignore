@@ -91,6 +91,7 @@ packages/db/docker/tmp/
 eng.traineddata
 
 # React Native / Expo
+packages/mobile/.env
 packages/mobile/.expo/
 packages/mobile/ios/
 packages/mobile/android/

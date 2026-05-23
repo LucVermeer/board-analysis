@@ -162,9 +162,8 @@ describe('authenticatedFetch', () => {
     const response = await authenticatedFetch('https://api.example.com/data');
 
     expect(response.status).toBe(401);
-    expect(mockClearTokens).toHaveBeenCalledTimes(2);
-    // clearTokens called once inside refreshTokens (on failed refresh)
-    // and once in the 401 handler after refreshed===false
+    expect(mockClearTokens).toHaveBeenCalledTimes(1);
+    // clearTokens called once in the 401 handler after refresh fails
   });
 
   it('attaches Authorization header from stored token', async () => {

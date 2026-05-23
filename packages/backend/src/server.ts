@@ -16,7 +16,12 @@ import { handleOcrTestDataUpload } from './handlers/ocr-test-data';
 import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
-import { handleNativeAuthExchange, handleNativeAuthRefresh } from './handlers/native-auth';
+import {
+  handleNativeAuthExchange,
+  handleNativeAuthRefresh,
+  startRefreshTokenCleanup,
+  stopRefreshTokenCleanup,
+} from './handlers/native-auth';
 import { handleApnsStats } from './handlers/apns-stats';
 import { createYogaInstance } from './graphql/yoga';
 import { setupWebSocketServer } from './websocket/setup';
@@ -93,6 +98,9 @@ export async function startServer(): Promise<ServerResources> {
 
   // Initialize APNs for iOS Live Activity push notifications
   initializeApns();
+
+  // Start periodic cleanup of expired/revoked mobile refresh tokens.
+  startRefreshTokenCleanup();
 
   // Surface APNs configuration status at startup. The queue event hook
   // wired below has *publisher-side* semantics: it only fires on the
@@ -443,6 +451,12 @@ export async function startServer(): Promise<ServerResources> {
     if (apnsInstanceConfigInterval !== null) {
       clearInterval(apnsInstanceConfigInterval);
       apnsInstanceConfigInterval = null;
+    }
+
+    try {
+      stopRefreshTokenCleanup();
+    } catch (error) {
+      logger.error('[Server] Error stopping refresh token cleanup:', error);
     }
 
     try {

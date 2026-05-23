@@ -34,6 +34,7 @@ const TABLES_TO_RESET = [
   'esp32_controllers',
   'user_climb_percentiles',
   'user_board_mappings',
+  'mobile_refresh_tokens',
   'users',
 ];
 

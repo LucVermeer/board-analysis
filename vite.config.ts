@@ -186,7 +186,7 @@ export default defineConfig({
         command: 'bun run --filter=@boardsesh/board-config typecheck',
       },
       'typecheck:mobile': {
-        command: 'cd packages/mobile && npx tsc --noEmit',
+        command: 'bun run --filter=@boardsesh/mobile typecheck',
       },
       typecheck: {
         command: 'true',
@@ -204,7 +204,7 @@ export default defineConfig({
 
       // --- Dev servers ---
       'dev:mobile': {
-        command: 'cd packages/mobile && npx expo start',
+        command: 'bun run --filter=@boardsesh/mobile start',
         cache: false,
       },
       'dev:backend': {

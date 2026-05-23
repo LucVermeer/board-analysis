@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import crypto from 'crypto';
 import { SignJWT } from 'jose';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, lt, or, isNotNull } from 'drizzle-orm';
 import { mobileRefreshTokens } from '@boardsesh/db/schema/auth';
 import { db } from '../db/client';
+import { redisClientManager } from '../redis/client';
 import { applyCorsHeaders } from './cors';
 import { logger } from '../utils/logger';
 
@@ -30,17 +31,25 @@ const JWT_AUDIENCE = 'boardsesh-mobile';
 // Transfer token replay prevention
 // ---------------------------------------------------------------------------
 
-/** Map of consumed transfer token signatures → consumption timestamp (ms). */
+/**
+ * In-memory fallback for consumed transfer token signatures when Redis is
+ * unavailable. When Redis is connected, tokens are stored with SET NX EX for
+ * atomic, multi-instance-safe replay prevention.
+ */
 const consumedTransferTokens = new Map<string, number>();
 
 /** TTL for consumed token entries (125s — slightly longer than the 120s token TTL). */
-const CONSUMED_TOKEN_TTL_MS = 125_000;
+const CONSUMED_TOKEN_TTL_SECONDS = 125;
+const CONSUMED_TOKEN_TTL_MS = CONSUMED_TOKEN_TTL_SECONDS * 1000;
 
 /** Cleanup interval for expired consumed token entries. */
 const CONSUMED_TOKEN_CLEANUP_INTERVAL_MS = 60_000;
 
 /** Max entries before triggering early eviction. */
 const MAX_CONSUMED_TOKENS = 10_000;
+
+/** Redis key prefix for consumed transfer tokens. */
+const CONSUMED_TOKEN_REDIS_PREFIX = 'boardsesh:native-auth:consumed:';
 
 /** Evict stale entries from the consumed-token map. */
 function evictStaleConsumedTokens(): void {
@@ -52,6 +61,62 @@ function evictStaleConsumedTokens(): void {
 
 // Periodically evict stale consumed-token entries so the map doesn't grow unbounded.
 setInterval(evictStaleConsumedTokens, CONSUMED_TOKEN_CLEANUP_INTERVAL_MS);
+
+/**
+ * Attempt to mark a transfer token signature as consumed.
+ * Returns true if the token was freshly consumed, false if it was already consumed (replay).
+ *
+ * When Redis is connected, uses SET NX EX for atomic multi-instance replay prevention.
+ * Falls back to the in-memory map otherwise (single-instance only).
+ */
+async function markTokenConsumed(tokenSignature: string): Promise<boolean> {
+  if (redisClientManager.isRedisConnected()) {
+    try {
+      const { publisher } = redisClientManager.getClients();
+      const redisKey = `${CONSUMED_TOKEN_REDIS_PREFIX}${tokenSignature}`;
+      // SET key "1" NX EX 125 — returns "OK" if set, null if key already existed
+      const result = await publisher.set(redisKey, '1', 'EX', CONSUMED_TOKEN_TTL_SECONDS, 'NX');
+      return result === 'OK';
+    } catch (error) {
+      // Redis failure: fall through to in-memory map so the endpoint stays available.
+      logger.warn('[NativeAuth] Redis SET NX failed for consumed token, falling back to in-memory:', error);
+    }
+  }
+
+  // In-memory fallback (single-instance only)
+  if (consumedTransferTokens.has(tokenSignature)) {
+    return false;
+  }
+
+  if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
+    evictStaleConsumedTokens();
+    if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
+      // Map full even after eviction — reject to avoid unbounded growth
+      return false;
+    }
+  }
+
+  consumedTransferTokens.set(tokenSignature, Date.now());
+  return true;
+}
+
+/**
+ * Check if a transfer token signature has already been consumed (read-only check).
+ * Used for the early-reject path before verifying the HMAC.
+ */
+async function isTokenConsumed(tokenSignature: string): Promise<boolean> {
+  if (redisClientManager.isRedisConnected()) {
+    try {
+      const { publisher } = redisClientManager.getClients();
+      const redisKey = `${CONSUMED_TOKEN_REDIS_PREFIX}${tokenSignature}`;
+      const result = await publisher.exists(redisKey);
+      return result === 1;
+    } catch (error) {
+      logger.warn('[NativeAuth] Redis EXISTS failed for consumed token, falling back to in-memory:', error);
+    }
+  }
+  return consumedTransferTokens.has(tokenSignature);
+}
 
 // ---------------------------------------------------------------------------
 // IP-based rate limiting for auth endpoints
@@ -116,11 +181,16 @@ function checkAuthRateLimit(ipAddress: string): number | null {
   return null;
 }
 
-/** Extract the client IP from an incoming request. */
+/**
+ * Extract the client IP from an incoming request.
+ *
+ * Uses `req.socket.remoteAddress` exclusively. X-Forwarded-For is user-controlled
+ * and trusting its leftmost entry lets attackers bypass the rate limiter by
+ * spoofing arbitrary IPs. Behind a reverse proxy (e.g. Railway), remoteAddress
+ * is the proxy IP, which means all clients share one rate-limit bucket — overly
+ * permissive but not bypassable.
+ */
 function getClientIp(req: IncomingMessage): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
-  if (Array.isArray(forwarded) && forwarded.length > 0) return forwarded[0].split(',')[0].trim();
   return req.socket.remoteAddress ?? 'unknown';
 }
 
@@ -318,9 +388,9 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
   const tokenSignature = tokenParts[1];
 
   // Check if this transfer token has already been consumed (replay prevention)
-  if (consumedTransferTokens.has(tokenSignature)) {
+  if (await isTokenConsumed(tokenSignature)) {
     logger.warn('[NativeAuth] Transfer token replay attempt detected');
-    sendJson(res, 401, { error: 'Invalid or expired transfer token' });
+    sendJson(res, 409, { error: 'Transfer token has already been used' });
     return;
   }
 
@@ -332,18 +402,14 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
     return;
   }
 
-  // Guard against unbounded map growth under distributed attacks
-  if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
-    evictStaleConsumedTokens();
-    if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
-      logger.warn(`[NativeAuth] Consumed token map full (${consumedTransferTokens.size} entries)`);
-      sendJson(res, 503, { error: 'Service temporarily overloaded' });
-      return;
-    }
+  // Atomically mark the token as consumed. If another request consumed it
+  // between the EXISTS check above and now, markTokenConsumed returns false.
+  const consumed = await markTokenConsumed(tokenSignature);
+  if (!consumed) {
+    logger.warn('[NativeAuth] Transfer token replay attempt detected (race)');
+    sendJson(res, 409, { error: 'Transfer token has already been used' });
+    return;
   }
-
-  // Mark token as consumed to prevent replay within the TTL window
-  consumedTransferTokens.set(tokenSignature, Date.now());
 
   try {
     const tokenPair = await generateTokenPair(verified.userId);
@@ -434,4 +500,86 @@ export async function handleNativeAuthRefresh(req: IncomingMessage, res: ServerR
     logger.error('[NativeAuth] Token refresh failed:', error);
     sendJson(res, 500, { error: 'Internal server error' });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Periodic cleanup of expired / revoked refresh tokens
+// ---------------------------------------------------------------------------
+
+/** How often to run the cleanup (every 6 hours). */
+const REFRESH_TOKEN_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/** Revoked tokens older than this are deleted (7 days). */
+const REVOKED_TOKEN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+let refreshTokenCleanupHandle: ReturnType<typeof setInterval> | null = null;
+
+async function runRefreshTokenCleanup(): Promise<void> {
+  const revokedCutoff = new Date(Date.now() - REVOKED_TOKEN_RETENTION_MS);
+  const now = new Date();
+  try {
+    const result = await db
+      .delete(mobileRefreshTokens)
+      .where(
+        or(
+          // Revoked tokens older than 7 days
+          and(isNotNull(mobileRefreshTokens.revokedAt), lt(mobileRefreshTokens.revokedAt, revokedCutoff)),
+          // Expired tokens
+          lt(mobileRefreshTokens.expiresAt, now),
+        ),
+      )
+      .returning({ id: mobileRefreshTokens.id });
+    if (result.length > 0) {
+      logger.info(`[NativeAuth Cleanup] Removed ${String(result.length)} expired/revoked refresh token(s)`);
+    }
+  } catch (error) {
+    logger.error('[NativeAuth Cleanup] Failed to remove expired refresh tokens:', error);
+  }
+}
+
+/** Start the periodic refresh token cleanup loop. */
+export function startRefreshTokenCleanup(): void {
+  if (refreshTokenCleanupHandle !== null) return;
+  logger.info(
+    `[NativeAuth Cleanup] Started (interval=${String(REFRESH_TOKEN_CLEANUP_INTERVAL_MS)}ms, ` +
+      `revokedRetention=${String(REVOKED_TOKEN_RETENTION_MS / (24 * 60 * 60 * 1000))}d)`,
+  );
+
+  // Run once shortly after startup, then on the regular interval.
+  const initialDelay = setTimeout(() => {
+    runRefreshTokenCleanup().catch((error) => {
+      logger.error('[NativeAuth Cleanup] Initial tick failed:', error);
+    });
+  }, 60 * 1000);
+  if (typeof initialDelay.unref === 'function') initialDelay.unref();
+
+  refreshTokenCleanupHandle = setInterval(() => {
+    runRefreshTokenCleanup().catch((error) => {
+      logger.error('[NativeAuth Cleanup] Tick failed:', error);
+    });
+  }, REFRESH_TOKEN_CLEANUP_INTERVAL_MS);
+
+  if (typeof refreshTokenCleanupHandle.unref === 'function') refreshTokenCleanupHandle.unref();
+}
+
+export function stopRefreshTokenCleanup(): void {
+  if (refreshTokenCleanupHandle === null) return;
+  clearInterval(refreshTokenCleanupHandle);
+  refreshTokenCleanupHandle = null;
+  logger.info('[NativeAuth Cleanup] Stopped');
+}
+
+// ---------------------------------------------------------------------------
+// Test-only utilities
+// ---------------------------------------------------------------------------
+
+/** Reset the in-memory rate limit and consumed token maps. Test-only. */
+export function __resetNativeAuthStateForTests(): void {
+  authRateLimitMap.clear();
+  consumedTransferTokens.clear();
+}
+
+/** Run the refresh token cleanup tick directly. Test-only. */
+export async function __runRefreshTokenCleanupForTests(): Promise<void> {
+  await runRefreshTokenCleanup();
 }

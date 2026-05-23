@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { useRouter, useSegments } from 'expo-router';
-import { getAuthToken } from '../lib/auth-store';
+import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import { startSignIn, signOut as authSignOut, type AuthProvider as AuthProviderType } from '../lib/auth';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
@@ -29,7 +29,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = useCallback(async () => {
     const token = await getAuthToken();
-    setIsAuthenticated(!!token);
+    if (!token) {
+      setIsAuthenticated(false);
+      setIsLoading(false);
+      return;
+    }
+    const expiring = await isTokenExpiringSoon();
+    if (expiring) {
+      const { ensureFreshToken } = await import('../lib/auth-interceptor');
+      const refreshed = await ensureFreshToken();
+      setIsAuthenticated(refreshed);
+    } else {
+      setIsAuthenticated(true);
+    }
     setIsLoading(false);
   }, []);
 

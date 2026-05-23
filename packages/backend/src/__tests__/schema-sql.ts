@@ -87,6 +87,18 @@ export const schemaSQL = `
   CREATE INDEX IF NOT EXISTS "activity_push_tokens_user_idx" ON "activity_push_tokens" ("user_id");
   CREATE INDEX IF NOT EXISTS "activity_push_tokens_updated_at_idx" ON "activity_push_tokens" ("updated_at");
 
+  DROP TABLE IF EXISTS "mobile_refresh_tokens" CASCADE;
+  CREATE TABLE IF NOT EXISTS "mobile_refresh_tokens" (
+    "id" text PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "token_hash" text NOT NULL,
+    "expires_at" timestamp NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "revoked_at" timestamp
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "mobile_refresh_tokens_token_hash_idx" ON "mobile_refresh_tokens" ("token_hash");
+  CREATE INDEX IF NOT EXISTS "mobile_refresh_tokens_user_id_idx" ON "mobile_refresh_tokens" ("user_id");
+
   CREATE INDEX IF NOT EXISTS "board_sessions_location_idx" ON "board_sessions" ("latitude", "longitude");
   CREATE INDEX IF NOT EXISTS "board_sessions_discoverable_idx" ON "board_sessions" ("discoverable");
   CREATE INDEX IF NOT EXISTS "board_sessions_user_idx" ON "board_sessions" ("created_by_user_id");
