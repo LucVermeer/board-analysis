@@ -5,6 +5,7 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import { hapticLight } from '../lib/haptics';
 import { springs } from '../theme/animations';
+import { iosSystemColors } from '../theme/ios-colors';
 
 type ListRowProps = {
   title: string;
@@ -69,7 +70,7 @@ export function ListRow({
         {trailing && <View style={styles.trailing}>{trailing}</View>}
         {showChevron && (
           <View style={styles.chevron}>
-            <Icon name="chevron.right" size={14} color="#C7C7CC" />
+            <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
           </View>
         )}
       </View>
@@ -128,6 +129,6 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(60, 60, 67, 0.29)',
+    backgroundColor: iosSystemColors.separator,
   },
 });

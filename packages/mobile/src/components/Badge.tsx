@@ -1,6 +1,7 @@
 import { View, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Text } from './Text';
+import { iosSystemColors } from '../theme/ios-colors';
 
 type BadgeProps = {
   count?: number;
@@ -9,7 +10,7 @@ type BadgeProps = {
   size?: 'small' | 'medium';
 };
 
-export function Badge({ count, visible = true, color = '#FF3B30', size = 'medium' }: BadgeProps) {
+export function Badge({ count, visible = true, color = iosSystemColors.systemRed, size = 'medium' }: BadgeProps) {
   if (!visible) return null;
 
   const isDot = count === undefined || count === 0;
@@ -36,7 +37,7 @@ export function Badge({ count, visible = true, color = '#FF3B30', size = 'medium
       ]}
     >
       {!isDot && (
-        <Text variant="caption2" color="#FFFFFF" style={styles.text}>
+        <Text variant="caption2" color={iosSystemColors.white} style={styles.text}>
           {displayCount}
         </Text>
       )}

@@ -1,9 +1,10 @@
 import { ActivityIndicator as RNActivityIndicator, type ActivityIndicatorProps } from 'react-native';
+import { brandColors } from '../theme/colors';
 
 type Props = Omit<ActivityIndicatorProps, 'color'> & {
   color?: string;
 };
 
-export function ActivityIndicator({ color = '#8C4A52', ...props }: Props) {
+export function ActivityIndicator({ color = brandColors.primary, ...props }: Props) {
   return <RNActivityIndicator color={color} {...props} />;
 }

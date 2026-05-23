@@ -1,6 +1,9 @@
 import { Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 export default function ProfileLayout() {
+  const { t } = useTranslation('common');
+
   return (
     <Stack
       screenOptions={{
@@ -11,7 +14,7 @@ export default function ProfileLayout() {
         contentStyle: { backgroundColor: 'transparent' },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'Profile' }} />
+      <Stack.Screen name="index" options={{ title: t('mobile.nav.profile') }} />
     </Stack>
   );
 }

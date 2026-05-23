@@ -1,6 +1,9 @@
 import { Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 export default function MoreLayout() {
+  const { t } = useTranslation('common');
+
   return (
     <Stack
       screenOptions={{
@@ -11,7 +14,7 @@ export default function MoreLayout() {
         contentStyle: { backgroundColor: 'transparent' },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'More' }} />
+      <Stack.Screen name="index" options={{ title: t('mobile.more.title') }} />
     </Stack>
   );
 }

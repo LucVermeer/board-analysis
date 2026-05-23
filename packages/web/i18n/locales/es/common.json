@@ -203,6 +203,13 @@
   "mobile": {
     "more": {
       "title": "Más"
+    },
+    "nav": {
+      "boards": "Tablas",
+      "climbs": "Bloques",
+      "climb": "Bloque",
+      "queue": "Cola",
+      "profile": "Perfil"
     }
   },
   "lightControl": {

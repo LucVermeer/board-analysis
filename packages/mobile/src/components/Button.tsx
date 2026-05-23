@@ -6,6 +6,7 @@ import type { IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
 import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
+import { iosSystemColors } from '../theme/ios-colors';
 
 type ButtonVariant = 'filled' | 'outlined' | 'text';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -78,7 +79,7 @@ export function Button({
     ...(variant === 'outlined' && { borderWidth: 1, borderColor: tintColor }),
   };
 
-  const textColor = variant === 'filled' ? '#FFFFFF' : tintColor;
+  const textColor = variant === 'filled' ? iosSystemColors.white : tintColor;
 
   return (
     <AnimatedPressable

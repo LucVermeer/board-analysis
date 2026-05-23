@@ -1,6 +1,9 @@
 import { Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 export default function ClimbsLayout() {
+  const { t } = useTranslation('common');
+
   return (
     <Stack
       screenOptions={{
@@ -14,18 +17,13 @@ export default function ClimbsLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'Climbs',
-          headerSearchBarOptions: {
-            placeholder: 'Search climbs...',
-            autoCapitalize: 'none',
-            hideWhenScrolling: false,
-          },
+          title: t('mobile.nav.climbs'),
         }}
       />
       <Stack.Screen
         name="[climbUuid]"
         options={{
-          title: 'Climb',
+          title: t('mobile.nav.climb'),
           headerLargeTitle: false,
         }}
       />

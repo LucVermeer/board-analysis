@@ -1,6 +1,9 @@
 import { Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 export default function BoardsLayout() {
+  const { t } = useTranslation('common');
+
   return (
     <Stack
       screenOptions={{
@@ -11,7 +14,7 @@ export default function BoardsLayout() {
         contentStyle: { backgroundColor: 'transparent' },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'Boards' }} />
+      <Stack.Screen name="index" options={{ title: t('mobile.nav.boards') }} />
     </Stack>
   );
 }

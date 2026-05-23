@@ -5,6 +5,13 @@
   "mobile": {
     "more": {
       "title": "More"
+    },
+    "nav": {
+      "boards": "Boards",
+      "climbs": "Climbs",
+      "climb": "Climb",
+      "queue": "Queue",
+      "profile": "Profile"
     }
   },
   "lightControl": {

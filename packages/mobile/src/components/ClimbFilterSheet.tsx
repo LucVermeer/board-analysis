@@ -14,6 +14,7 @@ import { hapticSelection } from '../lib/haptics';
 import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
+import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
 
 export type ClimbFilters = {
   minGrade?: number;
@@ -50,15 +51,7 @@ const ASCENT_OPTIONS = [
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-function Chip({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -95,11 +88,7 @@ function Chip({
       accessibilityLabel={label}
       style={[animatedStyle, chipStyle]}
     >
-      <Text
-        variant="footnote"
-        color={selected ? '#FFFFFF' : undefined}
-        style={styles.chipText}
-      >
+      <Text variant="footnote" color={selected ? iosSystemColors.white : undefined} style={styles.chipText}>
         {label}
       </Text>
     </AnimatedPressable>
@@ -131,11 +120,7 @@ function GradeSelector({
       <Text variant="footnote" style={styles.gradeSelectorLabel}>
         {label}
       </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.gradeChipsRow}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gradeChipsRow}>
         {grades.map((grade) => {
           const selected = selectedDifficultyId === grade.difficultyId;
           return (
@@ -150,11 +135,7 @@ function GradeSelector({
               accessibilityLabel={grade.name}
             >
               <View style={chipStyle(selected)}>
-                <Text
-                  variant="footnote"
-                  color={selected ? '#FFFFFF' : undefined}
-                  style={styles.chipText}
-                >
+                <Text variant="footnote" color={selected ? iosSystemColors.white : undefined} style={styles.chipText}>
                   {grade.name}
                 </Text>
               </View>
@@ -189,7 +170,7 @@ function StarRatingFilter({
           <Icon
             name={value != null && starIndex <= value ? 'star.fill' : 'star'}
             size={28}
-            color={value != null && starIndex <= value ? '#FFB800' : '#C7C7CC'}
+            color={value != null && starIndex <= value ? iosSystemColors.starGold : iosSystemColors.systemGray4}
           />
         </Pressable>
       ))}
@@ -208,13 +189,7 @@ export function hasActiveFilters(filters: ClimbFilters): boolean {
   );
 }
 
-export function ClimbFilterSheet({
-  visible,
-  onDismiss,
-  boardName,
-  currentFilters,
-  onApply,
-}: ClimbFilterSheetProps) {
+export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters, onApply }: ClimbFilterSheetProps) {
   const { t } = useTranslation('climbs');
   const theme = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
@@ -289,7 +264,7 @@ export function ClimbFilterSheet({
   const isDarkMode = theme.colorScheme === 'dark';
 
   const backgroundStyle: ViewStyle = {
-    backgroundColor: isDarkMode ? '#1C1C1E' : '#FFFFFF',
+    backgroundColor: isDarkMode ? iosDarkColors.secondaryBackground : iosSystemColors.white,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };
@@ -324,10 +299,7 @@ export function ClimbFilterSheet({
           </Pressable>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           <View style={styles.section}>
             <Text variant="subheadline" style={styles.sectionLabel}>
               {t('mobile.filter.sortBy')}
@@ -409,10 +381,7 @@ export function ClimbFilterSheet({
                   {t('mobile.filter.anyRating')}
                 </Text>
               </Pressable>
-              <StarRatingFilter
-                value={localFilters.minRating}
-                onChange={handleMinRatingChange}
-              />
+              <StarRatingFilter value={localFilters.minRating} onChange={handleMinRatingChange} />
             </View>
           </View>
 
@@ -431,15 +400,7 @@ export function ClimbFilterSheet({
   );
 }
 
-function SortSegment({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
+function SortSegment({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -461,7 +422,7 @@ function SortSegment({
     justifyContent: 'center',
     borderRadius: 7,
     ...(selected && {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: iosSystemColors.white,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.15,

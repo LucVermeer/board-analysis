@@ -1,19 +1,14 @@
 import { View, Image, StyleSheet } from 'react-native';
 import { Text } from './Text';
+import { getInitials } from '../lib/get-initials';
+import { brandColors } from '../theme/colors';
+import { iosSystemColors, neutralGray } from '../theme/ios-colors';
 
 type AvatarProps = {
   uri?: string | null;
   name?: string | null;
   size?: number;
 };
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join('');
-}
 
 export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   const borderRadius = size / 2;
@@ -38,7 +33,7 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
       accessibilityLabel={accessibilityLabel}
       style={[styles.fallback, { width: size, height: size, borderRadius }]}
     >
-      <Text variant="caption1" color="#FFFFFF" style={{ fontSize, fontWeight: '600' }}>
+      <Text variant="caption1" color={iosSystemColors.white} style={{ fontSize, fontWeight: '600' }}>
         {initials}
       </Text>
     </View>
@@ -47,10 +42,10 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
 
 const styles = StyleSheet.create({
   image: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: neutralGray,
   },
   fallback: {
-    backgroundColor: '#8C4A52',
+    backgroundColor: brandColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

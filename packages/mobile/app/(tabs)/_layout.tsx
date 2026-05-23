@@ -1,7 +1,10 @@
 import { Tabs } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import BlurTabBar from '../../src/components/BlurTabBar';
 
 export default function TabLayout() {
+  const { t } = useTranslation('common');
+
   return (
     <Tabs
       tabBar={(props) => <BlurTabBar {...props} />}
@@ -13,31 +16,31 @@ export default function TabLayout() {
       <Tabs.Screen
         name="boards"
         options={{
-          title: 'Boards',
+          title: t('mobile.nav.boards'),
         }}
       />
       <Tabs.Screen
         name="climbs"
         options={{
-          title: 'Climbs',
+          title: t('mobile.nav.climbs'),
         }}
       />
       <Tabs.Screen
         name="queue"
         options={{
-          title: 'Queue',
+          title: t('mobile.nav.queue'),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: t('mobile.nav.profile'),
         }}
       />
       <Tabs.Screen
         name="more"
         options={{
-          title: 'More',
+          title: t('mobile.more.title'),
         }}
       />
     </Tabs>

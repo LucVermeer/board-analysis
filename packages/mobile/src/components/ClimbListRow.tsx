@@ -4,7 +4,9 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import { hapticLight } from '../lib/haptics';
 import { springs } from '../theme/animations';
+import { formatAscentCount } from '../lib/format-ascent-count';
 import { DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants';
+import { iosSystemColors } from '../theme/ios-colors';
 
 type ClimbListRowProps = {
   climb: {
@@ -73,7 +75,7 @@ export function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPres
         <View style={styles.metadata}>
           {showStars && (
             <View style={styles.stars}>
-              <Icon name="star.fill" size={12} color="#FFB800" />
+              <Icon name="star.fill" size={12} color={iosSystemColors.starGold} />
               <Text variant="caption1" style={styles.starText}>
                 {climb.stars > 0 ? climb.stars.toFixed(1) : qualityNum.toFixed(1)}
               </Text>
@@ -85,7 +87,7 @@ export function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPres
             </Text>
           )}
           <View style={[styles.gradePill, { backgroundColor: pillColor }]}>
-            <Text variant="caption2" color="#FFFFFF" style={styles.gradeText}>
+            <Text variant="caption2" color={iosSystemColors.white} style={styles.gradeText}>
               {gradeName ?? climb.difficulty}
             </Text>
           </View>
@@ -95,13 +97,6 @@ export function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPres
       <View style={styles.separator} />
     </AnimatedPressable>
   );
-}
-
-function formatAscentCount(count: number): string {
-  if (count >= 1000) {
-    return `${(count / 1000).toFixed(1)}k`;
-  }
-  return String(count);
 }
 
 const styles = StyleSheet.create({
@@ -152,7 +147,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(60, 60, 67, 0.29)',
+    backgroundColor: iosSystemColors.separator,
     marginLeft: 16,
   },
 });

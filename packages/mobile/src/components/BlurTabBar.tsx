@@ -3,6 +3,7 @@ import { BlurView } from '@react-native-community/blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
 
 const TAB_BAR_HEIGHT = 49;
 
@@ -24,8 +25,8 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const activeTint = '#007AFF';
-  const inactiveTint = isDark ? '#8E8E93' : '#999999';
+  const activeTint = iosSystemColors.systemBlue;
+  const inactiveTint = isDark ? iosDarkColors.systemGray : iosLightColors.inactiveGray;
   const totalHeight = TAB_BAR_HEIGHT + insets.bottom;
 
   const renderContent = () => (
@@ -90,10 +91,14 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
         <BlurView
           blurType={isDark ? 'dark' : 'light'}
           blurAmount={20}
-          reducedTransparencyFallbackColor={isDark ? '#1C1C1E' : '#F2F2F7'}
+          reducedTransparencyFallbackColor={
+            isDark ? iosDarkColors.secondaryBackground : iosLightColors.secondaryBackground
+          }
           style={StyleSheet.absoluteFill}
         />
-        <View style={[styles.separator, { backgroundColor: isDark ? '#38383A' : '#C6C6C8' }]} />
+        <View
+          style={[styles.separator, { backgroundColor: isDark ? iosDarkColors.separator : iosLightColors.separator }]}
+        />
         {renderContent()}
       </View>
     );
@@ -107,11 +112,15 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
         {
           height: totalHeight,
           paddingBottom: insets.bottom,
-          backgroundColor: isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(242, 242, 247, 0.95)',
+          backgroundColor: isDark
+            ? `${iosDarkColors.secondaryBackground}F2`
+            : `${iosLightColors.secondaryBackground}F2`,
         },
       ]}
     >
-      <View style={[styles.separator, { backgroundColor: isDark ? '#38383A' : '#C6C6C8' }]} />
+      <View
+        style={[styles.separator, { backgroundColor: isDark ? iosDarkColors.separator : iosLightColors.separator }]}
+      />
       {renderContent()}
     </View>
   );
@@ -149,7 +158,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -10,
-    backgroundColor: '#FF3B30',
+    backgroundColor: iosSystemColors.systemRed,
     borderRadius: 9,
     minWidth: 18,
     height: 18,
@@ -158,7 +167,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: {
-    color: '#FFFFFF',
+    color: iosSystemColors.white,
     fontSize: 11,
     fontWeight: '600',
   },

@@ -41,15 +41,7 @@ function getMinAttempts(tickStatus: TickStatus): number {
   return 1;
 }
 
-function SegmentOption({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
+function SegmentOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -129,15 +121,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (rating: num
   );
 }
 
-function GradeChip({
-  grade,
-  selected,
-  onPress,
-}: {
-  grade: Grade;
-  selected: boolean;
-  onPress: () => void;
-}) {
+function GradeChip({ grade, selected, onPress }: { grade: Grade; selected: boolean; onPress: () => void }) {
   const chipStyle: ViewStyle = {
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
@@ -158,11 +142,7 @@ function GradeChip({
       accessibilityLabel={grade.name}
     >
       <View style={chipStyle}>
-        <Text
-          variant="footnote"
-          color={selected ? '#FFFFFF' : undefined}
-          style={styles.gradeChipText}
-        >
+        <Text variant="footnote" color={selected ? '#FFFFFF' : undefined} style={styles.gradeChipText}>
           {grade.name}
         </Text>
       </View>
@@ -399,10 +379,7 @@ export function LogAscentSheet({
                 disabled={attemptCount <= minAttempts}
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.logAscent.decreaseAttempts')}
-                style={[
-                  stepperButtonStyle,
-                  attemptCount <= minAttempts && styles.stepperDisabled,
-                ]}
+                style={[stepperButtonStyle, attemptCount <= minAttempts && styles.stepperDisabled]}
               >
                 <Icon
                   name="minus.circle"
@@ -454,9 +431,7 @@ export function LogAscentSheet({
                       grade={grade}
                       selected={selectedDifficultyId === grade.difficultyId}
                       onPress={() =>
-                        setSelectedDifficultyId(
-                          selectedDifficultyId === grade.difficultyId ? null : grade.difficultyId,
-                        )
+                        setSelectedDifficultyId(selectedDifficultyId === grade.difficultyId ? null : grade.difficultyId)
                       }
                     />
                   ))}

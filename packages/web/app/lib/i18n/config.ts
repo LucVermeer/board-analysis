@@ -81,3 +81,11 @@ export function isSupportedLocale(value: string | undefined | null): value is Lo
 // i18n-keep boards.mobile.emptyTitle
 // i18n-keep boards.mobile.emptySubtitle
 // i18n-keep common.mobile.more.title
+// i18n-keep common.mobile.nav.boards
+// i18n-keep common.mobile.nav.climbs
+// i18n-keep common.mobile.nav.climb
+// i18n-keep common.mobile.nav.queue
+// i18n-keep common.mobile.nav.profile
+// i18n-keep auth.nativeStart.tagline
+// i18n-keep auth.nativeStart.signInApple
+// i18n-keep auth.nativeStart.signInGoogle

@@ -18,7 +18,7 @@ type TextProps = RNTextProps & {
   color?: ColorValue;
 };
 
-const variantStyles = StyleSheet.create({
+export const variantStyles = StyleSheet.create({
   largeTitle: { fontSize: 34, fontWeight: '700', lineHeight: 41 },
   title1: { fontSize: 28, fontWeight: '700', lineHeight: 34 },
   title2: { fontSize: 22, fontWeight: '700', lineHeight: 28 },

@@ -11,6 +11,7 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { brandColors } from '../theme/colors';
+import { iosSystemColors } from '../theme/ios-colors';
 import { hapticSelection, hapticMedium } from '../lib/haptics';
 
 const SWIPE_DELETE_THRESHOLD = -80;
@@ -114,7 +115,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
         {/* Delete action behind the row */}
         <Animated.View style={[styles.deleteAction, deleteButtonStyle]}>
           <Pressable onPress={handleDeletePress} style={styles.deleteButton}>
-            <Icon name="delete" size={22} color="#FFFFFF" />
+            <Icon name="delete" size={22} color={iosSystemColors.white} />
           </Pressable>
         </Animated.View>
 
@@ -128,7 +129,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
               {isCurrentClimb ? (
                 <Icon name="play.fill" size={14} color={brandColors.primary} />
               ) : (
-                <Text variant="subheadline" color="#8E8E93" style={styles.positionText}>
+                <Text variant="subheadline" color={iosSystemColors.systemGray} style={styles.positionText}>
                   {String(position)}
                 </Text>
               )}
@@ -146,7 +147,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
               <View style={[styles.gradePill, isCurrentClimb && styles.currentGradePill]}>
                 <Text
                   variant="caption1"
-                  color={isCurrentClimb ? brandColors.primary : '#8E8E93'}
+                  color={isCurrentClimb ? brandColors.primary : iosSystemColors.systemGray}
                   style={styles.gradeText}
                 >
                   {difficulty}
@@ -178,7 +179,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   currentClimbRow: {
-    backgroundColor: 'rgba(140, 74, 82, 0.08)',
+    backgroundColor: `${brandColors.primary}14`,
   },
   positionContainer: {
     width: 28,
@@ -202,11 +203,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: 'rgba(142, 142, 147, 0.12)',
+    backgroundColor: `${iosSystemColors.systemGray}1F`,
     marginLeft: 8,
   },
   currentGradePill: {
-    backgroundColor: 'rgba(140, 74, 82, 0.12)',
+    backgroundColor: `${brandColors.primary}1F`,
   },
   gradeText: {
     fontWeight: '600',
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: '#FF3B30',
+    backgroundColor: iosSystemColors.systemRed,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -228,6 +229,6 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(60, 60, 67, 0.29)',
+    backgroundColor: iosSystemColors.separator,
   },
 });
