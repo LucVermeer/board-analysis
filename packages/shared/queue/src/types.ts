@@ -72,10 +72,10 @@ export type SetCurrentClimbOptions = {
 
 export type QueueSearchParams = Record<string, unknown>;
 
-export type QueueState = {
+export type QueueState<TSearchParams extends QueueSearchParams = QueueSearchParams> = {
   queue: ClimbQueue;
   currentClimbQueueItem: ClimbQueueItem | null;
-  climbSearchParams: QueueSearchParams;
+  climbSearchParams: TSearchParams;
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   hasDoneFirstFetch: boolean;
   initialQueueDataReceivedFromPeers: boolean;
@@ -86,12 +86,12 @@ export type QueueState = {
   optimisticDriverParticipantId: string | null;
 };
 
-export type QueueAction =
+export type QueueAction<TSearchParams extends QueueSearchParams = QueueSearchParams> =
   | { type: 'ADD_TO_QUEUE'; payload: ClimbQueueItem }
   | { type: 'REMOVE_FROM_QUEUE'; payload: ClimbQueueItem[] }
   | { type: 'SET_CURRENT_CLIMB'; payload: ClimbQueueItem }
   | { type: 'SET_CURRENT_CLIMB_QUEUE_ITEM'; payload: ClimbQueueItem }
-  | { type: 'SET_CLIMB_SEARCH_PARAMS'; payload: QueueSearchParams }
+  | { type: 'SET_CLIMB_SEARCH_PARAMS'; payload: TSearchParams }
   | {
       type: 'UPDATE_QUEUE';
       payload: { queue: ClimbQueue; currentClimbQueueItem?: ClimbQueueItem | null };

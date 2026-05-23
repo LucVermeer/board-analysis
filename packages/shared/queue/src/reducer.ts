@@ -7,7 +7,9 @@ import type { QueueState, QueueAction, QueueSearchParams } from './types';
 import { insertQueueItemIdempotent } from './event-utils';
 import { playlistSuggestionSourceMatches, pruneSuggestedQueueItemsAfterCurrent } from './playlist-suggestions';
 
-export const initialState = (initialSearchParams: QueueSearchParams): QueueState => ({
+export const initialState = <TSearchParams extends QueueSearchParams>(
+  initialSearchParams: TSearchParams,
+): QueueState<TSearchParams> => ({
   queue: [],
   currentClimbQueueItem: null,
   climbSearchParams: initialSearchParams,
@@ -21,7 +23,10 @@ export const initialState = (initialSearchParams: QueueSearchParams): QueueState
   optimisticDriverParticipantId: null,
 });
 
-export function queueReducer(state: QueueState, action: QueueAction): QueueState {
+export function queueReducer<TSearchParams extends QueueSearchParams>(
+  state: QueueState<TSearchParams>,
+  action: QueueAction<TSearchParams>,
+): QueueState<TSearchParams> {
   switch (action.type) {
     case 'SET_CURRENT_CLIMB': {
       const currentIndex = state.currentClimbQueueItem

@@ -1,9 +1,7 @@
+import { MOONBOARD_GRID, MOONBOARD_DEVICE_NAME_PREFIXES } from '@boardsesh/board-constants/moonboard';
+
 const MOONBOARD_FRAME_PREFIX = 'l#';
 const MOONBOARD_FRAME_SUFFIX = '#';
-const MOONBOARD_DEVICE_NAME_PREFIXES = ['MoonBoard', 'Moonboard'] as const;
-
-// Inlined grid constants to avoid depending on the web package's moonboard-config.
-const MOONBOARD_GRID = { numColumns: 11, numRows: 18 } as const;
 
 // Boardsesh persists MoonBoard frames with the shared basic role codes only.
 // The newer controller firmware can render extra preview-only roles, but the

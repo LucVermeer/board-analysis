@@ -1,6 +1,8 @@
 // MoonBoard Configuration
 // This file contains all MoonBoard-specific configuration that differs from Aurora boards
 
+import { MOONBOARD_GRID } from '@boardsesh/board-constants/moonboard';
+
 // Feature flag - enabled by default
 export const MOONBOARD_ENABLED = true;
 
@@ -95,12 +97,13 @@ export const MOONBOARD_SETS: Record<MoonBoardLayoutKey, { id: number; name: stri
 
 // MoonBoard grid configuration (same for all standard layouts)
 // 11 columns (A-K) x 18 rows (1-18, bottom to top)
-export const MOONBOARD_GRID = {
-  columns: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'] as const,
-  rows: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] as const,
-  numColumns: 11,
-  numRows: 18,
-};
+// numColumns and numRows are imported from @boardsesh/board-constants/moonboard;
+// columns/rows arrays and the merged export are local because they carry
+// board-specific label info that only the web app needs.
+const MOONBOARD_COLUMNS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'] as const;
+const MOONBOARD_ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] as const;
+
+export { MOONBOARD_GRID };
 
 // MoonBoard only supports 25 and 40 degree angles
 export const MOONBOARD_ANGLES = [25, 40] as const;
@@ -137,8 +140,8 @@ export const MOONBOARD_HOLD_STATE_CODES = {
 } as const;
 
 // Grid coordinate types
-export type MoonBoardColumn = (typeof MOONBOARD_GRID.columns)[number];
-export type MoonBoardRow = (typeof MOONBOARD_GRID.rows)[number];
+export type MoonBoardColumn = (typeof MOONBOARD_COLUMNS)[number];
+export type MoonBoardRow = (typeof MOONBOARD_ROWS)[number];
 export type MoonBoardCoordinate = `${MoonBoardColumn}${MoonBoardRow}`;
 
 /**
@@ -149,7 +152,7 @@ export type MoonBoardCoordinate = `${MoonBoardColumn}${MoonBoardRow}`;
 export function coordinateToHoldId(coord: MoonBoardCoordinate): number {
   const col = coord.charAt(0) as MoonBoardColumn;
   const row = parseInt(coord.slice(1), 10) as MoonBoardRow;
-  const colIndex = MOONBOARD_GRID.columns.indexOf(col);
+  const colIndex = MOONBOARD_COLUMNS.indexOf(col);
   return (row - 1) * MOONBOARD_GRID.numColumns + colIndex + 1;
 }
 
@@ -160,7 +163,7 @@ export function holdIdToCoordinate(holdId: number): MoonBoardCoordinate {
   const id = holdId - 1;
   const colIndex = id % MOONBOARD_GRID.numColumns;
   const row = Math.floor(id / MOONBOARD_GRID.numColumns) + 1;
-  const col = MOONBOARD_GRID.columns[colIndex];
+  const col = MOONBOARD_COLUMNS[colIndex];
   return `${col}${row}` as MoonBoardCoordinate;
 }
 

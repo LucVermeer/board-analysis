@@ -29,6 +29,11 @@
       "types": "./src/grade-colors.ts",
       "import": "./src/grade-colors.ts",
       "default": "./src/grade-colors.ts"
+    },
+    "./moonboard": {
+      "types": "./src/moonboard.ts",
+      "import": "./src/moonboard.ts",
+      "default": "./src/moonboard.ts"
     }
   },
   "scripts": {
