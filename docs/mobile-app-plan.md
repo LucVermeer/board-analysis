@@ -156,15 +156,32 @@ The `useQueueReducer` React hook wrapper stays in each platform's code. The redu
 - `packages/shared-schema/` — GraphQL schema, TypeScript types (Climb, ClimbQueueItem, SessionUser, etc.)
 - `packages/board-constants/` — Product sizes, LED placements, hold state maps, grade colors
 
+## iOS-first with SwiftUI native modules
+
+75% of Boardsesh users are on iOS. The app uses Expo's native modules API to write performance-critical iOS views in SwiftUI, with Kotlin/Jetpack Compose equivalents for Android. Most screens (climb lists, queue, search, settings, profiles) are standard React Native — shared across both platforms.
+
+### When to use SwiftUI vs React Native
+
+| Use SwiftUI (iOS) / Compose (Android)                              | Use React Native (shared)         |
+| ------------------------------------------------------------------ | --------------------------------- |
+| Board renderer — GPU-accelerated hold circles via SwiftUI `Canvas` | Climb browsing, search, filtering |
+| Live Activity widget — ActivityKit requires SwiftUI                | Queue management                  |
+| BLE device picker — platform-native list with RSSI                 | Navigation, settings, profiles    |
+| HealthKit workout logging                                          | Party mode, social features       |
+
+The Expo Modules API bridges SwiftUI views into React Native. The same `<BoardRenderer holds={holds} />` JSX component renders a SwiftUI `Canvas` on iOS and a Compose `Canvas` on Android. All platform-specific code lives in the module's `ios/` and `android/` directories — the React Native layer is unaware of which platform is rendering.
+
+This gives iOS users the best possible performance on the most critical view (the board renderer) while Android still gets a native equivalent without maintaining a separate app.
+
 ## What gets rebuilt for React Native
 
 ### Board renderer
 
 **Current (web):** SVG + Canvas/WASM with Web Worker pool (2-5 workers), LRU bitmap cache (150 items), lazy loading. Files: `board-renderer.tsx`, `board-canvas-renderer.tsx`, `board-image-layers.tsx`, `worker-manager.ts`, `board-render.worker.ts`.
 
-**React Native:** `@shopify/react-native-skia` for GPU-accelerated hold circle rendering + image compositing. The rendering math (hold position coordinates, color mapping via `HOLD_STATE_MAP`, mirroring transforms) is shareable from `packages/board-constants/` and `packages/shared/`. The rendering engine is new.
+**React Native:** Expo native module with SwiftUI `Canvas` on iOS and Jetpack Compose `Canvas` on Android. The rendering math (hold position coordinates, color mapping via `HOLD_STATE_MAP`, mirroring transforms) is shareable from `packages/board-constants/` and `packages/shared/`. The rendering engine is platform-native. Fallback: `@shopify/react-native-skia` if the native module approach proves too complex.
 
-**Risk:** This is the highest-complexity rebuild (~40% of total UI effort). Start in Phase 2 and validate early. Fallback: `react-native-svg` for simpler but adequate rendering.
+**Risk:** This is the highest-complexity rebuild (~40% of total UI effort). Start in Phase 2 and validate early.
 
 ### BLE transport adapter
 
@@ -198,15 +215,17 @@ The backend already supports bearer token auth for the existing Capacitor native
 
 ### Platform features
 
-| Feature            | Current (Capacitor)                  | React Native                                       |
-| ------------------ | ------------------------------------ | -------------------------------------------------- |
-| Live Activity      | Custom Swift widget (~500 lines)     | `react-native-live-activity` or Expo native module |
-| HealthKit          | Custom bridge (~100 lines)           | `react-native-health`                              |
-| Push notifications | APNs backend (reused)                | `expo-notifications` + existing APNs backend       |
-| In-app review      | `@capacitor-community/in-app-review` | `expo-store-review`                                |
-| Wake lock          | `@capacitor-community/keep-awake`    | `expo-keep-awake`                                  |
-| Geolocation        | `@capacitor/geolocation`             | `expo-location`                                    |
-| Shake detection    | `@capacitor/motion`                  | `expo-sensors`                                     |
+| Feature            | Current (Capacitor)                  | React Native (Expo)                                                       |
+| ------------------ | ------------------------------------ | ------------------------------------------------------------------------- |
+| Board renderer     | Canvas/WASM + SVG                    | Expo native module: SwiftUI `Canvas` (iOS) / Compose `Canvas` (Android)   |
+| Live Activity      | Custom Swift widget (~500 lines)     | Expo native module: SwiftUI ActivityKit (iOS only, no Android equivalent) |
+| HealthKit          | Custom bridge (~100 lines)           | Expo native module: SwiftUI HealthKit (iOS) / Health Connect (Android)    |
+| BLE device picker  | Capacitor BLE plugin                 | Expo native module: SwiftUI list (iOS) / Compose list (Android)           |
+| Push notifications | APNs backend (reused)                | `expo-notifications` + existing APNs backend                              |
+| In-app review      | `@capacitor-community/in-app-review` | `expo-store-review`                                                       |
+| Wake lock          | `@capacitor-community/keep-awake`    | `expo-keep-awake`                                                         |
+| Geolocation        | `@capacitor/geolocation`             | `expo-location`                                                           |
+| Shake detection    | `@capacitor/motion`                  | `expo-sensors`                                                            |
 
 ## What gets deleted
 
@@ -307,22 +326,23 @@ Compare with v9.x: ~37 weeks (~9 months) before the Capacitor bundle switch even
 
 ## Key libraries
 
-| Capability      | Library                                     | Notes                                                      |
-| --------------- | ------------------------------------------- | ---------------------------------------------------------- |
-| Navigation      | `expo-router`                               | File-based, similar to Next.js App Router                  |
-| BLE             | `react-native-ble-plx`                      | Mature, 5k+ GitHub stars, direct CoreBluetooth/Android BLE |
-| Board rendering | `@shopify/react-native-skia`                | GPU-accelerated 2D graphics, Shopify-maintained            |
-| Lists           | `@shopify/flash-list`                       | Drop-in FlatList replacement, 60fps scrolling              |
-| Storage (KV)    | `react-native-mmkv`                         | Fastest KV store on mobile, JSI-based                      |
-| Storage (SQL)   | `expo-sqlite`                               | For offline climb database                                 |
-| Auth            | `expo-auth-session`                         | Standard OAuth flows                                       |
-| Secure storage  | `expo-secure-store`                         | iOS Keychain, Android Keystore                             |
-| Live Activity   | `react-native-live-activity`                | iOS lock screen widgets                                    |
-| HealthKit       | `react-native-health`                       | Workout logging                                            |
-| Push            | `expo-notifications`                        | APNs + FCM                                                 |
-| UI components   | `react-native-paper` or `tamagui`           | Material Design / cross-platform                           |
-| GraphQL         | `@tanstack/react-query` + `graphql-request` | Same pattern as web                                        |
-| Error tracking  | `@sentry/react-native`                      | Crash reporting + performance                              |
+| Capability      | Library / Approach                          | Notes                                                                |
+| --------------- | ------------------------------------------- | -------------------------------------------------------------------- |
+| Navigation      | `expo-router`                               | File-based, similar to Next.js App Router                            |
+| BLE             | `react-native-ble-plx`                      | Mature, 5k+ GitHub stars, direct CoreBluetooth/Android BLE           |
+| Board rendering | Expo native module (SwiftUI / Compose)      | SwiftUI `Canvas` on iOS, Compose `Canvas` on Android. Fallback: Skia |
+| Lists           | `@shopify/flash-list`                       | Drop-in FlatList replacement, 60fps scrolling                        |
+| Storage (KV)    | `react-native-mmkv`                         | Fastest KV store on mobile, JSI-based                                |
+| Storage (SQL)   | `expo-sqlite`                               | For offline climb database                                           |
+| Auth            | `expo-auth-session`                         | Standard OAuth flows                                                 |
+| Secure storage  | `expo-secure-store`                         | iOS Keychain, Android Keystore                                       |
+| Live Activity   | Expo native module (SwiftUI ActivityKit)    | iOS lock screen widgets, no Android equivalent                       |
+| HealthKit       | Expo native module (SwiftUI HealthKit)      | iOS; Android uses Health Connect via same module                     |
+| Push            | `expo-notifications`                        | APNs + FCM                                                           |
+| UI components   | `react-native-paper`                        | Material Design, stable, well-maintained                             |
+| GraphQL         | `@tanstack/react-query` + `graphql-request` | Same pattern as web                                                  |
+| Error tracking  | `@sentry/react-native`                      | Crash reporting + performance                                        |
+| Native modules  | `expo-modules-core`                         | SwiftUI (iOS) + Kotlin/Compose (Android) bridge                      |
 
 ## Auth design
 
