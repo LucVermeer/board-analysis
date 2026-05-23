@@ -13,6 +13,7 @@ RUN apk add --no-cache bash curl unzip && \
 COPY package.json bun.lock ./
 COPY packages/web/package.json ./packages/web/
 COPY packages/shared-schema/package.json ./packages/shared-schema/
+COPY packages/board-constants/package.json ./packages/board-constants/
 COPY packages/crypto/package.json ./packages/crypto/
 COPY packages/db/package.json ./packages/db/
 COPY packages/aurora-sync/package.json ./packages/aurora-sync/

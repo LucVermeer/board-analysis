@@ -74,19 +74,19 @@ if (typeof consumedTokenEvictionHandle.unref === 'function') consumedTokenEvicti
 
 /**
  * Attempt to mark a transfer token signature as consumed.
- * Returns true if the token was freshly consumed, false if it was already consumed (replay).
+ * Returns 'consumed' if freshly consumed, 'replay' if already used, 'overloaded' if map is full.
  *
  * When Redis is connected, uses SET NX EX for atomic multi-instance replay prevention.
  * Falls back to the in-memory map otherwise (single-instance only).
  */
-async function markTokenConsumed(tokenSignature: string): Promise<boolean> {
+async function markTokenConsumed(tokenSignature: string): Promise<'consumed' | 'replay' | 'overloaded'> {
   if (redisClientManager.isRedisConnected()) {
     try {
       const { publisher } = redisClientManager.getClients();
       const redisKey = `${CONSUMED_TOKEN_REDIS_PREFIX}${tokenSignature}`;
       // SET key "1" NX EX 125 — returns "OK" if set, null if key already existed
       const result = await publisher.set(redisKey, '1', 'EX', CONSUMED_TOKEN_TTL_SECONDS, 'NX');
-      return result === 'OK';
+      return result === 'OK' ? 'consumed' : 'replay';
     } catch (error) {
       // Redis failure: fall through to in-memory map so the endpoint stays available.
       logger.warn('[NativeAuth] Redis SET NX failed for consumed token, falling back to in-memory:', error);
@@ -95,19 +95,18 @@ async function markTokenConsumed(tokenSignature: string): Promise<boolean> {
 
   // In-memory fallback (single-instance only)
   if (consumedTransferTokens.has(tokenSignature)) {
-    return false;
+    return 'replay';
   }
 
   if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
     evictStaleConsumedTokens();
     if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
-      // Map full even after eviction — reject to avoid unbounded growth
-      return false;
+      return 'overloaded';
     }
   }
 
   consumedTransferTokens.set(tokenSignature, Date.now());
-  return true;
+  return 'consumed';
 }
 
 /**
@@ -426,11 +425,16 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
   }
 
   // Atomically mark the token as consumed. If another request consumed it
-  // between the EXISTS check above and now, markTokenConsumed returns false.
-  const consumed = await markTokenConsumed(tokenSignature);
-  if (!consumed) {
+  // between the EXISTS check above and now, markTokenConsumed returns 'replay'.
+  const consumeResult = await markTokenConsumed(tokenSignature);
+  if (consumeResult === 'replay') {
     logger.warn('[NativeAuth] Transfer token replay attempt detected (race)');
     sendJson(res, 409, { error: 'Transfer token has already been used' });
+    return;
+  }
+  if (consumeResult === 'overloaded') {
+    logger.error('[NativeAuth] Consumed token map full — rejecting request');
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
     return;
   }
 

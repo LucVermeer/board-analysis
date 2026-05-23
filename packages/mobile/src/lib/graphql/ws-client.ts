@@ -23,7 +23,12 @@ export function getWsClient(): Client {
       },
       lazy: true,
       retryAttempts: 10,
-      shouldRetry: (errOrCloseEvent) => !(errOrCloseEvent instanceof CloseEvent && errOrCloseEvent.code === 4401),
+      shouldRetry: (errOrCloseEvent) => {
+        if (typeof errOrCloseEvent === 'object' && errOrCloseEvent !== null && 'code' in errOrCloseEvent) {
+          return (errOrCloseEvent as { code: number }).code !== 4401;
+        }
+        return true;
+      },
     });
   }
   return wsClient;

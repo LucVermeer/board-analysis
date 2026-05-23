@@ -30,7 +30,7 @@ The mobile auth flow lets React Native (Expo) clients authenticate with the Boar
 
 ### Refresh token
 
-- Opaque UUID (`crypto.randomUUID()`)
+- Opaque 256-bit hex string (`crypto.randomBytes(32).toString('hex')`)
 - Stored in the database as a SHA-256 hash (`mobileRefreshTokens` table)
 - **Lifetime:** 90 days from issuance
 

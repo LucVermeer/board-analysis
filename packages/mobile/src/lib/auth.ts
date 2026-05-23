@@ -9,7 +9,7 @@ export type AuthProvider = 'google' | 'apple';
 export async function startSignIn(provider: AuthProvider): Promise<void> {
   const callbackUrl = encodeURIComponent('/api/auth/native/callback?next=/');
   const url = `${WEB_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;
-  await WebBrowser.openBrowserAsync(url);
+  await WebBrowser.openAuthSessionAsync(url, 'com.boardsesh.app://auth/callback');
 }
 
 export async function exchangeTransferToken(
