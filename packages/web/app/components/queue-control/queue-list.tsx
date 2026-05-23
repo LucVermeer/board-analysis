@@ -125,12 +125,13 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
     const [playlistClimb, setPlaylistClimb] = useState<Climb | null>(null);
 
     // Toggled by the "Show full history" row at the top of the history region.
-    // Local to each list mount — resets when the drawer remounts so a freshly-
-    // opened list always starts on the 5-item view. Depends on QueueDrawer NOT
-    // passing `keepMounted={true}` to the underlying SwipeableDrawer (default
-    // is false); if a caller starts keeping the drawer mounted, the state will
-    // stick across sessions and this expectation breaks.
+    // Reset whenever the consumer marks the list inactive — callers that keep
+    // the drawer mounted just need to pass `active={open}` to get the spec'd
+    // behavior (a freshly opened list always starts on the 5-item view).
     const [showFullHistory, setShowFullHistory] = useState(false);
+    useEffect(() => {
+      if (!active) setShowFullHistory(false);
+    }, [active]);
 
     const handleOpenActions = useCallback((climb: Climb) => {
       setPlaylistClimb(null);

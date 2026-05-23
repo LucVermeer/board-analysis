@@ -230,7 +230,8 @@
   "driverToast": {
     "firstDriver": "{{newDriver}} está manejando la pared.",
     "tookFromOther": "{{newDriver}} le quitó la pared a {{previousDriver}}.",
-    "tookFromYou": "{{newDriver}} te quitó la pared."
+    "tookFromYou": "{{newDriver}} te quitó la pared.",
+    "unknownDriver": "Alguien"
   },
   "playView": {
     "onWallChip": "EN EL MURO · {{username}}",

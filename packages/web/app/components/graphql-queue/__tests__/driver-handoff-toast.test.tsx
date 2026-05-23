@@ -308,13 +308,12 @@ describe('driver hand-off toast', () => {
     expect(mockShowMessage).not.toHaveBeenCalled();
   });
 
-  it('falls back to firstDriver copy when the previous driver is no longer in the users list', () => {
+  it('substitutes "Someone" for an unresolved previous driver instead of suppressing the toast', () => {
     renderHook(() => useQueueContext(), { wrapper: createWrapper() });
 
     // previousDriverParticipantId references a user who has already left the
-    // session — `users.find()` returns undefined and the resolved name is
-    // empty. The toast must drop the attribution rather than render "X took
-    // the wall from ." See bug triage on PR #2249.
+    // session — `users.find()` returns undefined. The toast still fires with
+    // the unknownDriver fallback rather than dropping attribution silently.
     act(() => {
       emitSessionEvent({
         __typename: 'DriverChanged',
@@ -324,12 +323,29 @@ describe('driver hand-off toast', () => {
     });
 
     expect(mockShowMessage).toHaveBeenCalledWith(
-      expect.stringContaining('driverToast.firstDriver|newDriver=Bob'),
+      expect.stringContaining('driverToast.tookFromOther|newDriver=Bob|previousDriver=driverToast.unknownDriver'),
       'info',
     );
-    expect(mockShowMessage).not.toHaveBeenCalledWith(
-      expect.stringContaining('driverToast.tookFromOther'),
-      expect.anything(),
+  });
+
+  it('still fires tookFromYou when the new driver has not propagated into the users list yet', () => {
+    renderHook(() => useQueueContext(), { wrapper: createWrapper() });
+
+    // The new driver's id arrives before they show up in `users` (distributed-
+    // state propagation reordering). The local user just lost the wall — they
+    // must still get the toast, with "Someone" substituted for the unresolved
+    // peer name. See PR #2249 review.
+    act(() => {
+      emitSessionEvent({
+        __typename: 'DriverChanged',
+        driverParticipantId: 'participant-ghost',
+        previousDriverParticipantId: 'participant-1',
+      });
+    });
+
+    expect(mockShowMessage).toHaveBeenCalledWith(
+      expect.stringContaining('driverToast.tookFromYou|newDriver=driverToast.unknownDriver'),
+      'info',
     );
   });
 });
