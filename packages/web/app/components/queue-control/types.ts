@@ -6,12 +6,8 @@ import type { ConnectionState } from '../connection-manager/websocket-connection
 // Types that embed Climb (PlaylistSuggestionSource, SetCurrentClimbOptions) are
 // defined locally because the web's Climb type is slightly narrower than
 // shared-schema's (e.g. description?: string vs string | null).
-export type {
-  QueueSearchParams,
-  AddToQueueSource,
-  PeerId,
-  UserName,
-} from '@boardsesh/queue';
+export type { QueueSearchParams, AddToQueueSource, PeerId, UserName } from '@boardsesh/queue';
+import type { AddToQueueSource } from '@boardsesh/queue';
 
 export type PlaylistSuggestionSource = {
   playlistUuid: string;
@@ -181,9 +177,6 @@ export type QueueActionsType = {
    *  isn't currently the driver. In solo, a no-op. */
   releaseControl: () => Promise<void>;
 };
-
-// Import type for inline usage
-type AddToQueueSource = import('@boardsesh/queue').AddToQueueSource;
 
 // Frequently-changing state data
 export type QueueDataType = {
