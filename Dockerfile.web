@@ -20,6 +20,8 @@ COPY packages/backend/package.json ./packages/backend/
 COPY packages/moonboard-ocr/package.json ./packages/moonboard-ocr/
 COPY packages/board-renderer-wasm/package.json ./packages/board-renderer-wasm/
 COPY packages/board-renderer-wasm/pkg/ ./packages/board-renderer-wasm/pkg/
+COPY packages/shared/ble-protocol/package.json ./packages/shared/ble-protocol/
+COPY packages/shared/queue/package.json ./packages/shared/queue/
 
 # Install all dependencies (need devDependencies for the build)
 RUN bun install --frozen-lockfile
