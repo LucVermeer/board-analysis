@@ -249,14 +249,41 @@ export function BluetoothProvider({
     sessionIdRef.current = sessionId;
   }, [sessionId]);
 
+  // Snapshot the most recently observed lastConnectedBoardSerial so the
+  // connect-success callback can compute `previousSerialKnown` for the Phase 5
+  // `Session Board Serial Set` event without taking the live session object as
+  // a dep (which would re-create the callback on every event).
+  const lastConnectedBoardSerialRef = useRef<string | null>(
+    persistentSessionState.session?.lastConnectedBoardSerial ?? null,
+  );
+  useEffect(() => {
+    lastConnectedBoardSerialRef.current = persistentSessionState.session?.lastConnectedBoardSerial ?? null;
+  }, [persistentSessionState.session?.lastConnectedBoardSerial]);
+
   const handleConnectSuccess = useCallback(
     (serial: string | null) => {
       if (!serial) return;
-      if (sessionIdRef.current) {
-        void setSessionBoardSerial(serial);
-      }
+      if (!sessionIdRef.current) return;
+      const previousSerial = lastConnectedBoardSerialRef.current;
+      // Open Q5 defensive clear: every successful pick overwrites whatever
+      // the session held — so a stale lastConnectedBoardSerial pointing at a
+      // board that has since moved gyms gets replaced as soon as anyone
+      // re-pairs against a different board. Skip the WS round-trip when the
+      // new serial matches what the session already has (and skip the
+      // analytics emit too — same-serial reconnect isn't a state change).
+      if (previousSerial === serial) return;
+      void setSessionBoardSerial(serial);
+      // Pivot Phase 5: sanity check that the field gets populated on real
+      // sessions. Always 'party' here — the surrounding sessionIdRef gate
+      // already excludes solo. `previousSerialKnown` distinguishes the
+      // first pairing of a session from a re-pair / board swap.
+      track('Session Board Serial Set', {
+        mode: 'party',
+        previousSerialKnown: previousSerial != null,
+        boardLayout: boardDetails?.layout_name ?? '',
+      });
     },
-    [setSessionBoardSerial],
+    [setSessionBoardSerial, boardDetails?.layout_name],
   );
 
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({

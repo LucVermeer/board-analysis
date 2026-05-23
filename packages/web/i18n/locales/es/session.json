@@ -219,10 +219,17 @@
     "editClimb": "Editar este bloque",
     "addedViaBluetooth": "Añadido por Bluetooth",
     "nextUpHeader": "A continuación",
-    "endMessage": "Eso es todo por ahora"
+    "endMessage": "Eso es todo por ahora",
+    "showFullHistory_one": "Mostrar historial completo ({{count}} más)",
+    "showFullHistory_other": "Mostrar historial completo ({{count}} más)"
   },
   "queueProvider": {
     "offlineLimitReached": "Has alcanzado el límite de la cola sin conexión. Vuelve a conectarte para sincronizar tus vías."
+  },
+  "driverToast": {
+    "firstDriver": "{{newDriver}} está manejando la pared.",
+    "tookFromOther": "{{newDriver}} le quitó la pared a {{previousDriver}}.",
+    "tookFromYou": "{{newDriver}} te quitó la pared."
   },
   "playView": {
     "onWallChip": "EN EL MURO · {{username}}",

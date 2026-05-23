@@ -1,5 +1,11 @@
 'use client';
 
+// TODO(queue-bar-pivot): exported but not rendered on any route — the
+// `queueButton` source on the `Add to Queue` analytics event has produced
+// zero hits in 3 months because nothing mounts this component. Either delete
+// alongside the other follow-up cleanups or re-mount intentionally as a
+// third entry point for "Add to Up next". See
+// docs/queue-control-bar-pivot.md ("What shipped vs spec" appendix).
 import React, { useState, useCallback } from 'react';
 import AddCircleOutlined from '@mui/icons-material/AddCircleOutlined';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';

@@ -219,10 +219,17 @@
     "editClimb": "Edit this climb",
     "addedViaBluetooth": "Added via Bluetooth",
     "nextUpHeader": "Next up",
-    "endMessage": "That's all for now"
+    "endMessage": "That's all for now",
+    "showFullHistory_one": "Show full history ({{count}} more)",
+    "showFullHistory_other": "Show full history ({{count}} more)"
   },
   "queueProvider": {
     "offlineLimitReached": "You've hit the offline up-next limit. Reconnect to sync your climbs."
+  },
+  "driverToast": {
+    "firstDriver": "{{newDriver}} is driving the wall.",
+    "tookFromOther": "{{newDriver}} took the wall from {{previousDriver}}.",
+    "tookFromYou": "{{newDriver}} took the wall."
   },
   "playView": {
     "onWallChip": "ON WALL · {{username}}",

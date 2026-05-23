@@ -759,10 +759,13 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   // gestures inside the drawer (swipe, prev/next) walk the queue/
   // suggestions and update the wall as the spec requires.
   const advanceTo = useCallback(
-    (item: ClimbQueueItem, method: string, direction: 'next' | 'previous') => {
+    (item: ClimbQueueItem, method: 'swipePlayViewDrawer' | 'playViewDrawer', direction: 'next' | 'previous') => {
       if (isPersistentSessionActive && !isDriver) {
         setDrawerDisplayedItem?.(item);
         track('Queue Navigation', { direction, method, mode: 'preview' });
+        // Pivot Phase 5: non-driver preview swipe is intentionally NOT a
+        // Wall Advance — nothing reaches the wall, so the success-metric
+        // pipeline shouldn't count it as a broadcast advance.
       } else {
         // Broadcast path: clear any lingering drawer-local preview so the
         // drawer's `effectiveItem = drawerDisplayedItem ?? wallClimb`
@@ -771,9 +774,19 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
         setDrawerDisplayedItem?.(null);
         setCurrentClimbQueueItem(item);
         track('Queue Navigation', { direction, method, mode: 'broadcast' });
+        // Pivot Phase 5: drawer broadcast paths are by definition driver
+        // (or solo, which we treat as driver). The method discriminates
+        // swipe vs button.
+        track('Wall Advance', {
+          source: method === 'swipePlayViewDrawer' ? 'drawer_swipe' : 'drawer_button',
+          pressedByRole: 'driver',
+          direction,
+          mode: isPersistentSessionActive ? 'party' : 'solo',
+          boardLayout: boardDetails.layout_name ?? '',
+        });
       }
     },
-    [isPersistentSessionActive, isDriver, setCurrentClimbQueueItem, setDrawerDisplayedItem],
+    [isPersistentSessionActive, isDriver, setCurrentClimbQueueItem, setDrawerDisplayedItem, boardDetails.layout_name],
   );
 
   // First-run coachmark — pulses the lightbulb once with the "Send to the

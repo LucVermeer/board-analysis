@@ -323,6 +323,38 @@ export const GraphQLQueueProvider = ({
         if (localParticipantId && newDriverId && newDriverId !== localParticipantId) {
           latest.persistentSession.triggerResync();
         }
+        // Hand-off toast: surface peer-driven driver changes so members know
+        // someone else just took or is now driving the wall. Spec recommends
+        // quiet info-level toast, no haptic, no sound. Suppressed when the
+        // local user IS the new driver — they pressed the lightbulb themselves
+        // and don't need to be told. Also suppressed when control was released
+        // without a successor (newDriverId === null) — nothing to attribute.
+        //
+        // i18n-keep session:driverToast.firstDriver
+        // i18n-keep session:driverToast.tookFromYou
+        // i18n-keep session:driverToast.tookFromOther
+        // (The orphan-key checker can't resolve `latest.t(...)` to a
+        // useTranslation binding; the keys are statically used here.)
+        if (newDriverId && newDriverId !== localParticipantId) {
+          const newDriverName = latest.users.find((user) => user.id === newDriverId)?.username ?? '';
+          const previousDriverId = event.previousDriverParticipantId ?? null;
+          if (newDriverName) {
+            if (!previousDriverId) {
+              latest.showMessage(latest.t('driverToast.firstDriver', { newDriver: newDriverName }), 'info');
+            } else if (previousDriverId === localParticipantId) {
+              latest.showMessage(latest.t('driverToast.tookFromYou', { newDriver: newDriverName }), 'info');
+            } else {
+              const previousDriverName = latest.users.find((user) => user.id === previousDriverId)?.username ?? '';
+              latest.showMessage(
+                latest.t('driverToast.tookFromOther', {
+                  newDriver: newDriverName,
+                  previousDriver: previousDriverName,
+                }),
+                'info',
+              );
+            }
+          }
+        }
       }
     });
     return unsubscribe;
@@ -470,6 +502,9 @@ export const GraphQLQueueProvider = ({
     validateQueueAdd,
     boardDetails,
     sessionId,
+    users,
+    showMessage,
+    t,
   });
   // Sync ref every render (synchronous — safe for refs)
   latestRef.current = {
@@ -497,6 +532,9 @@ export const GraphQLQueueProvider = ({
     validateQueueAdd,
     boardDetails,
     sessionId,
+    users,
+    showMessage,
+    t,
   };
 
   // --- Stable action callbacks (read from latestRef, never recreated) ---

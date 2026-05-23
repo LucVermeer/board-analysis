@@ -38,7 +38,7 @@ export default function QueueNavButton({ direction, navigate, boardDetails }: Qu
   const ariaLabel = direction === 'next' ? t('actions.navigation.nextClimb') : t('actions.navigation.previousClimb');
   const Icon = ICON[direction];
   const { setCurrentClimbQueueItem, getNextClimbQueueItem, getPreviousClimbQueueItem } = useQueueActions();
-  const { viewOnlyMode } = useSessionData();
+  const { viewOnlyMode, isPersistentSessionActive, isDriver } = useSessionData();
   const { rawParams, angle, searchParams, isPlayPage, resolvedDetails } = useResolvedBoardDetails(boardDetails);
 
   const target = direction === 'next' ? getNextClimbQueueItem() : getPreviousClimbQueueItem();
@@ -65,10 +65,22 @@ export default function QueueNavButton({ direction, navigate, boardDetails }: Qu
   const fireAdvance = useCallback(() => {
     if (!target || viewOnlyMode) return;
     setCurrentClimbQueueItem(target);
+    const boardLayout = boardDetails?.layout_name || '';
     track('Queue Navigation', {
       direction,
       method: 'button',
-      boardLayout: boardDetails?.layout_name || '',
+      boardLayout,
+    });
+    // Pivot Phase 5: Wall Advance fires on every successful broadcast advance.
+    // Bar prev/next is always a broadcast (any participant can advance the
+    // wall climb) and never transfers the driver — so pressedByRole reflects
+    // the presser's current role rather than implying a take-control.
+    track('Wall Advance', {
+      source: 'bar_button',
+      pressedByRole: isPersistentSessionActive && !isDriver ? 'non_driver' : 'driver',
+      direction,
+      mode: isPersistentSessionActive ? 'party' : 'solo',
+      boardLayout,
     });
     // On /play/ routes the URL is the source of truth — push the new climb's
     // play URL. On /view/ routes useDrawerUrlSync handles the URL via the
@@ -80,7 +92,17 @@ export default function QueueNavButton({ direction, navigate, boardDetails }: Qu
     // buildPlayUrl is a closure over current state; recreating each fire is
     // intentional. target is the only ref-stable input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, navigate, isPlayPage, viewOnlyMode, setCurrentClimbQueueItem, boardDetails?.layout_name, direction]);
+  }, [
+    target,
+    navigate,
+    isPlayPage,
+    viewOnlyMode,
+    setCurrentClimbQueueItem,
+    boardDetails?.layout_name,
+    direction,
+    isPersistentSessionActive,
+    isDriver,
+  ]);
 
   return (
     <IconButton aria-label={ariaLabel} onClick={fireAdvance} disabled={!target || viewOnlyMode}>

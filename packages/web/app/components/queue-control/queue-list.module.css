@@ -2,6 +2,10 @@
   margin: 8px 0;
 }
 
+.historyShowAll {
+  padding: 4px 8px;
+}
+
 .suggestedSectionHeader {
   padding: 12px 8px 4px;
 }
