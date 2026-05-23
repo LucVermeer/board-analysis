@@ -7,7 +7,8 @@ export type UserBoardMapping = {
   id: string;
   userId: string;
   boardType: BoardName;
-  boardUserId: number;
+  boardUserId: number | null;
+  boardUserIdText: string | null;
   boardUsername: string | null;
   linkedAt: Date;
 };
@@ -69,6 +70,7 @@ export async function getUserBoardMappings(userId: string): Promise<UserBoardMap
     userId: row.userId,
     boardType: row.boardType as BoardName,
     boardUserId: row.boardUserId,
+    boardUserIdText: row.boardUserIdText,
     boardUsername: row.boardUsername,
     linkedAt: row.linkedAt,
   }));

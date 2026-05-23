@@ -175,6 +175,11 @@ export const schemaSQL = `
   EXCEPTION WHEN duplicate_object THEN NULL;
   END $$;
 
+  DO $$ BEGIN
+    CREATE TYPE kilter_table_type AS ENUM ('logs', 'attempts');
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$;
+
   DROP TABLE IF EXISTS "boardsesh_ticks" CASCADE;
   CREATE TABLE IF NOT EXISTS "boardsesh_ticks" (
     "id" bigserial PRIMARY KEY NOT NULL,
@@ -200,7 +205,11 @@ export const schemaSQL = `
     "aurora_type" text,
     "aurora_id" text,
     "aurora_synced_at" timestamp,
-    "aurora_sync_error" text
+    "aurora_sync_error" text,
+    "kilter_type" kilter_table_type,
+    "kilter_id" text,
+    "kilter_synced_at" timestamp,
+    "kilter_sync_error" text
   );
 
   DROP TABLE IF EXISTS "board_placements" CASCADE;
@@ -230,7 +239,8 @@ export const schemaSQL = `
     "id" bigserial PRIMARY KEY NOT NULL,
     "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
     "board_type" text NOT NULL,
-    "board_user_id" integer NOT NULL,
+    "board_user_id" integer,
+    "board_user_id_text" text,
     "board_username" text,
     "linked_at" timestamp DEFAULT now() NOT NULL
   );
