@@ -10,6 +10,19 @@ A working plan for the native mobile app. v10.0 is a direction change from v9.x:
 
 Everything from v9.x's offline-first design — the query router shape, mutation queue with idempotency keys, refdata SQLite, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView.
 
+## Non-negotiable: web and Capacitor apps must keep working
+
+The React Native app is additive. The existing web app (Next.js on Vercel) and the existing Capacitor app (`mobile/`) must continue working throughout RN development and after launch. Concrete rules:
+
+1. **No breaking changes to `packages/web/`.** Every PR that touches shared packages or backend must pass the existing web test suite and `vp check`. The web app is the primary product until the RN app reaches feature parity — regressions are not acceptable.
+2. **No breaking changes to `packages/backend/`.** The backend serves both web and (eventually) RN clients. New endpoints or schema changes for RN must be additive. Existing GraphQL queries, mutations, and subscriptions must remain unchanged.
+3. **No breaking changes to `mobile/` (Capacitor).** The Capacitor app is live in the App Store. It loads `https://www.boardsesh.com` in hosted mode and uses BLE, Live Activity, and deep linking. It must keep working on every deploy. The Capacitor directory is not deleted until the RN app is live in the App Store and users have migrated.
+4. **Shared package extraction is additive.** When moving logic from `packages/web/` to `packages/shared/`, the web files must re-export everything from the shared package so downstream imports are unchanged. No import path changes for existing web code.
+5. **Backend bearer token auth stays backward-compatible.** The existing Capacitor native OAuth flow (`/auth/native-start`, `/auth/native/exchange`) must keep working. RN reuses the same endpoints — no separate auth path that could break the existing one.
+6. **Database schema changes are migration-safe.** Any new tables or columns for RN features use standard additive migrations via `bunx drizzle-kit generate`. No destructive schema changes that would break the web or Capacitor apps.
+
+The Capacitor app (`mobile/`) will be retired only after: (a) the RN app is accepted in both App Store and Play Store, (b) existing Capacitor users have had at least 30 days to update, and (c) analytics confirm <5% of sessions come from the old Capacitor build.
+
 ## Pinned user story
 
 A user opens Boardsesh in airplane mode at the gym. They launch the app, browse and search climbs for their board, build a queue, connect via BLE, send climbs to the board (LEDs light up), and tick the ones they sent. Real-time-only features (party mode, comments, others' profiles) show a "needs network" state. When the user reconnects, queued ticks and edits sync to the server. This end-to-end story is the terminal milestone.
