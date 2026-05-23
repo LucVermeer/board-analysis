@@ -431,16 +431,19 @@ This is much less likely with a genuinely native app (no WebView wrapper), but i
 
 ## Risks
 
-| Risk                                            | Likelihood | Impact | Mitigation                                                                                              |
-| ----------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------------- |
-| Board renderer complexity (Canvas/WASM to Skia) | Medium     | High   | Start early in Phase 2. Fallback: react-native-svg for adequate rendering.                              |
-| Two UI codebases to maintain                    | Certain    | Medium | Share everything below UI. Intentional divergence — each platform gets its best experience.             |
-| react-native-ble-plx gaps                       | Low        | High   | Protocol logic is shared; only the transport adapter differs. Can write a thin native module if needed. |
-| Expo ecosystem churn                            | Low        | Medium | Pin SDK versions. Expo's continuous native generation (CNG) handles native project updates.             |
-| Refdata SQLite > 200 MB                         | Medium     | Medium | Phase 5 measurement spike. Fallback: per-layout split or frames lazy-fetch.                             |
-| Bearer token refresh edge cases                 | Medium     | High   | Dedicated test suite. Failed refresh triggers re-auth, not silent failure.                              |
-| Live Activity reimplementation complexity       | Medium     | Medium | Defer to Phase 5. Existing Swift widget logic serves as reference.                                      |
-| Apple 4.2 rejection                             | Low        | High   | Native RN app has minimal risk. Plan B above if needed.                                                 |
+| Risk                                                       | Likelihood | Impact | Mitigation                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Board renderer complexity (Canvas/WASM to SwiftUI/Compose) | Medium     | High   | Start early in Phase 2. Fallback: `@shopify/react-native-skia`, then `react-native-svg`.                                                                                                                       |
+| Two UI codebases to maintain                               | Certain    | Medium | Share everything below UI. Intentional divergence — each platform gets its best experience.                                                                                                                    |
+| react-native-ble-plx maintenance slowdown                  | Medium     | High   | No major release since 2023. Protocol logic is shared; only the transport adapter differs. Backup: `react-native-ble-manager`. Last resort: custom Expo native module with CoreBluetooth/Android BLE directly. |
+| Metro bundler + monorepo friction                          | Medium     | Medium | Shared packages use raw TypeScript (`"main": "src/index.ts"`). Metro needs `watchFolders` + `nodeModulesPaths` config. Set up and verify in Phase 1 week 1.                                                    |
+| No CI/CD for native builds                                 | Certain    | Medium | EAS Build setup, TestFlight distribution, GitHub Actions integration. Budget 1 week in Phase 1.                                                                                                                |
+| Expo ecosystem churn                                       | Low        | Medium | Pin SDK versions. Expo's continuous native generation (CNG) handles native project updates.                                                                                                                    |
+| Refdata SQLite > 200 MB                                    | Medium     | Medium | Phase 5 measurement spike. Fallback: per-layout split or frames lazy-fetch.                                                                                                                                    |
+| Bearer token refresh edge cases                            | Medium     | High   | Dedicated test suite. Failed refresh triggers re-auth, not silent failure.                                                                                                                                     |
+| Live Activity reimplementation complexity                  | Medium     | Medium | Defer to Phase 5. Existing Swift widget logic serves as reference. SwiftUI Expo module.                                                                                                                        |
+| Phase 5 scope overload                                     | High       | Medium | Phase 5 packs SQLite + mutation queue + Live Activity + HealthKit into 3 weeks. Ship v1 without Live Activity and HealthKit to de-risk. Add them in a fast-follow.                                             |
+| Apple 4.2 rejection                                        | Low        | High   | Native RN app has minimal risk. Plan B above if needed.                                                                                                                                                        |
 
 ## Performance targets
 

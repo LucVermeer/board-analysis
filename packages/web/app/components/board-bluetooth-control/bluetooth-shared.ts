@@ -8,11 +8,12 @@ export {
   splitMessages,
 } from '@boardsesh/ble-protocol/transport';
 
-import { UART_SERVICE_UUID, UART_WRITE_CHARACTERISTIC_UUID } from '@boardsesh/ble-protocol/transport';
+import {
+  UART_SERVICE_UUID,
+  UART_WRITE_CHARACTERISTIC_UUID,
+  INTER_CHUNK_DELAY_MS,
+} from '@boardsesh/ble-protocol/transport';
 
-// Small delay between write-without-response chunks to avoid overwhelming the BLE stack.
-// Matches the pacing strategy used in the Capacitor adapter.
-const INTER_CHUNK_DELAY_MS = 5;
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 // --- Web-specific BLE helpers (use Web Bluetooth DOM types) ---
