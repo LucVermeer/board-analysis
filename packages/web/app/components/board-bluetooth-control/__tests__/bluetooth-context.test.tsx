@@ -126,7 +126,9 @@ vi.mock('@/app/lib/ble/capacitor-utils', () => ({
 
 const mockConfirmClimbOnWall = vi.fn().mockResolvedValue(undefined);
 const mockSetSessionBoardSerial = vi.fn().mockResolvedValue(undefined);
-let mockPersistentSessionState: { session: { id: string } | null } = { session: null };
+let mockPersistentSessionState: { session: { id: string; lastConnectedBoardSerial?: string | null } | null } = {
+  session: null,
+};
 vi.mock('@/app/components/persistent-session', () => ({
   usePersistentSessionActions: () => ({
     confirmClimbOnWall: mockConfirmClimbOnWall,
@@ -785,6 +787,103 @@ describe('BluetoothProvider', () => {
       });
 
       expect(mockSetSessionBoardSerial).not.toHaveBeenCalled();
+    });
+
+    it('skips setSessionBoardSerial when the new serial matches the session value (Open Q5 defensive clear: no churn on idempotent reconnect)', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1', lastConnectedBoardSerial: 'KB-12345' } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+
+      expect(mockSetSessionBoardSerial).not.toHaveBeenCalled();
+      expect(mockTrack.mock.calls.find((args) => args[0] === 'Session Board Serial Set')).toBeUndefined();
+    });
+
+    it('overwrites a stale serial when reconnect resolves a different board (Open Q5 defensive clear)', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1', lastConnectedBoardSerial: 'KB-OLD' } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-NEW');
+        await Promise.resolve();
+      });
+
+      expect(mockSetSessionBoardSerial).toHaveBeenCalledWith('KB-NEW');
+    });
+
+    it('does not re-fire setSessionBoardSerial on a back-to-back reconnect to the same board (cache updated synchronously)', async () => {
+      // Reproduces the race the in-memory ref guards against: session state
+      // still holds the old serial because SessionBoardSerialChanged hasn't
+      // landed yet, but the user disconnects + reconnects to the same board.
+      // Without the synchronous ref update, the second onConnectSuccess would
+      // see previousSerial=null and re-fire the mutation + analytics event.
+      mockPersistentSessionState = { session: { id: 'session-1', lastConnectedBoardSerial: null } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+      // Second reconnect to the same board before the WS event lands.
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+
+      expect(mockSetSessionBoardSerial).toHaveBeenCalledTimes(1);
+      expect(mockTrack.mock.calls.filter((args) => args[0] === 'Session Board Serial Set')).toHaveLength(1);
+    });
+
+    it("fires Session Board Serial Set with previousSerialKnown=false on the session's first pairing", async () => {
+      mockPersistentSessionState = { session: { id: 'session-1', lastConnectedBoardSerial: null } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-12345');
+        await Promise.resolve();
+      });
+
+      const call = mockTrack.mock.calls.find((args) => args[0] === 'Session Board Serial Set');
+      expect(call).toBeTruthy();
+      expect(call?.[1]).toMatchObject({
+        mode: 'party',
+        previousSerialKnown: false,
+      });
+    });
+
+    it('fires Session Board Serial Set with previousSerialKnown=true on a board swap', async () => {
+      mockPersistentSessionState = { session: { id: 'session-1', lastConnectedBoardSerial: 'KB-OLD' } };
+
+      renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        lastUseBoardBluetoothOptions?.onConnectSuccess?.('KB-NEW');
+        await Promise.resolve();
+      });
+
+      const call = mockTrack.mock.calls.find((args) => args[0] === 'Session Board Serial Set');
+      expect(call).toBeTruthy();
+      expect(call?.[1]).toMatchObject({
+        mode: 'party',
+        previousSerialKnown: true,
+      });
     });
 
     it('routes confirmClimbOnWall through the live session when a session is joined mid-send', async () => {

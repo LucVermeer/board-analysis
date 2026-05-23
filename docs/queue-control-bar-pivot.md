@@ -1,6 +1,6 @@
 # Queue Control Bar Pivot — Bar Mirrors the Wall, Lightbulb Controls the Driver
 
-**Status:** Phases 1–3 + simplified Phase 4 shipping together in #2198 (retargeted to `main`). Earlier stack (#2188, #2195, #2197) collapsed into the single PR after the design simplification on 2026-05-17.
+**Status:** Phases 1–3 + simplified Phase 4 shipped in #2198 on 2026-05-18. A follow-up PR (2026-05-23) closes the remaining gaps: Phase 3 queue-list 5-item history + center-on-open, Phase 5 `Wall Advance` + `Session Board Serial Set` events, bar prev/next "on the wall" aria-label polish, hand-off toast (Open Q2), stale board-serial defensive clear (Open Q5), `isLeader` audit. See the "What shipped vs spec" appendix at the bottom for the full divergence list. Earlier stack (#2188, #2195, #2197) collapsed into #2198 after the design simplification on 2026-05-17.
 **Decision date:** 2026-05-16 (original); simplified 2026-05-17
 **Driven by:** Observed user-testing pain in large-group party sessions, supported by 3 months of Vercel Analytics + 1 week of PostHog
 **Owner (assign on pickup):** TBD
@@ -68,16 +68,20 @@ _Open behavior:_ when the list is opened (drawer or full-screen view), scroll so
 
 ## Wall-view drawer (tap the bar)
 
-Tapping the Queue Control Bar itself opens a _wall-view drawer_ showing the climb currently lit on the wall. This is a distinct drawer mode from the normal "I tapped a climb in the list" drawer:
+_Shipped state (post-PR #2198 + follow-ups #2238 and the open queue-pivot finish PR)_: the drawer has a "wall-view mode" rather than a separate drawer instance — opened from a bar tap with the wall climb pinned, the same component flips into a non-driver-locked state. The pivot's original "separate drawer" framing was simplified during review; the final shape uses chips and a header strip inside the existing drawer.
 
-- _No prev/next buttons_ inside this drawer (the controls live on the bar itself; this view is anchored to the wall climb).
-- _No swipe gesture_ inside this drawer. The view is locked to whatever is currently lit. To browse other climbs, the user closes the drawer and uses the list or search.
-- _"Currently on the wall" label_ at the top of the drawer so the mode is unambiguous.
-- _Driver's avatar inline near the label_ — same avatar that carries the lit lightbulb badge in the bar's `AvatarGroup`. Tap-through behaviour mirrors the bar avatar (opens roster).
-- _Lightbulb stays available_ with the same semantics and visual rules as everywhere else: filled/lit when the local user is the driver (press to release), empty/outlined when someone else is driving (press to take). Gives the user a take-control path from this view without backing out. This is the same single lightbulb instance — the drawer just happens to be in wall-view mode.
-- _Standard climb actions remain_ — Add to Queue, Open in Aurora, Mirror, Fork, tick logging, etc. The restriction is navigation-only.
+How it actually works today:
 
-Contrast with the normal drawer (opened by tapping a climb in the list): that one shows the _tapped_ climb (not the wall climb), supports swipe-as-preview for non-drivers / swipe-as-broadcast for drivers, and shows prev/next for drivers. The two drawers share most of the underlying component; the differences are state-driven from how the drawer was opened.
+- _Opened from a bar tap_, the drawer pins to `state.currentClimbQueueItem` (the wall climb) via the `openedFromBar` payload.
+- _Header strip_ renders "Currently on the wall" / "{username} is on the wall" via `playView.wallViewHeader` / `wallViewHeaderDriver` and a `LockOutlined` indicator. Tapping the strip's "Browse from here" link exits wall-view mode without closing the drawer.
+- _`DRIVING` chip_ when the local user is the driver (so the user can tell at a glance that their drawer is the authoritative one).
+- _`Preview` chip_ when the local user is a non-driver actively previewing — appears once they swipe inside the drawer; the wall-view header collapses to make room. Paired with a coachmark explaining "Tap the lightbulb to send it to the wall."
+- _Swipe gesture is enabled for drivers_ inside wall-view (so drivers can drive without exiting), _disabled for non-drivers_ in wall-view (the preview path requires explicitly tapping past the lock).
+- _No drawer prev/next buttons_ for non-drivers — they remain driver-only as the spec required.
+- _Drawer lightbulb stays available_ with the same outlined/filled/pending states everywhere else, giving anyone in the drawer a take-control path without backing out.
+- _Standard climb actions remain_ — Add to Queue, Open in Aurora, Mirror, Fork, tick logging, etc.
+
+Contrast with the normal drawer (opened by tapping a climb in the list): same component, but no wall-view header / chips / lock. Drivers swipe to broadcast; non-drivers swipe to preview through `suggestedClimbs` only.
 
 ## User flows after the pivot
 
@@ -253,7 +257,7 @@ Queue Operation breakdown (3-month, sampled at max 5 per op-type per session; vi
 - `addToQueue` — 6%, 425 visitors.
 - Long tail: `replaceQueueItem` 2%, `setQueue` 2%, `mirrorClimb` 1%.
 
-`Add to Queue` UI events (3 months) by source: `swipe` 240, `climbActions` 183. The dedicated `queueButton` source fires zero events because the component (`packages/web/app/components/climb-actions/queue-button.tsx`) is exported from the climb-actions index but _never rendered on any route_ — verified via grep for `<QueueButton` JSX. The `track('Add to Queue', { source: 'queueButton' })` call inside it is wired correctly; it simply has no caller. Treat as dead UI: either delete the component in a Phase 6 cleanup or re-mount it intentionally as part of the "Add to Up next" rename in PR 3 if we want a third entry point. The zero-event signal is therefore "no surface", not "instrumentation gap".
+`Add to Queue` UI events (3 months) by source: `swipe` 240, `climbActions` 183. The dedicated `queueButton` source fires zero events because the component (`packages/web/app/components/climb-actions/queue-button.tsx`) is exported from the climb-actions index but _never rendered on any route_ — verified via grep for `<QueueButton` JSX. The `track('Add to Queue', { source: 'queueButton' })` call inside it is wired correctly; it simply has no caller. The file now carries a `TODO(queue-bar-pivot)` marker at the top pointing back to this doc; pick it up alongside other follow-up cleanups (either delete or re-mount as a third entry point). The zero-event signal is "no surface", not "instrumentation gap".
 
 `Queue Navigation` UI events (PostHog week — directionally stable): 4,753 next-swipes + 1,085 previous-swipes inside the Play View drawer. 20 events combined on the Queue Control Bar arrows/swipe. 8 events on the bar's button arrows. The persistent control bar is structurally unused as an interaction surface.
 
@@ -296,3 +300,17 @@ Not blockers. The implementing engineer should make the call in code review with
 - Do not change Workout Generator or Onboarding in this PR.
 - Do not collapse the existing `Set Active Climb` event into the new `Wall Control Taken` event. Keep them distinct for analytics continuity.
 - Do not surface a "Wall offline" indicator, BLE-holder attribution, or any other internal connection-state UI on the bar. The 2-second drawer fallback is the only legible recovery surface; everything else stays implicit.
+
+## What shipped vs spec
+
+PR #2198 (merged 2026-05-18) shipped Phases 1–3 + simplified Phase 4. A follow-up PR closes the remaining gaps. The list below captures the deviations from the original spec that landed so a future reader doesn't trip on them.
+
+- _Wall-view drawer mode_ — the spec described a separate drawer mode opened from a bar tap (lines 69-80 above, now rewritten). Commit `0317b3147` (design churn) deleted the dedicated mode and replaced it with an `ON WALL` chip on the bar. Commit `18a3c1069` moved the chip back into the drawer. Commit `489e1686f` added a `DRIVING` chip in the drawer for drivers. End state: the drawer has wall-view chrome (header strip + lock indicator + DRIVING chip for drivers + Preview chip for non-drivers after swipe + "Browse from here" exit link) but is the same component as the normal drawer.
+- _Component consolidation_ — `next-climb-button.tsx` + `previous-climb-button.tsx` were merged into a single `queue-nav-button.tsx`. Driver-only gating in the drawer happens at the drawer level, not inside the button.
+- _Wall Confirm Timeout event_ — added beyond spec as a kill-switch counter-metric (`use-wall-confirm-fallback.ts:180-201`). Pairs with `Wall Confirmed` to compute the silent-no-BLE-recovery share without inferring it from a missing event.
+- _Group-session ride-along (#2238)_ — `setSessionBoardPath` mutation + `SessionBoardPathChanged` event broadcast angle changes between members. Not pivot scope but related plumbing.
+- _Doc-vs-shipped queue-list rendering_ — Phase 3's 5-item history default, "Show full history" toggle, and center-on-open scroll were missing from PR #2198 and ship in the follow-up. Spec line 63-67 still describes the target behaviour; code now matches.
+- _Phase 5 instrumentation backfill_ — PR #2198 wired `Wall Control Taken`, `Wall Control Released`, and `Wall Confirmed`. The follow-up adds `Wall Advance` (bar button, bar swipe, drawer button, drawer swipe — all broadcast paths) and `Session Board Serial Set`. Live Activity widget `Wall Advance` is intentionally deferred to a separate iOS-touching PR.
+- _isLeader audit (Phase 2, 2026-05-23)_ — the spec required confirming no `isLeader` / `leaderId` / `leaderConnectionId` / `LeaderChanged` site gates wall-control. Confirmed across backend, web, shared-schema, and iOS native code. The only authorization use of `isLeader` is `endSession` (`mutations.ts:870`), which gates session termination — not wall control. Wall-control authority lives on `driverParticipantId`. A short audit comment at the top of `mutations.ts` records the result; no porting was needed.
+- _Hand-off toast (Open Q2)_ — the follow-up wires a quiet info-level snackbar on `DriverChanged` for non-self transitions ("Alice is driving the wall.", "Alice took the wall from Bob.", "Alice took the wall.") using the existing `previousDriverParticipantId` field on the event.
+- _Stale board serial recovery (Open Q5)_ — `bluetooth-context.tsx` now skips redundant `setSessionBoardSerial` writes when the new serial matches the stored one, and overwrites the field on every successful pick of a different board. No new UI; defensive only.

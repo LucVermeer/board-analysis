@@ -34,8 +34,15 @@ import type { ClimbQueueItem } from './types';
 import { isClimbEditable } from './is-climb-editable';
 import styles from './queue-list.module.css';
 
+// Default number of recent history items rendered when the user hasn't opted
+// into the full backlog. Spec: queue-list opens with a 5-item history so the
+// current item sits near the top of the visible area; older sends fold under
+// a "Show full history" button.
+const DEFAULT_HISTORY_DISPLAY_LIMIT = 5;
+
 // Discriminated union for all possible rows in the flat virtualized list
 type FlatRow =
+  | { type: 'history-show-all'; hiddenCount: number }
   | { type: 'history-item'; item: ClimbQueueItem; queueIndex: number }
   | { type: 'history-divider' }
   | { type: 'current-item'; item: ClimbQueueItem; queueIndex: number }
@@ -116,6 +123,14 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
     // This replaces the per-ClimbListItem drawers (previously 100+ drawer trees).
     const [actionsClimb, setActionsClimb] = useState<Climb | null>(null);
     const [playlistClimb, setPlaylistClimb] = useState<Climb | null>(null);
+
+    // Toggled by the "Show full history" row at the top of the history region.
+    // Local to each list mount — resets when the drawer remounts so a freshly-
+    // opened list always starts on the 5-item view. Depends on QueueDrawer NOT
+    // passing `keepMounted={true}` to the underlying SwipeableDrawer (default
+    // is false); if a caller starts keeping the drawer mounted, the state will
+    // stick across sessions and this expectation breaks.
+    const [showFullHistory, setShowFullHistory] = useState(false);
 
     const handleOpenActions = useCallback((climb: Climb) => {
       setPlaylistClimb(null);
@@ -224,30 +239,33 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
       // When no current climb (currentIndex === -1), show entire queue as future items
       const futureItems = currentIndex >= 0 ? queue.slice(currentIndex + 1) : queue;
 
-      // History items
+      // History items — render at most DEFAULT_HISTORY_DISPLAY_LIMIT (most
+      // recent) by default. The full backlog unfolds when the user taps the
+      // "Show full history" row. queueIndex always tracks the position in the
+      // full queue so re-orders + selection state stay consistent.
       if (showHistory && historyItems.length > 0) {
-        const scrollToHistoryIndex = historyItems.length > 2 ? historyItems.length - 2 : 0;
-        for (let i = 0; i < historyItems.length; i++) {
-          if (historyItems.length > 2 && i === scrollToHistoryIndex) {
-            scrollTargetIdx = rows.length;
-          }
+        const hiddenCount = showFullHistory ? 0 : Math.max(0, historyItems.length - DEFAULT_HISTORY_DISPLAY_LIMIT);
+        if (hiddenCount > 0) {
+          rows.push({ type: 'history-show-all', hiddenCount });
+        }
+        const firstRenderedIdx = hiddenCount;
+        for (let i = firstRenderedIdx; i < historyItems.length; i++) {
           rows.push({ type: 'history-item', item: historyItems[i], queueIndex: i });
         }
         rows.push({ type: 'history-divider' });
       }
 
-      // Current item
+      // Current item — always the scroll target so the virtualizer can center
+      // it on open. Fallback to the first future item when nothing is lit yet.
       if (currentItem) {
-        if (!showHistory || historyItems.length <= 2) {
-          scrollTargetIdx = rows.length;
-        }
+        scrollTargetIdx = rows.length;
         rows.push({ type: 'current-item', item: currentItem, queueIndex: currentIndex });
       }
 
       // Future items
       for (let i = 0; i < futureItems.length; i++) {
         const originalIndex = currentIndex >= 0 ? currentIndex + 1 + i : i;
-        if (i === 0 && !currentItem && (!showHistory || historyItems.length <= 2)) {
+        if (i === 0 && !currentItem) {
           scrollTargetIdx = rows.length;
         }
         rows.push({ type: 'future-item', item: futureItems[i], queueIndex: originalIndex });
@@ -274,6 +292,7 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
       queue,
       currentClimbUuid,
       showHistory,
+      showFullHistory,
       suggestedClimbs,
       active,
       viewOnlyMode,
@@ -300,6 +319,8 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
         switch (row.type) {
           case 'history-divider':
             return 17;
+          case 'history-show-all':
+            return 44;
           case 'suggestion-header':
             return 36;
           case 'loading':
@@ -323,6 +344,8 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
             return `s-${row.climb.uuid}`;
           case 'history-divider':
             return 'divider';
+          case 'history-show-all':
+            return 'history-show-all';
           case 'suggestion-header':
             return 'suggestion-header';
           case 'loading':
@@ -343,8 +366,10 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
       () => ({
         scrollToCurrentClimb: () => {
           if (scrollTargetFlatIndex >= 0) {
+            // Center the current item in the visible area. When history is
+            // short the virtualizer naturally clamps to the top — no padding.
             virtualizerRef.current.scrollToIndex(scrollTargetFlatIndex, {
-              align: 'start',
+              align: 'center',
               behavior: 'smooth',
             });
           }
@@ -380,6 +405,13 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
                   contain: 'layout style paint',
                 }}
               >
+                {row.type === 'history-show-all' && (
+                  <div className={styles.historyShowAll}>
+                    <Button size="small" onClick={() => setShowFullHistory(true)} fullWidth variant="text">
+                      {t('session:queueList.showFullHistory', { count: row.hiddenCount })}
+                    </Button>
+                  </div>
+                )}
                 {row.type === 'history-item' && (
                   <QueueClimbListItem
                     item={row.item}
