@@ -31,6 +31,13 @@ export const tickStatusEnum = pgEnum('tick_status', ['flash', 'send', 'attempt']
 export const auroraTableTypeEnum = pgEnum('aurora_table_type', ['ascents', 'bids']);
 
 /**
+ * Kilter table type for sync
+ * - logs: Completed climbs (flash/send) sync to Kilter logs table
+ * - attempts: Failed attempts sync to Kilter attempts table
+ */
+export const kilterTableTypeEnum = pgEnum('kilter_table_type', ['logs', 'attempts']);
+
+/**
  * Boardsesh ticks table
  * Unified table for all climb attempts (successful and failed)
  * Links to NextAuth users, not Aurora board users
@@ -84,6 +91,14 @@ export const boardseshTicks = pgTable(
     auroraId: text('aurora_id'), // UUID in Aurora's system
     auroraSyncedAt: timestamp('aurora_synced_at', { mode: 'string' }),
     auroraSyncError: text('aurora_sync_error'), // Last sync error if any
+
+    // Kilter sync tracking - populated by kilter-sync. A single row can
+    // legitimately carry both aurora_id and kilter_id (Kilter historically
+    // imported Aurora-exported logbooks).
+    kilterType: kilterTableTypeEnum('kilter_type'),
+    kilterId: text('kilter_id'),
+    kilterSyncedAt: timestamp('kilter_synced_at', { mode: 'string' }),
+    kilterSyncError: text('kilter_sync_error'),
   },
   (table) => ({
     // Index for efficient user logbook queries
@@ -95,6 +110,10 @@ export const boardseshTicks = pgTable(
     auroraIdUnique: uniqueIndex('boardsesh_ticks_aurora_id_unique').on(table.auroraId),
     // Index for pending sync queries (ticks without aurora_id)
     syncPendingIdx: index('boardsesh_ticks_sync_pending_idx').on(table.auroraId, table.userId),
+    // Unique index for Kilter sync - allows upsert on kilter_id
+    kilterIdUnique: uniqueIndex('boardsesh_ticks_kilter_id_unique').on(table.kilterId),
+    // Index for pending kilter push queries (ticks without kilter_id)
+    kilterSyncPendingIdx: index('boardsesh_ticks_kilter_sync_pending_idx').on(table.kilterId, table.userId),
     // Index for session queries
     sessionIdx: index('boardsesh_ticks_session_idx').on(table.sessionId),
     // Index for inferred session queries
@@ -121,3 +140,4 @@ export type BoardseshTick = typeof boardseshTicks.$inferSelect;
 export type NewBoardseshTick = typeof boardseshTicks.$inferInsert;
 export type TickStatus = 'flash' | 'send' | 'attempt';
 export type AuroraTableType = 'ascents' | 'bids';
+export type KilterTableType = 'logs' | 'attempts';

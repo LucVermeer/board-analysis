@@ -26,6 +26,11 @@ export const playlists = pgTable(
     auroraId: text('aurora_id'), // The circuit UUID from Aurora
     auroraSyncedAt: timestamp('aurora_synced_at'), // Last sync timestamp
 
+    // Kilter sync tracking (for circuits synced from / pushed to Kilter)
+    kilterType: text('kilter_type'), // 'circuits' when synced from Kilter
+    kilterId: text('kilter_id'), // The circuit UUID from Kilter
+    kilterSyncedAt: timestamp('kilter_synced_at'),
+
     // Timestamps
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -42,6 +47,8 @@ export const playlists = pgTable(
     lastAccessedAtIdx: index('playlists_last_accessed_at_idx').on(table.lastAccessedAt),
     // Index for Aurora sync conflict resolution
     auroraIdIdx: uniqueIndex('playlists_aurora_id_idx').on(table.auroraId),
+    // Index for Kilter sync conflict resolution
+    kilterIdIdx: uniqueIndex('playlists_kilter_id_idx').on(table.kilterId),
   }),
 );
 

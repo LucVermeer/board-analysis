@@ -60,7 +60,7 @@ export const userQueries = {
 
     return credentials.map((c) => ({
       boardType: c.boardType,
-      username: c.encryptedUsername, // Username is stored as-is (not encrypted)
+      username: c.encryptedUsername ?? '', // Username is stored as-is (not encrypted); empty for non-username boards (e.g. Kilter OIDC)
       userId: c.auroraUserId || undefined,
       syncedAt: c.lastSyncAt?.toISOString() || undefined,
       hasToken: !!c.auroraToken,
@@ -92,7 +92,7 @@ export const userQueries = {
     const c = credentials[0];
     return {
       boardType: c.boardType,
-      username: c.encryptedUsername, // Username is stored as-is (not encrypted)
+      username: c.encryptedUsername ?? '', // Username is stored as-is (not encrypted); empty for non-username boards (e.g. Kilter OIDC)
       userId: c.auroraUserId || undefined,
       syncedAt: c.lastSyncAt?.toISOString() || undefined,
       // Note: We don't expose the actual token for security

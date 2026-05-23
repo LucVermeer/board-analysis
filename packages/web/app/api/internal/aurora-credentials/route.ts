@@ -50,11 +50,15 @@ export async function GET() {
     // Return credentials without sensitive data
     const credentialStatuses: AuroraCredentialStatus[] = credentials.map((cred) => {
       let username: string;
-      try {
-        username = decrypt(cred.encryptedUsername);
-      } catch (decryptError) {
-        console.error(`Failed to decrypt username for ${cred.boardType} credential:`, decryptError);
-        username = '[Decryption Failed]';
+      if (!cred.encryptedUsername) {
+        username = '';
+      } else {
+        try {
+          username = decrypt(cred.encryptedUsername);
+        } catch (decryptError) {
+          console.error(`Failed to decrypt username for ${cred.boardType} credential:`, decryptError);
+          username = '[Decryption Failed]';
+        }
       }
 
       return {

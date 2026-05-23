@@ -1,7 +1,9 @@
 import { pgTable, bigserial, text, integer, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
-// User board mappings table to link NextAuth users with Aurora board users
+// Links a NextAuth user to a board account. board_user_id holds the Aurora
+// numeric ID; board_user_id_text holds a string identity (e.g. Keycloak sub
+// UUID for Kilter accounts). Exactly one is populated per row.
 export const userBoardMappings = pgTable(
   'user_board_mappings',
   {
@@ -9,20 +11,23 @@ export const userBoardMappings = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    boardType: text('board_type').notNull(), // 'kilter', 'tension', etc.
-    boardUserId: integer('board_user_id').notNull(),
-    boardUsername: text('board_username'), // Store username for display
+    boardType: text('board_type').notNull(),
+    boardUserId: integer('board_user_id'),
+    boardUserIdText: text('board_user_id_text'),
+    boardUsername: text('board_username'),
     linkedAt: timestamp('linked_at').defaultNow().notNull(),
   },
   (table) => ({
-    // Ensure unique mapping per board type for each user
     uniqueUserBoard: uniqueIndex('unique_user_board_mapping').on(table.userId, table.boardType),
-    // Index for efficient lookup by board user
     boardUserIdx: index('board_user_mapping_idx').on(table.boardType, table.boardUserId),
+    boardUserTextIdx: index('board_user_mapping_text_idx').on(table.boardType, table.boardUserIdText),
   }),
 );
 
-// Aurora credentials for Kilter/Tension board accounts (encrypted)
+// Encrypted credentials for board accounts. Aurora-flavoured boards
+// (Tension, originally Kilter) populate encrypted_username/password. Kilter
+// (Keycloak OIDC) populates encrypted_refresh_token instead — the other two
+// are nullable to accommodate that.
 export const auroraCredentials = pgTable(
   'aurora_credentials',
   {
@@ -30,21 +35,20 @@ export const auroraCredentials = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    boardType: text('board_type').notNull(), // 'kilter', 'tension'
-    encryptedUsername: text('encrypted_username').notNull(),
-    encryptedPassword: text('encrypted_password').notNull(),
-    auroraUserId: integer('aurora_user_id'), // Aurora board user ID after successful login
-    auroraToken: text('aurora_token'), // Session token (encrypted)
-    lastSyncAt: timestamp('last_sync_at'), // Last successful sync
-    syncStatus: text('sync_status').default('pending').notNull(), // 'pending', 'active', 'error', 'expired'
-    syncError: text('sync_error'), // Error message if sync failed
+    boardType: text('board_type').notNull(),
+    encryptedUsername: text('encrypted_username'),
+    encryptedPassword: text('encrypted_password'),
+    encryptedRefreshToken: text('encrypted_refresh_token'),
+    auroraUserId: integer('aurora_user_id'),
+    auroraToken: text('aurora_token'),
+    lastSyncAt: timestamp('last_sync_at'),
+    syncStatus: text('sync_status').default('pending').notNull(), // 'pending' | 'active' | 'error' | 'expired'
+    syncError: text('sync_error'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
-    // Ensure unique credential per board type for each user
     uniqueUserBoardCredential: uniqueIndex('unique_user_board_credential').on(table.userId, table.boardType),
-    // Index for efficient lookup by user
     userCredentialsIdx: index('aurora_credentials_user_idx').on(table.userId),
   }),
 );
