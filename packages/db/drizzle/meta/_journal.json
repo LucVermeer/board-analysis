@@ -743,6 +743,13 @@
       "when": 1779530224310,
       "tag": "0105_goofy_shotgun",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1779536500667,
+      "tag": "0106_bored_mister_fear",
+      "breakpoints": true
     }
   ]
 }

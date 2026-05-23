@@ -25,7 +25,7 @@ The mobile auth flow lets React Native (Expo) clients authenticate with the Boar
   - `aud` -- `"boardsesh-mobile"`
   - `iat` -- issued-at (Unix seconds)
   - `exp` -- expiration (Unix seconds)
-- **Lifetime:** 30 days
+- **Lifetime:** 7 days
 - **Header:** `{ "alg": "HS256", "typ": "JWT" }`
 
 ### Refresh token
@@ -70,7 +70,7 @@ After a transfer token is verified, its signature is stored in an in-memory `Map
 - **Eviction:** stale entries are cleaned every 60 seconds
 - **Map bounds:** 10,000 entries max. An early eviction pass runs when the limit is reached. If still full, the endpoint returns `503`.
 
-A replayed token receives a generic `401` response indistinguishable from an expired or invalid token.
+A replayed token receives a `409` response with the body `{ "error": "Transfer token has already been used" }`.
 
 ## Client-side behavior
 
@@ -121,7 +121,8 @@ Exchange a transfer token for a JWT + refresh token pair.
 | Status | Body                                       | Condition                                  |
 |--------|--------------------------------------------|--------------------------------------------|
 | 400    | `{ "error": "transferToken is required" }` | Missing or empty `transferToken`           |
-| 401    | `{ "error": "Invalid or expired transfer token" }` | Bad signature, expired, or replayed |
+| 401    | `{ "error": "Invalid or expired transfer token" }` | Bad signature or expired             |
+| 409    | `{ "error": "Transfer token has already been used" }` | Replay of a consumed token        |
 | 429    | `{ "error": "Rate limit exceeded..." }`    | IP rate limit hit                          |
 | 503    | `{ "error": "Service temporarily overloaded" }` | Internal map capacity exceeded       |
 
@@ -154,3 +155,35 @@ Rotate a refresh token for a new JWT + refresh token pair.
 | 401    | `{ "error": "Refresh token expired" }`     | Token past 90-day expiry                   |
 | 429    | `{ "error": "Rate limit exceeded..." }`    | IP rate limit hit                          |
 | 503    | `{ "error": "Service temporarily overloaded" }` | Internal map capacity exceeded       |
+
+### POST /auth/native/revoke
+
+Revoke all refresh tokens for the user associated with the submitted token (full sign-out).
+
+**Request:**
+```json
+{
+  "refreshToken": "<uuid>"
+}
+```
+
+**Success response (200):**
+```json
+{
+  "revoked": true
+}
+```
+
+**Error responses:**
+
+| Status | Body                                       | Condition                                  |
+|--------|--------------------------------------------|--------------------------------------------|
+| 400    | `{ "error": "refreshToken is required" }`  | Missing or empty `refreshToken`            |
+| 401    | `{ "error": "Invalid refresh token" }`     | Unknown or already-revoked token           |
+| 429    | `{ "error": "Rate limit exceeded..." }`    | IP rate limit hit                          |
+| 503    | `{ "error": "Service temporarily overloaded" }` | Internal map capacity exceeded       |
+
+## Known limitations
+
+- **JWTs cannot be revoked before expiry (7-day window).** Once issued, a JWT is valid until it expires. If a JWT is stolen, it can be used for up to 7 days. Mitigation: short lifetime (7 days instead of 30) combined with refresh token rotation means the window is bounded and a revoke call invalidates future refreshes immediately.
+- **Rate limiting is per-instance when not behind a single proxy.** The IP-based rate limiter uses an in-memory map, so each backend instance maintains its own counters. In a multi-instance deployment without a shared proxy, an attacker could spread requests across instances to exceed the intended limit. Mitigation: Redis-backed replay prevention covers the highest-risk path (transfer token exchange), and refresh token rotation is inherently safe against replay.

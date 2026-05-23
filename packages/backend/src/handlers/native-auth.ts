@@ -12,8 +12,8 @@ import { logger } from '../utils/logger';
 const CLOCK_SKEW_TOLERANCE_SECONDS = 5;
 
 /** JWT lifetime for mobile sessions. */
-const JWT_EXPIRY = '30d';
-const JWT_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
+const JWT_EXPIRY = '7d';
+const JWT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Refresh token lifetime. */
 const REFRESH_TOKEN_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000;
@@ -261,14 +261,15 @@ function verifyTransferToken(token: string): { userId: string } | null {
   const sigBuffer = Buffer.from(signature);
   const expectedSigBuffer = Buffer.from(expectedSignature);
 
-  if (sigBuffer.length !== expectedSigBuffer.length) {
-    // Constant-time no-op so this branch takes the same time as the
-    // valid-length comparison below.
-    crypto.timingSafeEqual(expectedSigBuffer, expectedSigBuffer);
-    return null;
-  }
+  // Pad both buffers to the same length so the comparison is always
+  // constant-time — no length oracle, no JIT short-circuit.
+  const maxLen = Math.max(sigBuffer.length, expectedSigBuffer.length);
+  const paddedSig = Buffer.alloc(maxLen);
+  const paddedExpected = Buffer.alloc(maxLen);
+  sigBuffer.copy(paddedSig);
+  expectedSigBuffer.copy(paddedExpected);
 
-  if (!crypto.timingSafeEqual(sigBuffer, expectedSigBuffer)) {
+  if (!crypto.timingSafeEqual(paddedSig, paddedExpected)) {
     return null;
   }
 
@@ -498,6 +499,85 @@ export async function handleNativeAuthRefresh(req: IncomingMessage, res: ServerR
     sendJson(res, 200, tokenPair);
   } catch (error) {
     logger.error('[NativeAuth] Token refresh failed:', error);
+    sendJson(res, 500, { error: 'Internal server error' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /auth/native/revoke
+// ---------------------------------------------------------------------------
+
+export async function handleNativeAuthRevoke(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  // Rate limit by IP
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    const raw = await readBody(req);
+    body = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: 'Invalid JSON body' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    sendJson(res, 400, { error: 'Request body must be a JSON object' });
+    return;
+  }
+
+  const { refreshToken } = body as Record<string, unknown>;
+  if (typeof refreshToken !== 'string' || refreshToken.length === 0) {
+    sendJson(res, 400, { error: 'refreshToken is required' });
+    return;
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+  try {
+    // Look up the token to find the user. Only non-revoked tokens are valid
+    // for initiating a full sign-out.
+    const matchingRows = await db
+      .update(mobileRefreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(mobileRefreshTokens.tokenHash, tokenHash), isNull(mobileRefreshTokens.revokedAt)))
+      .returning({ userId: mobileRefreshTokens.userId });
+
+    const matchedToken = matchingRows[0];
+
+    if (!matchedToken) {
+      sendJson(res, 401, { error: 'Invalid refresh token' });
+      return;
+    }
+
+    // Revoke ALL remaining non-revoked tokens for this user (full sign-out).
+    // The token we just revoked above is already covered, but the WHERE clause
+    // filters on revokedAt IS NULL so it's a no-op for that row.
+    await db
+      .update(mobileRefreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(mobileRefreshTokens.userId, matchedToken.userId), isNull(mobileRefreshTokens.revokedAt)));
+
+    logger.info(`[NativeAuth] All tokens revoked for user ${matchedToken.userId}`);
+    sendJson(res, 200, { revoked: true });
+  } catch (error) {
+    logger.error('[NativeAuth] Token revocation failed:', error);
     sendJson(res, 500, { error: 'Internal server error' });
   }
 }

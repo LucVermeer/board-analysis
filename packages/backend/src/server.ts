@@ -19,6 +19,7 @@ import { handleWidgetNavigate } from './handlers/widget-navigate';
 import {
   handleNativeAuthExchange,
   handleNativeAuthRefresh,
+  handleNativeAuthRevoke,
   startRefreshTokenCleanup,
   stopRefreshTokenCleanup,
 } from './handlers/native-auth';
@@ -346,6 +347,11 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (pathname === '/auth/native/revoke' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleNativeAuthRevoke(req, res);
+        return;
+      }
+
       // Sync cron endpoint (triggered by external cron service)
       if (pathname === '/sync-cron' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleSyncCron(req, res);
@@ -412,6 +418,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
     logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);
+    logger.info(`  Native auth revoke: ${httpScheme}://0.0.0.0:${PORT}/auth/native/revoke`);
     logger.info(`  Sync cron: ${httpScheme}://0.0.0.0:${PORT}/sync-cron`);
 
     // Warm up popular board configs cache in the background.

@@ -1,5 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
-import { storeTokens, clearTokens } from './auth-store';
+import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
@@ -36,5 +36,14 @@ export async function exchangeTransferToken(
 }
 
 export async function signOut(): Promise<void> {
+  const refreshToken = await getRefreshToken();
+  if (refreshToken) {
+    // Best-effort server-side revocation — don't block on failure
+    fetch(`${BACKEND_URL}/auth/native/revoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    }).catch(() => {});
+  }
   await clearTokens();
 }

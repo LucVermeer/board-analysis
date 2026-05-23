@@ -4,7 +4,7 @@ import { users } from './users';
 /**
  * Refresh tokens for mobile (React Native) JWT authentication.
  *
- * The native auth flow issues short-lived JWTs (30 days) alongside long-lived
+ * The native auth flow issues short-lived JWTs (7 days) alongside long-lived
  * refresh tokens (90 days). When a JWT expires the client presents the refresh
  * token to obtain a new JWT + refresh token pair (rotation).
  *
@@ -31,5 +31,6 @@ export const mobileRefreshTokens = pgTable(
   (table) => ({
     tokenHashIdx: uniqueIndex('mobile_refresh_tokens_token_hash_idx').on(table.tokenHash),
     userIdIdx: index('mobile_refresh_tokens_user_id_idx').on(table.userId),
+    expiresAtIdx: index('mobile_refresh_tokens_expires_at_idx').on(table.expiresAt),
   }),
 );

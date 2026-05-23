@@ -69,7 +69,7 @@ vi.mock('../redis/client', () => ({
   },
 }));
 
-const { handleNativeAuthExchange, handleNativeAuthRefresh, __resetNativeAuthStateForTests } =
+const { handleNativeAuthExchange, handleNativeAuthRefresh, handleNativeAuthRevoke, __resetNativeAuthStateForTests } =
   await import('../handlers/native-auth');
 
 // ---------------------------------------------------------------------------
@@ -478,5 +478,74 @@ describe('getClientIp (security)', () => {
 
     // Should still be rate limited because we use remoteAddress, not XFF
     expect(res.statusCode).toBe(429);
+  });
+});
+
+describe('handleNativeAuthRevoke', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetNativeAuthStateForTests();
+    mockDbInsertValues.mockResolvedValue([]);
+  });
+
+  it('returns 200 with { revoked: true } for a valid refresh token', async () => {
+    const rawRefreshToken = crypto.randomUUID();
+
+    // First db.update().returning() finds the token and returns the userId
+    mockDbUpdateReturning.mockResolvedValueOnce([
+      {
+        userId: 'user-abc',
+      },
+    ]);
+
+    const req = makeRequest({ method: 'POST', body: { refreshToken: rawRefreshToken } });
+    const res = makeResponse();
+
+    await handleNativeAuthRevoke(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(200);
+    const body = parseBody(res);
+    expect(body.revoked).toBe(true);
+  });
+
+  it('returns 401 for a revoked or missing refresh token', async () => {
+    const rawRefreshToken = crypto.randomUUID();
+
+    // DB returns empty — token already revoked or doesn't exist
+    mockDbUpdateReturning.mockResolvedValueOnce([]);
+
+    const req = makeRequest({ method: 'POST', body: { refreshToken: rawRefreshToken } });
+    const res = makeResponse();
+
+    await handleNativeAuthRevoke(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(401);
+    const body = parseBody(res);
+    expect(body.error).toBe('Invalid refresh token');
+  });
+
+  it('revokes ALL tokens for the user, not just the submitted one', async () => {
+    const rawRefreshToken = crypto.randomUUID();
+
+    // First db.update().returning() finds the token and returns the userId
+    mockDbUpdateReturning.mockResolvedValueOnce([
+      {
+        userId: 'user-xyz',
+      },
+    ]);
+
+    const req = makeRequest({ method: 'POST', body: { refreshToken: rawRefreshToken } });
+    const res = makeResponse();
+
+    await handleNativeAuthRevoke(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(200);
+
+    // The handler calls db.update() twice:
+    // 1. Revoke the submitted token (with returning() to get userId)
+    // 2. Revoke ALL remaining tokens for that user (by userId)
+    // mockDbUpdateSet is called for both updates
+    expect(mockDbUpdateSet).toHaveBeenCalledTimes(2);
+    expect(mockDbUpdateWhere).toHaveBeenCalledTimes(2);
   });
 });
