@@ -16,6 +16,7 @@ async function refreshTokens(): Promise<boolean> {
     });
 
     if (!response.ok) {
+      console.warn(`[Auth] Token refresh failed: HTTP ${response.status}`);
       await clearTokens();
       return false;
     }
@@ -23,22 +24,25 @@ async function refreshTokens(): Promise<boolean> {
     const data = (await response.json()) as { jwt: string; refreshToken: string; expiresAt: string };
     await storeTokens(data.jwt, data.refreshToken, data.expiresAt);
     return true;
-  } catch {
+  } catch (error) {
+    console.warn('[Auth] Token refresh error:', error instanceof Error ? error.message : 'unknown');
     return false;
   }
 }
 
-// Deduplicate concurrent refresh attempts
-export async function ensureFreshToken(): Promise<boolean> {
-  const expiring = await isTokenExpiringSoon();
-  if (!expiring) return true;
-
+function deduplicatedRefresh(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = refreshTokens().finally(() => {
       refreshPromise = null;
     });
   }
   return refreshPromise;
+}
+
+export async function ensureFreshToken(): Promise<boolean> {
+  const expiring = await isTokenExpiringSoon();
+  if (!expiring) return true;
+  return deduplicatedRefresh();
 }
 
 export async function authenticatedFetch(url: string | URL | Request, options: RequestInit = {}): Promise<Response> {
@@ -52,9 +56,10 @@ export async function authenticatedFetch(url: string | URL | Request, options: R
 
   const response = await fetch(url, { ...options, headers });
 
-  // If 401, try refresh once then retry (use ensureFreshToken for deduplication)
+  // On 401, force a refresh regardless of token expiry (server may have
+  // revoked the token) and retry once with the new credentials.
   if (response.status === 401 && token) {
-    const refreshed = await ensureFreshToken();
+    const refreshed = await deduplicatedRefresh();
     if (refreshed) {
       const newToken = await getAuthToken();
       if (newToken) {
@@ -62,7 +67,6 @@ export async function authenticatedFetch(url: string | URL | Request, options: R
         return fetch(url, { ...options, headers });
       }
     }
-    // Refresh failed or no new token — clear stale credentials
     await clearTokens();
   }
 

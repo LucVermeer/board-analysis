@@ -39,13 +39,19 @@ const CONSUMED_TOKEN_TTL_MS = 125_000;
 /** Cleanup interval for expired consumed token entries. */
 const CONSUMED_TOKEN_CLEANUP_INTERVAL_MS = 60_000;
 
-// Periodically evict stale consumed-token entries so the map doesn't grow unbounded.
-setInterval(() => {
+/** Max entries before triggering early eviction. */
+const MAX_CONSUMED_TOKENS = 10_000;
+
+/** Evict stale entries from the consumed-token map. */
+function evictStaleConsumedTokens(): void {
   const cutoff = Date.now() - CONSUMED_TOKEN_TTL_MS;
   for (const [signature, timestamp] of consumedTransferTokens) {
     if (timestamp < cutoff) consumedTransferTokens.delete(signature);
   }
-}, CONSUMED_TOKEN_CLEANUP_INTERVAL_MS);
+}
+
+// Periodically evict stale consumed-token entries so the map doesn't grow unbounded.
+setInterval(evictStaleConsumedTokens, CONSUMED_TOKEN_CLEANUP_INTERVAL_MS);
 
 // ---------------------------------------------------------------------------
 // IP-based rate limiting for auth endpoints
@@ -65,23 +71,39 @@ const AUTH_RATE_LIMIT_MAX = 10;
 /** Rate limit window in milliseconds (1 minute). */
 const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
 
-// Periodically clean up expired rate limit entries.
-setInterval(() => {
+/** Max entries before triggering early eviction. */
+const MAX_RATE_LIMIT_ENTRIES = 50_000;
+
+/** Evict expired entries from the rate limit map. */
+function evictExpiredRateLimitEntries(): void {
   const now = Date.now();
   for (const [ipAddress, entry] of authRateLimitMap) {
     if (now > entry.resetAt) authRateLimitMap.delete(ipAddress);
   }
-}, AUTH_RATE_LIMIT_WINDOW_MS);
+}
+
+// Periodically clean up expired rate limit entries.
+setInterval(evictExpiredRateLimitEntries, AUTH_RATE_LIMIT_WINDOW_MS);
 
 /**
  * Check if an IP address has exceeded the auth endpoint rate limit.
  * Returns the number of seconds until the limit resets, or null if allowed.
+ * Returns -1 if the rate limit map is full and cannot accept new entries
+ * (callers should respond with 503).
  */
 function checkAuthRateLimit(ipAddress: string): number | null {
   const now = Date.now();
   const entry = authRateLimitMap.get(ipAddress);
 
   if (!entry || now > entry.resetAt) {
+    // New entry — check map bounds before inserting
+    if (!entry && authRateLimitMap.size >= MAX_RATE_LIMIT_ENTRIES) {
+      evictExpiredRateLimitEntries();
+      if (authRateLimitMap.size >= MAX_RATE_LIMIT_ENTRIES) {
+        logger.warn(`[NativeAuth] Rate limit map full (${authRateLimitMap.size} entries)`);
+        return -1;
+      }
+    }
     authRateLimitMap.set(ipAddress, { count: 1, resetAt: now + AUTH_RATE_LIMIT_WINDOW_MS });
     return null;
   }
@@ -257,6 +279,10 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
   // Rate limit by IP
   const clientIp = getClientIp(req);
   const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
   if (retryAfter !== null) {
     res.setHeader('Retry-After', String(retryAfter));
     sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
@@ -306,6 +332,16 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
     return;
   }
 
+  // Guard against unbounded map growth under distributed attacks
+  if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
+    evictStaleConsumedTokens();
+    if (consumedTransferTokens.size >= MAX_CONSUMED_TOKENS) {
+      logger.warn(`[NativeAuth] Consumed token map full (${consumedTransferTokens.size} entries)`);
+      sendJson(res, 503, { error: 'Service temporarily overloaded' });
+      return;
+    }
+  }
+
   // Mark token as consumed to prevent replay within the TTL window
   consumedTransferTokens.set(tokenSignature, Date.now());
 
@@ -334,6 +370,10 @@ export async function handleNativeAuthRefresh(req: IncomingMessage, res: ServerR
   // Rate limit by IP
   const clientIp = getClientIp(req);
   const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
   if (retryAfter !== null) {
     res.setHeader('Retry-After', String(retryAfter));
     sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });

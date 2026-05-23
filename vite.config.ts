@@ -40,6 +40,7 @@ export default defineConfig({
       './packages/aurora-sync/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
+      './packages/mobile/vite.config.ts',
     ],
   },
   staged: {

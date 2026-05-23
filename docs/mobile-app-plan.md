@@ -272,6 +272,7 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 
 ### Phase 2: Core climb experience (4-5 weeks)
 
+- i18n setup: `i18next` + `react-i18next` with shared catalogs from `packages/web/i18n/locales/` (en-US, es, fr). All user-facing strings must go through `t()` — Phase 1 placeholder screens use hardcoded English that must be replaced.
 - Climb browsing, search, filtering with `@shopify/flash-list`
 - Board renderer with `@shopify/react-native-skia` — hold circles, colors, mirroring, image backgrounds
 - Climb detail view with board visualization
