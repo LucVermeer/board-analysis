@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react';
 import { View, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useRouter } from 'expo-router';
 import ContextMenu from 'react-native-context-menu-view';
+import { useTranslation } from 'react-i18next';
 import type { Climb } from '@boardsesh/shared-schema';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
@@ -15,9 +16,38 @@ import { hapticSelection } from '../../../src/lib/haptics';
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
 
+type ClimbListItemProps = {
+  climb: Climb;
+  gradeColor: string;
+  onPress: (climb: Climb) => void;
+  onContextAction: (actionTitle: string, climb: Climb) => void;
+  contextMenuActions: Array<{ title: string; systemIcon: string }>;
+};
+
+const ClimbListItem = memo(function ClimbListItem({
+  climb,
+  gradeColor,
+  onPress,
+  onContextAction,
+  contextMenuActions,
+}: ClimbListItemProps) {
+  const handlePress = useCallback(() => onPress(climb), [climb, onPress]);
+  const handleContext = useCallback(
+    (event: { nativeEvent: { name: string } }) => onContextAction(event.nativeEvent.name, climb),
+    [climb, onContextAction],
+  );
+
+  return (
+    <ContextMenu actions={contextMenuActions} onPress={handleContext}>
+      <ClimbListRow climb={climb} gradeName={climb.difficulty} gradeColor={gradeColor} onPress={handlePress} />
+    </ContextMenu>
+  );
+});
+
 export default function ClimbList() {
   const router = useRouter();
   const navigation = useNavigation();
+  const { t } = useTranslation('climbs');
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -26,7 +56,7 @@ export default function ClimbList() {
   useEffect(() => {
     navigation.setOptions({
       headerSearchBarOptions: {
-        placeholder: 'Search climbs...',
+        placeholder: t('search.placeholders.climbs'),
         autoCapitalize: 'none',
         hideWhenScrolling: false,
         onChangeText: (event: { nativeEvent: { text: string } }) => {
@@ -47,7 +77,7 @@ export default function ClimbList() {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [navigation]);
+  }, [navigation, t]);
 
   const { data: defaultBoard, isLoading: isBoardLoading } = useDefaultBoard();
 
@@ -61,9 +91,12 @@ export default function ClimbList() {
 
   // Track pagination
   const [pageNumber, setPageNumber] = useState(1);
+  // Accumulate climbs across pages for infinite scroll
+  const [accumulatedClimbs, setAccumulatedClimbs] = useState<Climb[]>([]);
 
-  // Reset page when search changes
+  // Combined search-reset effect: clear accumulated climbs and reset page when search changes
   useEffect(() => {
+    setAccumulatedClimbs([]);
     setPageNumber(1);
   }, [debouncedSearch]);
 
@@ -89,13 +122,13 @@ export default function ClimbList() {
     isRefetching,
     refetch,
   } = useSearchClimbs(searchInput, hasBoardConfig);
-
-  // Accumulate climbs across pages for infinite scroll
-  const [accumulatedClimbs, setAccumulatedClimbs] = useState<Climb[]>([]);
   const hasMore = searchResult?.hasMore ?? false;
+  const isLoadingMoreRef = useRef(false);
 
   useEffect(() => {
     if (!searchResult?.climbs) return;
+
+    isLoadingMoreRef.current = false;
 
     if (pageNumber === 1) {
       setAccumulatedClimbs(searchResult.climbs);
@@ -109,18 +142,15 @@ export default function ClimbList() {
     }
   }, [searchResult?.climbs, pageNumber]);
 
-  // Reset accumulated climbs when search changes
-  useEffect(() => {
-    setAccumulatedClimbs([]);
-  }, [debouncedSearch]);
-
   const handleRefresh = useCallback(() => {
+    setAccumulatedClimbs([]);
     setPageNumber(1);
     refetch();
   }, [refetch]);
 
   const handleEndReached = useCallback(() => {
-    if (hasMore && !isClimbsLoading && !isRefetching) {
+    if (hasMore && !isClimbsLoading && !isRefetching && !isLoadingMoreRef.current) {
+      isLoadingMoreRef.current = true;
       setPageNumber((previous) => previous + 1);
     }
   }, [hasMore, isClimbsLoading, isRefetching]);
@@ -147,17 +177,28 @@ export default function ClimbList() {
       hapticSelection();
       // Context actions will be wired up as features are built
       switch (actionTitle) {
-        case 'Add to Queue':
+        case t('mobile.contextMenu.addToQueue'):
           break;
-        case 'Favorite':
+        case t('actions.favorite.label.favorite'):
           break;
-        case 'Share':
+        case t('share.actionLabel'):
           break;
-        case 'View Setter':
+        case t('mobile.contextMenu.viewSetter'):
           break;
       }
     },
-    [],
+    [t],
+  );
+
+  const contextMenuActions = useMemo(
+    () =>
+      [
+        { title: t('mobile.contextMenu.addToQueue'), systemIcon: 'list.bullet' },
+        { title: t('actions.favorite.label.favorite'), systemIcon: 'heart' },
+        { title: t('share.actionLabel'), systemIcon: 'square.and.arrow.up' },
+        { title: t('mobile.contextMenu.viewSetter'), systemIcon: 'person' },
+      ],
+    [t],
   );
 
   const isInitialLoading = isBoardLoading || (isClimbsLoading && accumulatedClimbs.length === 0);
@@ -167,25 +208,16 @@ export default function ClimbList() {
       const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
 
       return (
-        <ContextMenu
-          actions={[
-            { title: 'Add to Queue', systemIcon: 'list.bullet' },
-            { title: 'Favorite', systemIcon: 'heart' },
-            { title: 'Share', systemIcon: 'square.and.arrow.up' },
-            { title: 'View Setter', systemIcon: 'person' },
-          ]}
-          onPress={(event) => handleContextAction(event.nativeEvent.name, climb)}
-        >
-          <ClimbListRow
-            climb={climb}
-            gradeName={climb.difficulty}
-            gradeColor={gradeColor}
-            onPress={() => handleClimbPress(climb)}
-          />
-        </ContextMenu>
+        <ClimbListItem
+          climb={climb}
+          gradeColor={gradeColor}
+          onPress={handleClimbPress}
+          onContextAction={handleContextAction}
+          contextMenuActions={contextMenuActions}
+        />
       );
     },
-    [handleClimbPress, handleContextAction],
+    [handleClimbPress, handleContextAction, contextMenuActions],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {
@@ -193,10 +225,10 @@ export default function ClimbList() {
       <View style={styles.emptyContainer}>
         <Icon name="boards" size={48} color="#C7C7CC" />
         <Text variant="headline" style={styles.emptyTitle}>
-          No board selected
+          {t('mobile.emptyState.noBoard.title')}
         </Text>
         <Text variant="subheadline" style={styles.emptySubtitle}>
-          Add a board first to browse climbs
+          {t('mobile.emptyState.noBoard.subtitle')}
         </Text>
       </View>
     );
@@ -235,12 +267,14 @@ export default function ClimbList() {
             <View style={styles.emptyContainer}>
               <Icon name="search" size={48} color="#C7C7CC" />
               <Text variant="headline" style={styles.emptyTitle}>
-                {debouncedSearch.length > 0 ? 'No matches' : 'No climbs found'}
+                {debouncedSearch.length > 0
+                  ? t('mobile.emptyState.noMatches.title')
+                  : t('mobile.emptyState.noClimbs.title')}
               </Text>
               <Text variant="subheadline" style={styles.emptySubtitle}>
                 {debouncedSearch.length > 0
-                  ? `Nothing matches "${debouncedSearch}"`
-                  : 'Try adjusting your board settings'}
+                  ? t('mobile.emptyState.noMatches.description', { query: debouncedSearch })
+                  : t('mobile.emptyState.noClimbs.subtitle')}
               </Text>
             </View>
           ) : null

@@ -4,6 +4,9 @@ import { type TextStyle } from 'react-native';
  * Apple Human Interface Guidelines type scale.
  * Uses the system font (San Francisco on iOS, Roboto on Android).
  * No custom font families — we rely on the platform default.
+ *
+ * Note: largeTitle, title1, and title2 use bold (700) instead of
+ * HIG's default Regular (400). This is intentional for brand identity.
  */
 
 type TypeStyle = Pick<TextStyle, 'fontSize' | 'fontWeight' | 'lineHeight'>;

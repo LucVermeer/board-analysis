@@ -18,10 +18,13 @@ export function Badge({ count, visible = true, color = '#FF3B30', size = 'medium
   const badgeSize = size === 'small' ? 8 : isDot ? 10 : 18;
   const minWidth = isDot ? badgeSize : Math.max(badgeSize, displayCount.length * 8 + 10);
 
+  const accessibilityLabel = isDot ? undefined : `${displayCount}`;
+
   return (
     <Animated.View
       entering={FadeIn.springify().damping(15).stiffness(200)}
       exiting={FadeOut.duration(150)}
+      accessibilityLabel={accessibilityLabel}
       style={[
         styles.badge,
         {

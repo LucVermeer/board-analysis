@@ -2,24 +2,27 @@ import { useCallback, useMemo } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl, useColorScheme } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { QueueItemRow } from '../../../src/components/QueueItemRow';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
-import { brandColors } from '../../../src/theme/colors';
 import { hapticSelection } from '../../../src/lib/haptics';
+import { useTheme } from '../../../src/providers/theme-provider';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+
+const TAB_BAR_HEIGHT = 49;
 
 export default function QueueScreen() {
   const { state, sessionId, removeFromQueue, setCurrentClimb, nextClimb, previousClimb } = useQueue();
+  const { systemColors, brandColors } = useTheme();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
 
-  const textColor = isDark ? '#FFFFFF' : '#000000';
-  const secondaryTextColor = isDark ? 'rgba(235, 235, 245, 0.6)' : 'rgba(60, 60, 67, 0.6)';
   const navBarBackground = isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-  const navBarBorder = isDark ? 'rgba(84, 84, 88, 0.6)' : 'rgba(60, 60, 67, 0.29)';
+  const navBarBottomPadding = insets.bottom + TAB_BAR_HEIGHT;
 
   const { queue, currentClimbQueueItem } = state;
 
@@ -63,8 +66,8 @@ export default function QueueScreen() {
           item={item}
           position={index + 1}
           isCurrentClimb={isActive}
-          onPress={() => handleItemPress(item)}
-          onRemove={() => handleItemRemove(item.uuid)}
+          onPress={handleItemPress}
+          onRemove={handleItemRemove}
         />
       );
     },
@@ -78,11 +81,11 @@ export default function QueueScreen() {
     return (
       <View style={styles.emptyContainer}>
         <Animated.View entering={FadeIn.duration(300)} style={styles.emptyContent}>
-          <Icon name="people" size={48} color={secondaryTextColor} />
-          <Text variant="title3" color={textColor} style={styles.emptyTitle}>
+          <Icon name="people" size={48} color={systemColors.secondaryLabel} />
+          <Text variant="title3" color={systemColors.label} style={styles.emptyTitle}>
             Start a session to use the queue
           </Text>
-          <Text variant="subheadline" color={secondaryTextColor} style={styles.emptySubtitle}>
+          <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptySubtitle}>
             Join or create a session from the Boards tab to line up climbs with your crew.
           </Text>
         </Animated.View>
@@ -95,11 +98,11 @@ export default function QueueScreen() {
     return (
       <View style={styles.emptyContainer}>
         <Animated.View entering={FadeIn.duration(300)} style={styles.emptyContent}>
-          <Icon name="queue" size={48} color={secondaryTextColor} />
-          <Text variant="title3" color={textColor} style={styles.emptyTitle}>
+          <Icon name="queue" size={48} color={systemColors.secondaryLabel} />
+          <Text variant="title3" color={systemColors.label} style={styles.emptyTitle}>
             No climbs in the queue
           </Text>
-          <Text variant="subheadline" color={secondaryTextColor} style={styles.emptySubtitle}>
+          <Text variant="subheadline" color={systemColors.secondaryLabel} style={styles.emptySubtitle}>
             Browse climbs and add them to your queue to get started.
           </Text>
           <Button
@@ -125,6 +128,7 @@ export default function QueueScreen() {
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         estimatedItemSize={64}
+        contentInsetAdjustmentBehavior="automatic"
         refreshControl={
           <RefreshControl
             refreshing={false}
@@ -146,7 +150,8 @@ export default function QueueScreen() {
           styles.navBar,
           {
             backgroundColor: navBarBackground,
-            borderTopColor: navBarBorder,
+            borderTopColor: systemColors.separator,
+            paddingBottom: navBarBottomPadding,
           },
         ]}
       >
@@ -159,7 +164,7 @@ export default function QueueScreen() {
           <Icon
             name="chevron.left"
             size={22}
-            color={hasPrevious ? brandColors.primary : secondaryTextColor}
+            color={hasPrevious ? brandColors.primary : systemColors.secondaryLabel}
           />
         </Pressable>
 
@@ -169,19 +174,19 @@ export default function QueueScreen() {
               <Text
                 variant="subheadline"
                 numberOfLines={1}
-                color={textColor}
+                color={systemColors.label}
                 style={styles.navClimbName}
               >
                 {currentClimbQueueItem.climb?.name ?? 'Unknown climb'}
               </Text>
               {currentClimbQueueItem.climb?.difficulty ? (
-                <Text variant="caption1" color={secondaryTextColor}>
+                <Text variant="caption1" color={systemColors.secondaryLabel}>
                   {currentClimbQueueItem.climb.difficulty}
                 </Text>
               ) : null}
             </>
           ) : (
-            <Text variant="subheadline" color={secondaryTextColor}>
+            <Text variant="subheadline" color={systemColors.secondaryLabel}>
               No climb selected
             </Text>
           )}
@@ -196,7 +201,7 @@ export default function QueueScreen() {
           <Icon
             name="chevron.right"
             size={22}
-            color={hasNext ? brandColors.primary : secondaryTextColor}
+            color={hasNext ? brandColors.primary : systemColors.secondaryLabel}
           />
         </Pressable>
       </Animated.View>
@@ -241,7 +246,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingBottom: 32, // Extra padding for tab bar overlap
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   navButton: {

@@ -4,6 +4,8 @@ import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
+import { springs } from '../theme/animations';
+import { brandColors } from '../theme/colors';
 
 type ButtonVariant = 'filled' | 'outlined' | 'text';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -38,7 +40,7 @@ export function Button({
   disabled = false,
   loading = false,
   haptic = true,
-  tintColor = '#8C4A52',
+  tintColor = brandColors.primary,
   style,
 }: ButtonProps) {
   const scale = useSharedValue(1);
@@ -56,11 +58,11 @@ export function Button({
   };
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.96, { damping: 20, stiffness: 300, mass: 0.7 });
+    scale.value = withSpring(0.96, springs.snappy);
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 20, stiffness: 300, mass: 0.7 });
+    scale.value = withSpring(1, springs.snappy);
   };
 
   const containerStyle: ViewStyle = {
@@ -85,6 +87,9 @@ export function Button({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: disabled || loading }}
+      accessibilityLabel={title}
       style={[animatedStyle, containerStyle, style]}
     >
       {icon && <Icon name={icon} size={config.iconSize} color={textColor} />}

@@ -1,17 +1,12 @@
-import { View, Text, Image, Pressable, ActivityIndicator, StyleSheet, useColorScheme } from 'react-native';
+import { View, Text, Image, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
+import { useTheme } from '../../../src/providers/theme-provider';
 
 export default function Profile() {
   const { data: profile, isLoading } = useProfile();
   const { signOut } = useAuth();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  const textColor = isDark ? '#FFFFFF' : '#000000';
-  const subtitleColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
-  const buttonBorder = isDark ? '#38383A' : '#C6C6C8';
-  const avatarBackground = isDark ? '#2C2C2E' : '#E5E5EA';
+  const { systemColors } = useTheme();
 
   if (isLoading) {
     return (
@@ -22,36 +17,45 @@ export default function Profile() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      style={styles.flex}
+      contentContainerStyle={styles.container}
+    >
       <View style={styles.header}>
         {profile?.avatarUrl ? (
           <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
         ) : (
-          <View style={[styles.avatarPlaceholder, { backgroundColor: avatarBackground }]}>
-            <Text style={[styles.avatarInitial, { color: subtitleColor }]}>
+          <View style={[styles.avatarPlaceholder, { backgroundColor: systemColors.fill }]}>
+            <Text style={[styles.avatarInitial, { color: systemColors.secondaryLabel }]}>
               {profile?.displayName?.charAt(0)?.toUpperCase() ?? '?'}
             </Text>
           </View>
         )}
-        <Text style={[styles.name, { color: textColor }]}>
+        <Text style={[styles.name, { color: systemColors.label }]}>
           {profile?.displayName ?? 'Unknown'}
         </Text>
-        <Text style={[styles.email, { color: subtitleColor }]}>{profile?.email ?? ''}</Text>
+        <Text style={[styles.email, { color: systemColors.secondaryLabel }]}>
+          {profile?.email ?? ''}
+        </Text>
       </View>
 
       <Pressable
-        style={[styles.signOutButton, { borderColor: buttonBorder }]}
+        style={[styles.signOutButton, { borderColor: systemColors.separator }]}
         onPress={signOut}
       >
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  flex: {
     flex: 1,
+  },
+  container: {
+    flexGrow: 1,
     padding: 24,
   },
   centered: {
@@ -61,7 +65,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginTop: 48,
+    marginTop: 24,
     marginBottom: 32,
   },
   avatar: {

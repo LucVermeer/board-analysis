@@ -48,12 +48,18 @@ export function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPres
   const qualityNum = parseFloat(climb.quality_average);
   const showStars = climb.stars > 0 || qualityNum > 0;
 
+  const accessibilityLabel = gradeName
+    ? `${climb.name}, ${gradeName}`
+    : `${climb.name}, ${climb.difficulty}`;
+
   return (
     <AnimatedPressable
       onPress={handlePress}
       onLongPress={onLongPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={[animatedStyle, styles.container]}
     >
       <View style={styles.row}>

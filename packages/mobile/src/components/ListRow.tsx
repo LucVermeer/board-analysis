@@ -4,6 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { hapticLight } from '../lib/haptics';
+import { springs } from '../theme/animations';
 
 type ListRowProps = {
   title: string;
@@ -39,11 +40,11 @@ export function ListRow({
   }));
 
   const handlePressIn = () => {
-    opacity.value = withSpring(0.7, { damping: 20, stiffness: 300, mass: 0.7 });
+    opacity.value = withSpring(0.7, springs.snappy);
   };
 
   const handlePressOut = () => {
-    opacity.value = withSpring(1, { damping: 20, stiffness: 300, mass: 0.7 });
+    opacity.value = withSpring(1, springs.snappy);
   };
 
   const handlePress = () => {
@@ -84,6 +85,8 @@ export function ListRow({
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        accessibilityRole="button"
+        accessibilityLabel={title}
         style={[animatedStyle, styles.container, style]}
       >
         {content}

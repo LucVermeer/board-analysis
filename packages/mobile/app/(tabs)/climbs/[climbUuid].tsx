@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants';
 import { Text } from '../../../src/components/Text';
 import { Button } from '../../../src/components/Button';
@@ -23,6 +24,7 @@ type ClimbDetailParams = {
 export default function ClimbDetail() {
   const params = useLocalSearchParams<ClimbDetailParams>();
   const { climbUuid, boardName, layoutId, sizeId, setIds, angle } = params;
+  const { t } = useTranslation('climbs');
 
   const hasRequiredParams = boardName && layoutId && sizeId && setIds && angle;
 
@@ -72,7 +74,7 @@ export default function ClimbDetail() {
       <View style={styles.loadingContainer}>
         <Icon name="error" size={48} color="#C7C7CC" />
         <Text variant="headline" style={styles.errorText}>
-          Climb not found
+          {t('mobile.detail.notFound')}
         </Text>
       </View>
     );
@@ -87,7 +89,7 @@ export default function ClimbDetail() {
       <View style={styles.boardPlaceholder}>
         <Icon name="boards" size={40} color="#C7C7CC" />
         <Text variant="footnote" style={styles.placeholderText}>
-          Board view coming soon
+          {t('mobile.detail.boardPreview')}
         </Text>
       </View>
 
@@ -120,7 +122,7 @@ export default function ClimbDetail() {
           <View style={styles.statItem}>
             <Icon name="person" size={14} color="#8E8E93" />
             <Text variant="footnote" style={styles.statLabel}>
-              {climb.ascensionist_count} {climb.ascensionist_count === 1 ? 'send' : 'sends'}
+              {climb.ascensionist_count} {t('mobile.detail.send', { count: climb.ascensionist_count })}
             </Text>
           </View>
 
@@ -138,10 +140,13 @@ export default function ClimbDetail() {
           <View style={styles.progressRow}>
             <Icon name="tick" size={16} color={brandColors.success} />
             <Text variant="footnote" style={styles.progressText}>
-              Sent {climb.userAscents} {climb.userAscents === 1 ? 'time' : 'times'}
               {climb.userAttempts != null && climb.userAttempts > 0
-                ? ` in ${climb.userAttempts} ${climb.userAttempts === 1 ? 'attempt' : 'attempts'}`
-                : ''}
+                ? t('mobile.detail.sentWithAttempts', {
+                    count: climb.userAscents,
+                    attempts: climb.userAttempts,
+                    attemptWord: t('mobile.detail.attempt', { count: climb.userAttempts }),
+                  })
+                : t('mobile.detail.sent', { count: climb.userAscents })}
             </Text>
           </View>
         )}
@@ -157,7 +162,7 @@ export default function ClimbDetail() {
       {/* Action buttons */}
       <View style={styles.actions}>
         <Button
-          title="Add to Queue"
+          title={t('mobile.detail.addToQueue')}
           icon="queue"
           variant="filled"
           size="large"
@@ -168,7 +173,7 @@ export default function ClimbDetail() {
         />
         <View style={styles.secondaryActions}>
           <Button
-            title="Favorite"
+            title={t('actions.favorite.label.favorite')}
             icon="favorite"
             variant="outlined"
             size="medium"
@@ -177,7 +182,7 @@ export default function ClimbDetail() {
             style={styles.secondaryButton}
           />
           <Button
-            title="Log Ascent"
+            title={t('mobile.detail.logAscent')}
             icon="tick.outline"
             variant="outlined"
             size="medium"

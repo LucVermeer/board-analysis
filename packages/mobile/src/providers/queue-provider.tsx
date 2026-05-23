@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useMemo,
   type ReactNode,
 } from 'react';
 import { queueReducer, initialState } from '@boardsesh/queue';
@@ -87,6 +88,10 @@ type QueueUpdateEvent = FullSyncEvent | QueueItemAddedEvent | QueueItemRemovedEv
  * Convert a subscription queue item to a ClimbQueueItem compatible with the
  * shared reducer. The subscription only sends a subset of climb fields
  * (uuid, name, frames), so we fill in defaults for the rest.
+ *
+ * The Climb type requires these fields as non-nullable primitives, so we use
+ * zero/empty defaults. The UI should prefer optional chaining (e.g.
+ * `difficulty || null`) when distinguishing "no data" from a real value.
  */
 function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): ClimbQueueItem {
   return {
@@ -95,6 +100,8 @@ function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): ClimbQueueIt
       uuid: subscriptionItem.climb.uuid,
       name: subscriptionItem.climb.name,
       frames: subscriptionItem.climb.frames,
+      // Subscription-only stubs: the WS payload doesn't include these fields.
+      // Non-nullable in the Climb type, so we use zero/empty defaults.
       setter_username: '',
       angle: 0,
       ascensionist_count: 0,
@@ -111,6 +118,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // Subscribe to queue updates when a session is active
   useEffect(() => {
@@ -204,8 +213,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   const addToQueue = useCallback(
     (item: ClimbQueueItem) => {
-      // Optimistic local dispatch
-      dispatch({ type: 'ADD_TO_QUEUE', payload: item });
+      // Optimistic local dispatch — use DELTA_ADD_QUEUE_ITEM for idempotency
+      // so a WS echo of the same item won't create a duplicate
+      dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
 
       // TODO: Send mutation to server when mutation operations are wired up
     },
@@ -238,7 +248,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   );
 
   const nextClimb = useCallback(() => {
-    const { queue, currentClimbQueueItem } = state;
+    const { queue, currentClimbQueueItem } = stateRef.current;
     if (queue.length === 0) return;
 
     if (!currentClimbQueueItem) {
@@ -259,10 +269,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         payload: { item: queue[nextIndex], isServerEvent: false },
       });
     }
-  }, [state]);
+  }, []);
 
   const previousClimb = useCallback(() => {
-    const { queue, currentClimbQueueItem } = state;
+    const { queue, currentClimbQueueItem } = stateRef.current;
     if (queue.length === 0 || !currentClimbQueueItem) return;
 
     const currentIndex = queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
@@ -274,19 +284,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         payload: { item: queue[prevIndex], isServerEvent: false },
       });
     }
-  }, [state]);
+  }, []);
 
-  const contextValue: QueueContextValue = {
-    state,
-    dispatch,
-    sessionId,
-    setSessionId,
-    addToQueue,
-    removeFromQueue,
-    setCurrentClimb,
-    nextClimb,
-    previousClimb,
-  };
+  const contextValue = useMemo<QueueContextValue>(
+    () => ({
+      state,
+      dispatch,
+      sessionId,
+      setSessionId,
+      addToQueue,
+      removeFromQueue,
+      setCurrentClimb,
+      nextClimb,
+      previousClimb,
+    }),
+    [state, sessionId, addToQueue, removeFromQueue, setCurrentClimb, nextClimb, previousClimb],
+  );
 
   return <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>;
 }

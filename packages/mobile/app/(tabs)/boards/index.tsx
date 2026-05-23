@@ -1,16 +1,11 @@
-import { View, Text, Pressable, ActivityIndicator, StyleSheet, useColorScheme } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
+import { useTheme } from '../../../src/providers/theme-provider';
 
 export default function BoardSelection() {
   const { data: boardConnection, isLoading } = useMyBoards();
   const boards = boardConnection?.boards ?? [];
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  const textColor = isDark ? '#FFFFFF' : '#000000';
-  const subtitleColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
-  const cardBackground = isDark ? '#1C1C1E' : '#FFFFFF';
-  const cardBorder = isDark ? '#38383A' : '#E5E5EA';
+  const { systemColors } = useTheme();
 
   if (isLoading) {
     return (
@@ -22,40 +17,55 @@ export default function BoardSelection() {
 
   if (boards.length === 0) {
     return (
-      <View style={styles.centered}>
-        <Text style={[styles.emptyTitle, { color: textColor }]}>No boards yet</Text>
-        <Text style={[styles.emptySubtitle, { color: subtitleColor }]}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.centered}
+      >
+        <Text style={[styles.emptyTitle, { color: systemColors.label }]}>No boards yet</Text>
+        <Text style={[styles.emptySubtitle, { color: systemColors.secondaryLabel }]}>
           Search for a board to get started
         </Text>
-      </View>
+      </ScrollView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      style={styles.flex}
+      contentContainerStyle={styles.container}
+    >
       {boards.map((board) => (
         <Pressable
           key={board.uuid}
-          style={[styles.card, { backgroundColor: cardBackground, borderColor: cardBorder }]}
+          style={[
+            styles.card,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderColor: systemColors.separator,
+            },
+          ]}
         >
-          <Text style={[styles.cardTitle, { color: textColor }]}>{board.name}</Text>
-          <Text style={[styles.cardSubtitle, { color: subtitleColor }]}>
+          <Text style={[styles.cardTitle, { color: systemColors.label }]}>{board.name}</Text>
+          <Text style={[styles.cardSubtitle, { color: systemColors.secondaryLabel }]}>
             {board.boardType} · {board.sizeName ?? ''}
           </Text>
         </Pressable>
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  flex: {
     flex: 1,
+  },
+  container: {
     padding: 16,
     gap: 12,
   },
   centered: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

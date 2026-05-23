@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { hapticLight } from '../lib/haptics';
+import { springs } from '../theme/animations';
 
 type CardProps = {
   children: ReactNode;
@@ -21,13 +22,13 @@ export function Card({ children, onPress, haptic = true, style }: CardProps) {
 
   const handlePressIn = () => {
     if (onPress) {
-      scale.value = withSpring(0.98, { damping: 20, stiffness: 300, mass: 0.7 });
+      scale.value = withSpring(0.98, springs.snappy);
     }
   };
 
   const handlePressOut = () => {
     if (onPress) {
-      scale.value = withSpring(1, { damping: 20, stiffness: 300, mass: 0.7 });
+      scale.value = withSpring(1, springs.snappy);
     }
   };
 
@@ -42,6 +43,7 @@ export function Card({ children, onPress, haptic = true, style }: CardProps) {
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        accessibilityRole="button"
         style={[animatedStyle, styles.card, style]}
       >
         {children}

@@ -18,10 +18,13 @@ function getInitials(name: string): string {
 export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   const borderRadius = size / 2;
 
+  const accessibilityLabel = name ?? undefined;
+
   if (uri) {
     return (
       <Image
         source={{ uri }}
+        accessibilityLabel={accessibilityLabel}
         style={[styles.image, { width: size, height: size, borderRadius }]}
       />
     );
@@ -31,7 +34,10 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
   const fontSize = size * 0.4;
 
   return (
-    <View style={[styles.fallback, { width: size, height: size, borderRadius }]}>
+    <View
+      accessibilityLabel={accessibilityLabel}
+      style={[styles.fallback, { width: size, height: size, borderRadius }]}
+    >
       <Text variant="caption1" color="#FFFFFF" style={{ fontSize, fontWeight: '600' }}>
         {initials}
       </Text>

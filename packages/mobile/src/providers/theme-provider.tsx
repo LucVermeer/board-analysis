@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { Platform, useColorScheme, type ColorValue } from 'react-native';
-import { systemColors, brandColors, androidFallbackColors } from '../theme/colors';
+import { iosSystemColors, brandColors, androidFallbackColors } from '../theme/colors';
 import { textStyles, type TextVariant } from '../theme/typography';
 import { spacing, borderRadius, shadows, opacity } from '../theme/tokens';
 import { springs, timing } from '../theme/animations';
@@ -48,11 +48,12 @@ const ThemeContext = createContext<Theme | null>(null);
  * androidFallbackColors light/dark map.
  */
 function resolveSystemColors(colorScheme: ColorScheme): ResolvedSystemColors {
-  if (Platform.OS === 'ios') {
+  if (Platform.OS === 'ios' && iosSystemColors) {
     // PlatformColor values adapt automatically on iOS — return as-is.
-    return systemColors as unknown as ResolvedSystemColors;
+    return iosSystemColors as ResolvedSystemColors;
   }
 
+  // Android: resolve from the single source of truth for fallback colors.
   const fallback = colorScheme === 'dark'
     ? androidFallbackColors.dark
     : androidFallbackColors.light;

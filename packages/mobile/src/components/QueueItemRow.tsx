@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -20,8 +21,8 @@ type QueueItemRowProps = {
   item: ClimbQueueItem;
   position: number;
   isCurrentClimb: boolean;
-  onPress: () => void;
-  onRemove: () => void;
+  onPress: (item: ClimbQueueItem) => void;
+  onRemove: (uuid: string) => void;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -31,10 +32,11 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
   const rowOpacity = useSharedValue(1);
   const rowHeight = useSharedValue<number | undefined>(undefined);
   const isSwipeOpen = useSharedValue(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const handleRemove = () => {
     hapticMedium();
-    onRemove();
+    onRemove(item.uuid);
   };
 
   const panGesture = Gesture.Pan()
@@ -56,10 +58,12 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
           stiffness: 200,
         });
         isSwipeOpen.value = true;
+        runOnJS(setIsOpen)(true);
       } else {
         // Snap back
         translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
         isSwipeOpen.value = false;
+        runOnJS(setIsOpen)(false);
       }
     });
 
@@ -82,14 +86,15 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
   }));
 
   const handlePress = () => {
-    if (isSwipeOpen.value) {
+    if (isOpen) {
       // Close the swipe first
       translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
       isSwipeOpen.value = false;
+      setIsOpen(false);
       return;
     }
     hapticSelection();
-    onPress();
+    onPress(item);
   };
 
   const handleDeletePress = () => {
@@ -143,11 +148,6 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
               >
                 {climbName}
               </Text>
-              {item.addedByUser?.username ? (
-                <Text variant="caption1" color="#8E8E93" numberOfLines={1}>
-                  {item.addedByUser.username}
-                </Text>
-              ) : null}
             </View>
 
             {/* Grade pill */}

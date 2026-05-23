@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { iconMap, type IconName } from './icon-map';
 
@@ -17,7 +16,7 @@ export function Icon({ name, size = 24, color, weight: _weight }: IconProps) {
   // For now, use MaterialCommunityIcons on both platforms.
   // The Icon component API is stable — swapping the implementation later is a one-file change.
 
-  const iconName = Platform.OS === 'ios' ? mapping.android : mapping.android;
+  const iconName = mapping.android;
 
   return (
     <MaterialCommunityIcons

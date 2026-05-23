@@ -530,5 +530,39 @@
     "untitledClimb": "Bloque sin título",
     "openActions": "Más acciones",
     "actionsUnavailable": "No se pueden abrir acciones para este bloque — configuración de la tabla no disponible."
+  },
+  "mobile": {
+    "emptyState": {
+      "noBoard": {
+        "title": "Tabla no seleccionada",
+        "subtitle": "Agrega una tabla primero para explorar bloques"
+      },
+      "noClimbs": {
+        "title": "No se encontraron bloques",
+        "subtitle": "Intenta ajustar la configuración de tu tabla"
+      },
+      "noMatches": {
+        "title": "Sin resultados",
+        "description": "Nada coincide con \"{{query}}\""
+      }
+    },
+    "contextMenu": {
+      "addToQueue": "Agregar a la cola",
+      "viewSetter": "Ver aperturista"
+    },
+    "detail": {
+      "notFound": "Bloque no encontrado",
+      "boardPreview": "Vista de tabla próximamente",
+      "addToQueue": "Agregar a la cola",
+      "logAscent": "Registrar encadene",
+      "sent_one": "Encadenado {{count}} vez",
+      "sent_other": "Encadenado {{count}} veces",
+      "sentWithAttempts_one": "Encadenado {{count}} vez en {{attempts}} {{attemptWord}}",
+      "sentWithAttempts_other": "Encadenado {{count}} veces en {{attempts}} {{attemptWord}}",
+      "attempt_one": "intento",
+      "attempt_other": "intentos",
+      "send_one": "encadene",
+      "send_other": "encadenes"
+    }
   }
 }

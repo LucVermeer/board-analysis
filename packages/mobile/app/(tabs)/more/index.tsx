@@ -1,21 +1,26 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, ScrollView, StyleSheet } from 'react-native';
+import { useTheme } from '../../../src/providers/theme-provider';
 
 export default function MoreScreen() {
+  const { systemColors } = useTheme();
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>More</Text>
-    </View>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={styles.container}
+    >
+      <Text style={[styles.text, { color: systemColors.secondaryLabel }]}>More</Text>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: {
     fontSize: 17,
-    color: '#8E8E93',
   },
 });

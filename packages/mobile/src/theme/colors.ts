@@ -1,40 +1,24 @@
-import { Platform, PlatformColor } from 'react-native';
+import { Platform, PlatformColor, type ColorValue } from 'react-native';
 
 /**
  * iOS semantic system colors via PlatformColor.
  * These automatically adapt to light/dark mode and accessibility settings.
- * On Android, we fall back to manual hex values.
- */
-
-function iosColor(iosName: string, androidLight: string, androidDark: string) {
-  if (Platform.OS === 'ios') {
-    return PlatformColor(iosName);
-  }
-  // Android fallback — consumers must pass the correct value based on color scheme.
-  // We return the light variant here; the theme provider resolves dark mode.
-  return { light: androidLight, dark: androidDark };
-}
-
-/**
- * System colors that adapt to the platform's appearance.
  *
- * On iOS these resolve to UIKit semantic colors via PlatformColor and
- * automatically respond to light/dark mode, contrast settings, etc.
- *
- * On Android they resolve to a { light, dark } pair that the ThemeProvider
- * picks from based on the current color scheme.
+ * This map is only populated on iOS. On Android, the ThemeProvider resolves
+ * colors from `androidFallbackColors` instead. All color access should go
+ * through `useTheme().systemColors` — never consume this directly.
  */
-export const systemColors = {
-  background: iosColor('systemBackground', '#FFFFFF', '#000000'),
-  secondaryBackground: iosColor('secondarySystemBackground', '#F2F2F7', '#1C1C1E'),
-  tertiaryBackground: iosColor('tertiarySystemBackground', '#FFFFFF', '#2C2C2E'),
-  groupedBackground: iosColor('systemGroupedBackground', '#F2F2F7', '#000000'),
-  label: iosColor('label', '#000000', '#FFFFFF'),
-  secondaryLabel: iosColor('secondaryLabel', '#3C3C43', '#EBEBF5'),
-  tertiaryLabel: iosColor('tertiaryLabel', '#3C3C43', '#EBEBF5'),
-  separator: iosColor('separator', '#C6C6C8', '#38383A'),
-  fill: iosColor('systemFill', '#787880', '#787880'),
-} as const;
+export const iosSystemColors: Record<string, ColorValue> | null = Platform.OS === 'ios' ? {
+  background: PlatformColor('systemBackground'),
+  secondaryBackground: PlatformColor('secondarySystemBackground'),
+  tertiaryBackground: PlatformColor('tertiarySystemBackground'),
+  groupedBackground: PlatformColor('systemGroupedBackground'),
+  label: PlatformColor('label'),
+  secondaryLabel: PlatformColor('secondaryLabel'),
+  tertiaryLabel: PlatformColor('tertiaryLabel'),
+  separator: PlatformColor('separator'),
+  fill: PlatformColor('systemFill'),
+} : null;
 
 /**
  * Brand colors are the same on all platforms and in all color schemes.
@@ -76,6 +60,6 @@ export const androidFallbackColors = {
   },
 } as const;
 
-export type SystemColors = typeof systemColors;
+export type SystemColorKey = keyof typeof androidFallbackColors.light;
 export type BrandColors = typeof brandColors;
 export type AndroidFallbackColors = typeof androidFallbackColors;
