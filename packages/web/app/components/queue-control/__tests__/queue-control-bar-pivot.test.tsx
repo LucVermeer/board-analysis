@@ -353,9 +353,13 @@ describe('QueueControlBar pivot', () => {
     mockSetPreference.mockResolvedValue(undefined);
   });
 
-  // --- Wall-view dispatch (P0-2) -------------------------------------------
+  // --- Play-drawer dispatch from the bar -----------------------------------
+  // Wall-view mode is gone: the bar now dispatches with no payload + no flags
+  // for both thumbnail and title taps. The drawer always opens in browse mode
+  // on the wall climb (via the `effectiveItem` fallback). Identity of the
+  // wall climb lives on the bar's ON WALL chip, not inside the drawer.
 
-  it('tapping the climb-title region dispatches wallView=true on the play-drawer event', async () => {
+  it('tapping the climb-title region dispatches the play-drawer event with no wallView flag', async () => {
     const seenDetails: PlayDrawerEventDetail[] = [];
     const handler = (event: Event) => {
       const detail = readPlayDrawerEventDetail(event);
@@ -375,19 +379,18 @@ describe('QueueControlBar pivot', () => {
         fireEvent.click(title!);
       });
 
-      // At least one dispatch fired, and the most recent had wallView=true.
       expect(seenDetails.length).toBeGreaterThan(0);
       const last = seenDetails[seenDetails.length - 1];
-      expect(last.wallView).toBe(true);
+      expect((last as PlayDrawerEventDetail & { wallView?: unknown }).wallView).toBeUndefined();
       // No climb payload on the bar's body-tap path — the drawer falls back
-      // to the wall climb.
+      // to the wall climb via `effectiveItem`.
       expect(last.climb).toBeUndefined();
     } finally {
       window.removeEventListener(PLAY_DRAWER_EVENT, handler);
     }
   });
 
-  it('keyboard Enter on the climb-title region dispatches wallView=true', async () => {
+  it('keyboard Enter on the climb-title region dispatches the play-drawer event with no wallView flag', async () => {
     const seenDetails: PlayDrawerEventDetail[] = [];
     const handler = (event: Event) => {
       const detail = readPlayDrawerEventDetail(event);
@@ -408,7 +411,8 @@ describe('QueueControlBar pivot', () => {
       });
 
       expect(seenDetails.length).toBeGreaterThan(0);
-      expect(seenDetails[seenDetails.length - 1].wallView).toBe(true);
+      const last = seenDetails[seenDetails.length - 1];
+      expect((last as PlayDrawerEventDetail & { wallView?: unknown }).wallView).toBeUndefined();
     } finally {
       window.removeEventListener(PLAY_DRAWER_EVENT, handler);
     }

@@ -6,7 +6,6 @@ import { track } from '@/app/lib/analytics';
 import MuiBadge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
-import MuiButton from '@mui/material/Button';
 import MuiAvatar from '@mui/material/Avatar';
 import MuiChip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
@@ -19,8 +18,7 @@ import SkipPreviousOutlined from '@mui/icons-material/SkipPreviousOutlined';
 import SkipNextOutlined from '@mui/icons-material/SkipNextOutlined';
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined';
 import Lightbulb from '@mui/icons-material/Lightbulb';
-import LockOutlined from '@mui/icons-material/LockOutlined';
-import ArrowForwardOutlined from '@mui/icons-material/ArrowForwardOutlined';
+import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined';
 import MoreHorizOutlined from '@mui/icons-material/MoreHorizOutlined';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import KeyboardArrowUpOutlined from '@mui/icons-material/KeyboardArrowUpOutlined';
@@ -158,11 +156,6 @@ type PlayViewActionBarProps = {
   /** Fired when the coachmark animation runs once — the parent persists
    *  the seen flag and clears `lightbulbCoachmark`. */
   onLightbulbCoachmarkSeen?: () => void;
-  /** Wall-view *locked* — non-driver opened the drawer from the bar body
-   *  in a party session. Hides prev/next; the lightbulb stays. Drivers
-   *  in wall-view don't reach this branch (the parent never passes true
-   *  for them — they get a normal browse drawer on the wall climb). */
-  wallViewLocked?: boolean;
   /** Name of the currently displayed climb. Used in the lightbulb's aria
    *  label so screen-reader users hear what they're sending. */
   displayedClimbName: string | null;
@@ -198,7 +191,6 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   displayedClimbName,
   onLightbulb,
   onLightbulbLongPress,
-  wallViewLocked = false,
   angleSelector,
 }: PlayViewActionBarProps) {
   const { t } = useTranslation('session');
@@ -224,11 +216,9 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
   }, [consumeLongPress, onLightbulb]);
   return (
     <div className={styles.actionBar}>
-      {!wallViewLocked && (
-        <IconButton disabled={!canSwipePrevious} onClick={onPrevClick}>
-          <SkipPreviousOutlined />
-        </IconButton>
-      )}
+      <IconButton disabled={!canSwipePrevious} onClick={onPrevClick}>
+        <SkipPreviousOutlined />
+      </IconButton>
       {supportsMirroring && (
         <IconButton
           color={isMirrored ? 'primary' : 'default'}
@@ -305,11 +295,9 @@ export const PlayViewActionBar = React.memo(function PlayViewActionBar({
           <FormatListBulletedOutlined />
         </IconButton>
       </MuiBadge>
-      {!wallViewLocked && (
-        <IconButton disabled={!canSwipeNext} onClick={onNextClick}>
-          <SkipNextOutlined />
-        </IconButton>
-      )}
+      <IconButton disabled={!canSwipeNext} onClick={onNextClick}>
+        <SkipNextOutlined />
+      </IconButton>
     </div>
   );
 });
@@ -575,16 +563,6 @@ type PlayViewDrawerProps = {
    * no-op — subsequent close/open cycles animate normally.
    */
   initialOpenWithoutAnimation?: boolean;
-  /** Wall-view mode (queue-control-bar pivot Phase 3). When true the drawer
-   *  was opened from the bar body and renders in a read-only navigation
-   *  state: hides prev/next, disables swipe, shows the "Currently on the
-   *  wall" header. The lightbulb and standard climb actions remain. */
-  wallView?: boolean;
-  /** Drop out of wall-view mode without closing the drawer — wired to the
-   *  "Browse from here" affordance that tester feedback asked for. The drawer
-   *  stays open on the same climb but in the normal browse state (swipe
-   *  enabled, prev/next visible for driver). */
-  onExitWallView?: () => void;
 };
 
 const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
@@ -596,8 +574,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   drawerDisplayedItem = null,
   setDrawerDisplayedItem,
   initialOpenWithoutAnimation = false,
-  wallView = false,
-  onExitWallView,
 }) => {
   const { t } = useTranslation('session');
   const isOpen = activeDrawer === 'play';
@@ -752,11 +728,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     boardDetails,
     angle: currentAngle,
     onClose: handleUrlSyncClose,
-    // Wall-view mode is a peek gesture at the wall climb, not a shareable
-    // /view/{uuid} surface — skip the URL push so the address bar stays put.
-    // Drivers can still navigate in wall-view (their swipes broadcast), so
-    // they need the URL to follow normally.
-    enabled: !wallView || isDriver,
   });
   const filteredLogbook = useMemo(() => {
     if (!logbook || !currentClimb) return [];
@@ -869,63 +840,32 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     });
   }, [swipeSuggestionsOnly, t]);
 
-  // Wall-view is "locked" only for non-drivers — the lock semantics
-  // (no swipe, no prev/next, no URL push) is the "you can't change the
-  // wall right now" cue. Drivers in wall-view get full nav: swipe walks
-  // queue → search → suggestions and broadcasts. Marco's group-session
-  // feedback — the blanket lock confused drivers who tapped the bar
-  // body. If driver status flips while the drawer is open, the lock UI
-  // appears/disappears reactively because `isDriver` is derived live
-  // from session data.
-  const wallViewLocked = wallView && !isDriver;
-
-  // Wall-view one-shot hint (group-session feedback fix). Show a
-  // "Locked to the wall climb. Close to browse." cue once per user,
-  // then never again. Gate on `wallViewLocked` rather than `wallView`
-  // so a driver who opens wallView doesn't mark the hint "seen" without
-  // ever seeing it.
-  const [showWallViewHint, setShowWallViewHint] = useState(false);
-  useEffect(() => {
-    if (!isOpen || !wallViewLocked) {
-      setShowWallViewHint(false);
-      return;
-    }
-    let cancelled = false;
-    void getPreference<boolean>('swipeHint:wallViewSeen').then((seen) => {
-      if (cancelled) return;
-      if (!seen) setShowWallViewHint(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, wallViewLocked]);
-  const handleWallViewHintSeen = useCallback(() => {
-    setShowWallViewHint(false);
-    void setPreference('swipeHint:wallViewSeen', true);
-  }, []);
-
-  // Mark the hint seen once the user actually closes the wall-view drawer —
-  // they've encountered the mode at least once. Avoids leaving the cue
-  // pulsing forever for users who never tap "Browse from here".
-  const wallViewHintSeenLatchRef = useRef(false);
-  useEffect(() => {
-    if (showWallViewHint) {
-      wallViewHintSeenLatchRef.current = true;
-    }
-    if (!isOpen && wallViewHintSeenLatchRef.current) {
-      wallViewHintSeenLatchRef.current = false;
-      void setPreference('swipeHint:wallViewSeen', true);
-    }
-  }, [isOpen, showWallViewHint]);
-
-  // Resolve the driver's user record so the wall-view header strip shows
-  // their avatar + name ("X is on the wall"). Falls back gracefully — if
-  // we can't find the user (driver dropped, optimistic-claim race, etc.)
-  // the strip just renders the climb-name + lock without the avatar.
+  // Resolve the driver's user record so the "return to wall climb" pill
+  // can show their avatar + name when a non-driver has drifted off the
+  // wall climb in browse mode. Falls back gracefully — if we can't find
+  // the user (driver dropped, optimistic-claim race, etc.) the pill
+  // skips rendering.
   const driverUser = useMemo(() => {
     if (!driverParticipantId) return null;
     return sessionUsers.find((u) => u.id === driverParticipantId) ?? null;
   }, [driverParticipantId, sessionUsers]);
+
+  // Drift detection: a non-driver in a party session has actively swiped
+  // off the wall climb in browse mode. `drawerDisplayedItem` is non-null
+  // only after a local swipe; if it matches `currentClimbQueueItem` the
+  // user is back on the wall climb (no drift). Until they swipe, the
+  // drawer auto-follows the wall via the `effectiveItem` fallback at the
+  // top of the component, so no pill is needed.
+  const driftedFromWall =
+    !isDriver &&
+    isPersistentSessionActive &&
+    drawerDisplayedItem != null &&
+    currentClimbQueueItem != null &&
+    drawerDisplayedItem.climb.uuid !== currentClimbQueueItem.climb.uuid;
+  const wallClimb = currentClimbQueueItem?.climb ?? null;
+  const handleReturnToWallClimb = useCallback(() => {
+    setDrawerDisplayedItem?.(null);
+  }, [setDrawerDisplayedItem]);
 
   const navigate = useCallback(
     (direction: 'next' | 'previous', source: 'swipePlayViewDrawer' | 'playViewDrawer') => {
@@ -946,12 +886,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     navigate('previous', 'swipePlayViewDrawer');
   }, [navigate, maybeArmPreviewCoachmark]);
 
-  // Wall-view mode is a read-only display of the wall climb for non-drivers
-  // (locked, no swipe). For drivers it behaves like the normal drawer — they
-  // can swipe and the queue/search/suggestions fall-through navigates as
-  // usual. See `wallViewLocked` above for the role-based gate.
-  const canSwipeNext = !viewOnlyMode && !wallViewLocked && !!nextItem;
-  const canSwipePrevious = !viewOnlyMode && !wallViewLocked && !!prevItem;
+  const canSwipeNext = !viewOnlyMode && !!nextItem;
+  const canSwipePrevious = !viewOnlyMode && !!prevItem;
 
   // Tick FAB → inline tick bar
   const handleTickFabClick = useCallback(() => {
@@ -1370,127 +1306,37 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     if (!currentClimb) return null;
     return (
       <>
-        {wallView && (
-          // Wall-view header strip: "X is on the wall" for everyone, plus
-          // the lock + hint + "Browse from here →" escape hatch only when
-          // the local user isn't the driver. Drivers keep swipe and the
-          // standard prev/next buttons (Marco's group-session feedback —
-          // the lock is the "you can't change the wall" cue, which doesn't
-          // apply to the driver). Re-renders reactively when driver status
-          // flips mid-drawer: if the user loses the wall while this is open,
-          // the lock + hint slide in on the next render tick.
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              px: 2,
-              py: 1,
-              backgroundColor: 'var(--semantic-selected-light, var(--semantic-selected))',
-              borderBottom: '1px solid var(--neutral-200)',
-            }}
-          >
-            {wallViewLocked && <LockOutlined aria-hidden="true" sx={{ fontSize: 18, color: 'text.secondary' }} />}
-            {driverUser ? (
-              <MuiAvatar
-                alt={driverUser.username}
-                src={driverUser.avatarUrl ?? undefined}
-                sx={{ width: 24, height: 24 }}
-              />
-            ) : null}
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Box
-                component="span"
-                sx={{
-                  display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: 'text.primary',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {driverUser
-                  ? t('playView.wallViewHeaderDriver', { username: driverUser.username })
-                  : t('playView.wallViewHeader')}
-              </Box>
-              {wallViewLocked && showWallViewHint && (
-                <Box
-                  component="span"
-                  sx={{
-                    display: 'block',
-                    fontSize: 11,
-                    color: 'text.secondary',
-                    mt: 0.25,
-                  }}
-                >
-                  {t('playView.wallViewHint')}
-                </Box>
-              )}
-            </Box>
-            {wallViewLocked && onExitWallView && (
-              <>
-                {/* CSS-driven responsive swap (per CLAUDE.md — JS
-                    breakpoint detection is prohibited). The text button
-                    competes for width with the driver username on narrow
-                    phones; below the MUI `sm` breakpoint we collapse to
-                    an icon-only IconButton. Render both, let the cascade
-                    pick. */}
-                <IconButton
-                  size="small"
-                  onClick={() => {
-                    handleWallViewHintSeen();
-                    onExitWallView();
-                  }}
-                  aria-label={t('playView.wallViewBrowseFromHere')}
-                  sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
-                >
-                  <ArrowForwardOutlined sx={{ fontSize: 18 }} />
-                </IconButton>
-                <MuiButton
-                  size="medium"
-                  variant="text"
-                  endIcon={<ArrowForwardOutlined sx={{ fontSize: 16 }} />}
-                  onClick={() => {
-                    handleWallViewHintSeen();
-                    onExitWallView();
-                  }}
-                  sx={{
-                    textTransform: 'none',
-                    fontSize: 12,
-                    display: { xs: 'none', sm: 'inline-flex' },
-                  }}
-                >
-                  {t('playView.wallViewBrowseFromHere')}
-                </MuiButton>
-              </>
-            )}
+        {driftedFromWall && driverUser && wallClimb && (
+          // Return-to-wall pill: visible only when a non-driver has actively
+          // swiped off the wall climb in browse mode. Tap snaps the drawer
+          // back to the wall climb (clears drawerDisplayedItem). The bar
+          // beneath the drawer carries the persistent "ON WALL" cue —
+          // this pill is the bridge for when drawer-view and bar-view have
+          // drifted apart.
+          <Box sx={{ display: 'flex', justifyContent: 'center', px: 2, pt: 1 }}>
+            <MuiChip
+              clickable
+              onClick={handleReturnToWallClimb}
+              size="small"
+              variant="outlined"
+              color="info"
+              icon={<ArrowBackOutlined sx={{ fontSize: 14, ml: 0.5 }} />}
+              avatar={
+                <MuiAvatar
+                  alt={driverUser.username}
+                  src={driverUser.avatarUrl ?? undefined}
+                  sx={{ width: 20, height: 20 }}
+                />
+              }
+              label={t('playView.returnToWallPill', { username: driverUser.username, climbName: wallClimb.name })}
+              aria-label={t('queueBar.ariaLabels.returnToWallClimb', { username: driverUser.username })}
+              sx={{ fontSize: 12, maxWidth: '100%' }}
+            />
           </Box>
         )}
         {/* Header: Grade | Name */}
         <div className={styles.headerSection}>
           <ClimbDetailHeader climb={currentClimb} />
-          {swipeSuggestionsOnly && !wallView && (
-            // Preview chip (group-session feedback fix): tells a non-driver
-            // their swipe is previewing only — the wall hasn't moved and
-            // nobody else sees this navigation. Sits next to the climb name
-            // so it's hard to miss without competing with the lightbulb cue.
-            // MUI `Chip` so design tokens + a11y semantics ride for free
-            // (the UI review caught that the prior `<Box component="span">`
-            // shipped a CSS-var fallback to `--semantic-selected` — the
-            // same rose tint the wall-view header strip uses — because
-            // `--semantic-info-light` is never defined).
-            <MuiChip
-              size="small"
-              variant="outlined"
-              color="info"
-              role="status"
-              aria-label={t('playView.previewChip')}
-              label={t('playView.previewChip')}
-              sx={{ ml: 1, fontSize: 11, fontWeight: 500 }}
-            />
-          )}
         </div>
 
         {/* Board renderer with card-swipe and floating Tick FAB */}
@@ -1576,7 +1422,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             displayedClimbName={currentClimb?.name ?? null}
             onLightbulb={handleLightbulbClick}
             onLightbulbLongPress={handleOpenLightDrawer}
-            wallViewLocked={wallViewLocked}
             angleSelector={
               <AngleSelector
                 boardName={boardDetails.board_name}
@@ -1620,7 +1465,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     isDriver,
     handleLightbulbClick,
     handleOpenLightDrawer,
-    wallView,
     angle,
     handleTickBarClose,
     handleTickBarError,
@@ -1631,11 +1475,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     isPersistentSessionActive,
     isBluetoothConnected,
     driverUser,
-    showWallViewHint,
-    handleWallViewHintSeen,
-    onExitWallView,
-    swipeSuggestionsOnly,
-    wallViewLocked,
+    driftedFromWall,
+    wallClimb,
+    handleReturnToWallClimb,
     lightbulbCoachmarkText,
   ]);
 

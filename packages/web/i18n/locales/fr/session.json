@@ -167,6 +167,7 @@
     "cancelReconnectConfirm": "Annuler quittera la session. C'est ce que tu veux ?",
     "shellMessage": "Aucun bloc sélectionné",
     "startSesh": "Lancer la sesh",
+    "onWall": "SUR LE MUR",
     "linkCopied": "Lien copié !",
     "shareFailed": "Échec du partage",
     "leaveFailed": "Impossible de quitter la session. Réessaie.",
@@ -196,7 +197,8 @@
       "showParticipants": "Afficher les participants",
       "hideParticipants": "Masquer les participants",
       "openWallView": "Show what's on the wall",
-      "userIsDriving": "{{username}} is driving"
+      "userIsDriving": "{{username}} is driving",
+      "returnToWallClimb": "Revenir au bloc de {{username}}"
     },
     "offline": {
       "idle": "Hors ligne",
@@ -223,11 +225,7 @@
     "offlineLimitReached": "Tu as atteint la limite hors ligne de la file d'attente. Reconnecte-toi pour synchroniser tes blocs."
   },
   "playView": {
-    "wallViewHeader": "Actuellement sur le mur",
-    "wallViewHeaderDriver": "{{username}} est sur le mur",
-    "wallViewHint": "Verrouillé sur le bloc du mur. Ferme pour explorer.",
-    "wallViewBrowseFromHere": "Explorer depuis ici",
-    "previewChip": "Aperçu",
+    "returnToWallPill": "{{username}} · {{climbName}}",
     "previewCoachmark": "Aperçu. Touche l'ampoule pour envoyer au mur.",
     "yourAscents_one": "Ton ascension ({{count}})",
     "yourAscents_other": "Tes ascensions ({{count}})",

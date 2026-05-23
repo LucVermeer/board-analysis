@@ -52,6 +52,7 @@ import ChatBubbleOutlineOutlined from '@mui/icons-material/ChatBubbleOutlineOutl
 import InputAdornment from '@mui/material/InputAdornment';
 import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
+import MuiChip from '@mui/material/Chip';
 import Badge from '@mui/material/Badge';
 import Lightbulb from '@mui/icons-material/Lightbulb';
 import Typography from '@mui/material/Typography';
@@ -188,7 +189,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   useEffect(() => {
     if (activeDrawer !== 'play') {
       setDrawerDisplayedItem(null);
-      setDrawerWallView(false);
     }
   }, [activeDrawer]);
 
@@ -223,10 +223,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   // tapped (drawer also reads the wall climb in that case). Reset to null on
   // drawer close.
   const [drawerDisplayedItem, setDrawerDisplayedItem] = useState<ClimbQueueItem | null>(null);
-  // Wall-view mode (pivot Phase 3): set by the bar's body-tap handler. When
-  // true the drawer hides prev/next, disables swipe, and shows the
-  // "Currently on the wall" header. Reset on close.
-  const [drawerWallView, setDrawerWallView] = useState(false);
 
   // Listen for play drawer open requests from climb list items that live
   // outside this component's React tree (board page, liked list, queue
@@ -251,7 +247,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       } else {
         setDrawerDisplayedItem(null);
       }
-      setDrawerWallView(!!detail?.wallView);
       setActiveDrawer('play');
     };
     window.addEventListener(PLAY_DRAWER_EVENT, handler);
@@ -272,16 +267,13 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   } = useQueueActions();
   const handleThumbnailClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
-    // No-payload dispatch + wallView flag: drawer falls back to the wall
-    // climb (the bar's own thumbnail mirrors the wall). The wall-view
-    // mode adds the locked "Currently on the wall" treatment for
-    // non-drivers — for drivers there's nothing to lock (they're already
-    // controlling the wall), so they skip wallView entirely and open the
-    // normal browse drawer on the wall climb. Group-session feedback
-    // fix; the prior follow-up commit kept wallView=true for drivers
-    // and the mode paid no rent on top of the normal drawer.
-    dispatchOpenPlayDrawer(undefined, { wallView: !isDriver });
-  }, [currentClimb, viewOnlyMode, isDriver]);
+    // No-payload dispatch: drawer falls back to `currentClimbQueueItem` (the
+    // wall climb) via the `effectiveItem` derivation. Drawer is always in
+    // browse mode now — swipe works, and the bar's ON WALL chip + the
+    // drawer's drift pill carry the "who's driving / where the wall is"
+    // wayfinding.
+    dispatchOpenPlayDrawer();
+  }, [currentClimb, viewOnlyMode]);
 
   const { showMessage } = useSnackbar();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -538,6 +530,14 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     return me?.userId ?? clientId;
   }, [sessionUsers, clientId]);
 
+  // Resolve the driver's session-user record so the bar's ON WALL chip
+  // can show their avatar. Null when there is no driver or when the
+  // driver participant isn't in the users list yet (claim race).
+  const driverUser = useMemo(() => {
+    if (!driverParticipantId) return null;
+    return sessionUsers.find((u) => u.id === driverParticipantId) ?? null;
+  }, [sessionUsers, driverParticipantId]);
+
   // Track which participants have ticked the current climb.
   // Merges backend-provided tickedBy with locally tracked ticks.
   // Uses both connection IDs and stable userIds so the badge matches
@@ -787,12 +787,10 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
 
   const handleClimbInfoClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
-    // Route through dispatchOpenPlayDrawer with wallView:true so the title
-    // region matches the thumbnail's path. The previous direct setActiveDrawer
-    // call skipped the drawer-local wallView wiring and opened the normal
-    // browse drawer, even though the title region is the dominant tap target
-    // for "show me what's on the wall right now."
-    dispatchOpenPlayDrawer(undefined, { wallView: true });
+    // Routes through the same no-payload dispatch as the thumbnail. Drawer
+    // opens in browse mode on the wall climb; the bar's ON WALL chip stays
+    // visible behind it so wall-climb identity is never hidden.
+    dispatchOpenPlayDrawer();
     track('Play Drawer Opened', {
       boardLayout: boardDetails.layout_name || '',
       source: 'bar_tap',
@@ -1272,6 +1270,35 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                 {/* Left section: Thumbnail and climb info */}
                 <Box sx={{ flex: 1 }} className={styles.climbInfoCol}>
                   <div className={styles.climbInfoInner} style={{ gap: themeTokens.spacing[2] }}>
+                    {/* ON WALL chip — non-drivers only, when a driver is set.
+                        Anchors the bar visually as "this climb is on the wall,
+                        driven by {driver}" so the wall-climb identity lives on
+                        the bar (always visible) rather than inside the drawer. */}
+                    {!isDriver && driverUser && currentClimb && (
+                      <MuiChip
+                        size="small"
+                        variant="outlined"
+                        color="info"
+                        role="status"
+                        avatar={
+                          <Avatar
+                            alt={driverUser.username}
+                            src={driverUser.avatarUrl ?? undefined}
+                            sx={{ width: 18, height: 18 }}
+                          />
+                        }
+                        label={t('queueBar.onWall')}
+                        sx={{
+                          flexShrink: 0,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          letterSpacing: 0.5,
+                          height: 22,
+                          '& .MuiChip-label': { px: 0.75 },
+                        }}
+                      />
+                    )}
+
                     {/* Board preview — STATIC, with crossfade on enter */}
                     <div className={`${styles.boardPreviewContainer} ${enterDirection ? styles.thumbnailEnter : ''}`}>
                       <ClimbThumbnail
@@ -1431,8 +1458,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
         drawerDisplayedItem={drawerDisplayedItem}
         setDrawerDisplayedItem={setDrawerDisplayedItem}
         initialOpenWithoutAnimation={isViewPage}
-        wallView={drawerWallView}
-        onExitWallView={() => setDrawerWallView(false)}
       />
 
       <StartSeshDrawer open={startSeshOpen} onClose={() => setStartSeshOpen(false)} />
