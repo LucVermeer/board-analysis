@@ -196,7 +196,7 @@
       "showParticipants": "Afficher les participants",
       "hideParticipants": "Masquer les participants",
       "openPlayDrawer": "Ouvrir le bloc du mur",
-      "userIsDriving": "{{username}} is driving",
+      "userIsDriving": "{{username}} est au contrôle",
       "returnToWallClimb": "Revenir au bloc de {{username}}",
       "returnToWallClimbNoDriver": "Revenir au bloc du mur"
     },

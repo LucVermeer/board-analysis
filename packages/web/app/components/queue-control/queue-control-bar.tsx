@@ -74,9 +74,6 @@ export type ActiveDrawer = 'none' | 'play' | 'queue' | 'tick';
 
 const QUEUE_BADGE_SX = { '& .MuiBadge-badge': themeTokens.badge.small } as const;
 
-// `TickBadgeAvatar` extracted to `@/app/components/session/tick-badge-avatar`
-// so the play-view drawer's mini session bar uses the same component.
-
 export type QueueControlBarProps = {
   boardDetails: BoardDetails;
   angle: Angle;
