@@ -16,7 +16,7 @@ export type {
   UserName,
 } from './types';
 
-// Re-export shared-schema types used by consumers
+// Queue-local type definitions (wide enough for both web and shared-schema consumers)
 export type { Climb, ClimbQueueItem, QueueItemUser } from './types';
 
 export { insertQueueItemIdempotent, evaluateQueueEventSequence } from './event-utils';

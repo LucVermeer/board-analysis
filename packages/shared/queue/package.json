@@ -11,9 +11,10 @@
       "default": "./src/index.ts"
     }
   },
-  "dependencies": {
-    "@boardsesh/shared-schema": "*"
+  "scripts": {
+    "typecheck": "tsc --noEmit"
   },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.9.3"
   }

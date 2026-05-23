@@ -4,8 +4,8 @@ import type { ConnectionState } from '../connection-manager/websocket-connection
 
 // Re-export pure value types from the shared package for backward compatibility.
 // Types that embed Climb (PlaylistSuggestionSource, SetCurrentClimbOptions) are
-// defined locally because the web's Climb type is slightly narrower than
-// shared-schema's (e.g. description?: string vs string | null).
+// defined locally because they reference the web's Climb type (which carries
+// web-specific fields like boardType).
 export type { QueueSearchParams, AddToQueueSource, PeerId, UserName } from '@boardsesh/queue';
 import type { AddToQueueSource } from '@boardsesh/queue';
 
@@ -23,7 +23,7 @@ export type SetCurrentClimbOptions = {
 export type QueueItemUser = {
   id: string;
   username: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
 };
 
 export type ClimbQueueItem = {

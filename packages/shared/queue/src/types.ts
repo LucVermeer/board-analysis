@@ -1,15 +1,56 @@
 /**
  * Pure queue state machine types. No React, no DOM, no web-specific imports.
  *
- * Types that already exist in @boardsesh/shared-schema (Climb, ClimbQueueItem,
- * QueueItemUser) are re-exported from there. Web-specific types like
- * QueueContextType, QueueDataType, and QueueActionsType stay in the web app.
+ * The queue package defines its OWN Climb / ClimbQueueItem / QueueItemUser
+ * types that are wide enough for both the web app (non-nullable optionals,
+ * e.g. `mirrored?: boolean`) and shared-schema (nullable optionals, e.g.
+ * `mirrored?: boolean | null`).  The reducer only reads `uuid` and `mirrored`
+ * on a climb and spreads the rest opaquely, so consumers can pass either
+ * variant without double-casting.
+ *
+ * Web-specific types like QueueContextType, QueueDataType, and
+ * QueueActionsType stay in the web app.
  */
 
-// Re-export shared types that the queue state machine uses
-export type { Climb, ClimbQueueItem, QueueItemUser } from '@boardsesh/shared-schema';
+export type QueueItemUser = {
+  id: string;
+  username: string;
+  avatarUrl?: string | null;
+};
 
-import type { Climb, ClimbQueueItem } from '@boardsesh/shared-schema';
+export type Climb = {
+  uuid: string;
+  layoutId?: number | null;
+  boardType?: string;
+  setter_username: string;
+  userId?: string | null;
+  name: string;
+  description?: string | null;
+  frames: string;
+  angle: number;
+  ascensionist_count: number;
+  difficulty: string;
+  quality_average: string;
+  stars: number;
+  difficulty_error: string;
+  mirrored?: boolean | null;
+  benchmark_difficulty: string | null;
+  is_draft?: boolean | null;
+  is_no_match?: boolean | null;
+  userAscents?: number | null;
+  userAttempts?: number | null;
+  created_at?: string | null;
+  published_at?: string | null;
+};
+
+export type ClimbQueueItem = {
+  uuid: string;
+  climb: Climb;
+  addedBy?: string | null;
+  addedByUser?: QueueItemUser;
+  tickedBy?: (string | null)[];
+  suggested?: boolean;
+};
 
 export type ClimbQueue = ClimbQueueItem[];
 
@@ -29,12 +70,6 @@ export type SetCurrentClimbOptions = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
 };
 
-/**
- * Minimal search parameters interface used by the queue state machine.
- * The full SearchRequestPagination type lives in the web app; the reducer
- * only stores it opaquely, so this record-based interface is sufficient
- * for any runtime that passes search params through the queue.
- */
 export type QueueSearchParams = Record<string, unknown>;
 
 export type QueueState = {
@@ -44,19 +79,10 @@ export type QueueState = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
   hasDoneFirstFetch: boolean;
   initialQueueDataReceivedFromPeers: boolean;
-  // Track locally-initiated current climb updates by correlation ID to skip server echoes
-  // Correlation IDs enable precise echo detection without time-based logic in the reducer
   pendingCurrentClimbUpdates: string[];
-  // Sequence tracking for gap detection and state verification
   lastReceivedSequence: number | null;
   lastReceivedStateHash: string | null;
-  // Flag to indicate corrupted data was filtered and a resync is needed
   needsResync: boolean;
-  // Optimistic driver participant id, used between `takeControl` firing and the
-  // server's `DriverChanged` broadcast landing. When set, the QueueContext
-  // prefers this over `persistentSession.driverParticipantId` so the lightbulb
-  // flips visual state instantly. Cleared on the next `DriverChanged` event
-  // (idempotent if the server agrees; corrects the UI if we lost a race).
   optimisticDriverParticipantId: string | null;
 };
 
@@ -76,7 +102,6 @@ export type QueueAction =
     }
   | { type: 'SET_FIRST_FETCH'; payload: boolean }
   | { type: 'MIRROR_CLIMB' }
-  // Delta-specific actions
   | { type: 'DELTA_ADD_QUEUE_ITEM'; payload: { item: ClimbQueueItem; position?: number } }
   | { type: 'DELTA_REMOVE_QUEUE_ITEM'; payload: { uuid: string } }
   | {
@@ -104,8 +129,5 @@ export type QueueAction =
   | { type: 'CLEANUP_PENDING_UPDATE'; payload: { correlationId: string } }
   | { type: 'CLEANUP_PENDING_UPDATES_BATCH'; payload: { correlationIds: string[] } }
   | { type: 'CLEAR_RESYNC_FLAG' }
-  // Optimistic driver claim — applied immediately when the local user fires
-  // `takeControl`, cleared on the authoritative `DriverChanged` broadcast.
-  // Lets the bar/drawer lightbulb flip visual state before the server round-trip.
   | { type: 'OPTIMISTIC_SET_DRIVER'; payload: { participantId: string } }
   | { type: 'OPTIMISTIC_CLEAR_DRIVER' };

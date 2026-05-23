@@ -4,8 +4,7 @@
  * (createPlaylistSuggestionSource, getQueueBoardKey) remain in the web app.
  */
 
-import type { Climb } from '@boardsesh/shared-schema';
-import type { ClimbQueue, ClimbQueueItem, PlaylistSuggestionSource } from './types';
+import type { Climb, ClimbQueue, ClimbQueueItem, PlaylistSuggestionSource } from './types';
 
 /**
  * Merge a list of playlist climbs with the activated climb, deduplicating

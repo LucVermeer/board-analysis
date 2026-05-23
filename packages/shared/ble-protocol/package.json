@@ -26,6 +26,9 @@
       "default": "./src/transport.ts"
     }
   },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@boardsesh/board-constants": "*",
     "@boardsesh/shared-schema": "*"

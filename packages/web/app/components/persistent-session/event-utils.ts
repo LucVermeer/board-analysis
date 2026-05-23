@@ -1,9 +1,10 @@
 import type { SessionUser } from '@boardsesh/shared-schema';
 import type { SessionUser as GeneratedSessionUser } from '@boardsesh/shared-schema/generated';
 
-type UuidItem = {
-  uuid: string;
-};
+// Re-export pure queue utilities from the shared package — the web app used to
+// have its own copies; now it delegates to the single implementation.
+export { insertQueueItemIdempotent, evaluateQueueEventSequence } from '@boardsesh/queue';
+export type { QueueSequenceDecision } from '@boardsesh/queue';
 
 /**
  * Normalize a SessionUser coming off the wire (generated GraphQL type, where
@@ -34,37 +35,4 @@ export function upsertSessionUser(users: SessionUser[], user: SessionUser): Sess
     ...user,
   };
   return nextUsers;
-}
-
-export function insertQueueItemIdempotent<T extends UuidItem>(queue: T[], item: T, position?: number): T[] {
-  if (queue.some((existingItem) => existingItem.uuid === item.uuid)) {
-    return queue;
-  }
-
-  const nextQueue = [...queue];
-  if (position !== undefined && position >= 0 && position <= nextQueue.length) {
-    nextQueue.splice(position, 0, item);
-    return nextQueue;
-  }
-
-  nextQueue.push(item);
-  return nextQueue;
-}
-
-export type QueueSequenceDecision = 'apply' | 'ignore-stale' | 'gap';
-
-export function evaluateQueueEventSequence(lastSequence: number | null, eventSequence: number): QueueSequenceDecision {
-  if (lastSequence === null) {
-    return 'apply';
-  }
-
-  if (eventSequence <= lastSequence) {
-    return 'ignore-stale';
-  }
-
-  if (eventSequence > lastSequence + 1) {
-    return 'gap';
-  }
-
-  return 'apply';
 }
