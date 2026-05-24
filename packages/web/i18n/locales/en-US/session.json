@@ -270,7 +270,16 @@
       "endSession": "End session",
       "endSessionConfirm": "Are you sure you want to end this session?",
       "climbCount_one": "{{count}} climb",
-      "climbCount_other": "{{count}} climbs"
+      "climbCount_other": "{{count}} climbs",
+      "noSessionTitle": "No session yet",
+      "noSessionSubtitle": "Start a session from the climbs tab to line up your sends",
+      "emptyTitle": "Queue is empty",
+      "emptySubtitle": "Browse climbs and add them to your queue",
+      "browseClimbs": "Browse climbs",
+      "previousClimb": "Previous climb",
+      "nextClimb": "Next climb",
+      "logAscent": "Log ascent",
+      "noClimbSelected": "No climb selected"
     },
     "queueSheet": {
       "emptyQueue": "Your queue is empty",

@@ -236,7 +236,7 @@
   "mobile": {
     "logbook": {
       "title": "Registro",
-      "noEntries": "Sin ascensiones todavia",
+      "noEntries": "Sin ascensiones todavía",
       "sendsAndAttempts": "{{sends}} envios, {{attempts}} intentos",
       "sendsOnly": "{{sends}} envios",
       "attemptsOnly": "{{attempts}} intentos"
@@ -248,14 +248,14 @@
     },
     "community": {
       "title": "Comunidad",
-      "empty": "Sin datos de la comunidad todavia",
+      "empty": "Sin datos de la comunidad todavía",
       "ascensionists_one": "{{count}} ascensionista",
       "ascensionists_other": "{{count}} ascensionistas",
       "avgQuality": "Calidad promedio"
     },
     "betaVideos": {
       "title": "Videos Beta",
-      "empty": "Sin videos beta todavia. Se el primero en compartir!"
+      "empty": "Sin videos beta todavía. ¡Sé el primero en compartir!"
     },
     "angleSelector": {
       "title": "Seleccionar ángulo"
@@ -270,7 +270,16 @@
       "endSession": "Terminar sesión",
       "endSessionConfirm": "¿Estás seguro de que quieres terminar esta sesión?",
       "climbCount_one": "{{count}} bloque",
-      "climbCount_other": "{{count}} bloques"
+      "climbCount_other": "{{count}} bloques",
+      "noSessionTitle": "Sin sesión aún",
+      "noSessionSubtitle": "Inicia una sesión desde la pestaña de bloques",
+      "emptyTitle": "La cola está vacía",
+      "emptySubtitle": "Explora bloques y agrégalos a tu cola",
+      "browseClimbs": "Explorar bloques",
+      "previousClimb": "Bloque anterior",
+      "nextClimb": "Bloque siguiente",
+      "logAscent": "Registrar ascenso",
+      "noClimbSelected": "Ningún bloque seleccionado"
     },
     "queueSheet": {
       "emptyQueue": "Tu cola está vacía",
