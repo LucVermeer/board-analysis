@@ -596,6 +596,18 @@
       "anyRating": "Any",
       "apply": "Apply filters",
       "reset": "Reset"
+    },
+    "climbRow": {
+      "addedToQueue": "Added to queue",
+      "addToQueue": "Add to queue",
+      "addToPlaylist": "Add to playlist",
+      "moreActions": "More actions",
+      "menuAccessibility": "Actions for {{climbName}}",
+      "toggleFavorite": "Toggle favorite",
+      "share": "Share climb",
+      "viewSetter": "View setter",
+      "ascentSent": "Sent",
+      "ascentAttempted": "Attempted"
     }
   }
 }

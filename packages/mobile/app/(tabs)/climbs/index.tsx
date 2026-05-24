@@ -1,11 +1,12 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Pressable, StyleSheet, RefreshControl, Image } from 'react-native';
+import { View, StyleSheet, RefreshControl, Image } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import type BottomSheet from '@gorhom/bottom-sheet';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
+import { ClimbActionsSheet } from '../../../src/components/ClimbActionsSheet';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
@@ -16,10 +17,13 @@ import {
   type ClimbFilters,
 } from '../../../src/components/ClimbFilterSheet';
 import { useDefaultBoard, useSearchClimbs } from '../../../src/lib/graphql/hooks';
+import { useQueue } from '../../../src/providers/queue-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
+import { hapticSuccess } from '../../../src/lib/haptics';
+import { Pressable } from 'react-native';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -57,13 +61,13 @@ export default function ClimbList() {
         autoCapitalize: 'none',
         hideWhenScrolling: false,
         onChangeText: (event: { nativeEvent: { text: string } }) => {
-          const text = event.nativeEvent.text;
+          const searchText = event.nativeEvent.text;
 
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
           }
           debounceTimerRef.current = setTimeout(() => {
-            setDebouncedSearch(text);
+            setDebouncedSearch(searchText);
           }, SEARCH_DEBOUNCE_MS);
         },
       },
@@ -83,7 +87,7 @@ export default function ClimbList() {
 
   const { data: defaultBoard, isLoading: isBoardLoading } = useDefaultBoard();
 
-  const boardName = defaultBoard?.boardType ?? '';
+  const boardName = (defaultBoard?.boardType ?? '') as BoardName;
   const layoutId = defaultBoard?.layoutId ?? 0;
   const sizeId = defaultBoard?.sizeId ?? 0;
   const setIds = defaultBoard?.setIds ?? '';
@@ -91,22 +95,25 @@ export default function ClimbList() {
 
   const hasBoardConfig = !!defaultBoard;
 
-  // Pre-warm board images so they're cached before the user taps into a climb
-  useEffect(() => {
-    if (!defaultBoard) return;
+  // Compute board render data once for all thumbnails
+  const boardRenderData = useMemo(() => {
+    if (!defaultBoard) return null;
     const parsedSetIds = defaultBoard.setIds.split(',').map(Number);
-    const renderData = getBoardRenderData({
+    return getBoardRenderData({
       boardName: defaultBoard.boardType as BoardName,
       layoutId: defaultBoard.layoutId,
       sizeId: defaultBoard.sizeId,
       setIds: parsedSetIds,
     });
-    if (renderData?.imageUrls) {
-      for (const url of renderData.imageUrls) {
-        Image.prefetch(url);
-      }
-    }
   }, [defaultBoard]);
+
+  // Pre-warm board images so they're cached before the user taps into a climb
+  useEffect(() => {
+    if (!boardRenderData) return;
+    for (const url of boardRenderData.imageUrls) {
+      Image.prefetch(url);
+    }
+  }, [boardRenderData]);
 
   // Track pagination
   const [pageNumber, setPageNumber] = useState(1);
@@ -121,7 +128,7 @@ export default function ClimbList() {
 
   const searchInput = useMemo(
     () => ({
-      boardName,
+      boardName: boardName as string,
       layoutId,
       sizeId,
       setIds,
@@ -175,7 +182,7 @@ export default function ClimbList() {
         pathname: '/(tabs)/climbs/[climbUuid]',
         params: {
           climbUuid: climb.uuid,
-          boardName,
+          boardName: boardName as string,
           layoutId: String(layoutId),
           sizeId: String(sizeId),
           setIds,
@@ -186,22 +193,57 @@ export default function ClimbList() {
     [router, boardName, layoutId, sizeId, setIds, angle],
   );
 
+  // --- Queue integration ---
+  const { addToQueue } = useQueue();
+
+  const handleAddToQueue = useCallback(
+    (climb: Climb) => {
+      hapticSuccess();
+      addToQueue({
+        uuid: `queue-${climb.uuid}-${Date.now()}`,
+        climb,
+      });
+    },
+    [addToQueue],
+  );
+
+  // --- Actions sheet ---
+  const actionsSheetRef = useRef<BottomSheet>(null);
+  const [activeActionClimb, setActiveActionClimb] = useState<Climb | null>(null);
+
+  const handleOpenActions = useCallback((climb: Climb) => {
+    setActiveActionClimb(climb);
+    actionsSheetRef.current?.expand();
+  }, []);
+
+  const handleDismissActions = useCallback(() => {
+    actionsSheetRef.current?.close();
+    setActiveActionClimb(null);
+  }, []);
+
+  const handleActionAddToQueue = useCallback(() => {
+    if (activeActionClimb) {
+      handleAddToQueue(activeActionClimb);
+    }
+  }, [activeActionClimb, handleAddToQueue]);
+
   const isInitialLoading = isBoardLoading || (isClimbsLoading && accumulatedClimbs.length === 0);
 
   const renderClimbItem = useCallback(
     ({ item: climb }: { item: Climb }) => {
-      const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
-
       return (
         <ClimbListRow
           climb={climb}
-          gradeName={climb.difficulty}
-          gradeColor={gradeColor}
+          boardName={boardName}
+          boardRenderData={boardRenderData}
+          angle={angle}
           onPress={() => handleClimbPress(climb)}
+          onAddToQueue={handleAddToQueue}
+          onOpenActions={handleOpenActions}
         />
       );
     },
-    [handleClimbPress],
+    [handleClimbPress, boardName, boardRenderData, angle, handleAddToQueue, handleOpenActions],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {
@@ -234,7 +276,6 @@ export default function ClimbList() {
         data={accumulatedClimbs}
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}
-        estimatedItemSize={68}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentInsetAdjustmentBehavior="automatic"
@@ -269,9 +310,15 @@ export default function ClimbList() {
       <ClimbFilterSheet
         visible={showFilters}
         onDismiss={handleDismissFilters}
-        boardName={boardName}
+        boardName={boardName as string}
         currentFilters={filters}
         onApply={handleApplyFilters}
+      />
+      <ClimbActionsSheet
+        ref={actionsSheetRef}
+        climb={activeActionClimb}
+        onAddToQueue={handleActionAddToQueue}
+        onDismiss={handleDismissActions}
       />
     </View>
   );
