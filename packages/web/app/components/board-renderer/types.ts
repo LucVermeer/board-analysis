@@ -1,6 +1,3 @@
-import { MOONBOARD_ENABLED } from '@/app/lib/moonboard-config';
-import type { BoardName } from '@/app/lib/types';
-
 // Re-export hold state types and constants from the canonical source
 export {
   HOLD_STATE_MAP,
@@ -37,8 +34,3 @@ export type HeatmapData = {
 
 /** Thumbnail render width in pixels. Covers 3x retina at ~64px CSS display. */
 export const THUMBNAIL_WIDTH = 200;
-
-// If adding more boards be sure to increment the DB version number for indexeddb
-export const supported_boards: BoardName[] = MOONBOARD_ENABLED
-  ? ['kilter', 'tension', 'moonboard', 'decoy', 'touchstone', 'grasshopper', 'soill']
-  : ['kilter', 'tension', 'decoy', 'touchstone', 'grasshopper', 'soill'];

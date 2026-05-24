@@ -11,8 +11,6 @@ type ImageDimensions = Record<
   }
 >;
 
-export type SetIdList = number[];
-
 // Conditionally include moonboard based on feature flag
 export const SUPPORTED_BOARDS: BoardName[] = MOONBOARD_ENABLED ? [...ALL_SUPPORTED_BOARDS] : [...AURORA_BOARDS];
 

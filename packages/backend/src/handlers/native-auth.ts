@@ -319,7 +319,10 @@ function verifyTransferToken(token: string): { userId: string } | null {
 // Token generation helpers
 // ---------------------------------------------------------------------------
 
-async function generateTokenPair(userId: string): Promise<{
+async function generateTokenPair(
+  userId: string,
+  txOrDb: { insert: typeof db.insert } = db,
+): Promise<{
   jwt: string;
   refreshToken: string;
   expiresAt: string;
@@ -343,7 +346,7 @@ async function generateTokenPair(userId: string): Promise<{
   const refreshToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
-  await db.insert(mobileRefreshTokens).values({
+  await txOrDb.insert(mobileRefreshTokens).values({
     userId,
     tokenHash,
     expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
@@ -496,33 +499,37 @@ export async function handleNativeAuthRefresh(req: IncomingMessage, res: ServerR
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
   try {
-    // Atomically revoke the token and return it in a single query.
-    // This prevents TOCTOU races: if two concurrent requests present the same
-    // refresh token, only one will get the row back — the other gets an empty
-    // result because the WHERE clause requires revoked_at IS NULL.
-    const revokedRows = await db
-      .update(mobileRefreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(and(eq(mobileRefreshTokens.tokenHash, tokenHash), isNull(mobileRefreshTokens.revokedAt)))
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      // Atomically revoke the token and return it in a single query.
+      // This prevents TOCTOU races: if two concurrent requests present the same
+      // refresh token, only one will get the row back — the other gets an empty
+      // result because the WHERE clause requires revoked_at IS NULL.
+      const revokedRows = await tx
+        .update(mobileRefreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(mobileRefreshTokens.tokenHash, tokenHash), isNull(mobileRefreshTokens.revokedAt)))
+        .returning();
 
-    const revokedToken = revokedRows[0];
+      const revokedToken = revokedRows[0];
+      if (!revokedToken) {
+        return { status: 401 as const, error: 'Invalid refresh token' };
+      }
 
-    if (!revokedToken) {
-      sendJson(res, 401, { error: 'Invalid refresh token' });
+      if (revokedToken.expiresAt < new Date()) {
+        return { status: 401 as const, error: 'Refresh token expired' };
+      }
+
+      const tokenPair = await generateTokenPair(revokedToken.userId, tx);
+      return { status: 200 as const, tokenPair, userId: revokedToken.userId };
+    });
+
+    if (result.status !== 200) {
+      sendJson(res, result.status, { error: result.error });
       return;
     }
 
-    if (revokedToken.expiresAt < new Date()) {
-      // Token was already expired — we revoked it for hygiene but won't issue new tokens
-      sendJson(res, 401, { error: 'Refresh token expired' });
-      return;
-    }
-
-    // Issue new token pair
-    const tokenPair = await generateTokenPair(revokedToken.userId);
-    logger.info(`[NativeAuth] Token refresh successful for user ${revokedToken.userId}`);
-    sendJson(res, 200, tokenPair);
+    logger.info(`[NativeAuth] Token refresh successful for user ${result.userId}`);
+    sendJson(res, 200, result.tokenPair);
   } catch (error) {
     logger.error('[NativeAuth] Token refresh failed:', error);
     sendJson(res, 500, { error: 'Internal server error' });
@@ -674,6 +681,22 @@ export function stopRefreshTokenCleanup(): void {
 export function __resetNativeAuthStateForTests(): void {
   authRateLimitMap.clear();
   consumedTransferTokens.clear();
+}
+
+/** Fill the consumed-token map with fresh entries for capacity testing. Test-only. */
+export function __fillConsumedTokenMapForTests(count: number): void {
+  const now = Date.now();
+  for (let i = 0; i < count; i++) {
+    consumedTransferTokens.set(`test-sig-${String(i)}`, now);
+  }
+}
+
+/** Fill the rate-limit map with non-expired entries for capacity testing. Test-only. */
+export function __fillRateLimitMapForTests(count: number): void {
+  const futureReset = Date.now() + AUTH_RATE_LIMIT_WINDOW_MS;
+  for (let i = 0; i < count; i++) {
+    authRateLimitMap.set(`test-ip-${String(i)}`, { count: 1, resetAt: futureReset });
+  }
 }
 
 /** Run the refresh token cleanup tick directly. Test-only. */

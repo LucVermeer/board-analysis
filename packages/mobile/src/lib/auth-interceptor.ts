@@ -1,4 +1,5 @@
-import { getAuthToken, getRefreshToken, storeTokens, clearTokens, isTokenExpiringSoon } from './auth-store';
+import { getAuthToken, getRefreshToken, storeTokens, isTokenExpiringSoon } from './auth-store';
+import { signOut } from './auth';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
 
@@ -66,7 +67,7 @@ export async function authenticatedFetch(url: string | URL | Request, options: R
         return fetch(url, { ...options, headers });
       }
     }
-    await clearTokens();
+    await signOut();
   }
 
   return response;

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { useRouter, useSegments } from 'expo-router';
+import { useSegments, Redirect } from 'expo-router';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import { startSignIn, signOut as authSignOut, type AuthProvider as AuthProviderType } from '../lib/auth';
 import { resetHttpClient } from '../lib/graphql/client';
@@ -26,7 +26,6 @@ export function useAuth(): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
   const segments = useSegments();
 
   const checkAuth = useCallback(async () => {
@@ -51,18 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
-  // Route protection
-  useEffect(() => {
-    if (isLoading) return;
-    const inAuthGroup = segments[0] === 'auth';
-
-    if (!isAuthenticated && !inAuthGroup) {
-      router.replace('/auth/login');
-    } else if (isAuthenticated && inAuthGroup) {
-      router.replace('/(tabs)');
-    }
-  }, [isAuthenticated, isLoading, segments, router]);
-
   const signIn = useCallback(async (provider: AuthProviderType) => {
     await startSignIn(provider);
   }, []);
@@ -75,8 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(false);
   }, []);
 
-  if (isLoading) {
-    return null;
+  const inAuthGroup = segments[0] === 'auth';
+
+  if (!isLoading && !isAuthenticated && !inAuthGroup) {
+    return <Redirect href="/auth/login" />;
+  }
+  if (!isLoading && isAuthenticated && inAuthGroup) {
+    return <Redirect href="/(tabs)" />;
   }
 
   return (
