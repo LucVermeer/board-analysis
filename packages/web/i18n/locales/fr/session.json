@@ -242,7 +242,11 @@
       "browseClimbs": "Parcourir les blocs",
       "noClimbSelected": "Aucun bloc sélectionné",
       "unknownClimb": "Bloc inconnu",
-      "logAscent": "Enregistrer l'ascension"
+      "logAscent": "Enregistrer l'ascension",
+      "previousClimb": "Bloc précédent",
+      "nextClimb": "Bloc suivant",
+      "removeClimb": "Supprimer le bloc",
+      "positionLabel": "position {{position}}"
     }
   },
   "playView": {

@@ -15,3 +15,5 @@ export { BoardRenderer, BoardHoldOverlay, useParseFrames } from './board-rendere
 export type { BoardRendererProps, BoardHold, HoldPlacement } from './board-renderer';
 export { QueueItemRow } from './QueueItemRow';
 export { ClimbFilterSheet, hasActiveFilters, DEFAULT_FILTERS, type ClimbFilters } from './ClimbFilterSheet';
+export { SegmentedControl } from './SegmentedControl';
+export { StarRating } from './StarRating';

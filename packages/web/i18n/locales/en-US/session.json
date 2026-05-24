@@ -242,7 +242,11 @@
       "browseClimbs": "Browse climbs",
       "noClimbSelected": "No climb selected",
       "unknownClimb": "Unknown climb",
-      "logAscent": "Log ascent"
+      "logAscent": "Log ascent",
+      "previousClimb": "Previous climb",
+      "nextClimb": "Next climb",
+      "removeClimb": "Remove climb",
+      "positionLabel": "position {{position}}"
     }
   },
   "playView": {

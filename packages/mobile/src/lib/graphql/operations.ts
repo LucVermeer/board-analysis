@@ -12,6 +12,7 @@ import type {
   SessionSummary,
   PublicUserProfile,
   FollowConnection,
+  TickStatus,
 } from '@boardsesh/shared-schema';
 
 // ============================================
@@ -502,7 +503,7 @@ export type SaveTickMutationVariables = {
     climbUuid: string;
     angle: number;
     isMirror: boolean;
-    status: string;
+    status: TickStatus;
     attemptCount: number;
     quality?: number | null;
     difficulty?: number | null;

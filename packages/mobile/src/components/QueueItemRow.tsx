@@ -7,11 +7,13 @@ import {
   type GestureUpdateEvent,
   type PanGestureHandlerEventPayload,
 } from 'react-native-gesture-handler';
+import { useTranslation } from 'react-i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
+import { useTheme } from '../providers/theme-provider';
 import { hapticSelection, hapticMedium } from '../lib/haptics';
 
 const SWIPE_DELETE_THRESHOLD = -80;
@@ -28,6 +30,8 @@ type QueueItemRowProps = {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove }: QueueItemRowProps) {
+  const { systemColors } = useTheme();
+  const { t } = useTranslation('session');
   const translateX = useSharedValue(0);
   const rowOpacity = useSharedValue(1);
   const rowHeight = useSharedValue<number | undefined>(undefined);
@@ -114,7 +118,12 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
       <View style={styles.swipeContainer}>
         {/* Delete action behind the row */}
         <Animated.View style={[styles.deleteAction, deleteButtonStyle]}>
-          <Pressable onPress={handleDeletePress} style={styles.deleteButton}>
+          <Pressable
+            onPress={handleDeletePress}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.queue.removeClimb')}
+            style={styles.deleteButton}
+          >
             <Icon name="delete" size={22} color={iosSystemColors.white} />
           </Pressable>
         </Animated.View>
@@ -122,6 +131,9 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
         <GestureDetector gesture={panGesture}>
           <AnimatedPressable
             onPress={handlePress}
+            accessibilityRole="button"
+            accessibilityLabel={`${climbName}, ${t('mobile.queue.positionLabel', { position })}`}
+            accessibilityState={{ selected: isCurrentClimb }}
             style={[styles.row, isCurrentClimb && styles.currentClimbRow, rowAnimatedStyle]}
           >
             {/* Position number */}
@@ -159,7 +171,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
       </View>
 
       {/* Separator */}
-      <View style={[styles.separator, { marginLeft: 52 }]} />
+      <View style={[styles.separator, { marginLeft: 52, backgroundColor: systemColors.separator }]} />
     </Animated.View>
   );
 }
@@ -229,6 +241,5 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: iosSystemColors.separator,
   },
 });

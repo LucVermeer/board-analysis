@@ -576,7 +576,9 @@
       "commentPlaceholder": "How did it feel?",
       "save": "Save",
       "decreaseAttempts": "Decrease attempts",
-      "increaseAttempts": "Increase attempts"
+      "increaseAttempts": "Increase attempts",
+      "errorTitle": "Save failed",
+      "errorMessage": "Could not save your ascent. Please try again."
     },
     "filter": {
       "title": "Filters",

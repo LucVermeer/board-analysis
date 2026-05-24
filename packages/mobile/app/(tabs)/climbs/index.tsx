@@ -1,10 +1,10 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Pressable, StyleSheet, RefreshControl } from 'react-native';
+import { View, Pressable, StyleSheet, RefreshControl, Image } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import type { Climb } from '@boardsesh/shared-schema';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants';
+import type { Climb, BoardName } from '@boardsesh/shared-schema';
+import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
@@ -17,6 +17,7 @@ import {
 } from '../../../src/components/ClimbFilterSheet';
 import { useDefaultBoard, useSearchClimbs } from '../../../src/lib/graphql/hooks';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
+import { getBoardRenderData } from '../../../src/lib/board-details';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
@@ -89,6 +90,23 @@ export default function ClimbList() {
   const angle = defaultBoard?.angle ?? 0;
 
   const hasBoardConfig = !!defaultBoard;
+
+  // Pre-warm board images so they're cached before the user taps into a climb
+  useEffect(() => {
+    if (!defaultBoard) return;
+    const parsedSetIds = defaultBoard.setIds.split(',').map(Number);
+    const renderData = getBoardRenderData({
+      boardName: defaultBoard.boardType as BoardName,
+      layoutId: defaultBoard.layoutId,
+      sizeId: defaultBoard.sizeId,
+      setIds: parsedSetIds,
+    });
+    if (renderData?.imageUrls) {
+      for (const url of renderData.imageUrls) {
+        Image.prefetch(url);
+      }
+    }
+  }, [defaultBoard]);
 
   // Track pagination
   const [pageNumber, setPageNumber] = useState(1);

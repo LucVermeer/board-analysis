@@ -171,6 +171,9 @@ export default function QueueScreen() {
         <Pressable
           onPress={handlePrevious}
           disabled={!hasPrevious}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.queue.previousClimb')}
+          accessibilityState={{ disabled: !hasPrevious }}
           style={[styles.navButton, !hasPrevious && styles.navButtonDisabled]}
           hitSlop={8}
         >
@@ -199,6 +202,9 @@ export default function QueueScreen() {
         <Pressable
           onPress={handleNext}
           disabled={!hasNext}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.queue.nextClimb')}
+          accessibilityState={{ disabled: !hasNext }}
           style={[styles.navButton, !hasNext && styles.navButtonDisabled]}
           hitSlop={8}
         >
@@ -208,6 +214,7 @@ export default function QueueScreen() {
         <Pressable
           onPress={handleLogAscent}
           disabled={!currentClimbQueueItem}
+          accessibilityRole="button"
           accessibilityLabel={t('mobile.queue.logAscent')}
           style={[styles.navButton, !currentClimbQueueItem && styles.navButtonDisabled]}
           hitSlop={8}

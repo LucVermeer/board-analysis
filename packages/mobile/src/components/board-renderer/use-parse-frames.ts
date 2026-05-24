@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { BoardName } from '@boardsesh/shared-schema';
-import { convertLitUpHoldsStringToMap, HOLD_STATE_MAP } from '@boardsesh/board-constants';
+import { convertLitUpHoldsStringToMap, HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 import type { BoardHold, HoldPlacement } from './types';
 
 /**

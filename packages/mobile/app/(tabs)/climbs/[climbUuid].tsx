@@ -1,9 +1,9 @@
-import { useMemo, useCallback, useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { useMemo, useCallback, useState, useEffect } from 'react';
+import { View, ScrollView, StyleSheet, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { randomUUID } from 'expo-crypto';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants';
+import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { Text } from '../../../src/components/Text';
 import { Button } from '../../../src/components/Button';
@@ -61,6 +61,15 @@ export default function ClimbDetail() {
       setIds: parsedSetIds,
     });
   }, [boardName, layoutId, sizeId, setIds]);
+
+  // Pre-warm React Native's platform image cache for board images
+  useEffect(() => {
+    if (boardRenderData?.imageUrls) {
+      for (const url of boardRenderData.imageUrls) {
+        Image.prefetch(url);
+      }
+    }
+  }, [boardRenderData?.imageUrls]);
 
   const gradeInfo = useMemo(() => {
     if (!climb) return null;

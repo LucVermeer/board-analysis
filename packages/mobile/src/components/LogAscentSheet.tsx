@@ -1,17 +1,17 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Pressable, TextInput, ScrollView, StyleSheet, type ViewStyle } from 'react-native';
+import { View, Pressable, TextInput, ScrollView, StyleSheet, Alert, type ViewStyle } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import { Text } from './Text';
 import { Button } from './Button';
 import { Icon } from './Icon';
 import { Separator } from './Separator';
+import { SegmentedControl } from './SegmentedControl';
+import { StarRating } from './StarRating';
 import { useTheme } from '../providers/theme-provider';
 import { useSaveTick, useGrades } from '../lib/graphql/hooks';
-import { hapticSelection, hapticSuccess, hapticLight, hapticError } from '../lib/haptics';
-import { springs } from '../theme/animations';
+import { hapticSuccess, hapticLight, hapticError, hapticSelection } from '../lib/haptics';
 import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
 
@@ -34,91 +34,9 @@ type LogAscentSheetProps = {
 
 const STATUS_OPTIONS: TickStatus[] = ['flash', 'send', 'attempt'];
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 function getMinAttempts(tickStatus: TickStatus): number {
   if (tickStatus === 'send') return 2;
   return 1;
-}
-
-function SegmentOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.95, springs.snappy);
-  };
-
-  const handlePressOut = () => {
-    scale.value = withSpring(1, springs.snappy);
-  };
-
-  const segmentStyle: ViewStyle = {
-    flex: 1,
-    paddingVertical: spacing[2],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 7,
-    ...(selected && {
-      backgroundColor: '#FFFFFF',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.15,
-      shadowRadius: 2,
-      elevation: 2,
-    }),
-  };
-
-  return (
-    <AnimatedPressable
-      onPress={() => {
-        hapticSelection();
-        onPress();
-      }}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      accessibilityLabel={label}
-      style={[animatedStyle, segmentStyle]}
-    >
-      <Text
-        variant="subheadline"
-        color={selected ? brandColors.primary : undefined}
-        style={selected ? styles.segmentLabelSelected : styles.segmentLabel}
-      >
-        {label}
-      </Text>
-    </AnimatedPressable>
-  );
-}
-
-function StarRating({ value, onChange }: { value: number; onChange: (rating: number) => void }) {
-  return (
-    <View style={styles.starRow}>
-      {[1, 2, 3, 4, 5].map((starIndex) => (
-        <Pressable
-          key={starIndex}
-          onPress={() => {
-            hapticSelection();
-            onChange(starIndex === value ? 0 : starIndex);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${starIndex} stars`}
-          hitSlop={4}
-        >
-          <Icon
-            name={starIndex <= value ? 'star.fill' : 'star'}
-            size={28}
-            color={starIndex <= value ? '#FFB800' : '#C7C7CC'}
-          />
-        </Pressable>
-      ))}
-    </View>
-  );
 }
 
 function GradeChip({ grade, selected, onPress }: { grade: Grade; selected: boolean; onPress: () => void }) {
@@ -187,14 +105,20 @@ export function LogAscentSheet({
     [t],
   );
 
+  const segmentOptions = useMemo(
+    () => STATUS_OPTIONS.map((option) => ({ key: option, label: statusLabels[option] })),
+    [statusLabels],
+  );
+
   const minAttempts = getMinAttempts(status);
 
   const handleStatusChange = useCallback(
-    (newStatus: TickStatus) => {
-      setStatus(newStatus);
-      if (newStatus === 'flash') {
+    (newStatus: string) => {
+      const tickStatus = newStatus as TickStatus;
+      setStatus(tickStatus);
+      if (tickStatus === 'flash') {
         setAttemptCount(1);
-      } else if (newStatus === 'send' && attemptCount < 2) {
+      } else if (tickStatus === 'send' && attemptCount < 2) {
         setAttemptCount(2);
       }
     },
@@ -210,6 +134,10 @@ export function LogAscentSheet({
     hapticLight();
     setAttemptCount((previous) => Math.max(minAttempts, previous - 1));
   }, [minAttempts]);
+
+  const handleQualityChange = useCallback((rating: number | undefined) => {
+    setQuality(rating ?? 0);
+  }, []);
 
   const resetForm = useCallback(() => {
     setStatus('flash');
@@ -249,6 +177,10 @@ export function LogAscentSheet({
         },
         onError: () => {
           hapticError();
+          Alert.alert(
+            t('mobile.logAscent.errorTitle'),
+            t('mobile.logAscent.errorMessage'),
+          );
         },
       },
     );
@@ -270,6 +202,7 @@ export function LogAscentSheet({
     setIds,
     onDismiss,
     resetForm,
+    t,
   ]);
 
   const handleSheetChange = useCallback(
@@ -288,20 +221,15 @@ export function LogAscentSheet({
     [],
   );
 
-  const isDarkMode = theme.colorScheme === 'dark';
+  const { systemColors } = theme;
 
   const backgroundStyle: ViewStyle = {
-    backgroundColor: isDarkMode ? '#1C1C1E' : '#FFFFFF',
+    backgroundColor: systemColors.secondaryBackground as string,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };
 
-  const segmentContainerStyle: ViewStyle = {
-    flexDirection: 'row',
-    backgroundColor: isDarkMode ? 'rgba(120, 120, 128, 0.24)' : 'rgba(120, 120, 128, 0.12)',
-    borderRadius: 9,
-    padding: 2,
-  };
+  const trackColor = systemColors.fill;
 
   const stepperButtonStyle: ViewStyle = {
     width: 36,
@@ -309,18 +237,18 @@ export function LogAscentSheet({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: isDarkMode ? 'rgba(120, 120, 128, 0.24)' : 'rgba(120, 120, 128, 0.12)',
+    backgroundColor: systemColors.fill as string,
   };
 
   const commentInputStyle = {
     borderWidth: 1,
-    borderColor: isDarkMode ? 'rgba(84, 84, 88, 0.6)' : 'rgba(60, 60, 67, 0.18)',
+    borderColor: systemColors.separator as string,
     borderRadius: 10,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     fontSize: 16,
     lineHeight: 22,
-    color: isDarkMode ? '#FFFFFF' : '#000000',
+    color: systemColors.label as string,
     minHeight: 80,
     textAlignVertical: 'top' as const,
   };
@@ -356,16 +284,12 @@ export function LogAscentSheet({
         >
           {/* Status segmented control */}
           <View style={styles.section}>
-            <View style={segmentContainerStyle}>
-              {STATUS_OPTIONS.map((option) => (
-                <SegmentOption
-                  key={option}
-                  label={statusLabels[option]}
-                  selected={status === option}
-                  onPress={() => handleStatusChange(option)}
-                />
-              ))}
-            </View>
+            <SegmentedControl
+              options={segmentOptions}
+              selectedKey={status}
+              onSelect={handleStatusChange}
+              trackColor={trackColor}
+            />
           </View>
 
           {/* Attempt count stepper */}
@@ -408,7 +332,7 @@ export function LogAscentSheet({
             <Text variant="subheadline" style={styles.sectionLabel}>
               {t('mobile.logAscent.quality')}
             </Text>
-            <StarRating value={quality} onChange={setQuality} />
+            <StarRating value={quality} onChange={handleQualityChange} clearValue={0} />
           </View>
 
           <Separator />
@@ -451,7 +375,7 @@ export function LogAscentSheet({
               value={comment}
               onChangeText={setComment}
               placeholder={t('mobile.logAscent.commentPlaceholder')}
-              placeholderTextColor={isDarkMode ? 'rgba(235, 235, 245, 0.3)' : 'rgba(60, 60, 67, 0.3)'}
+              placeholderTextColor={systemColors.tertiaryLabel as string}
               multiline
               style={commentInputStyle}
             />
@@ -505,12 +429,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginBottom: spacing[2],
   },
-  segmentLabel: {
-    fontWeight: '500',
-  },
-  segmentLabelSelected: {
-    fontWeight: '600',
-  },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -523,10 +441,6 @@ const styles = StyleSheet.create({
   attemptCount: {
     minWidth: 40,
     textAlign: 'center',
-  },
-  starRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
   },
   gradeChipsContainer: {
     gap: spacing[2],

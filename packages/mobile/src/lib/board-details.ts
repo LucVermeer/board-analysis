@@ -3,6 +3,8 @@ import { BOARD_IMAGE_DIMENSIONS } from '@boardsesh/board-config';
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { HoldPlacement } from '../components/board-renderer/types';
 
+const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
+
 type BoardRenderData = {
   boardWidth: number;
   boardHeight: number;
@@ -59,7 +61,7 @@ export function getBoardRenderData(params: {
       r: xSpacing * 4,
     }));
 
-  const imageUrls = imageFilenames.map((filename) => `https://www.boardsesh.com/images/${boardName}/${filename}`);
+  const imageUrls = imageFilenames.map((filename) => `${WEB_BASE_URL}/images/${boardName}/${filename}`);
 
   return { boardWidth, boardHeight, imageUrls, holdsData };
 }

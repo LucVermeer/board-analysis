@@ -576,7 +576,9 @@
       "commentPlaceholder": "Comment c'était ?",
       "save": "Enregistrer",
       "decreaseAttempts": "Diminuer les essais",
-      "increaseAttempts": "Augmenter les essais"
+      "increaseAttempts": "Augmenter les essais",
+      "errorTitle": "Échec de sauvegarde",
+      "errorMessage": "Impossible de sauvegarder votre ascension. Veuillez réessayer."
     },
     "filter": {
       "title": "Filtres",

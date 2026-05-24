@@ -6,15 +6,16 @@ import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import { Text } from './Text';
 import { Button } from './Button';
-import { Icon } from './Icon';
 import { Separator } from './Separator';
+import { SegmentedControl } from './SegmentedControl';
+import { StarRating } from './StarRating';
 import { useTheme } from '../providers/theme-provider';
 import { useGrades } from '../lib/graphql/hooks';
 import { hapticSelection } from '../lib/haptics';
 import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
+import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
-import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
 
 export type ClimbFilters = {
   minGrade?: number;
@@ -147,37 +148,6 @@ function GradeSelector({
   );
 }
 
-function StarRatingFilter({
-  value,
-  onChange,
-}: {
-  value: number | undefined;
-  onChange: (rating: number | undefined) => void;
-}) {
-  return (
-    <View style={styles.starRow}>
-      {[1, 2, 3, 4, 5].map((starIndex) => (
-        <Pressable
-          key={starIndex}
-          onPress={() => {
-            hapticSelection();
-            onChange(starIndex === value ? undefined : starIndex);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${starIndex} stars`}
-          hitSlop={4}
-        >
-          <Icon
-            name={value != null && starIndex <= value ? 'star.fill' : 'star'}
-            size={28}
-            color={value != null && starIndex <= value ? iosSystemColors.starGold : iosSystemColors.systemGray4}
-          />
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 export function hasActiveFilters(filters: ClimbFilters): boolean {
   return (
     filters.sortBy !== DEFAULT_FILTERS.sortBy ||
@@ -213,6 +183,11 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
       newest: t('mobile.filter.newest'),
     }),
     [t],
+  );
+
+  const sortSegmentOptions = useMemo(
+    () => SORT_OPTIONS.map((option) => ({ key: option, label: sortLabels[option] ?? option })),
+    [sortLabels],
   );
 
   const handleSortChange = useCallback((sortBy: string) => {
@@ -261,20 +236,15 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
     [],
   );
 
-  const isDarkMode = theme.colorScheme === 'dark';
+  const { systemColors } = theme;
 
   const backgroundStyle: ViewStyle = {
-    backgroundColor: isDarkMode ? iosDarkColors.secondaryBackground : iosSystemColors.white,
+    backgroundColor: systemColors.secondaryBackground as string,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };
 
-  const segmentContainerStyle: ViewStyle = {
-    flexDirection: 'row',
-    backgroundColor: isDarkMode ? 'rgba(120, 120, 128, 0.24)' : 'rgba(120, 120, 128, 0.12)',
-    borderRadius: 9,
-    padding: 2,
-  };
+  const trackColor = systemColors.fill;
 
   if (!visible) return null;
 
@@ -304,16 +274,13 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
             <Text variant="subheadline" style={styles.sectionLabel}>
               {t('mobile.filter.sortBy')}
             </Text>
-            <View style={segmentContainerStyle}>
-              {SORT_OPTIONS.map((option) => (
-                <SortSegment
-                  key={option}
-                  label={sortLabels[option] ?? option}
-                  selected={localFilters.sortBy === option}
-                  onPress={() => handleSortChange(option)}
-                />
-              ))}
-            </View>
+            <SegmentedControl
+              options={sortSegmentOptions}
+              selectedKey={localFilters.sortBy}
+              onSelect={handleSortChange}
+              textVariant="footnote"
+              trackColor={trackColor}
+            />
           </View>
 
           <Separator />
@@ -381,7 +348,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
                   {t('mobile.filter.anyRating')}
                 </Text>
               </Pressable>
-              <StarRatingFilter value={localFilters.minRating} onChange={handleMinRatingChange} />
+              <StarRating value={localFilters.minRating} onChange={handleMinRatingChange} clearValue={undefined} />
             </View>
           </View>
 
@@ -397,61 +364,6 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
         </ScrollView>
       </BottomSheetView>
     </BottomSheet>
-  );
-}
-
-function SortSegment({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.95, springs.snappy);
-  };
-
-  const handlePressOut = () => {
-    scale.value = withSpring(1, springs.snappy);
-  };
-
-  const segmentStyle: ViewStyle = {
-    flex: 1,
-    paddingVertical: spacing[2],
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 7,
-    ...(selected && {
-      backgroundColor: iosSystemColors.white,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.15,
-      shadowRadius: 2,
-      elevation: 2,
-    }),
-  };
-
-  return (
-    <AnimatedPressable
-      onPress={() => {
-        hapticSelection();
-        onPress();
-      }}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      accessibilityLabel={label}
-      style={[animatedStyle, segmentStyle]}
-    >
-      <Text
-        variant="footnote"
-        color={selected ? brandColors.primary : undefined}
-        style={selected ? styles.segmentLabelSelected : styles.segmentLabel}
-      >
-        {label}
-      </Text>
-    </AnimatedPressable>
   );
 }
 
@@ -483,12 +395,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginBottom: spacing[2],
   },
-  segmentLabel: {
-    fontWeight: '500',
-  },
-  segmentLabelSelected: {
-    fontWeight: '600',
-  },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -513,10 +419,6 @@ const styles = StyleSheet.create({
   },
   gradeSpacer: {
     height: spacing[2],
-  },
-  starRow: {
-    flexDirection: 'row',
-    gap: spacing[2],
   },
   ratingRow: {
     flexDirection: 'row',

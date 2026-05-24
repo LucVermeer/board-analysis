@@ -576,7 +576,9 @@
       "commentPlaceholder": "¿Cómo se sintió?",
       "save": "Guardar",
       "decreaseAttempts": "Disminuir intentos",
-      "increaseAttempts": "Aumentar intentos"
+      "increaseAttempts": "Aumentar intentos",
+      "errorTitle": "Error al guardar",
+      "errorMessage": "No se pudo guardar tu ascenso. Inténtalo de nuevo."
     },
     "filter": {
       "title": "Filtros",

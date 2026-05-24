@@ -1,5 +1,5 @@
 import type { BoardName, HoldState } from '@boardsesh/shared-schema';
-import type { HoldRenderStyle } from '@boardsesh/board-constants';
+import type { HoldRenderStyle } from '@boardsesh/board-constants/hold-states';
 
 /**
  * A single hold to render on the board, with position, size, and visual properties

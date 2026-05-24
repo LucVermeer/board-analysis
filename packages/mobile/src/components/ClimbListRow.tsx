@@ -1,3 +1,4 @@
+import React from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Text } from './Text';
@@ -5,8 +6,9 @@ import { Icon } from './Icon';
 import { hapticLight } from '../lib/haptics';
 import { springs } from '../theme/animations';
 import { formatAscentCount } from '../lib/format-ascent-count';
-import { DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants';
+import { DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { iosSystemColors } from '../theme/ios-colors';
+import { useTheme } from '../providers/theme-provider';
 
 type ClimbListRowProps = {
   climb: {
@@ -26,7 +28,8 @@ type ClimbListRowProps = {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPress }: ClimbListRowProps) {
+const ClimbListRow = React.memo(function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPress }: ClimbListRowProps) {
+  const { systemColors } = useTheme();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -94,10 +97,12 @@ export function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPres
         </View>
       </View>
 
-      <View style={styles.separator} />
+      <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
     </AnimatedPressable>
   );
-}
+});
+
+export { ClimbListRow };
 
 const styles = StyleSheet.create({
   container: {
@@ -147,7 +152,6 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: iosSystemColors.separator,
     marginLeft: 16,
   },
 });
