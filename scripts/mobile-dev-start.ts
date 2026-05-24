@@ -118,7 +118,7 @@ if (qaNotes.filePath) childEnv.BOARDSESH_DEV_QA_NOTES_FILE = qaNotes.filePath;
 const child = spawn('bunx', ['expo', 'start', ...passthroughArgs], {
   cwd: join(ROOT_DIR, 'packages', 'mobile'),
   env: childEnv,
-  stdio: ['inherit', 'pipe', 'pipe'],
+  stdio: ['inherit', 'pipe', 'pipe'] as ['inherit', 'pipe', 'pipe'],
 });
 
 child.stdout.on('data', (chunk: Buffer) => {
@@ -137,7 +137,7 @@ const forwardSignal = (signal: NodeJS.Signals) => {
 process.on('SIGINT', forwardSignal);
 process.on('SIGTERM', forwardSignal);
 
-child.on('close', (exitCode) => {
+child.on('close', (exitCode: number | null) => {
   logStream.end();
   process.exit(exitCode ?? 1);
 });
