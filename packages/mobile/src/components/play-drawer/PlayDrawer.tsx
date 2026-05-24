@@ -3,7 +3,7 @@ import { View, Pressable, StyleSheet, Image } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import BottomSheetModal, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
