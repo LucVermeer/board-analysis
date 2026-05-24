@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync, createWriteStream } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -115,18 +115,18 @@ if (branchName) childEnv.BOARDSESH_DEV_BRANCH_NAME = branchName;
 if (qaNotes.contents) childEnv.BOARDSESH_DEV_QA_NOTES = qaNotes.contents;
 if (qaNotes.filePath) childEnv.BOARDSESH_DEV_QA_NOTES_FILE = qaNotes.filePath;
 
-const child = spawn('bunx', ['expo', 'start', ...passthroughArgs], {
+const child: ChildProcess = spawn('bunx', ['expo', 'start', ...passthroughArgs], {
   cwd: join(ROOT_DIR, 'packages', 'mobile'),
   env: childEnv,
-  stdio: ['inherit', 'pipe', 'pipe'] as ['inherit', 'pipe', 'pipe'],
+  stdio: ['inherit', 'pipe', 'pipe'],
 });
 
-child.stdout.on('data', (chunk: Buffer) => {
+child.stdout!.on('data', (chunk: Buffer) => {
   process.stdout.write(chunk);
   logStream.write(chunk);
 });
 
-child.stderr.on('data', (chunk: Buffer) => {
+child.stderr!.on('data', (chunk: Buffer) => {
   process.stderr.write(chunk);
   logStream.write(chunk);
 });
