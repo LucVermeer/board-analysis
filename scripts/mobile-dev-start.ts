@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync, createWriteStream } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,14 +108,12 @@ console.log(`[dev:mobile] Metro log: .boardsesh/mobile-metro.log`);
 mkdirSync(BOARDSESH_DIR, { recursive: true });
 const logStream = createWriteStream(METRO_LOG_PATH, { flags: 'w' });
 
-const childEnv: Record<string, string> = Object.fromEntries(
-  Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-);
+const childEnv: NodeJS.ProcessEnv = { ...process.env };
 if (branchName) childEnv.BOARDSESH_DEV_BRANCH_NAME = branchName;
 if (qaNotes.contents) childEnv.BOARDSESH_DEV_QA_NOTES = qaNotes.contents;
 if (qaNotes.filePath) childEnv.BOARDSESH_DEV_QA_NOTES_FILE = qaNotes.filePath;
 
-const child: ChildProcess = spawn('bunx', ['expo', 'start', ...passthroughArgs], {
+const child = spawn('bunx', ['expo', 'start', ...passthroughArgs], {
   cwd: join(ROOT_DIR, 'packages', 'mobile'),
   env: childEnv,
   stdio: ['inherit', 'pipe', 'pipe'],
