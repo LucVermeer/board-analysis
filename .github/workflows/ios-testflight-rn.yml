@@ -22,7 +22,11 @@ concurrency:
 
 jobs:
   build-and-upload:
-    runs-on: macos-26
+    # macos-15 pins us to Xcode 16, where RN 0.79's vendored fmt library compiles.
+    # Under Xcode 26 (macos-26) clang's stricter C++20 constexpr evaluator
+    # rejects fmt's `format_str_.remove_prefix(...)` as non-constexpr. Bumping
+    # back here once RN ships a fmt fix that compiles on Xcode 26.
+    runs-on: macos-15
     timeout-minutes: 60
 
     env:
