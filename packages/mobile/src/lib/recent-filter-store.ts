@@ -55,5 +55,9 @@ export async function addRecentFilter(
 }
 
 export async function clearRecentFilters(): Promise<void> {
-  await SecureStore.deleteItemAsync(RECENT_FILTERS_KEY);
+  try {
+    await SecureStore.deleteItemAsync(RECENT_FILTERS_KEY);
+  } catch {
+    // Storage failure is non-critical
+  }
 }
