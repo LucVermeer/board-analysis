@@ -34,10 +34,11 @@ export default function ClimbList() {
   const playDrawerRef = useRef<PlayDrawerHandle>(null);
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
 
-  const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearchRef = useRef('');
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [searchTextLength, setSearchTextLength] = useState(0);
   const [filters, setFilters] = useState<ClimbFilters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
@@ -53,12 +54,13 @@ export default function ClimbList() {
   }, []);
 
   const handleSearchChange = useCallback((text: string) => {
-    setSearchText(text);
+    setSearchTextLength(text.length);
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
+      debouncedSearchRef.current = text;
       setDebouncedSearch(text);
     }, SEARCH_DEBOUNCE_MS);
   }, []);
@@ -71,31 +73,40 @@ export default function ClimbList() {
     setIsSearchFocused(false);
   }, []);
 
+  // Set up header once — SearchHeader manages its own text state internally
   useEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
         <SearchHeader
           ref={searchHeaderRef}
-          value={searchText}
           placeholder={t('search.placeholders.climbs')}
           onChangeText={handleSearchChange}
           onFocus={handleSearchFocus}
           onBlur={handleSearchBlur}
         />
       ),
+    });
+  }, [navigation, t, handleSearchChange, handleSearchFocus, handleSearchBlur]);
+
+  // Separate effect for headerRight since it depends on filtersActive
+  useEffect(() => {
+    navigation.setOptions({
       headerRight: () => (
         <Pressable onPress={handleOpenFilters} hitSlop={8} accessibilityRole="button">
           <Icon name="filter" size={22} color={filtersActive ? brandColors.primary : iosSystemColors.systemGray} />
         </Pressable>
       ),
     });
+  }, [navigation, filtersActive, handleOpenFilters]);
 
+  // Clean up debounce timer on unmount
+  useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [navigation, t, filtersActive, handleOpenFilters, searchText, handleSearchChange, handleSearchFocus, handleSearchBlur]);
+  }, []);
 
   // Load recent filters on mount
   useEffect(() => {
@@ -113,6 +124,8 @@ export default function ClimbList() {
   const hasBoardConfig = !!defaultBoard;
 
   const { data: gradesData } = useGrades(boardName);
+  const gradesRef = useRef(gradesData);
+  gradesRef.current = gradesData;
 
   // Pre-warm board images so they're cached before the user taps into a climb
   useEffect(() => {
@@ -212,22 +225,25 @@ export default function ClimbList() {
       setFilters(newFilters);
       setShowFilters(false);
 
-      if (hasActiveFilters(newFilters) || debouncedSearch.length > 0) {
-        const label = getFilterSummary(newFilters, debouncedSearch, gradesData, t);
-        addRecentFilter(label, newFilters, debouncedSearch)
+      const currentSearch = debouncedSearchRef.current;
+      if (hasActiveFilters(newFilters) || currentSearch.length > 0) {
+        const label = getFilterSummary(newFilters, currentSearch, gradesRef.current, t);
+        addRecentFilter(label, newFilters, currentSearch)
           .then(() => getRecentFilters())
           .then(setRecentFilters)
           .catch(() => {});
       }
     },
-    [debouncedSearch, gradesData, t],
+    [t],
   );
 
   const handleApplyRecentFilter = useCallback(
     (pillFilters: ClimbFilters, pillSearchText: string) => {
       setFilters(pillFilters);
-      setSearchText(pillSearchText);
+      debouncedSearchRef.current = pillSearchText;
       setDebouncedSearch(pillSearchText);
+      setSearchTextLength(pillSearchText.length);
+      searchHeaderRef.current?.setText(pillSearchText);
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
@@ -244,7 +260,7 @@ export default function ClimbList() {
       .catch(() => {});
   }, []);
 
-  const showRecentPills = isSearchFocused && searchText.length === 0 && recentFilters.length > 0;
+  const showRecentPills = isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
 
   const isInitialLoading = isBoardLoading || (isClimbsLoading && accumulatedClimbs.length === 0);
 

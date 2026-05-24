@@ -26,11 +26,11 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 function Pill({
   filter,
   isActive,
-  onPress,
+  onApply,
 }: {
   filter: RecentFilter;
   isActive: boolean;
-  onPress: () => void;
+  onApply: (filters: ClimbFilters, searchText: string) => void;
 }) {
   const scale = useSharedValue(1);
 
@@ -46,12 +46,14 @@ function Pill({
     scale.value = withSpring(1, springs.snappy);
   };
 
+  const handlePress = useCallback(() => {
+    hapticSelection();
+    onApply(filter.filters, filter.searchText);
+  }, [filter.filters, filter.searchText, onApply]);
+
   return (
     <AnimatedPressable
-      onPress={() => {
-        hapticSelection();
-        onPress();
-      }}
+      onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       accessibilityRole="button"
@@ -90,13 +92,6 @@ export function RecentFilterPills({
   const { t } = useTranslation('climbs');
   const currentKey = getFilterKey(currentFilters, currentSearchText);
 
-  const handleApply = useCallback(
-    (filter: RecentFilter) => {
-      onApply(filter.filters, filter.searchText);
-    },
-    [onApply],
-  );
-
   if (recentFilters.length === 0) return null;
 
   return (
@@ -122,7 +117,7 @@ export function RecentFilterPills({
             key={filter.id}
             filter={filter}
             isActive={getFilterKey(filter.filters, filter.searchText) === currentKey}
-            onPress={() => handleApply(filter)}
+            onApply={onApply}
           />
         ))}
       </ScrollView>
@@ -162,10 +157,10 @@ const styles = StyleSheet.create({
   },
   pillActive: {
     borderColor: brandColors.primary,
-    backgroundColor: 'rgba(140, 74, 82, 0.08)',
+    backgroundColor: `${brandColors.primary}14`,
   },
   pillInactive: {
-    borderColor: 'rgba(60, 60, 67, 0.18)',
+    borderColor: iosSystemColors.separator,
     backgroundColor: 'transparent',
   },
   pillLabel: {

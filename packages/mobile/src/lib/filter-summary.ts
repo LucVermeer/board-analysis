@@ -33,7 +33,16 @@ export function getFilterSummary(
   }
 
   if (filters.sortBy !== DEFAULT_FILTERS.sortBy) {
-    parts.push(t(`mobile.filter.${filters.sortBy}`));
+    const sortLabels: Record<string, string> = {
+      popular: t('mobile.filter.popular'),
+      quality: t('mobile.filter.quality'),
+      difficulty: t('mobile.filter.difficulty'),
+      newest: t('mobile.filter.newest'),
+    };
+    const sortLabel = sortLabels[filters.sortBy];
+    if (sortLabel) {
+      parts.push(sortLabel);
+    }
   }
 
   if (filters.minAscents != null) {
