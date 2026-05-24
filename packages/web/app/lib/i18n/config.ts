@@ -3,6 +3,10 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = 'en-US';
 
+// Keys used only by the React Native mobile app (packages/mobile/),
+// outside the web orphan checker's scan tree.
+// i18n-keep common:mobile.play.sendCount
+
 export const LOCALE_HTML_LANG: Record<Locale, string> = {
   'en-US': 'en',
   es: 'es',
