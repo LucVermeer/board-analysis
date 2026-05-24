@@ -54,6 +54,14 @@ vi.mock('../db/client', () => {
       insert: vi.fn(() => insertChain),
       update: vi.fn(() => updateChain),
       delete: vi.fn(() => deleteChain),
+      transaction: vi.fn(async (fn: (tx: unknown) => unknown) => {
+        const tx = {
+          insert: vi.fn(() => insertChain),
+          update: vi.fn(() => updateChain),
+          delete: vi.fn(() => deleteChain),
+        };
+        return fn(tx);
+      }),
     },
   };
 });
@@ -70,8 +78,14 @@ vi.mock('../redis/client', () => ({
   },
 }));
 
-const { handleNativeAuthExchange, handleNativeAuthRefresh, handleNativeAuthRevoke, __resetNativeAuthStateForTests } =
-  await import('../handlers/native-auth');
+const {
+  handleNativeAuthExchange,
+  handleNativeAuthRefresh,
+  handleNativeAuthRevoke,
+  __resetNativeAuthStateForTests,
+  __fillConsumedTokenMapForTests,
+  __fillRateLimitMapForTests,
+} = await import('../handlers/native-auth');
 
 const { validateMobileJwt, validateToken } = await import('../middleware/auth');
 
@@ -107,7 +121,7 @@ interface MockReq extends EventEmitter {
   destroy: () => void;
 }
 
-function makeRequest(opts: { method: string; body?: unknown; remoteAddress?: string }): MockReq {
+function makeRequest(opts: { method: string; body?: unknown; rawBody?: string; remoteAddress?: string }): MockReq {
   const emitter = new EventEmitter() as MockReq;
   emitter.method = opts.method;
   emitter.url = '/auth/native/exchange';
@@ -116,7 +130,9 @@ function makeRequest(opts: { method: string; body?: unknown; remoteAddress?: str
   emitter.destroy = vi.fn();
 
   setImmediate(() => {
-    if (opts.body !== undefined) {
+    if (opts.rawBody !== undefined) {
+      emitter.emit('data', Buffer.from(opts.rawBody, 'utf8'));
+    } else if (opts.body !== undefined) {
       emitter.emit('data', Buffer.from(JSON.stringify(opts.body), 'utf8'));
     }
     emitter.emit('end');
@@ -264,6 +280,33 @@ describe('handleNativeAuthExchange', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('returns 503 when consumed token map is full', async () => {
+    __fillConsumedTokenMapForTests(10_000);
+    const transferToken = createTransferToken('user-abc');
+    const req = makeRequest({ method: 'POST', body: { transferToken } });
+    const res = makeResponse();
+    await handleNativeAuthExchange(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+    expect(res.statusCode).toBe(503);
+    expect(parseBody(res).error).toBe('Service temporarily overloaded');
+  });
+
+  it('returns 503 when rate limit map is full', async () => {
+    __fillRateLimitMapForTests(50_000);
+    const req = makeRequest({ method: 'POST', body: { transferToken: 'payload.sig' }, remoteAddress: '10.0.0.1' });
+    const res = makeResponse();
+    await handleNativeAuthExchange(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+    expect(res.statusCode).toBe(503);
+    expect(parseBody(res).error).toBe('Service temporarily overloaded');
+  });
+
+  it('returns 400 for truly malformed JSON body', async () => {
+    const req = makeRequest({ method: 'POST', rawBody: 'not valid json {{{' });
+    const res = makeResponse();
+    await handleNativeAuthExchange(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+    expect(res.statusCode).toBe(400);
+    expect(parseBody(res).error).toBe('Invalid JSON body');
+  });
+
   it('returns 401 for a transfer token with an unreasonably long lifetime', async () => {
     // Token with a 1-hour lifetime (far exceeding the 125s max)
     const transferToken = createTransferToken('user-abc', { expiresInSeconds: 3600 });
@@ -372,6 +415,34 @@ describe('handleNativeAuthRefresh', () => {
     const res = makeResponse();
     await handleNativeAuthRefresh(req as unknown as IncomingMessage, res as unknown as ServerResponse);
     expect(res.statusCode).toBe(405);
+  });
+
+  it('returns 500 when NEXTAUTH_SECRET is unset during token generation', async () => {
+    // Set up valid refresh token revocation
+    mockDbUpdateReturning.mockResolvedValueOnce([
+      {
+        id: 'token-id',
+        userId: 'user-abc',
+        tokenHash: 'hash',
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(),
+        revokedAt: new Date(),
+      },
+    ]);
+
+    const savedSecret = process.env.NEXTAUTH_SECRET;
+    delete process.env.NEXTAUTH_SECRET;
+
+    try {
+      const refreshToken = crypto.randomUUID();
+      const req = makeRequest({ method: 'POST', body: { refreshToken } });
+      const res = makeResponse();
+      await handleNativeAuthRefresh(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+      expect(res.statusCode).toBe(500);
+      expect(parseBody(res).error).toBe('Internal server error');
+    } finally {
+      process.env.NEXTAUTH_SECRET = savedSecret;
+    }
   });
 });
 
@@ -592,6 +663,21 @@ describe('handleNativeAuthRevoke', () => {
     expect(res.statusCode).toBe(200);
     const body = parseBody(res);
     expect(body.revoked).toBe(true);
+  });
+
+  it('returns 405 for non-POST methods', async () => {
+    const req = makeRequest({ method: 'GET' });
+    const res = makeResponse();
+    await handleNativeAuthRevoke(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+    expect(res.statusCode).toBe(405);
+  });
+
+  it('returns 400 when refreshToken is missing', async () => {
+    const req = makeRequest({ method: 'POST', body: {} });
+    const res = makeResponse();
+    await handleNativeAuthRevoke(req as unknown as IncomingMessage, res as unknown as ServerResponse);
+    expect(res.statusCode).toBe(400);
+    expect(parseBody(res).error).toBe('refreshToken is required');
   });
 
   it('revokes an expired-but-unrevoked token and cleans up the user session', async () => {

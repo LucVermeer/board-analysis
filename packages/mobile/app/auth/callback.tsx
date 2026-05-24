@@ -21,14 +21,18 @@ export default function AuthCallback() {
     if (exchangedRef.current) return;
     exchangedRef.current = true;
 
-    exchangeTransferToken(transferToken).then(async (result) => {
-      if (result.success) {
-        await refreshAuthState();
-        router.replace('/(tabs)');
-      } else {
-        setError(result.error);
-      }
-    });
+    exchangeTransferToken(transferToken)
+      .then(async (result) => {
+        if (result.success) {
+          await refreshAuthState();
+          router.replace('/(tabs)');
+        } else {
+          setError(result.error);
+        }
+      })
+      .catch((exchangeError: unknown) => {
+        setError(exchangeError instanceof Error ? exchangeError.message : 'Unexpected error');
+      });
   }, [transferToken, router, refreshAuthState]);
 
   if (error) {

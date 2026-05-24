@@ -18,6 +18,12 @@ vi.mock('../auth-store', () => ({
   getTokenExpiresAt: vi.fn().mockResolvedValue(null),
 }));
 
+// ── Mock auth module (signOut used by interceptor on 401) ───────────────
+const mockSignOut = vi.fn().mockResolvedValue(undefined);
+vi.mock('../auth', () => ({
+  signOut: (...args: unknown[]) => mockSignOut(...args),
+}));
+
 import { ensureFreshToken, authenticatedFetch } from '../auth-interceptor';
 import { getAuthToken, getRefreshToken, storeTokens, clearTokens, isTokenExpiringSoon } from '../auth-store';
 
@@ -98,6 +104,33 @@ describe('ensureFreshToken', () => {
     // Only one actual fetch despite three concurrent calls
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  it('returns false without calling fetch when refresh token is null', async () => {
+    mockIsTokenExpiringSoon.mockResolvedValue(true);
+    mockGetRefreshToken.mockResolvedValue(null);
+
+    const result = await ensureFreshToken();
+
+    expect(result).toBe(false);
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockStoreTokens).not.toHaveBeenCalled();
+  });
+
+  it('returns false and logs warning when fetch throws', async () => {
+    mockIsTokenExpiringSoon.mockResolvedValue(true);
+    mockGetRefreshToken.mockResolvedValue('some-refresh-token');
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const result = await ensureFreshToken();
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith('[Auth] Token refresh error:', 'Network error');
+      expect(mockStoreTokens).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
 
 // ── authenticatedFetch ───────────────────────────────────────────────────
@@ -162,8 +195,8 @@ describe('authenticatedFetch', () => {
     const response = await authenticatedFetch('https://api.example.com/data');
 
     expect(response.status).toBe(401);
-    expect(mockClearTokens).toHaveBeenCalledTimes(1);
-    // clearTokens called once in the 401 handler after refresh fails
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    // signOut called once in the 401 handler after refresh fails (revokes + clears tokens)
   });
 
   it('attaches Authorization header from stored token', async () => {
@@ -179,6 +212,30 @@ describe('authenticatedFetch', () => {
     const headers = fetchCall[1].headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer my-jwt-token');
     expect(headers.get('X-Custom')).toBe('value');
+  });
+
+  it('makes request without Authorization header when no token exists', async () => {
+    mockIsTokenExpiringSoon.mockResolvedValue(false);
+    mockGetAuthToken.mockResolvedValue(null);
+    mockFetch.mockResolvedValueOnce({ status: 200, ok: true });
+
+    await authenticatedFetch('https://api.example.com/data');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const fetchCallHeaders = mockFetch.mock.calls[0][1].headers as Headers;
+    expect(fetchCallHeaders.has('Authorization')).toBe(false);
+  });
+
+  it('returns 401 directly without refresh attempt when no token exists', async () => {
+    mockIsTokenExpiringSoon.mockResolvedValue(false);
+    mockGetAuthToken.mockResolvedValue(null);
+    mockFetch.mockResolvedValueOnce({ status: 401, ok: false });
+
+    const response = await authenticatedFetch('https://api.example.com/data');
+
+    expect(response.status).toBe(401);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockSignOut).not.toHaveBeenCalled();
   });
 });
 
