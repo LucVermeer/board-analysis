@@ -9,7 +9,7 @@ A working plan for the native mobile app. v11.0 refines v10.0's direction with a
 3. **Share business logic, not UI.** BLE protocol encoding, queue state machine, GraphQL schema, board configuration, and type definitions live in shared packages. Web and mobile each get the UI layer that's best for their platform.
 4. **iOS-native experience.** 75% of users are on iOS. The app uses iOS system colors, SF Symbols, spring animations, haptic feedback, blur effects, and SwiftUI native modules for critical views. The goal is the quality bar set by apps like Things 3, Halide, and Bear — apps that feel like they were written in SwiftUI. No Material Design on iOS.
 
-Everything from v9.x's offline-first design — the query router shape, refdata per board, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView. The custom mutation queue is replaced by PowerSync's built-in CDC sync — see [offline-sync-plan.md](offline-sync-plan.md).
+Everything from v9.x's offline-first design — the query router shape, refdata per board, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView. The custom mutation queue is replaced by RxDB's built-in GraphQL replication — see [offline-sync-plan.md](offline-sync-plan.md).
 
 ## Non-negotiable: web and Capacitor apps must keep working
 
@@ -98,16 +98,11 @@ packages/
 │   • Auth: NextAuth for web cookies, bearer tokens for RN  │
 │                                                            │
 │  Postgres + PostGIS + Redis                                │
-│                                                            │
-│  PowerSync Service (self-hosted)                           │
-│   • Consumes Postgres WAL via logical replication          │
-│   • Streams changes to mobile clients per Sync Rules       │
-│   • MongoDB for bucket storage                             │
 └───────────────────────────────────────────────────────────┘
-         ▲                    ▲                ▲
-         │ HTTPS GraphQL      │ PowerSync      │ WebSocket
-         │                    │ sync stream    │
-┌────────┴────────── Mobile ──┴──────────────┴─────────────┐
+         ▲                                    ▲
+         │ HTTPS GraphQL                      │ WebSocket
+         │ (includes sync pull queries)       │
+┌────────┴────────── Mobile ────────────────┴──────────────┐
 │  packages/mobile (React Native / Expo)                    │
 │   • iOS-native design system (system colors, SF Symbols,  │
 │     spring animations, haptics, blur effects)              │
@@ -116,13 +111,13 @@ packages/
 │   • BLE via react-native-ble-plx + shared protocol logic  │
 │   • Board rendering via Expo native module (SwiftUI Canvas │
 │     on iOS, Compose Canvas on Android)                     │
-│   • Offline: PowerSync for data + sync, MMKV for prefs     │
+│   • Offline: RxDB for data + sync, MMKV for prefs          │
 │   • Auth: bearer tokens via expo-auth-session             │
 │   • Live Activity via Expo native module (ActivityKit)     │
 │                                                            │
 │  Local data:                                               │
-│   • PowerSync (CDC sync for user data + board refdata)     │
-│   • Pre-warmed PowerSync DB ships with app (all boards)    │
+│   • RxDB (GraphQL sync for user data + board refdata)      │
+│   • Pre-warmed SQLite database ships with app (all boards) │
 │   • MMKV for key-value preferences                        │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -405,9 +400,9 @@ The backend already supports bearer token auth for the existing Capacitor native
 
 **React Native:**
 
-- `@powersync/react-native` for offline data sync (user ticks, playlists, favorites, board reference data) via Postgres CDC. Self-hosted PowerSync service on Railway. See [offline-sync-plan.md](offline-sync-plan.md) for the full architecture.
+- `rxdb` with `react-native-quick-sqlite` for offline data sync (user ticks, playlists, favorites, board reference data) via built-in GraphQL replication. No additional server infrastructure. See [offline-sync-plan.md](offline-sync-plan.md) for the full architecture.
 - `react-native-mmkv` for key-value preferences (fastest KV store on mobile, synchronous reads)
-- App ships with a pre-warmed PowerSync database containing all board reference data (~150-200MB). Users select which boards get real-time incremental updates via PowerSync Sync Streams.
+- App ships with a pre-warmed SQLite database containing all board reference data (~150-200MB). Users select which boards get real-time incremental updates via RxDB per-board replication.
 
 ### Platform features
 
@@ -469,13 +464,13 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 - **`useHaptic()` hook** integrated into all interactive base components
 - Auth flow: `expo-auth-session` + backend bearer token endpoint (reuse existing `/auth/native-start` flow)
 - GraphQL client: TanStack Query + `graphql-request` (same pattern as web)
-- **PowerSync setup**: install `@powersync/react-native`, define client schema, set up `PowerSyncDatabase` and `BoardseshConnector` with `uploadData()` calling existing GraphQL mutations. See [offline-sync-plan.md](offline-sync-plan.md).
+- **RxDB setup**: install `rxdb` + `react-native-quick-sqlite`, define schemas for all collections, set up GraphQL replication with push (existing mutations) and pull (new sync queries). See [offline-sync-plan.md](offline-sync-plan.md).
 - Navigation skeleton: bottom tab bar with blur, native-stack navigators per tab, large title headers, search bar on Search tab
 
 ### Phase 2: Core climb experience (5 weeks)
 
 - i18n setup: `i18next` + `react-i18next` with shared catalogs from `packages/web/i18n/locales/` (en-US, es, fr). All user-facing strings must go through `t()` — Phase 1 placeholder screens use hardcoded English that must be replaced.
-- **PowerSync deployment**: deploy PowerSync service + MongoDB on Railway, configure Postgres logical replication, write and test Sync Rules, wire `useQuery()` hooks for climb browsing and tick display. See [offline-sync-plan.md](offline-sync-plan.md).
+- **RxDB sync integration**: implement sync pull queries on backend (~6 GraphQL resolvers), create `sync_deletions` table + triggers, wire `useRxQuery()` hooks for climb browsing and tick display, build pre-warmed database pipeline. See [offline-sync-plan.md](offline-sync-plan.md).
 - Climb browsing with FlashList, swipe actions, context menus
 - Board renderer with SwiftUI `Canvas` on iOS — validate 120fps on ProMotion early in week 1
 - Climb detail view with board visualization, action sheet
@@ -505,7 +500,7 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 
 - Live Activity widget (iOS lock screen queue navigation) — existing `ClimbSessionLiveActivity.swift` serves as direct reference for the Expo native module
 - HealthKit integration (iOS) / Health Connect (Android)
-- Pre-warmed PowerSync database build pipeline (GitHub Action) and per-board sync toggle UI. PowerSync sync and user data are already set up from Phases 1-2. See [offline-sync-plan.md](offline-sync-plan.md).
+- Pre-warmed database build pipeline (GitHub Action) and per-board sync toggle UI. RxDB sync and user data replication are already set up from Phases 1-2. See [offline-sync-plan.md](offline-sync-plan.md).
 - Push notification token management (reuse existing backend schema)
 - **Settings screen** native module (SwiftUI `Form` on iOS)
 
@@ -574,7 +569,7 @@ The explicit goal: a user picking up the iOS app says "this feels like it was ma
 | Board rendering | Expo native module (SwiftUI / Compose)           | SwiftUI `Canvas` on iOS, Compose `Canvas` on Android. Fallback: Skia |
 | Lists           | `@shopify/flash-list`                            | Drop-in FlatList replacement, 60fps+ scrolling                       |
 | Storage (KV)    | `react-native-mmkv`                              | Fastest KV store on mobile, JSI-based                                |
-| Storage (DB)    | `@powersync/react-native`                        | Offline data + CDC sync (user data, board refdata). See [offline sync plan](offline-sync-plan.md) |
+| Storage (DB)    | `rxdb` + `react-native-quick-sqlite`             | Offline data + GraphQL sync (user data, board refdata). See [offline sync plan](offline-sync-plan.md) |
 | Auth            | `expo-auth-session`                              | Standard OAuth flows                                                 |
 | Secure storage  | `expo-secure-store`                              | iOS Keychain, Android Keystore                                       |
 | Live Activity   | Expo native module (SwiftUI ActivityKit)         | iOS lock screen widgets, no Android equivalent                       |
@@ -624,29 +619,30 @@ New work: ensure the token exchange endpoint returns a proper JWT + refresh toke
 
 See [offline-sync-plan.md](offline-sync-plan.md) for the full offline sync architecture, Sync Rules, write path, and implementation details.
 
-### PowerSync self-hosted (Phase 0 PoC, Phases 1-2 setup, Phase 5 board sync UI)
+### RxDB + GraphQL sync (Phase 0 PoC, Phases 1-2 setup, Phase 5 board sync UI)
 
-PowerSync replaces the previous `expo-sqlite` + custom mutation queue plan with automatic CDC sync between Postgres and a client-side SQLite database:
+RxDB replaces the previous `expo-sqlite` + custom mutation queue plan with a reactive offline database and built-in GraphQL replication:
 
-- **Pre-warmed database** — app ships with a CI-built PowerSync SQLite containing all board reference data (~150-200MB). All boards are browsable offline from first launch. A Phase 0 PoC validates this approach before implementation begins.
-- **Postgres CDC** — PowerSync uses logical replication to detect changes. No custom sync endpoint. No soft-delete migration.
-- **Write path reuses existing mutations** — `uploadData()` calls the existing GraphQL mutations (`saveTick`, `toggleFavorite`, `createPlaylist`, etc.). `saveTick` and `createPlaylist` accept a client-supplied `uuid` for idempotent retry.
-- **Per-board selective sync** — Sync Streams allow per-board incremental updates. Users choose which boards get real-time sync; all boards are browsable from the pre-warmed data.
-- **Reactive queries** — `useQuery()` hooks re-render components when local SQLite data changes.
-- **Infrastructure** — self-hosted PowerSync service + MongoDB for bucket storage on Railway (~$70/mo production).
+- **Pre-warmed database** — app ships with a CI-built SQLite database containing all board reference data (~150-200MB). All boards are browsable offline from first launch. A Phase 0 PoC validates this approach.
+- **GraphQL replication** — push calls existing mutations (`saveTick`, `createPlaylist`, etc.). Pull uses new sync queries (~6 resolvers). No separate sync service, no additional infrastructure.
+- **Delete handling** — new `sync_deletions` table with triggers on user data DELETEs. Existing queries untouched.
+- **Per-board selective sync** — separate RxDB replication states per board. Users choose which boards get incremental updates.
+- **Reactive queries** — `useRxQuery()` hooks re-render components when data changes.
+- **No infrastructure cost** — RxDB is client-only. Syncs via the existing GraphQL API. $0/mo additional.
 
 Schema and sync setup starts in Phase 1-2. Per-board sync toggle UI ships in Phase 5.
 
 ### User data sync (Phases 1-2)
 
-- Ticks, playlists, favorites, follows synced automatically via PowerSync CDC.
-- Write path calls existing GraphQL mutations with client-supplied UUIDs for idempotent retry.
+- Ticks, playlists, favorites, follows synced via RxDB GraphQL replication.
+- Push path calls existing GraphQL mutations with client-supplied UUIDs for idempotent retry.
+- Pull path uses new sync queries that return records changed since a checkpoint timestamp.
 - Aurora dual-write handled transparently — the existing Aurora sync daemon picks up new ticks.
 
 ### Board reference data (pre-warmed + Phase 5 incremental sync)
 
 - Pre-warmed database ships all board reference data as an app asset.
-- Phase 5 adds per-board sync toggle: enabled boards get real-time incremental updates (new climbs, updated stats).
+- Phase 5 adds per-board sync toggle: enabled boards get incremental updates (new climbs, updated stats).
 - "Needs network" state for real-time features (party, comments, feed).
 
 ## App Store distribution
@@ -656,7 +652,7 @@ Schema and sync setup starts in Phase 1-2. Per-board sync toggle UI ships in Pha
 > Boardsesh controls climbing-board hardware via Bluetooth Low Energy. The app is built with React Native with native SwiftUI modules for performance-critical views. Key native features:
 >
 > 1. CoreBluetooth integration for BLE board control (Kilter, Tension, MoonBoard)
-> 2. Offline climb database (~150 MB per board, synced via PowerSync with per-board selective sync)
+> 2. Offline climb database (~150 MB per board, synced via RxDB with per-board selective sync)
 > 3. Live Activity widget showing current climb on the lock screen (SwiftUI ActivityKit)
 > 4. HealthKit workout logging for climbing sessions
 > 5. Native iOS design: SF Symbols, system colors, spring animations, haptic feedback, Dynamic Type
@@ -690,7 +686,7 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 | Pre-warmed DB > 200 MB in app bundle                       | Medium     | Medium | Use Play Asset Delivery on Android. App Store allows 200MB cellular. Fallback: per-layout split or lazy-fetch frames on first view.                                                                             |
 | Bearer token refresh edge cases                            | Medium     | High   | Dedicated test suite. Failed refresh triggers re-auth, not silent failure.                                                                                                                                     |
 | Live Activity reimplementation complexity                  | Medium     | Medium | Defer to Phase 5. Existing Swift widget logic serves as reference. SwiftUI Expo module.                                                                                                                        |
-| Phase 5 scope overload                                     | Medium     | Medium | Phase 5 scope reduced: PowerSync sync is done in Phases 1-2. Phase 5 handles per-board sync UI + Live Activity + HealthKit. Ship v1 without Live Activity and HealthKit to de-risk.                            |
+| Phase 5 scope overload                                     | Medium     | Medium | Phase 5 scope reduced: RxDB sync is done in Phases 1-2. Phase 5 handles per-board sync UI + Live Activity + HealthKit. Ship v1 without Live Activity and HealthKit to de-risk.                                 |
 | Apple 4.2 rejection                                        | Low        | High   | Native RN app with SwiftUI modules has minimal risk. Plan B above if needed.                                                                                                                                   |
 | Custom design system takes longer than a library           | Medium     | Medium | Start with 8-10 base components the app actually needs. Don't build a component library — build what each screen requires. Iterate after Phase 1.                                                              |
 | SF Symbols availability in React Native                    | Medium     | Low    | `expo-symbols` is the official Expo module. Fallback: `react-native-sfsymbols`. Worst case: SF Symbol PNGs exported from SF Symbols.app.                                                                       |
@@ -733,7 +729,7 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 | Core experience   | Climb browsing, search, board visualization, queue management work end-to-end on iOS + Android. Context menus and swipe actions functional on iOS.                                                                |
 | BLE               | Connect to physical Kilter/Tension/MoonBoard, send climbs, LEDs light up correctly.                                                                                                                               |
 | Social            | Party mode, notifications, feed work via WebSocket subscriptions.                                                                                                                                                 |
-| Platform          | Live Activity, HealthKit, PowerSync offline sync, pre-warmed DB pipeline, per-board sync UI, push notifications all functional.                                                                                   |
+| Platform          | Live Activity, HealthKit, RxDB offline sync, pre-warmed DB pipeline, per-board sync UI, push notifications all functional.                                                                                        |
 | iOS quality       | Dynamic Type works at all 7 sizes. Haptics fire on all interactive elements. Context menus on long press. 120fps on ProMotion in board renderer and lists. Swipe-back on all screens. VoiceOver reads all labels. |
 | Android parity    | All features work on Android. Material 3 visual treatment. Context menus via long-press fallback.                                                                                                                 |
 | App Store         | Accepted on iOS App Store and Google Play Store. TestFlight beta with 10+ testers.                                                                                                                                |
