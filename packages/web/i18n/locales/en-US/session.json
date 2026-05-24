@@ -246,7 +246,17 @@
       "previousClimb": "Previous climb",
       "nextClimb": "Next climb",
       "removeClimb": "Remove climb",
-      "positionLabel": "position {{position}}"
+      "positionLabel": "position {{position}}",
+      "syncError": "Queue sync failed",
+      "sessionCreateError": "Couldn't start session",
+      "actionFailed": "Action failed, try again",
+      "endSession": "End Session",
+      "endSessionConfirm": "End this session and see your results?",
+      "climbCount_one": "{{count}} climb",
+      "climbCount_other": "{{count}} climbs"
+    },
+    "toast": {
+      "sessionEnded": "Session ended"
     }
   },
   "playView": {

@@ -368,6 +368,8 @@
     "connectBoard": "Conectar tablero",
     "connected": "Conectado",
     "notAvailable": "Bluetooth no está disponible",
-    "signalStrength": "Señal: {{strength}}"
+    "errorLedMissing": "No se pudo enviar al tablero — faltan datos LED para esta configuración.",
+    "errorIncompatible": "Este boulder es para una configuración de tablero diferente.",
+    "errorConnectionFailed": "No se pudo conectar al tablero. Asegúrate de que esté encendido y cerca."
   }
 }

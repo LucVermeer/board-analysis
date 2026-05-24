@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
@@ -10,6 +10,7 @@ import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
 type BluetoothContextValue = {
   isConnected: boolean;
   loading: boolean;
+  disconnectedUnexpectedly: boolean;
   connect: (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>;
   disconnect: () => Promise<void>;
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
@@ -118,11 +119,10 @@ type BluetoothProviderProps = {
   boardName?: string;
   layoutId?: number;
   sizeId?: number;
-  setIds?: string;
   children: React.ReactNode;
 };
 
-export function BluetoothProvider({ boardName, layoutId, sizeId, setIds, children }: BluetoothProviderProps) {
+export function BluetoothProvider({ boardName, layoutId, sizeId, children }: BluetoothProviderProps) {
   // Track the last connected serial number for auto-reconnect on foreground
   const lastConnectedSerialRef = useRef<string | null>(null);
   const handleConnectSuccess = useCallback((serial: string | null) => {
@@ -133,7 +133,6 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, setIds, childre
     boardName,
     layoutId,
     sizeId,
-    setIds,
     onConnectSuccess: handleConnectSuccess,
   });
 
@@ -156,31 +155,38 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, setIds, childre
   // initiated disconnect() call.
   const wasConnectedRef = useRef(false);
   const isUserDisconnectRef = useRef(false);
+  const [disconnectedUnexpectedly, setDisconnectedUnexpectedly] = useState(false);
 
   // Wrap disconnect to track user-initiated disconnects
   const wrappedDisconnect = useCallback(async () => {
     isUserDisconnectRef.current = true;
     lastConnectedSerialRef.current = null;
-    await disconnect();
-    isUserDisconnectRef.current = false;
+    setDisconnectedUnexpectedly(false);
+    try {
+      await disconnect();
+    } finally {
+      isUserDisconnectRef.current = false;
+    }
   }, [disconnect]);
+
+  // Track app state across effect re-runs so foreground transitions
+  // are never missed when `isConnected` or `connect` identity changes.
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Auto-reconnect when the app returns to foreground after a background
   // disconnect. iOS CBCentralManager restoration handles keeping the
   // connection alive in most cases, but if the OS killed the connection
   // while backgrounded, this re-establishes it automatically.
   useEffect(() => {
-    let previousState: AppStateStatus = AppState.currentState;
-
     const subscription = AppState.addEventListener('change', (nextState) => {
-      const wasBackground = previousState === 'background' || previousState === 'inactive';
+      const wasBackground = appStateRef.current === 'background' || appStateRef.current === 'inactive';
       const isNowActive = nextState === 'active';
 
       if (wasBackground && isNowActive && !isConnected && lastConnectedSerialRef.current) {
         void connect(undefined, undefined, lastConnectedSerialRef.current);
       }
 
-      previousState = nextState;
+      appStateRef.current = nextState;
     });
 
     return () => {
@@ -190,22 +196,33 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, setIds, childre
 
   useEffect(() => {
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {
-      // Unexpected disconnect — fire haptic error
+      // Unexpected disconnect — fire haptic error and expose to consumers
       hapticError();
+      setDisconnectedUnexpectedly(true);
     }
     wasConnectedRef.current = isConnected;
   }, [isConnected]);
+
+  // Clear unexpected-disconnect flag when reconnecting
+  const wrappedConnect = useCallback(
+    async (initialFrames?: string, mirrored?: boolean, targetSerial?: string) => {
+      setDisconnectedUnexpectedly(false);
+      return connect(initialFrames, mirrored, targetSerial);
+    },
+    [connect],
+  );
 
   const value = useMemo<BluetoothContextValue>(
     () => ({
       isConnected,
       loading,
-      connect,
+      disconnectedUnexpectedly,
+      connect: wrappedConnect,
       disconnect: wrappedDisconnect,
       sendFramesToBoard,
       clearBoard,
     }),
-    [isConnected, loading, connect, wrappedDisconnect, sendFramesToBoard, clearBoard],
+    [isConnected, loading, disconnectedUnexpectedly, wrappedConnect, wrappedDisconnect, sendFramesToBoard, clearBoard],
   );
 
   return (
@@ -217,7 +234,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, setIds, childre
           devices={pickerState.devices}
           onSelect={pickerState.handleSelect}
           onDismiss={pickerState.handleCancel}
-          isScanning={pickerState.devices.length === 0}
+          isScanning={pickerState.isScanning}
         />
       )}
       {children}

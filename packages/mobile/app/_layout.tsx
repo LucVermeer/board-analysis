@@ -9,6 +9,7 @@ import { ThemeProvider } from '../src/providers/theme-provider';
 import { AuthProvider } from '../src/providers/auth-provider';
 import { I18nProvider } from '../src/providers/i18n-provider';
 import { BluetoothProvider } from '../src/providers/bluetooth-provider';
+import { ToastProvider } from '../src/providers/toast-provider';
 import { useDefaultBoard } from '../src/lib/graphql/hooks';
 
 const styles = StyleSheet.create({
@@ -24,12 +25,7 @@ function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
   }
 
   return (
-    <BluetoothProvider
-      boardName={defaultBoard.boardType}
-      layoutId={defaultBoard.layoutId}
-      sizeId={defaultBoard.sizeId}
-      setIds={defaultBoard.setIds}
-    >
+    <BluetoothProvider boardName={defaultBoard.boardType} layoutId={defaultBoard.layoutId} sizeId={defaultBoard.sizeId}>
       {children}
     </BluetoothProvider>
   );
@@ -43,14 +39,16 @@ export default function RootLayout() {
         <QueryProvider>
           <ThemeProvider>
             <AuthProvider>
-              <BottomSheetModalProvider>
-                <BluetoothProviderWrapper>
-                  <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
-                  </Stack>
-                </BluetoothProviderWrapper>
-              </BottomSheetModalProvider>
+              <ToastProvider>
+                <BottomSheetModalProvider>
+                  <BluetoothProviderWrapper>
+                    <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
+                    </Stack>
+                  </BluetoothProviderWrapper>
+                </BottomSheetModalProvider>
+              </ToastProvider>
             </AuthProvider>
           </ThemeProvider>
         </QueryProvider>

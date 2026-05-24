@@ -63,6 +63,7 @@ export const iconMap = {
   'play.fill': { ios: 'play.fill', android: 'play' },
   pause: { ios: 'pause', android: 'pause' },
   'minus.circle': { ios: 'minus.circle', android: 'minus-circle-outline' },
+  'end.session': { ios: 'stop.circle', android: 'stop-circle-outline' },
 
   // Misc
   star: { ios: 'star', android: 'star-outline' },

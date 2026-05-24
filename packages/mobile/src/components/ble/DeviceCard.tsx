@@ -7,6 +7,7 @@ import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticLight } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { parseSerialNumber } from '@boardsesh/ble-protocol';
 
 type RssiStrength = 'strong' | 'good' | 'weak';
@@ -18,9 +19,9 @@ function classifyRssi(rssi: number): RssiStrength {
 }
 
 const rssiBarColor: Record<RssiStrength, string> = {
-  strong: '#34C759', // iOS systemGreen
-  good: '#FFCC00', // iOS systemYellow
-  weak: '#FF3B30', // iOS systemRed
+  strong: iosSystemColors.systemGreen,
+  good: iosSystemColors.systemYellow,
+  weak: iosSystemColors.systemRed,
 };
 
 function RssiIndicator({ rssi }: { rssi: number }) {

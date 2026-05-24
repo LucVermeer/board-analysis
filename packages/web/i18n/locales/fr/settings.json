@@ -368,6 +368,8 @@
     "connectBoard": "Connecter le panneau",
     "connected": "Connecté",
     "notAvailable": "Le Bluetooth n'est pas disponible",
-    "signalStrength": "Signal : {{strength}}"
+    "errorLedMissing": "Impossible d'envoyer au panneau — données LED manquantes pour cette configuration.",
+    "errorIncompatible": "Ce bloc est pour une configuration de panneau différente.",
+    "errorConnectionFailed": "Impossible de se connecter au panneau. Vérifiez qu'il est allumé et à proximité."
   }
 }

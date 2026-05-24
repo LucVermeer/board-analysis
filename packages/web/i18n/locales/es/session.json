@@ -246,7 +246,17 @@
       "previousClimb": "Bloque anterior",
       "nextClimb": "Siguiente bloque",
       "removeClimb": "Eliminar bloque",
-      "positionLabel": "posición {{position}}"
+      "positionLabel": "posición {{position}}",
+      "syncError": "Error de sincronización de la cola",
+      "sessionCreateError": "No se pudo iniciar la sesión",
+      "actionFailed": "Acción fallida, inténtalo de nuevo",
+      "endSession": "Finalizar sesión",
+      "endSessionConfirm": "¿Finalizar esta sesión y ver tus resultados?",
+      "climbCount_one": "{{count}} vía",
+      "climbCount_other": "{{count}} vías"
+    },
+    "toast": {
+      "sessionEnded": "Sesión finalizada"
     }
   },
   "playView": {

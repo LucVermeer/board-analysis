@@ -25,6 +25,7 @@ import {
   SEARCH_CLIMBS_COUNT,
   GET_CLIMB,
   GET_SESSION_SUMMARY,
+  END_SESSION,
   TOGGLE_FAVORITE,
   SAVE_TICK,
   type GetProfileQueryResponse,
@@ -41,6 +42,8 @@ import {
   type GetClimbQueryVariables,
   type GetSessionSummaryQueryResponse,
   type GetSessionSummaryQueryVariables,
+  type EndSessionMutationVariables,
+  type EndSessionMutationResponse,
   type ToggleFavoriteMutationVariables,
   type ToggleFavoriteMutationResponse,
   type SaveTickMutationVariables,
@@ -173,6 +176,15 @@ export function useSessionSummary(sessionId: string | null) {
       } as GetSessionSummaryQueryVariables),
     select: (data) => data.sessionSummary,
     enabled: !!sessionId,
+  });
+}
+
+export function useEndSession() {
+  return useMutation({
+    mutationFn: async (variables: EndSessionMutationVariables) => {
+      const response = await getHttpClient().request<EndSessionMutationResponse>(END_SESSION, variables);
+      return response.endSession;
+    },
   });
 }
 

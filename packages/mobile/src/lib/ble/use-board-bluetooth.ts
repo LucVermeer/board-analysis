@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import {
   getAuroraBluetoothPacket,
@@ -15,6 +16,7 @@ import type { HoldPlacement } from '../../components/board-renderer/types';
 
 export type PickerState = {
   devices: DiscoveredDevice[];
+  isScanning: boolean;
   handleSelect: (deviceId: string) => void;
   handleCancel: () => void;
 };
@@ -50,7 +52,6 @@ type UseBoardBluetoothOptions = {
   boardName?: string;
   layoutId?: number;
   sizeId?: number;
-  setIds?: string;
   holdsData?: HoldPlacement[];
   ledColorOverrides?: LedColorOverrides;
   onConnectionChange?: (connected: boolean) => void;
@@ -63,12 +64,12 @@ export function useBoardBluetooth({
   boardName,
   layoutId,
   sizeId,
-  setIds,
   holdsData,
   ledColorOverrides,
   onConnectionChange,
   onConnectSuccess,
 }: UseBoardBluetoothOptions) {
+  const { t } = useTranslation('settings');
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -110,7 +111,7 @@ export function useBoardBluetooth({
         reject(new Error('Device selection cancelled'));
       };
 
-      setPickerState({ devices: [], handleSelect, handleCancel });
+      setPickerState({ devices: [], isScanning: true, handleSelect, handleCancel });
 
       subscribe((devices) => {
         setPickerState((prev) => (prev ? { ...prev, devices } : null));
@@ -160,7 +161,7 @@ export function useBoardBluetooth({
           console.error(
             `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
           );
-          Alert.alert('BLE Error', 'Could not send to board — LED data missing for this board configuration.');
+          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.errorLedMissing'));
           return false;
         }
 
@@ -176,7 +177,7 @@ export function useBoardBluetooth({
 
         if (skippedCount > 0 && result.packet.length === 0) {
           console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
-          Alert.alert('BLE Error', 'This climb is for a different board configuration.');
+          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.errorIncompatible'));
           return false;
         }
 
@@ -212,7 +213,7 @@ export function useBoardBluetooth({
 
         const available = await adapter.isAvailable();
         if (!available) {
-          Alert.alert('Bluetooth Unavailable', 'Bluetooth is not available on this device.');
+          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.notAvailable'));
           return false;
         }
 
@@ -254,7 +255,7 @@ export function useBoardBluetooth({
           /user cancelled|cancel/i.test(errorMessage) || /Device selection cancelled/i.test(errorMessage);
 
         if (!isUserCancel) {
-          Alert.alert('Connection Failed', 'Could not connect to the board. Make sure it is powered on and nearby.');
+          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.errorConnectionFailed'));
         }
 
         // TODO: analytics (Phase 6)

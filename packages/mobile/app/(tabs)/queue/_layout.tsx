@@ -15,6 +15,14 @@ export default function QueueLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: t('mobile.nav.queue') }} />
+      <Stack.Screen
+        name="summary"
+        options={{
+          title: t('summary.dialogTitle'),
+          presentation: 'modal',
+          headerLargeTitle: false,
+        }}
+      />
     </Stack>
   );
 }

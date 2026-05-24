@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl, useColorScheme } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -10,6 +10,7 @@ import { useOptionalBluetoothContext } from '../../../src/providers/bluetooth-pr
 import { QueueItemRow } from '../../../src/components/QueueItemRow';
 import { BluetoothStatusIcon } from '../../../src/components/ble/BluetoothStatusIcon';
 import { ConnectionBanner } from '../../../src/components/ble/ConnectionBanner';
+import { EndSessionSheet } from '../../../src/components/EndSessionSheet';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
@@ -22,10 +23,12 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 const TAB_BAR_HEIGHT = 49;
 
 export default function QueueScreen() {
-  const { state, sessionId, removeFromQueue, setCurrentClimb, nextClimb, previousClimb } = useQueue();
+  const { state, sessionId, removeFromQueue, setCurrentClimb, nextClimb, previousClimb, endSession } = useQueue();
   const { data: defaultBoard } = useDefaultBoard();
   const { systemColors, brandColors } = useTheme();
   const [showLogAscent, setShowLogAscent] = useState(false);
+  const [showEndSession, setShowEndSession] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
@@ -33,35 +36,32 @@ export default function QueueScreen() {
   const { t } = useTranslation('session');
 
   const bluetooth = useOptionalBluetoothContext();
-  const [showConnectionBanner, setShowConnectionBanner] = useState(false);
-  const wasConnectedRef = useRef(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  // Show the reconnect banner when BLE drops unexpectedly
-  useEffect(() => {
-    if (!bluetooth) return;
-    if (wasConnectedRef.current && !bluetooth.isConnected) {
-      setShowConnectionBanner(true);
-    }
-    wasConnectedRef.current = bluetooth.isConnected;
-  }, [bluetooth?.isConnected, bluetooth]);
+  // Show the banner when an unexpected disconnect occurs, hide when dismissed.
+  // bannerDismissed resets when the user reconnects (connect sets
+  // disconnectedUnexpectedly to false, which makes showConnectionBanner
+  // false regardless of bannerDismissed).
+  const showConnectionBanner = !!bluetooth?.disconnectedUnexpectedly && !bannerDismissed;
 
   const handleBluetoothPress = useCallback(() => {
     if (!bluetooth) return;
     if (bluetooth.isConnected) {
       void bluetooth.disconnect();
     } else {
+      setBannerDismissed(false);
       void bluetooth.connect();
     }
   }, [bluetooth]);
 
   const handleReconnect = useCallback(() => {
     if (!bluetooth) return;
-    setShowConnectionBanner(false);
+    setBannerDismissed(false);
     void bluetooth.connect();
   }, [bluetooth]);
 
   const handleDismissBanner = useCallback(() => {
-    setShowConnectionBanner(false);
+    setBannerDismissed(true);
   }, []);
 
   const navBarBackground = isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)';
@@ -91,6 +91,21 @@ export default function QueueScreen() {
     hapticSelection();
     setShowLogAscent(true);
   }, []);
+
+  const handleEndSessionPress = useCallback(() => {
+    hapticSelection();
+    setShowEndSession(true);
+  }, []);
+
+  const handleEndSessionConfirm = useCallback(async () => {
+    setIsEnding(true);
+    const summary = await endSession();
+    setIsEnding(false);
+    setShowEndSession(false);
+    if (summary) {
+      router.push({ pathname: '/(tabs)/queue/summary', params: { sessionId: summary.sessionId } });
+    }
+  }, [endSession, router]);
 
   const handleItemPress = useCallback(
     (item: ClimbQueueItem) => {
@@ -276,6 +291,16 @@ export default function QueueScreen() {
             onPress={handleBluetoothPress}
           />
         )}
+
+        <Pressable
+          onPress={handleEndSessionPress}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.queue.endSession')}
+          style={styles.navButton}
+          hitSlop={8}
+        >
+          <Icon name="end.session" size={22} color={brandColors.error} />
+        </Pressable>
       </Animated.View>
 
       {currentClimbQueueItem && defaultBoard && (
@@ -294,6 +319,14 @@ export default function QueueScreen() {
           sessionId={sessionId}
         />
       )}
+
+      <EndSessionSheet
+        visible={showEndSession}
+        onDismiss={() => setShowEndSession(false)}
+        onConfirm={handleEndSessionConfirm}
+        isEnding={isEnding}
+        climbCount={queue.length}
+      />
     </View>
   );
 }

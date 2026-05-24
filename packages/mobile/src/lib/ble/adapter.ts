@@ -61,10 +61,9 @@ export class RNBleAdapter implements BluetoothAdapter {
         rssi: scannedDevice.rssi ?? -100,
       };
 
-      // Deduplicate by name rather than deviceId because BLE addresses
-      // can rotate on some platforms for the same physical board.
-      const dedupeKey = device.name ?? device.deviceId;
-      devices.set(dedupeKey, device);
+      // Deduplicate by deviceId — react-native-ble-plx uses stable
+      // peripheral UUIDs on iOS and device addresses on Android.
+      devices.set(device.deviceId, device);
       pushDevices();
 
       if (autoSelectResolve && targetSerial) {

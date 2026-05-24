@@ -14,6 +14,7 @@ import { Button } from '../Button';
 import { DeviceCard } from './DeviceCard';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing } from '../../theme/tokens';
+import { iosSystemColors } from '../../theme/ios-colors';
 
 type DevicePickerSheetProps = {
   visible: boolean;
@@ -137,7 +138,7 @@ export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isSca
 
 const styles = StyleSheet.create({
   indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
+    backgroundColor: iosSystemColors.separator,
     width: 36,
     height: 5,
     borderRadius: 3,

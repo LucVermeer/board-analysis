@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -53,8 +53,17 @@ export function ConnectionBanner({ visible, onReconnect, onDismiss }: Connection
   const { systemColors } = useTheme();
   const autoDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Keep the component mounted until the exit animation completes
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setIsMounted(true);
+    }
+  }, [visible]);
+
   const handleHidden = useCallback(() => {
-    // No-op — animation completed, parent controls visibility
+    setIsMounted(false);
   }, []);
 
   const { translateY, bannerOpacity } = useSlideAnimation(visible, handleHidden);
@@ -89,7 +98,7 @@ export function ConnectionBanner({ visible, onReconnect, onDismiss }: Connection
     onDismiss();
   }, [onDismiss]);
 
-  if (!visible) return null;
+  if (!isMounted) return null;
 
   return (
     <Animated.View style={[styles.wrapper, animatedStyle]}>
@@ -127,9 +136,9 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(196, 148, 60, 0.12)',
+    backgroundColor: `${brandColors.warning}1F`,
     borderWidth: 1,
-    borderColor: 'rgba(196, 148, 60, 0.25)',
+    borderColor: `${brandColors.warning}40`,
     borderRadius: borderRadius.lg,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],

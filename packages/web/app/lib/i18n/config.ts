@@ -136,4 +136,14 @@ export function isSupportedLocale(value: string | undefined | null): value is Lo
 // i18n-keep settings.ble.connectBoard
 // i18n-keep settings.ble.connected
 // i18n-keep settings.ble.notAvailable
-// i18n-keep settings.ble.signalStrength
+// i18n-keep settings.ble.errorLedMissing
+// i18n-keep settings.ble.errorIncompatible
+// i18n-keep settings.ble.errorConnectionFailed
+// i18n-keep session.mobile.queue.actionFailed
+// i18n-keep session.mobile.queue.climbCount_one
+// i18n-keep session.mobile.queue.climbCount_other
+// i18n-keep session.mobile.queue.endSession
+// i18n-keep session.mobile.queue.endSessionConfirm
+// i18n-keep session.mobile.queue.sessionCreateError
+// i18n-keep session.mobile.queue.syncError
+// i18n-keep session.mobile.toast.sessionEnded
