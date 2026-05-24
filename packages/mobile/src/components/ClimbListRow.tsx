@@ -224,7 +224,8 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const singleTapGesture = useMemo(
     () =>
       Gesture.Tap()
-        .maxDuration(250)
+        .maxDuration(300)
+        .maxDistance(15)
         .onStart(() => {
           'worklet';
           runOnJS(stableRowPress)();
@@ -285,16 +286,14 @@ const ClimbListRow = React.memo(function ClimbListRow({
     return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
   }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
 
-  // Compose gestures: double-tap takes priority over single-tap;
-  // pan runs simultaneously with the tap gestures
-  const thumbnailTapGesture = useMemo(
+  const tapGesture = useMemo(
     () => Gesture.Exclusive(doubleTapGesture, singleTapGesture),
     [doubleTapGesture, singleTapGesture],
   );
 
   const composedGesture = useMemo(
-    () => Gesture.Simultaneous(panGesture, thumbnailTapGesture),
-    [panGesture, thumbnailTapGesture],
+    () => Gesture.Race(tapGesture, panGesture),
+    [tapGesture, panGesture],
   );
 
   return (
