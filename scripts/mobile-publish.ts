@@ -115,7 +115,7 @@ console.log(`[mobile:publish] Platform: ${platform}`);
 console.log('');
 
 const easArgs = [
-  'eas',
+  'eas-cli@16',
   'update',
   '--branch',
   sanitizedBranch,
@@ -150,7 +150,4 @@ console.log(`[mobile:publish] Published to branch "${sanitizedBranch}".`);
 console.log(`[mobile:publish] Testers on the "preview" build will receive this update.`);
 console.log('');
 console.log(`[mobile:publish] To point a preview build at this branch:`);
-console.log(`  bunx eas channel:edit preview --branch ${sanitizedBranch}`);
-console.log('');
-console.log(`[mobile:publish] Or give testers this deep link to switch:`);
-console.log(`  exp+boardsesh://expo-development-client/?url=https://u.expo.dev/update/${sanitizedBranch}`);
+console.log(`  bunx eas-cli@16 channel:edit preview --branch ${sanitizedBranch}`);

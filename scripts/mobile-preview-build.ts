@@ -49,7 +49,7 @@ console.log('[mobile:preview-build] After install, they receive JS updates via `
 console.log('');
 
 const easArgs = [
-  'eas',
+  'eas-cli@16',
   'build',
   '--profile',
   'preview',

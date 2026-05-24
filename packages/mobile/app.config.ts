@@ -1,6 +1,13 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
-const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '0195d3e5-7326-7251-b498-79b3cf7de62a';
+const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
+
+if (!EAS_PROJECT_ID) {
+  throw new Error(
+    'EXPO_PUBLIC_EAS_PROJECT_ID is required. Run `bunx eas init` from packages/mobile/ ' +
+      'and set the resulting project ID as EXPO_PUBLIC_EAS_PROJECT_ID in your environment.',
+  );
+}
 
 function resolveDevMetadata(): {
   branchName: string | null;
