@@ -532,6 +532,19 @@ Multiple worktrees can publish independent mobile previews via EAS Update. Teste
 1. Build the preview client: `vp run mobile:preview-build` — this produces an installable `.ipa`/`.apk` with the native runtime + expo-updates baked in. Share the install link with testers.
 2. Testers install it on their device (iOS via ad-hoc provisioning, Android via APK).
 
+**Preview channels:**
+
+There are 4 preview channels available, each mapped to a different test device or tester:
+
+| Channel | Purpose |
+|---------|---------|
+| `preview-1` | Primary test device |
+| `preview-2` | Secondary test device |
+| `preview-3` | Third tester / device |
+| `preview-4` | Fourth tester / device |
+
+Each channel can independently point to a different EAS Update branch. This lets multiple worktrees deliver updates to different phones simultaneously.
+
 **Publishing updates (per branch):**
 ```bash
 # From any worktree — publishes current JS bundle to an EAS branch matching git branch
@@ -544,10 +557,10 @@ vp run mobile:publish -- --branch my-feature --message "fix nav regression"
 vp run mobile:publish -- --platform ios
 ```
 
-**Pointing testers at a specific branch:**
+**Pointing a channel at a branch:**
 ```bash
-# Switch the preview channel to receive updates from a specific branch
-bunx eas channel:edit preview --branch my-feature-branch
+# Switch preview-1 to receive updates from a specific branch
+bunx eas-cli@16 channel:edit preview-1 --branch my-feature-branch
 ```
 
 **CI integration:** The `mobile-eas-update.yml` workflow auto-publishes an update on every push to a non-main branch that touches `packages/mobile/` or shared packages. It posts an update comment on the PR with instructions.
@@ -555,6 +568,20 @@ bunx eas channel:edit preview --branch my-feature-branch
 **When you need a new preview build:** Only required when native dependencies change (new Expo plugin, new native module, SDK version bump). Pure JS/TS changes are covered by OTA updates.
 
 **Environment:** The preview build uses production backend (`https://www.boardsesh.com`). The `EXPO_TOKEN` secret must be set in GitHub Actions for CI publishing; locally use `bunx eas login`.
+
+### Agent workflow for React Native changes
+
+When making changes to `packages/mobile/` or shared packages that affect the mobile app, **always ask the user which preview channel to publish to** before pushing a test update. Example:
+
+> "Changes are ready. Which preview channel should I publish to? (preview-1, preview-2, preview-3, preview-4)"
+
+After the user responds, publish and point the channel:
+```bash
+vp run mobile:publish
+bunx eas-cli@16 channel:edit <channel> --branch <current-branch>
+```
+
+Do not assume a channel — the user knows which device they're testing on. If the user has previously stated a preferred channel in this session, reuse it without asking again.
 
 ### Mobile vs. Web Differences
 
