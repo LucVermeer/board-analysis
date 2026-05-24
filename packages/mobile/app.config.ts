@@ -64,6 +64,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...(hasDevMetadata
       ? {
           extra: {
+            ...config.extra,
             devMetadata: {
               branchName: devMetadata.branchName,
               qaNotes: devMetadata.qaNotes,
