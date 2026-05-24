@@ -36,6 +36,7 @@ jobs:
 
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PUBLIC_EAS_PROJECT_ID }}
       INPUT_BRANCH: ${{ github.event.inputs.branch }}
       INPUT_PLATFORM: ${{ github.event.inputs.platform || 'all' }}
 
