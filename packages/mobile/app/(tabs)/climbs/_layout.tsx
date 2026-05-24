@@ -7,7 +7,7 @@ export default function ClimbsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerLargeTitle: true,
+        headerLargeTitle: false,
         headerLargeTitleShadowVisible: false,
         headerTransparent: true,
         headerBlurEffect: 'systemMaterial',
