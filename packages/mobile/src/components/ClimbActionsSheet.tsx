@@ -32,10 +32,13 @@ const ClimbActionsSheet = forwardRef<BottomSheet, ClimbActionsSheetProps>(functi
     onDismiss?.();
   }, [onToggleFavorite, onDismiss]);
 
-  const handleShare = useCallback(() => {
+  const handleShare = useCallback(async () => {
     if (!climb) return;
-    Share.share({ message: climb.name }).catch(() => {});
-    onDismiss?.();
+    try {
+      await Share.share({ message: climb.name });
+    } finally {
+      onDismiss?.();
+    }
   }, [climb, onDismiss]);
 
   const handleClose = useCallback(() => {

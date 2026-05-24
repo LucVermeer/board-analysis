@@ -607,7 +607,9 @@
       "share": "Share climb",
       "viewSetter": "View setter",
       "ascentSent": "Sent",
-      "ascentAttempted": "Attempted"
+      "ascentAttempted": "Attempted",
+      "favoritedIndicator": "♥",
+      "projectFallback": "Project"
     }
   }
 }

@@ -211,16 +211,23 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [handleDoubleTap],
   );
 
-  // Single tap on the whole row — must wait for double-tap to fail
+  // Single tap on the whole row — uses ref to avoid hoisting/stale closure issues
+  const handleRowPressRef = useRef(handleRowPress);
+  handleRowPressRef.current = handleRowPress;
+
+  const stableRowPress = useCallback(() => {
+    handleRowPressRef.current();
+  }, []);
+
   const singleTapGesture = useMemo(
     () =>
       Gesture.Tap()
         .maxDuration(250)
         .onStart(() => {
           'worklet';
-          runOnJS(handleRowPress)();
+          runOnJS(stableRowPress)();
         }),
-    [handleRowPress],
+    [stableRowPress],
   );
 
   const handleMenuPress = useCallback(() => {
@@ -274,9 +281,9 @@ const ClimbListRow = React.memo(function ClimbListRow({
       parts.push(climb.setter_username);
     }
     if (isFavorited) {
-      parts.push('♥');
+      parts.push(t('mobile.climbRow.favoritedIndicator'));
     }
-    return parts.length > 0 ? parts.join(' · ') : t('card.title.project');
+    return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
   }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, isFavorited, t]);
 
   // Compose gestures: double-tap takes priority over single-tap;

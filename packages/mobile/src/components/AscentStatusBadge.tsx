@@ -48,7 +48,6 @@ const styles = StyleSheet.create({
     backgroundColor: iosSystemColors.systemGreen,
   },
   attemptedBadge: {
-    // iOS systemOrange (#FF9500) — not in iosSystemColors yet
-    backgroundColor: '#FF9500',
+    backgroundColor: iosSystemColors.systemOrange,
   },
 });

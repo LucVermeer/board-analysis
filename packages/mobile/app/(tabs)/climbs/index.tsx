@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, RefreshControl, Image } from 'react-native';
+import { View, Pressable, StyleSheet, RefreshControl, Image } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -16,14 +16,13 @@ import {
   DEFAULT_FILTERS,
   type ClimbFilters,
 } from '../../../src/components/ClimbFilterSheet';
-import { useDefaultBoard, useSearchClimbs } from '../../../src/lib/graphql/hooks';
+import { useDefaultBoard, useSearchClimbs, useToggleFavorite } from '../../../src/lib/graphql/hooks';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { hapticSuccess } from '../../../src/lib/haptics';
-import { Pressable } from 'react-native';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -227,6 +226,15 @@ export default function ClimbList() {
     }
   }, [activeActionClimb, handleAddToQueue]);
 
+  // --- Favorite toggle from actions sheet ---
+  const { mutate: toggleFavorite } = useToggleFavorite();
+
+  const handleActionToggleFavorite = useCallback(() => {
+    if (activeActionClimb) {
+      toggleFavorite({ input: { boardName, climbUuid: activeActionClimb.uuid, angle } });
+    }
+  }, [activeActionClimb, toggleFavorite, boardName, angle]);
+
   const isInitialLoading = isBoardLoading || (isClimbsLoading && accumulatedClimbs.length === 0);
 
   const renderClimbItem = useCallback(
@@ -318,6 +326,7 @@ export default function ClimbList() {
         ref={actionsSheetRef}
         climb={activeActionClimb}
         onAddToQueue={handleActionAddToQueue}
+        onToggleFavorite={handleActionToggleFavorite}
         onDismiss={handleDismissActions}
       />
     </View>

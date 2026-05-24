@@ -607,7 +607,9 @@
       "share": "Partager le bloc",
       "viewSetter": "Voir le créateur",
       "ascentSent": "Envoyé",
-      "ascentAttempted": "Tenté"
+      "ascentAttempted": "Tenté",
+      "favoritedIndicator": "♥",
+      "projectFallback": "Projet"
     }
   }
 }
