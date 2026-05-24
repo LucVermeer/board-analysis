@@ -284,6 +284,7 @@ export default function ClimbList() {
         data={accumulatedClimbs}
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}
+        overrideProps={{ estimatedItemSize: 88 }}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentInsetAdjustmentBehavior="automatic"
@@ -325,6 +326,11 @@ export default function ClimbList() {
       <ClimbActionsSheet
         ref={actionsSheetRef}
         climb={activeActionClimb}
+        boardName={boardName as string}
+        layoutId={layoutId}
+        sizeId={sizeId}
+        setIds={setIds}
+        angle={angle}
         onAddToQueue={handleActionAddToQueue}
         onToggleFavorite={handleActionToggleFavorite}
         onDismiss={handleDismissActions}

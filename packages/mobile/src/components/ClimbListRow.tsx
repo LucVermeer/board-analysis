@@ -137,7 +137,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
     () =>
       Gesture.Pan()
         .activeOffsetX([-10, 10])
-        .failOffsetY([-5, 5])
+        .failOffsetY([-15, 15])
         .onUpdate((event) => {
           'worklet';
           const offset = event.translationX;
@@ -274,7 +274,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const subtitleText = useMemo(() => {
     const parts: string[] = [];
     if (climb.is_draft) {
-      parts.push(t('create.draftBadge'));
+      parts.push(t('createClimbForm.draftBadge'));
     }
     if (!climb.is_draft && climb.ascensionist_count) {
       parts.push(formatSends(climb.ascensionist_count));

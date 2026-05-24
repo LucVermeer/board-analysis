@@ -8,16 +8,35 @@ import { ListRow } from './ListRow';
 import { Icon } from './Icon';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
+import { spacing } from '../theme/tokens';
+
+const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
 
 type ClimbActionsSheetProps = {
   climb: Climb | null;
+  boardName: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  angle: number;
   onAddToQueue?: () => void;
   onToggleFavorite?: () => void;
   onDismiss?: () => void;
 };
 
+function buildClimbUrl(
+  boardName: string,
+  layoutId: number,
+  sizeId: number,
+  setIds: string,
+  angle: number,
+  climbUuid: string,
+): string {
+  return `${WEB_BASE_URL}/${boardName}/${layoutId}/${sizeId}/${setIds}/${angle}/view/${climbUuid}`;
+}
+
 const ClimbActionsSheet = forwardRef<BottomSheet, ClimbActionsSheetProps>(function ClimbActionsSheet(
-  { climb, onAddToQueue, onToggleFavorite, onDismiss },
+  { climb, boardName, layoutId, sizeId, setIds, angle, onAddToQueue, onToggleFavorite, onDismiss },
   ref,
 ) {
   const { t } = useTranslation('climbs');
@@ -34,12 +53,13 @@ const ClimbActionsSheet = forwardRef<BottomSheet, ClimbActionsSheetProps>(functi
 
   const handleShare = useCallback(async () => {
     if (!climb) return;
+    const url = buildClimbUrl(boardName, layoutId, sizeId, setIds, angle, climb.uuid);
     try {
-      await Share.share({ message: climb.name });
+      await Share.share({ message: `${climb.name}\n${url}`, url });
     } finally {
       onDismiss?.();
     }
-  }, [climb, onDismiss]);
+  }, [climb, boardName, layoutId, sizeId, setIds, angle, onDismiss]);
 
   const handleClose = useCallback(() => {
     onDismiss?.();
@@ -81,6 +101,6 @@ export { ClimbActionsSheet };
 
 const styles = StyleSheet.create({
   content: {
-    paddingTop: 8,
+    paddingTop: spacing[2],
   },
 });
