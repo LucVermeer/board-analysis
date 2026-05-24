@@ -2,6 +2,10 @@
 
 Control the climbing board from the lock screen while the app is backgrounded. The Live Activities widget should keep queue state current via WebSocket and illuminate LEDs on the physical board as you navigate climbs.
 
+## BLE ownership
+
+Two BLE layers exist in the codebase. The **React Native layer** (`packages/mobile/src/lib/ble/`) owns BLE for the Expo app — it uses `react-native-ble-plx` with `restoreStateIdentifier: 'boardsesh-ble-restore'` and AppState-based foreground reconnection. The **Capacitor/Swift layer** described below (`mobile/ios/`) owns BLE for the legacy Capacitor app and will be retired once the RN app ships (see `docs/mobile-app-plan.md` for the retirement criteria).
+
 ## Current State
 
 **What works today:**

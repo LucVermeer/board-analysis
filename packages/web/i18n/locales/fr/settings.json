@@ -354,5 +354,22 @@
   "auroraImport": {
     "unlinkSuccessToast": "Compte délié avec succès",
     "uploadAriaLabel": "Importer un fichier d'export JSON Aurora"
+  },
+  "ble": {
+    "scanning": "Recherche de panneaux à proximité…",
+    "selectBoard": "Sélectionner un panneau",
+    "devicesFound_one": "{{count}} panneau trouvé",
+    "devicesFound_other": "{{count}} panneaux trouvés",
+    "noDevicesFound": "Aucun panneau trouvé à proximité",
+    "cancel": "Annuler",
+    "unknownBoard": "Panneau inconnu",
+    "disconnected": "Panneau déconnecté",
+    "reconnect": "Reconnecter",
+    "connectBoard": "Connecter le panneau",
+    "connected": "Connecté",
+    "notAvailable": "Le Bluetooth n'est pas disponible",
+    "errorLedMissing": "Impossible d'envoyer au panneau — données LED manquantes pour cette configuration.",
+    "errorIncompatible": "Ce bloc est pour une configuration de panneau différente.",
+    "errorConnectionFailed": "Impossible de se connecter au panneau. Vérifiez qu'il est allumé et à proximité."
   }
 }

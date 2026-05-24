@@ -10,6 +10,10 @@
 export const iosSystemColors = {
   /** iOS systemRed — destructive actions, badges */
   systemRed: '#FF3B30',
+  /** iOS systemGreen — success, positive indicators */
+  systemGreen: '#34C759',
+  /** iOS systemYellow — caution, moderate indicators */
+  systemYellow: '#FFCC00',
   /** iOS systemBlue — default tint, links */
   systemBlue: '#007AFF',
   /** iOS systemGray — secondary text, inactive tint */

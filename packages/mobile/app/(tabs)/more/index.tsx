@@ -1,6 +1,7 @@
 import { Text, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 
 export default function MoreScreen() {
   const { systemColors } = useTheme();
@@ -8,6 +9,7 @@ export default function MoreScreen() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
+      <DevMetadataPanel />
       <Text style={[styles.text, { color: systemColors.secondaryLabel }]}>{t('mobile.more.title')}</Text>
     </ScrollView>
   );

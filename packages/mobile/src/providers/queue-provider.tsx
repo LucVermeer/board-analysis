@@ -9,8 +9,10 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { queueReducer, initialState } from '@boardsesh/queue';
 import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from '@boardsesh/queue';
+import type { SessionSummary } from '@boardsesh/shared-schema';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
 import {
@@ -19,15 +21,18 @@ import {
   REMOVE_QUEUE_ITEM,
   SET_CURRENT_CLIMB,
   CREATE_SESSION,
+  END_SESSION,
   type AddQueueItemMutationResponse,
   type RemoveQueueItemMutationResponse,
   type SetCurrentClimbMutationResponse,
   type CreateSessionMutationResponse,
+  type EndSessionMutationResponse,
 } from '../lib/graphql/operations';
 import { getStoredBoardConfig } from '../lib/board-store';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
 import { findNextQueueItem, findPreviousQueueItem } from '../lib/queue-navigation';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
+import { useToast } from './toast-provider';
 
 type QueueContextValue = {
   state: QueueState;
@@ -40,6 +45,7 @@ type QueueContextValue = {
   nextClimb: () => void;
   previousClimb: () => void;
   clearSession: () => Promise<void>;
+  endSession: () => Promise<SessionSummary | null>;
 };
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -97,6 +103,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const sessionCreationRef = useRef<Promise<string | null> | null>(null);
+  const { showToast } = useToast();
+  const { t } = useTranslation('session');
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -178,8 +186,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             }
           }
         },
-        error: (error) => {
-          console.error('[QueueProvider] Subscription error:', error);
+        error: () => {
+          showToast(t('mobile.queue.syncError'), 'error');
         },
         complete: () => {},
       },
@@ -214,8 +222,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         setSessionId(newId);
         await setStoredSessionId(newId);
         return newId;
-      } catch (error: unknown) {
-        console.error('[QueueProvider] session creation failed:', error);
+      } catch {
+        showToast(t('mobile.queue.sessionCreateError'), 'error');
         return null;
       } finally {
         sessionCreationRef.current = null;
@@ -239,7 +247,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             .request<AddQueueItemMutationResponse>(ADD_QUEUE_ITEM, {
               item: { uuid: item.uuid, climb: item.climb },
             })
-            .catch((error: unknown) => console.error('[QueueProvider] addQueueItem failed:', error));
+            .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
         }
       });
     },
@@ -252,7 +260,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (sessionIdRef.current) {
       getHttpClient()
         .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid })
-        .catch((error: unknown) => console.error('[QueueProvider] removeQueueItem failed:', error));
+        .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
     }
   }, []);
 
@@ -274,7 +282,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               item: { uuid: item.uuid, climb: item.climb },
               shouldAddToQueue: true,
             })
-            .catch((error: unknown) => console.error('[QueueProvider] setCurrentClimb failed:', error));
+            .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
         }
       });
     },
@@ -296,9 +304,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               item: { uuid: nextItem.uuid, climb: nextItem.climb },
               shouldAddToQueue: false,
             })
-            .catch((error: unknown) => {
-              console.error('[QueueProvider] setCurrentClimb failed:', error);
-            });
+            .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
         }
       });
     }
@@ -319,9 +325,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               item: { uuid: prevItem.uuid, climb: prevItem.climb },
               shouldAddToQueue: false,
             })
-            .catch((error: unknown) => {
-              console.error('[QueueProvider] setCurrentClimb failed:', error);
-            });
+            .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
         }
       });
     }
@@ -336,6 +340,23 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     await clearStoredSessionId();
   }, []);
 
+  const endSession = useCallback(async (): Promise<SessionSummary | null> => {
+    const currentSessionId = sessionIdRef.current;
+    if (!currentSessionId) return null;
+
+    try {
+      const response = await getHttpClient().request<EndSessionMutationResponse>(END_SESSION, {
+        sessionId: currentSessionId,
+      });
+      await clearSession();
+      showToast(t('mobile.toast.sessionEnded'), 'success');
+      return response.endSession;
+    } catch {
+      showToast(t('mobile.queue.actionFailed'), 'error');
+      return null;
+    }
+  }, [clearSession, showToast, t]);
+
   const contextValue = useMemo<QueueContextValue>(
     () => ({
       state,
@@ -348,8 +369,19 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       nextClimb,
       previousClimb,
       clearSession,
+      endSession,
     }),
-    [state, sessionId, addToQueue, removeFromQueue, setCurrentClimb, nextClimb, previousClimb, clearSession],
+    [
+      state,
+      sessionId,
+      addToQueue,
+      removeFromQueue,
+      setCurrentClimb,
+      nextClimb,
+      previousClimb,
+      clearSession,
+      endSession,
+    ],
   );
 
   return <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>;

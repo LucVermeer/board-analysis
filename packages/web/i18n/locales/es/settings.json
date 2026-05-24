@@ -354,5 +354,22 @@
   "auroraImport": {
     "unlinkSuccessToast": "Cuenta desvinculada",
     "uploadAriaLabel": "Subir archivo JSON exportado de Aurora"
+  },
+  "ble": {
+    "scanning": "Buscando tableros cercanos…",
+    "selectBoard": "Seleccionar tablero",
+    "devicesFound_one": "{{count}} tablero encontrado",
+    "devicesFound_other": "{{count}} tableros encontrados",
+    "noDevicesFound": "No se encontraron tableros cercanos",
+    "cancel": "Cancelar",
+    "unknownBoard": "Tablero desconocido",
+    "disconnected": "Tablero desconectado",
+    "reconnect": "Reconectar",
+    "connectBoard": "Conectar tablero",
+    "connected": "Conectado",
+    "notAvailable": "Bluetooth no está disponible",
+    "errorLedMissing": "No se pudo enviar al tablero — faltan datos LED para esta configuración.",
+    "errorIncompatible": "Este boulder es para una configuración de tablero diferente.",
+    "errorConnectionFailed": "No se pudo conectar al tablero. Asegúrate de que esté encendido y cerca."
   }
 }
