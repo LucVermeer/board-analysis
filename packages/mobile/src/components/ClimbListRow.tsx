@@ -47,6 +47,7 @@ type ClimbListRowProps = {
   angle: number;
   onPress: (climb: Climb) => void;
   onAddToQueue?: (climb: Climb) => void;
+  onOpenPlaylist?: (climb: Climb) => void;
   onOpenActions?: (climb: Climb) => void;
   selected?: boolean;
   unsupported?: boolean;
@@ -61,6 +62,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
   angle,
   onPress,
   onAddToQueue,
+  onOpenPlaylist,
   onOpenActions,
   selected,
   unsupported,
@@ -99,6 +101,8 @@ const ClimbListRow = React.memo(function ClimbListRow({
   onPressRef.current = onPress;
   const onAddToQueueRef = useRef(onAddToQueue);
   onAddToQueueRef.current = onAddToQueue;
+  const onOpenPlaylistRef = useRef(onOpenPlaylist);
+  onOpenPlaylistRef.current = onOpenPlaylist;
   const onOpenActionsRef = useRef(onOpenActions);
   onOpenActionsRef.current = onOpenActions;
   const climbRef = useRef(climb);
@@ -124,7 +128,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
   const handleSwipePlaylist = useCallback(() => {
     hapticMedium();
-    onOpenActionsRef.current?.(climbRef.current);
+    onOpenPlaylistRef.current?.(climbRef.current);
   }, []);
 
   const panGesture = useMemo(

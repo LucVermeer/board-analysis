@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useToggleFavorite } from '../lib/graphql/hooks';
 
 type UseDoubleTapFavoriteParams = {
@@ -19,10 +19,16 @@ export function useDoubleTapFavorite({
   const isFavoritedRef = useRef(initialFavorited);
   isFavoritedRef.current = isFavorited;
 
+  // Re-sync local state when the climb changes (FlashList recycles rows)
+  // or when the server-provided initial value changes.
+  useEffect(() => {
+    setIsFavorited(initialFavorited);
+    setShowHeart(false);
+  }, [climbUuid, initialFavorited]);
+
   const { mutate: toggleFavorite } = useToggleFavorite();
 
   const handleDoubleTap = useCallback(() => {
-    // Instagram-style: double-tap only adds, never removes
     if (!isFavoritedRef.current) {
       setIsFavorited(true);
       toggleFavorite({ input: { boardName, climbUuid, angle } });

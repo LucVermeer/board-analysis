@@ -3,6 +3,8 @@ import { View, StyleSheet } from 'react-native';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardRenderer } from './board-renderer/BoardRenderer';
 import type { HoldPlacement } from './board-renderer/types';
+import { iosSystemColors } from '../theme/ios-colors';
+import { spacing, borderRadius } from '../theme/tokens';
 
 type ClimbThumbnailProps = {
   frames: string;
@@ -43,13 +45,13 @@ export { ClimbThumbnail };
 
 const styles = StyleSheet.create({
   container: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
+    width: spacing[16],
+    height: spacing[16],
+    borderRadius: borderRadius.md,
     overflow: 'hidden',
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    backgroundColor: `${iosSystemColors.systemGray}1A`,
   },
   board: {
-    width: 64,
+    width: spacing[16],
   },
 });
