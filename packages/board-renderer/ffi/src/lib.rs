@@ -51,9 +51,16 @@ pub unsafe extern "C" fn board_renderer_render(
 }
 
 /// Free memory previously allocated by `board_renderer_render`.
+///
+/// # Safety
+/// `ptr` must have been returned by `board_renderer_render` and `len`
+/// must be the corresponding `out_len`. `board_renderer_render` uses
+/// `into_boxed_slice` before `forget`, which guarantees capacity == len,
+/// so passing len for both the Vec length and capacity is correct.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn board_renderer_free(ptr: *mut u8, len: u32) {
     if !ptr.is_null() && len > 0 {
-        drop(unsafe { Vec::from_raw_parts(ptr, len as usize, len as usize) });
+        let capacity = len as usize;
+        drop(unsafe { Vec::from_raw_parts(ptr, capacity, capacity) });
     }
 }

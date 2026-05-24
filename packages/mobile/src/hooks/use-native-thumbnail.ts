@@ -21,6 +21,8 @@ type NativeThumbnailResult = {
 /** Deduplicate concurrent renders for the same cache key */
 const inflightRenders = new Map<string, Promise<string>>();
 
+const BOARD_CONFIG_CACHE_MAX = 20;
+
 /** Memoize board render configs to avoid re-computing hold positions */
 const boardConfigCache = new Map<
   string,
@@ -30,17 +32,18 @@ const boardConfigCache = new Map<
   }
 >();
 
-/**
- * Simple numeric hash producing a short base-36 string.
- * Used for cache key generation -- not cryptographic.
- */
-function simpleHash(input: string): string {
-  let hash = 0;
-  for (let charIndex = 0; charIndex < input.length; charIndex++) {
-    const charCode = input.charCodeAt(charIndex);
-    hash = ((hash << 5) - hash + charCode) | 0;
-  }
-  return (hash >>> 0).toString(36);
+/** Bump when the Rust renderer output format changes */
+const RENDERER_VERSION = 1;
+
+export function buildCacheKey(
+  boardName: string,
+  layoutId: number,
+  sizeId: number,
+  setIds: string,
+  frames: string,
+  mirrored: boolean,
+): string {
+  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${frames}${mirrored ? '_m' : ''}`;
 }
 
 function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, setIds: string) {
@@ -78,6 +81,14 @@ function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, 
     })),
     hold_state_map: holdStateMap,
   };
+
+  // Evict oldest entry when the cache exceeds the cap
+  if (boardConfigCache.size >= BOARD_CONFIG_CACHE_MAX) {
+    const oldestKey = boardConfigCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      boardConfigCache.delete(oldestKey);
+    }
+  }
 
   const boardConfig = { configBase, setIdsArray };
   boardConfigCache.set(configKey, boardConfig);
@@ -134,9 +145,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
     const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds);
     if (!boardConfig) return;
 
-    const cacheKey = simpleHash(
-      `${boardName}${layoutId}${sizeId}${setIds}${frames}${mirrored ? 'm' : ''}`,
-    );
+    const cacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames, mirrored ?? false);
 
     // Reuse an in-flight render for the same cache key
     const existingRender = inflightRenders.get(cacheKey);
@@ -178,7 +187,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
       .finally(() => {
         inflightRenders.delete(cacheKey);
       });
-  }, [frames, boardName, layoutId, sizeId, setIds, mirrored]);
+  }, [frames, boardName, layoutId, sizeId, setIds, mirrored, serverUrl]);
 
   return { uri };
 }

@@ -17,10 +17,9 @@ Java_com_boardsesh_boardrenderer_BoardRendererBridge_nativeRender(
     jobject /* thiz */,
     jstring configJson
 ) {
+    jsize jsonLen = env->GetStringUTFLength(configJson);
     const char *jsonChars = env->GetStringUTFChars(configJson, nullptr);
     if (!jsonChars) return nullptr;
-
-    uint32_t jsonLen = static_cast<uint32_t>(strlen(jsonChars));
     uint8_t *outData = nullptr;
     uint32_t outLen = 0;
     uint32_t outWidth = 0;
@@ -28,7 +27,7 @@ Java_com_boardsesh_boardrenderer_BoardRendererBridge_nativeRender(
 
     int32_t result = board_renderer_render(
         reinterpret_cast<const uint8_t *>(jsonChars),
-        jsonLen,
+        static_cast<uint32_t>(jsonLen),
         &outData,
         &outLen,
         &outWidth,

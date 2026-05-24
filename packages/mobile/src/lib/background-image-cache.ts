@@ -13,7 +13,7 @@ const bgCacheDir = new Directory(Paths.document, 'board-backgrounds');
  *   .../product_sizes_layouts_sets/36-1.png
  *   -> .../product_sizes_layouts_sets/thumbs/36-1.webp
  */
-function getThumbnailImageUrl(fullImageUrl: string): string {
+export function getThumbnailImageUrl(fullImageUrl: string): string {
   const lastSlash = fullImageUrl.lastIndexOf('/');
   if (lastSlash < 0) return fullImageUrl;
   const directory = fullImageUrl.substring(0, lastSlash);
@@ -22,7 +22,7 @@ function getThumbnailImageUrl(fullImageUrl: string): string {
   return `${directory}/thumbs/${webpFilename}`;
 }
 
-function extractFilename(imageUrl: string): string {
+export function extractFilename(imageUrl: string): string {
   return imageUrl.split('/').pop() ?? 'unknown.webp';
 }
 
@@ -31,14 +31,14 @@ function extractFilename(imageUrl: string): string {
  * filesystem path. Native image decoders (BitmapFactory.decodeFile,
  * UIImage(contentsOfFile:)) expect paths, not URIs.
  */
-function toFilesystemPath(fileUri: string): string {
+export function toFilesystemPath(fileUri: string): string {
   return fileUri.replace(/^file:\/\//, '');
 }
 
 /**
  * Ensure all background images for a board configuration are cached locally.
  * Downloads thumbnail variants (smaller, webp) for faster initial load.
- * Returns an array of local file paths usable by the native renderer.
+ * Returns an array of local filesystem paths usable by the native renderer.
  */
 export async function ensureBackgroundsCached(params: {
   boardName: BoardName;

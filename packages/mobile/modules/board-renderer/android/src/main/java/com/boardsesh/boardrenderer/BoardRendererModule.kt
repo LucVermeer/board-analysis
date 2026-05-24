@@ -67,7 +67,11 @@ class BoardRendererModule : Module() {
 
             // Encode to PNG
             FileOutputStream(outputFile).use { outputStream ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                val written = bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                if (!written) {
+                    outputFile.delete()
+                    throw Exception("PNG compression failed")
+                }
             }
             bitmap.recycle()
 
