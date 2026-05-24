@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { createInitialTickState, deriveAscentType, getMinAttempts, clampAttempts, type TickStatus } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -41,10 +42,12 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   sessionId,
   onDismiss,
 }: QuickTickBarProps) {
+  const { t } = useTranslation('session');
   const saveTick = useSaveTick();
   const { data: grades } = useGrades(boardName);
 
   const [tickState, setTickState] = useState(createInitialTickState);
+  const [mounted, setMounted] = useState(visible);
 
   const ascentType = deriveAscentType(false, tickState.attemptCount);
   const minAttempts = useMemo(() => getMinAttempts(ascentType), [ascentType]);
@@ -53,10 +56,22 @@ export const QuickTickBar = React.memo(function QuickTickBar({
     setTickState(createInitialTickState());
   }, [climbUuid]);
 
-  const translateY = useSharedValue(visible ? 0 : 200);
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+    }
+  }, [visible]);
+
+  const translateY = useSharedValue(200);
 
   useEffect(() => {
-    translateY.value = withTiming(visible ? 0 : 200, { duration: timing.normal });
+    if (visible) {
+      translateY.value = withTiming(0, { duration: timing.normal });
+    } else {
+      translateY.value = withTiming(200, { duration: timing.fast }, () => {
+        runOnJS(setMounted)(false);
+      });
+    }
   }, [visible, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -77,6 +92,8 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   }, []);
 
   const handleSave = useCallback(() => {
+    if (saveTick.isPending) return;
+
     const status: TickStatus = ascentType;
     const finalAttempts = clampAttempts(tickState.attemptCount, status);
 
@@ -112,14 +129,17 @@ export const QuickTickBar = React.memo(function QuickTickBar({
     );
   }, [saveTick, boardName, climbUuid, angle, isMirror, isBenchmark, sessionId, layoutId, sizeId, setIds, ascentType, tickState, onDismiss]);
 
-  if (!visible) return null;
+  if (!mounted) return null;
+
+  const saveLabel = ascentType === 'flash'
+    ? t('playView.tickBar.flashSaveLabel')
+    : t('playView.tickBar.sendSaveLabel');
 
   return (
-    <Animated.View style={[styles.container, animatedStyle]}>
-      {/* Grade row */}
+    <Animated.View style={[styles.container, animatedStyle]} pointerEvents={visible ? 'auto' : 'none'}>
       <View style={styles.row}>
         <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
-          Grade
+          {t('playView.tickBar.gradeLabel')}
         </Text>
         <View style={styles.rowPicker}>
           {grades && (
@@ -133,10 +153,9 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         </View>
       </View>
 
-      {/* Tries row */}
       <View style={styles.row}>
         <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
-          Tries
+          {t('playView.tickBar.triesLabel')}
         </Text>
         <View style={styles.rowPicker}>
           <InlineTriesPicker
@@ -147,36 +166,41 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         </View>
       </View>
 
-      {/* Stars row */}
       <View style={styles.row}>
         <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
-          Stars
+          {t('playView.tickBar.starsLabel')}
         </Text>
         <View style={styles.rowPicker}>
           <InlineStarPicker quality={tickState.quality} onSelect={handleQualitySelect} />
         </View>
       </View>
 
-      {/* Save button */}
       <View style={styles.saveRow}>
         <Pressable
           onPress={onDismiss}
           accessibilityRole="button"
-          accessibilityLabel="Cancel"
+          accessibilityLabel={t('playView.tickBar.cancelLabel')}
           style={styles.cancelButton}
         >
-          <Text variant="footnote" color={iosSystemColors.systemGray}>Cancel</Text>
+          <Text variant="footnote" color={iosSystemColors.systemGray}>
+            {t('playView.tickBar.cancelLabel')}
+          </Text>
         </Pressable>
 
         <Pressable
           onPress={handleSave}
+          disabled={saveTick.isPending}
           accessibilityRole="button"
-          accessibilityLabel={`Log ${ascentType}`}
-          style={({ pressed }) => [styles.saveButton, pressed && styles.saveButtonPressed]}
+          accessibilityLabel={t('playView.tickBar.logAscentAria', { status: ascentType })}
+          style={({ pressed }) => [
+            styles.saveButton,
+            pressed && styles.saveButtonPressed,
+            saveTick.isPending && styles.saveButtonDisabled,
+          ]}
         >
           <Icon name="tick.outline" size={18} color={iosSystemColors.white} />
           <Text variant="footnote" color={iosSystemColors.white} style={styles.saveLabel}>
-            {ascentType === 'flash' ? 'Flash' : 'Send'}
+            {saveLabel}
           </Text>
         </Pressable>
       </View>
@@ -190,7 +214,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.97)',
+    backgroundColor: iosSystemColors.white,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: iosSystemColors.separator,
     borderTopLeftRadius: 12,
@@ -238,6 +262,9 @@ const styles = StyleSheet.create({
   saveButtonPressed: {
     transform: [{ scale: 0.95 }],
     opacity: 0.9,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveLabel: {
     fontWeight: '600',

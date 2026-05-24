@@ -3,6 +3,7 @@ import { View, Pressable, ScrollView, StyleSheet, type ViewStyle } from 'react-n
 import type { Grade } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { brandColors } from '../../theme/colors';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { hapticSelection } from '../../lib/haptics';
 import { spacing } from '../../theme/tokens';
 
@@ -26,12 +27,14 @@ export const InlineGradePicker = React.memo(function InlineGradePicker({
     const focusId = selectedDifficultyId ?? consensusDifficultyId;
     if (!focusId) return;
     const index = grades.findIndex((g) => g.difficultyId === focusId);
-    if (index >= 0) {
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ x: Math.max(0, index * chipWidth - chipWidth * 2), animated: false });
-      }, 50);
-    }
-  }, [grades, selectedDifficultyId, consensusDifficultyId]);
+    if (index < 0) return;
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ x: Math.max(0, index * chipWidth - chipWidth * 2), animated: false });
+    }, 50);
+    return () => clearTimeout(timer);
+    // Only scroll on mount — don't fight user's manual scrolling
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePress = useCallback(
     (difficultyId: number) => {
@@ -70,7 +73,7 @@ export const InlineGradePicker = React.memo(function InlineGradePicker({
             <View style={chipStyle}>
               <Text
                 variant="footnote"
-                color={isSelected ? '#FFFFFF' : undefined}
+                color={isSelected ? iosSystemColors.white : undefined}
                 style={styles.chipText}
               >
                 {grade.name}

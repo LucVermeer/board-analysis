@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react';
 import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { ActionBarContract } from '@boardsesh/play-view';
 import { Icon } from '../Icon';
 import { Badge } from '../Badge';
@@ -26,6 +27,8 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   onOpenActions,
   onOpenQueue,
 }: PlayDrawerActionBarProps) {
+  const { t } = useTranslation('session');
+
   const handlePrev = useCallback(() => {
     hapticMedium();
     onPrevClick();
@@ -58,7 +61,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         iconName="skip.previous"
         onPress={handlePrev}
         disabled={!canSwipePrevious}
-        accessibilityLabel="Previous climb"
+        accessibilityLabel={t('playView.actionBar.previousAria')}
       />
 
       {/* Mirror */}
@@ -68,7 +71,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
           onPress={handleMirror}
           active={isMirrored}
           activeColor={brandColors.primary}
-          accessibilityLabel={isMirrored ? 'Unmirror climb' : 'Mirror climb'}
+          accessibilityLabel={isMirrored ? t('playView.actionBar.unmirrorAria') : t('playView.actionBar.mirrorAria')}
         />
       )}
 
@@ -77,7 +80,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         iconName={isFavorited ? 'favorite.fill' : 'favorite'}
         onPress={handleFavorite}
         iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
-        accessibilityLabel={isFavorited ? 'Remove favorite' : 'Add favorite'}
+        accessibilityLabel={isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')}
       />
 
       {/* Lightbulb */}
@@ -85,14 +88,14 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         iconName={lightbulbActive ? 'lightbulb.fill' : 'lightbulb'}
         onPress={handleLightbulb}
         iconColor={lightbulbActive ? brandColors.warning : undefined}
-        accessibilityLabel="Send to board"
+        accessibilityLabel={t('playView.actionBar.sendToBoardAria')}
       />
 
       {/* More actions */}
       <ActionButton
         iconName="more"
         onPress={onOpenActions}
-        accessibilityLabel="More actions"
+        accessibilityLabel={t('playView.actionBar.climbActionsAria')}
       />
 
       {/* Queue */}
@@ -100,7 +103,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         <ActionButton
           iconName="queue"
           onPress={onOpenQueue}
-          accessibilityLabel={`Queue, ${remainingQueueCount} climbs`}
+          accessibilityLabel={t('playView.actionBar.queueCountAria', { count: remainingQueueCount })}
         />
         {remainingQueueCount > 0 && (
           <View style={styles.badgeContainer}>
@@ -114,7 +117,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         iconName="skip.next"
         onPress={handleNext}
         disabled={!canSwipeNext}
-        accessibilityLabel="Next climb"
+        accessibilityLabel={t('playView.actionBar.nextAria')}
       />
     </View>
   );

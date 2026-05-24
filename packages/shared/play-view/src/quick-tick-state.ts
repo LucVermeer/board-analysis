@@ -1,4 +1,6 @@
-export type TickStatus = 'flash' | 'send' | 'attempt';
+import type { TickStatus } from '@boardsesh/shared-schema';
+
+export type { TickStatus };
 
 export type QuickTickState = {
   quality: number | null;

@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useDerivedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardRenderer } from '../board-renderer';
@@ -56,12 +56,21 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const isSwiping = useDerivedValue(() => translateX.value !== 0);
-
   const peekDirection = useDerivedValue(() => (translateX.value < 0 ? 'next' : 'prev'));
 
+  // Track direction in JS state so PeekBoard can select the correct frames
+  const [jsDirection, setJsDirection] = React.useState<'next' | 'prev'>('next');
+  useAnimatedReaction(
+    () => peekDirection.value,
+    (direction) => {
+      runOnJS(setJsDirection)(direction);
+    },
+    [peekDirection],
+  );
+
   const peekStyle = useAnimatedStyle(() => {
-    if (!isSwiping.value) return { opacity: 0, transform: [{ translateX: screenWidth }] };
+    const isSwiping = translateX.value !== 0;
+    if (!isSwiping) return { opacity: 0, transform: [{ translateX: screenWidth }] };
 
     const peekOffset =
       peekDirection.value === 'next'
@@ -74,11 +83,8 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     };
   });
 
-  const peekFrames = useMemo(() => {
-    return { next: nextFrames, prev: prevFrames };
-  }, [nextFrames, prevFrames]);
-
   const { boardWidth, boardHeight, imageUrls, holdsData } = boardRenderData;
+  const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
 
   return (
     <GestureDetector gesture={gesture}>
@@ -95,60 +101,21 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
           />
         </Animated.View>
 
-        {/* Peek board — shows next/prev during swipe */}
         <Animated.View style={[styles.peekWrapper, peekStyle]}>
-          <PeekBoard
-            boardName={boardName}
-            boardWidth={boardWidth}
-            boardHeight={boardHeight}
-            imageUrls={imageUrls}
-            holdsData={holdsData}
-            mirrored={mirrored}
-            nextFrames={peekFrames.next}
-            prevFrames={peekFrames.prev}
-            peekDirection={peekDirection}
-          />
+          {peekFrames && (
+            <BoardRenderer
+              frames={peekFrames}
+              boardName={boardName}
+              boardWidth={boardWidth}
+              boardHeight={boardHeight}
+              imageUrls={imageUrls}
+              holdsData={holdsData}
+              mirrored={mirrored}
+            />
+          )}
         </Animated.View>
       </View>
     </GestureDetector>
-  );
-});
-
-type PeekBoardProps = {
-  boardName: BoardName;
-  boardWidth: number;
-  boardHeight: number;
-  imageUrls: string[];
-  holdsData: HoldPlacement[];
-  mirrored: boolean;
-  nextFrames: string | null;
-  prevFrames: string | null;
-  peekDirection: SharedValue<'next' | 'prev'>;
-};
-
-const PeekBoard = React.memo(function PeekBoard({
-  boardName,
-  boardWidth,
-  boardHeight,
-  imageUrls,
-  holdsData,
-  mirrored,
-  nextFrames,
-  prevFrames,
-}: PeekBoardProps) {
-  const frames = nextFrames ?? prevFrames;
-  if (!frames) return null;
-
-  return (
-    <BoardRenderer
-      frames={frames}
-      boardName={boardName}
-      boardWidth={boardWidth}
-      boardHeight={boardHeight}
-      imageUrls={imageUrls}
-      holdsData={holdsData}
-      mirrored={mirrored}
-    />
   );
 });
 

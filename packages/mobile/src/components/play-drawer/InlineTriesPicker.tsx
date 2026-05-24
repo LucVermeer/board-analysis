@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -17,6 +18,8 @@ export const InlineTriesPicker = React.memo(function InlineTriesPicker({
   minAttempts = 1,
   onSelect,
 }: InlineTriesPickerProps) {
+  const { t } = useTranslation('session');
+
   const handleDecrement = useCallback(() => {
     hapticLight();
     onSelect(Math.max(minAttempts, attemptCount - 1));
@@ -33,7 +36,7 @@ export const InlineTriesPicker = React.memo(function InlineTriesPicker({
         onPress={handleDecrement}
         disabled={attemptCount <= minAttempts}
         accessibilityRole="button"
-        accessibilityLabel="Decrease attempts"
+        accessibilityLabel={t('playView.tickBar.decreaseTriesAria')}
         style={[styles.button, attemptCount <= minAttempts && styles.buttonDisabled]}
       >
         <Icon name="minus" size={18} color={iosSystemColors.systemGray} />
@@ -48,7 +51,7 @@ export const InlineTriesPicker = React.memo(function InlineTriesPicker({
       <Pressable
         onPress={handleIncrement}
         accessibilityRole="button"
-        accessibilityLabel="Increase attempts"
+        accessibilityLabel={t('playView.tickBar.increaseTriesAria')}
         style={styles.button}
       >
         <Icon name="plus" size={18} color={iosSystemColors.systemGray} />
@@ -69,7 +72,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(120, 120, 128, 0.12)',
+    backgroundColor: iosSystemColors.separator,
     alignItems: 'center',
     justifyContent: 'center',
   },
