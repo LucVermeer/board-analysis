@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import { AppState } from 'react-native';
 import { useSegments, Redirect } from 'expo-router';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
@@ -60,6 +61,15 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
 
   useEffect(() => {
     checkAuth();
+  }, [checkAuth]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkAuth();
+      }
+    });
+    return () => subscription.remove();
   }, [checkAuth]);
 
   const signIn = useCallback(async (provider: AuthProviderType) => {
