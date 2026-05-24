@@ -266,6 +266,7 @@
     "attempts_other": "{{count}} essais"
   },
   "board": {
-    "resetZoom": "Réinitialiser le zoom"
+    "resetZoom": "Réinitialiser le zoom",
+    "imageUnavailable": "Image du mur indisponible"
   }
 }
