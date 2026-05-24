@@ -1,23 +1,27 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, Image } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
-import { BoardRenderer } from '../board-renderer';
+import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { PlayDrawerTickFab } from './PlayDrawerTickFab';
+import { QuickTickBar } from './QuickTickBar';
 import { LogAscentSheet } from '../LogAscentSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
+import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
+import { timing } from '../../theme/animations';
 
 type BoardConfig = {
   boardName: string;
@@ -47,11 +51,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [showLogAscent, setShowLogAscent] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [isTickBarActive, setIsTickBarActive] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId } = useQueue();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
+
+  usePlayDrawerWakeLock(isSheetOpen);
 
   const boardRenderData = useMemo(() => {
     const parsedSetIds = setIds.split(',').map(Number);
@@ -79,11 +87,32 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;
 
+  // Auto-close tick bar when climb changes
+  const displayedClimbUuid = displayedClimb?.uuid;
+  useEffect(() => {
+    setIsTickBarActive(false);
+  }, [displayedClimbUuid]);
+
+  // FAB animation: hide when tick bar is active
+  const fabScale = useSharedValue(1);
+  const fabOpacity = useSharedValue(1);
+
+  useEffect(() => {
+    fabScale.value = withTiming(isTickBarActive ? 0.5 : 1, { duration: timing.fast });
+    fabOpacity.value = withTiming(isTickBarActive ? 0 : 1, { duration: timing.fast });
+  }, [isTickBarActive, fabScale, fabOpacity]);
+
+  const fabAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: fabScale.value }],
+    opacity: fabOpacity.value,
+  }));
+
   useImperativeHandle(ref, () => ({
     open: (selectedClimb: Climb) => {
       setClimb(selectedClimb);
       setIsMirrored(false);
       setIsFavorited(false);
+      setIsTickBarActive(false);
       const queueItem = {
         uuid: randomUUID(),
         climb: {
@@ -110,9 +139,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     },
   }));
 
+  const handleSheetChange = useCallback((index: number) => {
+    setIsSheetOpen(index >= 0);
+  }, []);
+
   const handleClose = useCallback(() => {
     setClimb(null);
     setIsMirrored(false);
+    setIsTickBarActive(false);
+    setIsSheetOpen(false);
   }, []);
 
   const handlePrev = useCallback(() => {
@@ -159,7 +194,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handleTickFabPress = useCallback(() => {
+    setIsTickBarActive(true);
+  }, []);
+
+  const handleTickFabLongPress = useCallback(() => {
     setShowLogAscent(true);
+  }, []);
+
+  const handleTickBarDismiss = useCallback(() => {
+    setIsTickBarActive(false);
   }, []);
 
   const renderBackdrop = useCallback(
@@ -182,6 +225,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         snapPoints={snapPoints}
         enablePanDownToClose
         backdropComponent={renderBackdrop}
+        onChange={handleSheetChange}
         onClose={handleClose}
         handleIndicatorStyle={styles.indicator}
         backgroundStyle={styles.background}
@@ -210,20 +254,43 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
               <View style={styles.boardSection}>
                 {boardRenderData && (
-                  <BoardRenderer
-                    frames={displayedClimb.frames}
+                  <SwipeBoardCarousel
                     boardName={boardName as BoardName}
-                    boardWidth={boardRenderData.boardWidth}
-                    boardHeight={boardRenderData.boardHeight}
-                    imageUrls={boardRenderData.imageUrls}
-                    holdsData={boardRenderData.holdsData}
+                    boardRenderData={boardRenderData}
+                    currentFrames={displayedClimb.frames}
+                    nextFrames={navigationState.nextItem?.climb.frames ?? null}
+                    prevFrames={navigationState.prevItem?.climb.frames ?? null}
                     mirrored={isMirrored}
+                    canSwipeNext={navigationState.canNext}
+                    canSwipePrevious={navigationState.canPrevious}
+                    onSwipeNext={handleNext}
+                    onSwipePrevious={handlePrev}
+                    enabled={!isTickBarActive}
                   />
                 )}
 
-                <PlayDrawerTickFab
-                  ascentCount={ascentCount}
-                  onPress={handleTickFabPress}
+                {/* Tick FAB */}
+                <Animated.View style={[styles.fabWrapper, fabAnimatedStyle]} pointerEvents={isTickBarActive ? 'none' : 'auto'}>
+                  <PlayDrawerTickFab
+                    ascentCount={ascentCount}
+                    onPress={handleTickFabPress}
+                    onLongPress={handleTickFabLongPress}
+                  />
+                </Animated.View>
+
+                {/* Quick Tick Bar (expanded mode) */}
+                <QuickTickBar
+                  visible={isTickBarActive}
+                  climbUuid={displayedClimb.uuid}
+                  boardName={boardName}
+                  angle={angle}
+                  isMirror={isMirrored}
+                  isBenchmark={displayedClimb.benchmark_difficulty != null}
+                  layoutId={layoutId}
+                  sizeId={sizeId}
+                  setIds={setIds}
+                  sessionId={sessionId}
+                  onDismiss={handleTickBarDismiss}
                 />
               </View>
 
@@ -248,6 +315,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         </BottomSheetView>
       </BottomSheet>
 
+      {/* Log Ascent sheet (full, via long-press) */}
       {displayedClimb && (
         <LogAscentSheet
           visible={showLogAscent}
@@ -298,5 +366,11 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     marginHorizontal: spacing[4],
+  },
+  fabWrapper: {
+    position: 'absolute',
+    bottom: 12,
+    right: 16,
+    zIndex: 10,
   },
 });

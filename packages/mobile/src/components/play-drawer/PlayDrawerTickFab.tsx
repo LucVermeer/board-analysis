@@ -11,11 +11,13 @@ import { shadows } from '../../theme/tokens';
 type PlayDrawerTickFabProps = {
   ascentCount: number;
   onPress: () => void;
+  onLongPress?: () => void;
 };
 
 export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
   ascentCount,
   onPress,
+  onLongPress,
 }: PlayDrawerTickFabProps) {
   const { t } = useTranslation('session');
   const handlePress = useCallback(() => {
@@ -23,9 +25,17 @@ export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
     onPress();
   }, [onPress]);
 
+  const handleLongPress = useCallback(() => {
+    if (onLongPress) {
+      hapticMedium();
+      onLongPress();
+    }
+  }, [onLongPress]);
+
   return (
     <Pressable
       onPress={handlePress}
+      onLongPress={handleLongPress}
       accessibilityRole="button"
       accessibilityLabel={t('playView.tickFab.logAscentAria')}
       style={({ pressed }) => [
@@ -47,16 +57,12 @@ export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
 
 const styles = StyleSheet.create({
   fab: {
-    position: 'absolute',
-    bottom: 12,
-    right: 16,
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: brandColors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
     ...shadows.md,
   },
   fabPressed: {

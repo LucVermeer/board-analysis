@@ -24,7 +24,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   stars,
   setterUsername,
 }: PlayDrawerHeaderProps) {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation('climbs');
   const gradeColor = useMemo(() => getGradeColor(difficulty) ?? DEFAULT_GRADE_COLOR, [difficulty]);
 
   const qualityNum = parseFloat(qualityAverage);
@@ -32,7 +32,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
 
   const subtitleParts: string[] = [];
   if (qualityDisplay) subtitleParts.push(`${qualityDisplay}★`);
-  subtitleParts.push(t('mobile.play.sendCount', { count: ascensionistCount }));
+  subtitleParts.push(t('sends_other', { count: ascensionistCount }));
   if (setterUsername) subtitleParts.push(setterUsername);
 
   return (
@@ -40,7 +40,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
       {/* Grade */}
       <View style={styles.gradeColumn}>
         <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
-          <Text variant="footnote" color="#FFFFFF" style={styles.gradeText}>
+          <Text variant="footnote" color={iosSystemColors.white} style={styles.gradeText}>
             {difficulty}
           </Text>
         </View>

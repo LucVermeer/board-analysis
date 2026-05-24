@@ -307,7 +307,16 @@
       "flashLabel": "flash",
       "tickLabel": "tick",
       "logAttemptAria": "Enregistrer un essai",
-      "saveTickAria": "Enregistrer le tick"
+      "saveTickAria": "Enregistrer le tick",
+      "gradeLabel": "Grade",
+      "triesLabel": "Tries",
+      "starsLabel": "Stars",
+      "cancelLabel": "Cancel",
+      "flashSaveLabel": "Flash",
+      "sendSaveLabel": "Send",
+      "logAscentAria": "Log {{status}}",
+      "decreaseTriesAria": "Decrease attempts",
+      "increaseTriesAria": "Increase attempts"
     }
   }
 }

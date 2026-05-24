@@ -54,18 +54,9 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
     onLightbulb();
   }, [onLightbulb]);
 
-  const handleOpenActions = useCallback(() => {
-    hapticMedium();
-    onOpenActions();
-  }, [onOpenActions]);
-
-  const handleOpenQueue = useCallback(() => {
-    hapticMedium();
-    onOpenQueue();
-  }, [onOpenQueue]);
-
   return (
     <View style={styles.container}>
+      {/* Previous */}
       <ActionButton
         iconName="skip.previous"
         onPress={handlePrev}
@@ -73,6 +64,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         accessibilityLabel={t('playView.actionBar.previousAria')}
       />
 
+      {/* Mirror */}
       {supportsMirroring && (
         <ActionButton
           iconName="mirror"
@@ -83,6 +75,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         />
       )}
 
+      {/* Favorite */}
       <ActionButton
         iconName={isFavorited ? 'favorite.fill' : 'favorite'}
         onPress={handleFavorite}
@@ -90,6 +83,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         accessibilityLabel={isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')}
       />
 
+      {/* Lightbulb */}
       <ActionButton
         iconName={lightbulbActive ? 'lightbulb.fill' : 'lightbulb'}
         onPress={handleLightbulb}
@@ -97,25 +91,28 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         accessibilityLabel={t('playView.actionBar.sendToBoardAria')}
       />
 
+      {/* More actions */}
       <ActionButton
         iconName="more"
-        onPress={handleOpenActions}
+        onPress={onOpenActions}
         accessibilityLabel={t('playView.actionBar.climbActionsAria')}
       />
 
+      {/* Queue */}
       <View>
         <ActionButton
           iconName="queue"
-          onPress={handleOpenQueue}
+          onPress={onOpenQueue}
           accessibilityLabel={t('playView.actionBar.queueCountAria', { count: remainingQueueCount })}
         />
         {remainingQueueCount > 0 && (
-          <View style={styles.badgeContainer} pointerEvents="none">
-            <Badge count={remainingQueueCount} color={brandColors.primary} />
+          <View style={styles.badgeContainer}>
+            <Badge count={remainingQueueCount} color={brandColors.primary} size="small" />
           </View>
         )}
       </View>
 
+      {/* Next */}
       <ActionButton
         iconName="skip.next"
         onPress={handleNext}

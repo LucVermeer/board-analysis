@@ -7,7 +7,7 @@ export { getGradeColor };
  * Convert a hex color to HSL components.
  * @returns Object with h (0-360), s (0-1), l (0-1)
  */
-export function hexToHSL(hex: string): { h: number; s: number; l: number } {
+function hexToHSL(hex: string): { h: number; s: number; l: number } {
   const clean = hex.replace('#', '');
   const r = parseInt(clean.substring(0, 2), 16) / 255;
   const g = parseInt(clean.substring(2, 4), 16) / 255;

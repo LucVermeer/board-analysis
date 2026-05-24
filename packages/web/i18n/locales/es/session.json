@@ -307,7 +307,16 @@
       "flashLabel": "flash",
       "tickLabel": "marca",
       "logAttemptAria": "Registrar intento",
-      "saveTickAria": "Guardar marca"
+      "saveTickAria": "Guardar marca",
+      "gradeLabel": "Grade",
+      "triesLabel": "Tries",
+      "starsLabel": "Stars",
+      "cancelLabel": "Cancel",
+      "flashSaveLabel": "Flash",
+      "sendSaveLabel": "Send",
+      "logAscentAria": "Log {{status}}",
+      "decreaseTriesAria": "Decrease attempts",
+      "increaseTriesAria": "Increase attempts"
     }
   }
 }
