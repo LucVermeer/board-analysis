@@ -29,6 +29,11 @@
       "idle": "Inicio rápido"
     }
   },
+  "mobile": {
+    "emptyTitle": "Aún no tienes boards",
+    "emptySubtitle": "Busca un board para empezar",
+    "activeBoard": "Board activo"
+  },
   "boardEntity": {
     "notFound": "Tabla de escalada no encontrada",
     "chips": {

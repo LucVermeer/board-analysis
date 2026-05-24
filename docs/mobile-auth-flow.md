@@ -45,9 +45,9 @@ If a revoked or expired refresh token is presented, the backend returns `401` an
 The backend accepts both NextAuth web tokens and mobile JWTs on the same WebSocket and HTTP endpoints. It distinguishes them by segment count:
 
 | Token type         | Format | Segments (split on `.`) |
-|--------------------|--------|------------------------|
-| NextAuth JWE (web) | JWE    | 5                      |
-| Mobile JWS         | JWT    | 3                      |
+| ------------------ | ------ | ----------------------- |
+| NextAuth JWE (web) | JWE    | 5                       |
+| Mobile JWS         | JWT    | 3                       |
 
 `validateToken()` in `packages/backend/src/middleware/auth.ts` dispatches to the correct verifier based on this heuristic. Both paths cache results in an in-process map (60s TTL) to avoid repeated cryptographic operations.
 
@@ -82,11 +82,11 @@ A replayed token receives a `409` response with the body `{ "error": "Transfer t
 
 Tokens are stored in `expo-secure-store` under three keys:
 
-| Key                          | Value                    |
-|------------------------------|--------------------------|
-| `boardsesh_jwt`              | JWT access token         |
-| `boardsesh_refresh_token`    | Refresh token (UUID)     |
-| `boardsesh_token_expires_at` | ISO 8601 expiry string   |
+| Key                          | Value                  |
+| ---------------------------- | ---------------------- |
+| `boardsesh_jwt`              | JWT access token       |
+| `boardsesh_refresh_token`    | Refresh token (UUID)   |
+| `boardsesh_token_expires_at` | ISO 8601 expiry string |
 
 ### Proactive refresh
 
@@ -105,6 +105,7 @@ If the refresh itself fails, all tokens are cleared and the user is signed out.
 Exchange a transfer token for a JWT + refresh token pair.
 
 **Request:**
+
 ```json
 {
   "transferToken": "<payload>.<signature>"
@@ -112,6 +113,7 @@ Exchange a transfer token for a JWT + refresh token pair.
 ```
 
 **Success response (200):**
+
 ```json
 {
   "jwt": "<signed-jwt>",
@@ -122,19 +124,20 @@ Exchange a transfer token for a JWT + refresh token pair.
 
 **Error responses:**
 
-| Status | Body                                       | Condition                                  |
-|--------|--------------------------------------------|--------------------------------------------|
-| 400    | `{ "error": "transferToken is required" }` | Missing or empty `transferToken`           |
-| 401    | `{ "error": "Invalid or expired transfer token" }` | Bad signature or expired             |
-| 409    | `{ "error": "Transfer token has already been used" }` | Replay of a consumed token        |
-| 429    | `{ "error": "Rate limit exceeded..." }`    | IP rate limit hit                          |
-| 503    | `{ "error": "Service temporarily overloaded" }` | Internal map capacity exceeded       |
+| Status | Body                                                  | Condition                        |
+| ------ | ----------------------------------------------------- | -------------------------------- |
+| 400    | `{ "error": "transferToken is required" }`            | Missing or empty `transferToken` |
+| 401    | `{ "error": "Invalid or expired transfer token" }`    | Bad signature or expired         |
+| 409    | `{ "error": "Transfer token has already been used" }` | Replay of a consumed token       |
+| 429    | `{ "error": "Rate limit exceeded..." }`               | IP rate limit hit                |
+| 503    | `{ "error": "Service temporarily overloaded" }`       | Internal map capacity exceeded   |
 
 ### POST /auth/native/refresh
 
 Rotate a refresh token for a new JWT + refresh token pair.
 
 **Request:**
+
 ```json
 {
   "refreshToken": "<uuid>"
@@ -142,6 +145,7 @@ Rotate a refresh token for a new JWT + refresh token pair.
 ```
 
 **Success response (200):**
+
 ```json
 {
   "jwt": "<signed-jwt>",
@@ -152,19 +156,20 @@ Rotate a refresh token for a new JWT + refresh token pair.
 
 **Error responses:**
 
-| Status | Body                                       | Condition                                  |
-|--------|--------------------------------------------|--------------------------------------------|
-| 400    | `{ "error": "refreshToken is required" }`  | Missing or empty `refreshToken`            |
-| 401    | `{ "error": "Invalid refresh token" }`     | Unknown or already-revoked token           |
-| 401    | `{ "error": "Refresh token expired" }`     | Token past 90-day expiry                   |
-| 429    | `{ "error": "Rate limit exceeded..." }`    | IP rate limit hit                          |
-| 503    | `{ "error": "Service temporarily overloaded" }` | Internal map capacity exceeded       |
+| Status | Body                                            | Condition                        |
+| ------ | ----------------------------------------------- | -------------------------------- |
+| 400    | `{ "error": "refreshToken is required" }`       | Missing or empty `refreshToken`  |
+| 401    | `{ "error": "Invalid refresh token" }`          | Unknown or already-revoked token |
+| 401    | `{ "error": "Refresh token expired" }`          | Token past 90-day expiry         |
+| 429    | `{ "error": "Rate limit exceeded..." }`         | IP rate limit hit                |
+| 503    | `{ "error": "Service temporarily overloaded" }` | Internal map capacity exceeded   |
 
 ### POST /auth/native/revoke
 
 Revoke all refresh tokens for the user associated with the submitted token (full sign-out).
 
 **Request:**
+
 ```json
 {
   "refreshToken": "<uuid>"
@@ -172,6 +177,7 @@ Revoke all refresh tokens for the user associated with the submitted token (full
 ```
 
 **Success response (200):**
+
 ```json
 {
   "revoked": true
@@ -180,10 +186,10 @@ Revoke all refresh tokens for the user associated with the submitted token (full
 
 **Error responses:**
 
-| Status | Body                                       | Condition                                  |
-|--------|--------------------------------------------|--------------------------------------------|
-| 400    | `{ "error": "refreshToken is required" }`  | Missing or empty `refreshToken`            |
-| 401    | `{ "error": "Invalid refresh token" }`     | Unknown or already-revoked token           |
+| Status | Body                                      | Condition                        |
+| ------ | ----------------------------------------- | -------------------------------- |
+| 400    | `{ "error": "refreshToken is required" }` | Missing or empty `refreshToken`  |
+| 401    | `{ "error": "Invalid refresh token" }`    | Unknown or already-revoked token |
 
 ## Known limitations
 

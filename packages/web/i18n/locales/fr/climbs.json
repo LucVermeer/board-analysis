@@ -530,5 +530,72 @@
     "grade": "Cotation : {{grade}}",
     "angle": "Inclinaison : {{angle}}°",
     "unknown": "Inconnu"
+  },
+  "mobile": {
+    "emptyState": {
+      "noBoard": {
+        "title": "Aucun board sélectionné",
+        "subtitle": "Ajoutez un board pour parcourir les blocs"
+      },
+      "noClimbs": {
+        "title": "Aucun bloc trouvé",
+        "subtitle": "Essayez d'ajuster les paramètres de votre board"
+      },
+      "noMatches": {
+        "title": "Aucun résultat",
+        "description": "Rien ne correspond à \"{{query}}\""
+      }
+    },
+    "contextMenu": {
+      "addToQueue": "Ajouter à la file",
+      "viewSetter": "Voir l'ouvreur"
+    },
+    "detail": {
+      "notFound": "Bloc introuvable",
+      "boardPreview": "Vue du board bientôt disponible",
+      "addToQueue": "Ajouter à la file",
+      "logAscent": "Enregistrer un enchaînement",
+      "sent_one": "Enchaîné {{count}} fois",
+      "sent_other": "Enchaîné {{count}} fois",
+      "sentWithAttempts_one": "Enchaîné {{count}} fois en {{attempts}} {{attemptWord}}",
+      "sentWithAttempts_other": "Enchaîné {{count}} fois en {{attempts}} {{attemptWord}}",
+      "attempt_one": "essai",
+      "attempt_other": "essais",
+      "send_one": "enchaînement",
+      "send_other": "enchaînements"
+    },
+    "logAscent": {
+      "title": "Enregistrer un enchaînement",
+      "flash": "Flash",
+      "send": "Enchaînement",
+      "attempt": "Essai",
+      "attempts": "Essais",
+      "quality": "Qualité",
+      "gradeOpinion": "Votre cotation",
+      "comment": "Notes",
+      "commentPlaceholder": "Comment c'était ?",
+      "save": "Enregistrer",
+      "decreaseAttempts": "Diminuer les essais",
+      "increaseAttempts": "Augmenter les essais",
+      "errorTitle": "Échec de sauvegarde",
+      "errorMessage": "Impossible de sauvegarder votre ascension. Veuillez réessayer."
+    },
+    "filter": {
+      "title": "Filtres",
+      "sortBy": "Trier par",
+      "popular": "Populaire",
+      "quality": "Qualité",
+      "difficulty": "Difficulté",
+      "newest": "Récents",
+      "gradeRange": "Plage de cotation",
+      "minGrade": "Min",
+      "maxGrade": "Max",
+      "minAscents": "Min enchaînements",
+      "anyAscents": "Tous",
+      "minRating": "Min note",
+      "anyRating": "Tous",
+      "apply": "Appliquer les filtres",
+      "reset": "Réinitialiser"
+    }
   }
 }

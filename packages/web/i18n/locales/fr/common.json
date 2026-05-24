@@ -2,6 +2,18 @@
   "languageSwitcher": {
     "ariaLabelWithCurrent": "Langue : {{language}}"
   },
+  "mobile": {
+    "more": {
+      "title": "Plus"
+    },
+    "nav": {
+      "boards": "Boards",
+      "climbs": "Blocs",
+      "climb": "Bloc",
+      "queue": "File",
+      "profile": "Profil"
+    }
+  },
   "lightControl": {
     "title": "Lumières",
     "turnOffAll": "Tout éteindre",

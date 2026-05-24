@@ -530,5 +530,72 @@
     "grade": "Grade: {{grade}}",
     "angle": "Angle: {{angle}}°",
     "unknown": "Unknown"
+  },
+  "mobile": {
+    "emptyState": {
+      "noBoard": {
+        "title": "No board selected",
+        "subtitle": "Add a board first to browse climbs"
+      },
+      "noClimbs": {
+        "title": "No climbs found",
+        "subtitle": "Try adjusting your board settings"
+      },
+      "noMatches": {
+        "title": "No matches",
+        "description": "Nothing matches \"{{query}}\""
+      }
+    },
+    "contextMenu": {
+      "addToQueue": "Add to Queue",
+      "viewSetter": "View Setter"
+    },
+    "detail": {
+      "notFound": "Climb not found",
+      "boardPreview": "Board view coming soon",
+      "addToQueue": "Add to Queue",
+      "logAscent": "Log Ascent",
+      "sent_one": "Sent {{count}} time",
+      "sent_other": "Sent {{count}} times",
+      "sentWithAttempts_one": "Sent {{count}} time in {{attempts}} {{attemptWord}}",
+      "sentWithAttempts_other": "Sent {{count}} times in {{attempts}} {{attemptWord}}",
+      "attempt_one": "attempt",
+      "attempt_other": "attempts",
+      "send_one": "send",
+      "send_other": "sends"
+    },
+    "logAscent": {
+      "title": "Log Ascent",
+      "flash": "Flash",
+      "send": "Send",
+      "attempt": "Attempt",
+      "attempts": "Attempts",
+      "quality": "Quality",
+      "gradeOpinion": "Grade opinion",
+      "comment": "Notes",
+      "commentPlaceholder": "How did it feel?",
+      "save": "Save",
+      "decreaseAttempts": "Decrease attempts",
+      "increaseAttempts": "Increase attempts",
+      "errorTitle": "Save failed",
+      "errorMessage": "Could not save your ascent. Please try again."
+    },
+    "filter": {
+      "title": "Filters",
+      "sortBy": "Sort by",
+      "popular": "Popular",
+      "quality": "Quality",
+      "difficulty": "Difficulty",
+      "newest": "Newest",
+      "gradeRange": "Grade range",
+      "minGrade": "Min",
+      "maxGrade": "Max",
+      "minAscents": "Min ascents",
+      "anyAscents": "Any",
+      "minRating": "Min rating",
+      "anyRating": "Any",
+      "apply": "Apply filters",
+      "reset": "Reset"
+    }
   }
 }

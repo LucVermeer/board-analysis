@@ -1,46 +1,46 @@
 import { Tabs } from 'expo-router';
-import { useTheme } from 'react-native-paper';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTranslation } from 'react-i18next';
+import BlurTabBar from '../../src/components/BlurTabBar';
 
 export default function TabLayout() {
-  const theme = useTheme();
+  const { t } = useTranslation('common');
 
   return (
     <Tabs
+      tabBar={(props) => <BlurTabBar {...props} />}
       screenOptions={{
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.outline,
-        headerStyle: { backgroundColor: theme.colors.surface },
-        headerTintColor: theme.colors.onSurface,
-        tabBarStyle: { backgroundColor: theme.colors.surface },
+        headerShown: false,
+        tabBarStyle: { position: 'absolute' },
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="boards"
         options={{
-          title: 'Boards',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="view-dashboard" size={size} color={color} />,
+          title: t('mobile.nav.boards'),
         }}
       />
       <Tabs.Screen
         name="climbs"
         options={{
-          title: 'Climbs',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="terrain" size={size} color={color} />,
+          title: t('mobile.nav.climbs'),
         }}
       />
       <Tabs.Screen
         name="queue"
         options={{
-          title: 'Queue',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="playlist-play" size={size} color={color} />,
+          title: t('mobile.nav.queue'),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account" size={size} color={color} />,
+          title: t('mobile.nav.profile'),
+        }}
+      />
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: t('mobile.more.title'),
         }}
       />
     </Tabs>

@@ -209,6 +209,10 @@
       }
     }
   },
+  "mobile": {
+    "unknownName": "Inconnu",
+    "signOut": "Se déconnecter"
+  },
   "setter": {
     "notFoundTitle": "Ouvreur introuvable",
     "notFoundMessage": "Ce profil d'ouvreur n'existe pas ou a été supprimé.",

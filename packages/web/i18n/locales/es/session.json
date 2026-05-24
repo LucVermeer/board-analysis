@@ -233,6 +233,22 @@
     "tookFromYou": "{{newDriver}} te quitó la pared.",
     "unknownDriver": "Alguien"
   },
+  "mobile": {
+    "queue": {
+      "noSessionTitle": "Inicia una sesión para usar la cola",
+      "noSessionSubtitle": "Únete o crea una sesión desde la pestaña Boards para organizar bloques con tu grupo.",
+      "emptyTitle": "No hay bloques en la cola",
+      "emptySubtitle": "Busca bloques y añádelos a tu cola para empezar.",
+      "browseClimbs": "Buscar bloques",
+      "noClimbSelected": "Sin bloque seleccionado",
+      "unknownClimb": "Bloque desconocido",
+      "logAscent": "Registrar ascenso",
+      "previousClimb": "Bloque anterior",
+      "nextClimb": "Siguiente bloque",
+      "removeClimb": "Eliminar bloque",
+      "positionLabel": "posición {{position}}"
+    }
+  },
   "playView": {
     "onWallChip": "EN EL MURO · {{username}}",
     "onWallChipNoDriver": "EN EL MURO",

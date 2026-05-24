@@ -167,15 +167,15 @@ The `useQueueReducer` React hook wrapper stays in each platform's code. The redu
 
 ### When to use SwiftUI vs React Native
 
-| Use SwiftUI (iOS) / Compose (Android)                                    | Use React Native (shared)         |
-| ------------------------------------------------------------------------- | --------------------------------- |
-| Board renderer — GPU-accelerated hold circles via SwiftUI `Canvas`        | Climb browsing, filtering         |
-| Live Activity widget — ActivityKit requires SwiftUI                       | Queue management                  |
-| BLE device picker — platform-native list with RSSI + board preview        | Social features (party, comments) |
-| HealthKit workout logging                                                 | Profile, statistics               |
-| Settings screen — native grouped list matching iOS Settings app           | Feed, notifications               |
-| Board angle selector — SwiftUI circular dial with haptic detents          | Auth screens                      |
-| Share sheet — native `UIActivityViewController` integration               | Playlists, logbook                |
+| Use SwiftUI (iOS) / Compose (Android)                              | Use React Native (shared)         |
+| ------------------------------------------------------------------ | --------------------------------- |
+| Board renderer — GPU-accelerated hold circles via SwiftUI `Canvas` | Climb browsing, filtering         |
+| Live Activity widget — ActivityKit requires SwiftUI                | Queue management                  |
+| BLE device picker — platform-native list with RSSI + board preview | Social features (party, comments) |
+| HealthKit workout logging                                          | Profile, statistics               |
+| Settings screen — native grouped list matching iOS Settings app    | Feed, notifications               |
+| Board angle selector — SwiftUI circular dial with haptic detents   | Auth screens                      |
+| Share sheet — native `UIActivityViewController` integration        | Playlists, logbook                |
 
 The Expo Modules API bridges SwiftUI views into React Native. The same `<BoardRenderer holds={holds} />` JSX component renders a SwiftUI `Canvas` on iOS and a Compose `Canvas` on Android. All platform-specific code lives in the module's `ios/` and `android/` directories — the React Native layer is unaware of which platform is rendering.
 
@@ -189,21 +189,21 @@ The app does not use a pre-built component library like react-native-paper (Mate
 
 The design system uses iOS semantic colors, not hardcoded values. On iOS, these resolve to Apple's dynamic system colors that automatically adapt to light mode, dark mode, accessibility settings (increased contrast, reduce transparency), and Display Zoom.
 
-| Token | iOS mapping | Usage |
-|-------|-------------|-------|
-| `colors.background` | `UIColor.systemBackground` | Primary background |
-| `colors.secondaryBackground` | `UIColor.secondarySystemBackground` | Grouped table sections, cards |
-| `colors.tertiaryBackground` | `UIColor.tertiarySystemBackground` | Nested content within cards |
-| `colors.groupedBackground` | `UIColor.systemGroupedBackground` | Settings-style grouped lists |
-| `colors.label` | `UIColor.label` | Primary text |
-| `colors.secondaryLabel` | `UIColor.secondaryLabel` | Subtitle text, metadata |
-| `colors.tertiaryLabel` | `UIColor.tertiaryLabel` | Placeholder text |
-| `colors.separator` | `UIColor.separator` | List dividers (with leading inset) |
-| `colors.tint` | Brand `#8C4A52` | App accent color (passed to iOS tint system) |
-| `colors.fill` | `UIColor.systemFill` | Toggle track, slider fill |
-| `colors.success` | Brand `#6B9080` | Success states, confirmations |
-| `colors.warning` | Brand `#C4943C` | Warning states |
-| `colors.error` | Brand `#B8524C` | Error states, destructive actions |
+| Token                        | iOS mapping                         | Usage                                        |
+| ---------------------------- | ----------------------------------- | -------------------------------------------- |
+| `colors.background`          | `UIColor.systemBackground`          | Primary background                           |
+| `colors.secondaryBackground` | `UIColor.secondarySystemBackground` | Grouped table sections, cards                |
+| `colors.tertiaryBackground`  | `UIColor.tertiarySystemBackground`  | Nested content within cards                  |
+| `colors.groupedBackground`   | `UIColor.systemGroupedBackground`   | Settings-style grouped lists                 |
+| `colors.label`               | `UIColor.label`                     | Primary text                                 |
+| `colors.secondaryLabel`      | `UIColor.secondaryLabel`            | Subtitle text, metadata                      |
+| `colors.tertiaryLabel`       | `UIColor.tertiaryLabel`             | Placeholder text                             |
+| `colors.separator`           | `UIColor.separator`                 | List dividers (with leading inset)           |
+| `colors.tint`                | Brand `#8C4A52`                     | App accent color (passed to iOS tint system) |
+| `colors.fill`                | `UIColor.systemFill`                | Toggle track, slider fill                    |
+| `colors.success`             | Brand `#6B9080`                     | Success states, confirmations                |
+| `colors.warning`             | Brand `#C4943C`                     | Warning states                               |
+| `colors.error`               | Brand `#B8524C`                     | Error states, destructive actions            |
 
 On Android, these map to Material 3 dynamic color equivalents.
 
@@ -211,19 +211,19 @@ On Android, these map to Material 3 dynamic color equivalents.
 
 System font (`San Francisco` on iOS, `Roboto` on Android) via React Native's default font family. No custom fonts.
 
-| Style | iOS equivalent | Size | Weight | Use |
-|-------|---------------|------|--------|-----|
-| `largeTitle` | `.largeTitle` | 34pt | Bold | Screen headers (large title mode) |
-| `title1` | `.title` | 28pt | Bold | Section headers |
-| `title2` | `.title2` | 22pt | Bold | Card titles |
-| `title3` | `.title3` | 20pt | Semibold | Subsection headers |
-| `headline` | `.headline` | 17pt | Semibold | Climb names, labels |
-| `body` | `.body` | 17pt | Regular | Default text |
-| `callout` | `.callout` | 16pt | Regular | Secondary content |
-| `subheadline` | `.subheadline` | 15pt | Regular | Metadata, timestamps |
-| `footnote` | `.footnote` | 13pt | Regular | Tertiary info, helper text |
-| `caption1` | `.caption` | 12pt | Regular | Badges, small labels |
-| `caption2` | `.caption2` | 11pt | Regular | Minimal annotations |
+| Style         | iOS equivalent | Size | Weight   | Use                               |
+| ------------- | -------------- | ---- | -------- | --------------------------------- |
+| `largeTitle`  | `.largeTitle`  | 34pt | Bold     | Screen headers (large title mode) |
+| `title1`      | `.title`       | 28pt | Bold     | Section headers                   |
+| `title2`      | `.title2`      | 22pt | Bold     | Card titles                       |
+| `title3`      | `.title3`      | 20pt | Semibold | Subsection headers                |
+| `headline`    | `.headline`    | 17pt | Semibold | Climb names, labels               |
+| `body`        | `.body`        | 17pt | Regular  | Default text                      |
+| `callout`     | `.callout`     | 16pt | Regular  | Secondary content                 |
+| `subheadline` | `.subheadline` | 15pt | Regular  | Metadata, timestamps              |
+| `footnote`    | `.footnote`    | 13pt | Regular  | Tertiary info, helper text        |
+| `caption1`    | `.caption`     | 12pt | Regular  | Badges, small labels              |
+| `caption2`    | `.caption2`    | 11pt | Regular  | Minimal annotations               |
 
 **Dynamic Type support is required.** All text uses `allowFontScaling` (default true) and must be tested at all seven accessibility sizes.
 
@@ -231,53 +231,53 @@ System font (`San Francisco` on iOS, `Roboto` on Android) via React Native's def
 
 All icons use SF Symbols on iOS (via `expo-symbols`), with Material Symbols fallback on Android. SF Symbols match the system font weight, support variable rendering, and animate natively.
 
-| Action | SF Symbol | Notes |
-|--------|-----------|-------|
-| Search | `magnifyingglass` | |
-| Bluetooth | `antenna.radiowaves.left.and.right` | |
-| Queue/list | `list.bullet` | |
-| Previous | `chevron.left` | |
-| Next | `chevron.right` | |
-| Favorite | `heart` / `heart.fill` | Outlined when inactive, filled when active |
-| Settings | `gearshape` | |
-| Profile | `person.crop.circle` | |
-| Tick/Send | `checkmark.circle.fill` | |
-| Comment | `bubble.left` | |
-| Share | `square.and.arrow.up` | |
-| More | `ellipsis.circle` | |
-| Close | `xmark` | |
-| Add | `plus.circle` | |
-| Playlist | `folder.badge.plus` | |
+| Action     | SF Symbol                           | Notes                                      |
+| ---------- | ----------------------------------- | ------------------------------------------ |
+| Search     | `magnifyingglass`                   |                                            |
+| Bluetooth  | `antenna.radiowaves.left.and.right` |                                            |
+| Queue/list | `list.bullet`                       |                                            |
+| Previous   | `chevron.left`                      |                                            |
+| Next       | `chevron.right`                     |                                            |
+| Favorite   | `heart` / `heart.fill`              | Outlined when inactive, filled when active |
+| Settings   | `gearshape`                         |                                            |
+| Profile    | `person.crop.circle`                |                                            |
+| Tick/Send  | `checkmark.circle.fill`             |                                            |
+| Comment    | `bubble.left`                       |                                            |
+| Share      | `square.and.arrow.up`               |                                            |
+| More       | `ellipsis.circle`                   |                                            |
+| Close      | `xmark`                             |                                            |
+| Add        | `plus.circle`                       |                                            |
+| Playlist   | `folder.badge.plus`                 |                                            |
 
 ### Haptic feedback
 
 Every interactive element gets appropriate haptic feedback via `expo-haptics`.
 
-| Interaction | Haptic type | When |
-|-------------|------------|------|
-| Tab switch | `selection` | On tab press |
-| List item tap | `light` impact | On press, before navigation |
-| Button press | `light` impact | On press down |
-| Toggle switch | `medium` impact | On state change |
-| Swipe action threshold | `medium` impact | When swipe crosses action threshold |
-| Pull-to-refresh trigger | `medium` impact | When pull passes refresh threshold |
-| Long press activate | `heavy` impact | When context menu appears |
-| Success (tick saved) | `success` notification | After tick confirmation |
-| Error (connection lost) | `error` notification | On BLE disconnect |
-| Queue item added | `success` notification | After add to queue |
-| Delete confirmation | `warning` notification | Before destructive action |
-| Climb navigation (prev/next) | `selection` | On each climb change |
+| Interaction                  | Haptic type            | When                                |
+| ---------------------------- | ---------------------- | ----------------------------------- |
+| Tab switch                   | `selection`            | On tab press                        |
+| List item tap                | `light` impact         | On press, before navigation         |
+| Button press                 | `light` impact         | On press down                       |
+| Toggle switch                | `medium` impact        | On state change                     |
+| Swipe action threshold       | `medium` impact        | When swipe crosses action threshold |
+| Pull-to-refresh trigger      | `medium` impact        | When pull passes refresh threshold  |
+| Long press activate          | `heavy` impact         | When context menu appears           |
+| Success (tick saved)         | `success` notification | After tick confirmation             |
+| Error (connection lost)      | `error` notification   | On BLE disconnect                   |
+| Queue item added             | `success` notification | After add to queue                  |
+| Delete confirmation          | `warning` notification | Before destructive action           |
+| Climb navigation (prev/next) | `selection`            | On each climb change                |
 
 ### Spring animation presets
 
 All animations use spring physics via `react-native-reanimated`'s `withSpring()`, not CSS-style timing functions.
 
-| Preset | Damping | Stiffness | Mass | Use |
-|--------|---------|-----------|------|-----|
-| `snappy` | 0.85 | 400 | 0.7 | Button press/release, tab switch |
-| `interactive` | 0.86 | 300 | 1.0 | Drag release, sheet snap |
-| `gentle` | 0.7 | 200 | 1.0 | Screen transitions, expand/collapse |
-| `bouncy` | 0.6 | 300 | 0.7 | Success celebrations, add-to-queue |
+| Preset        | Damping | Stiffness | Mass | Use                                 |
+| ------------- | ------- | --------- | ---- | ----------------------------------- |
+| `snappy`      | 0.85    | 400       | 0.7  | Button press/release, tab switch    |
+| `interactive` | 0.86    | 300       | 1.0  | Drag release, sheet snap            |
+| `gentle`      | 0.7     | 200       | 1.0  | Screen transitions, expand/collapse |
+| `bouncy`      | 0.6     | 300       | 0.7  | Success celebrations, add-to-queue  |
 
 ## iOS interaction patterns
 
@@ -286,6 +286,7 @@ These are the specific interaction behaviors that make the app feel native to iO
 ### Swipe actions on list items
 
 Climb list items, queue items, and playlist items support swipe actions:
+
 - **Leading swipe**: Add to queue (teal) — matches iOS Mail's gesture language
 - **Trailing swipe**: Short swipe = More actions menu. Full swipe = Favorite (rose, heart icon)
 - Implementation: `react-native-gesture-handler` `Swipeable` component
@@ -294,6 +295,7 @@ Climb list items, queue items, and playlist items support swipe actions:
 ### Context menus (long press)
 
 Climb cards, queue items, and playlist items show a native iOS context menu on long press:
+
 - Uses `react-native-context-menu-view` which wraps `UIContextMenuInteraction`
 - Shows a blurred preview of the climb card with a menu below
 - Menu items with SF Symbol icons: "Add to Queue", "Add to Playlist", "Favorite", "Share", "View Setter"
@@ -320,15 +322,16 @@ The navigation system matches what iOS users expect from a SwiftUI `NavigationSt
 
 ### Tab structure
 
-| Tab | Icon (SF Symbol) | Root screen | Notes |
-|-----|-----------------|-------------|-------|
-| Home | `house.fill` | Board selection | User's boards, discover |
-| Search | `magnifyingglass` | Climb search/filter | Full search with filters |
-| Queue | `list.bullet` | Queue/play view | Current session, BLE status |
-| Profile | `person.crop.circle.fill` | User profile | Stats, logbook, playlists |
-| More | `ellipsis` | Settings & extras | Settings, about, help |
+| Tab     | Icon (SF Symbol)          | Root screen         | Notes                       |
+| ------- | ------------------------- | ------------------- | --------------------------- |
+| Home    | `house.fill`              | Board selection     | User's boards, discover     |
+| Search  | `magnifyingglass`         | Climb search/filter | Full search with filters    |
+| Queue   | `list.bullet`             | Queue/play view     | Current session, BLE status |
+| Profile | `person.crop.circle.fill` | User profile        | Stats, logbook, playlists   |
+| More    | `ellipsis`                | Settings & extras   | Settings, about, help       |
 
 **Tab bar implementation:**
+
 - `@react-navigation/bottom-tabs` with a custom `tabBar` component
 - Tab bar background: `UIBlurEffect` vibrancy via `@react-native-community/blur` — content scrolls behind a translucent tab bar
 - Badge on Queue tab showing item count
@@ -336,13 +339,13 @@ The navigation system matches what iOS users expect from a SwiftUI `NavigationSt
 
 ### Navigation patterns per screen type
 
-| Pattern | Implementation | Examples |
-|---------|---------------|----------|
-| Push (drill-down) | `native-stack` push | Board list -> Climb list -> Climb detail |
-| Modal sheet (half-height) | `react-native-bottom-sheet` | Queue management, climb actions, tick entry |
-| Modal sheet (full-height) | `native-stack` `presentation: 'modal'` | Climb create, settings sub-pages |
-| Full-screen cover | `native-stack` `presentation: 'fullScreenModal'` | Play view (board with overlay controls) |
-| Action sheet | Native `ActionSheetIOS` | Destructive actions, share |
+| Pattern                   | Implementation                                   | Examples                                    |
+| ------------------------- | ------------------------------------------------ | ------------------------------------------- |
+| Push (drill-down)         | `native-stack` push                              | Board list -> Climb list -> Climb detail    |
+| Modal sheet (half-height) | `react-native-bottom-sheet`                      | Queue management, climb actions, tick entry |
+| Modal sheet (full-height) | `native-stack` `presentation: 'modal'`           | Climb create, settings sub-pages            |
+| Full-screen cover         | `native-stack` `presentation: 'fullScreenModal'` | Play view (board with overlay controls)     |
+| Action sheet              | Native `ActionSheetIOS`                          | Destructive actions, share                  |
 
 ### Large title headers
 
@@ -403,19 +406,19 @@ The backend already supports bearer token auth for the existing Capacitor native
 
 ### Platform features
 
-| Feature            | Current (Capacitor)                  | React Native (Expo)                                                       |
-| ------------------ | ------------------------------------ | ------------------------------------------------------------------------- |
-| Board renderer     | Canvas/WASM + SVG                    | Expo native module: SwiftUI `Canvas` (iOS) / Compose `Canvas` (Android)   |
-| Live Activity      | Custom Swift widget (~500 lines)     | Expo native module: SwiftUI ActivityKit (iOS only, no Android equivalent) |
-| HealthKit          | Custom bridge (~100 lines)           | Expo native module: SwiftUI HealthKit (iOS) / Health Connect (Android)    |
-| BLE device picker  | Capacitor BLE plugin                 | Expo native module: SwiftUI list (iOS) / Compose list (Android)           |
-| Settings screen    | Web settings page                    | Expo native module: SwiftUI `Form` (iOS) / React Native (Android)         |
+| Feature            | Current (Capacitor)                  | React Native (Expo)                                                          |
+| ------------------ | ------------------------------------ | ---------------------------------------------------------------------------- |
+| Board renderer     | Canvas/WASM + SVG                    | Expo native module: SwiftUI `Canvas` (iOS) / Compose `Canvas` (Android)      |
+| Live Activity      | Custom Swift widget (~500 lines)     | Expo native module: SwiftUI ActivityKit (iOS only, no Android equivalent)    |
+| HealthKit          | Custom bridge (~100 lines)           | Expo native module: SwiftUI HealthKit (iOS) / Health Connect (Android)       |
+| BLE device picker  | Capacitor BLE plugin                 | Expo native module: SwiftUI list (iOS) / Compose list (Android)              |
+| Settings screen    | Web settings page                    | Expo native module: SwiftUI `Form` (iOS) / React Native (Android)            |
 | Angle selector     | Web angle selector component         | Expo native module: SwiftUI dial with haptics (iOS) / React Native (Android) |
-| Push notifications | APNs backend (reused)                | `expo-notifications` + existing APNs backend                              |
-| In-app review      | `@capacitor-community/in-app-review` | `expo-store-review`                                                       |
-| Wake lock          | `@capacitor-community/keep-awake`    | `expo-keep-awake`                                                         |
-| Geolocation        | `@capacitor/geolocation`             | `expo-location`                                                           |
-| Shake detection    | `@capacitor/motion`                  | `expo-sensors`                                                            |
+| Push notifications | APNs backend (reused)                | `expo-notifications` + existing APNs backend                                 |
+| In-app review      | `@capacitor-community/in-app-review` | `expo-store-review`                                                          |
+| Wake lock          | `@capacitor-community/keep-awake`    | `expo-keep-awake`                                                            |
+| Geolocation        | `@capacitor/geolocation`             | `expo-location`                                                              |
+| Shake detection    | `@capacitor/motion`                  | `expo-sensors`                                                               |
 
 ## What gets deleted
 
@@ -513,15 +516,15 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 
 ### Timeline
 
-| Phase               | Duration  | Cumulative  |
-| ------------------- | --------- | ----------- |
-| 0 Shared extraction | 2 weeks   | 2 weeks     |
-| 1 Foundation        | 4 weeks   | 6 weeks     |
-| 2 Core experience   | 5 weeks   | 11 weeks    |
-| 3 BLE               | 3 weeks   | 14 weeks    |
-| 4 Social            | 3 weeks   | 17 weeks    |
-| 5 Platform features | 3 weeks   | 20 weeks    |
-| 6 Polish            | 3 weeks   | 23 weeks    |
+| Phase               | Duration | Cumulative |
+| ------------------- | -------- | ---------- |
+| 0 Shared extraction | 2 weeks  | 2 weeks    |
+| 1 Foundation        | 4 weeks  | 6 weeks    |
+| 2 Core experience   | 5 weeks  | 11 weeks   |
+| 3 BLE               | 3 weeks  | 14 weeks   |
+| 4 Social            | 3 weeks  | 17 weeks   |
+| 5 Platform features | 3 weeks  | 20 weeks   |
+| 6 Polish            | 3 weeks  | 23 weeks   |
 
 **Total: ~23 weeks (~5.5 months) to App Store submission.**
 
@@ -535,18 +538,18 @@ With an iOS-first approach and 75% iOS users, Android must still work well but s
 
 The design system is platform-adaptive at the component level:
 
-| Component | iOS behavior | Android behavior |
-|-----------|-------------|-----------------|
-| Tab bar | SF Symbols, blur background, iOS tab style | Material 3 navigation bar, Material Symbols |
-| Navigation | Large title headers, native push, swipe-back | Material 3 top app bar, back arrow |
-| Sheets | Gorhom bottom sheet with iOS snap points | Same bottom sheet (works well on both) |
-| Context menu | Native `UIContextMenuInteraction` | Long-press menu via custom implementation |
-| Icons | SF Symbols | Material Symbols (via conditional import) |
-| Haptics | Taptic Engine (precise) | Android haptic fallback (less precise) |
-| Blur | `UIVisualEffectView` | Semi-transparent background (blur unreliable across Android devices) |
-| Search | Native `UISearchController` | React Native `TextInput` styled for Material |
-| Colors | iOS semantic colors | Material 3 dynamic color |
-| Typography | San Francisco (system) | Roboto (system) |
+| Component    | iOS behavior                                 | Android behavior                                                     |
+| ------------ | -------------------------------------------- | -------------------------------------------------------------------- |
+| Tab bar      | SF Symbols, blur background, iOS tab style   | Material 3 navigation bar, Material Symbols                          |
+| Navigation   | Large title headers, native push, swipe-back | Material 3 top app bar, back arrow                                   |
+| Sheets       | Gorhom bottom sheet with iOS snap points     | Same bottom sheet (works well on both)                               |
+| Context menu | Native `UIContextMenuInteraction`            | Long-press menu via custom implementation                            |
+| Icons        | SF Symbols                                   | Material Symbols (via conditional import)                            |
+| Haptics      | Taptic Engine (precise)                      | Android haptic fallback (less precise)                               |
+| Blur         | `UIVisualEffectView`                         | Semi-transparent background (blur unreliable across Android devices) |
+| Search       | Native `UISearchController`                  | React Native `TextInput` styled for Material                         |
+| Colors       | iOS semantic colors                          | Material 3 dynamic color                                             |
+| Typography   | San Francisco (system)                       | Roboto (system)                                                      |
 
 Implementation: `Platform.select()` wrapper for each divergent component. The climb list, queue, and board renderer are shared. Navigation chrome, icons, and interaction feedback adapt per platform.
 
@@ -556,30 +559,30 @@ The explicit goal: a user picking up the iOS app says "this feels like it was ma
 
 ## Key libraries
 
-| Capability | Library / Approach | Notes |
-|------------|-------------------|-------|
-| Navigation | `expo-router` + `@react-navigation/native-stack` | Native `UINavigationController` on iOS, large titles, swipe-back |
-| Tab bar | `@react-navigation/bottom-tabs` + custom tab bar | iOS-style blur tab bar, SF Symbol icons |
-| Modal sheets | `react-native-bottom-sheet` (Gorhom) | Snap points, gesture-driven, matches iOS sheet behavior |
-| BLE | `react-native-ble-plx` | Mature, direct CoreBluetooth/Android BLE |
-| Board rendering | Expo native module (SwiftUI / Compose) | SwiftUI `Canvas` on iOS, Compose `Canvas` on Android. Fallback: Skia |
-| Lists | `@shopify/flash-list` | Drop-in FlatList replacement, 60fps+ scrolling |
-| Storage (KV) | `react-native-mmkv` | Fastest KV store on mobile, JSI-based |
-| Storage (SQL) | `expo-sqlite` | For offline climb database |
-| Auth | `expo-auth-session` | Standard OAuth flows |
-| Secure storage | `expo-secure-store` | iOS Keychain, Android Keystore |
-| Live Activity | Expo native module (SwiftUI ActivityKit) | iOS lock screen widgets, no Android equivalent |
-| HealthKit | Expo native module (SwiftUI HealthKit) | iOS; Android uses Health Connect via same module |
-| Push | `expo-notifications` | APNs + FCM |
-| Icons | `expo-symbols` (SF Symbols) | Native Apple iconography on iOS, Material fallback on Android |
-| Haptics | `expo-haptics` | Taptic Engine feedback on all interactive elements |
-| Animations | `react-native-reanimated` v3 | Spring-based animations matching iOS system dynamics |
-| Gestures | `react-native-gesture-handler` | Native gesture recognizers, swipe actions, drag-to-reorder |
-| Context menus | `react-native-context-menu-view` | Native `UIContextMenuInteraction` with blur preview |
-| Blur effects | `@react-native-community/blur` | Tab bar vibrancy, navigation bar blur, overlay blur |
-| GraphQL | `@tanstack/react-query` + `graphql-request` | Same pattern as web |
-| Error tracking | `@sentry/react-native` | Crash reporting + performance |
-| Native modules | `expo-modules-core` | SwiftUI (iOS) + Kotlin/Compose (Android) bridge |
+| Capability      | Library / Approach                               | Notes                                                                |
+| --------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| Navigation      | `expo-router` + `@react-navigation/native-stack` | Native `UINavigationController` on iOS, large titles, swipe-back     |
+| Tab bar         | `@react-navigation/bottom-tabs` + custom tab bar | iOS-style blur tab bar, SF Symbol icons                              |
+| Modal sheets    | `react-native-bottom-sheet` (Gorhom)             | Snap points, gesture-driven, matches iOS sheet behavior              |
+| BLE             | `react-native-ble-plx`                           | Mature, direct CoreBluetooth/Android BLE                             |
+| Board rendering | Expo native module (SwiftUI / Compose)           | SwiftUI `Canvas` on iOS, Compose `Canvas` on Android. Fallback: Skia |
+| Lists           | `@shopify/flash-list`                            | Drop-in FlatList replacement, 60fps+ scrolling                       |
+| Storage (KV)    | `react-native-mmkv`                              | Fastest KV store on mobile, JSI-based                                |
+| Storage (SQL)   | `expo-sqlite`                                    | For offline climb database                                           |
+| Auth            | `expo-auth-session`                              | Standard OAuth flows                                                 |
+| Secure storage  | `expo-secure-store`                              | iOS Keychain, Android Keystore                                       |
+| Live Activity   | Expo native module (SwiftUI ActivityKit)         | iOS lock screen widgets, no Android equivalent                       |
+| HealthKit       | Expo native module (SwiftUI HealthKit)           | iOS; Android uses Health Connect via same module                     |
+| Push            | `expo-notifications`                             | APNs + FCM                                                           |
+| Icons           | `expo-symbols` (SF Symbols)                      | Native Apple iconography on iOS, Material fallback on Android        |
+| Haptics         | `expo-haptics`                                   | Taptic Engine feedback on all interactive elements                   |
+| Animations      | `react-native-reanimated` v3                     | Spring-based animations matching iOS system dynamics                 |
+| Gestures        | `react-native-gesture-handler`                   | Native gesture recognizers, swipe actions, drag-to-reorder           |
+| Context menus   | `react-native-context-menu-view`                 | Native `UIContextMenuInteraction` with blur preview                  |
+| Blur effects    | `@react-native-community/blur`                   | Tab bar vibrancy, navigation bar blur, overlay blur                  |
+| GraphQL         | `@tanstack/react-query` + `graphql-request`      | Same pattern as web                                                  |
+| Error tracking  | `@sentry/react-native`                           | Crash reporting + performance                                        |
+| Native modules  | `expo-modules-core`                              | SwiftUI (iOS) + Kotlin/Compose (Android) bridge                      |
 
 ## Auth design
 
@@ -684,29 +687,29 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 | Phase 5 scope overload                                     | High       | Medium | Phase 5 packs SQLite + mutation queue + Live Activity + HealthKit into 3 weeks. Ship v1 without Live Activity and HealthKit to de-risk. Add them in a fast-follow.                                             |
 | Apple 4.2 rejection                                        | Low        | High   | Native RN app with SwiftUI modules has minimal risk. Plan B above if needed.                                                                                                                                   |
 | Custom design system takes longer than a library           | Medium     | Medium | Start with 8-10 base components the app actually needs. Don't build a component library — build what each screen requires. Iterate after Phase 1.                                                              |
-| SF Symbols availability in React Native                    | Medium     | Low    | `expo-symbols` is the official Expo module. Fallback: `react-native-sfsymbols`. Worst case: SF Symbol PNGs exported from SF Symbols.app.                                                                      |
+| SF Symbols availability in React Native                    | Medium     | Low    | `expo-symbols` is the official Expo module. Fallback: `react-native-sfsymbols`. Worst case: SF Symbol PNGs exported from SF Symbols.app.                                                                       |
 | 120fps target on ProMotion hard to achieve                 | Medium     | Medium | SwiftUI `Canvas` handles this natively. FlashList + Reanimated run on the UI thread. If JS thread drops frames, move animations to native driver. Validate in Phase 2 week 1.                                  |
-| Context menu library maintenance                           | Low        | Low    | `react-native-context-menu-view` wraps a stable UIKit API. If abandoned, simple enough to wrap in a custom Expo native module.                                                                                  |
+| Context menu library maintenance                           | Low        | Low    | `react-native-context-menu-view` wraps a stable UIKit API. If abandoned, simple enough to wrap in a custom Expo native module.                                                                                 |
 | Platform-adaptive components double component count        | Medium     | Medium | Accept this cost. The alternative (one compromised design) is worse. Use `Platform.select()` at the component level, not the screen level. Most screens are ~90% shared code.                                  |
-| Spring animation tuning is subjective                      | Medium     | Low    | Define 4 presets (snappy, interactive, gentle, bouncy) in Phase 1 and lock them. Consistency matters more than per-case perfection.                                                                             |
+| Spring animation tuning is subjective                      | Medium     | Low    | Define 4 presets (snappy, interactive, gentle, bouncy) in Phase 1 and lock them. Consistency matters more than per-case perfection.                                                                            |
 | SwiftUI Settings module adds native maintenance burden     | Low        | Medium | Settings screen is structurally simple (Form + sections). SwiftUI code is ~200 lines. If burdensome, fall back to React Native with grouped list styling.                                                      |
 | Android blur effects look bad on some devices              | High       | Low    | On Android, use semi-transparent backgrounds instead of blur. This is standard for cross-platform apps.                                                                                                        |
 
 ## Performance targets
 
-| Metric                      | Target                                           |
-| --------------------------- | ------------------------------------------------ |
-| Cold start to interactive   | < 1.2s on iPhone 13                              |
-| Climb search (local SQLite) | < 100ms p95                                      |
-| Board renderer FPS          | 120fps on ProMotion, 60fps on standard displays  |
-| BLE connection              | < 5s                                             |
-| BLE LED send                | < 1s after connect                               |
-| App binary size             | < 30 MB without refdata                          |
-| List scrolling              | 120fps on ProMotion, 60fps on standard (FlashList)|
-| Navigation transition       | < 16ms frame budget (native stack handles this)  |
-| Haptic latency              | < 10ms from gesture to feedback                  |
-| Memory (idle)               | < 80 MB                                          |
-| Memory (board rendered)     | < 150 MB                                         |
+| Metric                      | Target                                             |
+| --------------------------- | -------------------------------------------------- |
+| Cold start to interactive   | < 1.2s on iPhone 13                                |
+| Climb search (local SQLite) | < 100ms p95                                        |
+| Board renderer FPS          | 120fps on ProMotion, 60fps on standard displays    |
+| BLE connection              | < 5s                                               |
+| BLE LED send                | < 1s after connect                                 |
+| App binary size             | < 30 MB without refdata                            |
+| List scrolling              | 120fps on ProMotion, 60fps on standard (FlashList) |
+| Navigation transition       | < 16ms frame budget (native stack handles this)    |
+| Haptic latency              | < 10ms from gesture to feedback                    |
+| Memory (idle)               | < 80 MB                                            |
+| Memory (board rendered)     | < 150 MB                                           |
 
 ## Platform requirements
 
@@ -717,17 +720,17 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 
 ## Success criteria
 
-| Layer             | Done when                                                                                                |
-| ----------------- | -------------------------------------------------------------------------------------------------------- |
-| Shared extraction | BLE protocol, queue reducer, board config in `packages/shared/`. Web imports updated. `vp check` passes. |
-| Foundation        | Expo project builds, auth works, navigation skeleton complete (blur tab bar, large titles, search bar), design system tokens defined, haptics hook working, SF Symbols rendering. |
-| Core experience   | Climb browsing, search, board visualization, queue management work end-to-end on iOS + Android. Context menus and swipe actions functional on iOS.  |
-| BLE               | Connect to physical Kilter/Tension/MoonBoard, send climbs, LEDs light up correctly.                      |
-| Social            | Party mode, notifications, feed work via WebSocket subscriptions.                                        |
-| Platform          | Live Activity, HealthKit, offline SQLite, push notifications, mutation queue all functional.             |
+| Layer             | Done when                                                                                                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared extraction | BLE protocol, queue reducer, board config in `packages/shared/`. Web imports updated. `vp check` passes.                                                                                                          |
+| Foundation        | Expo project builds, auth works, navigation skeleton complete (blur tab bar, large titles, search bar), design system tokens defined, haptics hook working, SF Symbols rendering.                                 |
+| Core experience   | Climb browsing, search, board visualization, queue management work end-to-end on iOS + Android. Context menus and swipe actions functional on iOS.                                                                |
+| BLE               | Connect to physical Kilter/Tension/MoonBoard, send climbs, LEDs light up correctly.                                                                                                                               |
+| Social            | Party mode, notifications, feed work via WebSocket subscriptions.                                                                                                                                                 |
+| Platform          | Live Activity, HealthKit, offline SQLite, push notifications, mutation queue all functional.                                                                                                                      |
 | iOS quality       | Dynamic Type works at all 7 sizes. Haptics fire on all interactive elements. Context menus on long press. 120fps on ProMotion in board renderer and lists. Swipe-back on all screens. VoiceOver reads all labels. |
-| Android parity    | All features work on Android. Material 3 visual treatment. Context menus via long-press fallback.        |
-| App Store         | Accepted on iOS App Store and Google Play Store. TestFlight beta with 10+ testers.                       |
+| Android parity    | All features work on Android. Material 3 visual treatment. Context menus via long-press fallback.                                                                                                                 |
+| App Store         | Accepted on iOS App Store and Google Play Store. TestFlight beta with 10+ testers.                                                                                                                                |
 
 ## Considered alternatives
 

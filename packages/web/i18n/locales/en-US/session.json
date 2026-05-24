@@ -233,6 +233,22 @@
     "tookFromYou": "{{newDriver}} took the wall from you.",
     "unknownDriver": "Someone"
   },
+  "mobile": {
+    "queue": {
+      "noSessionTitle": "Start a session to use the queue",
+      "noSessionSubtitle": "Join or create a session from the Boards tab to line up climbs with your crew.",
+      "emptyTitle": "No climbs in the queue",
+      "emptySubtitle": "Browse climbs and add them to your queue to get started.",
+      "browseClimbs": "Browse climbs",
+      "noClimbSelected": "No climb selected",
+      "unknownClimb": "Unknown climb",
+      "logAscent": "Log ascent",
+      "previousClimb": "Previous climb",
+      "nextClimb": "Next climb",
+      "removeClimb": "Remove climb",
+      "positionLabel": "position {{position}}"
+    }
+  },
   "playView": {
     "onWallChip": "ON WALL · {{username}}",
     "onWallChipNoDriver": "ON WALL",
