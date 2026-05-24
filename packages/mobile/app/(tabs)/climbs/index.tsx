@@ -177,11 +177,11 @@ export default function ClimbList() {
   }, [hasMore, isClimbsLoading, isRefetching]);
 
   const handleClimbPress = useCallback(
-    (climb: Climb) => {
+    (pressedClimb: Climb) => {
       router.push({
         pathname: '/(tabs)/climbs/[climbUuid]',
         params: {
-          climbUuid: climb.uuid,
+          climbUuid: pressedClimb.uuid,
           boardName: boardName as string,
           layoutId: String(layoutId),
           sizeId: String(sizeId),
@@ -237,7 +237,7 @@ export default function ClimbList() {
           boardName={boardName}
           boardRenderData={boardRenderData}
           angle={angle}
-          onPress={() => handleClimbPress(climb)}
+          onPress={handleClimbPress}
           onAddToQueue={handleAddToQueue}
           onOpenActions={handleOpenActions}
         />

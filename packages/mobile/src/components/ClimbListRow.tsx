@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -23,6 +23,7 @@ import { getGradeTintColor } from '../lib/grade-tint-color';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { brandColors } from '../theme/colors';
+import { spacing } from '../theme/tokens';
 import type { HoldPlacement } from './board-renderer/types';
 
 const MAX_GESTURE_SWIPE = 180;
@@ -44,7 +45,7 @@ type ClimbListRowProps = {
   boardName: BoardName;
   boardRenderData: BoardRenderData | null;
   angle: number;
-  onPress: () => void;
+  onPress: (climb: Climb) => void;
   onAddToQueue?: (climb: Climb) => void;
   onOpenActions?: (climb: Climb) => void;
   selected?: boolean;
@@ -84,13 +85,32 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const rightActionOpacity = useSharedValue(0);
   const swipeConfirmed = useSharedValue(false);
 
+  // Reset shared values when the climb changes (FlashList recycles rows)
+  useEffect(() => {
+    translateX.value = 0;
+    leftShortOpacity.value = 0;
+    leftLongOpacity.value = 0;
+    rightActionOpacity.value = 0;
+    swipeConfirmed.value = false;
+  }, [climb.uuid, translateX, leftShortOpacity, leftLongOpacity, rightActionOpacity, swipeConfirmed]);
+
   // Stable refs for callbacks to avoid gesture closure staleness
+  const onPressRef = useRef(onPress);
+  onPressRef.current = onPress;
   const onAddToQueueRef = useRef(onAddToQueue);
   onAddToQueueRef.current = onAddToQueue;
   const onOpenActionsRef = useRef(onOpenActions);
   onOpenActionsRef.current = onOpenActions;
   const climbRef = useRef(climb);
   climbRef.current = climb;
+  const unsupportedRef = useRef(unsupported);
+  unsupportedRef.current = unsupported;
+
+  const handleRowPress = useCallback(() => {
+    if (unsupportedRef.current) return;
+    hapticLight();
+    onPressRef.current(climbRef.current);
+  }, []);
 
   const handleSwipeAddToQueue = useCallback(() => {
     hapticSuccess();
@@ -104,7 +124,6 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
   const handleSwipePlaylist = useCallback(() => {
     hapticMedium();
-    // Playlist selection — for now, delegate to actions sheet
     onOpenActionsRef.current?.(climbRef.current);
   }, []);
 
@@ -118,7 +137,6 @@ const ClimbListRow = React.memo(function ClimbListRow({
           const offset = event.translationX;
 
           if (offset > 0) {
-            // Swiping right — reveals left actions (playlist / more)
             const clamped = Math.min(offset, MAX_GESTURE_SWIPE);
             translateX.value = clamped;
 
@@ -133,7 +151,6 @@ const ClimbListRow = React.memo(function ClimbListRow({
             leftLongOpacity.value = baseOpacity * blend;
             rightActionOpacity.value = 0;
           } else {
-            // Swiping left — reveals right action (add to queue)
             const clamped = Math.max(offset, -RIGHT_ACTION_WIDTH - 20);
             translateX.value = clamped;
 
@@ -147,19 +164,16 @@ const ClimbListRow = React.memo(function ClimbListRow({
           const offset = translateX.value;
 
           if (offset > LONG_SWIPE_THRESHOLD) {
-            // Long swipe right — open actions
             translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
             leftShortOpacity.value = withTiming(0, { duration: 200 });
             leftLongOpacity.value = withTiming(0, { duration: 200 });
             runOnJS(handleSwipeOpenActions)();
           } else if (offset > SHORT_SWIPE_THRESHOLD) {
-            // Short swipe right — playlist
             translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
             leftShortOpacity.value = withTiming(0, { duration: 200 });
             leftLongOpacity.value = withTiming(0, { duration: 200 });
             runOnJS(handleSwipePlaylist)();
           } else if (offset < -SHORT_SWIPE_THRESHOLD) {
-            // Swipe left — add to queue
             swipeConfirmed.value = true;
             translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
             rightActionOpacity.value = withTiming(0, { duration: 300 }, () => {
@@ -167,7 +181,6 @@ const ClimbListRow = React.memo(function ClimbListRow({
             });
             runOnJS(handleSwipeAddToQueue)();
           } else {
-            // Below threshold — snap back
             translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
             leftShortOpacity.value = withTiming(0, { duration: 150 });
             leftLongOpacity.value = withTiming(0, { duration: 150 });
@@ -198,25 +211,17 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [handleDoubleTap],
   );
 
-  // Single tap on the whole row
+  // Single tap on the whole row — must wait for double-tap to fail
   const singleTapGesture = useMemo(
     () =>
-      Gesture.Tap().onStart(() => {
-        'worklet';
-        runOnJS(handleRowPress)();
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRowPress is stable via ref
-    [],
+      Gesture.Tap()
+        .maxDuration(250)
+        .onStart(() => {
+          'worklet';
+          runOnJS(handleRowPress)();
+        }),
+    [handleRowPress],
   );
-
-  const onPressRef = useRef(onPress);
-  onPressRef.current = onPress;
-
-  const handleRowPress = useCallback(() => {
-    if (unsupported) return;
-    hapticLight();
-    onPressRef.current();
-  }, [unsupported]);
 
   const handleMenuPress = useCallback(() => {
     hapticLight();
@@ -241,13 +246,13 @@ const ClimbListRow = React.memo(function ClimbListRow({
   }));
 
   const rightConfirmedStyle = useAnimatedStyle(() => ({
-    opacity: swipeConfirmed.value ? 1 : 0,
+    opacity: withTiming(swipeConfirmed.value ? 1 : 0, { duration: 120 }),
   }));
 
   // --- Background color (selected state) ---
   const backgroundColor = useMemo(() => {
     if (selected) {
-      return getGradeTintColor(climb.difficulty, 'light', isDark) ?? 'rgba(128, 128, 128, 0.1)';
+      return getGradeTintColor(climb.difficulty, 'light', isDark) ?? `${iosSystemColors.systemGray}1A`;
     }
     return 'transparent';
   }, [selected, climb.difficulty, isDark]);
@@ -256,7 +261,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const subtitleText = useMemo(() => {
     const parts: string[] = [];
     if (climb.is_draft) {
-      parts.push('Draft');
+      parts.push(t('create.draftBadge'));
     }
     if (!climb.is_draft && climb.ascensionist_count) {
       parts.push(formatSends(climb.ascensionist_count));
@@ -271,13 +276,19 @@ const ClimbListRow = React.memo(function ClimbListRow({
     if (isFavorited) {
       parts.push('♥');
     }
-    return parts.length > 0 ? parts.join(' · ') : 'Project';
-  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, isFavorited]);
+    return parts.length > 0 ? parts.join(' · ') : t('card.title.project');
+  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, isFavorited, t]);
 
-  // Compose gestures: pan + double-tap on thumbnail area
+  // Compose gestures: double-tap takes priority over single-tap;
+  // pan runs simultaneously with the tap gestures
+  const thumbnailTapGesture = useMemo(
+    () => Gesture.Exclusive(doubleTapGesture, singleTapGesture),
+    [doubleTapGesture, singleTapGesture],
+  );
+
   const composedGesture = useMemo(
-    () => Gesture.Race(panGesture, singleTapGesture),
-    [panGesture, singleTapGesture],
+    () => Gesture.Simultaneous(panGesture, thumbnailTapGesture),
+    [panGesture, thumbnailTapGesture],
   );
 
   return (
@@ -302,32 +313,30 @@ const ClimbListRow = React.memo(function ClimbListRow({
         </AnimatedView>
       </View>
 
-      {/* Main content row */}
+      {/* Main content row — single GestureDetector with composed gestures */}
       <GestureDetector gesture={composedGesture}>
         <AnimatedView style={[styles.contentRow, { backgroundColor }, contentAnimatedStyle]}>
           {/* Left: Thumbnail with ascent badge + heart overlay */}
-          <GestureDetector gesture={doubleTapGesture}>
-            <View style={styles.thumbnailContainer}>
-              {boardRenderData ? (
-                <ClimbThumbnail
-                  frames={climb.frames}
-                  boardName={boardName}
-                  boardWidth={boardRenderData.boardWidth}
-                  boardHeight={boardRenderData.boardHeight}
-                  imageUrls={boardRenderData.imageUrls}
-                  holdsData={boardRenderData.holdsData}
-                  mirrored={climb.mirrored ?? false}
-                />
-              ) : (
-                <View style={styles.thumbnailPlaceholder} />
-              )}
-              <HeartAnimationOverlay visible={showHeart} onDismiss={dismissHeart} size={32} />
-              <AscentStatusBadge
-                userAscents={climb.userAscents}
-                userAttempts={climb.userAttempts}
+          <View style={styles.thumbnailContainer}>
+            {boardRenderData ? (
+              <ClimbThumbnail
+                frames={climb.frames}
+                boardName={boardName}
+                boardWidth={boardRenderData.boardWidth}
+                boardHeight={boardRenderData.boardHeight}
+                imageUrls={boardRenderData.imageUrls}
+                holdsData={boardRenderData.holdsData}
+                mirrored={climb.mirrored ?? false}
               />
-            </View>
-          </GestureDetector>
+            ) : (
+              <View style={styles.thumbnailPlaceholder} />
+            )}
+            <HeartAnimationOverlay visible={showHeart} onDismiss={dismissHeart} size={32} />
+            <AscentStatusBadge
+              userAscents={climb.userAscents}
+              userAttempts={climb.userAttempts}
+            />
+          </View>
 
           {/* Center: Name + subtitle */}
           <View style={styles.centerColumn}>
@@ -350,7 +359,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
             </Text>
             <Pressable
               onPress={handleMenuPress}
-              hitSlop={8}
+              hitSlop={spacing[2]}
               accessibilityRole="button"
               accessibilityLabel={t('mobile.climbRow.menuAccessibility', { climbName: climb.name })}
             >
@@ -379,21 +388,21 @@ const styles = StyleSheet.create({
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 12,
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[2],
+    gap: spacing[3],
   },
   thumbnailContainer: {
-    width: 64,
-    height: 64,
+    width: spacing[16],
+    height: spacing[16],
     flexShrink: 0,
     position: 'relative',
   },
   thumbnailPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.15)',
+    width: spacing[16],
+    height: spacing[16],
+    borderRadius: spacing[2],
+    backgroundColor: `${iosSystemColors.systemGray}1A`,
   },
   centerColumn: {
     flex: 1,
@@ -410,7 +419,7 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing[2],
     flexShrink: 0,
   },
   gradeText: {
@@ -418,7 +427,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 84,
+    marginLeft: spacing[16] + spacing[2] + spacing[3],
   },
   // --- Swipe action layers ---
   leftActionContainer: {
@@ -429,21 +438,21 @@ const styles = StyleSheet.create({
     width: SHORT_ACTION_WIDTH,
     justifyContent: 'center',
     alignItems: 'flex-start',
-    paddingLeft: 16,
+    paddingLeft: spacing[4],
   },
   leftShortAction: {
     ...StyleSheet.absoluteFill,
     backgroundColor: brandColors.primary,
     justifyContent: 'center',
     alignItems: 'flex-start',
-    paddingLeft: 16,
+    paddingLeft: spacing[4],
   },
   leftLongAction: {
     ...StyleSheet.absoluteFill,
     backgroundColor: iosSystemColors.systemGray,
     justifyContent: 'center',
     alignItems: 'flex-start',
-    paddingLeft: 16,
+    paddingLeft: spacing[4],
   },
   rightActionContainer: {
     position: 'absolute',
@@ -453,20 +462,20 @@ const styles = StyleSheet.create({
     width: RIGHT_ACTION_WIDTH,
     justifyContent: 'center',
     alignItems: 'flex-end',
-    paddingRight: 16,
+    paddingRight: spacing[4],
   },
   rightActionDefault: {
     ...StyleSheet.absoluteFill,
     backgroundColor: brandColors.success,
     justifyContent: 'center',
     alignItems: 'flex-end',
-    paddingRight: 16,
+    paddingRight: spacing[4],
   },
   rightActionConfirmed: {
     ...StyleSheet.absoluteFill,
     backgroundColor: brandColors.success,
     justifyContent: 'center',
     alignItems: 'flex-end',
-    paddingRight: 16,
+    paddingRight: spacing[4],
   },
 });

@@ -34,9 +34,7 @@ const ClimbActionsSheet = forwardRef<BottomSheet, ClimbActionsSheetProps>(functi
 
   const handleShare = useCallback(() => {
     if (!climb) return;
-    Share.share({
-      message: climb.name,
-    });
+    Share.share({ message: climb.name }).catch(() => {});
     onDismiss?.();
   }, [climb, onDismiss]);
 
