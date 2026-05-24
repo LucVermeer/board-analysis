@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { useSegments, Redirect } from 'expo-router';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import { startSignIn, signOut as authSignOut, type AuthProvider as AuthProviderType } from '../lib/auth';
@@ -23,7 +23,12 @@ export function useAuth(): AuthState {
   return context;
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+type AuthProviderProps = {
+  children: ReactNode;
+  onReady?: () => void;
+};
+
+export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
@@ -62,12 +67,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(false);
   }, []);
 
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    if (!isLoading) {
+      onReadyRef.current?.();
+    }
+  }, [isLoading]);
+
+  if (isLoading) {
+    return null;
+  }
+
   const inAuthGroup = segments[0] === 'auth';
 
-  if (!isLoading && !isAuthenticated && !inAuthGroup) {
+  if (!isAuthenticated && !inAuthGroup) {
     return <Redirect href="/auth/login" />;
   }
-  if (!isLoading && isAuthenticated && inAuthGroup) {
+  if (isAuthenticated && inAuthGroup) {
     return <Redirect href="/(tabs)" />;
   }
 
