@@ -96,7 +96,14 @@ function parseArgs(args: string[]): { branch: string | null; message: string | n
   return { branch, message, platform };
 }
 
+const VALID_PLATFORMS = ['ios', 'android', 'all'] as const;
+
 const { branch: explicitBranch, message: explicitMessage, platform } = parseArgs(process.argv.slice(2));
+
+if (!VALID_PLATFORMS.includes(platform as (typeof VALID_PLATFORMS)[number])) {
+  console.error(`[mobile:publish] Invalid platform "${platform}". Must be one of: ${VALID_PLATFORMS.join(', ')}`);
+  process.exit(1);
+}
 
 const branchName = explicitBranch ?? resolveCurrentBranchName();
 if (!branchName) {

@@ -114,7 +114,7 @@ jobs:
               '',
               '```bash',
               `# Point the preview channel at this branch:`,
-              `bunx eas-cli@16 channel:edit preview --branch ${branch}`,
+              `bunx eas-cli@16 channel:edit preview --branch "${branch}"`,
               '```',
             ].join('\n');
 

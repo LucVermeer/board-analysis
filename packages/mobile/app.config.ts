@@ -1,13 +1,6 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
-const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
-
-if (!EAS_PROJECT_ID) {
-  throw new Error(
-    'EXPO_PUBLIC_EAS_PROJECT_ID is required. Run `bunx eas init` from packages/mobile/ ' +
-      'and set the resulting project ID as EXPO_PUBLIC_EAS_PROJECT_ID in your environment.',
-  );
-}
+const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? null;
 
 function resolveDevMetadata(): {
   branchName: string | null;
@@ -39,12 +32,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
-    runtimeVersion: {
-      policy: 'appVersion',
-    },
-    updates: {
-      url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
-    },
+    ...(EAS_PROJECT_ID
+      ? {
+          runtimeVersion: { policy: 'appVersion' as const },
+          updates: { url: `https://u.expo.dev/${EAS_PROJECT_ID}` },
+        }
+      : {}),
     ios: {
       bundleIdentifier: 'com.boardsesh.app',
       supportsTablet: false,
@@ -77,9 +70,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ],
     extra: {
       ...config.extra,
-      eas: {
-        projectId: EAS_PROJECT_ID,
-      },
+      ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
       ...(hasDevMetadata
         ? {
             devMetadata: {

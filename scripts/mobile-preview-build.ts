@@ -38,7 +38,14 @@ function parseArgs(args: string[]): { platform: string } {
   return { platform };
 }
 
+const VALID_PLATFORMS = ['ios', 'android', 'all'] as const;
+
 const { platform } = parseArgs(process.argv.slice(2));
+
+if (!VALID_PLATFORMS.includes(platform as (typeof VALID_PLATFORMS)[number])) {
+  console.error(`[mobile:preview-build] Invalid platform "${platform}". Must be one of: ${VALID_PLATFORMS.join(', ')}`);
+  process.exit(1);
+}
 
 console.log(`[mobile:preview-build] Profile:  preview`);
 console.log(`[mobile:preview-build] Platform: ${platform}`);
