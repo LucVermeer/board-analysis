@@ -1,6 +1,14 @@
 name: iOS TestFlight Deploy (React Native)
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/mobile/**'
+      - 'packages/shared/**'
+      - 'packages/board-constants/**'
+      - 'packages/shared-schema/**'
+      - '.github/workflows/ios-testflight-rn.yml'
   workflow_dispatch:
     inputs:
       build_number_offset:
