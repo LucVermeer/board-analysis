@@ -39,6 +39,10 @@ export const iconMap = {
   'check.small': { ios: 'checkmark', android: 'check' },
 
   // Climb/Board
+  mirror: { ios: 'arrow.triangle.2.circlepath', android: 'sync' },
+  lightbulb: { ios: 'lightbulb', android: 'lightbulb-on-outline' },
+  'lightbulb.fill': { ios: 'lightbulb.fill', android: 'lightbulb-on' },
+  angle: { ios: 'angle', android: 'angle-acute' },
   tick: { ios: 'checkmark.circle.fill', android: 'check-circle' },
   'tick.outline': { ios: 'checkmark.circle', android: 'check-circle-outline' },
   bluetooth: { ios: 'antenna.radiowaves.left.and.right', android: 'bluetooth' },
@@ -66,6 +70,8 @@ export const iconMap = {
   pause: { ios: 'pause', android: 'pause' },
   'minus.circle': { ios: 'minus.circle', android: 'minus-circle-outline' },
   'end.session': { ios: 'stop.circle', android: 'stop-circle-outline' },
+  'skip.previous': { ios: 'backward.end', android: 'skip-previous' },
+  'skip.next': { ios: 'forward.end', android: 'skip-next' },
 
   // Misc
   star: { ios: 'star', android: 'star-outline' },

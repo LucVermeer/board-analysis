@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl, Image } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useNavigation, useRouter } from 'expo-router';
+import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
@@ -18,6 +18,7 @@ import {
 } from '../../../src/components/ClimbFilterSheet';
 import { useDefaultBoard, useSearchClimbs, useToggleFavorite } from '../../../src/lib/graphql/hooks';
 import { useQueue } from '../../../src/providers/queue-provider';
+import { PlayDrawer, type PlayDrawerHandle } from '../../../src/components/play-drawer';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import { brandColors } from '../../../src/theme/colors';
@@ -28,9 +29,9 @@ const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function ClimbList() {
-  const router = useRouter();
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
+  const playDrawerRef = useRef<PlayDrawerHandle>(null);
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -175,21 +176,19 @@ export default function ClimbList() {
     }
   }, [hasMore, isClimbsLoading, isRefetching]);
 
+  const boardConfig = useMemo(
+    () =>
+      hasBoardConfig
+        ? { boardName, layoutId, sizeId, setIds, angle }
+        : null,
+    [hasBoardConfig, boardName, layoutId, sizeId, setIds, angle],
+  );
+
   const handleClimbPress = useCallback(
     (pressedClimb: Climb) => {
-      router.push({
-        pathname: '/(tabs)/climbs/[climbUuid]',
-        params: {
-          climbUuid: pressedClimb.uuid,
-          boardName: boardName as string,
-          layoutId: String(layoutId),
-          sizeId: String(sizeId),
-          setIds,
-          angle: String(angle),
-        },
-      });
+      playDrawerRef.current?.open(pressedClimb);
     },
-    [router, boardName, layoutId, sizeId, setIds, angle],
+    [],
   );
 
   // --- Queue integration ---
@@ -335,6 +334,9 @@ export default function ClimbList() {
         onToggleFavorite={handleActionToggleFavorite}
         onDismiss={handleDismissActions}
       />
+      {boardConfig && (
+        <PlayDrawer ref={playDrawerRef} boardConfig={boardConfig} />
+      )}
     </View>
   );
 }

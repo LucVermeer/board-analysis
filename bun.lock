@@ -145,6 +145,7 @@
         "@boardsesh/ble-protocol": "*",
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
+        "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",
         "@expo/vector-icons": "^15.0.2",
@@ -239,6 +240,17 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/shared/play-view": {
+      "name": "@boardsesh/play-view",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/board-constants": "*",
+        "@boardsesh/queue": "*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared/queue": {
       "name": "@boardsesh/queue",
       "version": "1.0.0",
@@ -263,6 +275,7 @@
         "@boardsesh/board-renderer-wasm": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
+        "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",
         "@emoji-mart/data": "^1.2.1",
@@ -666,6 +679,8 @@
     "@boardsesh/mobile": ["@boardsesh/mobile@workspace:packages/mobile"],
 
     "@boardsesh/moonboard-ocr": ["@boardsesh/moonboard-ocr@workspace:packages/moonboard-ocr"],
+
+    "@boardsesh/play-view": ["@boardsesh/play-view@workspace:packages/shared/play-view"],
 
     "@boardsesh/queue": ["@boardsesh/queue@workspace:packages/shared/queue"],
 

@@ -34,6 +34,7 @@
     "@boardsesh/board-renderer-wasm": "*",
     "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",
+    "@boardsesh/play-view": "*",
     "@boardsesh/queue": "*",
     "@boardsesh/shared-schema": "*",
     "@emoji-mart/data": "^1.2.1",

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { queueReducer, initialState } from '@boardsesh/queue';
 import type { QueueState, ClimbQueueItem } from '@boardsesh/queue';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../../lib/queue-conversion';
-import { findNextQueueItem, findPreviousQueueItem } from '../../lib/queue-navigation';
+import { findNextQueueItem, findPreviousQueueItem } from '@boardsesh/play-view';
 
 // ── Factory helpers ─────────────────────────────────────────────────────
 
