@@ -97,3 +97,4 @@ packages/mobile/ios/
 packages/mobile/android/
 packages/mobile/dist/
 packages/mobile/.bundle-check-output/
+.claude/worktrees/
