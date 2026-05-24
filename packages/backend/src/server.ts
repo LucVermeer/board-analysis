@@ -17,6 +17,7 @@ import { handlePosthogProxy } from './handlers/posthog';
 import { handleUserDataExport, handleUserDataExportDownload } from './handlers/user-data-export';
 import { handleWidgetNavigate } from './handlers/widget-navigate';
 import {
+  handleNativeAuthCredentials,
   handleNativeAuthExchange,
   handleNativeAuthRefresh,
   handleNativeAuthRevoke,
@@ -342,6 +343,11 @@ export async function startServer(): Promise<ServerResources> {
         return;
       }
 
+      if (pathname === '/auth/native/credentials' && (req.method === 'POST' || req.method === 'OPTIONS')) {
+        await handleNativeAuthCredentials(req, res);
+        return;
+      }
+
       if (pathname === '/auth/native/refresh' && (req.method === 'POST' || req.method === 'OPTIONS')) {
         await handleNativeAuthRefresh(req, res);
         return;
@@ -417,6 +423,7 @@ export async function startServer(): Promise<ServerResources> {
     logger.info(`  User data export: ${httpScheme}://0.0.0.0:${PORT}/api/user-data-export`);
     logger.info(`  Widget navigate: ${httpScheme}://0.0.0.0:${PORT}/api/widget/navigate`);
     logger.info(`  Native auth exchange: ${httpScheme}://0.0.0.0:${PORT}/auth/native/exchange`);
+    logger.info(`  Native auth credentials: ${httpScheme}://0.0.0.0:${PORT}/auth/native/credentials`);
     logger.info(`  Native auth refresh: ${httpScheme}://0.0.0.0:${PORT}/auth/native/refresh`);
     logger.info(`  Native auth revoke: ${httpScheme}://0.0.0.0:${PORT}/auth/native/revoke`);
     logger.info(`  Sync cron: ${httpScheme}://0.0.0.0:${PORT}/sync-cron`);

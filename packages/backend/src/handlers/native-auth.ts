@@ -1,12 +1,24 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import crypto from 'crypto';
 import { SignJWT } from 'jose';
+import { compare } from 'bcryptjs';
 import { eq, and, isNull, lt, or, isNotNull } from 'drizzle-orm';
-import { mobileRefreshTokens } from '@boardsesh/db/schema/auth';
+import { mobileRefreshTokens, users, userCredentials } from '@boardsesh/db/schema/auth';
 import { db } from '../db/client';
 import { redisClientManager } from '../redis/client';
 import { applyCorsHeaders } from './cors';
 import { logger } from '../utils/logger';
+
+/**
+ * Fixed dummy bcrypt hash used to keep the credentials handler's response
+ * time roughly constant for unknown emails / OAuth-only users. Without it,
+ * an attacker could enumerate registered accounts by timing the response.
+ * The plaintext is irrelevant — `compare` always returns false against it.
+ */
+const DUMMY_PASSWORD_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8/oQbk1Ec7T0p/7K8nXfRzC2VyM4dy';
+
+/** Generic error returned for all credential validation failures. */
+const INVALID_CREDENTIALS_ERROR = 'Invalid email or password';
 
 // Transfer tokens are short-lived (120s) and exchanged between our own
 // servers, so 5s tolerance is sufficient. Long-lived JWTs use 60s in
@@ -447,6 +459,91 @@ export async function handleNativeAuthExchange(req: IncomingMessage, res: Server
     sendJson(res, 200, tokenPair);
   } catch (error) {
     logger.error('[NativeAuth] Token generation failed:', error);
+    sendJson(res, 500, { error: 'Internal server error' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /auth/native/credentials
+// ---------------------------------------------------------------------------
+
+export async function handleNativeAuthCredentials(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!applyCorsHeaders(req, res)) return;
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  // Rate limit by IP (shared limiter with the other native-auth endpoints)
+  const clientIp = getClientIp(req);
+  const retryAfter = checkAuthRateLimit(clientIp);
+  if (retryAfter === -1) {
+    sendJson(res, 503, { error: 'Service temporarily overloaded' });
+    return;
+  }
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    sendJson(res, 429, { error: `Rate limit exceeded. Try again in ${retryAfter} seconds.` });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    const raw = await readBody(req);
+    body = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: 'Invalid JSON body' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    sendJson(res, 400, { error: 'Request body must be a JSON object' });
+    return;
+  }
+
+  const { email, password } = body as Record<string, unknown>;
+  if (typeof email !== 'string' || email.length === 0 || typeof password !== 'string' || password.length === 0) {
+    sendJson(res, 400, { error: 'email and password are required' });
+    return;
+  }
+
+  // Normalize the email to match how NextAuth's adapter stores it.
+  const normalizedEmail = email.trim().toLowerCase();
+
+  try {
+    const userRows = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+    const user = userRows[0];
+
+    if (!user) {
+      // Dummy compare against a fixed hash to mask the user-lookup miss in
+      // response time. Result is intentionally discarded.
+      await compare(password, DUMMY_PASSWORD_HASH);
+      sendJson(res, 401, { error: INVALID_CREDENTIALS_ERROR });
+      return;
+    }
+
+    const credentialRows = await db.select().from(userCredentials).where(eq(userCredentials.userId, user.id)).limit(1);
+    const credentials = credentialRows[0];
+
+    if (!credentials) {
+      // OAuth-only user with no password. Same dummy compare for timing parity.
+      await compare(password, DUMMY_PASSWORD_HASH);
+      sendJson(res, 401, { error: INVALID_CREDENTIALS_ERROR });
+      return;
+    }
+
+    const passwordMatches = await compare(password, credentials.passwordHash);
+    if (!passwordMatches) {
+      sendJson(res, 401, { error: INVALID_CREDENTIALS_ERROR });
+      return;
+    }
+
+    const tokenPair = await generateTokenPair(user.id);
+    logger.info(`[NativeAuth] Credentials sign-in successful for user ${user.id}`);
+    sendJson(res, 200, tokenPair);
+  } catch (error) {
+    logger.error('[NativeAuth] Credentials sign-in failed:', error);
     sendJson(res, 500, { error: 'Internal server error' });
   }
 }
