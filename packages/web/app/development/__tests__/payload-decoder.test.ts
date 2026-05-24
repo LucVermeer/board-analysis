@@ -101,7 +101,7 @@ describe('PayloadDecoder — Aurora v2', () => {
 describe('PayloadDecoder — MoonBoard ASCII', () => {
   it('decodes a single-shot MoonBoard payload back to the original frames', () => {
     const frames = 'p1r42p2r43p198r44';
-    const packet = getMoonboardBluetoothPacket(frames);
+    const { packet } = getMoonboardBluetoothPacket(frames);
     const decoded = decodeOnce(packet, { board: 'moonboard', layoutId: 0, sizeId: 0 });
     if (!decoded || decoded.board !== 'moonboard') throw new Error('expected moonboard frame');
     // MoonBoard reverse-mapping is sort-stable on holdId, so the round-tripped
@@ -123,7 +123,7 @@ describe('PayloadDecoder — MoonBoard ASCII', () => {
     // exceeds that. Drive a payload through the decoder one BLE-sized slice
     // at a time and assert we get exactly one frame at the end.
     const frames = 'p1r42p2r43p10r43p20r43p50r43p100r43p150r43p198r44';
-    const packet = getMoonboardBluetoothPacket(frames);
+    const { packet } = getMoonboardBluetoothPacket(frames);
     expect(packet.length).toBeGreaterThan(20);
 
     const decoder = new PayloadDecoder({ board: 'moonboard', layoutId: 0, sizeId: 0 });

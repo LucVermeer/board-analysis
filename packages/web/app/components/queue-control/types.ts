@@ -7,6 +7,20 @@ import type {
   AddToQueueSource,
 } from '@boardsesh/queue';
 
+// TYPE SEAM: The web defines its own ClimbQueueItem, Climb, and QueueItemUser
+// types with web-specific fields (e.g. Climb.boardType). The shared
+// @boardsesh/queue package defines structurally compatible types with wider
+// nullability (e.g. description?: string | null). TypeScript accepts the
+// structural overlap but the two type trees are not identical.
+//
+// QueueState and QueueAction are aliased to the shared generics. Action
+// payloads use the shared ClimbQueueItem (from @boardsesh/queue), while
+// the web QueueContextType surfaces the web's own ClimbQueueItem. This
+// works because the shared ClimbQueueItem's Climb type is structurally
+// wider — the web Climb satisfies it — but callers should be aware that
+// action payloads and context data use different (but compatible) Climb
+// definitions.
+
 // Re-export pure value types from the shared package for backward compatibility.
 // Types that embed Climb (PlaylistSuggestionSource, SetCurrentClimbOptions) are
 // defined locally because they reference the web's Climb type (which carries

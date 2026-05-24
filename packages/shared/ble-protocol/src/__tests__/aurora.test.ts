@@ -156,12 +156,28 @@ describe('parseBoardTypeFromDeviceName', () => {
     expect(parseBoardTypeFromDeviceName('So iLL Board#42@3')).toBe('soill');
   });
 
+  it('parses "So-iLL Board#42@3" as soill (strips hyphens)', () => {
+    expect(parseBoardTypeFromDeviceName('So-iLL Board#42@3')).toBe('soill');
+  });
+
   it('returns undefined for undefined input', () => {
     expect(parseBoardTypeFromDeviceName(undefined)).toBeUndefined();
   });
 
   it('returns undefined for unrecognized board name', () => {
     expect(parseBoardTypeFromDeviceName('Unknown Board#1@3')).toBeUndefined();
+  });
+
+  it('parses decoy from device name', () => {
+    expect(parseBoardTypeFromDeviceName('Decoy Board#789@3')).toBe('decoy');
+  });
+
+  it('parses touchstone from device name', () => {
+    expect(parseBoardTypeFromDeviceName('Touchstone Board#101@3')).toBe('touchstone');
+  });
+
+  it('parses grasshopper from device name', () => {
+    expect(parseBoardTypeFromDeviceName('Grasshopper Board#202@3')).toBe('grasshopper');
   });
 });
 

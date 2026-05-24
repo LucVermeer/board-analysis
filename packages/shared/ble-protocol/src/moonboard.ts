@@ -12,6 +12,13 @@ const MOONBOARD_ROLE_MAP = {
   44: 'E',
 } as const;
 
+export type MoonboardPacketResult = {
+  packet: Uint8Array;
+  skippedRoleCount: number;
+  skippedPositionCount: number;
+  totalPlacements: number;
+};
+
 // Note: UART_SERVICE_UUID is available from './transport' — not re-exported
 // here to avoid collisions in the barrel index.
 
@@ -36,34 +43,40 @@ export function getMoonboardSerialPosition(holdId: number): number {
   return colIndex * MOONBOARD_GRID.numRows + (MOONBOARD_GRID.numRows - 1 - rowIndex);
 }
 
-export function getMoonboardBluetoothPacket(frames: string): Uint8Array {
+export function getMoonboardBluetoothPacket(frames: string): MoonboardPacketResult {
   const encodedHolds: string[] = [];
-  let skippedCount = 0;
+  let skippedRoleCount = 0;
+  let skippedPositionCount = 0;
 
-  frames
-    .split('p')
-    .filter(Boolean)
-    .forEach((frame) => {
-      const [placement, role] = frame.split('r');
-      const holdId = Number(placement);
-      const holdType = MOONBOARD_ROLE_MAP[Number(role) as keyof typeof MOONBOARD_ROLE_MAP];
+  const frameParts = frames.split('p').filter(Boolean);
 
-      if (!holdType) {
-        throw new Error(`Unsupported MoonBoard hold state code: ${role}`);
-      }
+  frameParts.forEach((frame) => {
+    const [placement, role] = frame.split('r');
+    const holdId = Number(placement);
+    const holdType = MOONBOARD_ROLE_MAP[Number(role) as keyof typeof MOONBOARD_ROLE_MAP];
 
-      try {
-        encodedHolds.push(`${holdType}${getMoonboardSerialPosition(holdId)}`);
-      } catch {
-        skippedCount++;
-      }
-    });
+    if (!holdType) {
+      skippedRoleCount++;
+      return;
+    }
 
-  if (skippedCount > 0) {
-    console.warn(`[BLE] Skipped ${skippedCount} MoonBoard holds with invalid ids for this payload`);
+    try {
+      encodedHolds.push(`${holdType}${getMoonboardSerialPosition(holdId)}`);
+    } catch {
+      skippedPositionCount++;
+    }
+  });
+
+  if (skippedPositionCount > 0) {
+    console.warn(`[BLE] Skipped ${skippedPositionCount} MoonBoard holds with invalid ids for this payload`);
   }
 
   const holdPayload = encodedHolds.join(',');
 
-  return new TextEncoder().encode(`${MOONBOARD_FRAME_PREFIX}${holdPayload}${MOONBOARD_FRAME_SUFFIX}`);
+  return {
+    packet: new TextEncoder().encode(`${MOONBOARD_FRAME_PREFIX}${holdPayload}${MOONBOARD_FRAME_SUFFIX}`),
+    skippedRoleCount,
+    skippedPositionCount,
+    totalPlacements: frameParts.length,
+  };
 }
