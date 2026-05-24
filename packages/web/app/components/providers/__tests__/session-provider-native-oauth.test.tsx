@@ -1,12 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { render, act, cleanup } from '@testing-library/react';
 import React from 'react';
-import SessionProviderWrapper from '../session-provider';
+import NativeDeepLinkListener from '../native-deep-link-listener';
 
 // Mock next-auth/react
 const mockSignIn = vi.fn();
 vi.mock('next-auth/react', () => ({
-  SessionProvider: ({ children }: { children: React.ReactNode }) => children,
   signIn: (...args: unknown[]) => mockSignIn(...args),
 }));
 
@@ -18,7 +17,7 @@ vi.mock('@/app/lib/ble/capacitor-utils', () => ({
 
 type AppUrlOpenListener = (event: { url: string }) => void;
 
-describe('SessionProviderWrapper native OAuth deep link', () => {
+describe('NativeDeepLinkListener native OAuth deep link', () => {
   let capturedListener: AppUrlOpenListener | null = null;
   const mockRemove = vi.fn().mockResolvedValue(undefined);
   const mockClose = vi.fn().mockResolvedValue(undefined);
@@ -92,21 +91,13 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
 
   it('does not register listener when not a native app', () => {
     mockIsNativeApp.mockReturnValue(false);
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
     expect(mockAddListener).not.toHaveBeenCalled();
   });
 
   it('registers appUrlOpen listener in native app', async () => {
     setupCapacitorMock();
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -119,11 +110,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
   it('handles malformed deep link URL gracefully', async () => {
     setupCapacitorMock();
 
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -142,11 +129,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
 
   it('ignores non-auth deep links', async () => {
     setupCapacitorMock();
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -163,11 +146,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
   it('closes browser and redirects to login on error param', async () => {
     setupCapacitorMock();
 
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -187,11 +166,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
   it('closes browser and redirects to login when transfer token is missing', async () => {
     setupCapacitorMock();
 
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -212,11 +187,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
     setupCapacitorMock();
     mockSignIn.mockResolvedValue({ url: '/dashboard', error: null });
 
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -241,11 +212,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
     setupCapacitorMock();
     mockSignIn.mockResolvedValue({ url: null, error: 'CredentialsSignin' });
 
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -264,11 +231,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
     setupCapacitorMock();
     mockSignIn.mockResolvedValue({ url: '/', error: null });
 
-    render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -289,11 +252,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
 
   it('removes listener on unmount', async () => {
     setupCapacitorMock();
-    const { unmount } = render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    const { unmount } = render(<NativeDeepLinkListener />);
 
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -319,11 +278,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
     window.addEventListener('unhandledrejection', captureRejection);
 
     try {
-      render(
-        <SessionProviderWrapper>
-          <div>child</div>
-        </SessionProviderWrapper>,
-      );
+      render(<NativeDeepLinkListener />);
 
       await act(async () => {
         await new Promise((r) => setTimeout(r, 0));
@@ -356,11 +311,7 @@ describe('SessionProviderWrapper native OAuth deep link', () => {
       });
     });
 
-    const { unmount } = render(
-      <SessionProviderWrapper>
-        <div>child</div>
-      </SessionProviderWrapper>,
-    );
+    const { unmount } = render(<NativeDeepLinkListener />);
 
     // Unmount before the listener promise resolves
     unmount();
