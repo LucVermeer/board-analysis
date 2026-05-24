@@ -9,7 +9,7 @@ A working plan for the native mobile app. v11.0 refines v10.0's direction with a
 3. **Share business logic, not UI.** BLE protocol encoding, queue state machine, GraphQL schema, board configuration, and type definitions live in shared packages. Web and mobile each get the UI layer that's best for their platform.
 4. **iOS-native experience.** 75% of users are on iOS. The app uses iOS system colors, SF Symbols, spring animations, haptic feedback, blur effects, and SwiftUI native modules for critical views. The goal is the quality bar set by apps like Things 3, Halide, and Bear — apps that feel like they were written in SwiftUI. No Material Design on iOS.
 
-Everything from v9.x's offline-first design — the query router shape, mutation queue with idempotency keys, refdata SQLite, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView.
+Everything from v9.x's offline-first design — the query router shape, refdata per board, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView. The custom mutation queue is replaced by WatermelonDB's built-in sync protocol — see [watermelondb-offline-sync.md](watermelondb-offline-sync.md).
 
 ## Non-negotiable: web and Capacitor apps must keep working
 
@@ -111,14 +111,14 @@ packages/
 │   • BLE via react-native-ble-plx + shared protocol logic  │
 │   • Board rendering via Expo native module (SwiftUI Canvas │
 │     on iOS, Compose Canvas on Android)                     │
-│   • Offline: expo-sqlite for climb data, MMKV for prefs   │
+│   • Offline: WatermelonDB for data + sync, MMKV for prefs  │
 │   • Auth: bearer tokens via expo-auth-session             │
 │   • Live Activity via Expo native module (ActivityKit)     │
 │                                                            │
 │  Local data:                                               │
-│   • Refdata SQLite per board                               │
-│   • Cached ticks, playlists, profile                       │
-│   • Pending mutations (write queue)                        │
+│   • WatermelonDB (user data + board refdata, per-board)    │
+│   • Built-in sync (replaces custom mutation queue)         │
+│   • MMKV for key-value preferences                        │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -400,9 +400,9 @@ The backend already supports bearer token auth for the existing Capacitor native
 
 **React Native:**
 
-- `react-native-mmkv` for key-value preferences (fastest KV store on mobile)
-- `expo-sqlite` for offline climb database (replaces the planned `@capacitor-community/sqlite`)
-- Same data schema, different storage engine
+- `@nozbe/watermelondb` for offline data (user ticks, playlists, favorites, board reference data) with built-in sync protocol. See [watermelondb-offline-sync.md](watermelondb-offline-sync.md) for the full architecture.
+- `react-native-mmkv` for key-value preferences (fastest KV store on mobile, synchronous reads)
+- Users select which boards to make available offline; each board's reference data is seeded from a pre-built SQLite snapshot downloaded from a CDN
 
 ### Platform features
 
@@ -464,11 +464,13 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 - **`useHaptic()` hook** integrated into all interactive base components
 - Auth flow: `expo-auth-session` + backend bearer token endpoint (reuse existing `/auth/native-start` flow)
 - GraphQL client: TanStack Query + `graphql-request` (same pattern as web)
+- **WatermelonDB setup**: install `@nozbe/watermelondb`, configure SQLiteAdapter with JSI, define schema and models for user data (ticks, playlists, favorites, follows) and board reference data (climbs, stats, etc.). See [watermelondb-offline-sync.md](watermelondb-offline-sync.md).
 - Navigation skeleton: bottom tab bar with blur, native-stack navigators per tab, large title headers, search bar on Search tab
 
 ### Phase 2: Core climb experience (5 weeks)
 
 - i18n setup: `i18next` + `react-i18next` with shared catalogs from `packages/web/i18n/locales/` (en-US, es, fr). All user-facing strings must go through `t()` — Phase 1 placeholder screens use hardcoded English that must be replaced.
+- **WatermelonDB sync integration**: implement backend sync endpoint (`/api/sync/pull`, `/api/sync/push`), wire tick writes and playlist reads to WatermelonDB, add soft-delete columns via Drizzle migration. See [watermelondb-offline-sync.md](watermelondb-offline-sync.md).
 - Climb browsing with FlashList, swipe actions, context menus
 - Board renderer with SwiftUI `Canvas` on iOS — validate 120fps on ProMotion early in week 1
 - Climb detail view with board visualization, action sheet
@@ -498,9 +500,8 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 
 - Live Activity widget (iOS lock screen queue navigation) — existing `ClimbSessionLiveActivity.swift` serves as direct reference for the Expo native module
 - HealthKit integration (iOS) / Health Connect (Android)
-- Offline climb database via `expo-sqlite`
+- Board reference data seed pipeline (GitHub Action → SQLite snapshots → Cloudflare R2) and per-board offline toggle UI. WatermelonDB schema and user data sync are already set up from Phases 1-2. See [watermelondb-offline-sync.md](watermelondb-offline-sync.md).
 - Push notification token management (reuse existing backend schema)
-- Offline mutation queue
 - **Settings screen** native module (SwiftUI `Form` on iOS)
 
 ### Phase 6: Polish + App Store (3 weeks)
@@ -568,7 +569,7 @@ The explicit goal: a user picking up the iOS app says "this feels like it was ma
 | Board rendering | Expo native module (SwiftUI / Compose)           | SwiftUI `Canvas` on iOS, Compose `Canvas` on Android. Fallback: Skia |
 | Lists           | `@shopify/flash-list`                            | Drop-in FlatList replacement, 60fps+ scrolling                       |
 | Storage (KV)    | `react-native-mmkv`                              | Fastest KV store on mobile, JSI-based                                |
-| Storage (SQL)   | `expo-sqlite`                                    | For offline climb database                                           |
+| Storage (DB)    | `@nozbe/watermelondb`                            | Offline data + sync (user data, board refdata). See [offline sync plan](watermelondb-offline-sync.md) |
 | Auth            | `expo-auth-session`                              | Standard OAuth flows                                                 |
 | Secure storage  | `expo-secure-store`                              | iOS Keychain, Android Keystore                                       |
 | Live Activity   | Expo native module (SwiftUI ActivityKit)         | iOS lock screen widgets, no Android equivalent                       |
@@ -616,32 +617,32 @@ New work: ensure the token exchange endpoint returns a proper JWT + refresh toke
 
 ## Offline design
 
-### Refdata SQLite (Phase 5)
+See [watermelondb-offline-sync.md](watermelondb-offline-sync.md) for the full offline sync architecture, schema design, and implementation details.
 
-Same design as v9.x, implemented natively:
+### WatermelonDB (Phases 1-2 setup, Phase 5 board seeding)
 
-- `expo-sqlite` stores climb data per board
-- Tables: `board_climbs`, `board_climb_stats`, `board_difficulty_grades`, `board_holes`, `board_layouts`, `board_product_sizes`, `board_products`, `board_sets`, `board_product_sizes_layouts_sets`
-- Sync: new climbs on 24h cadence, stats refresh weekly
-- Build pipeline: GitHub Action exports SQLite snapshots to Cloudflare R2
-- Download on first board selection; "Syncing climbs" progress indicator
+WatermelonDB replaces the previous `expo-sqlite` + custom mutation queue plan with a single database that handles both user data and board reference data:
 
-**Measurement spike (start of Phase 5):** Run the export script against the dev DB. If compressed Kilter data exceeds 200 MB, fall back to per-layout split or lazy-fetch frames on first view.
+- **One database** for everything — ticks, playlists, favorites, climbs, stats, holes, LEDs, placements. Lazy loading means large datasets don't impact memory.
+- **Built-in sync protocol** — `synchronize()` handles pull/push with timestamp-based deltas. Replaces the custom mutation queue, idempotency key dedup table, and single-concurrency drainer.
+- **Per-board selective sync** — users choose which boards (~10 available) to make available offline. Each board's reference data is seeded from a pre-built SQLite snapshot downloaded from Cloudflare R2.
+- **Observable queries** — components subscribe to database queries and re-render when records change. Ticks written offline appear immediately in the logbook.
 
-### Mutation queue (Phase 5)
+Schema and sync setup starts in Phase 1-2 (it's the data layer other features build on). Board seed pipeline and per-board toggle UI ship in Phase 5.
 
-Same design as v9.x:
+### User data sync (Phases 1-2)
 
-- Client-generated UUID v7 idempotency keys
-- Server-side `mutation_dedup` table (30-day expiry)
-- Single-concurrency drainer in `createdAt` order
-- Per-mutation conflict resolution (tick.create: idempotent, playlist ops: set ops, playlist.rename: last-write-wins)
+- Ticks, playlists, favorites, follows synced bidirectionally via WatermelonDB's `synchronize()`.
+- New REST endpoint on the backend (`/api/sync/pull`, `/api/sync/push`) implementing the WatermelonDB sync contract.
+- Conflict resolution: ticks are UUID-idempotent (client wins), playlists use last-write-wins, favorites are set operations.
+- Aurora dual-write handled transparently on the backend — the mobile client doesn't need to know about Aurora.
 
-### User data cache (Phase 5)
+### Board reference data (Phase 5)
 
-- Profile, ticks, playlists cached in MMKV after first online load
-- SWR refresh on next online launch
-- "Needs network" state for real-time features (party, comments, feed)
+- Build pipeline: GitHub Action exports per-board SQLite snapshots to Cloudflare R2.
+- Download on first board selection; progress indicator with estimated size.
+- After seeding, `synchronize()` handles incremental updates (new climbs, updated stats).
+- "Needs network" state for real-time features (party, comments, feed).
 
 ## App Store distribution
 
@@ -650,7 +651,7 @@ Same design as v9.x:
 > Boardsesh controls climbing-board hardware via Bluetooth Low Energy. The app is built with React Native with native SwiftUI modules for performance-critical views. Key native features:
 >
 > 1. CoreBluetooth integration for BLE board control (Kilter, Tension, MoonBoard)
-> 2. Offline climb database (~150 MB per board, stored in SQLite)
+> 2. Offline climb database (~150 MB per board, stored in WatermelonDB with per-board selective sync)
 > 3. Live Activity widget showing current climb on the lock screen (SwiftUI ActivityKit)
 > 4. HealthKit workout logging for climbing sessions
 > 5. Native iOS design: SF Symbols, system colors, spring animations, haptic feedback, Dynamic Type
@@ -681,10 +682,10 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 | Metro bundler + monorepo friction                          | Medium     | Medium | Shared packages use raw TypeScript (`"main": "src/index.ts"`). Metro needs `watchFolders` + `nodeModulesPaths` config. Set up and verify in Phase 1 week 1.                                                    |
 | No CI/CD for native builds                                 | Certain    | Medium | EAS Build setup, TestFlight distribution, GitHub Actions integration. Budget 1 week in Phase 1.                                                                                                                |
 | Expo ecosystem churn                                       | Low        | Medium | Pin SDK versions. Expo's continuous native generation (CNG) handles native project updates.                                                                                                                    |
-| Refdata SQLite > 200 MB                                    | Medium     | Medium | Phase 5 measurement spike. Fallback: per-layout split or frames lazy-fetch.                                                                                                                                    |
+| Board seed file > 200 MB (compressed)                      | Medium     | Medium | Phase 5 measurement spike. WatermelonDB's lazy loading handles large datasets in-memory; the concern is download size. Fallback: per-layout split or lazy-fetch frames on first view.                           |
 | Bearer token refresh edge cases                            | Medium     | High   | Dedicated test suite. Failed refresh triggers re-auth, not silent failure.                                                                                                                                     |
 | Live Activity reimplementation complexity                  | Medium     | Medium | Defer to Phase 5. Existing Swift widget logic serves as reference. SwiftUI Expo module.                                                                                                                        |
-| Phase 5 scope overload                                     | High       | Medium | Phase 5 packs SQLite + mutation queue + Live Activity + HealthKit into 3 weeks. Ship v1 without Live Activity and HealthKit to de-risk. Add them in a fast-follow.                                             |
+| Phase 5 scope overload                                     | Medium     | Medium | Phase 5 scope reduced: WatermelonDB schema and user sync are done in Phases 1-2. Phase 5 handles board seed pipeline + Live Activity + HealthKit. Ship v1 without Live Activity and HealthKit to de-risk.      |
 | Apple 4.2 rejection                                        | Low        | High   | Native RN app with SwiftUI modules has minimal risk. Plan B above if needed.                                                                                                                                   |
 | Custom design system takes longer than a library           | Medium     | Medium | Start with 8-10 base components the app actually needs. Don't build a component library — build what each screen requires. Iterate after Phase 1.                                                              |
 | SF Symbols availability in React Native                    | Medium     | Low    | `expo-symbols` is the official Expo module. Fallback: `react-native-sfsymbols`. Worst case: SF Symbol PNGs exported from SF Symbols.app.                                                                       |
@@ -727,7 +728,7 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 | Core experience   | Climb browsing, search, board visualization, queue management work end-to-end on iOS + Android. Context menus and swipe actions functional on iOS.                                                                |
 | BLE               | Connect to physical Kilter/Tension/MoonBoard, send climbs, LEDs light up correctly.                                                                                                                               |
 | Social            | Party mode, notifications, feed work via WebSocket subscriptions.                                                                                                                                                 |
-| Platform          | Live Activity, HealthKit, offline SQLite, push notifications, mutation queue all functional.                                                                                                                      |
+| Platform          | Live Activity, HealthKit, WatermelonDB offline sync, board seed pipeline, push notifications all functional.                                                                                                      |
 | iOS quality       | Dynamic Type works at all 7 sizes. Haptics fire on all interactive elements. Context menus on long press. 120fps on ProMotion in board renderer and lists. Swipe-back on all screens. VoiceOver reads all labels. |
 | Android parity    | All features work on Android. Material 3 visual treatment. Context menus via long-press fallback.                                                                                                                 |
 | App Store         | Accepted on iOS App Store and Google Play Store. TestFlight beta with 10+ testers.                                                                                                                                |
