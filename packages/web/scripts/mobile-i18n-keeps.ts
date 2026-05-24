@@ -60,6 +60,14 @@
 // i18n-keep climbs.mobile.climbRow.toggleFavorite
 // i18n-keep climbs.mobile.climbRow.share
 // i18n-keep climbs.mobile.climbRow.projectFallback
+// i18n-keep climbs.mobile.search.recentFilters
+// i18n-keep climbs.mobile.search.clearRecent
+// i18n-keep climbs.mobile.search.gradeRange
+// i18n-keep climbs.mobile.search.gradeMin
+// i18n-keep climbs.mobile.search.gradeMax
+// i18n-keep climbs.mobile.search.ascents
+// i18n-keep climbs.mobile.search.rating
+// i18n-keep climbs.mobile.search.more
 // i18n-keep session.mobile.queue.noSessionTitle
 // i18n-keep session.mobile.queue.noSessionSubtitle
 // i18n-keep session.mobile.queue.emptyTitle

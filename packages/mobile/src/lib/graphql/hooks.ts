@@ -114,12 +114,13 @@ export function useBoardsBySerialNumbers(serialNumbers: string[]) {
 // Board Configuration
 // ============================================
 
-export function useGrades(boardName: string) {
+export function useGrades(boardName: string, enabled = true) {
   return useQuery({
     queryKey: ['grades', boardName],
     queryFn: () => getHttpClient().request<GetGradesQueryResponse>(GET_GRADES, { boardName }),
     select: (data) => data.grades,
-    staleTime: 24 * 60 * 60 * 1000, // Grades rarely change
+    staleTime: 24 * 60 * 60 * 1000,
+    enabled: enabled && boardName.length > 0,
   });
 }
 
