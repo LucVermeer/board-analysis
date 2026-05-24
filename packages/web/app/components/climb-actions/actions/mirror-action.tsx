@@ -6,7 +6,7 @@ import { ActionTooltip } from '../action-tooltip';
 import SwapHorizOutlined from '@mui/icons-material/SwapHorizOutlined';
 import { track } from '@/app/lib/analytics';
 import type { ClimbActionProps, ClimbActionResult } from '../types';
-import { useOptionalQueueActions, useOptionalQueueData } from '../../graphql-queue';
+import { useOptionalQueueActions, useOptionalCurrentClimb } from '../../graphql-queue';
 import { themeTokens } from '@/app/theme/theme-config';
 import { buildActionResult, computeActionDisplay, ActionListElement } from '../action-view-renderer';
 import { useTranslation } from 'react-i18next';
@@ -23,11 +23,11 @@ export function MirrorAction({
 }: ClimbActionProps): ClimbActionResult {
   const { t } = useTranslation('climbs');
   const queueActions = useOptionalQueueActions();
-  const queueData = useOptionalQueueData();
+  const currentClimbData = useOptionalCurrentClimb();
   const { iconSize, shouldShowLabel } = computeActionDisplay(viewMode, size, showLabel);
 
   const canMirror = boardDetails.supportsMirroring === true && !!queueActions;
-  const isMirrored = queueData?.currentClimb?.mirrored ?? climb.mirrored ?? false;
+  const isMirrored = currentClimbData?.currentClimb?.mirrored ?? climb.mirrored ?? false;
 
   const handleClick = useCallback(
     (e?: React.MouseEvent) => {

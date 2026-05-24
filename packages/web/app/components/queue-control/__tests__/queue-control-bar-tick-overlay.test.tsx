@@ -28,7 +28,6 @@ vi.mock('@/app/lib/user-preferences-db', () => ({
 let mockQueueContext: Record<string, unknown> = {};
 vi.mock('@/app/components/graphql-queue', () => ({
   useQueueContext: () => mockQueueContext,
-  useQueueData: () => mockQueueContext,
   useQueueActions: () => mockQueueContext,
   useCurrentClimb: () => ({
     currentClimb: mockQueueContext.currentClimb,

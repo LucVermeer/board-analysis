@@ -9,11 +9,8 @@ export {
   useOptionalQueueContext,
   useQueueActions,
   useOptionalQueueActions,
-  useQueueData,
-  useOptionalQueueData,
   QueueContext,
   QueueActionsContext,
-  QueueDataContext,
   // Fine-grained hooks for targeted subscriptions
   useCurrentClimb,
   useOptionalCurrentClimb,
@@ -29,5 +26,5 @@ export {
   SearchContext,
   SessionContext,
 } from './QueueContext';
-export type { GraphQLQueueContextType, GraphQLQueueActionsType, GraphQLQueueDataType } from './types';
+export type { GraphQLQueueContextType, GraphQLQueueActionsType } from './types';
 export type { CurrentClimbDataType, QueueListDataType, SearchDataType, SessionDataType } from './types';

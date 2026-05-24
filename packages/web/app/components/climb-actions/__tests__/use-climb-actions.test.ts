@@ -24,9 +24,6 @@ vi.mock('../../graphql-queue', () => ({
     queue: [],
     mirrorClimb: mockMirrorClimb,
   }),
-  useQueueData: () => ({
-    queue: [],
-  }),
   useQueueActions: () => ({
     addToQueue: mockAddToQueue,
     mirrorClimb: mockMirrorClimb,

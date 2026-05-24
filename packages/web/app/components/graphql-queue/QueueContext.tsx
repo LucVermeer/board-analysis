@@ -59,7 +59,6 @@ import {
 import type {
   GraphQLQueueContextType,
   GraphQLQueueActionsType,
-  GraphQLQueueDataType,
   GraphQLQueueContextProps,
   CurrentClimbDataType,
   QueueListDataType,
@@ -68,8 +67,8 @@ import type {
 } from './types';
 import type { SetActiveClimbSource } from './set-active-climb-event';
 
-// Re-export types so direct importers still work
-export type { GraphQLQueueContextType, GraphQLQueueActionsType, GraphQLQueueDataType } from './types';
+// Re-export types so direct importers still work.
+export type { GraphQLQueueContextType, GraphQLQueueActionsType } from './types';
 export type { CurrentClimbDataType, QueueListDataType, SearchDataType, SessionDataType } from './types';
 
 const createClimbQueueItem = (
@@ -128,10 +127,13 @@ const makeBuildSuggestedQueueItem =
     return latest.state.playlistSuggestionSource ? { ...item, uuid: getPlaylistPeekQueueItemUuid(climb.uuid) } : item;
   };
 
-// Split contexts: actions (stable) vs data (changes frequently)
+// Actions context (stable; identity never changes after first render).
 export const QueueActionsContext = createContext<GraphQLQueueActionsType | undefined>(undefined);
-export const QueueDataContext = createContext<GraphQLQueueDataType | undefined>(undefined);
-// Combined context for backward compatibility
+// Combined context — exists for the test-only `useQueueContext` hook and for
+// the queue-bridge plumbing in `queue-bridge-context.tsx` which forwards a
+// single combined value into the top-level provider tree. Production consumers
+// should prefer the fine-grained hooks (`useCurrentClimb`, `useSessionData`,
+// `useQueueList`, `useSearchData`).
 export const QueueContext = createContext<GraphQLQueueContextType | undefined>(undefined);
 
 // Fine-grained contexts for targeted subscriptions (reduces re-render cascade)
@@ -1187,9 +1189,14 @@ export const GraphQLQueueProvider = ({
     [],
   );
 
-  // --- Data context value (changes when state/data changes) ---
-  const dataValue: GraphQLQueueDataType = useMemo(
+  // --- Combined context value (used by the test-only `useQueueContext` hook
+  // and by the queue-bridge plumbing). Composes actionsValue with every data
+  // field directly — the data fields no longer live in their own context, so
+  // there's no separate `dataValue` memo to compute. Production consumers
+  // should reach for the fine-grained hooks below instead. ---
+  const contextValue: GraphQLQueueContextType = useMemo(
     () => ({
+      ...actionsValue,
       queue: state.queue,
       currentClimbQueueItem: state.currentClimbQueueItem,
       currentClimb: state.currentClimbQueueItem?.climb || null,
@@ -1224,6 +1231,7 @@ export const GraphQLQueueProvider = ({
       connectionError,
     }),
     [
+      actionsValue,
       state.queue,
       state.currentClimbQueueItem,
       state.climbSearchParams,
@@ -1256,12 +1264,6 @@ export const GraphQLQueueProvider = ({
       hasConnected,
       connectionError,
     ],
-  );
-
-  // --- Combined context value for backward compatibility ---
-  const contextValue: GraphQLQueueContextType = useMemo(
-    () => ({ ...dataValue, ...actionsValue }),
-    [dataValue, actionsValue],
   );
 
   // --- Fine-grained context values (each only changes when its specific fields change) ---
@@ -1353,24 +1355,22 @@ export const GraphQLQueueProvider = ({
 
   return (
     <QueueActionsContext.Provider value={actionsValue}>
-      <QueueDataContext.Provider value={dataValue}>
-        <QueueContext.Provider value={contextValue}>
-          <CurrentClimbContext.Provider value={currentClimbValue}>
-            <CurrentClimbUuidContext.Provider value={currentClimbUuid}>
-              <QueueListContext.Provider value={queueListValue}>
-                <SearchContext.Provider value={searchValue}>
-                  <SessionContext.Provider value={sessionValue}>
-                    <FavoritesProvider {...favoritesProviderProps}>
-                      <PlaylistsProvider {...playlistsProviderProps}>{children}</PlaylistsProvider>
-                    </FavoritesProvider>
-                    <SessionSummaryDialog summary={sessionSummary} onDismiss={stableDismissSessionSummary} />
-                  </SessionContext.Provider>
-                </SearchContext.Provider>
-              </QueueListContext.Provider>
-            </CurrentClimbUuidContext.Provider>
-          </CurrentClimbContext.Provider>
-        </QueueContext.Provider>
-      </QueueDataContext.Provider>
+      <QueueContext.Provider value={contextValue}>
+        <CurrentClimbContext.Provider value={currentClimbValue}>
+          <CurrentClimbUuidContext.Provider value={currentClimbUuid}>
+            <QueueListContext.Provider value={queueListValue}>
+              <SearchContext.Provider value={searchValue}>
+                <SessionContext.Provider value={sessionValue}>
+                  <FavoritesProvider {...favoritesProviderProps}>
+                    <PlaylistsProvider {...playlistsProviderProps}>{children}</PlaylistsProvider>
+                  </FavoritesProvider>
+                  <SessionSummaryDialog summary={sessionSummary} onDismiss={stableDismissSessionSummary} />
+                </SessionContext.Provider>
+              </SearchContext.Provider>
+            </QueueListContext.Provider>
+          </CurrentClimbUuidContext.Provider>
+        </CurrentClimbContext.Provider>
+      </QueueContext.Provider>
     </QueueActionsContext.Provider>
   );
 };
@@ -1387,18 +1387,6 @@ export const useQueueActions = (): GraphQLQueueActionsType => {
 
 export const useOptionalQueueActions = (): GraphQLQueueActionsType | null => {
   return useContext(QueueActionsContext) ?? null;
-};
-
-export const useQueueData = (): GraphQLQueueDataType => {
-  const context = useContext(QueueDataContext);
-  if (!context) {
-    throw new Error('useQueueData must be used within a GraphQLQueueProvider');
-  }
-  return context;
-};
-
-export const useOptionalQueueData = (): GraphQLQueueDataType | null => {
-  return useContext(QueueDataContext) ?? null;
 };
 
 // --- Backward-compatible hooks (subscribe to everything) ---

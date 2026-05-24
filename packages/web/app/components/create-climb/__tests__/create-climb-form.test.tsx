@@ -29,7 +29,7 @@ const mockSetMoonboardHoldState = vi.fn();
 const mockSendFramesToBoard = vi.fn();
 const mockGenerateAuroraFramesString = vi.fn(() => 'test-frames');
 let mockQueueActions: Record<string, unknown> | null = null;
-let mockQueueData: Record<string, unknown> | null = null;
+let mockCurrentClimbData: Record<string, unknown> | null = null;
 let mockAuroraCreateState: {
   isValid: boolean;
   totalHolds: number;
@@ -103,7 +103,7 @@ vi.mock('../use-moonboard-create-climb', () => ({
 
 vi.mock('@/app/components/graphql-queue', () => ({
   useOptionalQueueActions: () => mockQueueActions,
-  useOptionalQueueData: () => mockQueueData,
+  useOptionalCurrentClimb: () => mockCurrentClimbData,
 }));
 
 vi.mock('../../board-renderer/board-renderer', () => ({
@@ -251,7 +251,7 @@ describe('CreateClimbForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueueActions = null;
-    mockQueueData = null;
+    mockCurrentClimbData = null;
     mockDraftsDrawerProps = null;
     mockAuroraCreateState = {
       isValid: false,
@@ -309,7 +309,7 @@ describe('CreateClimbForm', () => {
         addToQueue: vi.fn(),
         removeFromQueue: vi.fn(),
       };
-      mockQueueData = { currentClimb: null };
+      mockCurrentClimbData = { currentClimb: null };
 
       renderComponent();
 
@@ -323,7 +323,7 @@ describe('CreateClimbForm', () => {
         addToQueue: vi.fn(),
         removeFromQueue: vi.fn(),
       };
-      mockQueueData = { currentClimb: null };
+      mockCurrentClimbData = { currentClimb: null };
 
       renderComponent();
 
@@ -339,7 +339,7 @@ describe('CreateClimbForm', () => {
         addToQueue: vi.fn(),
         removeFromQueue: vi.fn(),
       };
-      mockQueueData = { currentClimb: null };
+      mockCurrentClimbData = { currentClimb: null };
 
       renderComponent();
 
@@ -366,7 +366,7 @@ describe('CreateClimbForm', () => {
         addToQueue: vi.fn(),
         removeFromQueue: vi.fn(),
       };
-      mockQueueData = { currentClimb: null };
+      mockCurrentClimbData = { currentClimb: null };
 
       renderComponent();
 
@@ -456,7 +456,7 @@ describe('CreateClimbForm — MoonBoard rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueueActions = null;
-    mockQueueData = null;
+    mockCurrentClimbData = null;
     mockDraftsDrawerProps = null;
     mockRequest.mockResolvedValue({ checkMoonBoardClimbDuplicates: [] });
   });
@@ -686,7 +686,7 @@ describe('CreateClimbForm — Aurora rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueueActions = null;
-    mockQueueData = null;
+    mockCurrentClimbData = null;
     mockDraftsDrawerProps = null;
     mockAuroraCreateState = {
       isValid: false,
@@ -839,7 +839,7 @@ describe('CreateClimbForm — Save button state', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueueActions = null;
-    mockQueueData = null;
+    mockCurrentClimbData = null;
     mockDraftsDrawerProps = null;
     mockRequest.mockResolvedValue({ checkMoonBoardClimbDuplicates: [] });
   });
@@ -902,7 +902,7 @@ describe('CreateClimbForm — forkName prop', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueueActions = null;
-    mockQueueData = null;
+    mockCurrentClimbData = null;
     mockDraftsDrawerProps = null;
     mockRequest.mockResolvedValue({ checkMoonBoardClimbDuplicates: [] });
   });

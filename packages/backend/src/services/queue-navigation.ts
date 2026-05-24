@@ -10,11 +10,16 @@ import { MAX_RETRIES } from '../graphql/resolvers/shared/types';
  * resolver so the new `takeControl(climb)` mutation can re-use the
  * optimistic-locking + event-publish logic without duplicating it.
  *
+ * Accepts `item: null` to clear the current climb. The `shouldAddToQueue` arg
+ * is ignored on the null path (no climb to add) and `pushRecentClimb` is
+ * skipped. The published event is always `CurrentClimbChanged { item: null }`
+ * on that path — never `FullSync`.
+ *
  * Returns the persisted queue state for resolvers that need to echo it back.
  */
 export async function setCurrentClimbAndPublish(
   sessionId: string,
-  item: ClimbQueueItem,
+  item: ClimbQueueItem | null,
   shouldAddToQueue: boolean,
   roomManager: RoomManager,
   pubsub: typeof PubSubInstance,
@@ -31,7 +36,7 @@ export async function setCurrentClimbAndPublish(
     let queue = currentState.queue;
     let addedInThisAttempt = false;
 
-    if (shouldAddToQueue && !queue.some((i) => i.uuid === item.uuid)) {
+    if (item !== null && shouldAddToQueue && !queue.some((i) => i.uuid === item.uuid)) {
       queue = [...queue, item];
       addedInThisAttempt = true;
     }
@@ -51,10 +56,25 @@ export async function setCurrentClimbAndPublish(
     }
   }
 
+  // Null-item path: queue updated to clear `currentClimbQueueItem`, nothing
+  // to add and no climb uuid to record. Early-return so the rest of the
+  // function can assume `item` is non-null.
+  if (item === null) {
+    pubsub.publishQueueEvent(sessionId, {
+      __typename: 'CurrentClimbChanged',
+      sequence,
+      stateHash,
+      item: null,
+      clientId: clientId ?? null,
+      correlationId: correlationId ?? null,
+    });
+    return { sequence, stateHash, queue: updatedQueue, addedToQueue: false };
+  }
+
   // Record the climb as the latest authoritative wall climb so the next
   // `confirmClimbOnWall` accepts it even if the driver navigates on before
   // the confirm arrives. Best-effort: don't fail the publish if the recency
-  // record breaks (Redis hiccup), and don't await it before the publish.
+  // record breaks (Redis hiccup).
   await roomManager.pushRecentClimb(sessionId, item.climb.uuid).catch(() => undefined);
 
   if (addedToQueue) {

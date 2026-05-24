@@ -742,23 +742,31 @@ export function useSessionLifecycle({
           onReconnect: () => void handleReconnect(),
           connectionName: 'session',
         });
+        // Capture a non-null local reference. The outer `graphqlClient` (a
+        // closure `let`) is nulled by the cleanup function below — if this
+        // effect's cleanup runs while `await joinSession()` is in flight,
+        // resuming code that touches `graphqlClient` directly would see
+        // `null` and crash on `.dispose()`. The cleanup already disposes
+        // its captured client, so calling `.dispose()` again on `client`
+        // here is a safe no-op (graphql-ws clients are idempotent).
+        const client = graphqlClient;
 
         if (!mountedRef.current) {
-          void graphqlClient.dispose();
+          void client.dispose();
           isConnectingRef.current = false;
           return;
         }
 
-        setClient(graphqlClient);
+        setClient(client);
 
-        const sessionData = await joinSession(graphqlClient);
+        const sessionData = await joinSession(client);
 
         if (connectionGenerationRef.current !== connectionGeneration) {
           return;
         }
 
         if (!mountedRef.current) {
-          void graphqlClient.dispose();
+          void client.dispose();
           return;
         }
 
@@ -782,7 +790,7 @@ export function useSessionLifecycle({
           });
         }
 
-        startSubscriptions(graphqlClient);
+        startSubscriptions(client);
 
         isConnectingRef.current = false;
       } catch (err) {

@@ -103,10 +103,10 @@ vi.mock('@/app/components/providers/auth-modal-provider', () => ({
 }));
 
 const mockUseOptionalQueueActions = vi.fn();
-const mockUseOptionalQueueData = vi.fn();
+const mockUseOptionalCurrentClimb = vi.fn();
 vi.mock('../../graphql-queue', () => ({
   useOptionalQueueActions: () => mockUseOptionalQueueActions(),
-  useOptionalQueueData: () => mockUseOptionalQueueData(),
+  useOptionalCurrentClimb: () => mockUseOptionalCurrentClimb(),
 }));
 
 vi.mock('../../swipeable-drawer/swipeable-drawer', () => ({
@@ -203,7 +203,7 @@ beforeEach(() => {
     addToQueue: vi.fn(),
     mirrorClimb: vi.fn(),
   });
-  mockUseOptionalQueueData.mockReturnValue({
+  mockUseOptionalCurrentClimb.mockReturnValue({
     currentClimb: null,
   });
 });
@@ -431,7 +431,7 @@ describe('List mode uses neutral colors (no per-action colored icons)', () => {
 
   describe('MirrorAction', () => {
     it('uses ActionListElement with uncolored icon (not purple) when mirrored', () => {
-      mockUseOptionalQueueData.mockReturnValue({
+      mockUseOptionalCurrentClimb.mockReturnValue({
         currentClimb: { mirrored: true },
       });
 
@@ -455,7 +455,7 @@ describe('List mode uses neutral colors (no per-action colored icons)', () => {
     });
 
     it('uses ActionListElement with uncolored icon when not mirrored', () => {
-      mockUseOptionalQueueData.mockReturnValue({
+      mockUseOptionalCurrentClimb.mockReturnValue({
         currentClimb: { mirrored: false },
       });
 

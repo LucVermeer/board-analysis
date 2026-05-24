@@ -291,10 +291,13 @@
     },
     "tickBar": {
       "commentPlaceholder": "Commentaire…",
+      "commentAria": "Commentaire du tick",
       "closeAria": "Fermer la barre de tick",
       "collapseAria": "Réduire la barre de tick",
       "expandAria": "Développer la barre de tick",
       "attemptLabel": "essai",
+      "flashLabel": "flash",
+      "tickLabel": "tick",
       "logAttemptAria": "Enregistrer un essai",
       "saveTickAria": "Enregistrer le tick"
     }

@@ -8,13 +8,13 @@ import { render, act, fireEvent, cleanup } from '@testing-library/react';
 //
 // The real PlayViewDrawer wraps PlayViewDrawerInner and only mounts it when
 // the drawer is open or still closing (keeping it alive for the exit animation).
-// This prevents useQueueData() subscriptions from firing when the drawer is
-// fully closed.
+// This prevents fine-grained context subscriptions (useCurrentClimb,
+// useQueueList, useSessionData) from firing when the drawer is fully closed.
 //
 // We test the pattern in isolation so we don't need the full dependency tree.
 // ---------------------------------------------------------------------------
 
-// Simulate a context that would cause re-renders (like QueueDataContext)
+// Simulate a context that would cause re-renders (like the combined QueueContext)
 const TestContext = createContext<{ value: number }>({ value: 0 });
 
 // Mutable tracking objects -- reset in beforeEach

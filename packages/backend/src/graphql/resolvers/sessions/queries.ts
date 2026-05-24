@@ -5,6 +5,7 @@ import { validateInput, requireSessionMember, requireAuthenticated } from '../sh
 import { SessionIdSchema, LatitudeSchema, LongitudeSchema, RadiusMetersSchema } from '../../../validation/schemas';
 import { generateSessionSummary } from './session-summary';
 import { getDistributedState } from '../../../services/distributed-state';
+import { buildSessionPayload } from './helpers';
 
 export const sessionQueries = {
   /**
@@ -15,32 +16,21 @@ export const sessionQueries = {
     // Validate session ID
     validateInput(SessionIdSchema, sessionId, 'sessionId');
 
+    // The membership check guards the rest of the payload — no session means
+    // no payload. Fetch users explicitly so we can early-return null without
+    // paying for the remaining lookups, then hand the pre-resolved list to
+    // the helper.
     const users = await roomManager.getSessionUsers(sessionId);
     if (users.length === 0) return null;
 
-    const queueState = await roomManager.getQueueState(sessionId);
-    const sessionInfo = await roomManager.getSessionById(sessionId);
-    const driverParticipantId = await roomManager.getSessionDriverParticipantId(sessionId);
-    const lastConnectedBoardSerial = await roomManager.getSessionBoardSerial(sessionId);
-
-    return {
-      id: sessionId,
-      boardPath: sessionInfo?.boardPath || '',
+    // Query result: no WebSocket context, so `isLeader` is always false and
+    // `clientId` is empty. Participant ID falls back through the helper's
+    // default (ctx.participantId ?? ctx.connectionId ?? '').
+    return buildSessionPayload(sessionId, ctx, {
       users,
-      queueState,
-      // These need connection context, but for Query we return defaults
       isLeader: false,
-      driverParticipantId,
-      lastConnectedBoardSerial,
       clientId: '',
-      participantId: ctx.participantId || ctx.connectionId || '',
-      goal: sessionInfo?.goal || null,
-      isPublic: sessionInfo?.isPublic ?? true,
-      startedAt: sessionInfo?.startedAt?.toISOString() || null,
-      endedAt: sessionInfo?.endedAt?.toISOString() || null,
-      isPermanent: sessionInfo?.isPermanent ?? false,
-      color: sessionInfo?.color || null,
-    };
+    });
   },
 
   /**
