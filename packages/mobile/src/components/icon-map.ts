@@ -87,6 +87,7 @@ export const iconMap = {
   location: { ios: 'location', android: 'map-marker-outline' },
   'location.fill': { ios: 'location.fill', android: 'map-marker' },
   clock: { ios: 'clock', android: 'clock-outline' },
+  history: { ios: 'clock.arrow.circlepath', android: 'history' },
   filter: { ios: 'line.3.horizontal.decrease', android: 'filter-variant' },
   sort: { ios: 'arrow.up.arrow.down', android: 'sort-variant' },
   refresh: { ios: 'arrow.clockwise', android: 'refresh' },

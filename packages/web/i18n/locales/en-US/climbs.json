@@ -597,6 +597,16 @@
       "apply": "Apply filters",
       "reset": "Reset"
     },
+    "search": {
+      "recentFilters": "Recent",
+      "clearRecent": "Clear",
+      "gradeRange": "{{min}}–{{max}}",
+      "gradeMin": "{{grade}}+",
+      "gradeMax": "Up to {{grade}}",
+      "ascents": "{{count}}+ ascents",
+      "rating": "{{count}}+ stars",
+      "more": "+{{count}} more"
+    },
     "climbRow": {
       "addToQueue": "Add to queue",
       "menuAccessibility": "Actions for {{climbName}}",
