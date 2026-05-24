@@ -92,10 +92,15 @@ type QueueUpdateEvent = FullSyncEvent | QueueItemAddedEvent | QueueItemRemovedEv
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const sessionCreationRef = useRef<Promise<string | null> | null>(null);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   useEffect(() => {
     getStoredSessionId().then((storedId) => {
@@ -189,7 +194,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, [sessionId]);
 
   const ensureSession = useCallback(async (): Promise<string | null> => {
-    if (sessionId) return sessionId;
+    if (sessionIdRef.current) return sessionIdRef.current;
     if (sessionCreationRef.current) return sessionCreationRef.current;
 
     const createPromise = (async () => {
@@ -203,6 +208,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           input: { boardPath, latitude: 0, longitude: 0, discoverable: false },
         });
         const newId = response.createSession.id;
+        sessionIdRef.current = newId;
         setSessionId(newId);
         await setStoredSessionId(newId);
         return newId;
@@ -216,10 +222,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     sessionCreationRef.current = createPromise;
     return createPromise;
-  }, [sessionId]);
+  }, []);
 
   const addToQueue = useCallback(
     (item: ClimbQueueItem) => {
+      // Optimistic local dispatch. The server will echo this item via the WS subscription,
+      // but the reducer's DELTA_ADD_QUEUE_ITEM handler uses insertQueueItemIdempotent which
+      // deduplicates by item.uuid, so the echo is a no-op.
       dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
 
       ensureSession().then((activeSessionId) => {
@@ -235,18 +244,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [ensureSession],
   );
 
-  const removeFromQueue = useCallback(
-    (uuid: string) => {
-      dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+  const removeFromQueue = useCallback((uuid: string) => {
+    dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
 
-      if (sessionId) {
-        getHttpClient()
-          .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid })
-          .catch((error: unknown) => console.error('[QueueProvider] removeQueueItem failed:', error));
-      }
-    },
-    [sessionId],
-  );
+    if (sessionIdRef.current) {
+      getHttpClient()
+        .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid })
+        .catch((error: unknown) => console.error('[QueueProvider] removeQueueItem failed:', error));
+    }
+  }, []);
 
   const setCurrentClimb = useCallback(
     (item: ClimbQueueItem) => {
@@ -281,8 +287,20 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
         payload: { item: nextItem, isServerEvent: false },
       });
+      ensureSession().then((activeSessionId) => {
+        if (activeSessionId) {
+          getHttpClient()
+            .request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, {
+              item: { uuid: nextItem.uuid, climb: nextItem.climb },
+              shouldAddToQueue: false,
+            })
+            .catch((error: unknown) => {
+              console.error('[QueueProvider] setCurrentClimb failed:', error);
+            });
+        }
+      });
     }
-  }, []);
+  }, [ensureSession]);
 
   const previousClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
@@ -292,11 +310,27 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
         payload: { item: prevItem, isServerEvent: false },
       });
+      ensureSession().then((activeSessionId) => {
+        if (activeSessionId) {
+          getHttpClient()
+            .request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, {
+              item: { uuid: prevItem.uuid, climb: prevItem.climb },
+              shouldAddToQueue: false,
+            })
+            .catch((error: unknown) => {
+              console.error('[QueueProvider] setCurrentClimb failed:', error);
+            });
+        }
+      });
     }
-  }, []);
+  }, [ensureSession]);
 
   const clearSession = useCallback(async () => {
     setSessionId(null);
+    dispatch({
+      type: 'INITIAL_QUEUE_DATA',
+      payload: { queue: [], currentClimbQueueItem: null },
+    });
     await clearStoredSessionId();
   }, []);
 

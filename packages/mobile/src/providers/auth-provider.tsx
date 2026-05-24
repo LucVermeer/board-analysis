@@ -4,6 +4,8 @@ import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import { startSignIn, signOut as authSignOut, type AuthProvider as AuthProviderType } from '../lib/auth';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
+import { clearStoredSessionId } from '../lib/session-store';
+import { clearStoredBoardConfig } from '../lib/board-store';
 
 type AuthState = {
   isAuthenticated: boolean;
@@ -67,10 +69,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await authSignOut();
+    await Promise.all([clearStoredSessionId(), clearStoredBoardConfig()]);
     resetHttpClient();
     disposeWsClient();
     setIsAuthenticated(false);
   }, []);
+
+  if (isLoading) {
+    return null;
+  }
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, isLoading, signIn, signOut, refreshAuthState: checkAuth }}>
