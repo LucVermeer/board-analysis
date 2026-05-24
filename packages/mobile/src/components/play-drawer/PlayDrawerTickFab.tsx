@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { brandColors } from '../../theme/colors';
@@ -10,22 +11,33 @@ import { shadows } from '../../theme/tokens';
 type PlayDrawerTickFabProps = {
   ascentCount: number;
   onPress: () => void;
+  onLongPress?: () => void;
 };
 
 export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
   ascentCount,
   onPress,
+  onLongPress,
 }: PlayDrawerTickFabProps) {
+  const { t } = useTranslation('session');
   const handlePress = useCallback(() => {
     hapticMedium();
     onPress();
   }, [onPress]);
 
+  const handleLongPress = useCallback(() => {
+    if (onLongPress) {
+      hapticMedium();
+      onLongPress();
+    }
+  }, [onLongPress]);
+
   return (
     <Pressable
       onPress={handlePress}
+      onLongPress={handleLongPress}
       accessibilityRole="button"
-      accessibilityLabel={ascentCount > 0 ? `Log ascent, ${ascentCount} logged` : 'Log ascent'}
+      accessibilityLabel={t('playView.tickFab.logAscentAria')}
       style={({ pressed }) => [
         styles.fab,
         pressed && styles.fabPressed,
@@ -45,16 +57,12 @@ export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
 
 const styles = StyleSheet.create({
   fab: {
-    position: 'absolute',
-    bottom: 12,
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: brandColors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
     ...shadows.md,
   },
   fabPressed: {

@@ -73,6 +73,14 @@ export const iconMap = {
   'skip.previous': { ios: 'backward.end', android: 'skip-previous' },
   'skip.next': { ios: 'forward.end', android: 'skip-next' },
 
+  // Math
+  minus: { ios: 'minus', android: 'minus' },
+  plus: { ios: 'plus', android: 'plus' },
+
+  // Data
+  'chart.bar': { ios: 'chart.bar', android: 'chart-bar' },
+  repeat: { ios: 'repeat', android: 'repeat' },
+
   // Misc
   star: { ios: 'star', android: 'star-outline' },
   'star.fill': { ios: 'star.fill', android: 'star' },
