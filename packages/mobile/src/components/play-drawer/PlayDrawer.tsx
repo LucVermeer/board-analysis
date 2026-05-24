@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
-import { computeNavigationState } from '@boardsesh/play-view';
+import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
 import { BoardRenderer } from '../board-renderer';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
@@ -167,7 +167,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const snapPoints = useMemo(() => ['95%'], []);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
-  const supportsMirroring = false;
+  const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
 
   return (
     <>

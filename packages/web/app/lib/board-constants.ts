@@ -1,4 +1,5 @@
 import { AURORA_BOARDS, SUPPORTED_BOARDS, type AuroraBoardName } from '@boardsesh/shared-schema';
+import { boardSupportsMirroring } from '@boardsesh/play-view';
 import type { HoldRenderData } from '@/app/components/board-renderer/types';
 import type { BoardDetails, ImageFileName } from '@/app/lib/types';
 import type { SetIdList } from '@/app/lib/board-data';
@@ -103,7 +104,7 @@ export const getBoardDetails = ({
     layout_id,
     size_id,
     set_ids,
-    supportsMirroring: (board_name === 'tension' && layout_id !== 11) || board_name === 'decoy',
+    supportsMirroring: boardSupportsMirroring(board_name, layout_id),
     layout_name: layoutData?.name,
     size_name: sizeData.name,
     size_description: sizeData.description,
