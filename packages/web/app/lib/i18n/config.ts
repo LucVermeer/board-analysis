@@ -6,6 +6,9 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // Keys used only by the React Native mobile app (packages/mobile/),
 // outside the web orphan checker's scan tree.
 // i18n-keep common:mobile.play.sendCount
+// i18n-keep auth:nativeStart.networkError
+// i18n-keep auth:nativeStart.orContinueWith
+// i18n-keep auth:nativeStart.signIn
 
 export const LOCALE_HTML_LANG: Record<Locale, string> = {
   'en-US': 'en',
