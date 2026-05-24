@@ -596,6 +596,13 @@
       "anyRating": "Todos",
       "apply": "Aplicar filtros",
       "reset": "Restablecer"
+    },
+    "climbRow": {
+      "addToQueue": "Añadir a la cola",
+      "menuAccessibility": "Acciones para {{climbName}}",
+      "toggleFavorite": "Alternar favorito",
+      "share": "Compartir bloque",
+      "projectFallback": "Proyecto"
     }
   }
 }

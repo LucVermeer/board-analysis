@@ -16,6 +16,8 @@ export const iosSystemColors = {
   systemYellow: '#FFCC00',
   /** iOS systemBlue — default tint, links */
   systemBlue: '#007AFF',
+  /** iOS systemOrange — moderate warnings, attempted indicators */
+  systemOrange: '#FF9500',
   /** iOS systemGray — secondary text, inactive tint */
   systemGray: '#8E8E93',
   /** iOS systemGray4 — chevrons, light chrome */

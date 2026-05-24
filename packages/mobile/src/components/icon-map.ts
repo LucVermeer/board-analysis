@@ -35,6 +35,8 @@ export const iconMap = {
   delete: { ios: 'trash', android: 'delete-outline' },
   'delete.fill': { ios: 'trash.fill', android: 'delete' },
   edit: { ios: 'pencil', android: 'pencil-outline' },
+  tag: { ios: 'tag', android: 'tag-outline' },
+  'check.small': { ios: 'checkmark', android: 'check' },
 
   // Climb/Board
   tick: { ios: 'checkmark.circle.fill', android: 'check-circle' },

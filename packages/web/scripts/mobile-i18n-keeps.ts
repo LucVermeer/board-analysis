@@ -55,6 +55,11 @@
 // i18n-keep climbs.mobile.logAscent.save
 // i18n-keep climbs.mobile.logAscent.send
 // i18n-keep climbs.mobile.logAscent.title
+// i18n-keep climbs.mobile.climbRow.addToQueue
+// i18n-keep climbs.mobile.climbRow.menuAccessibility
+// i18n-keep climbs.mobile.climbRow.toggleFavorite
+// i18n-keep climbs.mobile.climbRow.share
+// i18n-keep climbs.mobile.climbRow.projectFallback
 // i18n-keep session.mobile.queue.noSessionTitle
 // i18n-keep session.mobile.queue.noSessionSubtitle
 // i18n-keep session.mobile.queue.emptyTitle

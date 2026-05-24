@@ -596,6 +596,13 @@
       "anyRating": "Any",
       "apply": "Apply filters",
       "reset": "Reset"
+    },
+    "climbRow": {
+      "addToQueue": "Add to queue",
+      "menuAccessibility": "Actions for {{climbName}}",
+      "toggleFavorite": "Toggle favorite",
+      "share": "Share climb",
+      "projectFallback": "Project"
     }
   }
 }

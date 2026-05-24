@@ -73,6 +73,8 @@ const CLIMB_SEARCH_FIELDS = `
   is_no_match
   published_at
   created_at
+  userAscents
+  userAttempts
 `;
 
 const CLIMB_DETAIL_FIELDS = `
