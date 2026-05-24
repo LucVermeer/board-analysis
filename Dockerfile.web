@@ -19,6 +19,7 @@ COPY packages/crypto/package.json ./packages/crypto/
 COPY packages/db/package.json ./packages/db/
 COPY packages/aurora-sync/package.json ./packages/aurora-sync/
 COPY packages/backend/package.json ./packages/backend/
+COPY packages/mobile/package.json ./packages/mobile/
 COPY packages/moonboard-ocr/package.json ./packages/moonboard-ocr/
 COPY packages/board-renderer-wasm/package.json ./packages/board-renderer-wasm/
 COPY packages/board-renderer-wasm/pkg/ ./packages/board-renderer-wasm/pkg/
