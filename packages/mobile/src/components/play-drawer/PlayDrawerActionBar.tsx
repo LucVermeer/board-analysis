@@ -51,6 +51,16 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
     onLightbulb();
   }, [onLightbulb]);
 
+  const handleOpenActions = useCallback(() => {
+    hapticMedium();
+    onOpenActions();
+  }, [onOpenActions]);
+
+  const handleOpenQueue = useCallback(() => {
+    hapticMedium();
+    onOpenQueue();
+  }, [onOpenQueue]);
+
   return (
     <View style={styles.container}>
       {/* Previous */}
@@ -91,7 +101,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
       {/* More actions */}
       <ActionButton
         iconName="more"
-        onPress={onOpenActions}
+        onPress={handleOpenActions}
         accessibilityLabel="More actions"
       />
 
@@ -99,12 +109,12 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
       <View>
         <ActionButton
           iconName="queue"
-          onPress={onOpenQueue}
+          onPress={handleOpenQueue}
           accessibilityLabel={`Queue, ${remainingQueueCount} climbs`}
         />
         {remainingQueueCount > 0 && (
-          <View style={styles.badgeContainer}>
-            <Badge count={remainingQueueCount} color={brandColors.primary} size="small" />
+          <View style={styles.badgeContainer} pointerEvents="none">
+            <Badge count={remainingQueueCount} color={brandColors.primary} />
           </View>
         )}
       </View>

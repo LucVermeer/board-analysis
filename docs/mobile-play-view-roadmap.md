@@ -27,21 +27,27 @@ The authoritative design spec for the play view lives at [`docs/ui/06-play-view.
 | Play drawer (bottom sheet shell) | Done | Done | Snap points, state machine | 1 |
 | Climb header (grade + name + stats) | Done | Done | Grade formatting, stat utils | 1 |
 | Board renderer | Done | Done | Hold data transforms | 1 |
-| Action bar (8 buttons) | Done | Done | Button definitions, action types | 1 |
+| Action bar (7 buttons, angle deferred) | Done | Done | Button definitions, action types | 1 |
 | Tick FAB | Done | Done | Tick state logic | 1 |
 | Queue navigation (prev/next) | Done | Done | Navigation helpers | 1 |
 | Board carousel (swipe) | Done | Planned | Prefetch logic | 2 |
 | Inline tick bar | Done | Planned | QuickTickBar logic | 2 |
+| Tick draft save/restore | Done | Planned | Draft persistence | 2 |
 | Wake lock | Done | Planned | -- | 2 |
 | Queue drawer (nested) | Done | Planned | Queue list logic | 3 |
-| Below-fold sections (logbook, similar, community) | Done | Planned | Section data types | 3 |
+| Your Logbook section | Done | Planned | Section data types | 3 |
+| Crew Logbook section | Done | Planned | Section data types | 3 |
+| Community section (votes, comments, proposals) | Done | Planned | Section data types | 3 |
+| Similar Climbs section | Done | Planned | Section data types | 3 |
 | Climb actions sheet | Done | Planned | Action definitions | 3 |
+| Playlist selector drawer | Done | Planned | Playlist logic | 3 |
 | Angle selector | Done | Planned | Angle range utils | 3 |
 | Zoom/pan | Done | Planned | Transform math | 4 |
 | Double-tap favorite | Done | Planned | Favorite toggle logic | 4 |
 | Party mode (mini session bar, driver, drift) | Done | Planned | Session state types | 5 |
 | BLE lightbulb integration | Done | Planned | Protocol (via @boardsesh/ble-protocol) | 5 |
-| Coachmarks | Done | Planned | Coachmark definitions | 6 |
+| Light control drawer | Done | Planned | -- | 5 |
+| Coachmarks (lightbulb, zoom hint, swipe) | Done | Planned | Coachmark definitions | 6 |
 | Beta videos section | Done | Planned | Video data types | 6 |
 | Analytics section | Done | Planned | Stat aggregation | 6 |
 
@@ -54,7 +60,7 @@ Delivers the core play loop: open a climb, see the board, navigate the queue, lo
 - **`@boardsesh/play-view` shared package** -- queue navigation helpers, grade display formatting, tick utilities, shared TypeScript types
 - **`PlayDrawer`** -- bottom sheet component built on `@gorhom/bottom-sheet`, with collapsed/expanded snap points matching the web drawer heights
 - **`PlayDrawerHeader`** -- grade pill, climb name, ascent count, and star rating, using shared grade formatting
-- **`PlayDrawerActionBar`** -- 8 icon buttons matching the web action bar (favorite, share, add to playlist, mirror, rotate, angle, lightbulb, queue)
+- **`PlayDrawerActionBar`** -- 7 action bar buttons (prev, mirror, favorite, lightbulb, more, queue with badge, next); angle selector deferred to Phase 3
 - **`PlayDrawerTickFab`** -- floating green check button anchored above the bottom sheet, triggers the tick flow
 - **Navigation integration** -- climb list taps open the drawer instead of pushing a new screen; back gesture collapses or dismisses the drawer
 - **Queue integration** -- previous/next buttons in the action bar cycle through the queue using shared navigation helpers

@@ -11,6 +11,7 @@ import {
   getGradeColorWithOpacity,
   isLightColor,
   getGradeTextColor,
+  hexToHSL,
 } from '@boardsesh/play-view';
 import { BOULDER_GRADES } from './board-data';
 
@@ -132,33 +133,6 @@ export function getSoftGradeColorByFormat(
   }
   const vGrade = extractVGrade(difficulty);
   return getSoftVGradeColor(vGrade, darkMode);
-}
-
-/**
- * Convert a hex color to HSL components.
- * @returns Object with h (0-360), s (0-1), l (0-1)
- */
-function hexToHSL(hex: string): { h: number; s: number; l: number } {
-  const clean = hex.replace('#', '');
-  const r = parseInt(clean.substring(0, 2), 16) / 255;
-  const g = parseInt(clean.substring(2, 4), 16) / 255;
-  const b = parseInt(clean.substring(4, 6), 16) / 255;
-
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-
-  if (max === min) return { h: 0, s: 0, l };
-
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-
-  let h: number;
-  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-  else if (max === g) h = ((b - r) / d + 2) / 6;
-  else h = ((r - g) / d + 4) / 6;
-
-  return { h: h * 360, s, l };
 }
 
 /**

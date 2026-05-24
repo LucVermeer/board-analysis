@@ -210,6 +210,9 @@
       "climb": "Bloque",
       "queue": "Cola",
       "profile": "Perfil"
+    },
+    "play": {
+      "sendCount": "envíos"
     }
   },
   "lightControl": {

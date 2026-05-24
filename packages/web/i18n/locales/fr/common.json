@@ -12,6 +12,9 @@
       "climb": "Bloc",
       "queue": "File",
       "profile": "Profil"
+    },
+    "play": {
+      "sendCount": "envois"
     }
   },
   "lightControl": {

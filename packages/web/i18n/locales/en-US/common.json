@@ -12,6 +12,9 @@
       "climb": "Climb",
       "queue": "Queue",
       "profile": "Profile"
+    },
+    "play": {
+      "sendCount": "sends"
     }
   },
   "lightControl": {
