@@ -32,7 +32,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
 
   const subtitleParts: string[] = [];
   if (qualityDisplay) subtitleParts.push(`${qualityDisplay}★`);
-  subtitleParts.push(`${formatAscentCount(ascensionistCount)} ${t('mobile.play.sendCount')}`);
+  subtitleParts.push(t('mobile.play.sendCount', { count: ascensionistCount }));
   if (setterUsername) subtitleParts.push(setterUsername);
 
   return (

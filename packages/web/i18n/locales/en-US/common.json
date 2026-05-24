@@ -14,7 +14,8 @@
       "profile": "Profile"
     },
     "play": {
-      "sendCount": "sends"
+      "sendCount_one": "{{count}} send",
+      "sendCount_other": "{{count}} sends"
     }
   },
   "lightControl": {

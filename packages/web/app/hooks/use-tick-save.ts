@@ -32,10 +32,13 @@ export type UseTickSaveOptions = {
 
 /**
  * Decide whether the user has any prior history for a climb at open time.
- * Re-exported from @boardsesh/play-view for backward compatibility.
+ * Re-exported from @boardsesh/play-view. The shared function accepts
+ * ClimbWithAscents (structural subset of Climb) and LogbookEntryLike
+ * (structural subset of LogbookEntry), so this assignment is type-safe.
  */
-export const hasPriorHistoryForClimb: (climb: Climb, logbook: LogbookEntry[]) => boolean =
-  _hasPriorHistoryForClimb;
+export function hasPriorHistoryForClimb(climb: Climb, logbook: LogbookEntry[]): boolean {
+  return _hasPriorHistoryForClimb(climb, logbook);
+}
 
 export function buildTickTarget(
   climb: Climb,

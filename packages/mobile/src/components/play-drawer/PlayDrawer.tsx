@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, Image } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
@@ -39,15 +40,16 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   { boardConfig },
   ref,
 ) {
+  const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
   const [climb, setClimb] = useState<Climb | null>(null);
   const [showLogAscent, setShowLogAscent] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId } = useQueue();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
-  const [isFavorited, setIsFavorited] = useState(false);
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
 
@@ -75,7 +77,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [state.queue, state.currentClimbQueueItem],
   );
 
-  // Use local climb as primary source until queue state catches up
   const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;
 
   useImperativeHandle(ref, () => ({
@@ -115,13 +116,17 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handlePrev = useCallback(() => {
+    setClimb(null);
     previousClimb();
     setIsMirrored(false);
+    setIsFavorited(false);
   }, [previousClimb]);
 
   const handleNext = useCallback(() => {
+    setClimb(null);
     nextClimb();
     setIsMirrored(false);
+    setIsFavorited(false);
   }, [nextClimb]);
 
   const handleMirror = useCallback(() => {
@@ -185,7 +190,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           <Pressable
             onPress={() => sheetRef.current?.close()}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={t('playView.closeAria')}
             hitSlop={8}
             style={styles.closeButton}
           >

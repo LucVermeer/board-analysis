@@ -276,8 +276,16 @@
     "noClimbSelected": "Ningún bloque seleccionado",
     "browseClimbs": "Ver bloques",
     "actionBar": {
+      "previousAria": "Bloque anterior",
+      "nextAria": "Siguiente bloque",
+      "mirrorAria": "Espejear bloque",
+      "unmirrorAria": "Quitar espejo",
+      "addFavoriteAria": "Añadir favorito",
+      "removeFavoriteAria": "Quitar favorito",
+      "sendToBoardAria": "Enviar al muro",
       "climbActionsAria": "Acciones del bloque",
       "openQueueAria": "Abrir cola",
+      "queueCountAria": "Cola, {{count}} bloques",
       "lightbulb": {
         "drivingNamed": "Estás controlando “{{name}}”. Toca para soltar.",
         "driving": "Estás controlando. Toca para soltar.",
