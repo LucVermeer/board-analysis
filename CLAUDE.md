@@ -132,6 +132,8 @@ This project uses [Vite+](https://viteplus.dev) (`vp`) as its unified toolchain 
 - `vp run check:mobile-bundle` - Headless Metro bundle check for React Native (works on Linux, no simulator needed)
 - `vp run check:mobile-simulator` - Build and launch RN app on iOS simulator (macOS only, skips on Linux)
 - `vp run mobile:screenshot` - Capture iOS simulator screenshot (macOS only, skips on Linux)
+- `vp run mobile:publish` - Publish an EAS Update for the current branch (testers on the preview build receive it OTA)
+- `vp run mobile:preview-build` - Trigger an EAS Build for the "preview" profile (testers install this once)
 - `bun run backend:start` - Start backend in production mode
 
 ### Running E2E Tests
@@ -517,6 +519,38 @@ vp run dev:mobile -- --qa-notes-file path/to/notes.md
 ```
 
 Metro output is also tee'd to `.boardsesh/mobile-metro.log` for post-hoc error inspection.
+
+### OTA Preview Distribution (EAS Update)
+
+Multiple worktrees can publish independent mobile previews via EAS Update. Testers install the "preview" build once, then receive JS-only updates OTA when you publish from any branch.
+
+**One-time setup:**
+1. Build the preview client: `vp run mobile:preview-build` — this produces an installable `.ipa`/`.apk` with the native runtime + expo-updates baked in. Share the install link with testers.
+2. Testers install it on their device (iOS via ad-hoc provisioning, Android via APK).
+
+**Publishing updates (per branch):**
+```bash
+# From any worktree — publishes current JS bundle to an EAS branch matching git branch
+vp run mobile:publish
+
+# Explicit branch name or message
+vp run mobile:publish -- --branch my-feature --message "fix nav regression"
+
+# iOS only
+vp run mobile:publish -- --platform ios
+```
+
+**Pointing testers at a specific branch:**
+```bash
+# Switch the preview channel to receive updates from a specific branch
+bunx eas channel:edit preview --branch my-feature-branch
+```
+
+**CI integration:** The `mobile-eas-update.yml` workflow auto-publishes an update on every push to a non-main branch that touches `packages/mobile/` or shared packages. It posts an update comment on the PR with instructions.
+
+**When you need a new preview build:** Only required when native dependencies change (new Expo plugin, new native module, SDK version bump). Pure JS/TS changes are covered by OTA updates.
+
+**Environment:** The preview build uses production backend (`https://www.boardsesh.com`). The `EXPO_TOKEN` secret must be set in GitHub Actions for CI publishing; locally use `bunx eas login`.
 
 ### Mobile vs. Web Differences
 

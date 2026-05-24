@@ -1,5 +1,7 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
+const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? '0195d3e5-7326-7251-b498-79b3cf7de62a';
+
 function resolveDevMetadata(): {
   branchName: string | null;
   qaNotes: string | null;
@@ -10,8 +12,6 @@ function resolveDevMetadata(): {
   const qaNotesFilePath = process.env.BOARDSESH_DEV_QA_NOTES_FILE ?? null;
 
   if (!branchName && !qaNotes) {
-    // Env vars are set by `vp run dev:mobile` (scripts/mobile-dev-start.ts).
-    // Without the orchestrator, no dev metadata is injected — this is fine.
     return { branchName: null, qaNotes: null, qaNotesFilePath: null };
   }
 
@@ -32,6 +32,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    runtimeVersion: {
+      policy: 'appVersion',
+    },
+    updates: {
+      url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+    },
     ios: {
       bundleIdentifier: 'com.boardsesh.app',
       supportsTablet: false,
@@ -58,20 +64,24 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-secure-store',
       'expo-localization',
       'expo-status-bar',
+      'expo-updates',
       'expo-web-browser',
       'react-native-ble-plx',
     ],
-    ...(hasDevMetadata
-      ? {
-          extra: {
-            ...config.extra,
+    extra: {
+      ...config.extra,
+      eas: {
+        projectId: EAS_PROJECT_ID,
+      },
+      ...(hasDevMetadata
+        ? {
             devMetadata: {
               branchName: devMetadata.branchName,
               qaNotes: devMetadata.qaNotes,
               qaNotesFilePath: devMetadata.qaNotesFilePath,
             },
-          },
-        }
-      : {}),
+          }
+        : {}),
+    },
   };
 };
