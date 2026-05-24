@@ -104,7 +104,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     return <Redirect href="/auth/login" />;
   }
   if (isAuthenticated && inAuthGroup) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/(tabs)/boards" />;
   }
 
   return (

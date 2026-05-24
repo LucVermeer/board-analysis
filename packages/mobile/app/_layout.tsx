@@ -10,6 +10,7 @@ import { AuthProvider } from '../src/providers/auth-provider';
 import { I18nProvider } from '../src/providers/i18n-provider';
 import { BluetoothProvider } from '../src/providers/bluetooth-provider';
 import { ToastProvider } from '../src/providers/toast-provider';
+import { QueueProvider } from '../src/providers/queue-provider';
 import { useDefaultBoard } from '../src/lib/graphql/hooks';
 
 SplashScreen.preventAutoHideAsync();
@@ -47,12 +48,14 @@ export default function RootLayout() {
             <AuthProvider onReady={onAuthReady}>
               <ToastProvider>
                 <BottomSheetModalProvider>
-                  <BluetoothProviderWrapper>
-                    <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                      <Stack.Screen name="(tabs)" />
-                      <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
-                    </Stack>
-                  </BluetoothProviderWrapper>
+                  <QueueProvider>
+                    <BluetoothProviderWrapper>
+                      <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                        <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
+                      </Stack>
+                    </BluetoothProviderWrapper>
+                  </QueueProvider>
                 </BottomSheetModalProvider>
               </ToastProvider>
             </AuthProvider>

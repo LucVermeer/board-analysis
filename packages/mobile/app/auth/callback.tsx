@@ -25,7 +25,7 @@ export default function AuthCallback() {
       .then(async (result) => {
         if (result.success) {
           await refreshAuthState();
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/boards');
         } else {
           setError(result.error);
         }
