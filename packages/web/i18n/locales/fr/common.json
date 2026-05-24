@@ -23,6 +23,12 @@
     "play": {
       "sendCount_one": "{{count}} envoi",
       "sendCount_other": "{{count}} envois"
+    },
+    "errorBoundary": {
+      "title": "Une erreur est survenue",
+      "message": "L'application a rencontré une erreur inattendue. Vous pouvez réessayer ou retourner à vos boards.",
+      "tryAgain": "Réessayer",
+      "goHome": "Aller aux boards"
     }
   },
   "lightControl": {
