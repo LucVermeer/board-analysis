@@ -21,7 +21,7 @@ export default function RootLayout() {
           <ThemeProvider>
             <AuthProvider>
               <BottomSheetModalProvider>
-                <Stack screenOptions={{ headerShown: false }}>
+                <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
                 </Stack>
