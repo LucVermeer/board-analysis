@@ -32,6 +32,7 @@
     "@boardsesh/board-config": "*",
     "@boardsesh/board-constants": "*",
     "@boardsesh/board-renderer-wasm": "*",
+    "@boardsesh/climb-filters": "*",
     "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",
     "@boardsesh/play-view": "*",

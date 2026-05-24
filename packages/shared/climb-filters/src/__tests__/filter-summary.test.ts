@@ -1,0 +1,105 @@
+import { describe, it, expect } from 'vitest';
+import type { Grade } from '@boardsesh/shared-schema';
+import { getBaseFilterParts, formatFilterSummary, type FilterSummaryLabels, type BaseFilters } from '../filter-summary';
+
+const mockGrades: Grade[] = [
+  { difficultyId: 1, name: 'V0' },
+  { difficultyId: 5, name: 'V2' },
+  { difficultyId: 10, name: 'V4' },
+  { difficultyId: 15, name: 'V6' },
+  { difficultyId: 20, name: 'V8' },
+];
+
+const labels: FilterSummaryLabels = {
+  gradeRange: (min, max) => `${min}–${max}`,
+  gradeMin: (grade) => `${grade}+`,
+  gradeMax: (grade) => `Up to ${grade}`,
+  ascents: (count) => `${count}+ ascents`,
+  rating: (count) => `${count}+ stars`,
+  more: (count) => `+${count} more`,
+  empty: 'Filters',
+};
+
+const sortLabel = (sortBy: string) => {
+  const map: Record<string, string> = { quality: 'Quality', difficulty: 'Difficulty', newest: 'Newest' };
+  return map[sortBy];
+};
+
+describe('getBaseFilterParts', () => {
+  it('returns empty array when no filters are active', () => {
+    expect(getBaseFilterParts({}, mockGrades, labels)).toEqual([]);
+  });
+
+  it('includes search text in quotes', () => {
+    expect(getBaseFilterParts({ name: 'crimp' }, mockGrades, labels)).toEqual(['"crimp"']);
+  });
+
+  it('shows grade range when both min and max set', () => {
+    const filters: BaseFilters = { minGrade: 5, maxGrade: 15 };
+    expect(getBaseFilterParts(filters, mockGrades, labels)).toEqual(['V2–V6']);
+  });
+
+  it('shows min grade with plus', () => {
+    expect(getBaseFilterParts({ minGrade: 10 }, mockGrades, labels)).toEqual(['V4+']);
+  });
+
+  it('shows max grade with up-to prefix', () => {
+    expect(getBaseFilterParts({ maxGrade: 15 }, mockGrades, labels)).toEqual(['Up to V6']);
+  });
+
+  it('shows sort label when non-default', () => {
+    const filters: BaseFilters = { sortBy: 'quality', defaultSortBy: 'popular' };
+    expect(getBaseFilterParts(filters, mockGrades, labels, sortLabel)).toEqual(['Quality']);
+  });
+
+  it('skips sort label when sortBy matches default', () => {
+    const filters: BaseFilters = { sortBy: 'popular', defaultSortBy: 'popular' };
+    expect(getBaseFilterParts(filters, mockGrades, labels, sortLabel)).toEqual([]);
+  });
+
+  it('shows ascents count', () => {
+    expect(getBaseFilterParts({ minAscents: 25 }, mockGrades, labels)).toEqual(['25+ ascents']);
+  });
+
+  it('shows rating count', () => {
+    expect(getBaseFilterParts({ minRating: 3 }, mockGrades, labels)).toEqual(['3+ stars']);
+  });
+
+  it('falls back to difficultyId when grade not found', () => {
+    expect(getBaseFilterParts({ minGrade: 999 }, mockGrades, labels)).toEqual(['#999+']);
+  });
+
+  it('combines multiple parts', () => {
+    const filters: BaseFilters = { name: 'test', minGrade: 10, minAscents: 5 };
+    expect(getBaseFilterParts(filters, mockGrades, labels)).toEqual(['"test"', 'V4+', '5+ ascents']);
+  });
+});
+
+describe('formatFilterSummary', () => {
+  it('returns empty label when no parts', () => {
+    expect(formatFilterSummary([], labels)).toBe('Filters');
+  });
+
+  it('joins single part', () => {
+    expect(formatFilterSummary(['V4+'], labels)).toBe('V4+');
+  });
+
+  it('joins two parts with middle dot', () => {
+    expect(formatFilterSummary(['V4+', '5+ ascents'], labels)).toBe('V4+ · 5+ ascents');
+  });
+
+  it('truncates at 2 parts by default and shows remainder', () => {
+    const parts = ['V4+', 'Quality', '25+ ascents', '3+ stars'];
+    expect(formatFilterSummary(parts, labels)).toBe('V4+ · Quality · +2 more');
+  });
+
+  it('respects custom maxParts', () => {
+    const parts = ['V4+', 'Quality', '25+ ascents'];
+    expect(formatFilterSummary(parts, labels, 1)).toBe('V4+ · +2 more');
+  });
+
+  it('shows all parts when count equals maxParts', () => {
+    const parts = ['V4+', 'Quality', '25+ ascents'];
+    expect(formatFilterSummary(parts, labels, 3)).toBe('V4+ · Quality · 25+ ascents');
+  });
+});

@@ -2,6 +2,7 @@ import type { SearchRequestPagination } from '@/app/lib/types';
 import { TENSION_KILTER_GRADES } from '@/app/lib/board-data';
 import { DEFAULT_SEARCH_PARAMS } from '@/app/lib/url-utils';
 import { normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
+import { formatFilterSummary } from '@boardsesh/climb-filters';
 
 type SearchSummaryTranslate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -127,12 +128,10 @@ export type UserSummaryLabels = {
 };
 
 export function getUserPanelSummary(params: SearchRequestPagination, labels: UserSummaryLabels): string[] {
-  // Merge "Hide" filters into single entry
   const hideFilters: string[] = [];
   if (params.hideAttempted) hideFilters.push(labels.attempted);
   if (params.hideCompleted) hideFilters.push(labels.completed);
 
-  // Merge "Only" filters into single entry
   const onlyFilters: string[] = [];
   if (params.showOnlyAttempted) onlyFilters.push(labels.attempted);
   if (params.showOnlyCompleted) onlyFilters.push(labels.completed);
@@ -172,10 +171,6 @@ export function getZonePanelSummary(
   return [`${label}: ${modeLabel}`];
 }
 
-/**
- * Pre-translated labels used by the search-pill summary helpers.
- * Pass these in from the React layer where i18n is available.
- */
 export type SearchPillLabels = {
   empty: string;
   climb: ClimbSummaryLabels;
@@ -227,12 +222,8 @@ export function createSearchSummaryLabels(t: SearchSummaryTranslate): SearchPill
   };
 }
 
-/**
- * Get compact search pill summary (max 2 items + "+N more")
- * Used for display in the search bar and recent search pills
- */
-export function getSearchPillSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
-  const allParts = [
+function collectAllParts(params: SearchRequestPagination, labels: SearchPillLabels): string[] {
+  return [
     ...getClimbPanelSummary(params, labels.climb),
     ...getQualityPanelSummary(params, labels.quality),
     ...getStatusPanelSummary(params, labels.status),
@@ -240,31 +231,12 @@ export function getSearchPillSummary(params: SearchRequestPagination, labels: Se
     ...getHoldsPanelSummary(params, labels.holds),
     ...getZonePanelSummary(params, labels.zone, labels.zoneModes),
   ];
-
-  if (allParts.length === 0) return labels.empty;
-
-  // Show max 2 items, append "+N more" if more
-  if (allParts.length <= 2) {
-    return allParts.join(' \u00B7 ');
-  }
-  const remaining = allParts.length - 2;
-  return `${allParts.slice(0, 2).join(' \u00B7 ')} \u00B7 ${labels.more(remaining)}`;
 }
 
-/**
- * Get full search pill summary (all items, no truncation)
- * Used for tooltips to show the complete filter list
- */
-export function getSearchPillFullSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
-  const allParts = [
-    ...getClimbPanelSummary(params, labels.climb),
-    ...getQualityPanelSummary(params, labels.quality),
-    ...getStatusPanelSummary(params, labels.status),
-    ...getUserPanelSummary(params, labels.user),
-    ...getHoldsPanelSummary(params, labels.holds),
-    ...getZonePanelSummary(params, labels.zone, labels.zoneModes),
-  ];
+export function getSearchPillSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
+  return formatFilterSummary(collectAllParts(params, labels), { more: labels.more, empty: labels.empty });
+}
 
-  if (allParts.length === 0) return labels.empty;
-  return allParts.join(' \u00B7 ');
+export function getSearchPillFullSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
+  return formatFilterSummary(collectAllParts(params, labels), { more: labels.more, empty: labels.empty }, Infinity);
 }
