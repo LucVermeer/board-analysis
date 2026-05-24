@@ -7,8 +7,7 @@ export default function ClimbsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerLargeTitle: true,
-        headerLargeTitleShadowVisible: false,
+        headerLargeTitle: false,
         headerTransparent: true,
         headerBlurEffect: 'systemMaterial',
         contentStyle: { backgroundColor: 'transparent' },
@@ -24,7 +23,6 @@ export default function ClimbsLayout() {
         name="[climbUuid]"
         options={{
           title: t('mobile.nav.climb'),
-          headerLargeTitle: false,
         }}
       />
     </Stack>

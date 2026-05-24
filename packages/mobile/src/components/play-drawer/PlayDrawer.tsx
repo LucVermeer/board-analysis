@@ -3,7 +3,7 @@ import { View, Pressable, StyleSheet, Image } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import BottomSheetModal, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
@@ -46,7 +46,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 ) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
   const [climb, setClimb] = useState<Climb | null>(null);
   const [showLogAscent, setShowLogAscent] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
@@ -113,6 +113,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsMirrored(false);
       setIsFavorited(false);
       setIsTickBarActive(false);
+      setIsSheetOpen(true);
       const queueItem = {
         uuid: randomUUID(),
         climb: {
@@ -132,16 +133,12 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         },
       };
       setCurrentClimb(queueItem);
-      sheetRef.current?.snapToIndex(0);
+      sheetRef.current?.present();
     },
     close: () => {
-      sheetRef.current?.close();
+      sheetRef.current?.dismiss();
     },
   }));
-
-  const handleSheetChange = useCallback((index: number) => {
-    setIsSheetOpen(index >= 0);
-  }, []);
 
   const handleClose = useCallback(() => {
     setClimb(null);
@@ -219,20 +216,18 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   return (
     <>
-      <BottomSheet
+      <BottomSheetModal
         ref={sheetRef}
-        index={-1}
         snapPoints={snapPoints}
         enablePanDownToClose
         backdropComponent={renderBackdrop}
-        onChange={handleSheetChange}
-        onClose={handleClose}
+        onDismiss={handleClose}
         handleIndicatorStyle={styles.indicator}
         backgroundStyle={styles.background}
       >
         <BottomSheetView style={[styles.content, { paddingBottom: insets.bottom }]}>
           <Pressable
-            onPress={() => sheetRef.current?.close()}
+            onPress={() => sheetRef.current?.dismiss()}
             accessibilityRole="button"
             accessibilityLabel={t('playView.closeAria')}
             hitSlop={8}
@@ -313,9 +308,12 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
             </>
           )}
         </BottomSheetView>
-      </BottomSheet>
+      </BottomSheetModal>
 
-      {/* Log Ascent sheet (full, via long-press) */}
+      {/* Log Ascent sheet (full, via long-press).
+          TODO: still uses BottomSheet (not BottomSheetModal), so it renders
+          within the screen content area and can appear behind the nav header.
+          Follow-up: convert to BottomSheetModal once PlayDrawer is stable. */}
       {displayedClimb && (
         <LogAscentSheet
           visible={showLogAscent}

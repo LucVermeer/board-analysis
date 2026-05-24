@@ -7,8 +7,7 @@ export default function MoreLayout() {
   return (
     <Stack
       screenOptions={{
-        headerLargeTitle: true,
-        headerLargeTitleShadowVisible: false,
+        headerLargeTitle: false,
         headerTransparent: true,
         headerBlurEffect: 'systemMaterial',
         contentStyle: { backgroundColor: 'transparent' },
