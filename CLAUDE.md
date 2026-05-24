@@ -129,6 +129,9 @@ This project uses [Vite+](https://viteplus.dev) (`vp`) as its unified toolchain 
 - `vp run typecheck:db` - Type check db package only
 - `vp run typecheck:shared` - Type check shared-schema package only
 - `vp run check:i18n` - Scan `packages/web/app/**/*.tsx` for hardcoded user-facing English strings. Runs in CI on every PR; fails the build if a new untranslated string is introduced. Run `bun packages/web/scripts/check-untranslated-strings.ts --fix` to bulk-insert `// i18n-ignore-next-line` markers above existing violations.
+- `vp run check:mobile-bundle` - Headless Metro bundle check for React Native (works on Linux, no simulator needed)
+- `vp run check:mobile-simulator` - Build and launch RN app on iOS simulator (macOS only, skips on Linux)
+- `vp run mobile:screenshot` - Capture iOS simulator screenshot (macOS only, skips on Linux)
 - `bun run backend:start` - Start backend in production mode
 
 ### Running E2E Tests
@@ -459,8 +462,67 @@ All client-side persistence must use IndexedDB via the `idb` package. Bare `loca
 - Context for cross-component state
 - IndexedDB for persistence
 
-### Mobile Considerations
+### Mobile Considerations (Web)
 
 - iOS Safari lacks Web Bluetooth support
 - Recommend Bluefy browser for iOS users
 - Progressive enhancement for core features
+
+## Mobile Development (packages/mobile/)
+
+The React Native app lives at `packages/mobile/` and uses Expo SDK 53, React Native 0.79, and Expo Router 5 for file-based routing.
+
+### Stack
+
+- **Routing**: `packages/mobile/app/` — Expo Router file-based routing (auth, tabs)
+- **Components**: `packages/mobile/src/components/` — native RN components (no MUI)
+- **Theme**: `packages/mobile/src/providers/theme-provider.tsx` — iOS system colors, spacing, radii
+- **Providers**: `packages/mobile/src/providers/` — auth, i18n, query, queue, theme
+- **Shared packages**: `@boardsesh/ble-protocol`, `@boardsesh/board-config`, `@boardsesh/board-constants`, `@boardsesh/queue`, `@boardsesh/shared-schema`
+- **Bundler**: Metro via `packages/mobile/metro.config.js` — watches monorepo root
+
+### Mobile Agent Validation Sequence
+
+Run these commands after making changes to `packages/mobile/`. Steps 1–3 work on any platform (including Linux cloud agents). Steps 4–5 require macOS with Xcode.
+
+```bash
+# 1. Type check (always run)
+vp run typecheck:mobile
+
+# 2. Unit tests (always run)
+vp test --project mobile
+
+# 3. Metro bundle compilation (always run — works on Linux)
+vp run check:mobile-bundle
+
+# 4. Full simulator build and launch (macOS only — skips on Linux)
+vp run check:mobile-simulator
+
+# 5. Capture simulator screenshot (macOS only — skips on Linux)
+vp run mobile:screenshot
+```
+
+`check:mobile-bundle` is the highest-value check: it proves all imports resolve and the JS bundle compiles, without needing a simulator. On Linux, steps 4–5 print a skip message and exit 0.
+
+### Mobile QA Notes
+
+Same workflow as web. Write `.boardsesh/qa-notes.md` before starting `vp run dev:mobile`. The orchestrator (`scripts/mobile-dev-start.ts`) reads the file, injects it via env vars into the Expo config, and the `DevMetadataPanel` component shows branch name + QA notes in the More tab during dev builds.
+
+```bash
+# Start mobile dev server with QA notes
+vp run dev:mobile
+
+# Or specify a custom notes file
+vp run dev:mobile -- --qa-notes-file path/to/notes.md
+```
+
+Metro output is also tee'd to `.boardsesh/mobile-metro.log` for post-hoc error inspection.
+
+### Mobile vs. Web Differences
+
+- **No lint via `vp check`** — mobile is excluded from the lint config. Use `vp run typecheck:mobile` for type checking.
+- **No i18n check** — mobile has its own i18n provider at `packages/mobile/src/providers/i18n-provider.tsx`.
+- **Styling** — `StyleSheet.create` + theme provider, not MUI or CSS. No `style` prop avoidance rule.
+- **Dev mode** — use `__DEV__` (React Native global), not `process.env.NODE_ENV`.
+- **Storage** — `expo-secure-store` for credentials, not IndexedDB.
+- **Navigation** — Expo Router (`expo-router`), not Next.js App Router.

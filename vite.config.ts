@@ -202,9 +202,23 @@ export default defineConfig({
         ],
       },
 
+      // --- Mobile validation ---
+      'check:mobile-bundle': {
+        command: 'bash scripts/mobile-bundle-check.sh',
+        cache: false,
+      },
+      'check:mobile-simulator': {
+        command: 'bash scripts/mobile-simulator-check.sh',
+        cache: false,
+      },
+      'mobile:screenshot': {
+        command: 'bash scripts/mobile-screenshot.sh',
+        cache: false,
+      },
+
       // --- Dev servers ---
       'dev:mobile': {
-        command: 'bun run --filter=@boardsesh/mobile start',
+        command: 'tsx scripts/mobile-dev-start.ts',
         cache: false,
       },
       'dev:backend': {
