@@ -31,5 +31,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: 'com.boardsesh.app',
     permissions: ['BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'ACCESS_FINE_LOCATION'],
   },
-  plugins: ['expo-router', 'expo-secure-store', 'expo-localization'],
+  plugins: [
+    'expo-router',
+    'expo-secure-store',
+    'expo-localization',
+    'expo-status-bar',
+    'expo-web-browser',
+  ],
 });
