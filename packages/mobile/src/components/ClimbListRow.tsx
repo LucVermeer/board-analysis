@@ -19,7 +19,7 @@ import { HeartAnimationOverlay } from './HeartAnimationOverlay';
 import { useDoubleTapFavorite } from '../hooks/use-double-tap-favorite';
 import { hapticLight, hapticMedium, hapticSuccess } from '../lib/haptics';
 import { formatSends, formatQuality } from '../lib/format-climb-stats';
-import { getGradeTintColor } from '../lib/grade-tint-color';
+import { getGradeTintColor } from '@boardsesh/play-view';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { brandColors } from '../theme/colors';

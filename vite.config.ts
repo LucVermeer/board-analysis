@@ -40,6 +40,7 @@ export default defineConfig({
       './packages/aurora-sync/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
+      './packages/shared/play-view/vite.config.ts',
       './packages/mobile/vite.config.ts',
     ],
   },
@@ -185,6 +186,9 @@ export default defineConfig({
       'typecheck:board-config': {
         command: 'bun run --filter=@boardsesh/board-config typecheck',
       },
+      'typecheck:play-view': {
+        command: 'bun run --filter=@boardsesh/play-view typecheck',
+      },
       'typecheck:mobile': {
         command: 'bun run --filter=@boardsesh/mobile typecheck',
       },
@@ -198,6 +202,7 @@ export default defineConfig({
           'typecheck:ble-protocol',
           'typecheck:queue',
           'typecheck:board-config',
+          'typecheck:play-view',
           'typecheck:mobile',
         ],
       },

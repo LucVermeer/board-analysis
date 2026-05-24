@@ -30,7 +30,7 @@ import {
 } from '../lib/graphql/operations';
 import { getStoredBoardConfig } from '../lib/board-store';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
-import { findNextQueueItem, findPreviousQueueItem } from '../lib/queue-navigation';
+import { findNextQueueItem, findPreviousQueueItem } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { useToast } from './toast-provider';
 

@@ -276,8 +276,16 @@
     "noClimbSelected": "Aucun bloc sélectionné",
     "browseClimbs": "Parcourir les blocs",
     "actionBar": {
+      "previousAria": "Bloc précédent",
+      "nextAria": "Bloc suivant",
+      "mirrorAria": "Miroir du bloc",
+      "unmirrorAria": "Annuler le miroir",
+      "addFavoriteAria": "Ajouter aux favoris",
+      "removeFavoriteAria": "Retirer des favoris",
+      "sendToBoardAria": "Envoyer au mur",
       "climbActionsAria": "Actions du bloc",
       "openQueueAria": "Ouvrir la file d'attente",
+      "queueCountAria": "File, {{count}} blocs",
       "lightbulb": {
         "drivingNamed": "Tu contrôles «{{name}}». Touche pour relâcher.",
         "driving": "Tu contrôles. Touche pour relâcher.",

@@ -276,8 +276,16 @@
     "noClimbSelected": "No climb selected",
     "browseClimbs": "Browse Climbs",
     "actionBar": {
+      "previousAria": "Previous climb",
+      "nextAria": "Next climb",
+      "mirrorAria": "Mirror climb",
+      "unmirrorAria": "Unmirror climb",
+      "addFavoriteAria": "Add favorite",
+      "removeFavoriteAria": "Remove favorite",
+      "sendToBoardAria": "Send to board",
       "climbActionsAria": "Climb actions",
       "openQueueAria": "Open up next",
+      "queueCountAria": "Queue, {{count}} climbs",
       "lightbulb": {
         "drivingNamed": "You’re driving “{{name}}”. Tap to release control.",
         "driving": "You’re driving. Tap to release control.",

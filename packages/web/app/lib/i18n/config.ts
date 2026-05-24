@@ -3,6 +3,22 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = 'en-US';
 
+// Keys used only by the React Native mobile app (packages/mobile/),
+// outside the web orphan checker's scan tree.
+// i18n-keep common:mobile.play.sendCount_one
+// i18n-keep common:mobile.play.sendCount_other
+// i18n-keep session:playView.actionBar.previousAria
+// i18n-keep session:playView.actionBar.nextAria
+// i18n-keep session:playView.actionBar.mirrorAria
+// i18n-keep session:playView.actionBar.unmirrorAria
+// i18n-keep session:playView.actionBar.addFavoriteAria
+// i18n-keep session:playView.actionBar.removeFavoriteAria
+// i18n-keep session:playView.actionBar.sendToBoardAria
+// i18n-keep session:playView.actionBar.queueCountAria
+// i18n-keep auth:nativeStart.networkError
+// i18n-keep auth:nativeStart.orContinueWith
+// i18n-keep auth:nativeStart.signIn
+
 export const LOCALE_HTML_LANG: Record<Locale, string> = {
   'en-US': 'en',
   es: 'es',

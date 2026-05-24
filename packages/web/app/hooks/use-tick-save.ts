@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { track } from '@/app/lib/analytics';
+import { hasPriorHistoryForClimb as _hasPriorHistoryForClimb } from '@boardsesh/play-view';
 import type { Climb, BoardDetails, Angle } from '@/app/lib/types';
 import { useBoardProvider } from '../components/board-provider/board-provider-context';
 import type { LogbookEntry, TickStatus } from '@/app/hooks/use-logbook';
@@ -31,17 +32,12 @@ export type UseTickSaveOptions = {
 
 /**
  * Decide whether the user has any prior history for a climb at open time.
+ * Re-exported from @boardsesh/play-view. The shared function accepts
+ * ClimbWithAscents (structural subset of Climb) and LogbookEntryLike
+ * (structural subset of LogbookEntry), so this assignment is type-safe.
  */
 export function hasPriorHistoryForClimb(climb: Climb, logbook: LogbookEntry[]): boolean {
-  // Check server-side counts first — these are available immediately
-  // and prevent cold-cache flicker when logbook hasn't loaded yet.
-  const ascents = climb.userAscents;
-  const attempts = climb.userAttempts;
-  if (ascents != null || attempts != null) {
-    return (ascents ?? 0) + (attempts ?? 0) > 0;
-  }
-
-  return logbook.some((entry) => entry.climb_uuid === climb.uuid);
+  return _hasPriorHistoryForClimb(climb, logbook);
 }
 
 export function buildTickTarget(
