@@ -4,7 +4,6 @@ import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
-import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
@@ -188,19 +187,18 @@ export default function ClimbList() {
   const isInitialLoading = isBoardLoading || (isClimbsLoading && accumulatedClimbs.length === 0);
 
   const renderClimbItem = useCallback(
-    ({ item: climb }: { item: Climb }) => {
-      const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
-
-      return (
-        <ClimbListRow
-          climb={climb}
-          gradeName={climb.difficulty}
-          gradeColor={gradeColor}
-          onPress={() => handleClimbPress(climb)}
-        />
-      );
-    },
-    [handleClimbPress],
+    ({ item: climb }: { item: Climb }) => (
+      <ClimbListRow
+        climb={climb}
+        boardName={boardName as BoardName}
+        layoutId={layoutId}
+        sizeId={sizeId}
+        setIds={setIds}
+        angle={angle}
+        onPress={handleClimbPress}
+      />
+    ),
+    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {
