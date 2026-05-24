@@ -91,7 +91,7 @@ export default function LoginScreen() {
         if (result.error === 'network') {
           setError(t('nativeStart.networkError'));
         } else if (result.status === 401) {
-          setError(t('login.errors.invalidCredentials'));
+          setError(t('login.toasts.invalidCredentials'));
         } else {
           setError(result.error);
         }
@@ -115,11 +115,7 @@ export default function LoginScreen() {
   ];
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
