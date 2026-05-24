@@ -19,6 +19,7 @@ import { FeatureFlagsProvider } from './components/providers/feature-flags-provi
 import { OnboardingTourProvider } from './components/onboarding/onboarding-tour-provider';
 import OnboardingTourOverlay from './components/onboarding/onboarding-tour-overlay';
 import OnboardingDummySeshMount from './components/onboarding/onboarding-dummy-sesh-mount';
+import NativeDeepLinkListener from './components/providers/native-deep-link-listener';
 import { getLocale } from './lib/i18n/get-locale';
 import { getServerTranslation } from './lib/i18n/server';
 import { LOCALE_HTML_LANG, LOCALE_OG } from './lib/i18n/config';
@@ -96,6 +97,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   ]}
                 >
                   <SnackbarProvider>
+                    <NativeDeepLinkListener />
                     <AuthModalProvider>
                       <FeatureFlagsProvider flags={EMPTY_FEATURE_FLAGS}>
                         <PersistentSessionWrapper boardConfigs={boardConfigs}>
