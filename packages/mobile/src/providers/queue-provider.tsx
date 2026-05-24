@@ -204,6 +204,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const boardPath = `${boardConfig.boardName}/${boardConfig.layoutId}/${boardConfig.sizeId}/${boardConfig.setIds}/${boardConfig.angle}`;
 
       try {
+        // Location is a future feature — using 0,0 for sessions created from the queue.
+        // When expo-location is integrated, these will come from the device.
         const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {
           input: { boardPath, latitude: 0, longitude: 0, discoverable: false },
         });

@@ -94,6 +94,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     };
   }, [colorScheme]);
 
+  // React 19 context provider syntax (Expo SDK 53+ / React 19)
   return <ThemeContext value={theme}>{children}</ThemeContext>;
 }
 

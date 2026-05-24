@@ -31,24 +31,23 @@ export function useParseFrames(frames: string, boardName: BoardName, holdsData: 
     const result: BoardHold[] = [];
     const boardStateMap = HOLD_STATE_MAP[boardName];
 
+    // Build a name -> renderStyle lookup map once to avoid O(n*m) inner loop
+    const renderStyleByName = new Map<string, 'circle' | 'above-marker'>();
+    if (boardStateMap) {
+      for (const stateInfo of Object.values(boardStateMap)) {
+        if (stateInfo.renderStyle) {
+          renderStyleByName.set(stateInfo.name, stateInfo.renderStyle);
+        }
+      }
+    }
+
     for (const litUpHoldsMap of Object.values(frameMap)) {
       for (const [holdIdStr, holdInfo] of Object.entries(litUpHoldsMap)) {
         const holdId = Number(holdIdStr);
         const placement = holdLookup.get(holdId);
         if (!placement) continue;
 
-        // Find the renderStyle from the state map by matching the color
-        // (the stateCode is not directly available from convertLitUpHoldsStringToMap,
-        // so we look up the renderStyle from boardStateMap by matching state name)
-        let renderStyle: 'circle' | 'above-marker' = 'circle';
-        if (boardStateMap) {
-          for (const stateInfo of Object.values(boardStateMap)) {
-            if (stateInfo.name === holdInfo.state && stateInfo.renderStyle) {
-              renderStyle = stateInfo.renderStyle;
-              break;
-            }
-          }
-        }
+        const renderStyle = renderStyleByName.get(holdInfo.state) ?? 'circle';
 
         result.push({
           id: holdId,

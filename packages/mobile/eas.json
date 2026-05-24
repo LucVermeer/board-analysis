@@ -18,12 +18,5 @@
       }
     },
     "production": {}
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "ascAppId": "com.boardsesh.app"
-      }
-    }
   }
 }

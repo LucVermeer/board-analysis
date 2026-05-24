@@ -28,7 +28,13 @@ type ClimbListRowProps = {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const ClimbListRow = React.memo(function ClimbListRow({ climb, gradeName, gradeColor, onPress, onLongPress }: ClimbListRowProps) {
+const ClimbListRow = React.memo(function ClimbListRow({
+  climb,
+  gradeName,
+  gradeColor,
+  onPress,
+  onLongPress,
+}: ClimbListRowProps) {
   const { systemColors } = useTheme();
   const scale = useSharedValue(1);
 

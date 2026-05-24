@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, TextInput, ScrollView, StyleSheet, Alert, type ViewStyle } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -85,6 +85,12 @@ export function LogAscentSheet({
   const { t } = useTranslation('climbs');
   const theme = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
+
+  useEffect(() => {
+    // Sheet mounts when visible becomes true — expand it
+    sheetRef.current?.expand();
+  }, []);
+
   const saveTick = useSaveTick();
   const { data: grades } = useGrades(boardName);
 
@@ -177,10 +183,7 @@ export function LogAscentSheet({
         },
         onError: () => {
           hapticError();
-          Alert.alert(
-            t('mobile.logAscent.errorTitle'),
-            t('mobile.logAscent.errorMessage'),
-          );
+          Alert.alert(t('mobile.logAscent.errorTitle'), t('mobile.logAscent.errorMessage'));
         },
       },
     );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
@@ -38,38 +38,42 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
   const isSwipeOpen = useSharedValue(false);
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleRemove = () => {
+  const handleRemove = useCallback(() => {
     hapticMedium();
     onRemove(item.uuid);
-  };
+  }, [item.uuid, onRemove]);
 
-  const panGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .failOffsetY([-5, 5])
-    .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
-      // Only allow swiping left
-      if (event.translationX > 0) {
-        translateX.value = 0;
-        return;
-      }
-      translateX.value = Math.max(event.translationX, -DELETE_BUTTON_WIDTH - 20);
-    })
-    .onEnd(() => {
-      if (translateX.value < SWIPE_DELETE_THRESHOLD) {
-        // Snap open to show delete button
-        translateX.value = withSpring(-DELETE_BUTTON_WIDTH, {
-          damping: 20,
-          stiffness: 200,
-        });
-        isSwipeOpen.value = true;
-        runOnJS(setIsOpen)(true);
-      } else {
-        // Snap back
-        translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
-        isSwipeOpen.value = false;
-        runOnJS(setIsOpen)(false);
-      }
-    });
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-10, 10])
+        .failOffsetY([-5, 5])
+        .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
+          // Only allow swiping left
+          if (event.translationX > 0) {
+            translateX.value = 0;
+            return;
+          }
+          translateX.value = Math.max(event.translationX, -DELETE_BUTTON_WIDTH - 20);
+        })
+        .onEnd(() => {
+          if (translateX.value < SWIPE_DELETE_THRESHOLD) {
+            // Snap open to show delete button
+            translateX.value = withSpring(-DELETE_BUTTON_WIDTH, {
+              damping: 20,
+              stiffness: 200,
+            });
+            isSwipeOpen.value = true;
+            runOnJS(setIsOpen)(true);
+          } else {
+            // Snap back
+            translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+            isSwipeOpen.value = false;
+            runOnJS(setIsOpen)(false);
+          }
+        }),
+    [],
+  );
 
   const rowAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -110,7 +114,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
     });
   };
 
-  const climbName = item.climb?.name ?? 'Unknown climb';
+  const climbName = item.climb?.name ?? t('mobile.queue.unknownClimb');
   const difficulty = item.climb?.difficulty ?? '';
 
   return (

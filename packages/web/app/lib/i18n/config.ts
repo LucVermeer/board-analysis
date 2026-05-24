@@ -78,6 +78,7 @@ export function isSupportedLocale(value: string | undefined | null): value is Lo
 // i18n-keep session.mobile.queue.unknownClimb
 // i18n-keep profile.mobile.unknownName
 // i18n-keep profile.mobile.signOut
+// i18n-keep boards.mobile.activeBoard
 // i18n-keep boards.mobile.emptyTitle
 // i18n-keep boards.mobile.emptySubtitle
 // i18n-keep common.mobile.more.title
