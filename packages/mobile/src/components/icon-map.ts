@@ -19,6 +19,7 @@ export const iconMap = {
   'chevron.right': { ios: 'chevron.right', android: 'chevron-right' },
   'chevron.left': { ios: 'chevron.left', android: 'chevron-left' },
   'chevron.down': { ios: 'chevron.down', android: 'chevron-down' },
+  'chevron.up': { ios: 'chevron.up', android: 'chevron-up' },
   close: { ios: 'xmark', android: 'close' },
   back: { ios: 'chevron.left', android: 'arrow-left' },
 
@@ -32,6 +33,8 @@ export const iconMap = {
   'comment.fill': { ios: 'bubble.left.fill', android: 'comment' },
   'more.actions': { ios: 'ellipsis.circle', android: 'dots-horizontal-circle-outline' },
   'more.actions.fill': { ios: 'ellipsis.circle.fill', android: 'dots-horizontal-circle' },
+  copy: { ios: 'doc.on.doc', android: 'content-copy' },
+  flag: { ios: 'flag', android: 'flag-outline' },
   delete: { ios: 'trash', android: 'delete-outline' },
   'delete.fill': { ios: 'trash.fill', android: 'delete' },
   edit: { ios: 'pencil', android: 'pencil-outline' },
@@ -66,6 +69,9 @@ export const iconMap = {
   'notification.fill': { ios: 'bell.fill', android: 'bell' },
 
   // Queue / Playback
+  history: { ios: 'clock.arrow.circlepath', android: 'history' },
+  'checkmark.circle.fill': { ios: 'checkmark.circle.fill', android: 'check-circle' },
+  circle: { ios: 'circle', android: 'circle-outline' },
   'play.fill': { ios: 'play.fill', android: 'play' },
   pause: { ios: 'pause', android: 'pause' },
   'minus.circle': { ios: 'minus.circle', android: 'minus-circle-outline' },
@@ -93,6 +99,7 @@ export const iconMap = {
   refresh: { ios: 'arrow.clockwise', android: 'refresh' },
   photo: { ios: 'photo', android: 'image-outline' },
   camera: { ios: 'camera', android: 'camera-outline' },
+  video: { ios: 'video', android: 'video-outline' },
 } as const satisfies Record<string, IconMapping>;
 
 export type IconName = keyof typeof iconMap;

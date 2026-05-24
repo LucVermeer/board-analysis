@@ -3,16 +3,26 @@ import { View, Pressable, StyleSheet, Image } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import {
+  BottomSheetModal,
+  BottomSheetBackdrop,
+  BottomSheetScrollView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
+import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { PlayDrawerTickFab } from './PlayDrawerTickFab';
 import { QuickTickBar } from './QuickTickBar';
+import { DeferredSections } from './DeferredSections';
+import { QueueSheet } from './QueueSheet';
+import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { LogAscentSheet } from '../LogAscentSheet';
+import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
@@ -40,10 +50,7 @@ type PlayDrawerProps = {
   boardConfig: BoardConfig;
 };
 
-export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
-  { boardConfig },
-  ref,
-) {
+export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer({ boardConfig }, ref) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -53,8 +60,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [isFavorited, setIsFavorited] = useState(false);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
 
-  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId } = useQueue();
+  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
@@ -114,6 +122,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsFavorited(false);
       setIsTickBarActive(false);
       setIsSheetOpen(true);
+      setActiveSubDrawer('none');
       const queueItem = {
         uuid: randomUUID(),
         climb: {
@@ -145,6 +154,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsMirrored(false);
     setIsTickBarActive(false);
     setIsSheetOpen(false);
+    setActiveSubDrawer('none');
   }, []);
 
   const handlePrev = useCallback(() => {
@@ -183,11 +193,19 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handleOpenActions = useCallback(() => {
-    // Phase 3: Climb actions sheet
+    setActiveSubDrawer('actions');
   }, []);
 
   const handleOpenQueue = useCallback(() => {
-    // Phase 3: Queue drawer
+    setActiveSubDrawer('queue');
+  }, []);
+
+  const handleOpenAngleSelector = useCallback(() => {
+    setActiveSubDrawer('angleSelector');
+  }, []);
+
+  const handleCloseSubDrawer = useCallback(() => {
+    setActiveSubDrawer('none');
   }, []);
 
   const handleTickFabPress = useCallback(() => {
@@ -202,6 +220,34 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
   }, []);
 
+  const handleSimilarClimbPress = useCallback(
+    (similarClimb: Climb) => {
+      setClimb(similarClimb);
+      setIsMirrored(false);
+      setIsFavorited(false);
+      const queueItem = {
+        uuid: randomUUID(),
+        climb: {
+          uuid: similarClimb.uuid,
+          name: similarClimb.name,
+          frames: similarClimb.frames,
+          setter_username: similarClimb.setter_username,
+          angle: similarClimb.angle,
+          ascensionist_count: similarClimb.ascensionist_count,
+          difficulty: similarClimb.difficulty,
+          quality_average: similarClimb.quality_average,
+          stars: similarClimb.stars,
+          difficulty_error: similarClimb.difficulty_error,
+          benchmark_difficulty: similarClimb.benchmark_difficulty,
+          userAscents: similarClimb.userAscents,
+          userAttempts: similarClimb.userAttempts,
+        },
+      };
+      setCurrentClimb(queueItem);
+    },
+    [setCurrentClimb],
+  );
+
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.5} />
@@ -213,6 +259,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
+  const subDrawerOpen = activeSubDrawer !== 'none';
 
   return (
     <>
@@ -220,12 +267,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         ref={sheetRef}
         snapPoints={snapPoints}
         enablePanDownToClose
+        enableContentPanningGesture={!subDrawerOpen}
+        enableHandlePanningGesture={!subDrawerOpen}
         backdropComponent={renderBackdrop}
         onDismiss={handleClose}
         handleIndicatorStyle={styles.indicator}
         backgroundStyle={styles.background}
       >
-        <BottomSheetView style={[styles.content, { paddingBottom: insets.bottom }]}>
+        <BottomSheetScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom }}>
           <Pressable
             onPress={() => sheetRef.current?.dismiss()}
             accessibilityRole="button"
@@ -265,7 +314,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 )}
 
                 {/* Tick FAB */}
-                <Animated.View style={[styles.fabWrapper, fabAnimatedStyle]} pointerEvents={isTickBarActive ? 'none' : 'auto'}>
+                <Animated.View
+                  style={[styles.fabWrapper, fabAnimatedStyle]}
+                  pointerEvents={isTickBarActive ? 'none' : 'auto'}
+                >
                   <PlayDrawerTickFab
                     ascentCount={ascentCount}
                     onPress={handleTickFabPress}
@@ -304,16 +356,71 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 onLightbulb={handleLightbulb}
                 onOpenActions={handleOpenActions}
                 onOpenQueue={handleOpenQueue}
+                currentAngle={angle}
+                onOpenAngleSelector={handleOpenAngleSelector}
+              />
+
+              {/* Below-fold deferred sections */}
+              <DeferredSections
+                climb={displayedClimb}
+                boardName={boardName}
+                layoutId={layoutId}
+                sizeId={sizeId}
+                setIds={setIds}
+                angle={angle}
+                enabled={isSheetOpen}
+                onSimilarClimbPress={handleSimilarClimbPress}
               />
             </>
           )}
-        </BottomSheetView>
+        </BottomSheetScrollView>
       </BottomSheetModal>
 
-      {/* Log Ascent sheet (full, via long-press).
-          TODO: still uses BottomSheet (not BottomSheetModal), so it renders
-          within the screen content area and can appear behind the nav header.
-          Follow-up: convert to BottomSheetModal once PlayDrawer is stable. */}
+      {/* Sub-drawer: Queue */}
+      <QueueSheet
+        visible={activeSubDrawer === 'queue'}
+        onClose={handleCloseSubDrawer}
+        onClimbPress={(item) => {
+          setClimb(item.climb);
+          setCurrentClimb(item);
+          handleCloseSubDrawer();
+        }}
+      />
+
+      {/* Sub-drawer: Climb actions */}
+      <ClimbActionsSheet
+        visible={activeSubDrawer === 'actions'}
+        climb={displayedClimb ?? null}
+        boardName={boardName}
+        layoutId={layoutId}
+        sizeId={sizeId}
+        setIds={setIds}
+        angle={angle}
+        onAddToQueue={() => {
+          if (displayedClimb) {
+            addToQueue({
+              uuid: randomUUID(),
+              climb: displayedClimb,
+            });
+          }
+        }}
+        onToggleFavorite={handleToggleFavorite}
+        onClose={handleCloseSubDrawer}
+      />
+
+      {/* Sub-drawer: Angle selector */}
+      <AngleSelectorSheet
+        visible={activeSubDrawer === 'angleSelector'}
+        onClose={handleCloseSubDrawer}
+        boardName={boardName}
+        layoutId={layoutId}
+        currentAngle={angle}
+        onAngleChange={() => {
+          handleCloseSubDrawer();
+        }}
+      />
+
+      {/* Log Ascent sheet (full, via long-press) */}
       {displayedClimb && (
         <LogAscentSheet
           visible={showLogAscent}
