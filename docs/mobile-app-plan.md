@@ -465,13 +465,13 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 - **`useHaptic()` hook** integrated into all interactive base components
 - Auth flow: `expo-auth-session` + backend bearer token endpoint (reuse existing `/auth/native-start` flow)
 - GraphQL client: TanStack Query + `graphql-request` (same pattern as web)
-- **Offline data setup**: configure `expo-sqlite` with pre-warmed database, implement mutation queue for offline writes. See [offline-sync-plan.md](offline-sync-plan.md).
+- **Offline data setup**: configure `expo-sqlite` with pre-warmed database for offline climb browsing. Mutation queue and sync pull client are built in Phase 5. See [offline-sync-plan.md](offline-sync-plan.md).
 - Navigation skeleton: bottom tab bar with blur, native-stack navigators per tab, large title headers, search bar on Search tab
 
 ### Phase 2: Core climb experience (5 weeks)
 
 - i18n setup: `i18next` + `react-i18next` with shared catalogs from `packages/web/i18n/locales/` (en-US, es, fr). All user-facing strings must go through `t()` — Phase 1 placeholder screens use hardcoded English that must be replaced.
-- **Sync integration**: implement sync pull queries on backend (~8 GraphQL resolvers), create `sync_deletions` table + triggers, add `updated_at` columns to 8 tables, build pre-warmed database pipeline. See [offline-sync-plan.md](offline-sync-plan.md).
+- **Sync backend prerequisites**: `updated_at` columns on 8 tables + auto-update triggers, `sync_deletions` table + per-table trigger functions, idempotent `saveTick`/`createPlaylist` (accept client UUID), new `addFavorite`/`removeFavorite` mutations, sync pull resolvers (10 GraphQL queries with composite cursor). See [offline-sync-plan.md](offline-sync-plan.md).
 - Climb browsing with FlashList, swipe actions, context menus
 - Board renderer with SwiftUI `Canvas` on iOS — validate 120fps on ProMotion early in week 1
 - Climb detail view with board visualization, action sheet
