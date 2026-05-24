@@ -36,7 +36,8 @@ xcrun simctl spawn booted log stream \
   > "$LOG_FILE" 2>&1 || true
 
 if grep -qiE '(FATAL|fatal error|crash|EXC_BAD_ACCESS|EXC_CRASH|SIGABRT)' "$LOG_FILE" 2>/dev/null; then
-  echo "[mobile-sim] WARNING: Crash/fatal patterns detected in device logs. Review .boardsesh/mobile-device.log"
+  echo "[mobile-sim] FAILED: Crash/fatal patterns detected in device logs. Review .boardsesh/mobile-device.log"
+  exit 1
 fi
 
 echo "[mobile-sim] Build successful, 30s of device logs captured to .boardsesh/mobile-device.log"

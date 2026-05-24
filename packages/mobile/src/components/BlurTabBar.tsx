@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
+import { useBluetoothConnectedStatus } from '../lib/ble/bluetooth-status-store';
+import { brandColors } from '../theme/colors';
 
 const TAB_BAR_HEIGHT = 49;
 
@@ -24,6 +26,7 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const isBluetoothConnected = useBluetoothConnectedStatus();
 
   const activeTint = iosSystemColors.systemBlue;
   const inactiveTint = isDark ? iosDarkColors.systemGray : iosLightColors.inactiveGray;
@@ -38,6 +41,7 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
         const tintColor = isFocused ? activeTint : inactiveTint;
         const iconName = TAB_ICONS[route.name] ?? 'dots-horizontal';
         const showBadge = route.name === 'queue' && QUEUE_BADGE_COUNT > 0;
+        const showBluetoothDot = route.name === 'queue' && isBluetoothConnected;
 
         const onPress = () => {
           const event = navigation.emit({
@@ -75,6 +79,7 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
                   <Text style={styles.badgeText}>{QUEUE_BADGE_COUNT}</Text>
                 </View>
               )}
+              {showBluetoothDot && <View style={styles.bluetoothDot} />}
             </View>
             <Text style={[styles.label, { color: tintColor }]} numberOfLines={1}>
               {label}
@@ -170,6 +175,15 @@ const styles = StyleSheet.create({
     color: iosSystemColors.white,
     fontSize: 11,
     fontWeight: '600',
+  },
+  bluetoothDot: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: brandColors.success,
   },
   label: {
     fontSize: 10,

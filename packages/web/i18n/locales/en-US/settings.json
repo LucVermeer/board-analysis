@@ -354,5 +354,20 @@
   "auroraImport": {
     "unlinkSuccessToast": "Account unlinked successfully",
     "uploadAriaLabel": "Upload Aurora JSON export file"
+  },
+  "ble": {
+    "scanning": "Scanning for boards nearby…",
+    "selectBoard": "Select Board",
+    "devicesFound_one": "{{count}} board found",
+    "devicesFound_other": "{{count}} boards found",
+    "noDevicesFound": "No boards found nearby",
+    "cancel": "Cancel",
+    "unknownBoard": "Unknown Board",
+    "disconnected": "Board disconnected",
+    "reconnect": "Reconnect",
+    "connectBoard": "Connect Board",
+    "connected": "Connected",
+    "notAvailable": "Bluetooth is not available",
+    "signalStrength": "Signal: {{strength}}"
   }
 }

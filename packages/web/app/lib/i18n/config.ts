@@ -124,3 +124,16 @@ export function isSupportedLocale(value: string | undefined | null): value is Lo
 // i18n-keep session.mobile.queue.positionLabel
 // i18n-keep session.mobile.queue.previousClimb
 // i18n-keep session.mobile.queue.removeClimb
+// i18n-keep settings.ble.scanning
+// i18n-keep settings.ble.selectBoard
+// i18n-keep settings.ble.devicesFound_one
+// i18n-keep settings.ble.devicesFound_other
+// i18n-keep settings.ble.noDevicesFound
+// i18n-keep settings.ble.cancel
+// i18n-keep settings.ble.unknownBoard
+// i18n-keep settings.ble.disconnected
+// i18n-keep settings.ble.reconnect
+// i18n-keep settings.ble.connectBoard
+// i18n-keep settings.ble.connected
+// i18n-keep settings.ble.notAvailable
+// i18n-keep settings.ble.signalStrength

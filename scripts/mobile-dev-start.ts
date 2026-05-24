@@ -108,7 +108,9 @@ console.log(`[dev:mobile] Metro log: .boardsesh/mobile-metro.log`);
 mkdirSync(BOARDSESH_DIR, { recursive: true });
 const logStream = createWriteStream(METRO_LOG_PATH, { flags: 'w' });
 
-const childEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+const childEnv: Record<string, string> = Object.fromEntries(
+  Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+);
 if (branchName) childEnv.BOARDSESH_DEV_BRANCH_NAME = branchName;
 if (qaNotes.contents) childEnv.BOARDSESH_DEV_QA_NOTES = qaNotes.contents;
 if (qaNotes.filePath) childEnv.BOARDSESH_DEV_QA_NOTES_FILE = qaNotes.filePath;

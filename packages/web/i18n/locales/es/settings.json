@@ -354,5 +354,20 @@
   "auroraImport": {
     "unlinkSuccessToast": "Cuenta desvinculada",
     "uploadAriaLabel": "Subir archivo JSON exportado de Aurora"
+  },
+  "ble": {
+    "scanning": "Buscando tableros cercanos…",
+    "selectBoard": "Seleccionar tablero",
+    "devicesFound_one": "{{count}} tablero encontrado",
+    "devicesFound_other": "{{count}} tableros encontrados",
+    "noDevicesFound": "No se encontraron tableros cercanos",
+    "cancel": "Cancelar",
+    "unknownBoard": "Tablero desconocido",
+    "disconnected": "Tablero desconectado",
+    "reconnect": "Reconectar",
+    "connectBoard": "Conectar tablero",
+    "connected": "Conectado",
+    "notAvailable": "Bluetooth no está disponible",
+    "signalStrength": "Señal: {{strength}}"
   }
 }

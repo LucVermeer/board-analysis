@@ -354,5 +354,20 @@
   "auroraImport": {
     "unlinkSuccessToast": "Compte délié avec succès",
     "uploadAriaLabel": "Importer un fichier d'export JSON Aurora"
+  },
+  "ble": {
+    "scanning": "Recherche de panneaux à proximité…",
+    "selectBoard": "Sélectionner un panneau",
+    "devicesFound_one": "{{count}} panneau trouvé",
+    "devicesFound_other": "{{count}} panneaux trouvés",
+    "noDevicesFound": "Aucun panneau trouvé à proximité",
+    "cancel": "Annuler",
+    "unknownBoard": "Panneau inconnu",
+    "disconnected": "Panneau déconnecté",
+    "reconnect": "Reconnecter",
+    "connectBoard": "Connecter le panneau",
+    "connected": "Connecté",
+    "notAvailable": "Le Bluetooth n'est pas disponible",
+    "signalStrength": "Signal : {{strength}}"
   }
 }

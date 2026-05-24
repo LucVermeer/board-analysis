@@ -39,6 +39,7 @@ export function DevMetadataPanel() {
 
   return (
     <View style={styles.wrapper}>
+      {/* i18n-ignore-next-line — dev-only panel, never shown in production builds */}
       <SectionHeader title="Dev Build" />
       <View
         style={[
@@ -52,6 +53,7 @@ export function DevMetadataPanel() {
       >
         {branchName ? (
           <View style={styles.row}>
+            {/* i18n-ignore-next-line */}
             <Text variant="footnote" color={systemColors.secondaryLabel}>
               Branch
             </Text>
@@ -67,6 +69,7 @@ export function DevMetadataPanel() {
 
         {qaNotes ? (
           <View style={styles.notesSection}>
+            {/* i18n-ignore-next-line */}
             <Text variant="footnote" color={systemColors.secondaryLabel}>
               QA Notes
             </Text>

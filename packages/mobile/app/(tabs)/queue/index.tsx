@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl, useColorScheme } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -6,7 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../../src/providers/queue-provider';
+import { useOptionalBluetoothContext } from '../../../src/providers/bluetooth-provider';
 import { QueueItemRow } from '../../../src/components/QueueItemRow';
+import { BluetoothStatusIcon } from '../../../src/components/ble/BluetoothStatusIcon';
+import { ConnectionBanner } from '../../../src/components/ble/ConnectionBanner';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
@@ -28,6 +31,38 @@ export default function QueueScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation('session');
+
+  const bluetooth = useOptionalBluetoothContext();
+  const [showConnectionBanner, setShowConnectionBanner] = useState(false);
+  const wasConnectedRef = useRef(false);
+
+  // Show the reconnect banner when BLE drops unexpectedly
+  useEffect(() => {
+    if (!bluetooth) return;
+    if (wasConnectedRef.current && !bluetooth.isConnected) {
+      setShowConnectionBanner(true);
+    }
+    wasConnectedRef.current = bluetooth.isConnected;
+  }, [bluetooth?.isConnected, bluetooth]);
+
+  const handleBluetoothPress = useCallback(() => {
+    if (!bluetooth) return;
+    if (bluetooth.isConnected) {
+      void bluetooth.disconnect();
+    } else {
+      void bluetooth.connect();
+    }
+  }, [bluetooth]);
+
+  const handleReconnect = useCallback(() => {
+    if (!bluetooth) return;
+    setShowConnectionBanner(false);
+    void bluetooth.connect();
+  }, [bluetooth]);
+
+  const handleDismissBanner = useCallback(() => {
+    setShowConnectionBanner(false);
+  }, []);
 
   const navBarBackground = isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)';
   const navBarBottomPadding = insets.bottom + TAB_BAR_HEIGHT;
@@ -136,6 +171,14 @@ export default function QueueScreen() {
   // Queue list
   return (
     <View style={styles.container}>
+      {bluetooth && (
+        <ConnectionBanner
+          visible={showConnectionBanner}
+          onReconnect={handleReconnect}
+          onDismiss={handleDismissBanner}
+        />
+      )}
+
       <FlashList
         data={queue}
         renderItem={renderItem}
@@ -225,6 +268,14 @@ export default function QueueScreen() {
             color={currentClimbQueueItem ? brandColors.primary : systemColors.secondaryLabel}
           />
         </Pressable>
+
+        {bluetooth && (
+          <BluetoothStatusIcon
+            isConnected={bluetooth.isConnected}
+            isScanning={bluetooth.loading}
+            onPress={handleBluetoothPress}
+          />
+        )}
       </Animated.View>
 
       {currentClimbQueueItem && defaultBoard && (
