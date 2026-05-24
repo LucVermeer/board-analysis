@@ -35,7 +35,7 @@
     "graphql": "^16.0.0",
     "graphql-request": "^7.0.0",
     "graphql-ws": "^6.0.0",
-    "i18next": "^24.0.0",
+    "i18next": "^23.16.8",
     "react": "^19.0.0",
     "react-i18next": "^15.0.0",
     "react-native": "~0.79.0",
