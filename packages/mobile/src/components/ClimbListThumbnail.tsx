@@ -32,7 +32,7 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
     <Image
       source={{ uri }}
       style={[styles.thumbnail, mirrored && styles.mirrored]}
-      contentFit="cover"
+      contentFit="contain"
       recyclingKey={frames}
       cachePolicy="memory-disk"
       transition={150}
