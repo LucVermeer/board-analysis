@@ -1,6 +1,5 @@
 import { memo, useCallback } from 'react';
 import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import type { ActionBarContract } from '@boardsesh/play-view';
 import { Icon } from '../Icon';
 import { Badge } from '../Badge';
@@ -27,8 +26,6 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   onOpenActions,
   onOpenQueue,
 }: PlayDrawerActionBarProps) {
-  const { t } = useTranslation('session');
-
   const handlePrev = useCallback(() => {
     hapticMedium();
     onPrevClick();
@@ -54,73 +51,70 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
     onLightbulb();
   }, [onLightbulb]);
 
-  const handleOpenActions = useCallback(() => {
-    hapticMedium();
-    onOpenActions();
-  }, [onOpenActions]);
-
-  const handleOpenQueue = useCallback(() => {
-    hapticMedium();
-    onOpenQueue();
-  }, [onOpenQueue]);
-
   return (
     <View style={styles.container}>
+      {/* Previous */}
       <ActionButton
         iconName="skip.previous"
         onPress={handlePrev}
         disabled={!canSwipePrevious}
-        accessibilityLabel={t('playView.actionBar.previousAria')}
+        accessibilityLabel="Previous climb"
       />
 
+      {/* Mirror */}
       {supportsMirroring && (
         <ActionButton
           iconName="mirror"
           onPress={handleMirror}
           active={isMirrored}
           activeColor={brandColors.primary}
-          accessibilityLabel={isMirrored ? t('playView.actionBar.unmirrorAria') : t('playView.actionBar.mirrorAria')}
+          accessibilityLabel={isMirrored ? 'Unmirror climb' : 'Mirror climb'}
         />
       )}
 
+      {/* Favorite */}
       <ActionButton
         iconName={isFavorited ? 'favorite.fill' : 'favorite'}
         onPress={handleFavorite}
         iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
-        accessibilityLabel={isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')}
+        accessibilityLabel={isFavorited ? 'Remove favorite' : 'Add favorite'}
       />
 
+      {/* Lightbulb */}
       <ActionButton
         iconName={lightbulbActive ? 'lightbulb.fill' : 'lightbulb'}
         onPress={handleLightbulb}
         iconColor={lightbulbActive ? brandColors.warning : undefined}
-        accessibilityLabel={t('playView.actionBar.sendToBoardAria')}
+        accessibilityLabel="Send to board"
       />
 
+      {/* More actions */}
       <ActionButton
         iconName="more"
-        onPress={handleOpenActions}
-        accessibilityLabel={t('playView.actionBar.climbActionsAria')}
+        onPress={onOpenActions}
+        accessibilityLabel="More actions"
       />
 
+      {/* Queue */}
       <View>
         <ActionButton
           iconName="queue"
-          onPress={handleOpenQueue}
-          accessibilityLabel={t('playView.actionBar.queueCountAria', { count: remainingQueueCount })}
+          onPress={onOpenQueue}
+          accessibilityLabel={`Queue, ${remainingQueueCount} climbs`}
         />
         {remainingQueueCount > 0 && (
-          <View style={styles.badgeContainer} pointerEvents="none">
-            <Badge count={remainingQueueCount} color={brandColors.primary} />
+          <View style={styles.badgeContainer}>
+            <Badge count={remainingQueueCount} color={brandColors.primary} size="small" />
           </View>
         )}
       </View>
 
+      {/* Next */}
       <ActionButton
         iconName="skip.next"
         onPress={handleNext}
         disabled={!canSwipeNext}
-        accessibilityLabel={t('playView.actionBar.nextAria')}
+        accessibilityLabel="Next climb"
       />
     </View>
   );

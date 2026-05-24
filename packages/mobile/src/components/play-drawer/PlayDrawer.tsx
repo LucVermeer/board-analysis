@@ -1,11 +1,10 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, Image } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
-import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
+import { computeNavigationState } from '@boardsesh/play-view';
 import { BoardRenderer } from '../board-renderer';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
@@ -40,31 +39,28 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   { boardConfig },
   ref,
 ) {
-  const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
   const [climb, setClimb] = useState<Climb | null>(null);
   const [showLogAscent, setShowLogAscent] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
-  const [isFavorited, setIsFavorited] = useState(false);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId } = useQueue();
-  const { mutate: toggleFavoriteMutate } = useToggleFavorite();
-
-  const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
+  const toggleFavorite = useToggleFavorite();
 
   const boardRenderData = useMemo(() => {
-    const parsedSetIds = setIds.split(',').map(Number);
+    const parsedSetIds = boardConfig.setIds.split(',').map(Number);
     return getBoardRenderData({
-      boardName: boardName as BoardName,
-      layoutId,
-      sizeId,
+      boardName: boardConfig.boardName as BoardName,
+      layoutId: boardConfig.layoutId,
+      sizeId: boardConfig.sizeId,
       setIds: parsedSetIds,
     });
-  }, [boardName, layoutId, sizeId, setIds]);
+  }, [boardConfig]);
 
+  // Pre-warm images when board config changes — side effect, not a computed value
   const imageUrls = boardRenderData?.imageUrls;
-  useEffect(() => {
+  useMemo(() => {
     if (imageUrls) {
       for (const url of imageUrls) {
         Image.prefetch(url);
@@ -77,13 +73,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [state.queue, state.currentClimbQueueItem],
   );
 
-  const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;
+  // Track displayed climb — either current queue item or locally set climb
+  const displayedClimb = state.currentClimbQueueItem?.climb ?? climb;
 
   useImperativeHandle(ref, () => ({
     open: (selectedClimb: Climb) => {
       setClimb(selectedClimb);
       setIsMirrored(false);
-      setIsFavorited(false);
+      // Add to queue and set as current
       const queueItem = {
         uuid: randomUUID(),
         climb: {
@@ -98,8 +95,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           stars: selectedClimb.stars,
           difficulty_error: selectedClimb.difficulty_error,
           benchmark_difficulty: selectedClimb.benchmark_difficulty,
-          userAscents: selectedClimb.userAscents,
-          userAttempts: selectedClimb.userAttempts,
         },
       };
       setCurrentClimb(queueItem);
@@ -116,17 +111,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handlePrev = useCallback(() => {
-    setClimb(null);
     previousClimb();
     setIsMirrored(false);
-    setIsFavorited(false);
   }, [previousClimb]);
 
   const handleNext = useCallback(() => {
-    setClimb(null);
     nextClimb();
     setIsMirrored(false);
-    setIsFavorited(false);
   }, [nextClimb]);
 
   const handleMirror = useCallback(() => {
@@ -136,15 +127,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const handleToggleFavorite = useCallback(() => {
     if (!displayedClimb) return;
     hapticSuccess();
-    setIsFavorited((prev) => !prev);
-    toggleFavoriteMutate({
+    toggleFavorite.mutate({
       input: {
-        boardName,
+        boardName: boardConfig.boardName,
         climbUuid: displayedClimb.uuid,
-        angle,
+        angle: boardConfig.angle,
       },
     });
-  }, [displayedClimb, boardName, angle, toggleFavoriteMutate]);
+  }, [displayedClimb, boardConfig, toggleFavorite]);
 
   const handleLightbulb = useCallback(() => {
     // Phase 5: BLE integration
@@ -171,8 +161,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const snapPoints = useMemo(() => ['95%'], []);
 
+  // Determine ascent count from displayed climb
   const ascentCount = displayedClimb?.userAscents ?? 0;
-  const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
+
+  // Determine favorite state (optimistic placeholder — actual tracking needs server state)
+  const isFavorited = false; // Phase 2: track via GraphQL
+
+  // getBoardRenderData does not expose supportsMirroring — default to false
+  const supportsMirroring = false;
 
   return (
     <>
@@ -187,11 +183,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         backgroundStyle={styles.background}
       >
         <BottomSheetView style={[styles.content, { paddingBottom: insets.bottom }]}>
+          {/* Close button */}
           <Pressable
             onPress={() => sheetRef.current?.close()}
             accessibilityRole="button"
-            accessibilityLabel={t('playView.closeAria')}
-            hitSlop={8}
+            accessibilityLabel="Close"
             style={styles.closeButton}
           >
             <Icon name="close" size={20} color={iosSystemColors.systemGray} />
@@ -199,6 +195,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
           {displayedClimb && (
             <>
+              {/* Header */}
               <PlayDrawerHeader
                 name={displayedClimb.name}
                 difficulty={displayedClimb.difficulty}
@@ -208,11 +205,12 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 setterUsername={displayedClimb.setter_username}
               />
 
+              {/* Board section */}
               <View style={styles.boardSection}>
                 {boardRenderData && (
                   <BoardRenderer
                     frames={displayedClimb.frames}
-                    boardName={boardName as BoardName}
+                    boardName={boardConfig.boardName as BoardName}
                     boardWidth={boardRenderData.boardWidth}
                     boardHeight={boardRenderData.boardHeight}
                     imageUrls={boardRenderData.imageUrls}
@@ -221,12 +219,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   />
                 )}
 
+                {/* Tick FAB */}
                 <PlayDrawerTickFab
                   ascentCount={ascentCount}
                   onPress={handleTickFabPress}
                 />
               </View>
 
+              {/* Action bar */}
               <PlayDrawerActionBar
                 canSwipePrevious={navigationState.canPrevious}
                 canSwipeNext={navigationState.canNext}
@@ -248,19 +248,20 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         </BottomSheetView>
       </BottomSheet>
 
+      {/* Log Ascent sheet */}
       {displayedClimb && (
         <LogAscentSheet
           visible={showLogAscent}
           onDismiss={() => setShowLogAscent(false)}
           climbUuid={displayedClimb.uuid}
           climbName={displayedClimb.name}
-          boardName={boardName}
-          angle={angle}
+          boardName={boardConfig.boardName}
+          angle={boardConfig.angle}
           isMirror={isMirrored}
           isBenchmark={displayedClimb.benchmark_difficulty != null}
-          layoutId={layoutId}
-          sizeId={sizeId}
-          setIds={setIds}
+          layoutId={boardConfig.layoutId}
+          sizeId={boardConfig.sizeId}
+          setIds={boardConfig.setIds}
           sessionId={sessionId}
         />
       )}

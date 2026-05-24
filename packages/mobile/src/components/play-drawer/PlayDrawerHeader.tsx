@@ -1,6 +1,5 @@
 import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from '../Text';
 import { formatAscentCount } from '../../lib/format-ascent-count';
@@ -24,15 +23,15 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   stars,
   setterUsername,
 }: PlayDrawerHeaderProps) {
-  const { t } = useTranslation('common');
   const gradeColor = useMemo(() => getGradeColor(difficulty) ?? DEFAULT_GRADE_COLOR, [difficulty]);
 
   const qualityNum = parseFloat(qualityAverage);
   const qualityDisplay = stars > 0 ? stars.toFixed(1) : qualityNum > 0 ? qualityNum.toFixed(1) : null;
 
+  // Build subtitle parts, filtering empty values
   const subtitleParts: string[] = [];
   if (qualityDisplay) subtitleParts.push(`${qualityDisplay}★`);
-  subtitleParts.push(t('mobile.play.sendCount', { count: ascensionistCount }));
+  subtitleParts.push(`${formatAscentCount(ascensionistCount)} sends`);
   if (setterUsername) subtitleParts.push(setterUsername);
 
   return (

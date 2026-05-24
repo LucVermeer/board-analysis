@@ -1,6 +1,5 @@
 import { memo, useCallback } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { brandColors } from '../../theme/colors';
@@ -17,7 +16,6 @@ export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
   ascentCount,
   onPress,
 }: PlayDrawerTickFabProps) {
-  const { t } = useTranslation('session');
   const handlePress = useCallback(() => {
     hapticMedium();
     onPress();
@@ -27,7 +25,7 @@ export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
     <Pressable
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={t('playView.tickFab.logAscentAria')}
+      accessibilityLabel={ascentCount > 0 ? `Log ascent, ${ascentCount} logged` : 'Log ascent'}
       style={({ pressed }) => [
         styles.fab,
         pressed && styles.fabPressed,
@@ -50,9 +48,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 12,
     right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: brandColors.success,
     alignItems: 'center',
     justifyContent: 'center',
