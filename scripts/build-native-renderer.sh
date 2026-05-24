@@ -57,10 +57,12 @@ lipo -create \
   "$RELEASE_DIR/x86_64-apple-ios/release/libboard_renderer_ffi.a" \
   -output "$SIM_FAT_DIR/libboard_renderer_ffi.a"
 
-# xcodebuild -create-xcframework expects a headers directory, not a single file
+# xcodebuild -create-xcframework expects a headers directory
 HEADERS_DIR="$MODULE_DIR/ios/include"
-mkdir -p "$HEADERS_DIR"
-cp "$MODULE_DIR/ios/board_renderer.h" "$HEADERS_DIR/"
+if [ ! -f "$HEADERS_DIR/board_renderer.h" ]; then
+  echo "ERROR: $HEADERS_DIR/board_renderer.h not found" >&2
+  exit 1
+fi
 
 xcodebuild -create-xcframework \
   -library "$RELEASE_DIR/aarch64-apple-ios/release/libboard_renderer_ffi.a" \

@@ -126,7 +126,10 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
 
   useEffect(() => {
     const nativeModule = getNativeModule();
-    if (!nativeModule) return;
+    if (!nativeModule) {
+      setUri(serverUrl);
+      return;
+    }
 
     const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds);
     if (!boardConfig) return;

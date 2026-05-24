@@ -27,6 +27,15 @@ function extractFilename(imageUrl: string): string {
 }
 
 /**
+ * Strip the file:// scheme prefix from a URI to produce a plain
+ * filesystem path. Native image decoders (BitmapFactory.decodeFile,
+ * UIImage(contentsOfFile:)) expect paths, not URIs.
+ */
+function toFilesystemPath(fileUri: string): string {
+  return fileUri.replace(/^file:\/\//, '');
+}
+
+/**
  * Ensure all background images for a board configuration are cached locally.
  * Downloads thumbnail variants (smaller, webp) for faster initial load.
  * Returns an array of local file paths usable by the native renderer.
@@ -53,14 +62,14 @@ export async function ensureBackgroundsCached(params: {
     const localFile = new File(boardDir, filename);
 
     if (localFile.exists) {
-      localPaths.push(localFile.uri);
+      localPaths.push(toFilesystemPath(localFile.uri));
       continue;
     }
 
     try {
       const downloaded = await File.downloadFileAsync(thumbUrl, localFile);
       if (downloaded) {
-        localPaths.push(downloaded.uri);
+        localPaths.push(toFilesystemPath(downloaded.uri));
       }
     } catch {
       // Download failed — skip this background layer
