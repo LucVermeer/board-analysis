@@ -69,40 +69,44 @@ export class RNBleAdapter implements BluetoothAdapter {
       });
     }
 
-    bleManager.startDeviceScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID], null, (scanError, scannedDevice) => {
-      if (scanError) {
-        bleManager.stopDeviceScan();
-        if (autoSelectReject) {
-          autoSelectReject(new Error(`BLE scan failed: ${scanError.message}`));
-          autoSelectReject = null;
+    bleManager.startDeviceScan(
+      [AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID],
+      null,
+      (scanError, scannedDevice) => {
+        if (scanError) {
+          bleManager.stopDeviceScan();
+          if (autoSelectReject) {
+            autoSelectReject(new Error(`BLE scan failed: ${scanError.message}`));
+            autoSelectReject = null;
+          }
+          // For picker-based selection, reject via the pickerReject if the
+          // picker provided one; otherwise the scan timeout will eventually
+          // fire. The error is logged so the user sees feedback.
+          return;
         }
-        // For picker-based selection, reject via the pickerReject if the
-        // picker provided one; otherwise the scan timeout will eventually
-        // fire. The error is logged so the user sees feedback.
-        return;
-      }
 
-      if (!scannedDevice) return;
+        if (!scannedDevice) return;
 
-      const device: DiscoveredDevice = {
-        deviceId: scannedDevice.id,
-        name: scannedDevice.localName ?? scannedDevice.name ?? undefined,
-        rssi: scannedDevice.rssi ?? -100,
-      };
+        const device: DiscoveredDevice = {
+          deviceId: scannedDevice.id,
+          name: scannedDevice.localName ?? scannedDevice.name ?? undefined,
+          rssi: scannedDevice.rssi ?? -100,
+        };
 
-      // Deduplicate by deviceId — react-native-ble-plx uses stable
-      // peripheral UUIDs on iOS and device addresses on Android.
-      devices.set(device.deviceId, device);
-      pushDevices();
+        // Deduplicate by deviceId — react-native-ble-plx uses stable
+        // peripheral UUIDs on iOS and device addresses on Android.
+        devices.set(device.deviceId, device);
+        pushDevices();
 
-      if (autoSelectResolve && targetSerial) {
-        const serial = parseSerialNumber(device.name);
-        if (serial === targetSerial) {
-          autoSelectResolve(device.deviceId);
-          autoSelectResolve = null;
+        if (autoSelectResolve && targetSerial) {
+          const serial = parseSerialNumber(device.name);
+          if (serial === targetSerial) {
+            autoSelectResolve(device.deviceId);
+            autoSelectResolve = null;
+          }
         }
-      }
-    });
+      },
+    );
 
     const scanTimeoutId = setTimeout(() => {
       bleManager.stopDeviceScan();
@@ -133,16 +137,18 @@ export class RNBleAdapter implements BluetoothAdapter {
       }
     }
 
+    let connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
     const connected = await Promise.race([
       bleManager.connectToDevice(selectedDeviceId),
       new Promise<never>((_resolve, reject) => {
-        setTimeout(() => {
-          // Fire-and-forget cancellation of the pending connection attempt
+        connectionTimeoutId = setTimeout(() => {
           bleManager.cancelDeviceConnection(selectedDeviceId).catch(() => {});
           reject(new Error('Connection timed out — board may be powered off'));
         }, CONNECTION_TIMEOUT_MS);
       }),
-    ]);
+    ]).finally(() => {
+      if (connectionTimeoutId != null) clearTimeout(connectionTimeoutId);
+    });
 
     // Negotiate MTU before service discovery (Android requires this order
     // for best results; iOS handles MTU automatically but the call is safe).

@@ -141,8 +141,7 @@ const ZoomableView = React.memo(function ZoomableView({
       }
     });
 
-  // Compose gestures: pinch and pan are simultaneous, double-tap is exclusive
-  const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture, doubleTapGesture);
+  const composedGesture = Gesture.Exclusive(doubleTapGesture, Gesture.Simultaneous(pinchGesture, panGesture));
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],

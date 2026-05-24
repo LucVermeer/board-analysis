@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
 
@@ -30,9 +31,7 @@ export function reportError(error: unknown): void {
  * Wrap a root component with the Sentry error tracking HOC.
  * Returns the component unchanged when Sentry is not active.
  */
-export function wrapWithSentry<P extends Record<string, unknown>>(
-  component: React.ComponentType<P>,
-): React.ComponentType<P> {
+export function wrapWithSentry<P extends Record<string, unknown>>(component: ComponentType<P>): ComponentType<P> {
   if (!isSentryEnabled) return component;
   return Sentry.wrap(component);
 }
