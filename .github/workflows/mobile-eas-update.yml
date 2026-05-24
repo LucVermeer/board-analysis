@@ -21,6 +21,10 @@ on:
         required: false
         default: 'all'
 
+permissions:
+  contents: read
+  pull-requests: write
+
 concurrency:
   group: mobile-eas-update-${{ github.ref }}
   cancel-in-progress: true
