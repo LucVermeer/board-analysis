@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import type { BoardName } from '@boardsesh/shared-schema';
-import { buildThumbnailUrl } from '../lib/thumbnail-url';
+import { useNativeThumbnail } from '../hooks/use-native-thumbnail';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
 
@@ -23,10 +23,7 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
   setIds,
   mirrored,
 }: ClimbListThumbnailProps) {
-  const uri = useMemo(
-    () => buildThumbnailUrl({ boardName, layoutId, sizeId, setIds, frames }),
-    [boardName, layoutId, sizeId, setIds, frames],
-  );
+  const { uri } = useNativeThumbnail({ frames, boardName, layoutId, sizeId, setIds, mirrored });
 
   return (
     <Image

@@ -174,7 +174,7 @@ jobs:
             ${{ runner.os }}-nextjs-
 
       - name: Build all packages
-        # board-renderer-wasm ships pre-built pkg/ in git, so vp run build skips
+        # board-renderer/wasm ships pre-built pkg/ in git, so vp run build skips
         # its wasm-pack step. vp handles the build:shared → build:db → build:web
         # dependency graph internally.
         run: vp run build

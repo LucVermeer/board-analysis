@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["BoardRendererModule"]
+  },
+  "android": {
+    "modules": ["com.boardsesh.boardrenderer.BoardRendererModule"]
+  }
+}

@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "packages/shared/*"
+    "packages/shared/*",
+    "packages/board-renderer/wasm"
   ],
   "scripts": {
     "lint": "vp lint",
@@ -26,7 +27,7 @@
     "moonboard:monitor": "cd embedded/projects/moonboard-dev-server && pio device monitor",
     "controller:format": "find embedded -name '*.cpp' -o -name '*.h' | xargs clang-format -i",
     "controller:format:check": "find embedded -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror",
-    "build:wasm": "cd packages/board-renderer-wasm && bash build.sh"
+    "build:wasm": "cd packages/board-renderer/wasm && bash build.sh"
   },
   "dependencies": {
     "react": "^19.2.4",

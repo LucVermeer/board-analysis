@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum HoldRenderStyle {
     #[default]
