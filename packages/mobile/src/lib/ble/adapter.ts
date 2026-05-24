@@ -11,6 +11,7 @@ import { bleManager } from './ble-manager';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
 
 const SCAN_TIMEOUT_MS = 30_000;
+const CONNECTION_TIMEOUT_MS = 12_000;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -68,8 +69,20 @@ export class RNBleAdapter implements BluetoothAdapter {
       });
     }
 
-    bleManager.startDeviceScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID], null, (_error, scannedDevice) => {
-      if (_error || !scannedDevice) return;
+    bleManager.startDeviceScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID], null, (scanError, scannedDevice) => {
+      if (scanError) {
+        bleManager.stopDeviceScan();
+        if (autoSelectReject) {
+          autoSelectReject(new Error(`BLE scan failed: ${scanError.message}`));
+          autoSelectReject = null;
+        }
+        // For picker-based selection, reject via the pickerReject if the
+        // picker provided one; otherwise the scan timeout will eventually
+        // fire. The error is logged so the user sees feedback.
+        return;
+      }
+
+      if (!scannedDevice) return;
 
       const device: DiscoveredDevice = {
         deviceId: scannedDevice.id,
@@ -120,7 +133,16 @@ export class RNBleAdapter implements BluetoothAdapter {
       }
     }
 
-    const connected = await bleManager.connectToDevice(selectedDeviceId);
+    const connected = await Promise.race([
+      bleManager.connectToDevice(selectedDeviceId),
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(() => {
+          // Fire-and-forget cancellation of the pending connection attempt
+          bleManager.cancelDeviceConnection(selectedDeviceId).catch(() => {});
+          reject(new Error('Connection timed out — board may be powered off'));
+        }, CONNECTION_TIMEOUT_MS);
+      }),
+    ]);
 
     // Negotiate MTU before service discovery (Android requires this order
     // for best results; iOS handles MTU automatically but the call is safe).
@@ -189,6 +211,13 @@ export class RNBleAdapter implements BluetoothAdapter {
         throw new DOMException('Write aborted', 'AbortError');
       }
 
+      // Re-check the characteristic before each chunk — a mid-write
+      // disconnect sets it to null via the onDeviceDisconnected handler.
+      const characteristic = this.writeCharacteristic;
+      if (!characteristic) {
+        throw new Error('Device disconnected during write');
+      }
+
       if (chunkIndex > 0) {
         await delay(INTER_CHUNK_DELAY_MS);
       }
@@ -196,7 +225,7 @@ export class RNBleAdapter implements BluetoothAdapter {
       const chunk = chunks[chunkIndex];
       const base64Chunk = uint8ArrayToBase64(chunk);
 
-      await this.writeCharacteristic.writeWithoutResponse(base64Chunk);
+      await characteristic.writeWithoutResponse(base64Chunk);
     }
   }
 

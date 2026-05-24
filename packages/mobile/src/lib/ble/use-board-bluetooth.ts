@@ -72,6 +72,31 @@ type UseBoardBluetoothOptions = {
 
 const KEEP_AWAKE_TAG = 'boardsesh-ble';
 
+/**
+ * Create a single AbortSignal that fires when either of the two input signals
+ * is aborted. This lets us combine a caller-supplied signal with an internal
+ * one without losing either.
+ */
+function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): AbortSignal {
+  const controller = new AbortController();
+
+  const onAbort = () => {
+    controller.abort();
+    signalA.removeEventListener('abort', onAbort);
+    signalB.removeEventListener('abort', onAbort);
+  };
+
+  if (signalA.aborted || signalB.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+
+  signalA.addEventListener('abort', onAbort);
+  signalB.addEventListener('abort', onAbort);
+
+  return controller.signal;
+}
+
 export function useBoardBluetooth({
   boardName,
   layoutId,
@@ -88,6 +113,7 @@ export function useBoardBluetooth({
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
+  const writeAbortRef = useRef<AbortController | null>(null);
 
   const [pickerState, setPickerState] = useState<PickerState | null>(null);
   const pickerRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -140,16 +166,26 @@ export function useBoardBluetooth({
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal) => {
       if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
 
+      // Create an AbortController for this write so connect() can cancel
+      // an in-flight write when creating a new adapter.
+      const writeAbort = new AbortController();
+      writeAbortRef.current = writeAbort;
+
+      // Combine caller-provided signal with the internal abort controller
+      const combinedSignal = signal
+        ? mergeAbortSignals(signal, writeAbort.signal)
+        : writeAbort.signal;
+
       try {
         if (boardName === 'moonboard') {
           // TODO: analytics (Phase 6)
-          return dispatchMoonboardPacket(frames, adapterRef.current.write.bind(adapterRef.current), signal);
+          return dispatchMoonboardPacket(frames, adapterRef.current.write.bind(adapterRef.current), combinedSignal);
         }
 
         // Empty frames = "clear all LEDs" for Aurora boards
         if (frames === '') {
           const clearResult = getAuroraBluetoothPacket('', {}, boardName as AuroraBoardName, apiLevelRef.current);
-          await adapterRef.current.write(clearResult.packet, signal);
+          await adapterRef.current.write(clearResult.packet, combinedSignal);
           return true;
         }
 
@@ -194,7 +230,7 @@ export function useBoardBluetooth({
           console.warn(`[BLE] ${skippedCount} of ${result.totalPlacements} placements skipped`);
         }
 
-        await adapterRef.current.write(result.packet, signal);
+        await adapterRef.current.write(result.packet, combinedSignal);
         // TODO: analytics (Phase 6)
         return true;
       } catch (error) {
@@ -225,6 +261,11 @@ export function useBoardBluetooth({
           Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.notAvailable'));
           return false;
         }
+
+        // Abort any in-flight write from the previous adapter so it
+        // doesn't keep writing on a potentially-disconnected device.
+        writeAbortRef.current?.abort();
+        writeAbortRef.current = null;
 
         // Clean up any existing adapter
         if (adapterRef.current) {
