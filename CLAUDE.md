@@ -63,11 +63,31 @@ Before working on a specific part of the codebase, check the `docs/` directory f
 
 ```
 /packages/
-  /web/           # Next.js web application
-  /backend/       # WebSocket backend for party mode (graphql-ws)
-  /shared-schema/ # Shared GraphQL schema and TypeScript types
-  /db/            # Shared database schema, client, and migrations (drizzle)
+  /web/             # Next.js web application
+  /mobile/          # React Native (Expo) mobile application
+  /backend/         # WebSocket backend for party mode (graphql-ws)
+  /shared-schema/   # Shared GraphQL schema and TypeScript types
+  /shared/
+    /play-view/     # Shared play-drawer logic (queue nav, tick utils, grade display)
+    /queue/          # Queue state machine (reducer, types, event utils)
+    /board-config/   # Board metadata, hold maps, angle tables
+    /board-constants/# Grade colours, difficulty bands
+    /ble-protocol/   # Bluetooth LED control protocol
+  /db/              # Shared database schema, client, and migrations (drizzle)
 ```
+
+## Shared Packages (Web ↔ Mobile Code Reuse)
+
+**Code reuse between web and mobile is the highest priority when adding features that exist on both platforms.** Before writing platform-specific logic, check whether the same behaviour already exists in the other app and extract the shared part into a package under `packages/shared/`.
+
+### Rules
+
+- **One responsibility per package.** Don't dump everything into a single `@boardsesh/shared` mega-package. Name each package after what it does: `@boardsesh/play-view` for play-drawer logic, `@boardsesh/queue` for the queue state machine, `@boardsesh/board-config` for board metadata. If a new shared concern doesn't fit an existing package, create a new one.
+- **No React, no DOM, no React Native in shared packages.** Shared code must be pure TypeScript — types, pure functions, constants, state machines. Platform-specific rendering stays in `packages/web/` and `packages/mobile/`.
+- **No circular dependencies.** Shared packages may depend on other shared packages (e.g., `@boardsesh/play-view` depends on `@boardsesh/queue`) but never on `web`, `mobile`, or `backend`. Use `vp run typecheck` to verify — TypeScript project references will catch cycles.
+- **Extract, don't duplicate.** When implementing a feature on mobile that the web already has, read the web implementation first. Pull the business logic (validation, state derivation, formatting, URL construction) into the appropriate shared package, then have both platforms import it. A duplicated 10-line helper today becomes two divergent copies with different bugs tomorrow.
+- **Web should adopt shared extractions too.** When you extract logic from web into a shared package for mobile, update the web code to import from the shared package in the same PR. Don't leave the web on its inline copy.
+- **Tests live next to the code.** Every shared package has a `src/__tests__/` directory. New shared functions need tests — the shared package is the most leveraged place to catch bugs since both platforms depend on it.
 
 ## Commands
 
