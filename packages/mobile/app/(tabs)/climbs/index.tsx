@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Pressable, StyleSheet, RefreshControl, Image } from 'react-native';
+import { View, Pressable, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -20,7 +20,6 @@ import { useDefaultBoard, useSearchClimbs, useToggleFavorite } from '../../../sr
 import { useQueue } from '../../../src/providers/queue-provider';
 import { PlayDrawer, type PlayDrawerHandle } from '../../../src/components/play-drawer';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
-import { getBoardRenderData } from '../../../src/lib/board-details';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { hapticSuccess } from '../../../src/lib/haptics';
@@ -94,26 +93,6 @@ export default function ClimbList() {
   const angle = defaultBoard?.angle ?? 0;
 
   const hasBoardConfig = !!defaultBoard;
-
-  // Compute board render data once for all thumbnails
-  const boardRenderData = useMemo(() => {
-    if (!defaultBoard) return null;
-    const parsedSetIds = defaultBoard.setIds.split(',').map(Number);
-    return getBoardRenderData({
-      boardName: defaultBoard.boardType as BoardName,
-      layoutId: defaultBoard.layoutId,
-      sizeId: defaultBoard.sizeId,
-      setIds: parsedSetIds,
-    });
-  }, [defaultBoard]);
-
-  // Pre-warm board images so they're cached before the user taps into a climb
-  useEffect(() => {
-    if (!boardRenderData) return;
-    for (const url of boardRenderData.imageUrls) {
-      Image.prefetch(url);
-    }
-  }, [boardRenderData]);
 
   // Track pagination
   const [pageNumber, setPageNumber] = useState(1);
@@ -242,7 +221,9 @@ export default function ClimbList() {
         <ClimbListRow
           climb={climb}
           boardName={boardName}
-          boardRenderData={boardRenderData}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
           angle={angle}
           onPress={handleClimbPress}
           onAddToQueue={handleAddToQueue}
@@ -250,7 +231,7 @@ export default function ClimbList() {
         />
       );
     },
-    [handleClimbPress, boardName, boardRenderData, angle, handleAddToQueue, handleOpenActions],
+    [handleClimbPress, boardName, layoutId, sizeId, setIds, angle, handleAddToQueue, handleOpenActions],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {
@@ -284,6 +265,7 @@ export default function ClimbList() {
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}
         overrideProps={{ estimatedItemSize: 88 }}
+        drawDistance={250}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentInsetAdjustmentBehavior="automatic"

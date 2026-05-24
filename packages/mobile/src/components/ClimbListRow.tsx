@@ -13,7 +13,7 @@ import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from './Text';
 import { Icon } from './Icon';
-import { ClimbThumbnail } from './ClimbThumbnail';
+import { ClimbListThumbnail } from './ClimbListThumbnail';
 import { AscentStatusBadge } from './AscentStatusBadge';
 import { HeartAnimationOverlay } from './HeartAnimationOverlay';
 import { useDoubleTapFavorite } from '../hooks/use-double-tap-favorite';
@@ -24,7 +24,6 @@ import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
-import type { HoldPlacement } from './board-renderer/types';
 
 const MAX_GESTURE_SWIPE = 180;
 const SHORT_ACTION_WIDTH = 120;
@@ -33,17 +32,12 @@ const SHORT_SWIPE_THRESHOLD = 60;
 const TRANSITION_START = 115;
 const LONG_SWIPE_THRESHOLD = 150;
 
-type BoardRenderData = {
-  boardWidth: number;
-  boardHeight: number;
-  imageUrls: string[];
-  holdsData: HoldPlacement[];
-};
-
 type ClimbListRowProps = {
   climb: Climb;
   boardName: BoardName;
-  boardRenderData: BoardRenderData | null;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
   angle: number;
   onPress: (climb: Climb) => void;
   onAddToQueue?: (climb: Climb) => void;
@@ -58,7 +52,9 @@ const AnimatedView = Animated.View;
 const ClimbListRow = React.memo(function ClimbListRow({
   climb,
   boardName,
-  boardRenderData,
+  layoutId,
+  sizeId,
+  setIds,
   angle,
   onPress,
   onAddToQueue,
@@ -328,19 +324,14 @@ const ClimbListRow = React.memo(function ClimbListRow({
         <AnimatedView style={[styles.contentRow, { backgroundColor }, contentAnimatedStyle]}>
           {/* Left: Thumbnail with ascent badge + heart overlay */}
           <View style={styles.thumbnailContainer}>
-            {boardRenderData ? (
-              <ClimbThumbnail
-                frames={climb.frames}
-                boardName={boardName}
-                boardWidth={boardRenderData.boardWidth}
-                boardHeight={boardRenderData.boardHeight}
-                imageUrls={boardRenderData.imageUrls}
-                holdsData={boardRenderData.holdsData}
-                mirrored={climb.mirrored ?? false}
-              />
-            ) : (
-              <View style={styles.thumbnailPlaceholder} />
-            )}
+            <ClimbListThumbnail
+              frames={climb.frames}
+              boardName={boardName}
+              layoutId={layoutId}
+              sizeId={sizeId}
+              setIds={setIds}
+              mirrored={climb.mirrored ?? false}
+            />
             <HeartAnimationOverlay visible={showHeart} onDismiss={dismissHeart} size={32} />
             <AscentStatusBadge
               userAscents={climb.userAscents}
@@ -407,12 +398,6 @@ const styles = StyleSheet.create({
     height: spacing[16],
     flexShrink: 0,
     position: 'relative',
-  },
-  thumbnailPlaceholder: {
-    width: spacing[16],
-    height: spacing[16],
-    borderRadius: spacing[2],
-    backgroundColor: `${iosSystemColors.systemGray}1A`,
   },
   centerColumn: {
     flex: 1,

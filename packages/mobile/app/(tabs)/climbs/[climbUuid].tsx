@@ -1,5 +1,5 @@
-import { useMemo, useCallback, useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Image } from 'react-native';
+import { useMemo, useCallback, useState } from 'react';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { randomUUID } from 'expo-crypto';
@@ -9,11 +9,11 @@ import { Text } from '../../../src/components/Text';
 import { Button } from '../../../src/components/Button';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
-import { BoardRenderer } from '../../../src/components/board-renderer';
+import { BoardImage } from '../../../src/components/BoardImage';
 import { LogAscentSheet } from '../../../src/components/LogAscentSheet';
 import { useClimb, useToggleFavorite } from '../../../src/lib/graphql/hooks';
 import { useQueue } from '../../../src/providers/queue-provider';
-import { getBoardRenderData } from '../../../src/lib/board-details';
+import { getBoardAspectRatio } from '../../../src/lib/board-details';
 import { hapticSuccess } from '../../../src/lib/haptics';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing } from '../../../src/theme/tokens';
@@ -51,25 +51,15 @@ export default function ClimbDetail() {
   const { sessionId, addToQueue } = useQueue();
   const [showLogAscent, setShowLogAscent] = useState(false);
 
-  const boardRenderData = useMemo(() => {
-    if (!boardName || !layoutId || !sizeId || !setIds) return null;
-    const parsedSetIds = setIds.split(',').map(Number);
-    return getBoardRenderData({
+  const boardAspectRatio = useMemo(() => {
+    if (!boardName || !layoutId || !sizeId || !setIds) return 1080 / 1920;
+    return getBoardAspectRatio({
       boardName: boardName as BoardName,
       layoutId: Number(layoutId),
       sizeId: Number(sizeId),
-      setIds: parsedSetIds,
+      setIds: setIds.split(',').map(Number),
     });
   }, [boardName, layoutId, sizeId, setIds]);
-
-  // Pre-warm React Native's platform image cache for board images
-  useEffect(() => {
-    if (boardRenderData?.imageUrls) {
-      for (const url of boardRenderData.imageUrls) {
-        Image.prefetch(url);
-      }
-    }
-  }, [boardRenderData?.imageUrls]);
 
   const gradeInfo = useMemo(() => {
     if (!climb) return null;
@@ -115,15 +105,15 @@ export default function ClimbDetail() {
     <>
       <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
         {/* Board visualization */}
-        {boardRenderData && (
+        {boardName && layoutId && sizeId && setIds && (
           <View style={styles.boardContainer}>
-            <BoardRenderer
+            <BoardImage
               frames={climb.frames}
               boardName={boardName as BoardName}
-              boardWidth={boardRenderData.boardWidth}
-              boardHeight={boardRenderData.boardHeight}
-              imageUrls={boardRenderData.imageUrls}
-              holdsData={boardRenderData.holdsData}
+              layoutId={Number(layoutId)}
+              sizeId={Number(sizeId)}
+              setIds={setIds}
+              aspectRatio={boardAspectRatio}
               mirrored={climb.mirrored === true}
             />
           </View>

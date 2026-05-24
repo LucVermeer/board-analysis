@@ -2,8 +2,7 @@ import { getProductSize, getImageFilename, getHolePlacements } from '@boardsesh/
 import { BOARD_IMAGE_DIMENSIONS } from '@boardsesh/board-config';
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { HoldPlacement } from '../components/board-renderer/types';
-
-const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
+import { WEB_BASE_URL } from './env';
 
 type BoardRenderData = {
   boardWidth: number;
@@ -64,4 +63,25 @@ export function getBoardRenderData(params: {
   const imageUrls = imageFilenames.map((filename) => `${WEB_BASE_URL}/images/${boardName}/${filename}`);
 
   return { boardWidth, boardHeight, imageUrls, holdsData };
+}
+
+export function getBoardAspectRatio(params: {
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  setIds: number[];
+}): number {
+  const { boardName, layoutId, sizeId, setIds } = params;
+
+  for (const setId of setIds) {
+    const imageFilename = getImageFilename(boardName, layoutId, sizeId, setId);
+    if (!imageFilename) continue;
+
+    const dimensions = BOARD_IMAGE_DIMENSIONS[boardName]?.[imageFilename];
+    if (dimensions) {
+      return dimensions.width / dimensions.height;
+    }
+  }
+
+  return 1080 / 1920;
 }
