@@ -38,6 +38,15 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep session:mobile.queueSheet.toggleHistory
 // i18n-keep session:mobile.queueSheet.editQueue
 // i18n-keep session:mobile.queueSheet.doneEditing
+// i18n-keep session:mobile.queue.noSessionTitle
+// i18n-keep session:mobile.queue.noSessionSubtitle
+// i18n-keep session:mobile.queue.emptyTitle
+// i18n-keep session:mobile.queue.emptySubtitle
+// i18n-keep session:mobile.queue.browseClimbs
+// i18n-keep session:mobile.queue.previousClimb
+// i18n-keep session:mobile.queue.nextClimb
+// i18n-keep session:mobile.queue.logAscent
+// i18n-keep session:mobile.queue.noClimbSelected
 // i18n-keep climbs:mobile.climbActions.copyLink
 // i18n-keep climbs:mobile.climbActions.linkCopied
 // i18n-keep climbs:mobile.climbActions.report

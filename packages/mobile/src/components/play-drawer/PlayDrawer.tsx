@@ -48,9 +48,13 @@ export type PlayDrawerHandle = {
 
 type PlayDrawerProps = {
   boardConfig: BoardConfig;
+  onAngleChange?: (angle: number) => void;
 };
 
-export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer({ boardConfig }, ref) {
+export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
+  { boardConfig, onAngleChange },
+  ref,
+) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -409,7 +413,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         boardName={boardName}
         layoutId={layoutId}
         currentAngle={angle}
-        onAngleChange={() => {
+        onAngleChange={(newAngle) => {
+          onAngleChange?.(newAngle);
           handleCloseSubDrawer();
         }}
       />

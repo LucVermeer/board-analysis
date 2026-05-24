@@ -270,7 +270,16 @@
       "endSession": "Terminer la session",
       "endSessionConfirm": "Êtes-vous sûr de vouloir terminer cette session ?",
       "climbCount_one": "{{count}} bloc",
-      "climbCount_other": "{{count}} blocs"
+      "climbCount_other": "{{count}} blocs",
+      "noSessionTitle": "Pas encore de session",
+      "noSessionSubtitle": "Lancez une session depuis l'onglet blocs",
+      "emptyTitle": "La file est vide",
+      "emptySubtitle": "Parcourez les blocs et ajoutez-les à votre file",
+      "browseClimbs": "Parcourir les blocs",
+      "previousClimb": "Bloc précédent",
+      "nextClimb": "Bloc suivant",
+      "logAscent": "Enregistrer l'ascension",
+      "noClimbSelected": "Aucun bloc sélectionné"
     },
     "queueSheet": {
       "emptyQueue": "Votre file est vide",

@@ -63,9 +63,7 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
 
   const handleSheetChange = useCallback(
     (index: number) => {
-      if (index >= 0) {
-        hapticMedium();
-      } else {
+      if (index < 0) {
         handleClose();
       }
     },
