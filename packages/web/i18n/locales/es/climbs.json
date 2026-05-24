@@ -598,17 +598,10 @@
       "reset": "Restablecer"
     },
     "climbRow": {
-      "addedToQueue": "Añadido a la cola",
       "addToQueue": "Añadir a la cola",
-      "addToPlaylist": "Añadir a la lista",
-      "moreActions": "Más acciones",
       "menuAccessibility": "Acciones para {{climbName}}",
       "toggleFavorite": "Alternar favorito",
       "share": "Compartir bloque",
-      "viewSetter": "Ver creador",
-      "ascentSent": "Enviado",
-      "ascentAttempted": "Intentado",
-      "favoritedIndicator": "♥",
       "projectFallback": "Proyecto"
     }
   }

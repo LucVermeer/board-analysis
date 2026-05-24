@@ -215,9 +215,6 @@ export default function ClimbList() {
     actionsSheetRef.current?.expand();
   }, []);
 
-  // Playlist selector not yet implemented — fall back to actions sheet
-  const handleOpenPlaylist = handleOpenActions;
-
   const handleDismissActions = useCallback(() => {
     actionsSheetRef.current?.close();
     setActiveActionClimb(null);
@@ -250,12 +247,11 @@ export default function ClimbList() {
           angle={angle}
           onPress={handleClimbPress}
           onAddToQueue={handleAddToQueue}
-          onOpenPlaylist={handleOpenPlaylist}
           onOpenActions={handleOpenActions}
         />
       );
     },
-    [handleClimbPress, boardName, boardRenderData, angle, handleAddToQueue, handleOpenPlaylist, handleOpenActions],
+    [handleClimbPress, boardName, boardRenderData, angle, handleAddToQueue, handleOpenActions],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {

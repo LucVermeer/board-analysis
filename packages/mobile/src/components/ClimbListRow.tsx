@@ -73,8 +73,9 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
 
-  // --- Double-tap favorite ---
-  const { handleDoubleTap, showHeart, dismissHeart, isFavorited } = useDoubleTapFavorite({
+  // --- Double-tap favorite (ephemeral heart animation only — favorite status
+  // is not available in the search query, so we don't show it in the subtitle) ---
+  const { handleDoubleTap, showHeart, dismissHeart } = useDoubleTapFavorite({
     climbUuid: climb.uuid,
     boardName,
     angle,
@@ -101,8 +102,9 @@ const ClimbListRow = React.memo(function ClimbListRow({
   onPressRef.current = onPress;
   const onAddToQueueRef = useRef(onAddToQueue);
   onAddToQueueRef.current = onAddToQueue;
-  const onOpenPlaylistRef = useRef(onOpenPlaylist);
-  onOpenPlaylistRef.current = onOpenPlaylist;
+  const resolvedOpenPlaylist = onOpenPlaylist ?? onOpenActions;
+  const onOpenPlaylistRef = useRef(resolvedOpenPlaylist);
+  onOpenPlaylistRef.current = resolvedOpenPlaylist;
   const onOpenActionsRef = useRef(onOpenActions);
   onOpenActionsRef.current = onOpenActions;
   const climbRef = useRef(climb);
@@ -284,11 +286,8 @@ const ClimbListRow = React.memo(function ClimbListRow({
     if (climb.setter_username) {
       parts.push(climb.setter_username);
     }
-    if (isFavorited) {
-      parts.push(t('mobile.climbRow.favoritedIndicator'));
-    }
     return parts.length > 0 ? parts.join(' · ') : t('mobile.climbRow.projectFallback');
-  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, isFavorited, t]);
+  }, [climb.is_draft, climb.ascensionist_count, climb.quality_average, climb.setter_username, t]);
 
   // Compose gestures: double-tap takes priority over single-tap;
   // pan runs simultaneously with the tap gestures
