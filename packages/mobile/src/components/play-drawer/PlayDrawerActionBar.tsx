@@ -4,12 +4,16 @@ import { useTranslation } from 'react-i18next';
 import type { ActionBarContract } from '@boardsesh/play-view';
 import { Icon } from '../Icon';
 import { Badge } from '../Badge';
+import { Text } from '../Text';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 import { hapticMedium } from '../../lib/haptics';
 
-type PlayDrawerActionBarProps = ActionBarContract;
+type PlayDrawerActionBarProps = ActionBarContract & {
+  currentAngle?: number;
+  onOpenAngleSelector?: () => void;
+};
 
 export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   canSwipePrevious,
@@ -26,6 +30,8 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   onLightbulb,
   onOpenActions,
   onOpenQueue,
+  currentAngle,
+  onOpenAngleSelector,
 }: PlayDrawerActionBarProps) {
   const { t } = useTranslation('session');
 
@@ -54,6 +60,11 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
     onLightbulb();
   }, [onLightbulb]);
 
+  const handleAngleSelector = useCallback(() => {
+    hapticMedium();
+    onOpenAngleSelector?.();
+  }, [onOpenAngleSelector]);
+
   return (
     <View style={styles.container}>
       {/* Previous */}
@@ -80,7 +91,9 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         iconName={isFavorited ? 'favorite.fill' : 'favorite'}
         onPress={handleFavorite}
         iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
-        accessibilityLabel={isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')}
+        accessibilityLabel={
+          isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')
+        }
       />
 
       {/* Lightbulb */}
@@ -90,6 +103,20 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         iconColor={lightbulbActive ? brandColors.warning : undefined}
         accessibilityLabel={t('playView.actionBar.sendToBoardAria')}
       />
+
+      {/* Angle pill */}
+      {onOpenAngleSelector && currentAngle != null && (
+        <Pressable
+          onPress={handleAngleSelector}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.angleSelector.title')}
+          style={({ pressed }) => [styles.actionButton, styles.anglePill, pressed && styles.actionButtonPressed]}
+        >
+          <Text variant="caption1" style={styles.angleText}>
+            {currentAngle}°
+          </Text>
+        </Pressable>
+      )}
 
       {/* More actions */}
       <ActionButton
@@ -149,7 +176,7 @@ function ActionButton({
 
   const resolvedColor = disabled
     ? iosSystemColors.systemGray4
-    : iconColor ?? (active && activeColor ? activeColor : iosSystemColors.systemGray);
+    : (iconColor ?? (active && activeColor ? activeColor : iosSystemColors.systemGray));
 
   return (
     <Pressable
@@ -198,5 +225,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 2,
     right: 2,
+  },
+  anglePill: {
+    paddingHorizontal: 10,
+    backgroundColor: `${iosSystemColors.systemGray}1F`,
+  },
+  angleText: {
+    fontWeight: '600',
+    color: iosSystemColors.systemGray,
   },
 });

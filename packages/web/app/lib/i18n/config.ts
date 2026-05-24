@@ -18,6 +18,38 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep auth:nativeStart.networkError
 // i18n-keep auth:nativeStart.orContinueWith
 // i18n-keep auth:nativeStart.signIn
+// i18n-keep session:mobile.logbook.title
+// i18n-keep session:mobile.logbook.noEntries
+// i18n-keep session:mobile.logbook.sendsAndAttempts
+// i18n-keep session:mobile.logbook.sendsOnly
+// i18n-keep session:mobile.logbook.attemptsOnly
+// i18n-keep session:mobile.similarClimbs.title
+// i18n-keep session:mobile.similarClimbs.empty
+// i18n-keep session:mobile.similarClimbs.loading
+// i18n-keep session:mobile.community.title
+// i18n-keep session:mobile.community.empty
+// i18n-keep session:mobile.community.ascensionists_one
+// i18n-keep session:mobile.community.ascensionists_other
+// i18n-keep session:mobile.community.avgQuality
+// i18n-keep session:mobile.betaVideos.title
+// i18n-keep session:mobile.betaVideos.empty
+// i18n-keep session:mobile.angleSelector.title
+// i18n-keep session:mobile.queueSheet.emptyQueue
+// i18n-keep session:mobile.queueSheet.toggleHistory
+// i18n-keep session:mobile.queueSheet.editQueue
+// i18n-keep session:mobile.queueSheet.doneEditing
+// i18n-keep climbs:mobile.climbActions.copyLink
+// i18n-keep climbs:mobile.climbActions.linkCopied
+// i18n-keep climbs:mobile.climbActions.report
+// i18n-keep session:playView.tickBar.cancelLabel
+// i18n-keep session:playView.tickBar.decreaseTriesAria
+// i18n-keep session:playView.tickBar.flashSaveLabel
+// i18n-keep session:playView.tickBar.gradeLabel
+// i18n-keep session:playView.tickBar.increaseTriesAria
+// i18n-keep session:playView.tickBar.logAscentAria
+// i18n-keep session:playView.tickBar.sendSaveLabel
+// i18n-keep session:playView.tickBar.starsLabel
+// i18n-keep session:playView.tickBar.triesLabel
 
 export const LOCALE_HTML_LANG: Record<Locale, string> = {
   'en-US': 'en',

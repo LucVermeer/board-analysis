@@ -613,6 +613,11 @@
       "toggleFavorite": "Alternar favorito",
       "share": "Compartir bloque",
       "projectFallback": "Proyecto"
+    },
+    "climbActions": {
+      "copyLink": "Copiar enlace",
+      "report": "Reportar",
+      "linkCopied": "Enlace copiado"
     }
   }
 }
