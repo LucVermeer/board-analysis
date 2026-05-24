@@ -8,7 +8,6 @@ export default function BoardsLayout() {
     <Stack
       screenOptions={{
         headerLargeTitle: false,
-        headerLargeTitleShadowVisible: false,
         headerTransparent: true,
         headerBlurEffect: 'systemMaterial',
         contentStyle: { backgroundColor: 'transparent' },

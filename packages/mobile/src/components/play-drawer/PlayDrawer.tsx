@@ -113,6 +113,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsMirrored(false);
       setIsFavorited(false);
       setIsTickBarActive(false);
+      setIsSheetOpen(true);
       const queueItem = {
         uuid: randomUUID(),
         climb: {
@@ -138,10 +139,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       sheetRef.current?.dismiss();
     },
   }));
-
-  const handleSheetChange = useCallback((index: number) => {
-    setIsSheetOpen(index >= 0);
-  }, []);
 
   const handleClose = useCallback(() => {
     setClimb(null);
@@ -224,7 +221,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         snapPoints={snapPoints}
         enablePanDownToClose
         backdropComponent={renderBackdrop}
-        onChange={handleSheetChange}
         onDismiss={handleClose}
         handleIndicatorStyle={styles.indicator}
         backgroundStyle={styles.background}
@@ -314,7 +310,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         </BottomSheetView>
       </BottomSheetModal>
 
-      {/* Log Ascent sheet (full, via long-press) */}
+      {/* Log Ascent sheet (full, via long-press).
+          TODO: still uses BottomSheet (not BottomSheetModal), so it renders
+          within the screen content area and can appear behind the nav header.
+          Follow-up: convert to BottomSheetModal once PlayDrawer is stable. */}
       {displayedClimb && (
         <LogAscentSheet
           visible={showLogAscent}

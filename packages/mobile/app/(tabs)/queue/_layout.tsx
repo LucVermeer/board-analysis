@@ -8,7 +8,6 @@ export default function QueueLayout() {
     <Stack
       screenOptions={{
         headerLargeTitle: false,
-        headerLargeTitleShadowVisible: false,
         headerTransparent: true,
         headerBlurEffect: 'systemMaterial',
         contentStyle: { backgroundColor: 'transparent' },
@@ -20,7 +19,6 @@ export default function QueueLayout() {
         options={{
           title: t('summary.dialogTitle'),
           presentation: 'modal',
-          headerLargeTitle: false,
         }}
       />
     </Stack>
