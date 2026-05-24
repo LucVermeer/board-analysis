@@ -1,7 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { useSegments, Redirect } from 'expo-router';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
-import { startSignIn, signOut as authSignOut, type AuthProvider as AuthProviderType } from '../lib/auth';
+import {
+  startSignIn,
+  signOut as authSignOut,
+  signInWithCredentials as authSignInWithCredentials,
+  type AuthProvider as AuthProviderType,
+  type CredentialsSignInResult,
+} from '../lib/auth';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
@@ -11,6 +17,7 @@ type AuthState = {
   isAuthenticated: boolean;
   isLoading: boolean;
   signIn: (provider: AuthProviderType) => Promise<void>;
+  signInWithCredentials: (email: string, password: string) => Promise<CredentialsSignInResult>;
   signOut: () => Promise<void>;
   refreshAuthState: () => Promise<void>;
 };
@@ -59,6 +66,17 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     await startSignIn(provider);
   }, []);
 
+  const signInWithCredentials = useCallback(
+    async (email: string, password: string): Promise<CredentialsSignInResult> => {
+      const result = await authSignInWithCredentials(email, password);
+      if (result.success) {
+        await checkAuth();
+      }
+      return result;
+    },
+    [checkAuth],
+  );
+
   const signOut = useCallback(async () => {
     await authSignOut();
     await Promise.all([clearStoredSessionId(), clearStoredBoardConfig()]);
@@ -90,7 +108,16 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, signIn, signOut, refreshAuthState: checkAuth }}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated,
+        isLoading,
+        signIn,
+        signInWithCredentials,
+        signOut,
+        refreshAuthState: checkAuth,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
