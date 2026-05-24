@@ -1,14 +1,14 @@
 import * as WebBrowser from 'expo-web-browser';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
+import { WEB_BASE_URL } from './env';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
-const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
 
 export type AuthProvider = 'google' | 'apple';
 
 export async function startSignIn(provider: AuthProvider): Promise<void> {
   const callbackUrl = encodeURIComponent('/api/auth/native/callback?next=/');
-  const url = `${WEB_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;
+  const url = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;
   await WebBrowser.openAuthSessionAsync(url, 'com.boardsesh.app://auth/callback');
 }
 

@@ -1,6 +1,5 @@
 import type { BoardName } from '@boardsesh/shared-schema';
-
-const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
+import { WEB_BASE_URL } from './env';
 
 type BoardRenderParams = {
   boardName: BoardName;
@@ -10,29 +9,24 @@ type BoardRenderParams = {
   frames: string;
 };
 
-export function buildThumbnailUrl(params: BoardRenderParams): string {
+function buildBoardRenderUrl(params: BoardRenderParams, thumbnail: boolean): string {
   const { boardName, layoutId, sizeId, setIds, frames } = params;
-  return (
-    `${WEB_BASE_URL}/api/internal/board-render` +
-    `?board_name=${boardName}` +
-    `&layout_id=${layoutId}` +
-    `&size_id=${sizeId}` +
-    `&set_ids=${setIds}` +
-    `&frames=${encodeURIComponent(frames)}` +
-    `&thumbnail=1` +
-    `&include_background=1`
-  );
+  const searchParams = new URLSearchParams({
+    board_name: boardName,
+    layout_id: String(layoutId),
+    size_id: String(sizeId),
+    set_ids: setIds,
+    frames,
+    include_background: '1',
+    ...(thumbnail ? { thumbnail: '1' } : {}),
+  });
+  return `${WEB_BASE_URL}/api/internal/board-render?${searchParams.toString()}`;
+}
+
+export function buildThumbnailUrl(params: BoardRenderParams): string {
+  return buildBoardRenderUrl(params, true);
 }
 
 export function buildFullRenderUrl(params: BoardRenderParams): string {
-  const { boardName, layoutId, sizeId, setIds, frames } = params;
-  return (
-    `${WEB_BASE_URL}/api/internal/board-render` +
-    `?board_name=${boardName}` +
-    `&layout_id=${layoutId}` +
-    `&size_id=${sizeId}` +
-    `&set_ids=${setIds}` +
-    `&frames=${encodeURIComponent(frames)}` +
-    `&include_background=1`
-  );
+  return buildBoardRenderUrl(params, false);
 }

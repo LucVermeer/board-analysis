@@ -9,8 +9,7 @@ import { Icon } from './Icon';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
-
-const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://www.boardsesh.com';
+import { WEB_BASE_URL } from '../lib/env';
 
 type ClimbActionsSheetProps = {
   climb: Climb | null;

@@ -13,6 +13,7 @@ import { BoardImage } from '../../../src/components/BoardImage';
 import { LogAscentSheet } from '../../../src/components/LogAscentSheet';
 import { useClimb, useToggleFavorite } from '../../../src/lib/graphql/hooks';
 import { useQueue } from '../../../src/providers/queue-provider';
+import { getBoardAspectRatio } from '../../../src/lib/board-details';
 import { hapticSuccess } from '../../../src/lib/haptics';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing } from '../../../src/theme/tokens';
@@ -49,6 +50,16 @@ export default function ClimbDetail() {
   const toggleFavorite = useToggleFavorite();
   const { sessionId, addToQueue } = useQueue();
   const [showLogAscent, setShowLogAscent] = useState(false);
+
+  const boardAspectRatio = useMemo(() => {
+    if (!boardName || !layoutId || !sizeId || !setIds) return 1080 / 1920;
+    return getBoardAspectRatio({
+      boardName: boardName as BoardName,
+      layoutId: Number(layoutId),
+      sizeId: Number(sizeId),
+      setIds: setIds.split(',').map(Number),
+    });
+  }, [boardName, layoutId, sizeId, setIds]);
 
   const gradeInfo = useMemo(() => {
     if (!climb) return null;
@@ -102,6 +113,7 @@ export default function ClimbDetail() {
               layoutId={Number(layoutId)}
               sizeId={Number(sizeId)}
               setIds={setIds}
+              aspectRatio={boardAspectRatio}
               mirrored={climb.mirrored === true}
             />
           </View>

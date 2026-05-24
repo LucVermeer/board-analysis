@@ -3,6 +3,7 @@ import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { buildFullRenderUrl } from '../lib/thumbnail-url';
+import { iosSystemColors } from '../theme/ios-colors';
 
 type BoardImageProps = {
   frames: string;
@@ -10,6 +11,7 @@ type BoardImageProps = {
   layoutId: number;
   sizeId: number;
   setIds: string;
+  aspectRatio: number;
   mirrored?: boolean;
   style?: ViewStyle;
 };
@@ -20,6 +22,7 @@ const BoardImage = React.memo(function BoardImage({
   layoutId,
   sizeId,
   setIds,
+  aspectRatio,
   mirrored,
   style,
 }: BoardImageProps) {
@@ -29,7 +32,7 @@ const BoardImage = React.memo(function BoardImage({
   );
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, { aspectRatio }, style]}>
       <Image
         source={{ uri }}
         style={[styles.image, mirrored && styles.mirrored]}
@@ -46,7 +49,7 @@ export { BoardImage };
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    aspectRatio: 5 / 7,
+    backgroundColor: `${iosSystemColors.systemGray}1A`,
   },
   image: {
     width: '100%',
