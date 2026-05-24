@@ -9,7 +9,7 @@ A working plan for the native mobile app. v11.0 refines v10.0's direction with a
 3. **Share business logic, not UI.** BLE protocol encoding, queue state machine, GraphQL schema, board configuration, and type definitions live in shared packages. Web and mobile each get the UI layer that's best for their platform.
 4. **iOS-native experience.** 75% of users are on iOS. The app uses iOS system colors, SF Symbols, spring animations, haptic feedback, blur effects, and SwiftUI native modules for critical views. The goal is the quality bar set by apps like Things 3, Halide, and Bear — apps that feel like they were written in SwiftUI. No Material Design on iOS.
 
-Everything from v9.x's offline-first design — the query router shape, mutation queue with idempotency keys, refdata SQLite, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView.
+Everything from v9.x's offline-first design — the query router shape, refdata per board, App Store Plan B — carries forward, implemented natively in React Native instead of through a WebView. See [offline-sync-plan.md](offline-sync-plan.md) for the offline sync architecture (expo-sqlite + custom mutation queue, validated by evaluating WatermelonDB, PowerSync, and RxDB alternatives).
 
 ## Non-negotiable: web and Capacitor apps must keep working
 
@@ -101,7 +101,7 @@ packages/
 └───────────────────────────────────────────────────────────┘
          ▲                                    ▲
          │ HTTPS GraphQL                      │ WebSocket
-         │                                    │
+         │ (includes sync pull queries)       │
 ┌────────┴────────── Mobile ────────────────┴──────────────┐
 │  packages/mobile (React Native / Expo)                    │
 │   • iOS-native design system (system colors, SF Symbols,  │
@@ -111,14 +111,15 @@ packages/
 │   • BLE via react-native-ble-plx + shared protocol logic  │
 │   • Board rendering via Expo native module (SwiftUI Canvas │
 │     on iOS, Compose Canvas on Android)                     │
-│   • Offline: expo-sqlite for climb data, MMKV for prefs   │
+│   • Offline: expo-sqlite + mutation queue, MMKV for prefs   │
 │   • Auth: bearer tokens via expo-auth-session             │
 │   • Live Activity via Expo native module (ActivityKit)     │
 │                                                            │
 │  Local data:                                               │
-│   • Refdata SQLite per board                               │
-│   • Cached ticks, playlists, profile                       │
-│   • Pending mutations (write queue)                        │
+│   • expo-sqlite (user data + board refdata, full SQL)       │
+│   • Pre-warmed SQLite ships with app (all boards)          │
+│   • Custom mutation queue for offline writes               │
+│   • MMKV for key-value preferences                        │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -400,9 +401,9 @@ The backend already supports bearer token auth for the existing Capacitor native
 
 **React Native:**
 
-- `react-native-mmkv` for key-value preferences (fastest KV store on mobile)
-- `expo-sqlite` for offline climb database (replaces the planned `@capacitor-community/sqlite`)
-- Same data schema, different storage engine
+- `expo-sqlite` for offline data storage (user ticks, playlists, favorites, board reference data) with full SQL and JOINs. Custom mutation queue for offline writes, sync pull queries for incremental updates. See [offline-sync-plan.md](offline-sync-plan.md) for the full architecture.
+- `react-native-mmkv` for key-value preferences (fastest KV store on mobile, synchronous reads)
+- App ships with a pre-warmed SQLite database containing all board reference data (~150-200MB). Users select which boards get incremental updates via per-board sync pull.
 
 ### Platform features
 
@@ -464,11 +465,13 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 - **`useHaptic()` hook** integrated into all interactive base components
 - Auth flow: `expo-auth-session` + backend bearer token endpoint (reuse existing `/auth/native-start` flow)
 - GraphQL client: TanStack Query + `graphql-request` (same pattern as web)
+- **Offline data setup**: configure `expo-sqlite` with pre-warmed database for offline climb browsing. Mutation queue and sync pull client are built in Phase 5. See [offline-sync-plan.md](offline-sync-plan.md).
 - Navigation skeleton: bottom tab bar with blur, native-stack navigators per tab, large title headers, search bar on Search tab
 
 ### Phase 2: Core climb experience (5 weeks)
 
 - i18n setup: `i18next` + `react-i18next` with shared catalogs from `packages/web/i18n/locales/` (en-US, es, fr). All user-facing strings must go through `t()` — Phase 1 placeholder screens use hardcoded English that must be replaced.
+- **Sync backend prerequisites**: `updated_at` columns on 8 tables + auto-update triggers, `sync_deletions` table + per-table trigger functions, idempotent `saveTick`/`createPlaylist` (accept client UUID), new `addFavorite`/`removeFavorite` mutations, sync pull resolvers (10 GraphQL queries with composite cursor). See [offline-sync-plan.md](offline-sync-plan.md).
 - Climb browsing with FlashList, swipe actions, context menus
 - Board renderer with SwiftUI `Canvas` on iOS — validate 120fps on ProMotion early in week 1
 - Climb detail view with board visualization, action sheet
@@ -498,9 +501,8 @@ Update `packages/web/` imports to reference the shared packages. Run `vp check` 
 
 - Live Activity widget (iOS lock screen queue navigation) — existing `ClimbSessionLiveActivity.swift` serves as direct reference for the Expo native module
 - HealthKit integration (iOS) / Health Connect (Android)
-- Offline climb database via `expo-sqlite`
+- Offline sync: pre-warmed database build pipeline (GitHub Action), sync pull client, mutation queue, per-board sync toggle UI. See [offline-sync-plan.md](offline-sync-plan.md).
 - Push notification token management (reuse existing backend schema)
-- Offline mutation queue
 - **Settings screen** native module (SwiftUI `Form` on iOS)
 
 ### Phase 6: Polish + App Store (3 weeks)
@@ -568,7 +570,7 @@ The explicit goal: a user picking up the iOS app says "this feels like it was ma
 | Board rendering | Expo native module (SwiftUI / Compose)           | SwiftUI `Canvas` on iOS, Compose `Canvas` on Android. Fallback: Skia |
 | Lists           | `@shopify/flash-list`                            | Drop-in FlatList replacement, 60fps+ scrolling                       |
 | Storage (KV)    | `react-native-mmkv`                              | Fastest KV store on mobile, JSI-based                                |
-| Storage (SQL)   | `expo-sqlite`                                    | For offline climb database                                           |
+| Storage (SQL)   | `expo-sqlite`                                    | Offline climb database + user data, full SQL with JOINs. See [offline sync plan](offline-sync-plan.md) |
 | Auth            | `expo-auth-session`                              | Standard OAuth flows                                                 |
 | Secure storage  | `expo-secure-store`                              | iOS Keychain, Android Keystore                                       |
 | Live Activity   | Expo native module (SwiftUI ActivityKit)         | iOS lock screen widgets, no Android equivalent                       |
@@ -616,32 +618,31 @@ New work: ensure the token exchange endpoint returns a proper JWT + refresh toke
 
 ## Offline design
 
-### Refdata SQLite (Phase 5)
+See [offline-sync-plan.md](offline-sync-plan.md) for the full offline sync architecture, Sync Rules, write path, and implementation details.
 
-Same design as v9.x, implemented natively:
+### expo-sqlite + custom mutation queue (Phase 5)
 
-- `expo-sqlite` stores climb data per board
-- Tables: `board_climbs`, `board_climb_stats`, `board_difficulty_grades`, `board_holes`, `board_layouts`, `board_product_sizes`, `board_products`, `board_sets`, `board_product_sizes_layouts_sets`
-- Sync: new climbs on 24h cadence, stats refresh weekly
-- Build pipeline: GitHub Action exports SQLite snapshots to Cloudflare R2
-- Download on first board selection; "Syncing climbs" progress indicator
+The original offline plan, validated by evaluating three alternatives (WatermelonDB, PowerSync, RxDB — all rejected for different reasons). See [offline-sync-plan.md](offline-sync-plan.md) for the full evaluation and architecture.
 
-**Measurement spike (start of Phase 5):** Run the export script against the dev DB. If compressed Kilter data exceeds 200 MB, fall back to per-layout split or lazy-fetch frames on first view.
+- **Pre-warmed database** — app ships with a CI-built SQLite database containing all board reference data (~150-200MB). All boards are browsable offline from first launch. Just a SQLite file — no internal metadata format to worry about.
+- **Full SQL with JOINs** — climb search runs as standard SQL against proper columns with covering indexes. < 100ms p95 on 200K climbs. The core reason the alternatives were rejected: RxDB has no JOINs, PowerSync needs synthetic IDs, WatermelonDB needs soft-delete.
+- **Mutation queue** — ~300 lines. Offline writes go to a `pending_mutations` table. Queue drainer calls existing GraphQL mutations when online. Idempotent via client-supplied UUIDs.
+- **Sync pull** — new GraphQL queries (~8) return records changed since a checkpoint. Per-board selective sync for reference data.
+- **Delete handling** — `sync_deletions` table with triggers on user data DELETEs. Existing queries untouched.
+- **$0 infrastructure** — no additional services. Syncs via the existing GraphQL API.
 
-### Mutation queue (Phase 5)
+### User data sync (Phase 5)
 
-Same design as v9.x:
+- Ticks, playlists, favorites, follows cached locally in SQLite.
+- Offline writes via mutation queue → existing GraphQL mutations when online.
+- Sync pull queries fetch changes since last checkpoint.
+- Aurora dual-write handled transparently — the existing Aurora sync daemon picks up new ticks.
 
-- Client-generated UUID v7 idempotency keys
-- Server-side `mutation_dedup` table (30-day expiry)
-- Single-concurrency drainer in `createdAt` order
-- Per-mutation conflict resolution (tick.create: idempotent, playlist ops: set ops, playlist.rename: last-write-wins)
+### Board reference data (pre-warmed + Phase 5 incremental sync)
 
-### User data cache (Phase 5)
-
-- Profile, ticks, playlists cached in MMKV after first online load
-- SWR refresh on next online launch
-- "Needs network" state for real-time features (party, comments, feed)
+- Pre-warmed database ships all board reference data as an app asset.
+- Per-board sync toggle: enabled boards get incremental updates (new climbs, updated stats).
+- "Needs network" state for real-time features (party, comments, feed).
 
 ## App Store distribution
 
@@ -650,7 +651,7 @@ Same design as v9.x:
 > Boardsesh controls climbing-board hardware via Bluetooth Low Energy. The app is built with React Native with native SwiftUI modules for performance-critical views. Key native features:
 >
 > 1. CoreBluetooth integration for BLE board control (Kilter, Tension, MoonBoard)
-> 2. Offline climb database (~150 MB per board, stored in SQLite)
+> 2. Offline climb database (~150 MB per board, pre-warmed SQLite with per-board incremental sync)
 > 3. Live Activity widget showing current climb on the lock screen (SwiftUI ActivityKit)
 > 4. HealthKit workout logging for climbing sessions
 > 5. Native iOS design: SF Symbols, system colors, spring animations, haptic feedback, Dynamic Type
@@ -681,10 +682,10 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 | Metro bundler + monorepo friction                          | Medium     | Medium | Shared packages use raw TypeScript (`"main": "src/index.ts"`). Metro needs `watchFolders` + `nodeModulesPaths` config. Set up and verify in Phase 1 week 1.                                                    |
 | No CI/CD for native builds                                 | Certain    | Medium | EAS Build setup, TestFlight distribution, GitHub Actions integration. Budget 1 week in Phase 1.                                                                                                                |
 | Expo ecosystem churn                                       | Low        | Medium | Pin SDK versions. Expo's continuous native generation (CNG) handles native project updates.                                                                                                                    |
-| Refdata SQLite > 200 MB                                    | Medium     | Medium | Phase 5 measurement spike. Fallback: per-layout split or frames lazy-fetch.                                                                                                                                    |
+| Pre-warmed DB > 200 MB in app bundle                       | Medium     | Medium | Use Play Asset Delivery on Android. App Store allows 200MB cellular. Fallback: per-layout split or lazy-fetch frames on first view.                                                                             |
 | Bearer token refresh edge cases                            | Medium     | High   | Dedicated test suite. Failed refresh triggers re-auth, not silent failure.                                                                                                                                     |
 | Live Activity reimplementation complexity                  | Medium     | Medium | Defer to Phase 5. Existing Swift widget logic serves as reference. SwiftUI Expo module.                                                                                                                        |
-| Phase 5 scope overload                                     | High       | Medium | Phase 5 packs SQLite + mutation queue + Live Activity + HealthKit into 3 weeks. Ship v1 without Live Activity and HealthKit to de-risk. Add them in a fast-follow.                                             |
+| Phase 5 scope overload                                     | High       | Medium | Phase 5 packs offline sync + Live Activity + HealthKit into 3 weeks. Ship v1 without Live Activity and HealthKit to de-risk. Add them in a fast-follow.                                                        |
 | Apple 4.2 rejection                                        | Low        | High   | Native RN app with SwiftUI modules has minimal risk. Plan B above if needed.                                                                                                                                   |
 | Custom design system takes longer than a library           | Medium     | Medium | Start with 8-10 base components the app actually needs. Don't build a component library — build what each screen requires. Iterate after Phase 1.                                                              |
 | SF Symbols availability in React Native                    | Medium     | Low    | `expo-symbols` is the official Expo module. Fallback: `react-native-sfsymbols`. Worst case: SF Symbol PNGs exported from SF Symbols.app.                                                                       |
@@ -727,7 +728,7 @@ This is much less likely with a genuinely native app using SwiftUI modules, but 
 | Core experience   | Climb browsing, search, board visualization, queue management work end-to-end on iOS + Android. Context menus and swipe actions functional on iOS.                                                                |
 | BLE               | Connect to physical Kilter/Tension/MoonBoard, send climbs, LEDs light up correctly.                                                                                                                               |
 | Social            | Party mode, notifications, feed work via WebSocket subscriptions.                                                                                                                                                 |
-| Platform          | Live Activity, HealthKit, offline SQLite, push notifications, mutation queue all functional.                                                                                                                      |
+| Platform          | Live Activity, HealthKit, offline sync (expo-sqlite + mutation queue), pre-warmed DB pipeline, per-board sync UI, push notifications all functional.                                                               |
 | iOS quality       | Dynamic Type works at all 7 sizes. Haptics fire on all interactive elements. Context menus on long press. 120fps on ProMotion in board renderer and lists. Swipe-back on all screens. VoiceOver reads all labels. |
 | Android parity    | All features work on Android. Material 3 visual treatment. Context menus via long-press fallback.                                                                                                                 |
 | App Store         | Accepted on iOS App Store and Google Play Store. TestFlight beta with 10+ testers.                                                                                                                                |
