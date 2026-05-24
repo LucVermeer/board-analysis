@@ -76,7 +76,7 @@ jobs:
           WEB_CHANGED=false
           for file in $CHANGED_FILES; do
             case "$file" in
-              packages/backend/*|packages/shared-schema/*|packages/shared/*|packages/db/*|packages/crypto/*|packages/aurora-sync/*|Dockerfile.backend|bun.lock|package.json)
+              packages/*|Dockerfile.backend|scripts/create-service-docker-context.mjs|scripts/railway-deployment-status.mjs|railway.toml|bun.lock|package.json|.github/workflows/production-deploy.yml)
                 BACKEND_CHANGED=true
                 ;;
             esac
@@ -228,6 +228,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -252,12 +257,15 @@ jobs:
             type=raw,value=production,enable={{is_default_branch}}
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Generate backend Docker context
+        run: vp run docker-context:backend
+
       - name: Build and push backend image
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: Dockerfile.backend
+          context: .docker-context/backend
+          file: .docker-context/backend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -365,6 +373,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     steps:
+      - uses: actions/checkout@v6
+
       - name: Show image being deployed
         run: |
           echo "Image: ${{ needs.build-backend.outputs.image }}:production"
@@ -388,13 +398,83 @@ jobs:
       # re-pulls the service's image source, so it picks up the new digest rather
       # than serving a cached layer.
       - name: Trigger Railway redeploy
+        id: railway-deploy
         if: needs.check-rollback.outputs.active != 'true'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_BACKEND_SERVICE_ID: ${{ vars.RAILWAY_BACKEND_SERVICE_ID }}
         run: |
+          set -euo pipefail
+
+          railway deployment list \
+            --service "$RAILWAY_BACKEND_SERVICE_ID" \
+            --limit 10 \
+            --json > railway-before.json
+
+          node scripts/railway-deployment-status.mjs capture-previous railway-before.json > railway-before.env
+          . ./railway-before.env
+
           railway redeploy \
-            --service "${{ vars.RAILWAY_BACKEND_SERVICE_ID }}" \
+            --service "$RAILWAY_BACKEND_SERVICE_ID" \
             --yes
+
+          echo "previous_deployment_id=${PREVIOUS_DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "previous_deployment_created_at=${PREVIOUS_DEPLOYMENT_CREATED_AT}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Railway deployment
+        if: needs.check-rollback.outputs.active != 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_BACKEND_SERVICE_ID: ${{ vars.RAILWAY_BACKEND_SERVICE_ID }}
+          PREVIOUS_DEPLOYMENT_ID: ${{ steps.railway-deploy.outputs.previous_deployment_id }}
+          PREVIOUS_DEPLOYMENT_CREATED_AT: ${{ steps.railway-deploy.outputs.previous_deployment_created_at }}
+        run: |
+          set -euo pipefail
+
+          rollback_previous_deployment() {
+            if [ -z "${PREVIOUS_DEPLOYMENT_ID:-}" ]; then
+              echo "No previous Railway deployment ID captured; skipping rollback."
+              return 0
+            fi
+
+            echo "Attempting Railway rollback to ${PREVIOUS_DEPLOYMENT_ID}..."
+            node -e 'process.stdout.write(JSON.stringify({ query: "mutation deploymentRollback($id: String!) { deploymentRollback(id: $id) }", variables: { id: process.env.PREVIOUS_DEPLOYMENT_ID } }))' > railway-rollback-payload.json
+
+            curl -fsS https://backboard.railway.com/graphql/v2 \
+              -H "Authorization: Bearer ${RAILWAY_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data @railway-rollback-payload.json || echo "Railway rollback request failed; check Railway manually."
+          }
+
+          for attempt in $(seq 1 90); do
+            railway deployment list \
+              --service "$RAILWAY_BACKEND_SERVICE_ID" \
+              --limit 10 \
+              --json > railway-deployments.json
+
+            node scripts/railway-deployment-status.mjs find-new railway-deployments.json > railway-current.env
+
+            . ./railway-current.env
+            echo "Attempt ${attempt}: deployment=${CURRENT_ID:-unknown} status=${CURRENT_STATUS:-unknown}"
+
+            case "$CURRENT_STATUS" in
+              SUCCESS)
+                exit 0
+                ;;
+              FAILED|CRASHED|REMOVED)
+                rollback_previous_deployment
+                railway logs --service "$RAILWAY_BACKEND_SERVICE_ID" --latest --lines 100 || true
+                exit 1
+                ;;
+            esac
+
+            sleep 10
+          done
+
+          rollback_previous_deployment
+          railway logs --service "$RAILWAY_BACKEND_SERVICE_ID" --latest --lines 100 || true
+          echo "Railway deployment did not reach SUCCESS in time"
+          exit 1
 
   # Homelab staging-backend deploy is currently broken — re-enable once the
   # self-hosted runner is healthy. It deploys the same :staging image and is

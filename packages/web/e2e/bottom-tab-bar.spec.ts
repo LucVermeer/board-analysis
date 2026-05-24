@@ -246,6 +246,12 @@ test.describe('Bottom Tab Bar - Queue Integration', () => {
     const climbName = ((await queueToggle.textContent()) ?? '').trim();
     expect(climbName).toBeTruthy();
 
+    const playDrawerCloseButton = page.getByRole('button', { name: 'Close' }).first();
+    if (await playDrawerCloseButton.isVisible({ timeout: 2_000 })) {
+      await playDrawerCloseButton.click();
+      await expect(playDrawerCloseButton).toBeHidden({ timeout: 10_000 });
+    }
+
     // Helper to verify queue bar and bottom tab bar on any page
     const verifyBarsShowClimb = async (timeout = 5_000) => {
       await expect(page.locator(queueControlBar)).toBeVisible({ timeout: 10_000 });
