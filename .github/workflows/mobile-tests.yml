@@ -1,4 +1,4 @@
-name: Mobile Unit Tests
+name: Mobile CI
 
 on:
   push:
@@ -21,6 +21,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check mobile package
+        run: vp run typecheck:mobile
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
