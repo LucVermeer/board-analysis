@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { QueueSheetHeader } from './QueueSheetHeader';
-import { QueueList, type QueueListHandle } from './QueueList';
+import { QueueList } from './QueueList';
 import { Text } from '../Text';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
@@ -25,10 +25,8 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
   const insets = useSafeAreaInsets();
   const { systemColors } = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
-  const listRef = useRef<QueueListHandle>(null);
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { state, removeFromQueue } = useQueue();
+  const { state, removeFromQueue, clearQueue } = useQueue();
   const { queue, currentClimbQueueItem } = state;
 
   const [isEditMode, setIsEditMode] = useState(false);
@@ -38,23 +36,14 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
 
   const snapPoints = useMemo(() => ['60%', '90%'], []);
 
-  const currentClimbUuid = currentClimbQueueItem?.climb.uuid ?? null;
+  const currentItemUuid = currentClimbQueueItem?.uuid ?? null;
 
   useEffect(() => {
     if (visible) {
       sheetRef.current?.snapToIndex(0);
-      scrollTimerRef.current = setTimeout(() => {
-        listRef.current?.scrollToCurrentClimb();
-      }, 400);
     } else {
       sheetRef.current?.close();
     }
-    return () => {
-      if (scrollTimerRef.current) {
-        clearTimeout(scrollTimerRef.current);
-        scrollTimerRef.current = null;
-      }
-    };
   }, [visible]);
 
   const resetState = useCallback(() => {
@@ -108,12 +97,10 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
 
   const handleClearAll = useCallback(() => {
     hapticWarning();
-    for (const item of queue) {
-      removeFromQueue(item.uuid);
-    }
+    clearQueue();
     setIsEditMode(false);
     setSelectedItems(new Set());
-  }, [queue, removeFromQueue]);
+  }, [clearQueue]);
 
   const handleBulkRemove = useCallback(() => {
     hapticMedium();
@@ -166,13 +153,13 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
       />
 
       <QueueList
-        ref={listRef}
         queue={queue}
-        currentClimbUuid={currentClimbUuid}
+        currentItemUuid={currentItemUuid}
         isEditMode={isEditMode}
         showHistory={showHistory}
         showFullHistory={showFullHistory}
         selectedItems={selectedItems}
+        autoScrollOnMount={visible}
         onToggleSelect={handleToggleSelect}
         onClimbPress={onClimbPress}
         onRemove={handleRemove}

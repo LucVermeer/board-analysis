@@ -6,7 +6,7 @@ export { SwipeBoardCarousel } from './SwipeBoardCarousel';
 export { QuickTickBar } from './QuickTickBar';
 export { QueueSheet } from './QueueSheet';
 export { QueueSheetHeader } from './QueueSheetHeader';
-export { QueueList, type QueueListHandle } from './QueueList';
+export { QueueList } from './QueueList';
 export { AngleSelectorSheet } from './AngleSelectorSheet';
 export { DeferredSections } from './DeferredSections';
 export { CollapsibleSection } from './CollapsibleSection';

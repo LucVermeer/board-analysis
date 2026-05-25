@@ -41,6 +41,7 @@ type QueueContextValue = {
   setSessionId: (id: string | null) => void;
   addToQueue: (item: ClimbQueueItem) => void;
   removeFromQueue: (uuid: string) => void;
+  clearQueue: () => void;
   setCurrentClimb: (item: ClimbQueueItem) => void;
   nextClimb: () => void;
   previousClimb: () => void;
@@ -264,6 +265,19 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearQueue = useCallback(() => {
+    const itemsToRemove = stateRef.current.queue;
+    dispatch({ type: 'CLEAR_QUEUE' });
+
+    if (sessionIdRef.current) {
+      for (const item of itemsToRemove) {
+        getHttpClient()
+          .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid: item.uuid })
+          .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
+      }
+    }
+  }, []);
+
   const setCurrentClimb = useCallback(
     (item: ClimbQueueItem) => {
       dispatch({
@@ -365,6 +379,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setSessionId,
       addToQueue,
       removeFromQueue,
+      clearQueue,
       setCurrentClimb,
       nextClimb,
       previousClimb,
@@ -376,6 +391,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       sessionId,
       addToQueue,
       removeFromQueue,
+      clearQueue,
       setCurrentClimb,
       nextClimb,
       previousClimb,

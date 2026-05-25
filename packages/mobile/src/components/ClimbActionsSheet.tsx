@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import type { Climb } from '@boardsesh/shared-schema';
+import { buildClimbViewPath } from '@boardsesh/play-view';
 import { Sheet } from './Sheet';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
@@ -26,17 +27,6 @@ type ClimbActionsSheetProps = {
   onToggleFavorite?: () => void;
   onClose: () => void;
 };
-
-function buildClimbUrl(
-  boardName: string,
-  layoutId: number,
-  sizeId: number,
-  setIds: string,
-  angle: number,
-  climbUuid: string,
-): string {
-  return `${WEB_BASE_URL}/${boardName}/${layoutId}/${sizeId}/${setIds}/${angle}/view/${climbUuid}`;
-}
 
 function ClimbActionsSheet({
   visible,
@@ -74,7 +64,7 @@ function ClimbActionsSheet({
 
   const handleShare = useCallback(async () => {
     if (!climb) return;
-    const url = buildClimbUrl(boardName, layoutId, sizeId, setIds, angle, climb.uuid);
+    const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
     try {
       await Share.share({ message: `${climb.name}\n${url}`, url });
     } finally {
@@ -84,7 +74,7 @@ function ClimbActionsSheet({
 
   const handleCopyLink = useCallback(async () => {
     if (!climb) return;
-    const url = buildClimbUrl(boardName, layoutId, sizeId, setIds, angle, climb.uuid);
+    const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
     await Clipboard.setStringAsync(url);
     showToast(t('mobile.climbActions.linkCopied'), 'info');
     onClose();
@@ -92,7 +82,7 @@ function ClimbActionsSheet({
 
   const handleReport = useCallback(async () => {
     if (!climb) return;
-    const reportUrl = `${WEB_BASE_URL}/${boardName}/${layoutId}/${sizeId}/${setIds}/${angle}/view/${climb.uuid}?report=true`;
+    const reportUrl = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}?report=true`;
     await WebBrowser.openBrowserAsync(reportUrl);
     onClose();
   }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose]);

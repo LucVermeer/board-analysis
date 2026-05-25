@@ -56,12 +56,24 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
 
   const angles = useMemo(() => anglesData ?? [], [anglesData]);
 
+  // Refs to access latest values without adding deps that re-fire the effect
+  const isOpenRef = useRef(false);
+  const anglesRef = useRef(angles);
+  anglesRef.current = angles;
+  const currentAngleRef = useRef(currentAngle);
+  currentAngleRef.current = currentAngle;
+
   useEffect(() => {
     if (visible) {
+      if (isOpenRef.current) {
+        // Already open — skip re-triggering
+        return undefined;
+      }
+      isOpenRef.current = true;
       sheetRef.current?.snapToIndex(0);
 
       // Auto-scroll to current angle after a short delay to let the list render
-      const currentIndex = angles.findIndex((angleItem) => angleItem.angle === currentAngle);
+      const currentIndex = anglesRef.current.findIndex((angleItem) => angleItem.angle === currentAngleRef.current);
       if (currentIndex >= 0) {
         const scrollTimer = setTimeout(() => {
           try {
@@ -77,10 +89,11 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
         return () => clearTimeout(scrollTimer);
       }
     } else {
+      isOpenRef.current = false;
       sheetRef.current?.close();
     }
     return undefined;
-  }, [visible, angles, currentAngle]);
+  }, [visible]);
 
   const handleClose = useCallback(() => {
     onClose();

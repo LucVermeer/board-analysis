@@ -16,7 +16,7 @@ export type QueueListModel = {
 
 export function buildQueueListModel(
   queue: ClimbQueue,
-  currentClimbUuid: string | null,
+  currentItemUuid: string | null,
   options: {
     showHistory: boolean;
     showFullHistory: boolean;
@@ -27,7 +27,7 @@ export function buildQueueListModel(
   const rows: QueueFlatRow[] = [];
   let currentItemFlatIndex = -1;
 
-  const currentIndex = currentClimbUuid ? queue.findIndex((item) => item.climb.uuid === currentClimbUuid) : -1;
+  const currentIndex = currentItemUuid ? queue.findIndex((item) => item.uuid === currentItemUuid) : -1;
 
   const historyItems = currentIndex > 0 ? queue.slice(0, currentIndex) : [];
   const currentItem = currentIndex >= 0 ? queue[currentIndex] : null;

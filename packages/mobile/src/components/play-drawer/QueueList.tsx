@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -13,36 +13,31 @@ import { brandColors } from '../../theme/colors';
 
 type QueueListProps = {
   queue: ClimbQueueItem[];
-  currentClimbUuid: string | null;
+  currentItemUuid: string | null;
   isEditMode: boolean;
   showHistory: boolean;
   showFullHistory: boolean;
   selectedItems: Set<string>;
+  autoScrollOnMount?: boolean;
   onToggleSelect: (uuid: string) => void;
   onClimbPress: (item: ClimbQueueItem) => void;
   onRemove: (uuid: string) => void;
   onShowFullHistory: () => void;
 };
 
-export type QueueListHandle = {
-  scrollToCurrentClimb: () => void;
-};
-
-export const QueueList = forwardRef<QueueListHandle, QueueListProps>(function QueueList(
-  {
-    queue,
-    currentClimbUuid,
-    isEditMode,
-    showHistory,
-    showFullHistory,
-    selectedItems,
-    onToggleSelect,
-    onClimbPress,
-    onRemove,
-    onShowFullHistory,
-  },
-  ref,
-) {
+export function QueueList({
+  queue,
+  currentItemUuid,
+  isEditMode,
+  showHistory,
+  showFullHistory,
+  selectedItems,
+  autoScrollOnMount,
+  onToggleSelect,
+  onClimbPress,
+  onRemove,
+  onShowFullHistory,
+}: QueueListProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
   const flatListRef = useRef<InstanceType<typeof BottomSheetFlatList>>(null);
@@ -57,28 +52,27 @@ export const QueueList = forwardRef<QueueListHandle, QueueListProps>(function Qu
   }, []);
 
   const { flatRows, currentItemFlatIndex } = useMemo(
-    () => buildQueueListModel(queue, currentClimbUuid, { showHistory, showFullHistory }),
-    [queue, currentClimbUuid, showHistory, showFullHistory],
+    () => buildQueueListModel(queue, currentItemUuid, { showHistory, showFullHistory }),
+    [queue, currentItemUuid, showHistory, showFullHistory],
   );
 
-  useImperativeHandle(ref, () => ({
-    scrollToCurrentClimb: () => {
-      if (currentItemFlatIndex >= 0 && flatRows.length > 0) {
-        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-        scrollTimerRef.current = setTimeout(() => {
-          (
-            flatListRef.current as unknown as {
-              scrollToIndex?: (params: { index: number; animated: boolean; viewPosition: number }) => void;
-            }
-          )?.scrollToIndex?.({
-            index: currentItemFlatIndex,
-            animated: true,
-            viewPosition: 0.3,
-          });
-        }, 300);
-      }
-    },
-  }));
+  useEffect(() => {
+    if (autoScrollOnMount && currentItemFlatIndex >= 0 && flatRows.length > 0) {
+      const timer = setTimeout(() => {
+        (
+          flatListRef.current as {
+            scrollToIndex?: (params: { index: number; animated: boolean; viewPosition: number }) => void;
+          }
+        )?.scrollToIndex?.({
+          index: currentItemFlatIndex,
+          animated: true,
+          viewPosition: 0.3,
+        });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [autoScrollOnMount, currentItemFlatIndex, flatRows.length]);
 
   const keyExtractor = useCallback((row: QueueFlatRow, index: number): string => {
     switch (row.type) {
@@ -102,7 +96,12 @@ export const QueueList = forwardRef<QueueListHandle, QueueListProps>(function Qu
       switch (row.type) {
         case 'history-show-all':
           return (
-            <Pressable onPress={onShowFullHistory} style={styles.showAllRow} accessibilityRole="button">
+            <Pressable
+              onPress={onShowFullHistory}
+              style={styles.showAllRow}
+              accessibilityRole="button"
+              accessibilityLabel={t('queueList.showFullHistoryAria', { count: row.hiddenCount })}
+            >
               <Text variant="subheadline" color={brandColors.primary}>
                 {t('queueList.showFullHistory', { count: row.hiddenCount })}
               </Text>
@@ -185,7 +184,7 @@ export const QueueList = forwardRef<QueueListHandle, QueueListProps>(function Qu
       }}
     />
   );
-});
+}
 
 const styles = StyleSheet.create({
   listContent: {

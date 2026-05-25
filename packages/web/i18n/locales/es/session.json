@@ -222,6 +222,8 @@
     "endMessage": "Eso es todo por ahora",
     "showFullHistory_one": "Mostrar historial completo ({{count}} más)",
     "showFullHistory_other": "Mostrar historial completo ({{count}} más)",
+    "showFullHistoryAria_one": "Mostrar {{count}} elemento más del historial",
+    "showFullHistoryAria_other": "Mostrar {{count}} elementos más del historial",
     "tickHistoryClimb": "Registrar un tick para {{name}}"
   },
   "queueProvider": {
@@ -340,15 +342,17 @@
       "tickLabel": "marca",
       "logAttemptAria": "Registrar intento",
       "saveTickAria": "Guardar marca",
-      "gradeLabel": "Grade",
-      "triesLabel": "Tries",
-      "starsLabel": "Stars",
-      "cancelLabel": "Cancel",
+      "gradeLabel": "Grado",
+      "triesLabel": "Intentos",
+      "starsLabel": "Estrellas",
+      "cancelLabel": "Cancelar",
       "flashSaveLabel": "Flash",
-      "sendSaveLabel": "Send",
-      "logAscentAria": "Log {{status}}",
-      "decreaseTriesAria": "Decrease attempts",
-      "increaseTriesAria": "Increase attempts"
+      "sendSaveLabel": "Envío",
+      "logAscentAria": "Registrar {{status}}",
+      "decreaseTriesAria": "Disminuir intentos",
+      "increaseTriesAria": "Aumentar intentos",
+      "starRating_one": "{{count}} estrella",
+      "starRating_other": "{{count}} estrellas"
     }
   }
 }
