@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useDerivedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
+import { computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { useCarouselGesture } from './use-carousel-gesture';
@@ -59,10 +60,11 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     transform: [{ translateX: translateX.value }],
   }));
 
-  const peekDirection = useDerivedValue(() => (translateX.value < 0 ? 'next' : 'prev'));
+  const peekDirection = useDerivedValue<PeekDirection>(() => (translateX.value < 0 ? 'next' : 'prev'));
 
-  // Track direction in JS state so PeekBoard can select the correct frames
-  const [jsDirection, setJsDirection] = React.useState<'next' | 'prev'>('next');
+  // Mirror direction into JS state so the React tree can swap the peek board's
+  // climb frames between renders.
+  const [jsDirection, setJsDirection] = React.useState<PeekDirection>('next');
   useAnimatedReaction(
     () => peekDirection.value,
     (direction) => {
@@ -72,16 +74,16 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   );
 
   const peekStyle = useAnimatedStyle(() => {
-    const isSwiping = translateX.value !== 0;
-    if (!isSwiping) return { opacity: 0, transform: [{ translateX: screenWidth }] };
-
-    const peekOffset =
-      peekDirection.value === 'next' ? screenWidth + translateX.value : -screenWidth + translateX.value;
-
-    return {
-      opacity: 1,
-      transform: [{ translateX: peekOffset }],
-    };
+    if (translateX.value === 0) {
+      // Park the peek board off-screen when idle so it does not intercept layout.
+      return { opacity: 0, transform: [{ translateX: screenWidth }] };
+    }
+    const offset = computePeekOffset({
+      direction: peekDirection.value,
+      swipeOffset: translateX.value,
+      viewportWidth: screenWidth,
+    });
+    return { opacity: 1, transform: [{ translateX: offset }] };
   });
 
   const { boardWidth, boardHeight } = boardRenderData;
@@ -103,7 +105,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
           />
         </Animated.View>
 
-        <Animated.View style={[styles.peekWrapper, peekStyle]}>
+        <Animated.View style={[styles.peekWrapper, peekStyle]} pointerEvents="none">
           {peekFrames && (
             <BoardImageNative
               frames={peekFrames}
