@@ -14,6 +14,18 @@ import { RNBleAdapter } from './adapter';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 
+// Exported for testing — isolates the .packet extraction so regressions are caught.
+export async function dispatchMoonboardPacket(
+  frames: string,
+  write: BluetoothAdapter['write'],
+  signal?: AbortSignal,
+): Promise<true | undefined> {
+  if (!frames) return undefined;
+  const { packet } = getMoonboardBluetoothPacket(frames);
+  await write(packet, signal);
+  return true;
+}
+
 export type PickerState = {
   devices: DiscoveredDevice[];
   isScanning: boolean;
@@ -130,11 +142,8 @@ export function useBoardBluetooth({
 
       try {
         if (boardName === 'moonboard') {
-          if (!frames) return;
-          const bluetoothPacket = getMoonboardBluetoothPacket(frames);
-          await adapterRef.current.write(bluetoothPacket.packet, signal);
           // TODO: analytics (Phase 6)
-          return true;
+          return dispatchMoonboardPacket(frames, adapterRef.current.write.bind(adapterRef.current), signal);
         }
 
         // Empty frames = "clear all LEDs" for Aurora boards

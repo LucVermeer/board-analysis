@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import type { ClimbFilters } from './climb-filter-types';
-export { getFilterKey } from './filter-key';
+import { getFilterKey } from './filter-key';
+
+export { getFilterKey };
 
 export type RecentFilter = {
   id: string;
@@ -12,8 +14,6 @@ export type RecentFilter = {
 
 const RECENT_FILTERS_KEY = 'boardsesh_recent_filters';
 const MAX_ITEMS = 10;
-
-import { getFilterKey } from './filter-key';
 
 export async function getRecentFilters(): Promise<RecentFilter[]> {
   try {

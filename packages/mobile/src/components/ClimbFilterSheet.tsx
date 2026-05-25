@@ -16,10 +16,11 @@ import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
-export type { ClimbFilters } from '../lib/climb-filter-types';
-export { DEFAULT_FILTERS } from '../lib/climb-filter-types';
 import type { ClimbFilters } from '../lib/climb-filter-types';
 import { DEFAULT_FILTERS } from '../lib/climb-filter-types';
+
+export type { ClimbFilters };
+export { DEFAULT_FILTERS };
 
 type ClimbFilterSheetProps = {
   visible: boolean;

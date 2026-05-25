@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { HoldPlacement } from '../../../components/board-renderer/types';
 
 // ── Mock native modules that use-board-bluetooth.ts imports transitively ──
@@ -18,17 +18,18 @@ vi.mock('@boardsesh/ble-protocol/aurora', () => ({
   parseSerialNumber: vi.fn(),
 }));
 
+const mockGetMoonboardBluetoothPacket = vi.hoisted(() => vi.fn());
 vi.mock('@boardsesh/ble-protocol/moonboard', () => ({
-  getMoonboardBluetoothPacket: vi.fn(),
+  getMoonboardBluetoothPacket: mockGetMoonboardBluetoothPacket,
 }));
 
 vi.mock('../adapter', () => ({
   RNBleAdapter: vi.fn(),
 }));
 
-import { convertToMirroredFramesString } from '../use-board-bluetooth';
+import { convertToMirroredFramesString, dispatchMoonboardPacket } from '../use-board-bluetooth';
 
-// ── Factory helper ──────────────────────────────────────────────────────
+// ── Factory helper ─────────────────────────────────────────────────────────
 
 function makePlacement(id: number, mirroredHoldId: number | null): HoldPlacement {
   return { id, mirroredHoldId, cx: 0, cy: 0, r: 10 };
@@ -116,5 +117,55 @@ describe('convertToMirroredFramesString', () => {
     const result = convertToMirroredFramesString(frames, holdsData);
 
     expect(result).toBe('p20r1');
+  });
+});
+
+// ── dispatchMoonboardPacket ─────────────────────────────────────────────────
+
+describe('dispatchMoonboardPacket', () => {
+  beforeEach(() => {
+    mockGetMoonboardBluetoothPacket.mockReset();
+  });
+
+  it('calls write() with the packet bytes, not the full packet object', async () => {
+    const fakePacket = new Uint8Array([0x01, 0x02, 0x03]);
+    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    await dispatchMoonboardPacket('p1r12p2r14', write);
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledWith(fakePacket, undefined);
+    // Confirm the full object was NOT passed (catches the `.packet` omission regression)
+    expect(write).not.toHaveBeenCalledWith({ packet: fakePacket }, undefined);
+  });
+
+  it('returns true on success', async () => {
+    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: new Uint8Array([0x00]) });
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchMoonboardPacket('p1r12', write);
+
+    expect(result).toBe(true);
+  });
+
+  it('returns undefined and skips write when frames is empty', async () => {
+    const write = vi.fn();
+
+    const result = await dispatchMoonboardPacket('', write);
+
+    expect(result).toBeUndefined();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('forwards the AbortSignal to write()', async () => {
+    const fakePacket = new Uint8Array([0xaa]);
+    mockGetMoonboardBluetoothPacket.mockReturnValue({ packet: fakePacket });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const controller = new AbortController();
+
+    await dispatchMoonboardPacket('p5r3', write, controller.signal);
+
+    expect(write).toHaveBeenCalledWith(fakePacket, controller.signal);
   });
 });
