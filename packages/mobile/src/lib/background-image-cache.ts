@@ -133,44 +133,87 @@ type BackgroundParams = {
 };
 
 /**
- * Sync lookup for all background paths for a given board config.
- * Returns the array of filesystem paths if every required background is
- * already resolved; returns null on any miss. Callers (the hook's
- * useState initializer) use this so the placeholder layer can render
- * with backgrounds visible on the very first frame in production.
+ * Result of a background lookup. `paths` is the list of filesystem paths
+ * that successfully resolved; `missingCount` is the number of expected
+ * background layers that did NOT resolve (manifest miss or asset
+ * resolution failure). Callers must use `missingCount` to render visible
+ * placeholder gaps — silently dropping a layer would hide bugs where a
+ * new board has been added to the schema but not yet bundled. Per the
+ * no-network rule there is no server fallback; broken must be visible.
+ *
+ * Returns null when `getBoardRenderData` itself fails (unknown board /
+ * layout combo) — caller has no expected layer count to fall back on.
  */
-export function tryGetBackgroundPathsSync(params: BackgroundParams): string[] | null {
+export type BackgroundLookupResult = {
+  paths: string[];
+  missingCount: number;
+};
+
+/**
+ * Sync lookup for all background paths for a given board config.
+ * Returns paths + missingCount when render data is available, null when
+ * render data itself is missing. A non-null result with missingCount > 0
+ * means some layers were not bundled — callers must visibly fill those
+ * gaps. Callers (the hook's useState initializer) use this so the
+ * placeholder layer can render with backgrounds visible on the very
+ * first frame in production.
+ */
+export function tryGetBackgroundPathsSync(params: BackgroundParams): BackgroundLookupResult | null {
   const renderData = getBoardRenderData(params);
   if (!renderData) return null;
 
   const paths: string[] = [];
+  let missingCount = 0;
   for (const imageUrl of renderData.imageUrls) {
     const manifestKey = manifestKeyFromUrl(imageUrl);
-    if (!manifestKey) return null;
+    if (!manifestKey) {
+      missingCount++;
+      continue;
+    }
     const path = tryResolveBundledPathSync(manifestKey);
-    if (!path) return null;
+    if (!path) {
+      // Sync miss: could be a true manifest miss OR just the dev-mode
+      // case where Asset.localUri isn't populated yet. The async path
+      // will surface true misses with the right count; sync's job here
+      // is to surface "anything not ready yet" so the hook knows to do
+      // the async pass. Treat as missing for now.
+      missingCount++;
+      continue;
+    }
     paths.push(path);
   }
-  return paths;
+  return { paths, missingCount };
 }
 
 /**
  * Async resolve all background paths for a given board config. Materializes
- * any not-yet-resolved bundled assets (dev mode), then returns the full set.
- * Missing manifest entries are warned once and skipped — the returned
- * array may have fewer paths than expected, in which case the renderer
- * shows no background for those layers.
+ * any not-yet-resolved bundled assets (dev mode), then returns the full
+ * set plus missingCount. A missingCount > 0 means a manifest entry was
+ * absent or asset resolution failed — callers MUST render a visible gap
+ * per missing layer instead of silently treating the partial result as
+ * complete. Returns null only when `getBoardRenderData` is itself
+ * missing (unknown board).
  */
-export async function ensureBackgroundsCached(params: BackgroundParams): Promise<string[]> {
+export async function ensureBackgroundsCached(
+  params: BackgroundParams,
+): Promise<BackgroundLookupResult | null> {
   const renderData = getBoardRenderData(params);
-  if (!renderData) return [];
+  if (!renderData) return null;
 
   const paths: string[] = [];
+  let missingCount = 0;
   for (const imageUrl of renderData.imageUrls) {
     const manifestKey = manifestKeyFromUrl(imageUrl);
-    if (!manifestKey) continue;
+    if (!manifestKey) {
+      missingCount++;
+      continue;
+    }
     const path = await resolveBundledPathAsync(manifestKey);
-    if (path) paths.push(path);
+    if (path) {
+      paths.push(path);
+    } else {
+      missingCount++;
+    }
   }
-  return paths;
+  return { paths, missingCount };
 }

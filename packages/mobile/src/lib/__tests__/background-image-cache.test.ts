@@ -53,7 +53,7 @@ describe('ensureBackgroundsCached', () => {
     downloadAsyncMock.mockClear();
   });
 
-  it('returns empty array when board render data is missing', async () => {
+  it('returns null when board render data is missing', async () => {
     vi.mocked(getBoardRenderData).mockReturnValue(null);
     const result = await ensureBackgroundsCached({
       boardName: 'kilter',
@@ -61,7 +61,9 @@ describe('ensureBackgroundsCached', () => {
       sizeId: 10,
       setIds: [24],
     });
-    expect(result).toEqual([]);
+    // Null when getBoardRenderData itself fails — caller has no expected
+    // layer count to fall back on, so a partial result would be misleading.
+    expect(result).toBeNull();
   });
 
   it('resolves bundled assets without calling downloadAsync when localUri is populated', async () => {
@@ -79,7 +81,7 @@ describe('ensureBackgroundsCached', () => {
       setIds: [24],
     });
 
-    expect(result).toEqual(['/bundled/100.webp']);
+    expect(result).toEqual({ paths: ['/bundled/100.webp'], missingCount: 0 });
     // Production bundled assets short-circuit downloadAsync via the sync
     // fast-path — neither ensureBackgroundsCached nor the underlying
     // sync resolver should call it.
@@ -102,10 +104,10 @@ describe('ensureBackgroundsCached', () => {
       setIds: [24],
     });
 
-    expect(result).toEqual(['/bundled/200.webp']);
+    expect(result).toEqual({ paths: ['/bundled/200.webp'], missingCount: 0 });
   });
 
-  it('skips layers missing from the manifest (no network fallback)', async () => {
+  it('surfaces a manifest miss via missingCount (no silent drop, no network fallback)', async () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
@@ -120,11 +122,37 @@ describe('ensureBackgroundsCached', () => {
       setIds: [24],
     });
 
-    // The no-network rule means a manifest miss is silent (after a one-time
-    // warn) — the caller gets back an empty path list and the renderer
-    // shows nothing for that layer.
-    expect(result).toEqual([]);
+    // The no-network rule means a manifest miss is surfaced as a
+    // missingCount — the caller MUST render a visible gap so the bug is
+    // reportable, not invisibly-broken.
+    expect(result).toEqual({ paths: [], missingCount: 1 });
     expect(downloadAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('returns a partial result with the right missingCount when only some layers resolve', async () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      // First URL resolves via the manifest; second is a Tension layer
+      // we never bundled (the bug this fix targets).
+      imageUrls: [
+        'https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png',
+        'https://www.boardsesh.com/images/newboard/missing-layer.png',
+      ],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    const result = await ensureBackgroundsCached({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+    });
+
+    // 1 layer resolved, 1 missing — the consumer must show a visible
+    // placeholder for the missing one. Previously this returned just
+    // ['/bundled/100.webp'] and the consumer never knew a layer was lost.
+    expect(result).toEqual({ paths: ['/bundled/100.webp'], missingCount: 1 });
   });
 });
 
@@ -148,10 +176,10 @@ describe('tryGetBackgroundPathsSync', () => {
       setIds: [24],
     });
 
-    expect(result).toEqual(['/bundled/100.webp']);
+    expect(result).toEqual({ paths: ['/bundled/100.webp'], missingCount: 0 });
   });
 
-  it('returns null on any manifest miss', () => {
+  it('surfaces manifest misses via missingCount instead of silently dropping them', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
@@ -169,7 +197,11 @@ describe('tryGetBackgroundPathsSync', () => {
       setIds: [24],
     });
 
-    expect(result).toBeNull();
+    // Resolved layer + missingCount. The hook propagates missingCount to
+    // the components, which render a visible placeholder per missing
+    // layer. Before the fix this returned null and the caller fell back
+    // to an empty array with no signal that a layer was lost.
+    expect(result).toEqual({ paths: ['/bundled/100.webp'], missingCount: 1 });
   });
 
   it('returns null when getBoardRenderData fails', () => {

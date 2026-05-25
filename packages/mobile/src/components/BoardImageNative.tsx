@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, type ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
+import { View, type ViewStyle } from 'react-native';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { useNativeClimbRender } from '../hooks/use-native-climb-render';
+import { LayeredClimbImage } from './LayeredClimbImage';
 
 type BoardImageNativeProps = {
   frames: string;
@@ -18,11 +18,10 @@ type BoardImageNativeProps = {
 
 /**
  * Full-size layered board image, suited for the PlayView drawer and the
- * climb detail page. The bundled board background images render
- * synchronously underneath; the holds-only overlay PNG (from the Rust
- * renderer) fades in on top once available. Both use contentFit="contain"
- * inside an aspect-ratio-locked container so they line up perfectly
- * regardless of native source dimensions.
+ * climb detail page. Wraps the shared LayeredClimbImage stack in an
+ * aspect-ratio-locked container so the bundled board background and
+ * holds-only overlay line up perfectly regardless of native source
+ * dimensions.
  *
  * Mirrors via CSS to match the SVG renderer's behavior (background +
  * holds flipped together) — the Rust `mirrored` flag is intentionally
@@ -39,7 +38,7 @@ const BoardImageNative = React.memo(function BoardImageNative({
   mirrored,
   style,
 }: BoardImageNativeProps) {
-  const { overlayUri, backgroundPaths } = useNativeClimbRender({
+  const { overlayUri, backgroundPaths, missingBackgroundCount } = useNativeClimbRender({
     frames,
     boardName,
     layoutId,
@@ -55,48 +54,14 @@ const BoardImageNative = React.memo(function BoardImageNative({
 
   return (
     <View style={containerStyle}>
-      <View style={[styles.stack, mirrored && styles.mirrored]}>
-        {backgroundPaths.map((path) => (
-          <Image
-            key={path}
-            source={{ uri: `file://${path}` }}
-            style={styles.layer}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-          />
-        ))}
-        {overlayUri && (
-          <Image
-            source={{ uri: overlayUri }}
-            style={styles.layer}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            transition={150}
-          />
-        )}
-      </View>
+      <LayeredClimbImage
+        overlayUri={overlayUri}
+        backgroundPaths={backgroundPaths}
+        missingBackgroundCount={missingBackgroundCount}
+        mirrored={mirrored}
+      />
     </View>
   );
 });
 
 export { BoardImageNative };
-
-const styles = StyleSheet.create({
-  stack: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  layer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  mirrored: {
-    transform: [{ scaleX: -1 }],
-  },
-});

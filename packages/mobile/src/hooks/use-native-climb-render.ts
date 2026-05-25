@@ -6,6 +6,18 @@ import { getBoardRenderData } from '../lib/board-details';
 import { ensureBackgroundsCached, tryGetBackgroundPathsSync } from '../lib/background-image-cache';
 
 /**
+ * Bump when the Rust renderer output format changes. v2 marks the
+ * switch from composited PNGs (backgrounds baked in) to overlay-only
+ * PNGs (transparent background, holds only) — old v1 files in the
+ * cache directory are stale and the layered RN component would
+ * double-paint backgrounds if it loaded them.
+ */
+const RENDERER_VERSION = 2;
+
+/** Subset of expo-file-system's `File`: its synchronous `delete()`. */
+type DeletableFsEntry = { delete?: () => void };
+
+/**
  * Inputs to the native climb renderer. Just the climb identity — no
  * render-size or quality knobs. The hook always renders at the board's
  * native pixel dimensions (from getBoardRenderData) and the consuming
@@ -35,12 +47,20 @@ type NativeClimbRenderResult = {
    */
   overlayUri: string | null;
   /**
-   * Filesystem paths (no scheme) of the bundled board background images.
-   * Returned synchronously when bundled-asset paths are already
-   * materialized (production builds), empty array otherwise (dev mode
-   * before downloadAsync has run, or manifest miss).
+   * Filesystem paths (no scheme) of the bundled board background images
+   * that resolved successfully. Returned synchronously when bundled-asset
+   * paths are already materialized (production builds), populated after
+   * an async pass otherwise.
    */
   backgroundPaths: string[];
+  /**
+   * Number of background layers the renderer expected but could not
+   * resolve (manifest miss, asset resolution failure, etc). Consumers
+   * MUST render a visible placeholder per missing layer — the no-network
+   * rule means we never fall back to a server, so missing layers have to
+   * be visible-broken to the user instead of invisibly-broken.
+   */
+  missingBackgroundCount: number;
 };
 
 /**
@@ -89,12 +109,29 @@ function warmupRenderedOverlaysOnce(): void {
   try {
     const cacheDir = new Directory(Paths.cache, CACHE_DIR_NAME);
     if (!cacheDir.exists) return;
+    // Only PNGs from the current RENDERER_VERSION can be reused. Older
+    // version prefixes (e.g. v1_*) describe a different render format and
+    // would never be matched by cacheKey lookups, so loading them into
+    // the map just wastes memory. Opportunistically delete those stale
+    // files to reclaim disk while we're already walking the directory.
+    const currentVersionPrefix = `v${RENDERER_VERSION}_`;
     for (const entry of cacheDir.list()) {
       if (!('uri' in entry) || typeof entry.uri !== 'string') continue;
       // Files only — skip subdirectories. expo-file-system returns
       // File and Directory instances; File has a .name like "<key>.png".
       const name = (entry as { name?: string }).name;
       if (!name || !name.endsWith('.png')) continue;
+      if (!name.startsWith(currentVersionPrefix)) {
+        // Stale leftover from a prior RENDERER_VERSION. Best-effort delete;
+        // any failure (permissions, race with another writer) is non-fatal
+        // — the file simply lingers until the OS reclaims cache space.
+        try {
+          (entry as DeletableFsEntry).delete?.();
+        } catch {
+          // Swallow — never let a delete failure crash the warmup.
+        }
+        continue;
+      }
       const cacheKey = name.slice(0, -'.png'.length);
       renderedOverlays.set(cacheKey, entry.uri);
     }
@@ -102,6 +139,17 @@ function warmupRenderedOverlaysOnce(): void {
     // Filesystem errors at startup shouldn't break the app — the hook's
     // render path will repopulate the map as climbs are viewed.
   }
+}
+
+/** Test-only handle for re-running the warm-up against a fresh mock list. */
+export function _resetWarmupForTests(): void {
+  warmupRun = false;
+  renderedOverlays.clear();
+}
+
+/** Test-only handle to invoke the warm-up explicitly (it normally runs lazily on first render). */
+export function _runWarmupForTests(): void {
+  warmupRenderedOverlaysOnce();
 }
 
 /**
@@ -156,15 +204,6 @@ const boardConfigCache = new Map<
 >();
 
 /**
- * Bump when the Rust renderer output format changes. v2 marks the
- * switch from composited PNGs (backgrounds baked in) to overlay-only
- * PNGs (transparent background, holds only) — old v1 files in the
- * cache directory are stale and the layered RN component would
- * double-paint backgrounds if it loaded them.
- */
-const RENDERER_VERSION = 2;
-
-/**
  * FNV-1a 32-bit hash, returned as 8-char hex. Used to keep the cache
  * filename bounded — long climbs can produce frame strings hundreds of
  * chars long, and both iOS and Android cap filenames at 255 bytes.
@@ -180,6 +219,23 @@ function fnv1aHex(input: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+/**
+ * Canonicalize the comma-separated setIds string so that equivalent
+ * inputs hash to the same cache key regardless of order or duplicates.
+ * Mirrors the filter in getBoardConfig (split/Number/filter(Boolean))
+ * and additionally sorts ascending — '25,24' and '24,25' both become
+ * '24,25'. Without this, two callers passing the same sets in different
+ * order would each occupy a separate cache slot for the same render.
+ */
+function canonicalizeSetIds(setIds: string): string {
+  return setIds
+    .split(',')
+    .map(Number)
+    .filter(Boolean)
+    .sort((a, b) => a - b)
+    .join(',');
+}
+
 export function buildCacheKey(
   boardName: string,
   layoutId: number,
@@ -188,7 +244,26 @@ export function buildCacheKey(
   frames: string,
 ): string {
   const framesHash = fnv1aHex(frames);
-  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${framesHash}`;
+  const canonicalSetIds = canonicalizeSetIds(setIds);
+  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${canonicalSetIds}_${framesHash}`;
+}
+
+/**
+ * Identity tuple for the board configuration that determines which
+ * background images apply. Unlike the per-climb cache key, this does NOT
+ * include `frames` — the bundled background PNGs are the same for every
+ * climb on a given board/layout/size/setIds combo. Used to guard the
+ * backgroundPaths state so FlashList row recycling (which keeps the same
+ * hook instance but swaps in new props) can't surface stale paths from
+ * the previous climb's board.
+ */
+export function buildBoardKey(
+  boardName: string,
+  layoutId: number,
+  sizeId: number,
+  setIds: string,
+): string {
+  return `${boardName}-${layoutId}-${sizeId}-${setIds}`;
 }
 
 function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, setIds: string) {
@@ -255,10 +330,16 @@ function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, 
  */
 let renderModule: typeof import('../../modules/board-renderer/src/index') | null = null;
 let moduleLoadAttempted = false;
+let moduleLoadFailureCount = 0;
+// Cap retries so we don't call require() on every render forever in
+// the genuinely-unavailable case (Expo Go, dev client without the
+// native binary). The transient case — fast-refresh timing where the
+// module registers slightly after JS evaluation — typically resolves
+// within a render or two, well under this budget.
+const MODULE_LOAD_MAX_ATTEMPTS = 5;
 
 function getNativeModule() {
   if (moduleLoadAttempted) return renderModule;
-  moduleLoadAttempted = true;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const loaded = require('../../modules/board-renderer/src/index') as typeof renderModule;
@@ -266,11 +347,23 @@ function getNativeModule() {
     // native binary isn't loaded. Treat that as "no native renderer
     // available" — the hook returns a null overlayUri and the component
     // shows backgrounds only.
-    renderModule = loaded?.boardRendererNative ? loaded : null;
+    if (loaded?.boardRendererNative) {
+      renderModule = loaded;
+      moduleLoadAttempted = true;
+      return renderModule;
+    }
   } catch {
+    // fall through to the retry-budget logic below
+  }
+  // Either the require() threw or the native binary wasn't registered
+  // yet. Leave moduleLoadAttempted = false so the next render retries,
+  // until we exhaust the budget and give up for this JS context.
+  moduleLoadFailureCount += 1;
+  if (moduleLoadFailureCount >= MODULE_LOAD_MAX_ATTEMPTS) {
+    moduleLoadAttempted = true;
     renderModule = null;
   }
-  return renderModule;
+  return null;
 }
 
 /**
@@ -288,6 +381,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   warmupRenderedOverlaysOnce();
 
   const currentCacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames);
+  const currentBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds);
 
   // Seed both pieces of state synchronously so the first paint already
   // shows whatever's available. Backgrounds in production are usually
@@ -298,9 +392,26 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     const existing = renderedOverlays.get(currentCacheKey);
     return existing ? { key: currentCacheKey, uri: existing } : null;
   });
-  const [backgroundPaths, setBackgroundPaths] = useState<string[]>(
-    () => tryGetBackgroundPathsSync({ boardName, layoutId, sizeId, setIds: setIds.split(',').map(Number).filter(Boolean) }) ?? [],
-  );
+  // Background state combines two guards:
+  //   - `key`: locks the value to a specific board config so a FlashList
+  //     row recycled to a different climb can't surface the previous
+  //     climb's paths (same hook instance, new props).
+  //   - `missingCount`: how many expected layers the cache couldn't
+  //     resolve. Surfaced to the consumer so it can render visible
+  //     placeholder gaps — silently dropping a layer is the exact
+  //     failure mode the no-network rule made dangerous.
+  const [storedBackgrounds, setStoredBackgrounds] = useState<
+    { key: string; paths: string[]; missingCount: number } | null
+  >(() => {
+    const sync = tryGetBackgroundPathsSync({
+      boardName,
+      layoutId,
+      sizeId,
+      setIds: setIds.split(',').map(Number).filter(Boolean),
+    });
+    if (!sync) return null;
+    return { key: currentBoardKey, paths: sync.paths, missingCount: sync.missingCount };
+  });
 
   const mountedRef = useRef(true);
 
@@ -311,29 +422,79 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     };
   }, []);
 
-  // Background-paths effect: if the sync path returned empty (dev mode,
-  // or the asset module hadn't loaded yet), do the async resolve and
-  // update state. In production this typically no-ops because the sync
-  // seed already populated.
+  // Background-paths effect: always re-resolve on board config change.
+  // We can't bail early on "non-empty paths" because that would treat a
+  // partial result (some layers resolved, some missing) as complete and
+  // never surface the true missingCount. The async resolver re-derives
+  // the latest boardKey after await and discards stale results so a
+  // slow resolve from a previous prop value can't clobber the current.
   useEffect(() => {
-    if (backgroundPaths.length > 0) return;
+    const setIdsArray = setIds.split(',').map(Number).filter(Boolean);
+
+    // Try sync first when stored entry is missing or for a different
+    // board: in production Asset.localUri is usually pre-populated, so
+    // the sync result is the authoritative one.
+    if (!storedBackgrounds || storedBackgrounds.key !== currentBoardKey) {
+      const sync = tryGetBackgroundPathsSync({
+        boardName,
+        layoutId,
+        sizeId,
+        setIds: setIdsArray,
+      });
+      if (sync) {
+        setStoredBackgrounds({
+          key: currentBoardKey,
+          paths: sync.paths,
+          missingCount: sync.missingCount,
+        });
+      }
+    }
+
     let cancelled = false;
     void (async () => {
-      const setIdsArray = setIds.split(',').map(Number).filter(Boolean);
-      const resolved = await ensureBackgroundsCached({ boardName, layoutId, sizeId, setIds: setIdsArray });
-      if (!cancelled && mountedRef.current && resolved.length > 0) {
-        setBackgroundPaths(resolved);
-      }
+      const resolved = await ensureBackgroundsCached({
+        boardName,
+        layoutId,
+        sizeId,
+        setIds: setIdsArray,
+      });
+      if (cancelled || !mountedRef.current) return;
+      // Null = getBoardRenderData failed; leave existing state alone.
+      if (!resolved) return;
+      // Guard against a stale resolution from a previous boardKey
+      // clobbering the current climb's state. mountedRef alone isn't
+      // enough — the hook instance is still mounted, just on different
+      // props now.
+      const latestBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds);
+      if (latestBoardKey !== currentBoardKey) return;
+      setStoredBackgrounds((prev) => {
+        // Skip the state update when nothing actually changed, to avoid
+        // a needless re-render. Paths are content-addressed so a length
+        // + first-path comparison is sufficient.
+        if (
+          prev?.key === currentBoardKey &&
+          prev.missingCount === resolved.missingCount &&
+          prev.paths.length === resolved.paths.length &&
+          prev.paths[0] === resolved.paths[0]
+        ) {
+          return prev;
+        }
+        return {
+          key: currentBoardKey,
+          paths: resolved.paths,
+          missingCount: resolved.missingCount,
+        };
+      });
     })();
     return () => {
       cancelled = true;
     };
-    // Re-resolve only when the climb's board config changes. backgroundPaths
-    // is intentionally excluded from deps: it's the state this effect *sets*,
-    // and including it would re-trigger the effect every time the resolve
-    // populates the paths (causing an infinite loop in the empty-resolve case).
+    // Re-resolve when the board config changes. storedBackgrounds is the
+    // state this effect *sets*; including it would re-trigger on every
+    // successful resolve. The boardKey check inside the async block
+    // covers staleness across prop changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardName, layoutId, sizeId, setIds]);
+  }, [boardName, layoutId, sizeId, setIds, currentBoardKey]);
 
   // Overlay-render effect: kick off the native render if we don't already
   // have one for this cache key in the sync map.
@@ -387,5 +548,11 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   // Only surface the native URI if it matches the *current* cache key —
   // a stale render (from before a prop change) would otherwise show.
   const overlayUri = nativeRender?.key === currentCacheKey ? nativeRender.uri : null;
-  return { overlayUri, backgroundPaths };
+  // Same guard for backgrounds: a stored entry from a prior boardKey
+  // (FlashList row recycle case) must not bleed through to the new climb.
+  const backgroundPaths =
+    storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.paths : [];
+  const missingBackgroundCount =
+    storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.missingCount : 0;
+  return { overlayUri, backgroundPaths, missingBackgroundCount };
 }
