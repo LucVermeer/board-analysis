@@ -1,17 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// expo-file-system: stub Directory/Paths so the eager warm-up's
+// `new Directory(Paths.cache, 'board-thumbnails').list()` runs without
+// hitting a real filesystem. The default mock returns an empty list.
+const directoryListSpy = vi.fn<() => Array<{ uri: string; name: string }>>(() => []);
+class MockDirectory {
+  uri: string;
+  exists = true;
+  constructor(...parts: (string | { uri: string })[]) {
+    this.uri = parts.map((p) => (typeof p === 'string' ? p : p.uri)).join('/');
+  }
+  list = () => directoryListSpy();
+}
 vi.mock('expo-file-system', () => ({
-  File: class MockFile {
-    uri = '';
-    exists = false;
-    static downloadFileAsync = vi.fn();
-  },
-  Directory: class MockDirectory {
-    uri = '';
-    exists = false;
-    create = vi.fn();
-  },
-  Paths: { document: '/mock' },
+  Directory: MockDirectory,
+  Paths: { cache: { uri: '/mock/cache' } },
 }));
 
 vi.mock('../../lib/board-details', () => ({
@@ -20,34 +23,43 @@ vi.mock('../../lib/board-details', () => ({
 
 vi.mock('../../lib/background-image-cache', () => ({
   ensureBackgroundsCached: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock('../../lib/thumbnail-url', () => ({
-  buildThumbnailUrl: ({ frames }: { frames: string }) =>
-    `https://server.test/thumb?frames=${frames}`,
-  buildFullRenderUrl: ({ frames }: { frames: string }) =>
-    `https://server.test/full?frames=${frames}`,
+  tryGetBackgroundPathsSync: vi.fn().mockReturnValue(null),
 }));
 
 // Simulate the Expo Go / dev-build-without-Rust-libs case: requireNativeModule
-// throws. The hook's try/catch around require() should swallow this so the
-// initial server URL stays as-is.
+// throws. The hook's try/catch around require() should swallow this so
+// overlayUri stays null and backgroundPaths is whatever the sync seed got.
 vi.mock('../../../modules/board-renderer/src/index', () => {
   throw new Error('Native module not available (simulated Expo Go)');
 });
 
 const {
   buildCacheKey,
-  getServerFallbackUri,
   getOrStartInflightRender,
   _inflightRendersForTests,
-} = await import('../use-native-thumbnail');
+  _renderedOverlaysForTests,
+} = await import('../use-native-climb-render');
 
 describe('buildCacheKey', () => {
   it('hashes the frames component so the key fits in a filename', () => {
     const key = buildCacheKey('kilter', 1, 10, '24,25', 'p1r42p2r43');
     // v<version>_<board>_<layout>_<size>_<sets>_<8-hex-hash>
     expect(key).toMatch(/^v\d+_kilter_1_10_24,25_[0-9a-f]{8}$/);
+  });
+
+  it('does not include output-width or quality suffixes (single PNG per climb)', () => {
+    const key = buildCacheKey('kilter', 1, 10, '24', 'p1r42');
+    // Old key shape carried _w<n> and _<quality>; the unified renderer
+    // produces one PNG per climb so neither belongs in the key.
+    expect(key).not.toMatch(/_w\d+/);
+    expect(key).not.toMatch(/_(thumbnail|full)/);
+  });
+
+  it('uses RENDERER_VERSION v2 to invalidate v1 composited PNGs', () => {
+    // v1 produced backgrounds-baked-in PNGs; v2 produces transparent
+    // holds-only overlays. The version prefix guarantees no v1 file is
+    // reused as a v2 overlay (which would double-paint backgrounds).
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/^v2_/);
   });
 
   it('produces different keys for different frames', () => {
@@ -59,18 +71,6 @@ describe('buildCacheKey', () => {
   it('produces different keys for different boards', () => {
     expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(
       buildCacheKey('tension', 1, 10, '24', 'p1r42'),
-    );
-  });
-
-  it('produces different keys for different output widths', () => {
-    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42', 200)).not.toBe(
-      buildCacheKey('kilter', 1, 10, '24', 'p1r42', 800),
-    );
-  });
-
-  it('produces different keys for different background qualities', () => {
-    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42', 200, 'thumbnail')).not.toBe(
-      buildCacheKey('kilter', 1, 10, '24', 'p1r42', 200, 'full'),
     );
   });
 
@@ -93,51 +93,12 @@ describe('buildCacheKey', () => {
     const key = buildCacheKey('kilter', 1, 10, '24', longFrames);
     expect(key.length).toBeLessThan(64);
   });
-
-  it('includes a version prefix', () => {
-    const key = buildCacheKey('kilter', 1, 10, '24', 'p1r42');
-    expect(key).toMatch(/^v\d+_/);
-  });
-});
-
-// Verifies the Expo Go / no-native-module fallback contract. The hook
-// seeds useState with getServerFallbackUri's result and only ever
-// overwrites it from the native render path, so if getNativeModule()
-// returns null (require throws — simulated by the vi.mock above), the
-// hook's returned uri equals what this function returns.
-describe('getServerFallbackUri (Expo Go fallback contract)', () => {
-  const baseParams = {
-    frames: 'p1r42',
-    boardName: 'kilter' as const,
-    layoutId: 1,
-    sizeId: 10,
-    setIds: '24',
-  };
-
-  it('returns the thumbnail server URL', () => {
-    expect(getServerFallbackUri(baseParams)).toBe(
-      'https://server.test/thumb?frames=p1r42',
-    );
-  });
-
-  it('returns the thumbnail URL even when backgroundQuality is "full"', () => {
-    // The play view's drawer opens showing this URI while the native
-    // full-render is in progress. The thumbnail URL is already in
-    // expo-image's cache from the list view, so it shows instantly;
-    // using the full-quality server URL would trigger a multi-second
-    // fresh fetch that defeats the point of native rendering.
-    expect(getServerFallbackUri({ ...baseParams, backgroundQuality: 'full' })).toBe(
-      'https://server.test/thumb?frames=p1r42',
-    );
-  });
 });
 
 // The dedup + cap contract was extracted into a plain helper specifically
 // so it can be tested without a working React renderer. The hook-level
 // pieces that still need React (mountedRef guard, setState after settle)
-// are covered by manual QA on device — the @testing-library/react +
-// jsdom + bun-resolved React 19 combo currently produces a null
-// dispatcher for useState.
+// are covered by manual QA on device.
 describe('getOrStartInflightRender', () => {
   beforeEach(() => {
     _inflightRendersForTests.clear();
@@ -204,5 +165,23 @@ describe('getOrStartInflightRender', () => {
     expect(_inflightRendersForTests.size).toBe(50);
     expect(_inflightRendersForTests.has('key-0')).toBe(false);
     expect(_inflightRendersForTests.has('key-50')).toBe(true);
+  });
+});
+
+// Verifies the eager warm-up that populates renderedOverlays from the
+// on-disk PNG cache. This is what makes a drawer open instantly when the
+// PNG already exists from a prior session: useState's initializer reads
+// from this map synchronously.
+describe('renderedOverlays warm-up from disk cache', () => {
+  it('exposes the populated map so a fresh hook init can hit it synchronously', () => {
+    // The hook's first import already triggered the warm-up (with our
+    // default empty directoryListSpy). Verify the map is reachable for
+    // tests that want to pre-seed it.
+    expect(_renderedOverlaysForTests).toBeInstanceOf(Map);
+    _renderedOverlaysForTests.set('v2_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
+    expect(_renderedOverlaysForTests.get('v2_kilter_1_10_24_deadbeef')).toBe(
+      'file:///prior/session.png',
+    );
+    _renderedOverlaysForTests.delete('v2_kilter_1_10_24_deadbeef');
   });
 });

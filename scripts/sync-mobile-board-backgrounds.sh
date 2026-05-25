@@ -16,6 +16,10 @@ set -euo pipefail
 #   1. .webp variant (3-4x smaller than .png, decoded natively on both
 #      iOS UIImage and Android BitmapFactory)
 #   2. .png fallback (only when no .webp exists)
+#
+# Paths under a `thumbs/` directory are skipped — the native renderer
+# only uses the full-quality variants. The RN app does no server fetches,
+# so every image it can render must come from this manifest.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -38,6 +42,10 @@ REQUIRE_PREFIX="../../../web/public/images"
 declare -A chosen
 while IFS= read -r -d '' src_path; do
   rel_to_images="${src_path#$WEB_IMAGES/}"
+  # Skip thumb variants — the native renderer always uses full-quality.
+  case "$rel_to_images" in
+    */thumbs/*) continue ;;
+  esac
   logical_key="${rel_to_images%.*}"
   ext="${rel_to_images##*.}"
   current="${chosen[$logical_key]:-}"

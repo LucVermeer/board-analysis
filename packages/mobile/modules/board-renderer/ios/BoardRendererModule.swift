@@ -20,7 +20,7 @@ public class BoardRendererModule: Module {
   }()
 
   // Lazy-initialized once per module lifetime (i.e. once per app launch).
-  // Accessing it from renderComposite triggers the prune on first call.
+  // Accessing it from renderHoldsOverlay triggers the prune on first call.
   private lazy var pruneOnce: Void = {
     pruneCacheIfNeeded(maxBytes: BoardRendererModule.cacheCapBytes)
   }()
@@ -69,8 +69,14 @@ public class BoardRendererModule: Module {
   public func definition() -> ModuleDefinition {
     Name("BoardRenderer")
 
-    AsyncFunction("renderComposite") {
-      (configJson: String, backgroundPaths: [String], cacheKey: String) -> String in
+    // Renders just the climb's hold overlay — a transparent-background PNG
+    // containing only the hold markers. The RN component stacks bundled
+    // board background images underneath this overlay, mirroring the web
+    // SVG-on-background model. Backgrounds aren't passed in here anymore;
+    // keeping them in JS means the placeholder (backgrounds alone) is
+    // visible while this async render is in flight.
+    AsyncFunction("renderHoldsOverlay") {
+      (configJson: String, cacheKey: String) -> String in
       _ = self.pruneOnce
       let outputUrl = self.cacheDir.appendingPathComponent("\(cacheKey).png")
 
@@ -113,51 +119,34 @@ public class BoardRendererModule: Module {
       let width = Int(outWidth)
       let height = Int(outHeight)
 
-      // Create composited image using UIGraphicsImageRenderer for
-      // automatic memory management and correct color space handling
-      let renderer = UIGraphicsImageRenderer(
-        size: CGSize(width: width, height: height),
-        format: {
-          let format = UIGraphicsImageRendererFormat()
-          format.scale = 1.0
-          format.opaque = false
-          return format
-        }()
-      )
+      // Wrap the RGBA buffer Rust returned in a CGImage and PNG-encode it
+      // directly — no compositing step, no background draws. tiny-skia's
+      // Pixmap::data() returns premultiplied RGBA (verified in
+      // tiny_skia::Pixmap docs: "A container that owns premultiplied RGBA
+      // pixels"); CGImageAlphaInfo.premultipliedLast is the matching
+      // CoreGraphics format. Using straight alpha here would produce
+      // washed-out hold colors.
+      let colorSpace = CGColorSpaceCreateDeviceRGB()
+      let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+      guard let overlayContext = CGContext(
+        data: UnsafeMutableRawPointer(pixelData),
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: width * 4,
+        space: colorSpace,
+        bitmapInfo: bitmapInfo.rawValue
+      ), let overlayImage = overlayContext.makeImage() else {
+        throw NSError(
+          domain: "BoardRenderer", code: -3,
+          userInfo: [NSLocalizedDescriptionKey: "Failed to wrap RGBA buffer as CGImage"])
+      }
 
-      let pngData = renderer.pngData { rendererContext in
-        let context = rendererContext.cgContext
-
-        // CGContext uses bottom-left origin; flip to top-left for UIKit consistency
-        context.translateBy(x: 0, y: CGFloat(height))
-        context.scaleBy(x: 1, y: -1)
-
-        // Draw background images in order
-        for bgPath in backgroundPaths {
-          if let bgImage = UIImage(contentsOfFile: bgPath)?.cgImage {
-            context.draw(bgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-          }
-        }
-
-        // Create CGImage from the RGBA overlay pixel data returned by Rust.
-        // tiny-skia's Pixmap::data() returns premultiplied RGBA (verified in
-        // tiny_skia::Pixmap docs: "A container that owns premultiplied RGBA
-        // pixels"). CGImageAlphaInfo.premultipliedLast is the matching
-        // CoreGraphics format; using straight alpha here would produce
-        // washed-out hold colors.
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
-        if let overlayContext = CGContext(
-          data: UnsafeMutableRawPointer(pixelData),
-          width: width,
-          height: height,
-          bitsPerComponent: 8,
-          bytesPerRow: width * 4,
-          space: colorSpace,
-          bitmapInfo: bitmapInfo.rawValue
-        ), let overlayImage = overlayContext.makeImage() {
-          context.draw(overlayImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        }
+      let uiImage = UIImage(cgImage: overlayImage)
+      guard let pngData = uiImage.pngData() else {
+        throw NSError(
+          domain: "BoardRenderer", code: -4,
+          userInfo: [NSLocalizedDescriptionKey: "PNG encoding failed"])
       }
 
       try pngData.write(to: outputUrl)

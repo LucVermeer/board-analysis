@@ -1,35 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const downloadMock = vi.fn();
-const fileInstances: MockFile[] = [];
-
-class MockFile {
-  uri: string;
-  exists = false;
-  constructor(...parts: (string | { uri: string })[]) {
-    this.uri = parts.map((p) => (typeof p === 'string' ? p : p.uri)).join('/');
-    fileInstances.push(this);
-  }
-  static downloadFileAsync = downloadMock;
-}
-
-class MockDirectory {
-  uri: string;
-  exists = true;
-  constructor(...parts: (string | { uri: string })[]) {
-    this.uri = parts.map((p) => (typeof p === 'string' ? p : p.uri)).join('/');
-  }
-  create = vi.fn();
-}
-
-vi.mock('expo-file-system', () => ({
-  File: MockFile,
-  Directory: MockDirectory,
-  Paths: {
-    document: '/mock/documents',
-  },
-}));
-
 vi.mock('../board-details', () => ({
   getBoardRenderData: vi.fn(),
 }));
@@ -38,6 +8,7 @@ const downloadAsyncMock = vi.fn().mockResolvedValue(undefined);
 class MockAsset {
   localUri: string | null;
   constructor(public moduleId: number) {
+    // Simulate production: bundled assets have localUri pre-populated.
     this.localUri = `file:///bundled/${moduleId}.webp`;
   }
   downloadAsync = downloadAsyncMock;
@@ -53,54 +24,14 @@ vi.mock('expo-asset', () => ({
 vi.mock('../board-backgrounds-manifest', () => ({
   BOARD_BACKGROUND_ASSETS: {
     'kilter/product_sizes_layouts_sets/36-1.webp': 100,
-    'kilter/product_sizes_layouts_sets/thumbs/36-1.webp': 101,
+    'tension/product_sizes_layouts_sets/12.webp': 200,
   },
 }));
 
-const { getThumbnailImageUrl, extractFilename, toFilesystemPath, ensureBackgroundsCached } =
-  await import('../background-image-cache');
+const { toFilesystemPath, ensureBackgroundsCached, tryGetBackgroundPathsSync } = await import(
+  '../background-image-cache'
+);
 const { getBoardRenderData } = await import('../board-details');
-
-describe('getThumbnailImageUrl', () => {
-  it('inserts /thumbs/ and swaps .png to .webp', () => {
-    const input = 'https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png';
-    expect(getThumbnailImageUrl(input)).toBe(
-      'https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/thumbs/36-1.webp',
-    );
-  });
-
-  it('preserves .webp extension unchanged', () => {
-    const input = 'https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/12.webp';
-    expect(getThumbnailImageUrl(input)).toBe(
-      'https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/thumbs/12.webp',
-    );
-  });
-
-  it('returns the input unchanged when there is no slash', () => {
-    expect(getThumbnailImageUrl('noSlash.png')).toBe('noSlash.png');
-  });
-
-  it('handles moonboard background paths', () => {
-    const input = 'https://www.boardsesh.com/images/moonboard/moonboard-bg.png';
-    expect(getThumbnailImageUrl(input)).toBe(
-      'https://www.boardsesh.com/images/moonboard/thumbs/moonboard-bg.webp',
-    );
-  });
-});
-
-describe('extractFilename', () => {
-  it('extracts the last path segment', () => {
-    expect(extractFilename('https://example.com/images/board/36-1.webp')).toBe('36-1.webp');
-  });
-
-  it('returns empty string for empty URL', () => {
-    expect(extractFilename('')).toBe('');
-  });
-
-  it('handles URL with no slashes', () => {
-    expect(extractFilename('file.webp')).toBe('file.webp');
-  });
-});
 
 describe('toFilesystemPath', () => {
   it('strips file:// prefix', () => {
@@ -118,9 +49,8 @@ describe('toFilesystemPath', () => {
 
 describe('ensureBackgroundsCached', () => {
   beforeEach(() => {
-    downloadMock.mockReset();
-    fileInstances.length = 0;
     vi.mocked(getBoardRenderData).mockReset();
+    downloadAsyncMock.mockClear();
   });
 
   it('returns empty array when board render data is missing', async () => {
@@ -132,52 +62,9 @@ describe('ensureBackgroundsCached', () => {
       setIds: [24],
     });
     expect(result).toEqual([]);
-    expect(downloadMock).not.toHaveBeenCalled();
   });
 
-  it('deduplicates concurrent downloads of the same URL', async () => {
-    vi.mocked(getBoardRenderData).mockReturnValue({
-      boardWidth: 100,
-      boardHeight: 100,
-      holdsData: [],
-      imageUrls: ['https://example.com/images/kilter/bg.png'],
-    } as ReturnType<typeof getBoardRenderData>);
-
-    let resolveDownload: ((value: { uri: string }) => void) | undefined;
-    downloadMock.mockImplementation(
-      () =>
-        new Promise<{ uri: string }>((resolve) => {
-          resolveDownload = resolve;
-        }),
-    );
-
-    const params = {
-      boardName: 'kilter' as const,
-      layoutId: 1,
-      sizeId: 10,
-      setIds: [24],
-    };
-
-    // Two callers race for the same background. Only one network download
-    // should be issued; the second must reuse the in-flight promise.
-    const firstCall = ensureBackgroundsCached(params);
-    const secondCall = ensureBackgroundsCached(params);
-
-    // Let the microtasks run so both ensureBackgroundsCached invocations
-    // reach the inflight-tracking branch.
-    await Promise.resolve();
-
-    expect(downloadMock).toHaveBeenCalledTimes(1);
-
-    resolveDownload?.({ uri: 'file:///mock/bg.webp' });
-    const [firstPaths, secondPaths] = await Promise.all([firstCall, secondCall]);
-
-    expect(firstPaths).toEqual(['/mock/bg.webp']);
-    expect(secondPaths).toEqual(['/mock/bg.webp']);
-    expect(downloadMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses the bundled asset for thumbnail-quality when present in the manifest', async () => {
+  it('resolves bundled assets without calling downloadAsync when localUri is populated', async () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
@@ -190,34 +77,35 @@ describe('ensureBackgroundsCached', () => {
       layoutId: 1,
       sizeId: 10,
       setIds: [24],
-      // quality defaults to 'thumbnail' -> getThumbnailImageUrl(...) -> thumbs/36-1.webp
-    });
-
-    expect(result).toEqual(['/bundled/101.webp']);
-    expect(downloadMock).not.toHaveBeenCalled();
-  });
-
-  it('uses the bundled asset for full-quality by rewriting .png to .webp', async () => {
-    vi.mocked(getBoardRenderData).mockReturnValue({
-      boardWidth: 100,
-      boardHeight: 100,
-      holdsData: [],
-      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
-    } as ReturnType<typeof getBoardRenderData>);
-
-    const result = await ensureBackgroundsCached({
-      boardName: 'kilter',
-      layoutId: 1,
-      sizeId: 10,
-      setIds: [24],
-      quality: 'full',
     });
 
     expect(result).toEqual(['/bundled/100.webp']);
-    expect(downloadMock).not.toHaveBeenCalled();
+    // Production bundled assets short-circuit downloadAsync via the sync
+    // fast-path — neither ensureBackgroundsCached nor the underlying
+    // sync resolver should call it.
+    expect(downloadAsyncMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to network download when the manifest has no entry', async () => {
+  it('rewrites .png URL suffix to .webp before looking up the manifest', async () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      // Server URLs always come back with .png; manifest only has .webp.
+      imageUrls: ['https://www.boardsesh.com/images/tension/product_sizes_layouts_sets/12.png'],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    const result = await ensureBackgroundsCached({
+      boardName: 'tension',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+    });
+
+    expect(result).toEqual(['/bundled/200.webp']);
+  });
+
+  it('skips layers missing from the manifest (no network fallback)', async () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
@@ -225,8 +113,6 @@ describe('ensureBackgroundsCached', () => {
       imageUrls: ['https://www.boardsesh.com/images/newboard/bg.png'],
     } as ReturnType<typeof getBoardRenderData>);
 
-    downloadMock.mockResolvedValueOnce({ uri: 'file:///mock/newbg.webp' });
-
     const result = await ensureBackgroundsCached({
       boardName: 'kilter',
       layoutId: 1,
@@ -234,27 +120,66 @@ describe('ensureBackgroundsCached', () => {
       setIds: [24],
     });
 
-    expect(result).toEqual(['/mock/newbg.webp']);
-    expect(downloadMock).toHaveBeenCalledTimes(1);
+    // The no-network rule means a manifest miss is silent (after a one-time
+    // warn) — the caller gets back an empty path list and the renderer
+    // shows nothing for that layer.
+    expect(result).toEqual([]);
+    expect(downloadAsyncMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('tryGetBackgroundPathsSync', () => {
+  beforeEach(() => {
+    vi.mocked(getBoardRenderData).mockReset();
   });
 
-  it('skips a layer when the download throws', async () => {
+  it('returns paths synchronously when bundled assets resolve', () => {
     vi.mocked(getBoardRenderData).mockReturnValue({
       boardWidth: 100,
       boardHeight: 100,
       holdsData: [],
-      imageUrls: ['https://example.com/images/kilter/missing.png'],
+      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
     } as ReturnType<typeof getBoardRenderData>);
 
-    downloadMock.mockRejectedValueOnce(new Error('404'));
-
-    const result = await ensureBackgroundsCached({
+    const result = tryGetBackgroundPathsSync({
       boardName: 'kilter',
       layoutId: 1,
       sizeId: 10,
       setIds: [24],
     });
 
-    expect(result).toEqual([]);
+    expect(result).toEqual(['/bundled/100.webp']);
+  });
+
+  it('returns null on any manifest miss', () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      imageUrls: [
+        'https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png',
+        'https://www.boardsesh.com/images/newboard/bg.png',
+      ],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    const result = tryGetBackgroundPathsSync({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when getBoardRenderData fails', () => {
+    vi.mocked(getBoardRenderData).mockReturnValue(null);
+    const result = tryGetBackgroundPathsSync({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+    });
+    expect(result).toBeNull();
   });
 });

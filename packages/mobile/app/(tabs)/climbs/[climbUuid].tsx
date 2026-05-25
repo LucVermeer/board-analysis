@@ -9,11 +9,11 @@ import { Text } from '../../../src/components/Text';
 import { Button } from '../../../src/components/Button';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
-import { BoardImage } from '../../../src/components/BoardImage';
+import { BoardImageNative } from '../../../src/components/BoardImageNative';
 import { LogAscentSheet } from '../../../src/components/LogAscentSheet';
 import { useClimb, useToggleFavorite } from '../../../src/lib/graphql/hooks';
 import { useQueue } from '../../../src/providers/queue-provider';
-import { getBoardAspectRatio } from '../../../src/lib/board-details';
+import { getBoardRenderData } from '../../../src/lib/board-details';
 import { hapticSuccess } from '../../../src/lib/haptics';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing } from '../../../src/theme/tokens';
@@ -51,14 +51,15 @@ export default function ClimbDetail() {
   const { sessionId, addToQueue } = useQueue();
   const [showLogAscent, setShowLogAscent] = useState(false);
 
-  const boardAspectRatio = useMemo(() => {
-    if (!boardName || !layoutId || !sizeId || !setIds) return 1080 / 1920;
-    return getBoardAspectRatio({
+  const boardDimensions = useMemo(() => {
+    if (!boardName || !layoutId || !sizeId || !setIds) return null;
+    const renderData = getBoardRenderData({
       boardName: boardName as BoardName,
       layoutId: Number(layoutId),
       sizeId: Number(sizeId),
       setIds: setIds.split(',').map(Number),
     });
+    return renderData ? { width: renderData.boardWidth, height: renderData.boardHeight } : null;
   }, [boardName, layoutId, sizeId, setIds]);
 
   const gradeInfo = useMemo(() => {
@@ -105,15 +106,16 @@ export default function ClimbDetail() {
     <>
       <ScrollView style={styles.container} contentInsetAdjustmentBehavior="automatic">
         {/* Board visualization */}
-        {boardName && layoutId && sizeId && setIds && (
+        {boardName && layoutId && sizeId && setIds && boardDimensions && (
           <View style={styles.boardContainer}>
-            <BoardImage
+            <BoardImageNative
               frames={climb.frames}
               boardName={boardName as BoardName}
               layoutId={Number(layoutId)}
               sizeId={Number(sizeId)}
               setIds={setIds}
-              aspectRatio={boardAspectRatio}
+              boardWidth={boardDimensions.width}
+              boardHeight={boardDimensions.height}
               mirrored={climb.mirrored === true}
             />
           </View>

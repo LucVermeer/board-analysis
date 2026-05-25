@@ -1,9 +1,6 @@
 package com.boardsesh.boardrenderer
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Rect
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
@@ -45,7 +42,11 @@ class BoardRendererModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("BoardRenderer")
 
-        AsyncFunction("renderComposite") { configJson: String, backgroundPaths: List<String>, cacheKey: String ->
+        // Renders just the climb's hold overlay — a transparent-background
+        // PNG containing only the hold markers. The RN component stacks
+        // bundled board backgrounds underneath this overlay, so backgrounds
+        // aren't passed in here anymore.
+        AsyncFunction("renderHoldsOverlay") { configJson: String, cacheKey: String ->
             if (!pruned) {
                 synchronized(this@BoardRendererModule) {
                     if (!pruned) {
@@ -69,53 +70,27 @@ class BoardRendererModule : Module() {
             val height = renderResult.height
             val rgbaData = renderResult.data
 
-            // Both bitmaps are recycled in finally so a throw between
-            // creation and the manual recycle() can't leak native pixel
-            // memory (which lives outside the JVM heap and isn't GC'd).
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            var overlayBitmap: Bitmap? = null
+            // tiny-skia returns premultiplied RGBA, and ARGB_8888 bitmaps
+            // default to premultiplied storage in the same byte layout, so
+            // copyPixelsFromBuffer hands the buffer to the bitmap with no
+            // per-pixel JVM loop. setPremultiplied is true by default but
+            // we set it explicitly so future changes can't accidentally
+            // flip it. Recycled in finally so a throw between create and
+            // compress can't leak native pixel memory.
+            val overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             try {
-                val canvas = Canvas(bitmap)
-
-                // Draw background images
-                for (bgPath in backgroundPaths) {
-                    val bgBitmap = BitmapFactory.decodeFile(bgPath)
-                    if (bgBitmap != null) {
-                        try {
-                            canvas.drawBitmap(
-                                bgBitmap,
-                                null,
-                                Rect(0, 0, width, height),
-                                null
-                            )
-                        } finally {
-                            bgBitmap.recycle()
-                        }
-                    }
-                }
-
-                // Draw RGBA overlay — tiny-skia returns premultiplied RGBA, and
-                // ARGB_8888 bitmaps default to premultiplied storage in the same
-                // byte layout, so copyPixelsFromBuffer lets us hand the buffer
-                // straight to the bitmap with no per-pixel JVM loop. setPremultiplied
-                // is true by default but we set it explicitly so future changes
-                // can't accidentally flip it.
-                overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                 overlayBitmap.setPremultiplied(true)
                 overlayBitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgbaData))
-                canvas.drawBitmap(overlayBitmap, 0f, 0f, null)
 
-                // Encode to PNG
                 FileOutputStream(outputFile).use { outputStream ->
-                    val written = bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                    val written = overlayBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
                     if (!written) {
                         outputFile.delete()
                         throw Exception("PNG compression failed")
                     }
                 }
             } finally {
-                overlayBitmap?.recycle()
-                bitmap.recycle()
+                overlayBitmap.recycle()
             }
 
             "file://${outputFile.absolutePath}"
