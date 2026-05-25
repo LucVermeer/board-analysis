@@ -8,7 +8,6 @@ export type FilterSummaryLabels = {
   ascents: (count: number) => string;
   rating: (count: number) => string;
   more: (count: number) => string;
-  empty: string;
 };
 
 export type BaseFilters = {
@@ -21,6 +20,9 @@ export type BaseFilters = {
   name?: string;
 };
 
+// Web suppresses minAscents >= 2 when the "Established" status chip is active
+// (see getQualityPanelSummary in search-summary-utils.ts). This shared function
+// does not apply that dedup — web callers should filter parts before formatting.
 export function getBaseFilterParts(
   filters: BaseFilters,
   grades: Grade[],
@@ -61,10 +63,10 @@ export function getBaseFilterParts(
 
 export function formatFilterSummary(
   parts: string[],
-  labels: Pick<FilterSummaryLabels, 'more' | 'empty'>,
+  labels: Pick<FilterSummaryLabels, 'more'>,
   maxParts = 2,
-): string {
-  if (parts.length === 0) return labels.empty;
+): string | null {
+  if (parts.length === 0) return null;
 
   if (parts.length <= maxParts) {
     return parts.join(' · ');

@@ -12,8 +12,8 @@
   "dependencies": {
     "@boardsesh/ble-protocol": "*",
     "@boardsesh/board-config": "*",
-    "@boardsesh/climb-filters": "*",
     "@boardsesh/board-constants": "*",
+    "@boardsesh/climb-filters": "*",
     "@boardsesh/play-view": "*",
     "@boardsesh/queue": "*",
     "@boardsesh/shared-schema": "*",

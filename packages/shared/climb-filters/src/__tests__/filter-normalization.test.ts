@@ -57,6 +57,11 @@ describe('formatMinAscentsFilterCount', () => {
     expect(formatMinAscentsFilterCount(1000)).toBe('1k');
     expect(formatMinAscentsFilterCount(10000)).toBe('10k');
   });
+
+  it('falls back to plain number for non-round thousands', () => {
+    expect(formatMinAscentsFilterCount(1500)).toBe('1500');
+    expect(formatMinAscentsFilterCount(2500)).toBe('2500');
+  });
 });
 
 describe('getMinRatingPickerValue', () => {

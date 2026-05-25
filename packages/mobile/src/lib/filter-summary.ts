@@ -11,7 +11,6 @@ function buildLabels(t: TFunction<'climbs'>): FilterSummaryLabels {
     ascents: (count) => t('mobile.search.ascents', { count }),
     rating: (count) => t('mobile.search.rating', { count }),
     more: (count) => t('mobile.search.more', { count }),
-    empty: t('mobile.filter.title'),
   };
 }
 
@@ -47,5 +46,5 @@ export function getFilterSummary(
     buildSortLabel(t),
   );
 
-  return formatFilterSummary(parts, labels);
+  return formatFilterSummary(parts, labels) ?? t('mobile.filter.title');
 }

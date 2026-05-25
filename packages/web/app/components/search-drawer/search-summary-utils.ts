@@ -234,9 +234,9 @@ function collectAllParts(params: SearchRequestPagination, labels: SearchPillLabe
 }
 
 export function getSearchPillSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
-  return formatFilterSummary(collectAllParts(params, labels), { more: labels.more, empty: labels.empty });
+  return formatFilterSummary(collectAllParts(params, labels), labels) ?? labels.empty;
 }
 
-export function getSearchPillFullSummary(params: SearchRequestPagination, labels: SearchPillLabels): string {
-  return formatFilterSummary(collectAllParts(params, labels), { more: labels.more, empty: labels.empty }, Infinity);
+export function getSearchPillFullSummary(params: SearchRequestPagination, labels: SearchPillLabels): string | null {
+  return formatFilterSummary(collectAllParts(params, labels), labels, Infinity);
 }

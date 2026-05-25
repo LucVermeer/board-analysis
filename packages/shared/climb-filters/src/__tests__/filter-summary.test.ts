@@ -17,7 +17,6 @@ const labels: FilterSummaryLabels = {
   ascents: (count) => `${count}+ ascents`,
   rating: (count) => `${count}+ stars`,
   more: (count) => `+${count} more`,
-  empty: 'Filters',
 };
 
 const sortLabel = (sortBy: string) => {
@@ -76,8 +75,8 @@ describe('getBaseFilterParts', () => {
 });
 
 describe('formatFilterSummary', () => {
-  it('returns empty label when no parts', () => {
-    expect(formatFilterSummary([], labels)).toBe('Filters');
+  it('returns null when no parts', () => {
+    expect(formatFilterSummary([], labels)).toBeNull();
   });
 
   it('joins single part', () => {
