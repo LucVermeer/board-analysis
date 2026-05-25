@@ -8,10 +8,11 @@ import { QueueSheetHeader } from './QueueSheetHeader';
 import { QueueList, type QueueListHandle } from './QueueList';
 import { Text } from '../Text';
 import { useQueue } from '../../providers/queue-provider';
+import { useTheme } from '../../providers/theme-provider';
 import { hapticMedium, hapticWarning } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing } from '../../theme/tokens';
+import { spacing, sheetStyles } from '../../theme/tokens';
 
 type QueueSheetProps = {
   visible: boolean;
@@ -22,8 +23,10 @@ type QueueSheetProps = {
 export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) {
   const { t } = useTranslation('session');
   const insets = useSafeAreaInsets();
+  const { systemColors } = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
   const listRef = useRef<QueueListHandle>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { state, removeFromQueue } = useQueue();
   const { queue, currentClimbQueueItem } = state;
@@ -37,17 +40,21 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
 
   const currentClimbUuid = currentClimbQueueItem?.climb.uuid ?? null;
 
-  // Open/close the sheet based on visible prop
   useEffect(() => {
     if (visible) {
       sheetRef.current?.snapToIndex(0);
-      // Scroll to current climb after opening
-      setTimeout(() => {
+      scrollTimerRef.current = setTimeout(() => {
         listRef.current?.scrollToCurrentClimb();
       }, 400);
     } else {
       sheetRef.current?.close();
     }
+    return () => {
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+        scrollTimerRef.current = null;
+      }
+    };
   }, [visible]);
 
   const resetState = useCallback(() => {
@@ -73,7 +80,6 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
   const handleToggleEditMode = useCallback(() => {
     setIsEditMode((prev) => {
       if (prev) {
-        // Exiting edit mode — clear selection
         setSelectedItems(new Set());
       }
       return !prev;
@@ -143,8 +149,8 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
       backdropComponent={renderBackdrop}
       onChange={handleSheetChange}
       onClose={handleClose}
-      handleIndicatorStyle={styles.indicator}
-      backgroundStyle={styles.background}
+      handleIndicatorStyle={sheetStyles.indicator}
+      backgroundStyle={sheetStyles.background}
       style={styles.sheet}
     >
       <QueueSheetHeader
@@ -173,9 +179,17 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
         onShowFullHistory={handleShowFullHistory}
       />
 
-      {/* Bulk remove bar */}
       {isEditMode && selectedItems.size > 0 && (
-        <View style={[styles.bulkBar, { paddingBottom: insets.bottom + spacing[3] }]}>
+        <View
+          style={[
+            styles.bulkBar,
+            {
+              paddingBottom: insets.bottom + spacing[3],
+              backgroundColor: systemColors.background,
+              borderTopColor: systemColors.separator,
+            },
+          ]}
+        >
           <Pressable
             onPress={handleBulkRemove}
             accessibilityRole="button"
@@ -206,16 +220,6 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-  },
-  background: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
   bulkBar: {
     position: 'absolute',
     bottom: 0,
@@ -223,9 +227,7 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
-    backgroundColor: 'rgba(255, 255, 255, 0.97)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
   },
   bulkButton: {
     backgroundColor: brandColors.error,

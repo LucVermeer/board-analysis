@@ -22,32 +22,32 @@ The authoritative design spec for the play view lives at [`docs/ui/06-play-view.
 
 ## Feature Parity Table
 
-| Feature | Web | Mobile | Shared Code | Phase |
-|---|---|---|---|---|
-| Play drawer (bottom sheet shell) | Done | Done | Snap points, state machine | 1 |
-| Climb header (grade + name + stats) | Done | Done | Grade formatting, stat utils | 1 |
-| Board renderer | Done | Done | Hold data transforms | 1 |
-| Action bar (8 buttons) | Done | Done | Button definitions, action types | 1 |
-| Tick FAB | Done | Done | Tick state logic | 1 |
-| Queue navigation (prev/next) | Done | Done | Navigation helpers | 1 |
-| Board carousel (swipe) | Done | Planned | Prefetch logic | 2 |
-| Inline tick bar | Done | Planned | QuickTickBar logic | 2 |
-| Wake lock | Done | Planned | -- | 2 |
-| Queue drawer (nested) | Done | Planned | Queue list logic | 3 |
-| Below-fold sections (logbook, similar, community) | Done | Planned | Section data types | 3 |
-| Climb actions sheet | Done | Planned | Action definitions | 3 |
-| Angle selector | Done | Planned | Angle range utils | 3 |
-| Zoom/pan | Done | Planned | Transform math | 4 |
-| Double-tap favorite | Done | Planned | Favorite toggle logic | 4 |
-| Party mode (mini session bar, driver, drift) | Done | Planned | Session state types | 5 |
-| BLE lightbulb integration | Done | Planned | Protocol (via @boardsesh/ble-protocol) | 5 |
-| Coachmarks | Done | Planned | Coachmark definitions | 6 |
-| Beta videos section | Done | Planned | Video data types | 6 |
-| Analytics section | Done | Planned | Stat aggregation | 6 |
+| Feature                                           | Web  | Mobile  | Shared Code                            | Phase |
+| ------------------------------------------------- | ---- | ------- | -------------------------------------- | ----- |
+| Play drawer (bottom sheet shell)                  | Done | Done    | Snap points, state machine             | 1     |
+| Climb header (grade + name + stats)               | Done | Done    | Grade formatting, stat utils           | 1     |
+| Board renderer                                    | Done | Done    | Hold data transforms                   | 1     |
+| Action bar (8 buttons)                            | Done | Done    | Button definitions, action types       | 1     |
+| Tick FAB                                          | Done | Done    | Tick state logic                       | 1     |
+| Queue navigation (prev/next)                      | Done | Done    | Navigation helpers                     | 1     |
+| Board carousel (swipe)                            | Done | Done    | Prefetch logic                         | 2     |
+| Inline tick bar                                   | Done | Done    | QuickTickBar logic                     | 2     |
+| Wake lock                                         | Done | Done    | --                                     | 2     |
+| Queue drawer (nested)                             | Done | Done    | Queue list model (buildQueueListModel) | 3     |
+| Below-fold sections (logbook, similar, community) | Done | Done    | Section data types                     | 3     |
+| Climb actions sheet                               | Done | Done    | Action definitions                     | 3     |
+| Angle selector                                    | Done | Done    | Angle range utils                      | 3     |
+| Zoom/pan                                          | Done | Planned | Transform math                         | 4     |
+| Double-tap favorite                               | Done | Planned | Favorite toggle logic                  | 4     |
+| Party mode (mini session bar, driver, drift)      | Done | Planned | Session state types                    | 5     |
+| BLE lightbulb integration                         | Done | Planned | Protocol (via @boardsesh/ble-protocol) | 5     |
+| Coachmarks                                        | Done | Planned | Coachmark definitions                  | 6     |
+| Beta videos section                               | Done | Planned | Video data types                       | 6     |
+| Analytics section                                 | Done | Planned | Stat aggregation                       | 6     |
 
 ## Phase Descriptions
 
-### Phase 1: Drawer Shell (current)
+### Phase 1: Drawer Shell (done)
 
 Delivers the core play loop: open a climb, see the board, navigate the queue, log a tick.
 
@@ -59,7 +59,7 @@ Delivers the core play loop: open a climb, see the board, navigate the queue, lo
 - **Navigation integration** -- climb list taps open the drawer instead of pushing a new screen; back gesture collapses or dismisses the drawer
 - **Queue integration** -- previous/next buttons in the action bar cycle through the queue using shared navigation helpers
 
-### Phase 2: Board Carousel + Tick Bar
+### Phase 2: Board Carousel + Tick Bar (done)
 
 Adds swipe-to-navigate and inline tick logging without opening a full sheet.
 
@@ -69,7 +69,7 @@ Adds swipe-to-navigate and inline tick logging without opening a full sheet.
 - **Extract `QuickTickBar` logic into `@boardsesh/play-view`** -- grade/quality/tries state management and validation shared between web and mobile
 - **Wake lock** -- `expo-keep-awake` activated while the play drawer is open, released on dismiss
 
-### Phase 3: Queue Drawer + Below-Fold Sections
+### Phase 3: Queue Drawer + Below-Fold Sections (done)
 
 Adds queue management and deferred content sections.
 
@@ -110,12 +110,12 @@ Final pass for discoverability, feedback, and extended content.
 
 Key substitutions when translating web patterns to React Native:
 
-| Web | Mobile | Notes |
-|---|---|---|
-| `SwipeableDrawer` (MUI) | `@gorhom/bottom-sheet` | Native bottom sheet with snap points, gesture-driven open/close |
-| `react-swipeable` | `react-native-gesture-handler` | `PanGestureHandler` for horizontal swipe between climbs |
-| CSS transitions / `@keyframes` | `react-native-reanimated` | Shared values and `useAnimatedStyle` for 60fps animations on the UI thread |
-| `@use-gesture/react` (pinch/pan) | `PinchGestureHandler` + `PanGestureHandler` | Composed gesture handlers with reanimated for zoom/pan transforms |
-| Web Wake Lock API | `expo-keep-awake` | `activateKeepAwakeAsync()` while the drawer is open |
-| URL sync (search params) | Expo Router navigation state | Drawer state lives in component state, not the URL; deep links open the drawer via route params |
-| `startTransition` (React) | `InteractionManager.runAfterInteractions()` | Defers below-fold section rendering until the drawer animation completes |
+| Web                              | Mobile                                      | Notes                                                                                           |
+| -------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `SwipeableDrawer` (MUI)          | `@gorhom/bottom-sheet`                      | Native bottom sheet with snap points, gesture-driven open/close                                 |
+| `react-swipeable`                | `react-native-gesture-handler`              | `PanGestureHandler` for horizontal swipe between climbs                                         |
+| CSS transitions / `@keyframes`   | `react-native-reanimated`                   | Shared values and `useAnimatedStyle` for 60fps animations on the UI thread                      |
+| `@use-gesture/react` (pinch/pan) | `PinchGestureHandler` + `PanGestureHandler` | Composed gesture handlers with reanimated for zoom/pan transforms                               |
+| Web Wake Lock API                | `expo-keep-awake`                           | `activateKeepAwakeAsync()` while the drawer is open                                             |
+| URL sync (search params)         | Expo Router navigation state                | Drawer state lives in component state, not the URL; deep links open the drawer via route params |
+| `startTransition` (React)        | `InteractionManager.runAfterInteractions()` | Defers below-fold section rendering until the drawer animation completes                        |

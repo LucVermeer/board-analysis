@@ -72,6 +72,20 @@ export const opacity = {
   disabled: 0.5,
 } as const;
 
+/** Shared bottom-sheet handle and background styles used by QueueSheet, AngleSelectorSheet, and PlayDrawer. */
+export const sheetStyles = {
+  indicator: {
+    backgroundColor: 'rgba(60, 60, 67, 0.3)',
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+  },
+  background: {
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+  },
+} as const;
+
 export type Spacing = typeof spacing;
 export type BorderRadius = typeof borderRadius;
 export type Shadows = typeof shadows;

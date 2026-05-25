@@ -30,7 +30,7 @@ import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing } from '../../theme/tokens';
+import { spacing, sheetStyles } from '../../theme/tokens';
 import { timing } from '../../theme/animations';
 
 type BoardConfig = {
@@ -238,9 +238,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           userAttempts: similarClimb.userAttempts,
         },
       };
+      addToQueue(queueItem);
       setCurrentClimb(queueItem);
     },
-    [setCurrentClimb],
+    [addToQueue, setCurrentClimb],
   );
 
   const renderBackdrop = useCallback(
@@ -266,8 +267,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         enableHandlePanningGesture={!subDrawerOpen}
         backdropComponent={renderBackdrop}
         onDismiss={handleClose}
-        handleIndicatorStyle={styles.indicator}
-        backgroundStyle={styles.background}
+        handleIndicatorStyle={sheetStyles.indicator}
+        backgroundStyle={sheetStyles.background}
       >
         <BottomSheetScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom }}>
           <Pressable
@@ -441,16 +442,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 });
 
 const styles = StyleSheet.create({
-  indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-  },
-  background: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
   content: {
     flex: 1,
   },

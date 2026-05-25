@@ -13,7 +13,7 @@ import { GET_ANGLES, type GetAnglesQueryResponse } from '../../lib/graphql/opera
 import { hapticSelection } from '../../lib/haptics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { brandColors } from '../../theme/colors';
-import { spacing } from '../../theme/tokens';
+import { spacing, sheetStyles } from '../../theme/tokens';
 
 type AngleSelectorSheetProps = {
   visible: boolean;
@@ -137,14 +137,14 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
       enablePanDownToClose
       backdropComponent={renderBackdrop}
       onClose={handleClose}
-      handleIndicatorStyle={styles.indicator}
-      backgroundStyle={styles.background}
+      handleIndicatorStyle={sheetStyles.indicator}
+      backgroundStyle={sheetStyles.background}
     >
       <View style={styles.header}>
         <Text variant="headline">{t('mobile.angleSelector.title')}</Text>
       </View>
       <BottomSheetFlatList
-        ref={flatListRef as unknown as React.RefObject<never>}
+        ref={flatListRef as unknown as React.RefObject<InstanceType<typeof BottomSheetFlatList>>}
         data={angles}
         keyExtractor={keyExtractor}
         renderItem={renderAngleRow}
@@ -162,16 +162,6 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
 const ANGLE_ROW_HEIGHT = 52;
 
 const styles = StyleSheet.create({
-  indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-  },
-  background: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
   header: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[2],

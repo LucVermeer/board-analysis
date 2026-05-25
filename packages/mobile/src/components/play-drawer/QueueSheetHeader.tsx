@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
-    backgroundColor: 'rgba(120, 120, 128, 0.12)',
+    backgroundColor: `${iosSystemColors.systemGray}1F`,
   },
   headerButtonActive: {
     borderWidth: 1,

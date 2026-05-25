@@ -47,6 +47,12 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep session:mobile.queue.nextClimb
 // i18n-keep session:mobile.queue.logAscent
 // i18n-keep session:mobile.queue.noClimbSelected
+// i18n-keep session:queueList.showFullHistory_one
+// i18n-keep session:queueList.showFullHistory_other
+// i18n-keep session:queueDrawer.title
+// i18n-keep session:queueDrawer.clear
+// i18n-keep session:queueDrawer.removeItems_one
+// i18n-keep session:queueDrawer.removeItems_other
 // i18n-keep climbs:mobile.climbActions.copyLink
 // i18n-keep climbs:mobile.climbActions.linkCopied
 // i18n-keep climbs:mobile.climbActions.report
