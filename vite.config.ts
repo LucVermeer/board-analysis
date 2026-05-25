@@ -41,6 +41,7 @@ export default defineConfig({
       './packages/shared/ble-protocol/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
+      './packages/shared/climb-filters/vite.config.ts',
       './packages/mobile/vite.config.ts',
     ],
   },
@@ -189,6 +190,9 @@ export default defineConfig({
       'typecheck:play-view': {
         command: 'bun run --filter=@boardsesh/play-view typecheck',
       },
+      'typecheck:climb-filters': {
+        command: 'bun run --filter=@boardsesh/climb-filters typecheck',
+      },
       'typecheck:mobile': {
         command: 'bun run --filter=@boardsesh/mobile typecheck',
       },
@@ -203,6 +207,7 @@ export default defineConfig({
           'typecheck:queue',
           'typecheck:board-config',
           'typecheck:play-view',
+          'typecheck:climb-filters',
           'typecheck:mobile',
         ],
       },
