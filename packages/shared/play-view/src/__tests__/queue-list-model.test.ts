@@ -40,7 +40,7 @@ describe('buildQueueListModel', () => {
 
   it('splits queue into history, current, and future', () => {
     const queue = [makeItem('q1', 'c1'), makeItem('q2', 'c2'), makeItem('q3', 'c3'), makeItem('q4', 'c4')];
-    const result = buildQueueListModel(queue, 'c2', { showHistory: true, showFullHistory: false });
+    const result = buildQueueListModel(queue, 'q2', { showHistory: true, showFullHistory: false });
 
     const types = result.flatRows.map((row) => row.type);
     expect(types).toEqual(['history-item', 'history-divider', 'current-item', 'future-item', 'future-item']);
@@ -51,7 +51,7 @@ describe('buildQueueListModel', () => {
 
   it('hides history items beyond the limit', () => {
     const queue = Array.from({ length: 10 }, (_, i) => makeItem(`q${i}`, `c${i}`));
-    const result = buildQueueListModel(queue, 'c8', {
+    const result = buildQueueListModel(queue, 'q8', {
       showHistory: true,
       showFullHistory: false,
       historyDisplayLimit: 3,
@@ -68,7 +68,7 @@ describe('buildQueueListModel', () => {
 
   it('shows all history when showFullHistory is true', () => {
     const queue = Array.from({ length: 10 }, (_, i) => makeItem(`q${i}`, `c${i}`));
-    const result = buildQueueListModel(queue, 'c8', {
+    const result = buildQueueListModel(queue, 'q8', {
       showHistory: true,
       showFullHistory: true,
       historyDisplayLimit: 3,
@@ -83,7 +83,7 @@ describe('buildQueueListModel', () => {
 
   it('skips history entirely when showHistory is false', () => {
     const queue = [makeItem('q1', 'c1'), makeItem('q2', 'c2'), makeItem('q3', 'c3')];
-    const result = buildQueueListModel(queue, 'c2', { showHistory: false, showFullHistory: false });
+    const result = buildQueueListModel(queue, 'q2', { showHistory: false, showFullHistory: false });
 
     const types = result.flatRows.map((row) => row.type);
     expect(types).toEqual(['current-item', 'future-item']);
@@ -91,7 +91,7 @@ describe('buildQueueListModel', () => {
 
   it('handles current climb at queue start', () => {
     const queue = [makeItem('q1', 'c1'), makeItem('q2', 'c2')];
-    const result = buildQueueListModel(queue, 'c1', { showHistory: true, showFullHistory: false });
+    const result = buildQueueListModel(queue, 'q1', { showHistory: true, showFullHistory: false });
 
     const types = result.flatRows.map((row) => row.type);
     expect(types).toEqual(['current-item', 'future-item']);
@@ -100,7 +100,7 @@ describe('buildQueueListModel', () => {
 
   it('handles current climb at queue end', () => {
     const queue = [makeItem('q1', 'c1'), makeItem('q2', 'c2')];
-    const result = buildQueueListModel(queue, 'c2', { showHistory: true, showFullHistory: false });
+    const result = buildQueueListModel(queue, 'q2', { showHistory: true, showFullHistory: false });
 
     const types = result.flatRows.map((row) => row.type);
     expect(types).toEqual(['history-item', 'history-divider', 'current-item']);
@@ -109,7 +109,7 @@ describe('buildQueueListModel', () => {
 
   it('preserves queueIndex for all item rows', () => {
     const queue = [makeItem('q0', 'c0'), makeItem('q1', 'c1'), makeItem('q2', 'c2'), makeItem('q3', 'c3')];
-    const result = buildQueueListModel(queue, 'c1', { showHistory: true, showFullHistory: true });
+    const result = buildQueueListModel(queue, 'q1', { showHistory: true, showFullHistory: true });
 
     const itemRows = result.flatRows.filter(
       (row): row is Extract<QueueFlatRow, { type: 'history-item' | 'current-item' | 'future-item' }> =>
@@ -119,9 +119,28 @@ describe('buildQueueListModel', () => {
     expect(itemRows.map((row) => row.queueIndex)).toEqual([0, 1, 2, 3]);
   });
 
+  it('matches correct queue-item when same climb appears twice in queue', () => {
+    // Same climb UUID but different queue-item UUIDs
+    const queue = [makeItem('q1', 'shared-climb'), makeItem('q2', 'shared-climb'), makeItem('q3', 'c3')];
+    const result = buildQueueListModel(queue, 'q2', { showHistory: true, showFullHistory: true });
+
+    const types = result.flatRows.map((row) => row.type);
+    expect(types).toEqual(['history-item', 'history-divider', 'current-item', 'future-item']);
+
+    // The current item should be the second queue entry (q2), not the first (q1)
+    const currentRow = result.flatRows[result.currentItemFlatIndex] as Extract<QueueFlatRow, { type: 'current-item' }>;
+    expect(currentRow.item.uuid).toBe('q2');
+    expect(currentRow.item.climb.uuid).toBe('shared-climb');
+
+    // The first entry (q1) should be in history
+    const historyRow = result.flatRows[0] as Extract<QueueFlatRow, { type: 'history-item' }>;
+    expect(historyRow.item.uuid).toBe('q1');
+    expect(historyRow.item.climb.uuid).toBe('shared-climb');
+  });
+
   it('uses default history limit of 5', () => {
     const queue = Array.from({ length: 12 }, (_, i) => makeItem(`q${i}`, `c${i}`));
-    const result = buildQueueListModel(queue, 'c10', { showHistory: true, showFullHistory: false });
+    const result = buildQueueListModel(queue, 'q10', { showHistory: true, showFullHistory: false });
 
     const showAllRow = result.flatRows.find((row) => row.type === 'history-show-all') as
       | Extract<QueueFlatRow, { type: 'history-show-all' }>

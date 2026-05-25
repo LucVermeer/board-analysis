@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
@@ -86,6 +86,15 @@ export function QueueItemRow({
 
   // Disable swipe for edit mode and history items
   const swipeEnabled = !isEditMode && !isHistoryItem;
+
+  // Reset swipe position when swipe gets disabled (e.g. entering edit mode)
+  useEffect(() => {
+    if (!swipeEnabled) {
+      translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+      isSwipeOpen.value = false;
+      runOnJS(setIsOpen)(false);
+    }
+  }, [swipeEnabled]);
 
   const handleRemove = useCallback(() => {
     hapticMedium();
