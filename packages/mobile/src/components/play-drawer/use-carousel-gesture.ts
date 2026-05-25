@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
 import { SWIPE_THRESHOLD, EXIT_DURATION, CLIP_EXIT_DURATION } from '@boardsesh/play-view';
@@ -20,16 +20,8 @@ type UseCarouselGestureReturn = {
   isAnimating: SharedValue<boolean>;
 };
 
-/**
- * Pan gesture for the board carousel. Matches the web `useCardSwipeNavigation`
- * delay-navigation flow: the slide-off animation runs for EXIT_DURATION, but the
- * climb swap fires at CLIP_EXIT_DURATION so the new board appears promptly while
- * the outgoing peek board provides visual continuity.
- *
- * Snap-back below threshold uses `springs.interactive` rather than a fixed
- * SNAP_BACK_DURATION timing — a spring feels more natural on native, and the
- * user-visible duration is comparable.
- */
+// Delay-navigation: matches web — swap climb at CLIP_EXIT_DURATION while the
+// outgoing card finishes its EXIT_DURATION slide-off behind the peek board.
 export function useCarouselGesture({
   onSwipeNext,
   onSwipePrevious,
@@ -46,6 +38,13 @@ export function useCarouselGesture({
   const callbacksRef = useRef({ onSwipeNext, onSwipePrevious });
   callbacksRef.current = { onSwipeNext, onSwipePrevious };
 
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    },
+    [],
+  );
+
   const triggerHaptic = () => {
     hapticMedium();
   };
@@ -54,9 +53,7 @@ export function useCarouselGesture({
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
     commitTimerRef.current = setTimeout(() => {
       commitTimerRef.current = null;
-      // Jump-cut the carousel back to center so the freshly swapped climb
-      // renders in place. Assigning translateX.value cancels the in-flight
-      // withTiming on the UI thread.
+      // Hard-set cancels the in-flight withTiming on the UI thread.
       translateX.value = 0;
       isAnimating.value = false;
       if (direction === 'next') {
