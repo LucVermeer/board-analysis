@@ -220,6 +220,14 @@ export default defineConfig({
         command: 'bash scripts/mobile-screenshot.sh',
         cache: false,
       },
+      'mobile:publish': {
+        command: 'tsx scripts/mobile-publish.ts',
+        cache: false,
+      },
+      'mobile:preview-build': {
+        command: 'tsx scripts/mobile-preview-build.ts',
+        cache: false,
+      },
 
       // --- Dev servers ---
       'dev:mobile': {

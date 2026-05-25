@@ -83,6 +83,10 @@ curl -fsSL https://vite.plus | bash
 # .env.local contains generic config (tracked in git)
 # .env.development.local contains secrets (NOT tracked in git)
 
+# Mobile OTA updates (optional — only needed for `vp run mobile:publish`):
+# Set EXPO_PUBLIC_EAS_PROJECT_ID in your shell or packages/mobile/.env
+# to override the default project ID committed in app.config.ts
+
 # Note: VERCEL_URL is automatically set by Vercel for deployments
 # For local development, the app defaults to http://localhost:3000
 
@@ -132,6 +136,8 @@ This project uses [Vite+](https://viteplus.dev) (`vp`) as its unified toolchain 
 - `vp run check:mobile-bundle` - Headless Metro bundle check for React Native (works on Linux, no simulator needed)
 - `vp run check:mobile-simulator` - Build and launch RN app on iOS simulator (macOS only, skips on Linux)
 - `vp run mobile:screenshot` - Capture iOS simulator screenshot (macOS only, skips on Linux)
+- `vp run mobile:publish` - Publish an EAS Update for the current branch (testers on the preview build receive it OTA)
+- `vp run mobile:preview-build` - Trigger an EAS Build for the "preview" profile (testers install this once)
 - `bun run backend:start` - Start backend in production mode
 
 ### Running E2E Tests
@@ -517,6 +523,65 @@ vp run dev:mobile -- --qa-notes-file path/to/notes.md
 ```
 
 Metro output is also tee'd to `.boardsesh/mobile-metro.log` for post-hoc error inspection.
+
+### OTA Preview Distribution (EAS Update)
+
+Multiple worktrees can publish independent mobile previews via EAS Update. Testers install the "preview" build once, then receive JS-only updates OTA when you publish from any branch.
+
+**One-time setup:**
+1. Build the preview client: `vp run mobile:preview-build` — this produces an installable `.ipa`/`.apk` with the native runtime + expo-updates baked in. Share the install link with testers.
+2. Testers install it on their device (iOS via ad-hoc provisioning, Android via APK).
+
+**Preview channels:**
+
+There are 4 preview channels available, each mapped to a different test device or tester:
+
+| Channel | Purpose |
+|---------|---------|
+| `preview-1` | Primary test device |
+| `preview-2` | Secondary test device |
+| `preview-3` | Third tester / device |
+| `preview-4` | Fourth tester / device |
+
+Each channel can independently point to a different EAS Update branch. This lets multiple worktrees deliver updates to different phones simultaneously.
+
+**Publishing updates (per branch):**
+```bash
+# From any worktree — publishes current JS bundle to an EAS branch matching git branch
+vp run mobile:publish
+
+# Explicit branch name or message
+vp run mobile:publish -- --branch my-feature --message "fix nav regression"
+
+# iOS only
+vp run mobile:publish -- --platform ios
+```
+
+**Pointing a channel at a branch:**
+```bash
+# Switch preview-1 to receive updates from a specific branch
+bunx eas-cli@16 channel:edit preview-1 --branch my-feature-branch
+```
+
+**CI integration:** The `mobile-eas-update.yml` workflow auto-publishes an update on every push to a non-main branch that touches `packages/mobile/` or shared packages. It posts an update comment on the PR with instructions.
+
+**When you need a new preview build:** Only required when native dependencies change (new Expo plugin, new native module, SDK version bump). Pure JS/TS changes are covered by OTA updates.
+
+**Environment:** The preview build uses production backend (`https://www.boardsesh.com`). The `EXPO_TOKEN` secret must be set in GitHub Actions for CI publishing; locally use `bunx eas login`.
+
+### Agent workflow for React Native changes
+
+When making changes to `packages/mobile/` or shared packages that affect the mobile app, **always ask the user which preview channel to publish to** before pushing a test update. Example:
+
+> "Changes are ready. Which preview channel should I publish to? (preview-1, preview-2, preview-3, preview-4)"
+
+After the user responds, publish and point the channel:
+```bash
+vp run mobile:publish
+bunx eas-cli@16 channel:edit <channel> --branch <current-branch>
+```
+
+Do not assume a channel — the user knows which device they're testing on. If the user has previously stated a preferred channel in this session, reuse it without asking again.
 
 ### Mobile vs. Web Differences
 

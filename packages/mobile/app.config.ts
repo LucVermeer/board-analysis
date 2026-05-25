@@ -1,5 +1,8 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
+const DEFAULT_EAS_PROJECT_ID = '87499648-655e-4fb8-9856-65da37e55fb1';
+const EAS_PROJECT_ID = process.env.EXPO_PUBLIC_EAS_PROJECT_ID ?? DEFAULT_EAS_PROJECT_ID;
+
 function resolveDevMetadata(): {
   branchName: string | null;
   qaNotes: string | null;
@@ -10,8 +13,6 @@ function resolveDevMetadata(): {
   const qaNotesFilePath = process.env.BOARDSESH_DEV_QA_NOTES_FILE ?? null;
 
   if (!branchName && !qaNotes) {
-    // Env vars are set by `vp run dev:mobile` (scripts/mobile-dev-start.ts).
-    // Without the orchestrator, no dev metadata is injected — this is fine.
     return { branchName: null, qaNotes: null, qaNotesFilePath: null };
   }
 
@@ -26,12 +27,19 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: 'Boardsesh',
     slug: 'boardsesh',
+    owner: 'boardsesh',
     version: '2.0.0',
     scheme: 'com.boardsesh.app',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    ...(EAS_PROJECT_ID
+      ? {
+          runtimeVersion: { policy: 'appVersion' as const },
+          updates: { url: `https://u.expo.dev/${EAS_PROJECT_ID}` },
+        }
+      : {}),
     ios: {
       bundleIdentifier: 'com.boardsesh.app',
       supportsTablet: false,
@@ -58,20 +66,22 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-secure-store',
       'expo-localization',
       'expo-status-bar',
+      'expo-updates',
       'expo-web-browser',
       'react-native-ble-plx',
     ],
-    ...(hasDevMetadata
-      ? {
-          extra: {
-            ...config.extra,
+    extra: {
+      ...config.extra,
+      ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
+      ...(hasDevMetadata
+        ? {
             devMetadata: {
               branchName: devMetadata.branchName,
               qaNotes: devMetadata.qaNotes,
               qaNotesFilePath: devMetadata.qaNotesFilePath,
             },
-          },
-        }
-      : {}),
+          }
+        : {}),
+    },
   };
 };

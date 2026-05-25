@@ -7,16 +7,20 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "channel": "development",
       "ios": {
         "simulator": true
       }
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview-1",
       "ios": {
         "simulator": false
       }
     },
-    "production": {}
+    "production": {
+      "channel": "production"
+    }
   }
 }
