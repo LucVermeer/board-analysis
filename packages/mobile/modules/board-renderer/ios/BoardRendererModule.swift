@@ -139,7 +139,12 @@ public class BoardRendererModule: Module {
           }
         }
 
-        // Create CGImage from the RGBA overlay pixel data returned by Rust
+        // Create CGImage from the RGBA overlay pixel data returned by Rust.
+        // tiny-skia's Pixmap::data() returns premultiplied RGBA (verified in
+        // tiny_skia::Pixmap docs: "A container that owns premultiplied RGBA
+        // pixels"). CGImageAlphaInfo.premultipliedLast is the matching
+        // CoreGraphics format; using straight alpha here would produce
+        // washed-out hold colors.
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
         if let overlayContext = CGContext(

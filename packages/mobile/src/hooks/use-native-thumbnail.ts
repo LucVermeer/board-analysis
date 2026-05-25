@@ -138,9 +138,14 @@ function getBoardConfig(
 }
 
 /**
- * Lazy-load the native module. Returns null when running in Expo Go
- * or when the native binary has not been linked (dev builds without
- * the xcframework/jniLibs present).
+ * Lazy-load the native module wrapper. The wrapper uses
+ * requireOptionalNativeModule under the hood so missing-binary
+ * scenarios (Expo Go, dev client built before the module landed)
+ * return null silently rather than logging a JS error.
+ *
+ * We still wrap require() in a try/catch as belt-and-braces in case
+ * the module file itself fails to evaluate for some other reason
+ * (e.g. transitive import error during a hot reload).
  */
 let renderModule: typeof import('../../modules/board-renderer/src/index') | null = null;
 let moduleLoadAttempted = false;
@@ -149,10 +154,12 @@ function getNativeModule() {
   if (moduleLoadAttempted) return renderModule;
   moduleLoadAttempted = true;
   try {
-    // Dynamic require so Metro does not hard-fail when the native
-    // module is absent (e.g. Expo Go, or a build without Rust libs)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    renderModule = require('../../modules/board-renderer/src/index') as typeof renderModule;
+    const loaded = require('../../modules/board-renderer/src/index') as typeof renderModule;
+    // The wrapper exposes `boardRendererNative` which is null when the
+    // native binary isn't loaded. Treat that as "no native renderer
+    // available" — the hook's fallback path takes over.
+    renderModule = loaded?.boardRendererNative ? loaded : null;
   } catch {
     renderModule = null;
   }

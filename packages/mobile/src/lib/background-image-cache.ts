@@ -25,7 +25,7 @@ export function getThumbnailImageUrl(fullImageUrl: string): string {
 }
 
 export function extractFilename(imageUrl: string): string {
-  return imageUrl.split('/').pop() ?? '';
+  return imageUrl.substring(imageUrl.lastIndexOf('/') + 1);
 }
 
 /**
