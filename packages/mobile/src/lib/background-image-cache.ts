@@ -44,7 +44,9 @@ const inflightDownloads = new Map<string, Promise<string | null>>();
 
 /**
  * Ensure all background images for a board configuration are cached locally.
- * Downloads thumbnail variants (smaller, webp) for faster initial load.
+ * `quality: 'thumbnail'` downloads small webp variants (fast, for list rows);
+ * `quality: 'full'` downloads the original full-size images (sharp, for play view).
+ * The two qualities live in separate subdirs so they don't collide.
  * Returns an array of local filesystem paths usable by the native renderer.
  */
 export async function ensureBackgroundsCached(params: {
@@ -52,7 +54,9 @@ export async function ensureBackgroundsCached(params: {
   layoutId: number;
   sizeId: number;
   setIds: number[];
+  quality?: 'thumbnail' | 'full';
 }): Promise<string[]> {
+  const quality = params.quality ?? 'thumbnail';
   const renderData = getBoardRenderData(params);
   if (!renderData) return [];
 
@@ -63,20 +67,24 @@ export async function ensureBackgroundsCached(params: {
   if (!boardDir.exists) {
     boardDir.create();
   }
+  const qualityDir = new Directory(boardDir, quality);
+  if (!qualityDir.exists) {
+    qualityDir.create();
+  }
 
   const localPaths: string[] = [];
 
   for (const imageUrl of renderData.imageUrls) {
-    const thumbUrl = getThumbnailImageUrl(imageUrl);
-    const filename = extractFilename(thumbUrl);
-    const localFile = new File(boardDir, filename);
+    const downloadUrl = quality === 'thumbnail' ? getThumbnailImageUrl(imageUrl) : imageUrl;
+    const filename = extractFilename(downloadUrl);
+    const localFile = new File(qualityDir, filename);
 
     if (localFile.exists) {
       localPaths.push(toFilesystemPath(localFile.uri));
       continue;
     }
 
-    const existingDownload = inflightDownloads.get(thumbUrl);
+    const existingDownload = inflightDownloads.get(downloadUrl);
     if (existingDownload) {
       const inflightPath = await existingDownload;
       if (inflightPath) localPaths.push(inflightPath);
@@ -85,19 +93,19 @@ export async function ensureBackgroundsCached(params: {
 
     const downloadPromise = (async () => {
       try {
-        const downloaded = await File.downloadFileAsync(thumbUrl, localFile);
+        const downloaded = await File.downloadFileAsync(downloadUrl, localFile);
         return downloaded ? toFilesystemPath(downloaded.uri) : null;
       } catch {
         return null;
       }
     })();
 
-    inflightDownloads.set(thumbUrl, downloadPromise);
+    inflightDownloads.set(downloadUrl, downloadPromise);
     try {
       const downloadedPath = await downloadPromise;
       if (downloadedPath) localPaths.push(downloadedPath);
     } finally {
-      inflightDownloads.delete(thumbUrl);
+      inflightDownloads.delete(downloadUrl);
     }
   }
 

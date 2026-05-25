@@ -3,7 +3,7 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 import { getBoardRenderData } from '../lib/board-details';
 import { ensureBackgroundsCached } from '../lib/background-image-cache';
-import { buildThumbnailUrl } from '../lib/thumbnail-url';
+import { buildThumbnailUrl, buildFullRenderUrl } from '../lib/thumbnail-url';
 
 type NativeThumbnailParams = {
   frames: string;
@@ -12,6 +12,10 @@ type NativeThumbnailParams = {
   sizeId: number;
   setIds: string;
   mirrored?: boolean;
+  /** Output PNG width in pixels. Defaults to 200 (thumbnail). */
+  outputWidth?: number;
+  /** Background image quality to download + composite. Defaults to 'thumbnail'. */
+  backgroundQuality?: 'thumbnail' | 'full';
 };
 
 type NativeThumbnailResult = {
@@ -58,13 +62,25 @@ export function buildCacheKey(
   setIds: string,
   frames: string,
   mirrored: boolean,
+  outputWidth: number = 200,
+  backgroundQuality: 'thumbnail' | 'full' = 'thumbnail',
 ): string {
   const framesHash = fnv1aHex(frames);
-  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${framesHash}${mirrored ? '_m' : ''}`;
+  const sizeTag = outputWidth === 200 ? '' : `_w${outputWidth}`;
+  const qualityTag = backgroundQuality === 'thumbnail' ? '' : `_${backgroundQuality}`;
+  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${framesHash}${mirrored ? '_m' : ''}${sizeTag}${qualityTag}`;
 }
 
-function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, setIds: string) {
-  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}`;
+function getBoardConfig(
+  boardName: BoardName,
+  layoutId: number,
+  sizeId: number,
+  setIds: string,
+  outputWidth: number,
+) {
+  // outputWidth is baked into the cached config object (it sets the Rust
+  // renderer's pixel dimensions), so it has to be part of the cache key.
+  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${outputWidth}`;
   const cached = boardConfigCache.get(configKey);
   if (cached) return cached;
 
@@ -83,11 +99,16 @@ function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, 
     };
   }
 
+  // `thumbnail: true` switches the Rust renderer to a thicker, filled style
+  // tuned for tiny output. At full-size play-view dimensions the same style
+  // would look too heavy, so flip it off whenever the output is large.
+  const isThumbnailStyle = outputWidth <= 320;
+
   const configBase = {
     board_width: renderData.boardWidth,
     board_height: renderData.boardHeight,
-    output_width: 200,
-    thumbnail: true,
+    output_width: outputWidth,
+    thumbnail: isThumbnailStyle,
     mirrored: false,
     holds: renderData.holdsData.map((hold) => ({
       id: hold.id,
@@ -141,7 +162,15 @@ function getNativeModule() {
  */
 export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbnailResult {
   const { frames, boardName, layoutId, sizeId, setIds, mirrored } = params;
-  const serverUrl = buildThumbnailUrl({ boardName, layoutId, sizeId, setIds, frames });
+  const outputWidth = params.outputWidth ?? 200;
+  const backgroundQuality = params.backgroundQuality ?? 'thumbnail';
+  // Match the fallback URL quality to the requested render quality so the
+  // brief pre-native-render frame already looks roughly right (sharp full
+  // server render for play view, fast thumbnail for list rows).
+  const serverUrl =
+    backgroundQuality === 'full'
+      ? buildFullRenderUrl({ boardName, layoutId, sizeId, setIds, frames })
+      : buildThumbnailUrl({ boardName, layoutId, sizeId, setIds, frames });
   const [uri, setUri] = useState(serverUrl);
   const mountedRef = useRef(true);
 
@@ -159,10 +188,19 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
       return;
     }
 
-    const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds);
+    const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds, outputWidth);
     if (!boardConfig) return;
 
-    const cacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames, mirrored ?? false);
+    const cacheKey = buildCacheKey(
+      boardName,
+      layoutId,
+      sizeId,
+      setIds,
+      frames,
+      mirrored ?? false,
+      outputWidth,
+      backgroundQuality,
+    );
 
     // Reuse an in-flight render for the same cache key
     const existingRender = inflightRenders.get(cacheKey);
@@ -181,6 +219,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
         layoutId,
         sizeId,
         setIds: boardConfig.setIdsArray,
+        quality: backgroundQuality,
       });
 
       const configJson = JSON.stringify({
@@ -204,7 +243,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
       .finally(() => {
         inflightRenders.delete(cacheKey);
       });
-  }, [frames, boardName, layoutId, sizeId, setIds, mirrored, serverUrl]);
+  }, [frames, boardName, layoutId, sizeId, setIds, mirrored, outputWidth, backgroundQuality, serverUrl]);
 
   return { uri };
 }

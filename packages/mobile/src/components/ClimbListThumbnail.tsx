@@ -3,7 +3,6 @@ import { StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { useNativeThumbnail } from '../hooks/use-native-thumbnail';
-import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
 
 type ClimbListThumbnailProps = {
@@ -44,7 +43,6 @@ const styles = StyleSheet.create({
     width: spacing[16],
     height: spacing[16],
     borderRadius: borderRadius.md,
-    backgroundColor: `${iosSystemColors.systemGray}1A`,
   },
   mirrored: {
     transform: [{ scaleX: -1 }],
