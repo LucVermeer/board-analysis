@@ -48,7 +48,7 @@ export const CommunitySection = memo(function CommunitySection({
         color={starIndex < fullStars ? iosSystemColors.starGold : iosSystemColors.systemGray4}
       />
     ));
-  }, [qualityNum, hasQuality]);
+  }, [qualityNum]);
 
   return (
     <View style={styles.container}>

@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -45,7 +45,16 @@ export const QueueList = forwardRef<QueueListHandle, QueueListProps>(function Qu
 ) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
-  const flatListRef = useRef<ReturnType<typeof BottomSheetFlatList> | null>(null);
+  const flatListRef = useRef<InstanceType<typeof BottomSheetFlatList>>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimerRef.current) {
+        clearTimeout(scrollTimerRef.current);
+      }
+    };
+  }, []);
 
   const { flatRows, currentItemFlatIndex } = useMemo(
     () => buildQueueListModel(queue, currentClimbUuid, { showHistory, showFullHistory }),
@@ -55,10 +64,10 @@ export const QueueList = forwardRef<QueueListHandle, QueueListProps>(function Qu
   useImperativeHandle(ref, () => ({
     scrollToCurrentClimb: () => {
       if (currentItemFlatIndex >= 0 && flatRows.length > 0) {
-        // Small delay to allow layout to settle after sheet opens
-        setTimeout(() => {
+        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+        scrollTimerRef.current = setTimeout(() => {
           (
-            flatListRef.current as {
+            flatListRef.current as unknown as {
               scrollToIndex?: (params: { index: number; animated: boolean; viewPosition: number }) => void;
             }
           )?.scrollToIndex?.({
@@ -165,7 +174,7 @@ export const QueueList = forwardRef<QueueListHandle, QueueListProps>(function Qu
 
   return (
     <BottomSheetFlatList
-      ref={flatListRef as React.RefObject<never>}
+      ref={flatListRef as unknown as React.RefObject<InstanceType<typeof BottomSheetFlatList>>}
       data={flatRows}
       keyExtractor={keyExtractor}
       renderItem={renderRow}

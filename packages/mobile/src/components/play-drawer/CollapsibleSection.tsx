@@ -4,7 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing } from '../../theme/tokens';
+import { spacing, borderRadius } from '../../theme/tokens';
 import { timing } from '../../theme/animations';
 
 type CollapsibleSectionProps = {
@@ -52,8 +52,8 @@ export function CollapsibleSection({ title, defaultExpanded = false, children }:
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 12,
-    backgroundColor: 'rgba(120, 120, 128, 0.08)',
+    borderRadius: borderRadius.lg,
+    backgroundColor: `${iosSystemColors.systemGray}14`,
     overflow: 'hidden',
   },
   header: {
