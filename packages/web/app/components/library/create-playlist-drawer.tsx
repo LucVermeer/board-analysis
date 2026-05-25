@@ -17,7 +17,7 @@ import {
   type CreatePlaylistMutationResponse,
   type CreatePlaylistMutationVariables,
   type Playlist,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 
 type CreatePlaylistDrawerProps = {

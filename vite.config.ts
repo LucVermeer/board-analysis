@@ -42,6 +42,8 @@ export default defineConfig({
       './packages/shared/queue/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',
+      './packages/shared/graphql/vite.config.ts',
+      './packages/shared-schema/vite.config.ts',
       './packages/mobile/vite.config.ts',
     ],
   },
@@ -102,7 +104,7 @@ export default defineConfig({
       // file that graphql-codegen reads as its schema input.
       codegen: {
         command:
-          'bun packages/shared-schema/scripts/print-schema.ts && graphql-codegen && vp fmt packages/shared-schema/src/generated/ packages/web/app/lib/graphql/generated/',
+          'bun packages/shared-schema/scripts/print-schema.ts && graphql-codegen && vp fmt packages/shared-schema/src/generated/ packages/shared/graphql/src/generated/',
       },
 
       // --- Build (topological order via dependsOn) ---
@@ -193,6 +195,10 @@ export default defineConfig({
       'typecheck:climb-filters': {
         command: 'bun run --filter=@boardsesh/climb-filters typecheck',
       },
+      'typecheck:graphql': {
+        command: 'bun run --filter=@boardsesh/graphql typecheck',
+        dependsOn: ['codegen'],
+      },
       'typecheck:mobile': {
         command: 'bun run --filter=@boardsesh/mobile typecheck',
       },
@@ -208,6 +214,7 @@ export default defineConfig({
           'typecheck:board-config',
           'typecheck:play-view',
           'typecheck:climb-filters',
+          'typecheck:graphql',
           'typecheck:mobile',
         ],
       },

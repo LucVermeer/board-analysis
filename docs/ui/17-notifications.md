@@ -3,6 +3,7 @@
 ### 10.1 Notification Center (`/notifications`)
 
 **Layout:**
+
 - Page title "Notifications" in the layout header.
 - "Mark all as read" text button (right-aligned, visible only when `unreadCount > 0`).
 - `List` of `NotificationItem` components with infinite scroll.
@@ -25,27 +26,29 @@ Each `NotificationItem` is a `ListItem` with:
 
 **Notification Types and Icons:**
 
-| Type | Text Pattern | Icon |
-|------|-------------|------|
-| `new_follower` | "X followed you" | `PersonAddOutlined` |
-| `comment_reply` | "X replied to your comment: [body]" | `ChatBubbleOutline` |
-| `comment_on_tick` | "X commented on your tick: [body]" | `ChatBubbleOutline` |
-| `comment_on_climb` | "X commented on the climb: [body]" | `ChatBubbleOutline` |
-| `vote_on_tick` | "X liked your tick" | `ThumbUpOutlined` |
-| `vote_on_comment` | "X liked your comment" | `ThumbUpOutlined` |
-| `proposal_created` | "X created a proposal" | `LightbulbOutlined` |
-| `proposal_approved` | "X's proposal was approved" | `LightbulbOutlined` |
-| `proposal_rejected` | "X's proposal was rejected" | `LightbulbOutlined` |
-| `proposal_vote` | "X voted on a proposal" | `LightbulbOutlined` |
-| `new_climb` / `new_climb_global` | "X added a new climb" | `AddCircleOutline` |
-| `new_climbs_synced` | "X new climbs synced from [setter]" | `AddCircleOutline` |
+| Type                             | Text Pattern                        | Icon                |
+| -------------------------------- | ----------------------------------- | ------------------- |
+| `new_follower`                   | "X followed you"                    | `PersonAddOutlined` |
+| `comment_reply`                  | "X replied to your comment: [body]" | `ChatBubbleOutline` |
+| `comment_on_tick`                | "X commented on your tick: [body]"  | `ChatBubbleOutline` |
+| `comment_on_climb`               | "X commented on the climb: [body]"  | `ChatBubbleOutline` |
+| `vote_on_tick`                   | "X liked your tick"                 | `ThumbUpOutlined`   |
+| `vote_on_comment`                | "X liked your comment"              | `ThumbUpOutlined`   |
+| `proposal_created`               | "X created a proposal"              | `LightbulbOutlined` |
+| `proposal_approved`              | "X's proposal was approved"         | `LightbulbOutlined` |
+| `proposal_rejected`              | "X's proposal was rejected"         | `LightbulbOutlined` |
+| `proposal_vote`                  | "X voted on a proposal"             | `LightbulbOutlined` |
+| `new_climb` / `new_climb_global` | "X added a new climb"               | `AddCircleOutline`  |
+| `new_climbs_synced`              | "X new climbs synced from [setter]" | `AddCircleOutline`  |
 
 **Actor Summarization:**
+
 - 1 actor: "Alice"
 - 2 actors: "Alice and Bob"
 - 3+ actors: "Alice and N others"
 
 **Tap behavior:**
+
 1. Marks the notification group as read (via `markGroupAsReadMutation`).
 2. Navigates to relevant content:
    - `new_follower` -> `/profile/<actorId>`
@@ -53,12 +56,14 @@ Each `NotificationItem` is a `ListItem` with:
    - Climb-related (with `climbUuid` + `boardType`) -> Fetches climb URL via `/api/internal/climb-redirect` and navigates.
 
 **React Native adaptation:**
+
 - Use a `FlashList` with custom `renderItem` for notification rows.
 - Unread dot via a small `View` with absolute positioning.
 - Navigation via `router.push`.
 - Tap haptic feedback.
 
 **Data operations:**
+
 - `groupedNotifications` / `useGroupedNotifications` -- Cursor-paginated grouped notifications.
 - `unreadNotificationCount` / `useUnreadNotificationCount` -- Badge count for tab bar / header.
 - `markNotificationRead` -- Mark a single notification as read.
@@ -67,4 +72,3 @@ Each `NotificationItem` is a `ListItem` with:
 - `notificationReceived` subscription -- Real-time notification delivery.
 
 ---
-

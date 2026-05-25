@@ -17,6 +17,7 @@ type Documents = {
   '\n  query GetDeleteAccountInfo {\n    deleteAccountInfo {\n      publishedClimbCount\n    }\n  }\n': typeof types.GetDeleteAccountInfoDocument;
   '\n  mutation DeleteAccount($input: DeleteAccountInput!) {\n    deleteAccount(input: $input)\n  }\n': typeof types.DeleteAccountDocument;
   '\n  query GetBetaLinks($boardType: String!, $climbUuid: String!) {\n    betaLinks(boardType: $boardType, climbUuid: $climbUuid) {\n      climbUuid\n      link\n      foreignUsername\n      angle\n      thumbnail\n      isListed\n      createdAt\n    }\n  }\n': typeof types.GetBetaLinksDocument;
+  '\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n': typeof types.AttachBetaLinkDocument;
   '\n  query GetRecentBetaLinks($limit: Int, $boardType: String) {\n    recentBetaLinks(limit: $limit, boardType: $boardType) {\n      climbName\n      boardType\n      layoutId\n      betaLink {\n        climbUuid\n        link\n        foreignUsername\n        angle\n        thumbnail\n        isListed\n        createdAt\n      }\n    }\n  }\n': typeof types.GetRecentBetaLinksDocument;
   '\n  query GetUserBetaLinks($userId: String!, $limit: Int) {\n    userBetaLinks(userId: $userId, limit: $limit) {\n      climbName\n      boardType\n      layoutId\n      betaLink {\n        climbUuid\n        link\n        foreignUsername\n        angle\n        thumbnail\n        isListed\n        createdAt\n      }\n    }\n  }\n': typeof types.GetUserBetaLinksDocument;
   '\n  query ClimbStatsHistory($boardName: String!, $climbUuid: ID!) {\n    climbStatsHistory(boardName: $boardName, climbUuid: $climbUuid) {\n      angle\n      ascensionistCount\n      qualityAverage\n      difficultyAverage\n      displayDifficulty\n      createdAt\n    }\n  }\n': typeof types.ClimbStatsHistoryDocument;
@@ -114,7 +115,6 @@ type Documents = {
   '\n  query GetTicks($input: GetTicksInput!) {\n    ticks(input: $input) {\n      uuid\n      climbUuid\n      angle\n      isMirror\n      status\n      attemptCount\n      quality\n      difficulty\n      isBenchmark\n      comment\n      climbedAt\n      upvotes\n      downvotes\n      commentCount\n    }\n  }\n': typeof types.GetTicksDocument;
   '\n  query GetUserTicks($userId: ID!, $boardType: String!) {\n    userTicks(userId: $userId, boardType: $boardType) {\n      climbUuid\n      angle\n      status\n      attemptCount\n      difficulty\n      effectiveDifficulty\n      climbedAt\n      layoutId\n    }\n  }\n': typeof types.GetUserTicksDocument;
   '\n  mutation SaveTick($input: SaveTickInput!) {\n    saveTick(input: $input) {\n      uuid\n      climbUuid\n      angle\n      isMirror\n      status\n      attemptCount\n      quality\n      difficulty\n      comment\n      climbedAt\n    }\n  }\n': typeof types.SaveTickDocument;
-  '\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n': typeof types.AttachBetaLinkDocument;
   '\n  mutation DeleteTick($uuid: ID!) {\n    deleteTick(uuid: $uuid)\n  }\n': typeof types.DeleteTickDocument;
   '\n  query GetUserAscentsFeed($userId: ID!, $input: AscentFeedInput) {\n    userAscentsFeed(userId: $userId, input: $input) {\n      items {\n        uuid\n        climbUuid\n        climbName\n        setterUsername\n        boardType\n        layoutId\n        angle\n        isMirror\n        status\n        attemptCount\n        quality\n        difficulty\n        difficultyName\n        consensusDifficulty\n        consensusDifficultyName\n        qualityAverage\n        isBenchmark\n        isNoMatch\n        comment\n        climbedAt\n        frames\n      }\n      totalCount\n      hasMore\n    }\n  }\n': typeof types.GetUserAscentsFeedDocument;
   '\n  query GetUserGroupedAscentsFeed($userId: ID!, $input: AscentFeedInput) {\n    userGroupedAscentsFeed(userId: $userId, input: $input) {\n      groups {\n        key\n        climbUuid\n        climbName\n        setterUsername\n        boardType\n        layoutId\n        angle\n        isMirror\n        frames\n        difficultyName\n        isBenchmark\n        isNoMatch\n        date\n        flashCount\n        sendCount\n        attemptCount\n        bestQuality\n        latestComment\n        items {\n          uuid\n          climbUuid\n          climbName\n          setterUsername\n          boardType\n          layoutId\n          angle\n          isMirror\n          status\n          attemptCount\n          quality\n          difficulty\n          difficultyName\n          isBenchmark\n          isNoMatch\n          comment\n          climbedAt\n          frames\n        }\n      }\n      totalCount\n      hasMore\n    }\n  }\n': typeof types.GetUserGroupedAscentsFeedDocument;
@@ -129,6 +129,8 @@ const documents: Documents = {
     types.DeleteAccountDocument,
   '\n  query GetBetaLinks($boardType: String!, $climbUuid: String!) {\n    betaLinks(boardType: $boardType, climbUuid: $climbUuid) {\n      climbUuid\n      link\n      foreignUsername\n      angle\n      thumbnail\n      isListed\n      createdAt\n    }\n  }\n':
     types.GetBetaLinksDocument,
+  '\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n':
+    types.AttachBetaLinkDocument,
   '\n  query GetRecentBetaLinks($limit: Int, $boardType: String) {\n    recentBetaLinks(limit: $limit, boardType: $boardType) {\n      climbName\n      boardType\n      layoutId\n      betaLink {\n        climbUuid\n        link\n        foreignUsername\n        angle\n        thumbnail\n        isListed\n        createdAt\n      }\n    }\n  }\n':
     types.GetRecentBetaLinksDocument,
   '\n  query GetUserBetaLinks($userId: String!, $limit: Int) {\n    userBetaLinks(userId: $userId, limit: $limit) {\n      climbName\n      boardType\n      layoutId\n      betaLink {\n        climbUuid\n        link\n        foreignUsername\n        angle\n        thumbnail\n        isListed\n        createdAt\n      }\n    }\n  }\n':
@@ -319,8 +321,6 @@ const documents: Documents = {
     types.GetUserTicksDocument,
   '\n  mutation SaveTick($input: SaveTickInput!) {\n    saveTick(input: $input) {\n      uuid\n      climbUuid\n      angle\n      isMirror\n      status\n      attemptCount\n      quality\n      difficulty\n      comment\n      climbedAt\n    }\n  }\n':
     types.SaveTickDocument,
-  '\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n':
-    types.AttachBetaLinkDocument,
   '\n  mutation DeleteTick($uuid: ID!) {\n    deleteTick(uuid: $uuid)\n  }\n': types.DeleteTickDocument,
   '\n  query GetUserAscentsFeed($userId: ID!, $input: AscentFeedInput) {\n    userAscentsFeed(userId: $userId, input: $input) {\n      items {\n        uuid\n        climbUuid\n        climbName\n        setterUsername\n        boardType\n        layoutId\n        angle\n        isMirror\n        status\n        attemptCount\n        quality\n        difficulty\n        difficultyName\n        consensusDifficulty\n        consensusDifficultyName\n        qualityAverage\n        isBenchmark\n        isNoMatch\n        comment\n        climbedAt\n        frames\n      }\n      totalCount\n      hasMore\n    }\n  }\n':
     types.GetUserAscentsFeedDocument,
@@ -366,6 +366,12 @@ export function graphql(
 export function graphql(
   source: '\n  query GetBetaLinks($boardType: String!, $climbUuid: String!) {\n    betaLinks(boardType: $boardType, climbUuid: $climbUuid) {\n      climbUuid\n      link\n      foreignUsername\n      angle\n      thumbnail\n      isListed\n      createdAt\n    }\n  }\n',
 ): (typeof documents)['\n  query GetBetaLinks($boardType: String!, $climbUuid: String!) {\n    betaLinks(boardType: $boardType, climbUuid: $climbUuid) {\n      climbUuid\n      link\n      foreignUsername\n      angle\n      thumbnail\n      isListed\n      createdAt\n    }\n  }\n'];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n',
+): (typeof documents)['\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n'];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -948,12 +954,6 @@ export function graphql(
 export function graphql(
   source: '\n  mutation SaveTick($input: SaveTickInput!) {\n    saveTick(input: $input) {\n      uuid\n      climbUuid\n      angle\n      isMirror\n      status\n      attemptCount\n      quality\n      difficulty\n      comment\n      climbedAt\n    }\n  }\n',
 ): (typeof documents)['\n  mutation SaveTick($input: SaveTickInput!) {\n    saveTick(input: $input) {\n      uuid\n      climbUuid\n      angle\n      isMirror\n      status\n      attemptCount\n      quality\n      difficulty\n      comment\n      climbedAt\n    }\n  }\n'];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: '\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n',
-): (typeof documents)['\n  mutation AttachBetaLink($input: AttachBetaLinkInput!) {\n    attachBetaLink(input: $input)\n  }\n'];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

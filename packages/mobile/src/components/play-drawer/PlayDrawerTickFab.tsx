@@ -38,10 +38,7 @@ export const PlayDrawerTickFab = memo(function PlayDrawerTickFab({
       onLongPress={handleLongPress}
       accessibilityRole="button"
       accessibilityLabel={t('playView.tickFab.logAscentAria')}
-      style={({ pressed }) => [
-        styles.fab,
-        pressed && styles.fabPressed,
-      ]}
+      style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
     >
       <Icon name="tick.outline" size={20} color={iosSystemColors.white} />
       {ascentCount > 0 && (

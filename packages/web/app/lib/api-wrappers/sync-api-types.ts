@@ -157,15 +157,11 @@ export type ProductsAngle = {
   angle: number;
 };
 
-export type BetaLink = {
-  climb_uuid: string;
-  link: string;
-  foreign_username: string | null;
-  angle: number | null;
-  thumbnail: string | null;
-  is_listed: boolean;
-  created_at: string;
-};
+// BetaLink lives in @boardsesh/shared-schema; this re-export keeps the
+// historical import path `@/app/lib/api-wrappers/sync-api-types` working
+// for the ~10 call sites that already use it.
+import type { BetaLink } from '@boardsesh/shared-schema';
+export type { BetaLink };
 
 export type ProductSizesLayoutsSet = {
   id: number;

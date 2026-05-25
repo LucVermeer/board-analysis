@@ -10,7 +10,7 @@ import {
   setHealthKitAutoSync,
 } from '@/app/lib/healthkit/healthkit-bridge';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { SET_SESSION_HEALTHKIT_WORKOUT_ID } from '@/app/lib/graphql/operations/activity-feed';
+import { SET_SESSION_HEALTHKIT_WORKOUT_ID } from '@boardsesh/graphql/operations/activity-feed';
 import { useWsAuthToken } from './use-ws-auth-token';
 
 export type HealthKitSaveState = 'idle' | 'saving' | 'saved' | 'error' | 'unavailable';

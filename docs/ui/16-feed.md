@@ -5,6 +5,7 @@
 The feed is the social hub of the app. It uses three tabs with URL-based state (`?tab=sessions|proposals|comments`).
 
 **Global controls:**
+
 - **Board Filter Strip** (authenticated only): Same horizontal chip row as the library page, filtering all feed content by board.
 - **Full-width Tabs**: Sessions (default), Proposals, Comments. Tab state synced to URL params.
 
@@ -34,6 +35,7 @@ Each card represents a climbing session and contains:
 The entire body area (below the header) links to `/session/<sessionId>`.
 
 **Empty states:**
+
 - Authenticated, no sessions: "Follow climbers to see their activity" with "Find Climbers" button (opens `UnifiedSearchDrawer` in users mode).
 - Unauthenticated, no recent activity: "No recent activity" message.
 
@@ -60,6 +62,7 @@ The entire body area (below the header) links to `/session/<sessionId>`.
 **Component:** `CommentFeed`
 
 Each comment rendered as a `CommentFeedCard`:
+
 - **Header**: User avatar (32x32, linked to profile), display name (linked to profile), context text ("commented on a climb"), relative timestamp (via `dayjs.fromNow()`).
 - **Comment body**: Blockquote-styled box with left border, secondary background.
 - **Social row**: `VoteButton` (up/down votes, not like-only), reply count.
@@ -77,6 +80,7 @@ Empty state: Chat bubble icon + "No comments yet" message.
 - Allows searching for climbers to follow.
 
 **Data operations:**
+
 - `sessionGroupedFeed` / `GET_SESSION_GROUPED_FEED` -- Cursor-paginated session feed with optional board/user filters.
 - `browseProposals` / `BROWSE_PROPOSALS` -- Paginated proposals with optional board filter.
 - `globalCommentFeed` / `GET_GLOBAL_COMMENT_FEED` -- Cursor-paginated global comment feed with optional board filter.
@@ -85,4 +89,3 @@ Empty state: Chat bubble icon + "No comments yet" message.
 - `voteOnProposal` -- Vote on a climb proposal.
 
 ---
-

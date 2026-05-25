@@ -16,7 +16,7 @@ import BoardseshBetaAddPanel from '@/app/components/beta-videos/boardsesh-beta-a
 import BoardseshBetaAddButton from '@/app/components/beta-videos/boardsesh-beta-add-button';
 import SimilarClimbsList from '@/app/components/similar-climbs/similar-climbs-list';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
+import { GET_BETA_LINKS } from '@boardsesh/graphql/operations/beta-links';
 import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
 import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';

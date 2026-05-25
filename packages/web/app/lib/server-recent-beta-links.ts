@@ -1,6 +1,6 @@
 import 'server-only';
 import { unstable_cache } from 'next/cache';
-import { GET_RECENT_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
+import { GET_RECENT_BETA_LINKS } from '@boardsesh/graphql/operations/beta-links';
 import { executeGraphQLInternal } from '@/app/lib/graphql/server-cached-client';
 import type { BetaLinksGqlRow } from '@/app/lib/beta-video-url';
 

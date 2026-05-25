@@ -8,7 +8,7 @@ import {
   UPDATE_BOARD,
   type UpdateBoardMutationVariables,
   type UpdateBoardMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { BoardName } from '@/app/lib/types';
 import { ANGLES } from '@/app/lib/board-data';

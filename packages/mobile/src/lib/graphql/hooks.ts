@@ -217,3 +217,46 @@ export function useSaveTick() {
     },
   });
 }
+
+// ============================================
+// Beta Videos (Instagram + TikTok per climb)
+// ============================================
+
+import {
+  GET_BETA_LINKS,
+  ATTACH_BETA_LINK,
+  type GetBetaLinksQueryResponse,
+  type GetBetaLinksQueryVariables,
+  type AttachBetaLinkMutationVariables,
+  type AttachBetaLinkMutationResponse,
+} from '@boardsesh/graphql/operations/beta-links';
+import { dedupeBetaLinks } from '@boardsesh/shared-schema';
+import { mapBetaLinks } from '../beta-video-url';
+
+export function useBetaLinks(boardType: string, climbUuid: string, enabled = true) {
+  return useQuery({
+    queryKey: ['betaLinks', boardType, climbUuid],
+    queryFn: () =>
+      getHttpClient().request<GetBetaLinksQueryResponse, GetBetaLinksQueryVariables>(GET_BETA_LINKS, {
+        boardType,
+        climbUuid,
+      }),
+    select: (data) => dedupeBetaLinks(mapBetaLinks(data.betaLinks)),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAttachBetaLink() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: AttachBetaLinkMutationVariables['input']) =>
+      getHttpClient().request<AttachBetaLinkMutationResponse, AttachBetaLinkMutationVariables>(ATTACH_BETA_LINK, {
+        input,
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['betaLinks', vars.boardType, vars.climbUuid] });
+    },
+  });
+}

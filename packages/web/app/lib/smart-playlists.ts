@@ -1,4 +1,4 @@
-import type { SmartPlaylistType } from '@/app/lib/graphql/operations/playlists';
+import type { SmartPlaylistType } from '@boardsesh/graphql/operations/playlists';
 import { themeTokens } from '@/app/theme/theme-config';
 
 export type SmartPlaylistSlug = 'five-stars' | 'most-repeated' | 'projects';

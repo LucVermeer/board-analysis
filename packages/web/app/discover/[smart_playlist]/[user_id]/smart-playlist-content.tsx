@@ -18,7 +18,7 @@ import {
   type SmartPlaylistResult,
   type SmartPlaylistType,
   GET_SMART_PLAYLIST,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 import { type SmartPlaylistSlug, smartPlaylistByType } from '@/app/lib/smart-playlists';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useMyBoards } from '@/app/hooks/use-my-boards';

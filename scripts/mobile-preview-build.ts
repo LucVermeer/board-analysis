@@ -55,15 +55,7 @@ console.log('[mobile:preview-build] This build is the "shell" that testers insta
 console.log('[mobile:preview-build] After install, they receive JS updates via `vp run mobile:publish`.');
 console.log('');
 
-const easArgs = [
-  'eas-cli@16',
-  'build',
-  '--profile',
-  'preview',
-  '--platform',
-  platform,
-  '--non-interactive',
-];
+const easArgs = ['eas-cli@16', 'build', '--profile', 'preview', '--platform', platform, '--non-interactive'];
 
 console.log(`[mobile:preview-build] Running: bunx ${easArgs.join(' ')}`);
 console.log('');

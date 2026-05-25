@@ -2,7 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { createInitialTickState, deriveAscentType, getMinAttempts, clampAttempts, type TickStatus } from '@boardsesh/play-view';
+import {
+  createInitialTickState,
+  deriveAscentType,
+  getMinAttempts,
+  clampAttempts,
+  type TickStatus,
+} from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { InlineStarPicker } from './InlineStarPicker';
@@ -127,13 +133,25 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         },
       },
     );
-  }, [saveTick, boardName, climbUuid, angle, isMirror, isBenchmark, sessionId, layoutId, sizeId, setIds, ascentType, tickState, onDismiss]);
+  }, [
+    saveTick,
+    boardName,
+    climbUuid,
+    angle,
+    isMirror,
+    isBenchmark,
+    sessionId,
+    layoutId,
+    sizeId,
+    setIds,
+    ascentType,
+    tickState,
+    onDismiss,
+  ]);
 
   if (!mounted) return null;
 
-  const saveLabel = ascentType === 'flash'
-    ? t('playView.tickBar.flashSaveLabel')
-    : t('playView.tickBar.sendSaveLabel');
+  const saveLabel = ascentType === 'flash' ? t('playView.tickBar.flashSaveLabel') : t('playView.tickBar.sendSaveLabel');
 
   return (
     <Animated.View style={[styles.container, animatedStyle]} pointerEvents={visible ? 'auto' : 'none'}>

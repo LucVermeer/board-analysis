@@ -20,7 +20,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
-vi.mock('@/app/lib/graphql/operations/beta-links', () => ({
+vi.mock('@boardsesh/graphql/operations/beta-links', () => ({
   GET_USER_BETA_LINKS: 'GET_USER_BETA_LINKS',
 }));
 

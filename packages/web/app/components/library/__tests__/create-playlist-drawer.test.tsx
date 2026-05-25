@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import React from 'react';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import CreatePlaylistDrawer from '../create-playlist-drawer';
-import type { Playlist } from '@/app/lib/graphql/operations/playlists';
+import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 
 vi.mock('react-i18next', () => ({
   useTranslation: (ns?: string) => ({

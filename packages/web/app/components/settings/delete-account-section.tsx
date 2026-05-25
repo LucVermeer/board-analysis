@@ -20,7 +20,7 @@ import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { ClientError } from 'graphql-request';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_DELETE_ACCOUNT_INFO, DELETE_ACCOUNT } from '@/app/lib/graphql/operations/account';
+import { GET_DELETE_ACCOUNT_INFO, DELETE_ACCOUNT } from '@boardsesh/graphql/operations/account';
 
 export default function DeleteAccountSection() {
   const { t } = useTranslation('settings');

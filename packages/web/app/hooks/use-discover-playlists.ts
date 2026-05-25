@@ -5,7 +5,7 @@ import {
   type DiscoverablePlaylist,
   type DiscoverPlaylistsInput,
   type DiscoverPlaylistsQueryResponse,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 
 type UseDiscoverPlaylistsOptions = {
   /** Optional board filter. Changing it resets pagination for both streams. */

@@ -16,7 +16,7 @@ import {
   ATTACH_BETA_LINK,
   type AttachBetaLinkMutationVariables,
   type AttachBetaLinkMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import {
   isBetaVideoUrl,
   isInstagramUrl,

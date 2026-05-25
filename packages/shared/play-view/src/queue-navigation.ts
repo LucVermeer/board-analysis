@@ -53,9 +53,7 @@ export function computeNavigationState(
   const nextItem = findNextQueueItem(queue, currentClimbQueueItem);
   const prevItem = findPreviousQueueItem(queue, currentClimbQueueItem);
 
-  const currentIndex = currentClimbQueueItem
-    ? queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid)
-    : -1;
+  const currentIndex = currentClimbQueueItem ? queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid) : -1;
 
   const remainingCount = currentIndex >= 0 ? queue.length - currentIndex - 1 : queue.length;
 

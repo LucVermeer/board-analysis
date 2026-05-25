@@ -29,7 +29,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   GET_SETTER_PROFILE: 'GET_SETTER_PROFILE',
   FOLLOW_SETTER: 'FOLLOW_SETTER',
   UNFOLLOW_SETTER: 'UNFOLLOW_SETTER',

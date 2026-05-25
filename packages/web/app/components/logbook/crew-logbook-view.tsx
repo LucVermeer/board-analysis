@@ -13,7 +13,7 @@ import {
   GET_FOLLOWING_CLIMB_ASCENTS,
   type GetFollowingClimbAscentsQueryResponse,
   type GetFollowingClimbAscentsQueryVariables,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { Climb } from '@/app/lib/types';
 import { VoteSummaryProvider } from '@/app/components/social/vote-summary-context';
 import { LogbookEntryCard } from './logbook-entry-card';

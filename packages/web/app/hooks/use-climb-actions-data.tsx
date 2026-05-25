@@ -11,7 +11,7 @@ import {
   TOGGLE_FAVORITE,
   type FavoritesQueryResponse,
   type ToggleFavoriteMutationResponse,
-} from '@/app/lib/graphql/operations/favorites';
+} from '@boardsesh/graphql/operations/favorites';
 import {
   GET_ALL_USER_PLAYLISTS,
   GET_PLAYLISTS_FOR_CLIMBS,
@@ -24,7 +24,7 @@ import {
   type RemoveClimbFromPlaylistMutationResponse,
   type CreatePlaylistMutationResponse,
   type Playlist,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 import { useIncrementalQuery } from '@/app/hooks/use-incremental-query';
 
 type UseClimbActionsDataOptions = {

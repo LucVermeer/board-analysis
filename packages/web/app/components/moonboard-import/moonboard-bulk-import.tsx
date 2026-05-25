@@ -36,7 +36,7 @@ import {
   SAVE_MOONBOARD_CLIMB_MUTATION,
   type SaveMoonBoardClimbMutationVariables,
   type SaveMoonBoardClimbMutationResponse,
-} from '@/app/lib/graphql/operations/new-climb-feed';
+} from '@boardsesh/graphql/operations/new-climb-feed';
 import { refreshClimbSearchAfterSave } from '@/app/lib/climb-search-cache';
 import { themeTokens } from '@/app/theme/theme-config';
 import styles from './moonboard-bulk-import.module.css';

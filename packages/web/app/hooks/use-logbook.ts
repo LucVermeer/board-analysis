@@ -5,7 +5,7 @@ import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { useWsAuthToken } from './use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_TICKS, type GetTicksQueryVariables, type GetTicksQueryResponse } from '@/app/lib/graphql/operations';
+import { GET_TICKS, type GetTicksQueryVariables, type GetTicksQueryResponse } from '@boardsesh/graphql/operations';
 import type { BoardName, ClimbUuid } from '@/app/lib/types';
 
 // Tick status type matching the database enum

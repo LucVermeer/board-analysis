@@ -14,7 +14,7 @@ import Snackbar from '@mui/material/Snackbar';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { FREEZE_CLIMB } from '@/app/lib/graphql/operations/proposals';
+import { FREEZE_CLIMB } from '@boardsesh/graphql/operations/proposals';
 
 type FreezeClimbDialogProps = {
   open: boolean;

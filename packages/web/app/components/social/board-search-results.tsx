@@ -17,7 +17,7 @@ import {
   UNFOLLOW_BOARD,
   type SearchBoardsQueryVariables,
   type SearchBoardsQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { UserBoard, UserBoardConnection } from '@boardsesh/shared-schema';
 import { useDebouncedValue } from '@/app/hooks/use-debounced-value';
 import { useInfiniteScroll } from '@/app/hooks/use-infinite-scroll';

@@ -46,3 +46,94 @@ export function getTikTokVideoId(url: string): string | null {
   const match = url.match(TIKTOK_LONG_FORM_VIDEO_ID);
   return match?.[1] ?? null;
 }
+
+/**
+ * Canonical shape used by web and mobile after mapping a GraphQL response.
+ * Snake-case is preserved for backwards compatibility with existing call sites
+ * — Aurora's sync API uses these names and a lot of UI code already destructures
+ * them.
+ */
+export type BetaLink = {
+  climb_uuid: string;
+  link: string;
+  foreign_username: string | null;
+  angle: number | null;
+  thumbnail: string | null;
+  is_listed: boolean;
+  created_at: string;
+};
+
+/**
+ * Raw row shape returned by the `betaLinks` GraphQL query (camelCase).
+ */
+export type BetaLinksGqlRow = {
+  climbUuid: string;
+  link: string;
+  foreignUsername: string | null;
+  angle: number | null;
+  thumbnail: string | null;
+  isListed: boolean | null;
+  createdAt: string | null;
+};
+
+/**
+ * Stable identity used to dedupe beta links that point at the same video,
+ * even when their URLs differ in tracking params or host. Prefer the platform
+ * media id; fall back to the raw URL for unrecognised hosts.
+ */
+export function betaLinkIdentity(url: string): string {
+  const instagramId = getInstagramMediaId(url);
+  if (instagramId) return `instagram:${instagramId}`;
+  const tiktokId = getTikTokVideoId(url);
+  if (tiktokId) return `tiktok:${tiktokId}`;
+  return `raw:${url}`;
+}
+
+export function dedupeBetaLinks(betaLinks: BetaLink[]): BetaLink[] {
+  const dedupedLinks: BetaLink[] = [];
+  const indexByIdentity = new Map<string, number>();
+
+  for (const betaLink of betaLinks) {
+    const identity = betaLinkIdentity(betaLink.link);
+    const existingIndex = indexByIdentity.get(identity);
+
+    if (existingIndex === undefined) {
+      indexByIdentity.set(identity, dedupedLinks.length);
+      dedupedLinks.push(betaLink);
+      continue;
+    }
+
+    const existing = dedupedLinks[existingIndex];
+    dedupedLinks[existingIndex] = {
+      ...existing,
+      foreign_username: existing.foreign_username ?? betaLink.foreign_username,
+      angle: existing.angle ?? betaLink.angle,
+      thumbnail: existing.thumbnail ?? betaLink.thumbnail,
+      created_at: existing.created_at || betaLink.created_at,
+    };
+  }
+
+  return dedupedLinks;
+}
+
+type ThumbnailResolver = (thumbnail: string | null) => string | null;
+const identityThumbnail: ThumbnailResolver = (thumbnail) => thumbnail;
+
+export function mapBetaLinkRow(
+  row: BetaLinksGqlRow,
+  absolutizeThumbnail: ThumbnailResolver = identityThumbnail,
+): BetaLink {
+  return {
+    climb_uuid: row.climbUuid,
+    link: row.link,
+    foreign_username: row.foreignUsername,
+    angle: row.angle,
+    thumbnail: absolutizeThumbnail(row.thumbnail),
+    is_listed: row.isListed ?? false,
+    created_at: row.createdAt ?? '',
+  };
+}
+
+export function mapBetaLinksResponse(rows: BetaLinksGqlRow[], absolutizeThumbnail?: ThumbnailResolver): BetaLink[] {
+  return rows.map((row) => mapBetaLinkRow(row, absolutizeThumbnail));
+}

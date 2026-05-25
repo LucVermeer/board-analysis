@@ -3,6 +3,7 @@
 ### 8.1 Main Profile Page (`/profile/[user_id]`)
 
 **User Card** (top):
+
 - 80x80 `Avatar` with profile image (or `PersonOutlined` fallback).
 - Display name (`h6`) beside the avatar.
 - Follow/Unfollow button (for other users' profiles) using `FollowButton` with `FOLLOW_USER` / `UNFOLLOW_USER` mutations. Optimistic follower count update.
@@ -11,21 +12,24 @@
 - Instagram link (if set): Instagram icon + formatted handle (strips URL prefix). External link, opens in new tab.
 
 **Activity Overview** (last 3 months):
+
 - A `CssBarChart` showing weekly activity bars. Built from all boards' tick data via `buildWeeklyBars`. Height 100px (80px mobile). No legend.
 
 **Beta Videos Section**:
+
 - `ProfileBetaSection` component showing beta videos contributed by this user.
 
 **Navigation Cards** (vertical stack, 1.5 spacing):
 Three `ProfileNavCard` components, each a `Card` with icon, title, subtitle, and chevron-right:
 
-| Card | Icon | Route | Subtitle |
-|------|------|-------|----------|
-| Statistics | `ShowChartOutlined` | `/profile/<id>/statistics` | "X sends logged" or "Start climbing" |
-| Sessions | `TimelineOutlined` | `/profile/<id>/sessions` | "Activity and session history" |
-| Created Climbs | `FitnessCenterOutlined` | `/profile/<id>/climbs` | "Climbs you've set" / "Climbs they've set" |
+| Card           | Icon                    | Route                      | Subtitle                                   |
+| -------------- | ----------------------- | -------------------------- | ------------------------------------------ |
+| Statistics     | `ShowChartOutlined`     | `/profile/<id>/statistics` | "X sends logged" or "Start climbing"       |
+| Sessions       | `TimelineOutlined`      | `/profile/<id>/sessions`   | "Activity and session history"             |
+| Created Climbs | `FitnessCenterOutlined` | `/profile/<id>/climbs`     | "Climbs you've set" / "Climbs they've set" |
 
 **React Native adaptation:**
+
 - `ScrollView` with vertical layout.
 - Avatar, name, and follow button in a horizontal row.
 - Navigation cards as `Pressable` rows with `router.push`.
@@ -36,6 +40,7 @@ Three `ProfileNavCard` components, each a `Card` with icon, title, subtitle, and
 ### 8.2 Statistics Sub-page (`/profile/[user_id]/statistics`)
 
 **Filter controls:**
+
 - Header injects a filter button via `StatsFilterBridgeInjector`.
 - `StatsFilterDrawer` bottom sheet with:
   - Board selector (all boards or specific board).
@@ -44,6 +49,7 @@ Three `ProfileNavCard` components, each a `Card` with icon, title, subtitle, and
 - Active filter indicator in the header.
 
 **Stats Summary** (`StatsSummary` component):
+
 - Hardest send grade and hardest flash grade.
 - Total ascents, total sessions.
 - Percentile ranking vs other climbers (from `userClimbPercentile` query).
@@ -53,6 +59,7 @@ Three `ProfileNavCard` components, each a `Card` with icon, title, subtitle, and
 - V-Points progression timeline chart.
 
 **Board Stats Section** (`BoardStatsSection` component):
+
 - Per-board breakdown when a specific board is selected.
 - Grade distribution by board layout with color-coded bars.
 - Filtered logbook entries.
@@ -85,6 +92,7 @@ Three `ProfileNavCard` components, each a `Card` with icon, title, subtitle, and
 - Requires authentication (redirects to home if not logged in).
 
 **Data operations:**
+
 - `publicProfile` -- Profile data for any user.
 - `userProfileStats` -- Aggregated statistics (total ascents, sessions, grade distribution).
 - `userClimbPercentile` -- Percentile ranking among all climbers.
@@ -99,4 +107,3 @@ Three `ProfileNavCard` components, each a `Card` with icon, title, subtitle, and
 - `setterProfile` / `setterClimbs` -- Setter-specific profile and climbs.
 
 ---
-

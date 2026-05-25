@@ -5,7 +5,7 @@ import {
   type GetMyPinnedPlaylistsQueryResponse,
   type GetMyPinnedPlaylistsQueryVariables,
   type Playlist,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 import { getRecentPlaylists, RECENT_PLAYLISTS_CHANGED_EVENT, type RecentPlaylist } from '@/app/lib/recent-playlists-db';
 
 type UsePinnedPlaylistsOptions = {

@@ -549,6 +549,7 @@ Metro output is also tee'd to `.boardsesh/mobile-metro.log` for post-hoc error i
 Multiple worktrees can publish independent mobile previews via EAS Update. Testers install the "preview" build once, then receive JS-only updates OTA when you publish from any branch.
 
 **One-time setup:**
+
 1. Build the preview client: `vp run mobile:preview-build` — this produces an installable `.ipa`/`.apk` with the native runtime + expo-updates baked in. Share the install link with testers.
 2. Testers install it on their device (iOS via ad-hoc provisioning, Android via APK).
 
@@ -556,16 +557,17 @@ Multiple worktrees can publish independent mobile previews via EAS Update. Teste
 
 There are 4 preview channels available, each mapped to a different test device or tester:
 
-| Channel | Purpose |
-|---------|---------|
-| `preview-1` | Primary test device |
-| `preview-2` | Secondary test device |
-| `preview-3` | Third tester / device |
+| Channel     | Purpose                |
+| ----------- | ---------------------- |
+| `preview-1` | Primary test device    |
+| `preview-2` | Secondary test device  |
+| `preview-3` | Third tester / device  |
 | `preview-4` | Fourth tester / device |
 
 Each channel can independently point to a different EAS Update branch. This lets multiple worktrees deliver updates to different phones simultaneously.
 
 **Publishing updates (per branch):**
+
 ```bash
 # From any worktree — publishes current JS bundle to an EAS branch matching git branch
 vp run mobile:publish
@@ -578,6 +580,7 @@ vp run mobile:publish -- --platform ios
 ```
 
 **Pointing a channel at a branch:**
+
 ```bash
 # Switch preview-1 to receive updates from a specific branch
 bunx eas-cli@16 channel:edit preview-1 --branch my-feature-branch
@@ -596,6 +599,7 @@ When making changes to `packages/mobile/` or shared packages that affect the mob
 > "Changes are ready. Which preview channel should I publish to? (preview-1, preview-2, preview-3, preview-4)"
 
 After the user responds, publish and point the channel:
+
 ```bash
 vp run mobile:publish
 bunx eas-cli@16 channel:edit <channel> --branch <current-branch>

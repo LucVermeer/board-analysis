@@ -257,7 +257,23 @@
     },
     "betaVideos": {
       "title": "Videos Beta",
-      "empty": "Pas encore de videos beta. Soyez le premier a partager !"
+      "empty": "Pas encore de videos beta. Soyez le premier a partager !",
+      "videoCount_one": "{{count}} video",
+      "videoCount_other": "{{count}} videos",
+      "addButton": "Joindre une video beta",
+      "addTitle": "Joindre une video beta",
+      "urlPlaceholder": "Collez un lien TikTok ou Instagram",
+      "submitButton": "Joindre",
+      "submitting": "En cours...",
+      "attachSuccess": "Video beta jointe",
+      "attachError": "Echec du chargement de la video",
+      "errorTitle": "Impossible de charger les videos beta",
+      "retry": "Reessayer",
+      "cardLabelWithUser": "Video beta de @{{username}}",
+      "cardLabel": "Video beta",
+      "openError": "Impossible d ouvrir ce lien",
+      "imageError": "Echec du chargement de l image",
+      "urlInvalid": "Doit etre une URL Instagram ou TikTok"
     },
     "angleSelector": {
       "title": "Sélectionner l'angle"

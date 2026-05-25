@@ -11,6 +11,7 @@
 **Layout:** Full-screen. Board renderer (interactive, takes most of the screen). Floating action bar at bottom. Settings drawer as bottom sheet overlay.
 
 **Board renderer:**
+
 - `ZoomableBoard` wrapping `BoardRenderer` (Aurora) or `MoonBoardRenderer` (MoonBoard)
 - **Hold selection:** Tap any hold on the board to open hold type picker popover. The `useHoldTypePicker` hook tracks which hold was tapped and anchors the popover.
 - **Hold states cycle (via HoldTypePicker popover):**
@@ -24,6 +25,7 @@
 - **Heatmap overlay:** `CreateClimbHeatmapOverlay` component. Shows hold usage frequency across all climbs as a heat map. Toggle via fire icon button. Opacity 0.7.
 
 **Hold Type Picker (Popover):**
+
 - **Web component:** `packages/web/app/components/create-climb/hold-type-picker.tsx`
 - Anchored to tapped hold element, opens above (`anchorOrigin: top center`, `transformOrigin: bottom center`)
 - **Setter mode:** Horizontal row of color swatches (25px circles with 2px border). Each shows hold state color and label below (11px caption). "Clear" swatch has X icon.
@@ -33,9 +35,10 @@
   - MoonBoard: STARTING, HAND, FINISH (no FOOT)
 
 **Bottom action bar (floating over board):**
+
 - **Left section:** Draft count badge + Drafts button (opens DraftsDrawer)
 - **Center section:** Name input, description input (when settings open)
-- **Right section:** 
+- **Right section:**
   - Heatmap toggle (fire icon, Aurora only)
   - Settings gear (opens settings drawer)
   - Clear/delete button (resets all holds)
@@ -48,6 +51,7 @@
   - "Set Active" button (`PlayCircleOutlineOutlined`) -- pushes WIP climb to party queue
 
 **Form fields (in settings drawer):**
+
 - Name input (`TextField`): Required for publish. When empty and save is tapped, settings drawer auto-opens.
 - Description input (multiline `TextField`)
 - Draft toggle (`Switch`): When ON, climb is saved as draft (not publicly visible). Default ON.
@@ -56,6 +60,7 @@
 **Autosave:** Form state (holds, name, description, isDraft) is debounced (500ms) and persisted to IndexedDB via `saveAutosave()`. Restored on mount if not forking. Cleared on successful save or manual clear.
 
 **Save flow:**
+
 1. Validates: name required for publish; at least 1 hold for Aurora (isValid); START + FINISH for MoonBoard publish
 2. If not authenticated: opens auth modal with pending form values
 3. **First save:** Creates new climb via `saveClimb()` (Aurora) or `SAVE_MOONBOARD_CLIMB_MUTATION` (MoonBoard)
@@ -66,22 +71,26 @@
 **Bluetooth preview:** When BLE is connected (Aurora boards only), `sendFramesToBoard(frames)` fires on every `litUpHoldsMap` change, sending current hold pattern to the physical board in real-time.
 
 **Drafts drawer:**
+
 - Lists user's draft climbs for current board configuration
 - Each draft can be loaded back into the form (`handleLoadDraft`) or deleted
 - Count shown as badge on drafts button
 
 **MoonBoard OCR import:**
+
 - Hidden file input (`<input type="file">`) for screenshot upload
 - Processes via `parseScreenshot()` from `@boardsesh/moonboard-ocr/browser`
 - Extracts holds, name, grade, setter from MoonBoard app screenshots
 - Warning on angle mismatch
 
 **Fork flow:** When `forkFrames`/`forkName` props are provided (from "Fork" action on existing climb):
+
 - Holds pre-populated from fork source
 - Name set to "{original name} fork"
 - In edit mode: name preserved as-is
 
 **Data sources:**
+
 - `saveClimb()` / `updateClimb()` from `useBoardProvider()` (Aurora)
 - `SAVE_MOONBOARD_CLIMB_MUTATION` GraphQL mutation (MoonBoard)
 - `CHECK_MOONBOARD_CLIMB_DUPLICATES_QUERY` for MoonBoard duplicate detection
@@ -91,6 +100,7 @@
 - `useBoardBluetooth()` for BLE connection and frame sending
 
 **User actions:**
+
 - Tap hold on board -> opens hold type picker
 - Select hold type from picker -> updates hold state and color
 - Pinch/zoom board (ZoomableBoard)
@@ -104,6 +114,7 @@
 - MoonBoard: import from screenshot, select grade, toggle benchmark, change angle
 
 **States:**
+
 - Empty (no holds selected): save disabled
 - Valid (holds placed): save enabled if name provided
 - Saving: spinner on save button
@@ -115,16 +126,19 @@
 - Autosave active: form state being debounced and persisted
 
 **Validation:**
+
 - Aurora: must have at least 1 hold (`isValid = totalHolds > 0`)
 - MoonBoard publish: must have STARTING and FINISH holds
 - MoonBoard draft: no hold requirements
 - Name required for all saves (auto-opens settings drawer if missing)
 
 **Navigation:**
+
 - Back button (from header on mobile) -> returns to climb list
 - Bulk import link (MoonBoard) -> navigates to `/import` page
 
 **Mobile adaptation notes:**
+
 - `ZoomableBoard` maps to `react-native-gesture-handler` pinch/pan gestures + `react-native-reanimated` transforms
 - Hold type picker: bottom sheet instead of popover (finger occlusion on small screens)
 - File input for OCR: `expo-image-picker` or `expo-document-picker`

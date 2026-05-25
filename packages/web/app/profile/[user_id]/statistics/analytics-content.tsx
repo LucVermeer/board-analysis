@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type {
   GetUserClimbPercentileQueryResponse,
   GetUserProfileStatsQueryResponse,
-} from '@/app/lib/graphql/operations/ticks';
+} from '@boardsesh/graphql/operations/ticks';
 import StatsSummary from '../components/stats-summary';
 import BoardStatsSection from '../components/board-stats-section';
 import { useProfileData } from '../hooks/use-profile-data';

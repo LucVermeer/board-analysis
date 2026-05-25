@@ -37,7 +37,7 @@ import {
   type AscentFeedItem,
   type DeleteTickMutationVariables,
   type LayoutStats,
-} from '@/app/lib/graphql/operations/ticks';
+} from '@boardsesh/graphql/operations/ticks';
 import { getLayoutDisplayName } from '@/app/profile/[user_id]/utils/profile-constants';
 import {
   getDefaultSizeForLayout,

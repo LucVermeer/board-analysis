@@ -10,7 +10,7 @@ import {
   type UpdateTickResponse,
   type UpdateTickVariables,
   type UpdateTickInput,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 
 export type UpdateTickOptions = {
   uuid: string;

@@ -10,7 +10,11 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import GymCard from '@/app/components/gym-entity/gym-card';
 import GymDetail from '@/app/components/gym-entity/gym-detail';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { SEARCH_GYMS, type SearchGymsQueryVariables, type SearchGymsQueryResponse } from '@/app/lib/graphql/operations';
+import {
+  SEARCH_GYMS,
+  type SearchGymsQueryVariables,
+  type SearchGymsQueryResponse,
+} from '@boardsesh/graphql/operations';
 import type { Gym, GymConnection } from '@boardsesh/shared-schema';
 import { useDebouncedValue } from '@/app/hooks/use-debounced-value';
 import { useInfiniteScroll } from '@/app/hooks/use-infinite-scroll';

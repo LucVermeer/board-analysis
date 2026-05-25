@@ -23,7 +23,7 @@ import {
   SEARCH_USERS_AND_SETTERS,
   type SearchUsersAndSettersQueryVariables,
   type SearchUsersAndSettersQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import type { UnifiedSearchResult, UnifiedSearchConnection } from '@boardsesh/shared-schema';
 import { useDebouncedValue } from '@/app/hooks/use-debounced-value';

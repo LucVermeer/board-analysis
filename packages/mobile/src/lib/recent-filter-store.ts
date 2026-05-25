@@ -24,18 +24,12 @@ export async function getRecentFilters(): Promise<RecentFilter[]> {
   }
 }
 
-export async function addRecentFilter(
-  label: string,
-  filters: ClimbFilters,
-  searchText: string,
-): Promise<void> {
+export async function addRecentFilter(label: string, filters: ClimbFilters, searchText: string): Promise<void> {
   try {
     const existing = await getRecentFilters();
     const filterKey = getFilterKey(filters, searchText);
 
-    const deduplicated = existing.filter(
-      (entry) => getFilterKey(entry.filters, entry.searchText) !== filterKey,
-    );
+    const deduplicated = existing.filter((entry) => getFilterKey(entry.filters, entry.searchText) !== filterKey);
 
     const newEntry: RecentFilter = {
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,

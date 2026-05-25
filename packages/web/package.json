@@ -35,6 +35,7 @@
     "@boardsesh/climb-filters": "*",
     "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",
+    "@boardsesh/graphql": "*",
     "@boardsesh/play-view": "*",
     "@boardsesh/queue": "*",
     "@boardsesh/shared-schema": "*",

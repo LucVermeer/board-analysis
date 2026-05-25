@@ -8,10 +8,7 @@ type AscentStatusBadgeProps = {
   userAttempts: number | null | undefined;
 };
 
-const AscentStatusBadge = React.memo(function AscentStatusBadge({
-  userAscents,
-  userAttempts,
-}: AscentStatusBadgeProps) {
+const AscentStatusBadge = React.memo(function AscentStatusBadge({ userAscents, userAttempts }: AscentStatusBadgeProps) {
   if (userAscents && userAscents > 0) {
     return (
       <View style={[styles.badge, styles.sentBadge]}>

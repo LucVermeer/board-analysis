@@ -25,18 +25,13 @@ describe('hasPriorHistoryForClimb', () => {
 
   it('returns true when logbook contains a matching entry', () => {
     const climb: ClimbWithAscents = { uuid: 'climb-1' };
-    const logbook: LogbookEntryLike[] = [
-      { climb_uuid: 'climb-other' },
-      { climb_uuid: 'climb-1' },
-    ];
+    const logbook: LogbookEntryLike[] = [{ climb_uuid: 'climb-other' }, { climb_uuid: 'climb-1' }];
     expect(hasPriorHistoryForClimb(climb, logbook)).toBe(true);
   });
 
   it('returns false when logbook has no matching entry', () => {
     const climb: ClimbWithAscents = { uuid: 'climb-1' };
-    const logbook: LogbookEntryLike[] = [
-      { climb_uuid: 'climb-other' },
-    ];
+    const logbook: LogbookEntryLike[] = [{ climb_uuid: 'climb-other' }];
     expect(hasPriorHistoryForClimb(climb, logbook)).toBe(false);
   });
 

@@ -17,7 +17,7 @@ import { useGradeFormat } from '@/app/hooks/use-grade-format';
 import type {
   GetUserClimbPercentileQueryResponse,
   GetUserProfileStatsQueryResponse,
-} from '@/app/lib/graphql/operations/ticks';
+} from '@boardsesh/graphql/operations/ticks';
 import styles from './profile-page.module.css';
 import { useProfileData } from './hooks/use-profile-data';
 import { buildWeeklyBars } from './utils/chart-data-builders';

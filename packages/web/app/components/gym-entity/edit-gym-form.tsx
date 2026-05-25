@@ -8,7 +8,7 @@ import {
   UPDATE_GYM,
   type UpdateGymMutationVariables,
   type UpdateGymMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { Gym } from '@boardsesh/shared-schema';
 import GymForm, { type GymFormFieldValues } from './gym-form';
 

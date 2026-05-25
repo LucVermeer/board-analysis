@@ -19,7 +19,7 @@ import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { ClientError } from 'graphql-request';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { CREATE_PROPOSAL } from '@/app/lib/graphql/operations/proposals';
+import { CREATE_PROPOSAL } from '@boardsesh/graphql/operations/proposals';
 import { BOULDER_GRADES, ANGLES } from '@/app/lib/board-data';
 import { getGradeTintColor } from '@/app/lib/grade-colors';
 import SwipeableDrawer from '@/app/components/swipeable-drawer/swipeable-drawer';

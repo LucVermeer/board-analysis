@@ -7,7 +7,7 @@ import {
   GET_USER_CLIMBS,
   type GetUserClimbsQueryVariables,
   type GetUserClimbsQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { Climb } from '@/app/lib/types';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import MultiboardClimbList, { type SortBy } from './multiboard-climb-list';

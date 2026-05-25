@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import type { Playlist } from '@/app/lib/graphql/operations/playlists';
+import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 import type { RecentPlaylist } from '@/app/lib/recent-playlists-db';
 
 // --- Mocks ---
@@ -12,7 +12,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
-vi.mock('@/app/lib/graphql/operations/playlists', () => ({
+vi.mock('@boardsesh/graphql/operations/playlists', () => ({
   GET_MY_PINNED_PLAYLISTS: 'GET_MY_PINNED_PLAYLISTS_QUERY',
 }));
 

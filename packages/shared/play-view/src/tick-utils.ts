@@ -20,10 +20,7 @@ export type LogbookEntryLike = {
  * Checks server-side counts first (available immediately), then
  * falls back to logbook array scan.
  */
-export function hasPriorHistoryForClimb(
-  climb: ClimbWithAscents,
-  logbook: LogbookEntryLike[],
-): boolean {
+export function hasPriorHistoryForClimb(climb: ClimbWithAscents, logbook: LogbookEntryLike[]): boolean {
   const ascents = climb.userAscents;
   const attempts = climb.userAttempts;
   if (ascents != null || attempts != null) {
@@ -36,9 +33,6 @@ export function hasPriorHistoryForClimb(
  * Determine whether an ascent is a flash or a send.
  * Flash = first attempt on a climb with no prior history.
  */
-export function computeTickType(
-  hasPriorHistory: boolean,
-  attemptCount: number,
-): 'flash' | 'send' {
+export function computeTickType(hasPriorHistory: boolean, attemptCount: number): 'flash' | 'send' {
   return !hasPriorHistory && attemptCount === 1 ? 'flash' : 'send';
 }

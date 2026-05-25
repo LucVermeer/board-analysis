@@ -7,8 +7,8 @@ import type {
   FollowingAscentFeedItem,
   FollowingAscentsFeedResult,
   SetterProfile,
+  Climb,
 } from '@boardsesh/shared-schema';
-import type { Climb } from '@/app/lib/types';
 
 // ============================================
 // Follow Mutations

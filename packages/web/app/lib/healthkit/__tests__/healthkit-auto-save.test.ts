@@ -21,7 +21,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: vi.fn(),
 }));
 
-vi.mock('@/app/lib/graphql/operations/activity-feed', () => ({
+vi.mock('@boardsesh/graphql/operations/activity-feed', () => ({
   SET_SESSION_HEALTHKIT_WORKOUT_ID: 'SET_SESSION_HEALTHKIT_WORKOUT_ID',
 }));
 

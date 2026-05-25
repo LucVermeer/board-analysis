@@ -6,12 +6,7 @@ import {
   getFontGradeColor,
   getGradeColor,
 } from '@boardsesh/board-constants/grade-colors';
-import {
-  getGradeTintColor,
-  getGradeColorWithOpacity,
-  isLightColor,
-  getGradeTextColor,
-} from '@boardsesh/play-view';
+import { getGradeTintColor, getGradeColorWithOpacity, isLightColor, getGradeTextColor } from '@boardsesh/play-view';
 import { BOULDER_GRADES } from './board-data';
 
 // Re-export grade color data and core lookups from the canonical source
@@ -204,4 +199,3 @@ export function getSoftGradeColor(difficulty: string | null | undefined, darkMod
   if (!color) return undefined;
   return softenColor(color, darkMode);
 }
-

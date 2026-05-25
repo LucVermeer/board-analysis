@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_COMMUNITY_SETTINGS, SET_COMMUNITY_SETTING } from '@/app/lib/graphql/operations/proposals';
+import { GET_COMMUNITY_SETTINGS, SET_COMMUNITY_SETTING } from '@boardsesh/graphql/operations/proposals';
 import type { CommunitySettingType } from '@boardsesh/shared-schema';
 
 const SETTING_DEFINITIONS = [

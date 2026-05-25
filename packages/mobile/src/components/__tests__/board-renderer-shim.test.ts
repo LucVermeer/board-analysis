@@ -5,11 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // the variable the mock factory closes over before each import.
 type NativeMock = {
   renderHoldsOverlay?: ((configJson: string, cacheKey: string) => Promise<string>) | unknown;
-  renderComposite?: (
-    configJson: string,
-    backgroundPaths: string[],
-    cacheKey: string,
-  ) => Promise<string>;
+  renderComposite?: (configJson: string, backgroundPaths: string[], cacheKey: string) => Promise<string>;
 } | null;
 
 let nativeMock: NativeMock = null;
@@ -48,11 +44,7 @@ describe('renderHoldsOverlay shim', () => {
   it('falls through to renderComposite when renderHoldsOverlay rejects with "is not a function"', async () => {
     // Simulates the NativeModulesProxy-lies-about-method-presence case:
     // typeof says it is a function, but invocation rejects.
-    const renderHolds = vi
-      .fn()
-      .mockRejectedValue(
-        new TypeError('renderHoldsOverlay is not a function on this binary'),
-      );
+    const renderHolds = vi.fn().mockRejectedValue(new TypeError('renderHoldsOverlay is not a function on this binary'));
     const renderComposite = vi.fn().mockResolvedValue('file:///out/old.png');
     nativeMock = { renderHoldsOverlay: renderHolds, renderComposite };
 
@@ -82,9 +74,7 @@ describe('renderHoldsOverlay shim', () => {
   it('propagates real render errors instead of swallowing them', async () => {
     // OOM/disk-full/bad-JSON errors must NOT be misread as "method missing"
     // — the hook's catch block needs to log them.
-    const renderHolds = vi
-      .fn()
-      .mockRejectedValue(new Error('Out of memory while rasterizing overlay'));
+    const renderHolds = vi.fn().mockRejectedValue(new Error('Out of memory while rasterizing overlay'));
     const renderComposite = vi.fn().mockResolvedValue('file:///out/old.png');
     nativeMock = { renderHoldsOverlay: renderHolds, renderComposite };
 
@@ -117,8 +107,6 @@ describe('renderHoldsOverlay shim', () => {
   it('throws when neither function is exposed', async () => {
     nativeMock = {};
     const { renderHoldsOverlay } = await loadShim();
-    await expect(renderHoldsOverlay('{"json":true}', 'cache-key-7')).rejects.toThrow(
-      /no usable render function/,
-    );
+    await expect(renderHoldsOverlay('{"json":true}', 'cache-key-7')).rejects.toThrow(/no usable render function/);
   });
 });

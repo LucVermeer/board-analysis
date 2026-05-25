@@ -47,12 +47,14 @@ const {
       skippedRoleCount: 0,
       totalPlacements: 1,
     })),
-    mockGetMoonboardBluetoothPacket: vi.fn<(frames: string) => {
-      packet: Uint8Array;
-      skippedRoleCount: number;
-      skippedPositionCount: number;
-      totalPlacements: number;
-    }>(() => ({
+    mockGetMoonboardBluetoothPacket: vi.fn<
+      (frames: string) => {
+        packet: Uint8Array;
+        skippedRoleCount: number;
+        skippedPositionCount: number;
+        totalPlacements: number;
+      }
+    >(() => ({
       packet: new Uint8Array([9, 8, 7]),
       skippedRoleCount: 0,
       skippedPositionCount: 0,

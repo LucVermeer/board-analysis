@@ -10,7 +10,7 @@ import {
   SEARCH_CLIMBS_COUNT,
   type ClimbSearchResponse,
   type ClimbSearchCountResponse,
-} from '@/app/lib/graphql/operations/climb-search';
+} from '@boardsesh/graphql/operations/climb-search';
 import { normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { USER_SPECIFIC_SEARCH_PARAMS } from '@boardsesh/shared-schema';

@@ -73,13 +73,13 @@ Long-pressing the lightbulb opens the `LightControlDrawer` (`light-control-drawe
 
 **Menu items (MUI `List`):**
 
-| Action | Icon | Behaviour |
-|---|---|---|
-| Turn off all LEDs | `LightbulbOutlined` | Calls `clearBoard()`. If a light show is active, stops it first (the stop effect auto-clears). Disabled when not connected. |
-| Disco mode | `AutoAwesome` / `StopCircleOutlined` | Toggles `partyMode` between `'disco'` and `'off'`. Requires a climb to be loaded (`hasClimbLoaded`). Randomizes HAND hold colours every 450ms (`DISCO_TICK_MS`). START/FOOT/FINISH holds keep their canonical colours. |
-| Party mode (Glyphs) | `Celebration` / `StopCircleOutlined` | Toggles `partyMode` between `'glyphs'` and `'off'`. Cycles through letters "BOARDSESH" at 600ms per letter (`PARTY_TICK_MS`). Each letter is snapped to hold IDs via `mapGlyphToHolds`. Not available on MoonBoard. |
-| Customise colours | `Palette` | Opens a colour picker `Dialog`. Four customisable LED roles (START, HAND, FOOT, FINISH from `CUSTOMISABLE_LED_ROLES`). Each shows a colour swatch (`<input type="color">`), defaults to the board's canonical role colour from `STATE_TO_PRIMARY_CODE`. "Reset" button clears all overrides. Not available on MoonBoard. |
-| Disconnect | `BluetoothDisabledOutlined` | Calls `disconnect()` then `onClose()`. Disabled when not connected. |
+| Action              | Icon                                 | Behaviour                                                                                                                                                                                                                                                                                                                |
+| ------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Turn off all LEDs   | `LightbulbOutlined`                  | Calls `clearBoard()`. If a light show is active, stops it first (the stop effect auto-clears). Disabled when not connected.                                                                                                                                                                                              |
+| Disco mode          | `AutoAwesome` / `StopCircleOutlined` | Toggles `partyMode` between `'disco'` and `'off'`. Requires a climb to be loaded (`hasClimbLoaded`). Randomizes HAND hold colours every 450ms (`DISCO_TICK_MS`). START/FOOT/FINISH holds keep their canonical colours.                                                                                                   |
+| Party mode (Glyphs) | `Celebration` / `StopCircleOutlined` | Toggles `partyMode` between `'glyphs'` and `'off'`. Cycles through letters "BOARDSESH" at 600ms per letter (`PARTY_TICK_MS`). Each letter is snapped to hold IDs via `mapGlyphToHolds`. Not available on MoonBoard.                                                                                                      |
+| Customise colours   | `Palette`                            | Opens a colour picker `Dialog`. Four customisable LED roles (START, HAND, FOOT, FINISH from `CUSTOMISABLE_LED_ROLES`). Each shows a colour swatch (`<input type="color">`), defaults to the board's canonical role colour from `STATE_TO_PRIMARY_CODE`. "Reset" button clears all overrides. Not available on MoonBoard. |
+| Disconnect          | `BluetoothDisabledOutlined`          | Calls `disconnect()` then `onClose()`. Disabled when not connected.                                                                                                                                                                                                                                                      |
 
 **Disco mode effect:**
 
@@ -133,4 +133,3 @@ Long-pressing the lightbulb opens the `LightControlDrawer` (`light-control-drawe
 - **Background BLE**: handle BLE state restoration for iOS background mode.
 
 ---
-

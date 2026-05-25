@@ -10,7 +10,7 @@ import { PersonOutlined, Instagram } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import FollowButton from '@/app/components/ui/follow-button';
 import FollowerCount from '@/app/components/social/follower-count';
-import { FOLLOW_USER, UNFOLLOW_USER } from '@/app/lib/graphql/operations';
+import { FOLLOW_USER, UNFOLLOW_USER } from '@boardsesh/graphql/operations';
 import type { UserProfile } from '../utils/profile-constants';
 import styles from '../profile-page.module.css';
 

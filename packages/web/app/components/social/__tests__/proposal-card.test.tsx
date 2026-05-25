@@ -37,7 +37,7 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   }),
 }));
 
-vi.mock('@/app/lib/graphql/operations/proposals', () => ({
+vi.mock('@boardsesh/graphql/operations/proposals', () => ({
   VOTE_ON_PROPOSAL: 'VOTE_ON_PROPOSAL',
   RESOLVE_PROPOSAL: 'RESOLVE_PROPOSAL',
   DELETE_PROPOSAL: 'DELETE_PROPOSAL',

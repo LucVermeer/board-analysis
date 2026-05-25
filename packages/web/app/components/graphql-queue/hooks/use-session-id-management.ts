@@ -9,7 +9,7 @@ import { usePersistentSession } from '../../persistent-session';
 import { useConnectionSettings } from '../../connection-manager/connection-settings-context';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@/app/lib/graphql/operations/sessions';
+import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@boardsesh/graphql/operations/sessions';
 import { emitSessionEnded } from '@/app/lib/session-lifecycle-tracking';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '../../queue-control/types';

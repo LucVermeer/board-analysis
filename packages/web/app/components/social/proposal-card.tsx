@@ -28,7 +28,7 @@ import Snackbar from '@mui/material/Snackbar';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { VOTE_ON_PROPOSAL, RESOLVE_PROPOSAL, DELETE_PROPOSAL } from '@/app/lib/graphql/operations/proposals';
+import { VOTE_ON_PROPOSAL, RESOLVE_PROPOSAL, DELETE_PROPOSAL } from '@boardsesh/graphql/operations/proposals';
 import type { Proposal } from '@boardsesh/shared-schema';
 import { usePathname } from 'next/navigation';
 import type { Climb, BoardDetails, BoardName } from '@/app/lib/types';

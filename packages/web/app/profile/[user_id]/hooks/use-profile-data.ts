@@ -13,7 +13,7 @@ import {
   type GetUserProfileStatsQueryResponse,
   GET_USER_CLIMB_PERCENTILE,
   type GetUserClimbPercentileQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
 import {

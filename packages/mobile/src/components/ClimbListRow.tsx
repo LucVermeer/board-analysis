@@ -1,12 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
@@ -145,9 +139,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
             const baseOpacity = Math.min(1, clamped / SHORT_SWIPE_THRESHOLD);
             const transitionRange = LONG_SWIPE_THRESHOLD - TRANSITION_START;
             const blend =
-              transitionRange > 0
-                ? Math.max(0, Math.min(1, (clamped - TRANSITION_START) / transitionRange))
-                : 1;
+              transitionRange > 0 ? Math.max(0, Math.min(1, (clamped - TRANSITION_START) / transitionRange)) : 1;
 
             leftShortOpacity.value = baseOpacity * (1 - blend);
             leftLongOpacity.value = baseOpacity * blend;
@@ -291,10 +283,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
     [doubleTapGesture, singleTapGesture],
   );
 
-  const composedGesture = useMemo(
-    () => Gesture.Race(tapGesture, panGesture),
-    [tapGesture, panGesture],
-  );
+  const composedGesture = useMemo(() => Gesture.Race(tapGesture, panGesture), [tapGesture, panGesture]);
 
   return (
     <View style={[styles.outerContainer, unsupported && styles.unsupported]}>
@@ -332,10 +321,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
               mirrored={climb.mirrored ?? false}
             />
             <HeartAnimationOverlay visible={showHeart} onDismiss={dismissHeart} size={32} />
-            <AscentStatusBadge
-              userAscents={climb.userAscents}
-              userAttempts={climb.userAttempts}
-            />
+            <AscentStatusBadge userAscents={climb.userAscents} userAttempts={climb.userAttempts} />
           </View>
 
           {/* Center: Name + subtitle */}
@@ -350,11 +336,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
           {/* Right: Colorized grade + menu button */}
           <View style={styles.rightSection}>
-            <Text
-              variant="headline"
-              numberOfLines={1}
-              style={[styles.gradeText, { color: gradeColor }]}
-            >
+            <Text variant="headline" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
               {climb.difficulty}
             </Text>
             <Pressable

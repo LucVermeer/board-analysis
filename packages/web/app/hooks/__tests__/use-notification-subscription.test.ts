@@ -31,7 +31,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockHttpRequest }),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   GET_UNREAD_NOTIFICATION_COUNT: 'GET_UNREAD_COUNT',
   NOTIFICATION_RECEIVED_SUBSCRIPTION: 'NOTIFICATION_SUB',
 }));

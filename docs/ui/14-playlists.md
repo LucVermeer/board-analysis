@@ -12,11 +12,11 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
 
 3. **Your Picks (Smart Playlists)** -- Section title "Your Picks". A CSS grid of `PlaylistCard` components (variant `"grid"`). Each card maps to a `SmartPlaylistPresentation` preset:
 
-   | Preset | Icon | Color | Data Source |
-   |--------|------|-------|-------------|
-   | Five Stars | star emoji | amber | User's 5-star rated climbs |
-   | Most Repeated | repeat emoji | purple | Most attempted climbs |
-   | Projects | target emoji | accentRose | Climbs worked most without sending |
+   | Preset        | Icon         | Color      | Data Source                        |
+   | ------------- | ------------ | ---------- | ---------------------------------- |
+   | Five Stars    | star emoji   | amber      | User's 5-star rated climbs         |
+   | Most Repeated | repeat emoji | purple     | Most attempted climbs              |
+   | Projects      | target emoji | accentRose | Climbs worked most without sending |
 
    Cards with `count === 0` are omitted. Tapping navigates to `/discover/<slug>/<userId>`. The board-preview backdrop uses the currently selected board (or the user's primary board as fallback).
 
@@ -39,6 +39,7 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
 - Both variants are wrapped in `LocaleLink` for navigation.
 
 **React Native adaptation:**
+
 - Replace horizontal `PlaylistScrollSection` with a `FlatList` with `horizontal` prop and snap-to-item behavior.
 - Replace CSS grid with a 2-column `FlatList` for the pinned/smart sections.
 - Replace FAB with a floating `Pressable` positioned via absolute layout above the tab bar.
@@ -49,6 +50,7 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
 ### 7.2 Playlist Detail (`/playlists/[playlist_uuid]`)
 
 **Header (Hero Section):**
+
 - Back button (falls back to `/playlists`).
 - `PlaylistPreviewSquare` (96x96) showing board image with playlist color tint and optional emoji icon.
 - Playlist name (`h5`), climb count, follower count (with people icon), visibility badge (Public with globe icon / Private with lock icon).
@@ -63,16 +65,19 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
     - **Delete** (owner only): Red text, calls `DELETE_PLAYLIST` mutation, navigates back to library on success.
 
 **Climb List:**
+
 - Uses `MultiboardClimbList` component with board filter chips.
 - Infinite scroll via `useInfiniteQuery` with 20 climbs per page.
 - Each climb row: thumbnail, climb name, grade, board info. Tapping a climb activates it in the queue context if available.
 - Empty state: "No climbs in this playlist yet" (via `EmptyState` component).
 
 **Discussion Section:**
+
 - Rendered only for public playlists.
 - Uses `CommentSection` component with entity type `"playlist_climb"` and entity ID `"<playlistUuid>:_all"`.
 
 **React Native adaptation:**
+
 - Hero section as a sticky header or scroll-away header using `Animated.ScrollView`.
 - Action menu via an ActionSheet (iOS native bottom sheet).
 - Climb list as a `FlashList` with `onEndReached` for pagination.
@@ -82,6 +87,7 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
 ### 7.3 Create / Edit Playlist Drawers
 
 **Create Playlist Drawer** (`CreatePlaylistDrawer`):
+
 - Bottom sheet drawer (`SwipeableDrawer`).
 - Title: "Create Playlist".
 - Fields:
@@ -93,6 +99,7 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
 - On success: toast, analytics event, navigates to the new playlist detail page.
 
 **Edit Playlist Drawer** (`PlaylistEditDrawer`):
+
 - Bottom sheet drawer.
 - Title: "Edit Playlist".
 - Fields:
@@ -103,6 +110,7 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
 - Calls `UPDATE_PLAYLIST` mutation.
 
 **React Native adaptation:**
+
 - Use `Sheet` component (bottom sheet) instead of `SwipeableDrawer`.
 - Replace emoji picker with a modal or the `expo-emoji-picker` package.
 - Color picker as a row of preset color swatches rather than a native color input (which has poor RN support).
@@ -113,11 +121,11 @@ The library is the user's playlist hub, combining owned, pinned, smart, and comm
 
 Smart playlists are auto-generated from the user's logbook and are not editable. They live at `/discover/<slug>/<userId>`.
 
-| Smart Playlist | Slug | Logic |
-|----------------|------|-------|
-| Five Stars | `five-stars` | All climbs the user rated 5 stars |
-| Most Repeated | `most-repeated` | Climbs with the highest attempt count |
-| Projects | `projects` | Climbs with the most attempts but no successful send |
+| Smart Playlist | Slug            | Logic                                                |
+| -------------- | --------------- | ---------------------------------------------------- |
+| Five Stars     | `five-stars`    | All climbs the user rated 5 stars                    |
+| Most Repeated  | `most-repeated` | Climbs with the highest attempt count                |
+| Projects       | `projects`      | Climbs with the most attempts but no successful send |
 
 - Each has a dedicated color, emoji icon, and i18n title/description.
 - Share button with preset share text.
@@ -125,6 +133,7 @@ Smart playlists are auto-generated from the user's logbook and are not editable.
 - Counts fetched via `GET_MY_SMART_PLAYLIST_COUNTS` query (5-minute stale time).
 
 **Data operations:**
+
 - `allUserPlaylists` / `useUserPlaylists` -- Paginated owned playlists with board filter.
 - `myPinnedPlaylists` / `usePinnedPlaylists` -- Server-side pins with IndexedDB recents fallback.
 - `playlist` / `GET_PLAYLIST` -- Single playlist fetch.
@@ -144,4 +153,3 @@ Smart playlists are auto-generated from the user's logbook and are not editable.
 - `unfollowPlaylist` / `UNFOLLOW_PLAYLIST` -- Unfollows a playlist.
 
 ---
-

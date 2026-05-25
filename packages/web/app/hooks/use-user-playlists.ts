@@ -5,7 +5,7 @@ import {
   type GetAllUserPlaylistsQueryResponse,
   type GetAllUserPlaylistsQueryVariables,
   type Playlist,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 
 type UseUserPlaylistsOptions = {
   /** Auth token (when null, the hook is disabled). */

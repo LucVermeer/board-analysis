@@ -7,7 +7,7 @@ import {
   GET_SETTER_CLIMBS_FULL,
   type GetSetterClimbsFullQueryVariables,
   type GetSetterClimbsFullQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { Climb } from '@/app/lib/types';

@@ -13,7 +13,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
-vi.mock('@/app/lib/graphql/operations/create-session', () => ({
+vi.mock('@boardsesh/graphql/operations/create-session', () => ({
   CREATE_SESSION: 'CREATE_SESSION_MUTATION',
 }));
 

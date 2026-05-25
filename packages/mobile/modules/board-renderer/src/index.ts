@@ -16,11 +16,7 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
  */
 type BoardRendererNativeModule = {
   renderHoldsOverlay?(configJson: string, cacheKey: string): Promise<string>;
-  renderComposite?(
-    configJson: string,
-    backgroundPaths: string[],
-    cacheKey: string,
-  ): Promise<string>;
+  renderComposite?(configJson: string, backgroundPaths: string[], cacheKey: string): Promise<string>;
 };
 
 // requireOptionalNativeModule returns null (silently) when the module
@@ -29,8 +25,7 @@ type BoardRendererNativeModule = {
 // `requireNativeModule` here would log a noisy `Cannot find native
 // module 'BoardRenderer'` error in the JS console even though the
 // hook's fallback path handles it gracefully.
-export const boardRendererNative =
-  requireOptionalNativeModule<BoardRendererNativeModule>('BoardRenderer');
+export const boardRendererNative = requireOptionalNativeModule<BoardRendererNativeModule>('BoardRenderer');
 
 // Heuristic: does this error look like "the native binary doesn't actually
 // implement this method"? Some Expo NativeModulesProxy configurations
@@ -40,8 +35,7 @@ export const boardRendererNative =
 // JSON, disk full, etc.) — those should propagate so the hook's catch
 // can log them.
 function looksLikeMissingNativeMethod(error: unknown): boolean {
-  const message =
-    error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   if (!message) return false;
   return (
     /is not a function/i.test(message) ||
@@ -52,10 +46,7 @@ function looksLikeMissingNativeMethod(error: unknown): boolean {
   );
 }
 
-export async function renderHoldsOverlay(
-  configJson: string,
-  cacheKey: string,
-): Promise<string> {
+export async function renderHoldsOverlay(configJson: string, cacheKey: string): Promise<string> {
   if (!boardRendererNative) {
     throw new Error('BoardRenderer native module is not available');
   }

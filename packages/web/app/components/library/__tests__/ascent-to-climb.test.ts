@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vite-plus/test';
-import type { AscentFeedItem } from '@/app/lib/graphql/operations/ticks';
+import type { AscentFeedItem } from '@boardsesh/graphql/operations/ticks';
 import { ascentFeedItemToClimb } from '../ascent-to-climb';
 
 function makeItem(overrides: Partial<AscentFeedItem> = {}): AscentFeedItem {

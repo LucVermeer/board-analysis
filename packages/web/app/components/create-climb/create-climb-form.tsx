@@ -72,7 +72,7 @@ import {
   SEARCH_CLIMBS_COUNT,
   type ClimbSearchCountResponse,
   type ClimbSearchInputVariables,
-} from '@/app/lib/graphql/operations/climb-search';
+} from '@boardsesh/graphql/operations/climb-search';
 import { convertLitUpHoldsMapToMoonBoardHolds } from '@/app/lib/moonboard-climb-helpers';
 import styles from './create-climb-form.module.css';
 import {
@@ -82,7 +82,7 @@ import {
   SAVE_MOONBOARD_CLIMB_MUTATION,
   type SaveMoonBoardClimbMutationVariables,
   type SaveMoonBoardClimbMutationResponse,
-} from '@/app/lib/graphql/operations/new-climb-feed';
+} from '@boardsesh/graphql/operations/new-climb-feed';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 
 const SETTINGS_DRAWER_STYLES = {

@@ -20,7 +20,12 @@ import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { useDefaultBoard, useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
-import { getRecentFilters, addRecentFilter, clearRecentFilters, type RecentFilter } from '../../../src/lib/recent-filter-store';
+import {
+  getRecentFilters,
+  addRecentFilter,
+  clearRecentFilters,
+  type RecentFilter,
+} from '../../../src/lib/recent-filter-store';
 import { getFilterSummary } from '../../../src/lib/filter-summary';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
@@ -110,7 +115,9 @@ export default function ClimbList() {
 
   // Load recent filters on mount
   useEffect(() => {
-    getRecentFilters().then(setRecentFilters).catch(() => {});
+    getRecentFilters()
+      .then(setRecentFilters)
+      .catch(() => {});
   }, []);
 
   const { data: defaultBoard, isLoading: isBoardLoading } = useDefaultBoard();
@@ -206,19 +213,13 @@ export default function ClimbList() {
   }, [hasMore, isClimbsLoading, isRefetching]);
 
   const boardConfig = useMemo(
-    () =>
-      hasBoardConfig
-        ? { boardName, layoutId, sizeId, setIds, angle }
-        : null,
+    () => (hasBoardConfig ? { boardName, layoutId, sizeId, setIds, angle } : null),
     [hasBoardConfig, boardName, layoutId, sizeId, setIds, angle],
   );
 
-  const handleClimbPress = useCallback(
-    (climb: Climb) => {
-      playDrawerRef.current?.open(climb);
-    },
-    [],
-  );
+  const handleClimbPress = useCallback((climb: Climb) => {
+    playDrawerRef.current?.open(climb);
+  }, []);
 
   const handleApplyFilters = useCallback(
     (newFilters: ClimbFilters) => {
@@ -237,22 +238,19 @@ export default function ClimbList() {
     [t],
   );
 
-  const handleApplyRecentFilter = useCallback(
-    (pillFilters: ClimbFilters, pillSearchText: string) => {
-      setFilters(pillFilters);
-      debouncedSearchRef.current = pillSearchText;
-      setDebouncedSearch(pillSearchText);
-      setSearchTextLength(pillSearchText.length);
-      searchHeaderRef.current?.setText(pillSearchText);
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      Keyboard.dismiss();
-      searchHeaderRef.current?.blur();
-      setIsSearchFocused(false);
-    },
-    [],
-  );
+  const handleApplyRecentFilter = useCallback((pillFilters: ClimbFilters, pillSearchText: string) => {
+    setFilters(pillFilters);
+    debouncedSearchRef.current = pillSearchText;
+    setDebouncedSearch(pillSearchText);
+    setSearchTextLength(pillSearchText.length);
+    searchHeaderRef.current?.setText(pillSearchText);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    Keyboard.dismiss();
+    searchHeaderRef.current?.blur();
+    setIsSearchFocused(false);
+  }, []);
 
   const handleClearRecentFilters = useCallback(() => {
     clearRecentFilters()
@@ -359,9 +357,7 @@ export default function ClimbList() {
         currentFilters={filters}
         onApply={handleApplyFilters}
       />
-      {boardConfig && (
-        <PlayDrawer ref={playDrawerRef} boardConfig={boardConfig} />
-      )}
+      {boardConfig && <PlayDrawer ref={playDrawerRef} boardConfig={boardConfig} />}
     </View>
   );
 }

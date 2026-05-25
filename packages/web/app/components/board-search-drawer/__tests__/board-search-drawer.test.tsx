@@ -84,7 +84,7 @@ vi.mock('../board-search-map', () => ({
   ),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   FOLLOW_BOARD: 'FOLLOW_BOARD',
   UNFOLLOW_BOARD: 'UNFOLLOW_BOARD',
 }));

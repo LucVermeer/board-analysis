@@ -19,7 +19,7 @@ import {
   type VoteMutationResponse,
   type GetVoteSummaryQueryVariables,
   type GetVoteSummaryQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { themeTokens } from '@/app/theme/theme-config';
 import type { SocialEntityType } from '@boardsesh/shared-schema';
 import { useVoteSummaryContext } from './vote-summary-context';

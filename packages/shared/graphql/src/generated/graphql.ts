@@ -5096,6 +5096,12 @@ export type GetBetaLinksQuery = {
   }>;
 };
 
+export type AttachBetaLinkMutationVariables = Exact<{
+  input: AttachBetaLinkInput;
+}>;
+
+export type AttachBetaLinkMutation = { __typename?: 'Mutation'; attachBetaLink: boolean };
+
 export type GetRecentBetaLinksQueryVariables = Exact<{
   limit?: InputMaybe<Scalars['Int']['input']>;
   boardType?: InputMaybe<Scalars['String']['input']>;
@@ -6978,12 +6984,6 @@ export type SaveTickMutation = {
   };
 };
 
-export type AttachBetaLinkMutationVariables = Exact<{
-  input: AttachBetaLinkInput;
-}>;
-
-export type AttachBetaLinkMutation = { __typename?: 'Mutation'; attachBetaLink: boolean };
-
 export type DeleteTickMutationVariables = Exact<{
   uuid: Scalars['ID']['input'];
 }>;
@@ -7343,6 +7343,42 @@ export const GetBetaLinksDocument = {
     },
   ],
 } as unknown as DocumentNode<GetBetaLinksQuery, GetBetaLinksQueryVariables>;
+export const AttachBetaLinkDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AttachBetaLink' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'AttachBetaLinkInput' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'attachBetaLink' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<AttachBetaLinkMutation, AttachBetaLinkMutationVariables>;
 export const GetRecentBetaLinksDocument = {
   kind: 'Document',
   definitions: [
@@ -12285,42 +12321,6 @@ export const SaveTickDocument = {
     },
   ],
 } as unknown as DocumentNode<SaveTickMutation, SaveTickMutationVariables>;
-export const AttachBetaLinkDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AttachBetaLink' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'AttachBetaLinkInput' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'attachBetaLink' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AttachBetaLinkMutation, AttachBetaLinkMutationVariables>;
 export const DeleteTickDocument = {
   kind: 'Document',
   definitions: [

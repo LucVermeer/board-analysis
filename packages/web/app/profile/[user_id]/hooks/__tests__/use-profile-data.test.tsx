@@ -7,7 +7,7 @@ import { IsRestoringProvider, QueryClient, QueryClientProvider } from '@tanstack
 import { useSession } from 'next-auth/react';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';
-import { GET_USER_CLIMB_PERCENTILE, GET_USER_PROFILE_STATS, GET_USER_TICKS } from '@/app/lib/graphql/operations';
+import { GET_USER_CLIMB_PERCENTILE, GET_USER_PROFILE_STATS, GET_USER_TICKS } from '@boardsesh/graphql/operations';
 import { useProfileData } from '../use-profile-data';
 
 vi.mock('next-auth/react', () => ({

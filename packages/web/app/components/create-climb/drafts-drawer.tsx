@@ -18,12 +18,12 @@ import {
   SEARCH_DRAFT_CLIMBS,
   type ClimbSearchInputVariables,
   type ClimbSearchResponse,
-} from '@/app/lib/graphql/operations/climb-search';
+} from '@boardsesh/graphql/operations/climb-search';
 import {
   DELETE_DRAFT_CLIMB_MUTATION,
   type DeleteDraftClimbMutationResponse,
   type DeleteDraftClimbMutationVariables,
-} from '@/app/lib/graphql/operations/new-climb-feed';
+} from '@boardsesh/graphql/operations/new-climb-feed';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { themeTokens } from '@/app/theme/theme-config';
 import { constructClimbViewUrl } from '@/app/lib/url-utils';

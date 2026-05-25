@@ -1,6 +1,6 @@
 import 'server-only';
 import { unstable_cache } from 'next/cache';
-import { GET_POPULAR_BOARD_CONFIGS, type GetPopularBoardConfigsQueryResponse } from '@/app/lib/graphql/operations';
+import { GET_POPULAR_BOARD_CONFIGS, type GetPopularBoardConfigsQueryResponse } from '@boardsesh/graphql/operations';
 import { executeGraphQLInternal } from '@/app/lib/graphql/server-cached-client';
 import type { PopularBoardConfig } from '@boardsesh/shared-schema';
 

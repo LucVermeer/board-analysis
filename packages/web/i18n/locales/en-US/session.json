@@ -257,7 +257,23 @@
     },
     "betaVideos": {
       "title": "Beta Videos",
-      "empty": "No beta videos yet. Be the first to share!"
+      "empty": "No beta videos yet. Be the first to share!",
+      "videoCount_one": "{{count}} video",
+      "videoCount_other": "{{count}} videos",
+      "addButton": "Attach a beta video",
+      "addTitle": "Attach a beta video",
+      "urlPlaceholder": "Paste TikTok or Instagram URL",
+      "submitButton": "Attach",
+      "submitting": "Attaching...",
+      "attachSuccess": "Beta video attached",
+      "attachError": "Couldn't attach video",
+      "errorTitle": "Couldn't load beta videos",
+      "retry": "Try again",
+      "cardLabelWithUser": "Beta video by @{{username}}",
+      "cardLabel": "Beta video",
+      "openError": "Couldn't open this link",
+      "imageError": "Image failed to load",
+      "urlInvalid": "Needs to be an Instagram or TikTok URL"
     },
     "angleSelector": {
       "title": "Select Angle"

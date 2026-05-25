@@ -10,7 +10,7 @@ import AcUnitIcon from '@mui/icons-material/AcUnit';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_CLIMB_COMMUNITY_STATUS, GET_CLIMB_PROPOSALS, GET_MY_ROLES } from '@/app/lib/graphql/operations/proposals';
+import { GET_CLIMB_COMMUNITY_STATUS, GET_CLIMB_PROPOSALS, GET_MY_ROLES } from '@boardsesh/graphql/operations/proposals';
 import type {
   ClimbCommunityStatusType,
   Proposal,

@@ -21,7 +21,7 @@ import {
   SEARCH_USERS,
   type SearchUsersQueryVariables,
   type SearchUsersQueryResponse,
-} from '@/app/lib/graphql/operations/social';
+} from '@boardsesh/graphql/operations/social';
 
 type UserSearchDialogProps = {
   open: boolean;

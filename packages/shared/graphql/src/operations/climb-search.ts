@@ -1,5 +1,5 @@
 import { gql } from 'graphql-request';
-import type { Climb, HoldsFilter, ZoneMatchMode } from '@/app/lib/types';
+import type { Climb, HoldsFilter, ZoneMatchMode } from '@boardsesh/shared-schema';
 
 // Slim fragment for search/list views. Intentionally omits `description` to
 // keep the list payload small — descriptions can be long and no list UI

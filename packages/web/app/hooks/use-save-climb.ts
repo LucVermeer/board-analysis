@@ -12,7 +12,7 @@ import {
   type SaveClimbMutationResponse,
   type UpdateClimbMutationVariables,
   type UpdateClimbMutationResponse,
-} from '@/app/lib/graphql/operations/new-climb-feed';
+} from '@boardsesh/graphql/operations/new-climb-feed';
 import { createGraphQLClient, execute, GraphQLOperationError } from '@/app/components/graphql-queue/graphql-client';
 import { getBackendWsUrl } from '@/app/lib/backend-url';
 import type { BoardName } from '@/app/lib/types';

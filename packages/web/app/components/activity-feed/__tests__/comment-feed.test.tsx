@@ -27,7 +27,7 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: vi.fn(),
 }));
 
-vi.mock('@/app/lib/graphql/operations/comments-votes', () => ({
+vi.mock('@boardsesh/graphql/operations/comments-votes', () => ({
   GET_GLOBAL_COMMENT_FEED: 'GET_GLOBAL_COMMENT_FEED',
 }));
 

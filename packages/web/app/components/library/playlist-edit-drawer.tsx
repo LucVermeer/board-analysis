@@ -20,7 +20,7 @@ import {
   type UpdatePlaylistMutationVariables,
   type Playlist,
   UPDATE_PLAYLIST,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { themeTokens } from '@/app/theme/theme-config';
 

@@ -71,6 +71,10 @@ export const DeferredSections = memo(function DeferredSections({
 
   return (
     <View style={styles.container}>
+      <CollapsibleSection title={t('mobile.betaVideos.title')} keepExpanded>
+        <BetaVideosSection climbUuid={climb.uuid} boardName={boardName} angle={angle} />
+      </CollapsibleSection>
+
       <CollapsibleSection title={t('mobile.logbook.title')} defaultExpanded>
         <LogbookSection
           climbUuid={climb.uuid}
@@ -101,10 +105,6 @@ export const DeferredSections = memo(function DeferredSections({
           angle={angle}
           onClimbPress={onSimilarClimbPress}
         />
-      </CollapsibleSection>
-
-      <CollapsibleSection title={t('mobile.betaVideos.title')}>
-        <BetaVideosSection climbUuid={climb.uuid} boardName={boardName} />
       </CollapsibleSection>
     </View>
   );

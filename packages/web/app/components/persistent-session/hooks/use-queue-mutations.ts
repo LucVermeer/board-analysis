@@ -12,7 +12,7 @@ import {
   CONFIRM_CLIMB_ON_WALL,
   SET_SESSION_BOARD_SERIAL,
   SET_SESSION_BOARD_PATH,
-} from '@boardsesh/shared-schema';
+} from '@boardsesh/graphql/operations/queue-session';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import { type Session, toClimbQueueItemInput } from '../types';
 

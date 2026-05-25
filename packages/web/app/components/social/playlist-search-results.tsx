@@ -18,7 +18,7 @@ import {
   type SearchPlaylistsQueryVariables,
   type SearchPlaylistsQueryResponse,
   type DiscoverablePlaylist,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { useDebouncedValue } from '@/app/hooks/use-debounced-value';
 import { useInfiniteScroll } from '@/app/hooks/use-infinite-scroll';
 

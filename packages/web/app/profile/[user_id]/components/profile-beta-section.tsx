@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { themeTokens } from '@/app/theme/theme-config';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_USER_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
+import { GET_USER_BETA_LINKS } from '@boardsesh/graphql/operations/beta-links';
 import { mapBetaLinkRow } from '@/app/lib/beta-video-url';
 import { getDefaultClimbViewPath } from '@/app/lib/default-board-configs';
 import type { BoardName } from '@/app/lib/types';

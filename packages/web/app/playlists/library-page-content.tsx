@@ -21,7 +21,7 @@ import {
   PIN_PLAYLIST,
   UNPIN_PLAYLIST,
   GET_MY_SMART_PLAYLIST_COUNTS,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 import { useUserPlaylists } from '@/app/hooks/use-user-playlists';
 import { useDiscoverPlaylists } from '@/app/hooks/use-discover-playlists';
 import { usePinnedPlaylists } from '@/app/hooks/use-pinned-playlists';

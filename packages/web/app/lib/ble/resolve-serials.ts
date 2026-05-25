@@ -5,7 +5,7 @@ import {
   type BoardSerialConfig,
   type GetBoardsBySerialNumbersQueryResponse,
   type GetMyBoardSerialConfigsQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { UserBoard } from '@boardsesh/shared-schema';
 
 /**
