@@ -239,7 +239,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [],
   );
 
-  const snapPoints = useMemo(() => ['95%'], []);
+  const snapPoints = useMemo(() => ['100%'], []);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
@@ -250,6 +250,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       <BottomSheetModal
         ref={sheetRef}
         snapPoints={snapPoints}
+        topInset={insets.top}
         enablePanDownToClose
         enableContentPanningGesture={!subDrawerOpen}
         enableHandlePanningGesture={!subDrawerOpen}
@@ -258,7 +259,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         handleIndicatorStyle={sheetStyles.indicator}
         backgroundStyle={sheetStyles.background}
       >
-        <BottomSheetScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom }}>
+        <BottomSheetScrollView
+          style={styles.content}
+          contentContainerStyle={{ paddingTop: spacing[2], paddingBottom: insets.bottom }}
+        >
           <Pressable
             onPress={() => sheetRef.current?.dismiss()}
             accessibilityRole="button"
