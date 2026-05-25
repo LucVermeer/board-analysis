@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('expo-file-system', () => ({
   File: class MockFile {
@@ -36,7 +36,12 @@ vi.mock('../../../modules/board-renderer/src/index', () => {
   throw new Error('Native module not available (simulated Expo Go)');
 });
 
-const { buildCacheKey, getServerFallbackUri } = await import('../use-native-thumbnail');
+const {
+  buildCacheKey,
+  getServerFallbackUri,
+  getOrStartInflightRender,
+  _inflightRendersForTests,
+} = await import('../use-native-thumbnail');
 
 describe('buildCacheKey', () => {
   it('hashes the frames component so the key fits in a filename', () => {
@@ -109,29 +114,95 @@ describe('getServerFallbackUri (Expo Go fallback contract)', () => {
     setIds: '24',
   };
 
-  it('defaults to the thumbnail server URL', () => {
+  it('returns the thumbnail server URL', () => {
     expect(getServerFallbackUri(baseParams)).toBe(
       'https://server.test/thumb?frames=p1r42',
     );
   });
 
-  it('uses the full-render server URL when backgroundQuality is "full"', () => {
+  it('returns the thumbnail URL even when backgroundQuality is "full"', () => {
+    // The play view's drawer opens showing this URI while the native
+    // full-render is in progress. The thumbnail URL is already in
+    // expo-image's cache from the list view, so it shows instantly;
+    // using the full-quality server URL would trigger a multi-second
+    // fresh fetch that defeats the point of native rendering.
     expect(getServerFallbackUri({ ...baseParams, backgroundQuality: 'full' })).toBe(
-      'https://server.test/full?frames=p1r42',
+      'https://server.test/thumb?frames=p1r42',
     );
-  });
-
-  it('uses the thumbnail server URL when backgroundQuality is "thumbnail" explicitly', () => {
-    expect(
-      getServerFallbackUri({ ...baseParams, backgroundQuality: 'thumbnail' }),
-    ).toBe('https://server.test/thumb?frames=p1r42');
   });
 });
 
-// Other hook-level behaviors (native render success path, inflight dedup,
-// unmount guard) need a working React hook test runner with a single React
-// instance — the @testing-library/react + jsdom + bun-resolved React 19
-// combo currently produces a null dispatcher for useState. Until that
-// setup is sorted out, the dedup contract is exercised at the
-// background-image-cache layer in background-image-cache.test.ts; the
-// success path is covered by manual QA on device.
+// The dedup + cap contract was extracted into a plain helper specifically
+// so it can be tested without a working React renderer. The hook-level
+// pieces that still need React (mountedRef guard, setState after settle)
+// are covered by manual QA on device — the @testing-library/react +
+// jsdom + bun-resolved React 19 combo currently produces a null
+// dispatcher for useState.
+describe('getOrStartInflightRender', () => {
+  beforeEach(() => {
+    _inflightRendersForTests.clear();
+  });
+
+  it('starts a render and returns its promise on first call', async () => {
+    const startRender = vi.fn().mockResolvedValue('file:///out/a.png');
+    const result = await getOrStartInflightRender('key-a', startRender);
+    expect(result).toBe('file:///out/a.png');
+    expect(startRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the in-flight promise instead of starting a second render', async () => {
+    let resolveFn: ((value: string) => void) | undefined;
+    const startRender = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveFn = resolve;
+        }),
+    );
+
+    const first = getOrStartInflightRender('key-a', startRender);
+    const second = getOrStartInflightRender('key-a', startRender);
+
+    expect(first).toBe(second);
+    expect(startRender).toHaveBeenCalledTimes(1);
+
+    resolveFn?.('file:///out/a.png');
+    expect(await first).toBe('file:///out/a.png');
+  });
+
+  it('removes the entry once the render settles successfully', async () => {
+    await getOrStartInflightRender('key-a', () => Promise.resolve('file:///out/a.png'));
+    // Drain microtasks so the .finally cleanup runs.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(_inflightRendersForTests.has('key-a')).toBe(false);
+  });
+
+  it('removes the entry when the render rejects, without surfacing as unhandled', async () => {
+    const promise = getOrStartInflightRender('key-a', () =>
+      Promise.reject(new Error('render failed')),
+    );
+    // Caller is expected to handle the rejection — match the hook's
+    // .catch(() => {}) pattern.
+    await expect(promise).rejects.toThrow('render failed');
+    await Promise.resolve();
+    expect(_inflightRendersForTests.has('key-a')).toBe(false);
+  });
+
+  it('evicts the oldest entry when the cap is reached', async () => {
+    // Each render hangs forever so entries stay in the map and we can
+    // observe the cap behaviour. INFLIGHT_RENDERS_MAX = 50 in the module.
+    const neverResolves = () => new Promise<string>(() => {});
+
+    for (let entryIndex = 0; entryIndex < 50; entryIndex++) {
+      getOrStartInflightRender(`key-${entryIndex}`, neverResolves);
+    }
+    expect(_inflightRendersForTests.size).toBe(50);
+    expect(_inflightRendersForTests.has('key-0')).toBe(true);
+
+    // Inserting one more should evict key-0 (insertion order = oldest).
+    getOrStartInflightRender('key-50', neverResolves);
+    expect(_inflightRendersForTests.size).toBe(50);
+    expect(_inflightRendersForTests.has('key-0')).toBe(false);
+    expect(_inflightRendersForTests.has('key-50')).toBe(true);
+  });
+});

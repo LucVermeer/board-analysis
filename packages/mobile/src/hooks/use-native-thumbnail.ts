@@ -3,7 +3,7 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { HOLD_STATE_MAP } from '@boardsesh/board-constants/hold-states';
 import { getBoardRenderData } from '../lib/board-details';
 import { ensureBackgroundsCached } from '../lib/background-image-cache';
-import { buildThumbnailUrl, buildFullRenderUrl } from '../lib/thumbnail-url';
+import { buildThumbnailUrl } from '../lib/thumbnail-url';
 
 type NativeThumbnailParams = {
   frames: string;
@@ -28,10 +28,59 @@ type NativeThumbnailResult = {
   uri: string;
 };
 
-/** Deduplicate concurrent renders for the same cache key */
+/**
+ * Deduplicate concurrent renders for the same cache key. Entries
+ * self-delete via `.finally` when the underlying render settles, so under
+ * normal usage the map only holds a handful of in-flight promises at any
+ * moment. The hard cap is defence against a pathological burst (e.g. a
+ * huge list scrolled before any render completes) leaving stale entries
+ * if components unmount mid-render.
+ */
 const inflightRenders = new Map<string, Promise<string>>();
+const INFLIGHT_RENDERS_MAX = 50;
 
 const BOARD_CONFIG_CACHE_MAX = 20;
+
+/**
+ * Look up an in-flight render by cache key, or start a new one. Exposed
+ * (alongside _inflightRendersForTests) so the dedup + cap contract can be
+ * unit tested without spinning up a React renderer.
+ */
+export function getOrStartInflightRender(
+  cacheKey: string,
+  startRender: () => Promise<string>,
+): Promise<string> {
+  const existing = inflightRenders.get(cacheKey);
+  if (existing) return existing;
+
+  // Evict the oldest entry before inserting so we never grow past the
+  // cap, even briefly.
+  if (inflightRenders.size >= INFLIGHT_RENDERS_MAX) {
+    const oldestKey = inflightRenders.keys().next().value;
+    if (oldestKey !== undefined) {
+      inflightRenders.delete(oldestKey);
+    }
+  }
+
+  const promise = startRender();
+  inflightRenders.set(cacheKey, promise);
+  // Run cleanup as a detached handler so it doesn't change the promise
+  // returned to callers, and so callers that only attach .then can still
+  // observe rejections.
+  void promise
+    .finally(() => {
+      inflightRenders.delete(cacheKey);
+    })
+    .catch(() => {
+      // Swallow — the original promise's rejection is observed by the
+      // caller. This catch only exists to prevent the .finally chain
+      // from generating an unhandled rejection.
+    });
+  return promise;
+}
+
+/** Test-only handle to the in-flight map. Not part of the public API. */
+export const _inflightRendersForTests = inflightRenders;
 
 /** Memoize board render configs to avoid re-computing hold positions */
 const boardConfigCache = new Map<
@@ -173,16 +222,18 @@ function getNativeModule() {
  * tested without spinning up a React render — the hook itself just
  * calls this to seed useState.
  *
- * Background quality is matched to the requested render quality so the
- * brief pre-native-render frame already looks roughly right: sharp full
- * server render for play view, fast thumbnail for list rows.
+ * Always returns the thumbnail URL, even when the requested render is
+ * full-quality. Rationale: the play view's drawer opens with this URI
+ * showing in <Image> for the ~200–500ms while the native renderer
+ * encodes and writes the full-size PNG. The thumbnail URL was already
+ * fetched by the list view and is in expo-image's memory+disk cache,
+ * so it displays instantly. Falling back to buildFullRenderUrl instead
+ * would trigger a fresh server fetch (multi-second) — defeating the
+ * point of having a native renderer at all.
  */
 export function getServerFallbackUri(params: NativeThumbnailParams): string {
   const { frames, boardName, layoutId, sizeId, setIds } = params;
-  const backgroundQuality = params.backgroundQuality ?? 'thumbnail';
-  return backgroundQuality === 'full'
-    ? buildFullRenderUrl({ boardName, layoutId, sizeId, setIds, frames })
-    : buildThumbnailUrl({ boardName, layoutId, sizeId, setIds, frames });
+  return buildThumbnailUrl({ boardName, layoutId, sizeId, setIds, frames });
 }
 
 /**
@@ -230,18 +281,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
     const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds, outputWidth);
     if (!boardConfig) return;
 
-    // Reuse an in-flight render for the same cache key
-    const existingRender = inflightRenders.get(currentCacheKey);
-    if (existingRender) {
-      existingRender
-        .then((fileUri) => {
-          if (mountedRef.current) setNativeRender({ key: currentCacheKey, uri: fileUri });
-        })
-        .catch(() => {});
-      return;
-    }
-
-    const renderPromise = (async () => {
+    const renderPromise = getOrStartInflightRender(currentCacheKey, async () => {
       const backgroundPaths = await ensureBackgroundsCached({
         boardName,
         layoutId,
@@ -256,9 +296,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
       });
 
       return nativeModule.renderComposite(configJson, backgroundPaths, currentCacheKey);
-    })();
-
-    inflightRenders.set(currentCacheKey, renderPromise);
+    });
 
     renderPromise
       .then((fileUri) => {
@@ -266,9 +304,6 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
       })
       .catch(() => {
         // Native render failed -- the derived display URI stays on serverUrl
-      })
-      .finally(() => {
-        inflightRenders.delete(currentCacheKey);
       });
   }, [currentCacheKey, frames, boardName, layoutId, sizeId, setIds, outputWidth, backgroundQuality]);
 
