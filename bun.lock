@@ -145,6 +145,7 @@
         "@boardsesh/ble-protocol": "*",
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
+        "@boardsesh/climb-filters": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",
@@ -243,6 +244,16 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/shared/climb-filters": {
+      "name": "@boardsesh/climb-filters",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/shared-schema": "*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared/play-view": {
       "name": "@boardsesh/play-view",
       "version": "1.0.0",
@@ -276,6 +287,7 @@
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/board-renderer-wasm": "*",
+        "@boardsesh/climb-filters": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
         "@boardsesh/play-view": "*",
@@ -674,6 +686,8 @@
     "@boardsesh/board-constants": ["@boardsesh/board-constants@workspace:packages/board-constants"],
 
     "@boardsesh/board-renderer-wasm": ["@boardsesh/board-renderer-wasm@workspace:packages/board-renderer-wasm"],
+
+    "@boardsesh/climb-filters": ["@boardsesh/climb-filters@workspace:packages/shared/climb-filters"],
 
     "@boardsesh/crypto": ["@boardsesh/crypto@workspace:packages/crypto"],
 
