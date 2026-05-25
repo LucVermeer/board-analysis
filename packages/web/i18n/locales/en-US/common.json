@@ -11,7 +11,8 @@
       "climbs": "Climbs",
       "climb": "Climb",
       "queue": "Queue",
-      "profile": "Profile"
+      "profile": "Profile",
+      "setters": "Setters"
     },
     "play": {
       "sendCount_one": "{{count}} send",

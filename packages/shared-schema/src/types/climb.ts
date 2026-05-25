@@ -144,6 +144,20 @@ export type ClimbSearchResult = {
   hasMore: boolean;
 };
 
+export type SetterStatsInput = {
+  boardName: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  angle: number;
+  search?: string;
+};
+
+export type SetterStat = {
+  setterUsername: string;
+  climbCount: number;
+};
+
 export type SaveClimbInput = {
   boardType: string;
   layoutId: number;

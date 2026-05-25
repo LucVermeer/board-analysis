@@ -2,16 +2,37 @@ import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { View, Pressable, ScrollView, StyleSheet, type ViewStyle } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
+import {
+  hasActiveClimbFilters,
+  applyStatusChange,
+  gradeAccuracyBucket,
+  type GradeAccuracyBucket,
+  type SortOption,
+  type SortOrder,
+  type StatusFilter,
+  type GradeAccuracyValue,
+  SORT_OPTIONS,
+  GRADE_ACCURACY_VALUES,
+  STATUS_FILTER_VALUES,
+  MIN_ASCENTS_FILTER_OPTIONS,
+  formatMinAscentsFilterCount,
+} from '@boardsesh/climb-filters';
 import { Text } from './Text';
 import { Button } from './Button';
-import { Separator } from './Separator';
 import { SegmentedControl } from './SegmentedControl';
 import { StarRating } from './StarRating';
+import { FilterAccordionSection } from './FilterAccordionSection';
+import { RadioGroup, type RadioOption } from './RadioGroup';
+import { SwitchRow } from './SwitchRow';
+import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
 import { useGrades } from '../lib/graphql/hooks';
+import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
+import { subscribeToSetterSelection } from '../lib/filter-handoff';
 import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
@@ -22,26 +43,30 @@ import { DEFAULT_FILTERS } from '../lib/climb-filter-types';
 export type { ClimbFilters };
 export { DEFAULT_FILTERS };
 
+type BoardSearchConfig = {
+  boardName: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  angle: number;
+};
+
 type ClimbFilterSheetProps = {
   visible: boolean;
   onDismiss: () => void;
-  boardName: string;
+  boardConfig: BoardSearchConfig | null;
   currentFilters: ClimbFilters;
   onApply: (filters: ClimbFilters) => void;
 };
 
-const SORT_OPTIONS = ['popular', 'quality', 'difficulty', 'newest'] as const;
-
-const ASCENT_OPTIONS = [
-  { label: 'any', value: undefined },
-  { label: '5+', value: 5 },
-  { label: '10+', value: 10 },
-  { label: '25+', value: 25 },
-  { label: '50+', value: 50 },
-  { label: '100+', value: 100 },
-] as const;
+// Bucket values come from the shared canonical list so mobile and web stay
+// in lockstep (web's `MinAscentsBucketPicker` consumes the same list).
+// `0` is the "any" sentinel — rendered with a localised label.
+const ASCENT_BUCKET_VALUES = MIN_ASCENTS_FILTER_OPTIONS;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+type SectionKey = 'sort' | 'climb' | 'quality' | 'status' | 'progress';
 
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   const scale = useSharedValue(1);
@@ -49,14 +74,6 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.95, springs.snappy);
-  };
-
-  const handlePressOut = () => {
-    scale.value = withSpring(1, springs.snappy);
-  };
 
   const chipStyle: ViewStyle = {
     paddingHorizontal: spacing[3],
@@ -73,8 +90,12 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
         hapticSelection();
         onPress();
       }}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      onPressIn={() => {
+        scale.value = withSpring(0.95, springs.snappy);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, springs.snappy);
+      }}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
@@ -140,66 +161,139 @@ function GradeSelector({
 }
 
 export function hasActiveFilters(filters: ClimbFilters): boolean {
-  return (
-    filters.sortBy !== DEFAULT_FILTERS.sortBy ||
-    filters.sortOrder !== DEFAULT_FILTERS.sortOrder ||
-    filters.minGrade != null ||
-    filters.maxGrade != null ||
-    filters.minAscents != null ||
-    filters.minRating != null
-  );
+  return hasActiveClimbFilters(filters);
 }
 
-export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters, onApply }: ClimbFilterSheetProps) {
+export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilters, onApply }: ClimbFilterSheetProps) {
   const { t } = useTranslation('climbs');
   const theme = useTheme();
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const sheetRef = useRef<BottomSheet>(null);
+  const boardName = boardConfig?.boardName ?? '';
   const { data: grades } = useGrades(boardName);
 
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(currentFilters);
+  const [expandedSection, setExpandedSection] = useState<SectionKey | null>('sort');
 
+  // Seed `localFilters` from `currentFilters` only when the sheet opens. Keeping
+  // `currentFilters` in the deps list would re-run this whenever the parent
+  // re-references its filters object, wiping the user's in-flight edits.
+  const currentFiltersRef = useRef(currentFilters);
+  currentFiltersRef.current = currentFilters;
   useEffect(() => {
     if (visible) {
-      setLocalFilters(currentFilters);
+      setLocalFilters(currentFiltersRef.current);
+      setExpandedSection('sort');
     }
-  }, [visible, currentFilters]);
+  }, [visible]);
 
-  const snapPoints = useMemo(() => ['80%'], []);
+  // Receive setter selection from the dedicated picker route.
+  useEffect(() => {
+    return subscribeToSetterSelection((setters) => {
+      setLocalFilters((previous) => ({ ...previous, setter: setters.length > 0 ? setters : undefined }));
+    });
+  }, []);
 
-  const sortLabels: Record<string, string> = useMemo(
+  const snapPoints = useMemo(() => ['90%'], []);
+
+  const isKilter = boardName === 'kilter';
+
+  const sortLabels = useMemo<Record<SortOption, string>>(
     () => ({
-      popular: t('mobile.filter.popular'),
-      quality: t('mobile.filter.quality'),
-      difficulty: t('mobile.filter.difficulty'),
-      newest: t('mobile.filter.newest'),
+      ascents: t('mobile.filter.sort.ascents'),
+      quality: t('mobile.filter.sort.quality'),
+      difficulty: t('mobile.filter.sort.difficulty'),
+      name: t('mobile.filter.sort.name'),
+      popular: t('mobile.filter.sort.popular'),
+      creation: t('mobile.filter.sort.creation'),
     }),
     [t],
   );
 
-  const sortSegmentOptions = useMemo(
-    () => SORT_OPTIONS.map((option) => ({ key: option, label: sortLabels[option] ?? option })),
+  const statusLabels = useMemo<Record<StatusFilter, string>>(
+    () => ({
+      any: t('mobile.filter.status.any'),
+      drafts: t('mobile.filter.status.drafts'),
+      established: t('mobile.filter.status.established'),
+      projects: t('mobile.filter.status.projects'),
+    }),
+    [t],
+  );
+
+  const accuracyLabels = useMemo<Record<GradeAccuracyValue, string>>(
+    () => ({
+      '0': t('mobile.filter.accuracy.off'),
+      '0.2': t('mobile.filter.accuracy.loose'),
+      '0.1': t('mobile.filter.accuracy.moderate'),
+      '0.05': t('mobile.filter.accuracy.tight'),
+    }),
+    [t],
+  );
+
+  const sortByOptions = useMemo<ReadonlyArray<RadioOption<SortOption>>>(
+    () => SORT_OPTIONS.map((option) => ({ value: option, label: sortLabels[option] })),
     [sortLabels],
   );
 
-  const handleSortChange = useCallback((sortBy: string) => {
-    setLocalFilters((previous) => ({ ...previous, sortBy }));
+  const sortOrderOptions = useMemo(
+    () => [
+      { key: 'desc', label: t('mobile.filter.sortOrder.desc') },
+      { key: 'asc', label: t('mobile.filter.sortOrder.asc') },
+    ],
+    [t],
+  );
+
+  const statusOptions = useMemo<ReadonlyArray<RadioOption<StatusFilter>>>(
+    () =>
+      STATUS_FILTER_VALUES.map((value) => ({
+        value,
+        label: statusLabels[value],
+        disabled: value === 'drafts' && !isAuthenticated,
+        description: value === 'drafts' && !isAuthenticated ? t('mobile.filter.signInForDrafts') : undefined,
+      })),
+    [statusLabels, isAuthenticated, t],
+  );
+
+  const accuracyOptions = useMemo<ReadonlyArray<RadioOption<GradeAccuracyValue | 'off'>>>(
+    () =>
+      GRADE_ACCURACY_VALUES.map((value) => ({
+        value: value === '0' ? 'off' : value,
+        label: accuracyLabels[value],
+      })),
+    [accuracyLabels],
+  );
+
+  const setFiltersPatch = useCallback((patch: Partial<ClimbFilters>) => {
+    setLocalFilters((previous) => ({ ...previous, ...patch }));
   }, []);
 
-  const handleMinGradeChange = useCallback((difficultyId: number | undefined) => {
-    setLocalFilters((previous) => ({ ...previous, minGrade: difficultyId }));
+  const handleSortByChange = useCallback(
+    (sortBy: SortOption) => {
+      setFiltersPatch({ sortBy });
+    },
+    [setFiltersPatch],
+  );
+
+  const handleSortOrderChange = useCallback(
+    (sortOrder: string) => {
+      setFiltersPatch({ sortOrder: sortOrder as SortOrder });
+    },
+    [setFiltersPatch],
+  );
+
+  const handleStatusChange = useCallback((status: StatusFilter) => {
+    // Status carries side-effects (established → minAscents=2, drafts → sort=newest);
+    // applyStatusChange centralises the patch so web and mobile agree.
+    setLocalFilters((previous) => ({ ...previous, ...applyStatusChange(previous, status) }));
   }, []);
 
-  const handleMaxGradeChange = useCallback((difficultyId: number | undefined) => {
-    setLocalFilters((previous) => ({ ...previous, maxGrade: difficultyId }));
-  }, []);
-
-  const handleMinAscentsChange = useCallback((value: number | undefined) => {
-    setLocalFilters((previous) => ({ ...previous, minAscents: value }));
-  }, []);
-
-  const handleMinRatingChange = useCallback((value: number | undefined) => {
-    setLocalFilters((previous) => ({ ...previous, minRating: value }));
-  }, []);
+  const handleAccuracyChange = useCallback(
+    (value: GradeAccuracyValue | 'off') => {
+      setFiltersPatch({ gradeAccuracy: value === 'off' ? undefined : value });
+    },
+    [setFiltersPatch],
+  );
 
   const handleApply = useCallback(() => {
     onApply(localFilters);
@@ -209,6 +303,10 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
   const handleReset = useCallback(() => {
     hapticSelection();
     setLocalFilters(DEFAULT_FILTERS);
+  }, []);
+
+  const toggleSection = useCallback((key: SectionKey) => {
+    setExpandedSection((previous) => (previous === key ? null : key));
   }, []);
 
   const handleSheetChange = useCallback(
@@ -227,6 +325,23 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
     [],
   );
 
+  const openSetters = useCallback(() => {
+    if (!boardConfig) return;
+    router.push({
+      pathname: '/(tabs)/climbs/setters',
+      params: {
+        boardName: boardConfig.boardName,
+        layoutId: String(boardConfig.layoutId),
+        sizeId: String(boardConfig.sizeId),
+        setIds: boardConfig.setIds,
+        angle: String(boardConfig.angle),
+        // Setter usernames can contain commas (notably MoonBoard-imported names),
+        // so JSON-encode instead of comma-joining.
+        selected: JSON.stringify(localFilters.setter ?? []),
+      },
+    });
+  }, [router, boardConfig, localFilters.setter]);
+
   const { systemColors } = theme;
 
   const backgroundStyle: ViewStyle = {
@@ -236,6 +351,66 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
   };
 
   const trackColor = systemColors.fill;
+
+  // Section summary helpers — each returns null when nothing meaningful to show.
+  const gradeSummary = useMemo(() => {
+    const { minGrade, maxGrade } = localFilters;
+    if (minGrade == null && maxGrade == null) return null;
+    const minName = minGrade != null ? (grades?.find((g) => g.difficultyId === minGrade)?.name ?? '?') : '–';
+    const maxName = maxGrade != null ? (grades?.find((g) => g.difficultyId === maxGrade)?.name ?? '?') : '–';
+    return `${minName}–${maxName}`;
+  }, [localFilters, grades]);
+
+  const climbSummaryParts = useMemo(() => {
+    const parts: string[] = [];
+    if (gradeSummary) parts.push(gradeSummary);
+    if (localFilters.setter && localFilters.setter.length > 0) {
+      parts.push(t('mobile.search.settersCount', { count: localFilters.setter.length }));
+    }
+    if (localFilters.onlyTallClimbs) parts.push(t('mobile.filter.tall'));
+    if (localFilters.onlyWideClimbs) parts.push(t('mobile.filter.wide'));
+    return parts;
+  }, [gradeSummary, localFilters.setter, localFilters.onlyTallClimbs, localFilters.onlyWideClimbs, t]);
+
+  const qualitySummaryParts = useMemo(() => {
+    const parts: string[] = [];
+    if (localFilters.minAscents != null) {
+      parts.push(t('mobile.search.ascents', { count: localFilters.minAscents }));
+    }
+    if (localFilters.minRating != null) {
+      parts.push(t('mobile.search.rating', { count: localFilters.minRating }));
+    }
+    if (localFilters.gradeAccuracy != null) {
+      parts.push(accuracyLabels[localFilters.gradeAccuracy]);
+    }
+    return parts;
+  }, [localFilters.minAscents, localFilters.minRating, localFilters.gradeAccuracy, accuracyLabels, t]);
+
+  const statusSummary = localFilters.status !== 'any' ? statusLabels[localFilters.status] : null;
+
+  const progressSummaryParts = useMemo(() => {
+    const parts: string[] = [];
+    if (localFilters.hideAttempted) parts.push(t('mobile.filter.progress.hideAttempted'));
+    if (localFilters.hideCompleted) parts.push(t('mobile.filter.progress.hideCompleted'));
+    if (localFilters.showOnlyAttempted) parts.push(t('mobile.filter.progress.onlyAttempted'));
+    if (localFilters.showOnlyCompleted) parts.push(t('mobile.filter.progress.onlyCompleted'));
+    return parts;
+  }, [
+    localFilters.hideAttempted,
+    localFilters.hideCompleted,
+    localFilters.showOnlyAttempted,
+    localFilters.showOnlyCompleted,
+    t,
+  ]);
+
+  const sortSummary =
+    localFilters.sortBy !== DEFAULT_FILTERS.sortBy || localFilters.sortOrder !== DEFAULT_FILTERS.sortOrder
+      ? `${sortLabels[localFilters.sortBy]} · ${
+          localFilters.sortOrder === 'asc' ? t('mobile.filter.sortOrder.asc') : t('mobile.filter.sortOrder.desc')
+        }`
+      : null;
+
+  const accuracyValue: GradeAccuracyValue | 'off' = localFilters.gradeAccuracy ?? 'off';
 
   if (!visible) return null;
 
@@ -261,73 +436,132 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.section}>
-            <Text variant="subheadline" style={styles.sectionLabel}>
+          <FilterAccordionSection
+            label={t('mobile.filter.section.sort')}
+            summary={sortSummary}
+            expanded={expandedSection === 'sort'}
+            onToggle={() => toggleSection('sort')}
+          >
+            <Text variant="footnote" style={styles.subsectionLabel}>
               {t('mobile.filter.sortBy')}
             </Text>
+            <RadioGroup options={sortByOptions} value={localFilters.sortBy} onChange={handleSortByChange} />
+            <View style={styles.subsectionGap} />
+            <Text variant="footnote" style={styles.subsectionLabel}>
+              {t('mobile.filter.sortOrderLabel')}
+            </Text>
             <SegmentedControl
-              options={sortSegmentOptions}
-              selectedKey={localFilters.sortBy}
-              onSelect={handleSortChange}
+              options={sortOrderOptions}
+              selectedKey={localFilters.sortOrder}
+              onSelect={handleSortOrderChange}
               textVariant="footnote"
               trackColor={trackColor}
             />
-          </View>
+          </FilterAccordionSection>
 
-          <Separator />
-
-          {grades && grades.length > 0 && (
-            <>
-              <View style={styles.section}>
-                <Text variant="subheadline" style={styles.sectionLabel}>
+          <FilterAccordionSection
+            label={t('mobile.filter.section.climb')}
+            summary={climbSummaryParts.join(' · ') || null}
+            expanded={expandedSection === 'climb'}
+            onToggle={() => toggleSection('climb')}
+          >
+            {grades && grades.length > 0 ? (
+              <View>
+                <Text variant="footnote" style={styles.subsectionLabel}>
                   {t('mobile.filter.gradeRange')}
                 </Text>
                 <GradeSelector
                   label={t('mobile.filter.minGrade')}
                   grades={grades}
                   selectedDifficultyId={localFilters.minGrade}
-                  onSelect={handleMinGradeChange}
+                  onSelect={(value) => setFiltersPatch({ minGrade: value })}
                 />
                 <View style={styles.gradeSpacer} />
                 <GradeSelector
                   label={t('mobile.filter.maxGrade')}
                   grades={grades}
                   selectedDifficultyId={localFilters.maxGrade}
-                  onSelect={handleMaxGradeChange}
+                  onSelect={(value) => setFiltersPatch({ maxGrade: value })}
                 />
+                <View style={styles.subsectionGap} />
               </View>
+            ) : null}
 
-              <Separator />
-            </>
-          )}
+            <Pressable
+              onPress={openSetters}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.filter.setters')}
+              style={({ pressed }) => [
+                styles.tappableRow,
+                { backgroundColor: systemColors.tertiaryBackground as string },
+                pressed && styles.tappableRowPressed,
+              ]}
+            >
+              <Text variant="body">{t('mobile.filter.setters')}</Text>
+              <View style={styles.tappableRowTrailing}>
+                <Text variant="footnote" style={styles.tappableRowValue}>
+                  {localFilters.setter && localFilters.setter.length > 0
+                    ? t('mobile.search.settersCount', { count: localFilters.setter.length })
+                    : t('mobile.filter.none')}
+                </Text>
+                <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
+              </View>
+            </Pressable>
 
-          <View style={styles.section}>
-            <Text variant="subheadline" style={styles.sectionLabel}>
+            {isKilter ? (
+              <>
+                <View style={styles.subsectionGap} />
+                <SwitchRow
+                  label={t('mobile.filter.tall')}
+                  description={t('mobile.filter.tallDescription')}
+                  value={!!localFilters.onlyTallClimbs}
+                  onValueChange={(value) => setFiltersPatch({ onlyTallClimbs: value || undefined })}
+                />
+                <SwitchRow
+                  label={t('mobile.filter.wide')}
+                  description={t('mobile.filter.wideDescription')}
+                  value={!!localFilters.onlyWideClimbs}
+                  onValueChange={(value) => setFiltersPatch({ onlyWideClimbs: value || undefined })}
+                />
+              </>
+            ) : null}
+          </FilterAccordionSection>
+
+          <FilterAccordionSection
+            label={t('mobile.filter.section.quality')}
+            summary={qualitySummaryParts.join(' · ') || null}
+            expanded={expandedSection === 'quality'}
+            onToggle={() => toggleSection('quality')}
+          >
+            <Text variant="footnote" style={styles.subsectionLabel}>
               {t('mobile.filter.minAscents')}
             </Text>
             <View style={styles.chipRow}>
-              {ASCENT_OPTIONS.map((option) => (
-                <Chip
-                  key={option.label}
-                  label={option.label === 'any' ? t('mobile.filter.anyAscents') : option.label}
-                  selected={localFilters.minAscents === option.value}
-                  onPress={() => handleMinAscentsChange(option.value)}
-                />
-              ))}
+              {ASCENT_BUCKET_VALUES.map((bucket) => {
+                const isAny = bucket === 0;
+                // Mobile stores "any" as `undefined`; the canonical bucket list
+                // includes 0 as the sentinel that we present as "any".
+                const filterValue = isAny ? undefined : bucket;
+                return (
+                  <Chip
+                    key={bucket}
+                    label={isAny ? t('mobile.filter.anyAscents') : `${formatMinAscentsFilterCount(bucket)}+`}
+                    selected={localFilters.minAscents === filterValue}
+                    onPress={() => setFiltersPatch({ minAscents: filterValue })}
+                  />
+                );
+              })}
             </View>
-          </View>
 
-          <Separator />
-
-          <View style={styles.section}>
-            <Text variant="subheadline" style={styles.sectionLabel}>
+            <View style={styles.subsectionGap} />
+            <Text variant="footnote" style={styles.subsectionLabel}>
               {t('mobile.filter.minRating')}
             </Text>
             <View style={styles.ratingRow}>
               <Pressable
                 onPress={() => {
                   hapticSelection();
-                  handleMinRatingChange(undefined);
+                  setFiltersPatch({ minRating: undefined });
                 }}
                 accessibilityRole="button"
               >
@@ -339,9 +573,66 @@ export function ClimbFilterSheet({ visible, onDismiss, boardName, currentFilters
                   {t('mobile.filter.anyRating')}
                 </Text>
               </Pressable>
-              <StarRating value={localFilters.minRating} onChange={handleMinRatingChange} clearValue={undefined} />
+              <StarRating
+                value={localFilters.minRating}
+                onChange={(value) => setFiltersPatch({ minRating: value })}
+                clearValue={undefined}
+              />
             </View>
-          </View>
+
+            <View style={styles.subsectionGap} />
+            <Text variant="footnote" style={styles.subsectionLabel}>
+              {t('mobile.filter.accuracy.label')}
+            </Text>
+            <RadioGroup options={accuracyOptions} value={accuracyValue} onChange={handleAccuracyChange} />
+          </FilterAccordionSection>
+
+          <FilterAccordionSection
+            label={t('mobile.filter.section.status')}
+            summary={statusSummary}
+            expanded={expandedSection === 'status'}
+            onToggle={() => toggleSection('status')}
+          >
+            <RadioGroup options={statusOptions} value={localFilters.status} onChange={handleStatusChange} />
+          </FilterAccordionSection>
+
+          <FilterAccordionSection
+            label={t('mobile.filter.section.progress')}
+            summary={
+              progressSummaryParts.join(' · ') || (isAuthenticated ? null : t('mobile.filter.signInForProgress'))
+            }
+            expanded={expandedSection === 'progress'}
+            onToggle={() => toggleSection('progress')}
+          >
+            {isAuthenticated ? (
+              <>
+                <SwitchRow
+                  label={t('mobile.filter.progress.hideAttempted')}
+                  value={!!localFilters.hideAttempted}
+                  onValueChange={(value) => setFiltersPatch({ hideAttempted: value || undefined })}
+                />
+                <SwitchRow
+                  label={t('mobile.filter.progress.hideCompleted')}
+                  value={!!localFilters.hideCompleted}
+                  onValueChange={(value) => setFiltersPatch({ hideCompleted: value || undefined })}
+                />
+                <SwitchRow
+                  label={t('mobile.filter.progress.onlyAttempted')}
+                  value={!!localFilters.showOnlyAttempted}
+                  onValueChange={(value) => setFiltersPatch({ showOnlyAttempted: value || undefined })}
+                />
+                <SwitchRow
+                  label={t('mobile.filter.progress.onlyCompleted')}
+                  value={!!localFilters.showOnlyCompleted}
+                  onValueChange={(value) => setFiltersPatch({ showOnlyCompleted: value || undefined })}
+                />
+              </>
+            ) : (
+              <Text variant="footnote" style={styles.signInHint}>
+                {t('mobile.filter.signInForProgress')}
+              </Text>
+            )}
+          </FilterAccordionSection>
 
           <View style={styles.applySection}>
             <Button
@@ -378,13 +669,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing[10],
   },
-  section: {
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-  },
-  sectionLabel: {
-    opacity: 0.6,
+  subsectionLabel: {
+    opacity: 0.55,
+    marginTop: spacing[1],
     marginBottom: spacing[2],
+  },
+  subsectionGap: {
+    height: spacing[4],
   },
   chipRow: {
     flexDirection: 'row',
@@ -415,6 +706,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[4],
+  },
+  tappableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderRadius: 10,
+    minHeight: 44,
+  },
+  tappableRowPressed: {
+    opacity: 0.6,
+  },
+  tappableRowTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  tappableRowValue: {
+    opacity: 0.55,
+  },
+  signInHint: {
+    opacity: 0.55,
+    paddingVertical: spacing[2],
   },
   applySection: {
     paddingHorizontal: spacing[4],

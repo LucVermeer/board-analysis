@@ -595,7 +595,59 @@
       "minRating": "Min rating",
       "anyRating": "Any",
       "apply": "Apply filters",
-      "reset": "Reset"
+      "reset": "Reset",
+      "section": {
+        "sort": "Sort",
+        "climb": "Climb",
+        "quality": "Quality",
+        "status": "Status",
+        "progress": "Progress"
+      },
+      "sort": {
+        "ascents": "Ascents",
+        "quality": "Quality",
+        "difficulty": "Difficulty",
+        "name": "Name",
+        "popular": "Popular",
+        "creation": "Newest"
+      },
+      "sortOrderLabel": "Order",
+      "sortOrder": {
+        "asc": "Ascending",
+        "desc": "Descending"
+      },
+      "status": {
+        "any": "Any",
+        "drafts": "Drafts",
+        "established": "Established",
+        "projects": "Projects"
+      },
+      "accuracy": {
+        "label": "Grade accuracy",
+        "off": "Off",
+        "loose": "Loose",
+        "moderate": "Moderate",
+        "tight": "Tight"
+      },
+      "progress": {
+        "hideAttempted": "Hide attempted",
+        "hideCompleted": "Hide completed",
+        "onlyAttempted": "Only attempted",
+        "onlyCompleted": "Only completed"
+      },
+      "signInForDrafts": "Sign in to filter your drafts",
+      "signInForProgress": "Sign in to filter by your ticks",
+      "setters": "Setters",
+      "none": "None",
+      "tall": "Tall climbs only",
+      "tallDescription": "Reach the top of the wall",
+      "wide": "Wide climbs only",
+      "wideDescription": "Use the 10x10 side expansion",
+      "searchSetters": "Search setters",
+      "noSetters": "No setters yet",
+      "cancel": "Cancel",
+      "done": "Done",
+      "clearAll": "Clear all"
     },
     "search": {
       "recentFilters": "Recent",
@@ -605,7 +657,11 @@
       "gradeMax": "Up to {{grade}}",
       "ascents": "{{count}}+ ascents",
       "rating": "{{count}}+ stars",
-      "more": "+{{count}} more"
+      "more": "+{{count}} more",
+      "settersCount_one": "{{count}} setter",
+      "settersCount_other": "{{count}} setters",
+      "climbsCount_one": "{{count}} climb",
+      "climbsCount_other": "{{count}} climbs"
     },
     "climbRow": {
       "addToQueue": "Add to queue",

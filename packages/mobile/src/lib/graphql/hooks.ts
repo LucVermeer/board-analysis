@@ -8,6 +8,7 @@ import type {
   Angle,
   MyBoardsInput,
   SearchBoardsInput,
+  SetterStatsInput,
   UserProfile,
   SessionSummary,
 } from '@boardsesh/shared-schema';
@@ -23,6 +24,7 @@ import {
   GET_ANGLES,
   SEARCH_CLIMBS,
   SEARCH_CLIMBS_COUNT,
+  GET_SETTER_STATS,
   GET_CLIMB,
   GET_SESSION_SUMMARY,
   END_SESSION,
@@ -38,6 +40,7 @@ import {
   type GetAnglesQueryResponse,
   type SearchClimbsQueryResponse,
   type SearchClimbsCountQueryResponse,
+  type GetSetterStatsQueryResponse,
   type GetClimbQueryResponse,
   type GetClimbQueryVariables,
   type GetSessionSummaryQueryResponse,
@@ -152,6 +155,16 @@ export function useSearchClimbsCount(input: ClimbSearchInput, enabled = true) {
     queryFn: () => getHttpClient().request<SearchClimbsCountQueryResponse>(SEARCH_CLIMBS_COUNT, { input }),
     select: (data) => data.searchClimbs.totalCount,
     enabled,
+  });
+}
+
+export function useSetterStats(input: SetterStatsInput, enabled = true) {
+  return useQuery({
+    queryKey: ['setterStats', input],
+    queryFn: () => getHttpClient().request<GetSetterStatsQueryResponse>(GET_SETTER_STATS, { input }),
+    select: (data) => data.setterStats,
+    enabled,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

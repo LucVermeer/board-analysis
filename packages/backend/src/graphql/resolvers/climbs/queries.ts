@@ -3,12 +3,15 @@ import {
   type CheckMoonBoardClimbDuplicatesInput,
   type ClimbSearchInput,
   type ConnectionContext,
+  type SetterStat,
+  type SetterStatsInput,
   type SimilarClimb,
   type SimilarClimbsInput,
   SUPPORTED_BOARDS,
   USER_SPECIFIC_SEARCH_PARAMS,
 } from '@boardsesh/shared-schema';
 import type { BoardName } from '@boardsesh/board-constants';
+import { getSetterStats } from '@boardsesh/db/queries';
 import { logger } from '../../../utils/logger';
 import {
   type ClimbSearchParams,
@@ -24,10 +27,11 @@ import {
   CheckMoonBoardClimbDuplicatesInputSchema,
   ClimbSearchInputSchema,
   ExternalUUIDSchema,
+  SetterStatsInputSchema,
   SimilarClimbsInputSchema,
 } from '../../../validation/schemas';
 import type { ClimbSearchContext } from '../shared/types';
-import { db } from '../../../db/client';
+import { db, dbRead } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
 
 // Debug logging flag - only log in development
@@ -228,6 +232,50 @@ export const climbQueries = {
       userId,
       _isCacheable: !hasUserSpecificFilters && isCacheableBoard,
     };
+  },
+
+  /**
+   * Get setter usernames with climb counts for autocomplete in the search drawer.
+   * MoonBoard has no setter data — returns an empty list to match the REST behaviour.
+   */
+  setterStats: async (
+    _: unknown,
+    { input }: { input: SetterStatsInput },
+    ctx: ConnectionContext,
+  ): Promise<SetterStat[]> => {
+    await applyRateLimit(ctx, 60, 'setter-stats');
+    const validated = validateInput(SetterStatsInputSchema, input, 'input');
+
+    if (!isValidBoardName(validated.boardName)) {
+      throw new Error(`Invalid board name: ${validated.boardName}. Must be one of: ${SUPPORTED_BOARDS.join(', ')}`);
+    }
+
+    // MoonBoard doesn't have database tables for setter stats — return empty results
+    // to match the legacy REST endpoint.
+    if (validated.boardName === 'moonboard') {
+      return [];
+    }
+
+    // Parse setIds from comma-separated string (same pattern as searchClimbs)
+    const setIds = validated.setIds
+      .split(',')
+      .map((id) => parseInt(id.trim(), 10))
+      .filter((id) => !isNaN(id));
+
+    const params: ParsedBoardRouteParameters = {
+      board_name: validated.boardName,
+      layout_id: validated.layoutId,
+      size_id: validated.sizeId,
+      set_ids: setIds,
+      angle: validated.angle,
+    };
+
+    const rows = await getSetterStats(dbRead, params, validated.search);
+
+    return rows.map((row) => ({
+      setterUsername: row.setter_username,
+      climbCount: row.climb_count,
+    }));
   },
 
   /**

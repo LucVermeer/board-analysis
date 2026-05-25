@@ -3125,6 +3125,11 @@ export type Query = {
   /** Get a setter profile by username. */
   setterProfile?: Maybe<SetterProfile>;
   /**
+   * Setter usernames with climb counts for the given board, optionally filtered by username substring.
+   * Powers the setter filter autocomplete.
+   */
+  setterStats: Array<SetterStat>;
+  /**
    * Find climbs on the same board+layout with at least `threshold` Jaccard
    * similarity over hold positions (hold_id only, state-agnostic). Used by:
    * - The playview drawer's "Similar climbs" section at threshold 0.5 —
@@ -3543,6 +3548,11 @@ export type QuerySetterClimbsFullArgs = {
 /** Root query type for all read operations. */
 export type QuerySetterProfileArgs = {
   input: SetterProfileInput;
+};
+
+/** Root query type for all read operations. */
+export type QuerySetterStatsArgs = {
+  input: SetterStatsInput;
 };
 
 /** Root query type for all read operations. */
@@ -4369,6 +4379,37 @@ export type SetterSearchResult = {
   isFollowedByMe: Scalars['Boolean']['output'];
   /** The setter's Aurora username */
   username: Scalars['String']['output'];
+};
+
+/**
+ * A setter username paired with the number of climbs they've authored
+ * for a given board configuration and angle.
+ */
+export type SetterStat = {
+  __typename?: 'SetterStat';
+  /** Number of climbs authored by this setter for the board configuration */
+  climbCount: Scalars['Int']['output'];
+  /** Setter's username */
+  setterUsername: Scalars['String']['output'];
+};
+
+/**
+ * Input for fetching setter usernames with their climb counts.
+ * Used to power the setter filter autocomplete in the search drawer.
+ */
+export type SetterStatsInput = {
+  /** Board angle in degrees */
+  angle: Scalars['Int']['input'];
+  /** Board type (e.g., 'kilter', 'tension') */
+  boardName: Scalars['String']['input'];
+  /** Layout ID */
+  layoutId: Scalars['Int']['input'];
+  /** Case-insensitive substring filter on setter username (for autocomplete) */
+  search?: InputMaybe<Scalars['String']['input']>;
+  /** Comma-separated set IDs */
+  setIds: Scalars['String']['input'];
+  /** Size ID */
+  sizeId: Scalars['Int']['input'];
 };
 
 export type SimilarClimb = {
@@ -5371,6 +5412,8 @@ export type ResolversTypes = ResolversObject<{
   SetterProfile: ResolverTypeWrapper<SetterProfile>;
   SetterProfileInput: SetterProfileInput;
   SetterSearchResult: ResolverTypeWrapper<SetterSearchResult>;
+  SetterStat: ResolverTypeWrapper<SetterStat>;
+  SetterStatsInput: SetterStatsInput;
   SimilarClimb: ResolverTypeWrapper<SimilarClimb>;
   SimilarClimbsInput: SimilarClimbsInput;
   SmartPlaylistCount: ResolverTypeWrapper<SmartPlaylistCount>;
@@ -5620,6 +5663,8 @@ export type ResolversParentTypes = ResolversObject<{
   SetterProfile: SetterProfile;
   SetterProfileInput: SetterProfileInput;
   SetterSearchResult: SetterSearchResult;
+  SetterStat: SetterStat;
+  SetterStatsInput: SetterStatsInput;
   SimilarClimb: SimilarClimb;
   SimilarClimbsInput: SimilarClimbsInput;
   SmartPlaylistCount: SmartPlaylistCount;
@@ -7663,6 +7708,12 @@ export type QueryResolvers<
     ContextType,
     RequireFields<QuerySetterProfileArgs, 'input'>
   >;
+  setterStats?: Resolver<
+    Array<ResolversTypes['SetterStat']>,
+    ParentType,
+    ContextType,
+    RequireFields<QuerySetterStatsArgs, 'input'>
+  >;
   similarClimbs?: Resolver<
     Array<ResolversTypes['SimilarClimb']>,
     ParentType,
@@ -8195,6 +8246,15 @@ export type SetterSearchResultResolvers<
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
+export type SetterStatResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['SetterStat'] = ResolversParentTypes['SetterStat'],
+> = ResolversObject<{
+  climbCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  setterUsername?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
 export type SimilarClimbResolvers<
   ContextType = ConnectionContext,
   ParentType extends ResolversParentTypes['SimilarClimb'] = ResolversParentTypes['SimilarClimb'],
@@ -8628,6 +8688,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   SetterClimbsConnection?: SetterClimbsConnectionResolvers<ContextType>;
   SetterProfile?: SetterProfileResolvers<ContextType>;
   SetterSearchResult?: SetterSearchResultResolvers<ContextType>;
+  SetterStat?: SetterStatResolvers<ContextType>;
   SimilarClimb?: SimilarClimbResolvers<ContextType>;
   SmartPlaylistCount?: SmartPlaylistCountResolvers<ContextType>;
   SmartPlaylistMeta?: SmartPlaylistMetaResolvers<ContextType>;

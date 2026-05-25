@@ -184,4 +184,34 @@ export const climbTypeDefs = /* GraphQL */ `
     "Whether there are more results available"
     hasMore: Boolean!
   }
+
+  """
+  Input for fetching setter usernames with their climb counts.
+  Used to power the setter filter autocomplete in the search drawer.
+  """
+  input SetterStatsInput {
+    "Board type (e.g., 'kilter', 'tension')"
+    boardName: String!
+    "Layout ID"
+    layoutId: Int!
+    "Size ID"
+    sizeId: Int!
+    "Comma-separated set IDs"
+    setIds: String!
+    "Board angle in degrees"
+    angle: Int!
+    "Case-insensitive substring filter on setter username (for autocomplete)"
+    search: String
+  }
+
+  """
+  A setter username paired with the number of climbs they've authored
+  for a given board configuration and angle.
+  """
+  type SetterStat {
+    "Setter's username"
+    setterUsername: String!
+    "Number of climbs authored by this setter for the board configuration"
+    climbCount: Int!
+  }
 `;

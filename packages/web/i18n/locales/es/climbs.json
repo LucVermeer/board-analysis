@@ -595,7 +595,59 @@
       "minRating": "Mín valoración",
       "anyRating": "Todos",
       "apply": "Aplicar filtros",
-      "reset": "Restablecer"
+      "reset": "Restablecer",
+      "section": {
+        "sort": "Orden",
+        "climb": "Vía",
+        "quality": "Calidad",
+        "status": "Estado",
+        "progress": "Progreso"
+      },
+      "sort": {
+        "ascents": "Ascensos",
+        "quality": "Calidad",
+        "difficulty": "Dificultad",
+        "name": "Nombre",
+        "popular": "Populares",
+        "creation": "Más recientes"
+      },
+      "sortOrderLabel": "Dirección",
+      "sortOrder": {
+        "asc": "Ascendente",
+        "desc": "Descendente"
+      },
+      "status": {
+        "any": "Cualquiera",
+        "drafts": "Borradores",
+        "established": "Publicadas",
+        "projects": "Proyectos"
+      },
+      "accuracy": {
+        "label": "Precisión del grado",
+        "off": "Desactivado",
+        "loose": "Flexible",
+        "moderate": "Moderada",
+        "tight": "Estricta"
+      },
+      "progress": {
+        "hideAttempted": "Ocultar intentadas",
+        "hideCompleted": "Ocultar completadas",
+        "onlyAttempted": "Solo intentadas",
+        "onlyCompleted": "Solo completadas"
+      },
+      "signInForDrafts": "Inicia sesión para filtrar tus borradores",
+      "signInForProgress": "Inicia sesión para filtrar por tus envíos",
+      "setters": "Equipadores",
+      "none": "Ninguno",
+      "tall": "Solo vías altas",
+      "tallDescription": "Alcanzar el techo",
+      "wide": "Solo vías anchas",
+      "wideDescription": "Usan la extensión 10x10",
+      "searchSetters": "Buscar equipadores",
+      "noSetters": "Sin equipadores",
+      "cancel": "Cancelar",
+      "done": "Listo",
+      "clearAll": "Borrar todo"
     },
     "search": {
       "recentFilters": "Recientes",
@@ -605,7 +657,11 @@
       "gradeMax": "Hasta {{grade}}",
       "ascents": "{{count}}+ ascensos",
       "rating": "{{count}}+ estrellas",
-      "more": "+{{count}} más"
+      "more": "+{{count}} más",
+      "settersCount_one": "{{count}} equipador",
+      "settersCount_other": "{{count}} equipadores",
+      "climbsCount_one": "{{count}} vía",
+      "climbsCount_other": "{{count}} vías"
     },
     "climbRow": {
       "addToQueue": "Añadir a la cola",

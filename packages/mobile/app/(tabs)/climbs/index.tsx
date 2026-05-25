@@ -4,6 +4,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
+import { toClimbSearchInput } from '@boardsesh/climb-filters';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
@@ -18,6 +19,7 @@ import { PlayDrawer, type PlayDrawerHandle } from '../../../src/components/play-
 import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { useDefaultBoard, useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { useAuth } from '../../../src/providers/auth-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import {
@@ -113,12 +115,16 @@ export default function ClimbList() {
     };
   }, []);
 
-  // Load recent filters on mount
+  const { isAuthenticated } = useAuth();
+
+  // Load recent filters on mount. Pass auth state so auth-gated fields get
+  // stripped from pills written by a prior signed-in session — otherwise a
+  // tapped pill would silently no-op on the backend while looking active.
   useEffect(() => {
-    getRecentFilters()
+    getRecentFilters({ isAuthenticated })
       .then(setRecentFilters)
       .catch(() => {});
-  }, []);
+  }, [isAuthenticated]);
 
   const { data: defaultBoard, isLoading: isBoardLoading } = useDefaultBoard();
 
@@ -163,22 +169,13 @@ export default function ClimbList() {
   }, [debouncedSearch, filters]);
 
   const searchInput = useMemo(
-    () => ({
-      boardName,
-      layoutId,
-      sizeId,
-      setIds,
-      angle,
-      ...(debouncedSearch.length > 0 ? { name: debouncedSearch } : {}),
-      page: pageNumber,
-      pageSize: PAGE_SIZE,
-      sortBy: filters.sortBy,
-      sortOrder: filters.sortOrder,
-      ...(filters.minGrade != null ? { minGrade: filters.minGrade } : {}),
-      ...(filters.maxGrade != null ? { maxGrade: filters.maxGrade } : {}),
-      ...(filters.minAscents != null ? { minAscents: filters.minAscents } : {}),
-      ...(filters.minRating != null ? { minRating: filters.minRating } : {}),
-    }),
+    () =>
+      toClimbSearchInput(
+        filters,
+        { boardName, layoutId, sizeId, setIds, angle },
+        { page: pageNumber, pageSize: PAGE_SIZE },
+        { name: debouncedSearch },
+      ),
     [boardName, layoutId, sizeId, setIds, angle, debouncedSearch, pageNumber, filters],
   );
 
@@ -230,12 +227,12 @@ export default function ClimbList() {
       if (hasActiveFilters(newFilters) || currentSearch.length > 0) {
         const label = getFilterSummary(newFilters, currentSearch, gradesRef.current, t);
         addRecentFilter(label, newFilters, currentSearch)
-          .then(() => getRecentFilters())
+          .then(() => getRecentFilters({ isAuthenticated }))
           .then(setRecentFilters)
           .catch(() => {});
       }
     },
-    [t],
+    [t, isAuthenticated],
   );
 
   const handleApplyRecentFilter = useCallback((pillFilters: ClimbFilters, pillSearchText: string) => {
@@ -353,7 +350,7 @@ export default function ClimbList() {
       <ClimbFilterSheet
         visible={showFilters}
         onDismiss={handleDismissFilters}
-        boardName={boardName}
+        boardConfig={boardConfig}
         currentFilters={filters}
         onApply={handleApplyFilters}
       />

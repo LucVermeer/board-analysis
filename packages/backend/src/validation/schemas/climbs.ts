@@ -216,6 +216,15 @@ export const CheckMoonBoardClimbDuplicatesInputSchema = z.object({
     .max(100),
 });
 
+export const SetterStatsInputSchema = z.object({
+  boardName: BoardNameSchema,
+  layoutId: z.number().int().positive('Layout ID must be positive'),
+  sizeId: z.number().int().positive('Size ID must be positive'),
+  setIds: z.string().min(1, 'Set IDs cannot be empty'),
+  angle: z.number().int().min(0).max(90),
+  search: z.string().max(200).optional(),
+});
+
 export const SimilarClimbsInputSchema = z
   .object({
     boardType: BoardNameSchema,

@@ -1,0 +1,63 @@
+import { and, eq, ilike, sql } from 'drizzle-orm';
+import type { DbInstance } from '../../client/postgres';
+import { boardClimbs, boardClimbStats } from '../../schema/index';
+import type { BoardRouteParams } from './types';
+
+/**
+ * One row in the setter-stats result: a setter's username and how many
+ * climbs they've authored on the given board/layout/angle. Returned by
+ * `getSetterStats` and consumed by the search drawer's setter filter
+ * autocomplete on both web and mobile.
+ */
+export type SetterStat = {
+  setter_username: string;
+  climb_count: number;
+};
+
+/**
+ * Aggregate setter usernames with their climb counts for a board configuration.
+ *
+ * Joins `board_climbs` with `board_climb_stats` so we only count climbs that
+ * actually exist at the requested angle (the inner join drops setters whose
+ * climbs have no stats row at the angle). An optional `searchQuery` filters
+ * setter usernames with a case-insensitive substring match for autocomplete.
+ *
+ * Capped at 50 rows ordered by descending climb count for UI performance.
+ */
+export const getSetterStats = async (
+  db: DbInstance,
+  params: BoardRouteParams,
+  searchQuery?: string,
+): Promise<SetterStat[]> => {
+  const whereConditions = [
+    eq(boardClimbs.boardType, params.board_name),
+    eq(boardClimbs.layoutId, params.layout_id),
+    eq(boardClimbStats.angle, params.angle),
+    sql`${params.size_id} = ANY(${boardClimbs.compatibleSizeIds})`,
+    sql`${boardClimbs.setterUsername} IS NOT NULL`,
+    sql`${boardClimbs.setterUsername} != ''`,
+  ];
+
+  if (searchQuery && searchQuery.trim().length > 0) {
+    whereConditions.push(ilike(boardClimbs.setterUsername, `%${searchQuery}%`));
+  }
+
+  const result = await db
+    .select({
+      setter_username: boardClimbs.setterUsername,
+      climb_count: sql<number>`count(*)::int`,
+    })
+    .from(boardClimbs)
+    .innerJoin(
+      boardClimbStats,
+      and(eq(boardClimbStats.climbUuid, boardClimbs.uuid), eq(boardClimbStats.boardType, params.board_name)),
+    )
+    .where(and(...whereConditions))
+    .groupBy(boardClimbs.setterUsername)
+    .orderBy(sql`count(*) DESC`)
+    .limit(50);
+
+  // Strip any nulls — they're filtered out in the WHERE clause but the
+  // column is nullable in the schema so TS doesn't know that.
+  return result.filter((stat): stat is SetterStat => stat.setter_username !== null);
+};
