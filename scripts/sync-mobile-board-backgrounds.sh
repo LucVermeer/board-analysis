@@ -1,22 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Sync board background images from the web package into the mobile package
-# as bundled Expo assets, then emit a TypeScript manifest mapping the URL
-# suffix (everything after https://www.boardsesh.com/images/) to a
-# require()'d module ID so Metro will pack each file into the IPA/APK.
+# Regenerate the bundled-asset manifest for the React Native app's native
+# board renderer. We do NOT copy or duplicate files — Metro watches the
+# monorepo root (packages/mobile/metro.config.js sets watchFolders to
+# monorepoRoot), so the manifest can require() directly out of
+# packages/web/public/images/. Metro auto-bundles every require()'d
+# asset into the IPA/APK, regardless of assetBundlePatterns.
 #
-# Strategy:
-#   - Mirror the web/public/images/<board>/ tree into
-#     packages/mobile/assets/board-backgrounds/<board>/
-#   - Copy WebP files only (the .png siblings are 3-4x larger and decode
-#     identically on iOS/Android). Fall back to .png when no .webp exists.
-#   - Re-run this script whenever the web image set changes.
+# When the web image set changes, re-run this script and commit the
+# updated manifest. The manifest is small (~300 lines); the underlying
+# assets live in exactly one place (the web package).
+#
+# Preference order per (board, relative path) tuple:
+#   1. .webp variant (3-4x smaller than .png, decoded natively on both
+#      iOS UIImage and Android BitmapFactory)
+#   2. .png fallback (only when no .webp exists)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 WEB_IMAGES="$ROOT_DIR/packages/web/public/images"
-MOBILE_ASSETS="$ROOT_DIR/packages/mobile/assets/board-backgrounds"
 MANIFEST_FILE="$ROOT_DIR/packages/mobile/src/lib/board-backgrounds-manifest.ts"
 
 if [ ! -d "$WEB_IMAGES" ]; then
@@ -24,72 +27,40 @@ if [ ! -d "$WEB_IMAGES" ]; then
   exit 1
 fi
 
-echo "==> Wiping previous bundled assets at $MOBILE_ASSETS"
-rm -rf "$MOBILE_ASSETS"
-mkdir -p "$MOBILE_ASSETS"
+# require() path from MANIFEST_FILE (packages/mobile/src/lib/) up to the
+# monorepo root, then into packages/web/public/images.
+#   packages/mobile/src/lib/  -> ../../../ -> packages/  -> web/public/images
+REQUIRE_PREFIX="../../../web/public/images"
 
-# Track which logical URL suffixes we've already bundled so we can prefer
-# .webp over .png when both exist.
-declare -A BUNDLED
-
-copy_with_preference() {
-  local src_path="$1"  # full path of source file (.png or .webp)
-  local board="$2"     # board name (kilter, tension, etc.)
-  local rel_path="$3"  # path relative to the board dir, e.g. product_sizes_layouts_sets/36-1.png
-
-  # Logical key strips the extension — used to detect "we already bundled
-  # the .webp; skip the .png fallback".
-  local logical_key="$board/${rel_path%.*}"
-
-  if [ -n "${BUNDLED[$logical_key]:-}" ]; then
-    # Already have a (preferred) variant; skip this one.
-    return
+# Pick the preferred variant (.webp first, .png fallback) per logical key
+# (board + path without extension). Output one line per chosen file:
+#   <logical_key>\t<actual_relative_path>
+declare -A chosen
+while IFS= read -r -d '' src_path; do
+  rel_to_images="${src_path#$WEB_IMAGES/}"
+  logical_key="${rel_to_images%.*}"
+  ext="${rel_to_images##*.}"
+  current="${chosen[$logical_key]:-}"
+  if [ -z "$current" ]; then
+    chosen[$logical_key]="$rel_to_images"
+  else
+    current_ext="${current##*.}"
+    # Prefer webp over png
+    if [ "$ext" = "webp" ] && [ "$current_ext" = "png" ]; then
+      chosen[$logical_key]="$rel_to_images"
+    fi
   fi
+done < <(find "$WEB_IMAGES" -type f \( -name '*.webp' -o -name '*.png' \) -print0)
 
-  local ext="${rel_path##*.}"
-  local dest_dir="$MOBILE_ASSETS/$board/$(dirname "$rel_path")"
-  local dest_path="$dest_dir/$(basename "$rel_path")"
+# Sort the chosen relative paths for stable diffs.
+chosen_paths=()
+for logical_key in "${!chosen[@]}"; do
+  chosen_paths+=("${chosen[$logical_key]}")
+done
+IFS=$'\n' sorted_paths=($(printf '%s\n' "${chosen_paths[@]}" | sort))
+unset IFS
 
-  mkdir -p "$dest_dir"
-  cp "$src_path" "$dest_path"
-  BUNDLED[$logical_key]="$board/$rel_path"
-}
-
-echo "==> Syncing webp variants from $WEB_IMAGES"
-# Pass 1: prefer .webp
-while IFS= read -r -d '' webp_path; do
-  rel_to_images="${webp_path#$WEB_IMAGES/}"
-  board="${rel_to_images%%/*}"
-  rel_in_board="${rel_to_images#$board/}"
-  copy_with_preference "$webp_path" "$board" "$rel_in_board"
-done < <(find "$WEB_IMAGES" -type f -name '*.webp' -print0)
-
-echo "==> Syncing png fallbacks for files without webp"
-# Pass 2: .png fallback only when no .webp was bundled at the same logical path
-while IFS= read -r -d '' png_path; do
-  rel_to_images="${png_path#$WEB_IMAGES/}"
-  board="${rel_to_images%%/*}"
-  rel_in_board="${rel_to_images#$board/}"
-  copy_with_preference "$png_path" "$board" "$rel_in_board"
-done < <(find "$WEB_IMAGES" -type f -name '*.png' -print0)
-
-# Write a generated README so collaborators don't hand-edit the dir.
-cat > "$MOBILE_ASSETS/README.md" <<EOF
-# Bundled board background images
-
-This directory is generated by \`scripts/sync-mobile-board-backgrounds.sh\`.
-Do not hand-edit. Re-run the script whenever the web side
-(\`packages/web/public/images/\`) changes.
-
-WebP variants are preferred over PNG when both exist; only the bundled
-files end up in the manifest and the IPA/APK.
-EOF
-
-# ----- Manifest emission -----
-echo "==> Emitting manifest at $MANIFEST_FILE"
-
-# Find all bundled files relative to MOBILE_ASSETS, sorted for stable diffs.
-mapfile -t bundled_files < <(cd "$MOBILE_ASSETS" && find . -type f \( -name '*.webp' -o -name '*.png' \) | sed 's|^\./||' | sort)
+count="${#sorted_paths[@]}"
 
 {
   echo "// AUTO-GENERATED by scripts/sync-mobile-board-backgrounds.sh"
@@ -98,19 +69,18 @@ mapfile -t bundled_files < <(cd "$MOBILE_ASSETS" && find . -type f \( -name '*.w
   echo "// Keys are URL suffixes relative to https://www.boardsesh.com/images/,"
   echo "// e.g. 'kilter/product_sizes_layouts_sets/36-1.webp'. Values are Metro"
   echo "// module IDs produced by require() — Metro auto-bundles every"
-  echo "// require()'d asset into the IPA/APK."
+  echo "// require()'d asset into the IPA/APK. The require paths reach across"
+  echo "// the monorepo into packages/web/public/images, which Metro watches"
+  echo "// via packages/mobile/metro.config.js (watchFolders = monorepoRoot)."
+  echo "// This keeps the canonical asset set in one place (the web package)."
   echo ""
   echo "/* eslint-disable @typescript-eslint/no-require-imports */"
   echo "export const BOARD_BACKGROUND_ASSETS: Record<string, number> = {"
-  for rel in "${bundled_files[@]}"; do
-    echo "  '$rel': require('../../assets/board-backgrounds/$rel'),"
+  for rel in "${sorted_paths[@]}"; do
+    echo "  '$rel': require('$REQUIRE_PREFIX/$rel'),"
   done
   echo "};"
 } > "$MANIFEST_FILE"
 
-asset_count="${#bundled_files[@]}"
-asset_size="$(du -sh "$MOBILE_ASSETS" | cut -f1)"
-
-echo "==> Done"
-echo "    Bundled $asset_count files ($asset_size) at $MOBILE_ASSETS"
-echo "    Manifest: $MANIFEST_FILE"
+echo "==> Wrote $count entries to $MANIFEST_FILE"
+echo "    (No files copied — Metro reads from packages/web/public/images directly.)"
