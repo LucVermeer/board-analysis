@@ -17,7 +17,7 @@ import {
   type SubscribeNewClimbsResponse,
   type UnsubscribeNewClimbsVariables,
   type UnsubscribeNewClimbsResponse,
-} from '@/app/lib/graphql/operations/new-climb-feed';
+} from '@boardsesh/graphql/operations/new-climb-feed';
 
 type SubscribeButtonProps = {
   boardType: string;

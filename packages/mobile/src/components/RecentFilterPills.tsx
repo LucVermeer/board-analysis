@@ -59,17 +59,9 @@ function Pill({
       accessibilityRole="button"
       accessibilityState={{ selected: isActive }}
       accessibilityLabel={filter.label}
-      style={[
-        animatedStyle,
-        styles.pill,
-        isActive ? styles.pillActive : styles.pillInactive,
-      ]}
+      style={[animatedStyle, styles.pill, isActive ? styles.pillActive : styles.pillInactive]}
     >
-      <Icon
-        name="history"
-        size={14}
-        color={isActive ? brandColors.primary : iosSystemColors.systemGray}
-      />
+      <Icon name="history" size={14} color={isActive ? brandColors.primary : iosSystemColors.systemGray} />
       <Text
         variant="caption1"
         color={isActive ? brandColors.primary : undefined}

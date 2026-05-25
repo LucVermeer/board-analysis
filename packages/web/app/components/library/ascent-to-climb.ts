@@ -1,5 +1,5 @@
 import type { Climb } from '@/app/lib/types';
-import type { AscentFeedItem } from '@/app/lib/graphql/operations/ticks';
+import type { AscentFeedItem } from '@boardsesh/graphql/operations/ticks';
 
 export function ascentFeedItemToClimb(item: AscentFeedItem): Climb {
   return {

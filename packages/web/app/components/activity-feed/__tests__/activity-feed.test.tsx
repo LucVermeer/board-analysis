@@ -27,7 +27,7 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: vi.fn(),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   GET_SESSION_GROUPED_FEED: 'GET_SESSION_GROUPED_FEED',
 }));
 

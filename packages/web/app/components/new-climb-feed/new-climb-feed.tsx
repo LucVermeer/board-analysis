@@ -16,7 +16,7 @@ import {
   type GetNewClimbFeedResponse,
   type GetNewClimbFeedVariables,
   type NewClimbCreatedSubscriptionPayload,
-} from '@/app/lib/graphql/operations/new-climb-feed';
+} from '@boardsesh/graphql/operations/new-climb-feed';
 import type { NewClimbFeedItem as NewClimbFeedItemType, NewClimbFeedResult } from '@boardsesh/shared-schema';
 import NewClimbFeedItem from './new-climb-feed-item';
 import SubscribeButton from './subscribe-button';

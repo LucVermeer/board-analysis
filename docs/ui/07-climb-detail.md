@@ -9,6 +9,7 @@
 **Mobile status:** Stack screen pushed from climb list
 
 **Layout:**
+
 - **Play mode:** Single-column scroll layout. Above-fold (board + header) renders first. Below-fold (collapsible sections) deferred via `startTransition` to avoid blocking initial paint.
 - **Info mode:** Two-column on desktop (breakpoint 1024px), single-column on mobile. Left: board + sections. Right: sidebar with sections (desktop only).
 
@@ -32,6 +33,7 @@
 - **Right (flex-shrink 0, min-width 48px):** Empty spacer for visual centering of name
 
 **Data sources:**
+
 - `climb` object with `difficulty`, `name`, `quality_average`, `ascensionist_count`, `setter_username`, `benchmark_difficulty`, `is_no_match`
 - Optional `communityGrade` override from `climb_community_status` table
 - `useGradeFormat()` for board-specific grade formatting and coloring
@@ -79,15 +81,16 @@ Sections are rendered via `CollapsibleSection` component. Each section has a lab
 All sections are `lazy: true` (content mounts only when expanded).
 
 **Data sources:**
+
 - `betaLinks` query: `GET_BETA_LINKS` (GraphQL HTTP, staleTime 5min)
 - `useLogbookSummary(climbUuid)` for logbook section summary
 - `searchParams.get('proposalUuid')` for highlighting a specific proposal
 - `climbUuid`, `boardType`, `angle`, `layoutId` passed to each section
 
 **Mobile adaptation notes:**
+
 - Collapsible sections: `react-native-reanimated` `useAnimatedStyle` for height animation
 - Beta videos: `react-native-webview` for TikTok/Instagram embeds, or native video player
 - Charts: `react-native-chart-kit` or `victory-native`
 
 ---
-

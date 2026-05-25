@@ -21,7 +21,7 @@ import { buildInstagramCaption, copyAndOpenInstagram, getBoardDisplayName } from
 import type { BetaLink } from '@/app/lib/api-wrappers/sync-api-types';
 import { dedupeBetaLinks, mapBetaLinksResponse } from '@/app/lib/beta-video-url';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_BETA_LINKS } from '@/app/lib/graphql/operations/beta-links';
+import { GET_BETA_LINKS } from '@boardsesh/graphql/operations/beta-links';
 import { themeTokens } from '@/app/theme/theme-config';
 
 export type InstagramPostingTarget = {

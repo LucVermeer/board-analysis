@@ -31,7 +31,7 @@ import {
   type AddCommentMutationResponse,
   type GetCommentsQueryVariables,
   type GetCommentsQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { themeTokens } from '@/app/theme/theme-config';
 import { ConfirmPopover } from '@/app/components/ui/confirm-popover';
 import VoteButton from './vote-button';

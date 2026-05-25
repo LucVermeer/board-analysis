@@ -194,9 +194,7 @@ export function tryGetBackgroundPathsSync(params: BackgroundParams): BackgroundL
  * complete. Returns null only when `getBoardRenderData` is itself
  * missing (unknown board).
  */
-export async function ensureBackgroundsCached(
-  params: BackgroundParams,
-): Promise<BackgroundLookupResult | null> {
+export async function ensureBackgroundsCached(params: BackgroundParams): Promise<BackgroundLookupResult | null> {
   const renderData = getBoardRenderData(params);
   if (!renderData) return null;
 

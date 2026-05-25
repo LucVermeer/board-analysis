@@ -6,7 +6,7 @@ import {
   SUBMIT_APP_FEEDBACK,
   type SubmitAppFeedbackMutationVariables,
   type SubmitAppFeedbackMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { SubmitAppFeedbackInput, FeedbackContextInput } from '@boardsesh/shared-schema';
 import { getPlatform } from '@/app/lib/ble/capacitor-utils';
 import { getAppVersion } from '@/app/lib/app-info';

@@ -25,7 +25,7 @@ vi.mock('@/app/hooks/use-debounced-value', () => ({
   useDebouncedValue: <T>(v: T) => v,
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   SEARCH_BOARDS: 'SEARCH_BOARDS_QUERY',
 }));
 

@@ -35,12 +35,12 @@ import { useTranslation } from 'react-i18next';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_COMMUNITY_ROLES, GRANT_ROLE, REVOKE_ROLE } from '@/app/lib/graphql/operations/proposals';
+import { GET_COMMUNITY_ROLES, GRANT_ROLE, REVOKE_ROLE } from '@boardsesh/graphql/operations/proposals';
 import {
   SEARCH_USERS,
   type SearchUsersQueryResponse,
   type SearchUsersQueryVariables,
-} from '@/app/lib/graphql/operations/social';
+} from '@boardsesh/graphql/operations/social';
 import type { CommunityRoleAssignment, CommunityRoleType } from '@boardsesh/shared-schema';
 
 type UserResult = SearchUsersQueryResponse['searchUsers']['results'][number]['user'];

@@ -77,15 +77,11 @@ describe('buildCacheKey', () => {
   });
 
   it('produces different keys for different frames', () => {
-    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(
-      buildCacheKey('kilter', 1, 10, '24', 'p2r43'),
-    );
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(buildCacheKey('kilter', 1, 10, '24', 'p2r43'));
   });
 
   it('produces different keys for different boards', () => {
-    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(
-      buildCacheKey('tension', 1, 10, '24', 'p1r42'),
-    );
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(buildCacheKey('tension', 1, 10, '24', 'p1r42'));
   });
 
   it('is deterministic', () => {
@@ -95,9 +91,7 @@ describe('buildCacheKey', () => {
   });
 
   it('does not collide on similar parameter values', () => {
-    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(
-      buildCacheKey('kilter', 11, 0, '24', 'p1r42'),
-    );
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).not.toBe(buildCacheKey('kilter', 11, 0, '24', 'p1r42'));
   });
 
   it('produces a bounded-length key for very long frame strings', () => {
@@ -112,17 +106,13 @@ describe('buildCacheKey', () => {
     // '25,24' and '24,25' describe the same set selection — they must hash
     // to the same key so we don't double-render and double-cache the same
     // climb. The canonical form is ascending numeric.
-    expect(buildCacheKey('kilter', 1, 10, '24,25', 'p1r42')).toBe(
-      buildCacheKey('kilter', 1, 10, '25,24', 'p1r42'),
-    );
+    expect(buildCacheKey('kilter', 1, 10, '24,25', 'p1r42')).toBe(buildCacheKey('kilter', 1, 10, '25,24', 'p1r42'));
   });
 
   it('drops zero/empty setId entries during canonicalization', () => {
     // Mirrors getBoardConfig's split(',').map(Number).filter(Boolean) so the
     // cache key matches the config the renderer actually uses.
-    expect(buildCacheKey('kilter', 1, 10, '0,24,25', 'p1r42')).toBe(
-      buildCacheKey('kilter', 1, 10, '24,25', 'p1r42'),
-    );
+    expect(buildCacheKey('kilter', 1, 10, '0,24,25', 'p1r42')).toBe(buildCacheKey('kilter', 1, 10, '24,25', 'p1r42'));
   });
 });
 
@@ -141,27 +131,19 @@ describe('buildBoardKey', () => {
   });
 
   it('differs when boardName changes', () => {
-    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(
-      buildBoardKey('tension', 1, 10, '24,25'),
-    );
+    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(buildBoardKey('tension', 1, 10, '24,25'));
   });
 
   it('differs when layoutId changes', () => {
-    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(
-      buildBoardKey('kilter', 2, 10, '24,25'),
-    );
+    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(buildBoardKey('kilter', 2, 10, '24,25'));
   });
 
   it('differs when sizeId changes', () => {
-    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(
-      buildBoardKey('kilter', 1, 11, '24,25'),
-    );
+    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(buildBoardKey('kilter', 1, 11, '24,25'));
   });
 
   it('differs when setIds changes', () => {
-    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(
-      buildBoardKey('kilter', 1, 10, '26,27'),
-    );
+    expect(buildBoardKey('kilter', 1, 10, '24,25')).not.toBe(buildBoardKey('kilter', 1, 10, '26,27'));
   });
 
   it('does not collide on similar numeric values', () => {
@@ -215,9 +197,7 @@ describe('getOrStartInflightRender', () => {
   });
 
   it('removes the entry when the render rejects, without surfacing as unhandled', async () => {
-    const promise = getOrStartInflightRender('key-a', () =>
-      Promise.reject(new Error('render failed')),
-    );
+    const promise = getOrStartInflightRender('key-a', () => Promise.reject(new Error('render failed')));
     // Caller is expected to handle the rejection — match the hook's
     // .catch(() => {}) pattern.
     await expect(promise).rejects.toThrow('render failed');
@@ -257,9 +237,7 @@ describe('renderedOverlays warm-up from disk cache', () => {
   it('exposes the populated map so a fresh hook init can hit it synchronously', () => {
     expect(_renderedOverlaysForTests).toBeInstanceOf(Map);
     _renderedOverlaysForTests.set('v2_kilter_1_10_24_deadbeef', 'file:///prior/session.png');
-    expect(_renderedOverlaysForTests.get('v2_kilter_1_10_24_deadbeef')).toBe(
-      'file:///prior/session.png',
-    );
+    expect(_renderedOverlaysForTests.get('v2_kilter_1_10_24_deadbeef')).toBe('file:///prior/session.png');
     _renderedOverlaysForTests.delete('v2_kilter_1_10_24_deadbeef');
   });
 

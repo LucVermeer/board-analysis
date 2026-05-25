@@ -28,7 +28,7 @@ vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: vi.fn() }),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   VOTE: 'VOTE',
   GET_VOTE_SUMMARY: 'GET_VOTE_SUMMARY',
 }));

@@ -17,7 +17,7 @@ import {
   GET_USER_PROFILE_STATS,
   type GetUserProfileStatsQueryVariables,
   type GetUserProfileStatsQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { getDifficultyMapping, sortGrades } from '@/app/profile/[user_id]/utils/profile-constants';
 import { V_GRADE_COLORS, FONT_GRADE_COLORS, getGradeColorWithOpacity } from '@/app/lib/grade-colors';
 import { useGradeFormat } from '@/app/hooks/use-grade-format';

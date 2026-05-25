@@ -7,7 +7,7 @@ import {
   CREATE_SESSION,
   type CreateSessionInput,
   type CreateSessionResponse,
-} from '@/app/lib/graphql/operations/create-session';
+} from '@boardsesh/graphql/operations/create-session';
 import type { SessionCreationFormData } from '@/app/components/session-creation/session-creation-form';
 import { isNativeApp } from '@/app/lib/ble/capacitor-utils';
 

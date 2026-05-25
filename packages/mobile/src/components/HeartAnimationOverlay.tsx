@@ -34,11 +34,14 @@ const HeartAnimationOverlay = React.memo(function HeartAnimationOverlay({
       );
       opacity.value = withSequence(
         withTiming(1, { duration: 100 }),
-        withDelay(600, withTiming(0, { duration: 500 }, (finished) => {
-          if (finished) {
-            runOnJS(onDismiss)();
-          }
-        })),
+        withDelay(
+          600,
+          withTiming(0, { duration: 500 }, (finished) => {
+            if (finished) {
+              runOnJS(onDismiss)();
+            }
+          }),
+        ),
       );
     } else {
       scale.value = 0;

@@ -27,7 +27,7 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: vi.fn(),
 }));
 
-vi.mock('@/app/lib/graphql/operations/proposals', () => ({
+vi.mock('@boardsesh/graphql/operations/proposals', () => ({
   BROWSE_PROPOSALS: 'BROWSE_PROPOSALS',
 }));
 

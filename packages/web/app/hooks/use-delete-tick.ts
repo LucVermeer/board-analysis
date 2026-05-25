@@ -9,7 +9,7 @@ import {
   DELETE_TICK,
   type DeleteTickMutationVariables,
   type DeleteTickMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 
 /**
  * Hook to delete a tick (logbook entry) via GraphQL mutation.

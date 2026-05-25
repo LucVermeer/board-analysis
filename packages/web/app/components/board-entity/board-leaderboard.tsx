@@ -21,7 +21,7 @@ import {
   GET_BOARD_LEADERBOARD,
   type GetBoardLeaderboardQueryResponse,
   type GetBoardLeaderboardQueryVariables,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { themeTokens } from '@/app/theme/theme-config';
 
 type Period = 'week' | 'month' | 'year' | 'all';

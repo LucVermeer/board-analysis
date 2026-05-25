@@ -3,7 +3,7 @@ import isoWeek from 'dayjs/plugin/isoWeek';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import { parseTickTime, tickTimeMs } from '@/app/lib/format-tick-time';
-import type { GetUserProfileStatsQueryResponse } from '@/app/lib/graphql/operations';
+import type { GetUserProfileStatsQueryResponse } from '@boardsesh/graphql/operations';
 import type { CssBarChartBar, GroupedBar } from '@/app/components/charts/css-bar-chart';
 import { themeTokens } from '@/app/theme/theme-config';
 import { type GradeDisplayFormat } from '@/app/lib/grade-colors';

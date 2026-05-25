@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_MY_ROLES } from '@/app/lib/graphql/operations/proposals';
+import { GET_MY_ROLES } from '@boardsesh/graphql/operations/proposals';
 import type { CommunityRoleAssignment } from '@boardsesh/shared-schema';
 import RoleManagement from '@/app/components/admin/role-management';
 import CommunitySettingsPanel from '@/app/components/admin/community-settings-panel';

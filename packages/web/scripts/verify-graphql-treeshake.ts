@@ -27,9 +27,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
+const repoRoot = join(webRoot, '..', '..');
 const chunksDir = join(webRoot, '.next', 'static', 'chunks');
-const gqlPath = join(webRoot, 'app', 'lib', 'graphql', 'generated', 'gql.ts');
-const operationsDir = join(webRoot, 'app', 'lib', 'graphql', 'operations');
+const gqlPath = join(repoRoot, 'packages', 'shared', 'graphql', 'src', 'generated', 'gql.ts');
+const operationsDir = join(repoRoot, 'packages', 'shared', 'graphql', 'src', 'operations');
 
 function fail(message: string): never {
   console.error(`verify-graphql-treeshake: ${message}`);

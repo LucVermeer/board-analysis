@@ -157,10 +157,7 @@ export function _runWarmupForTests(): void {
  * (alongside _inflightRendersForTests) so the dedup + cap contract can be
  * unit tested without spinning up a React renderer.
  */
-export function getOrStartInflightRender(
-  cacheKey: string,
-  startRender: () => Promise<string>,
-): Promise<string> {
+export function getOrStartInflightRender(cacheKey: string, startRender: () => Promise<string>): Promise<string> {
   const existing = inflightRenders.get(cacheKey);
   if (existing) return existing;
 
@@ -257,12 +254,7 @@ export function buildCacheKey(
  * hook instance but swaps in new props) can't surface stale paths from
  * the previous climb's board.
  */
-export function buildBoardKey(
-  boardName: string,
-  layoutId: number,
-  sizeId: number,
-  setIds: string,
-): string {
+export function buildBoardKey(boardName: string, layoutId: number, sizeId: number, setIds: string): string {
   return `${boardName}-${layoutId}-${sizeId}-${setIds}`;
 }
 
@@ -400,9 +392,11 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   //     resolve. Surfaced to the consumer so it can render visible
   //     placeholder gaps — silently dropping a layer is the exact
   //     failure mode the no-network rule made dangerous.
-  const [storedBackgrounds, setStoredBackgrounds] = useState<
-    { key: string; paths: string[]; missingCount: number } | null
-  >(() => {
+  const [storedBackgrounds, setStoredBackgrounds] = useState<{
+    key: string;
+    paths: string[];
+    missingCount: number;
+  } | null>(() => {
     const sync = tryGetBackgroundPathsSync({
       boardName,
       layoutId,
@@ -550,9 +544,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
   const overlayUri = nativeRender?.key === currentCacheKey ? nativeRender.uri : null;
   // Same guard for backgrounds: a stored entry from a prior boardKey
   // (FlashList row recycle case) must not bleed through to the new climb.
-  const backgroundPaths =
-    storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.paths : [];
-  const missingBackgroundCount =
-    storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.missingCount : 0;
+  const backgroundPaths = storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.paths : [];
+  const missingBackgroundCount = storedBackgrounds?.key === currentBoardKey ? storedBackgrounds.missingCount : 0;
   return { overlayUri, backgroundPaths, missingBackgroundCount };
 }

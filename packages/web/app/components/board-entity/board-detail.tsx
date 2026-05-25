@@ -39,7 +39,7 @@ import {
   type DeleteBoardMutationResponse,
   type LinkBoardToGymMutationVariables,
   type LinkBoardToGymMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { useSession } from 'next-auth/react';
 import { themeTokens } from '@/app/theme/theme-config';
 import FitnessCenterOutlined from '@mui/icons-material/FitnessCenterOutlined';

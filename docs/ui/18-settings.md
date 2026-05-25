@@ -5,6 +5,7 @@
 **Layout:** Card with "Profile" title and "Manage your profile" subtitle.
 
 **Avatar uploader:**
+
 - 96x96 `Avatar` preview.
 - "Upload" / "Change" outlined button (toggles based on whether an avatar exists).
 - "Remove" outlined button (visible when an avatar is set).
@@ -14,13 +15,16 @@
 - Hint text below avatar buttons.
 
 **Display Name:**
+
 - `TextField` with person icon adornment, max 100 chars, placeholder text.
 
 **Instagram Profile URL:**
+
 - `TextField` with Instagram icon adornment.
 - Validated against `instagram.com/<username>` pattern.
 
 **Email:**
+
 - `TextField`, disabled/read-only, person icon adornment.
 - Helper text explaining it cannot be changed.
 
@@ -33,10 +37,12 @@
 Card with "Display" title and subtitle.
 
 **Grade Format Toggle:**
+
 - `ToggleButtonGroup` with two options: "V-Grade" (V3, V6) and "Font" (6A, 7C+).
 - Persisted via `useGradeFormat` hook (IndexedDB).
 
 **Apple Health Integration** (iOS only, conditionally rendered):
+
 - `FormControlLabel` with `Switch` toggle.
 - Label and subtitle text.
 - Only visible when `isHealthKitAvailable()` returns true.
@@ -48,10 +54,12 @@ Card with "Display" title and subtitle.
 **Component:** `SetPasswordSection`
 
 **When password is set:**
+
 - Card with green checkmark icon + "Password Enabled" title.
 - Description showing the email address.
 
 **When password is not set:**
+
 - Card with "Set Password" title and description.
 - Info alert showing linked OAuth providers (Google, Apple, Facebook).
 - Form with:
@@ -69,6 +77,7 @@ Card with "Display" title and subtitle.
 Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 
 **Not Connected state:**
+
 - Board name + "Board" suffix as title.
 - Description text (Kilter has special "shutdown" text).
 - Buttons:
@@ -77,6 +86,7 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
   - "Request Data" outlined button (Kilter only): Opens pre-filled mailto link to Aurora Climbing.
 
 **Connected state:**
+
 - Board name as title + status chip:
   - Active: green `CheckCircleOutlined` + "Connected"
   - Error: red `WarningAmberOutlined` + "Error"
@@ -88,11 +98,13 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 - Buttons: "Unlink" (red, with confirmation popover) + "Import JSON".
 
 **Link Account Dialog:**
+
 - Title: "Link <Board> Account"
 - Username + password text fields.
 - "Link Account" contained button.
 
 **Import Flow** (unified dialog with phase transitions):
+
 1. **Preview phase**: Shows parsed export data counts (draft climbs, ascents, attempts, circuits). Cancel/Confirm buttons.
 2. **Importing phase**: Step-by-step progress with `ImportProgressSteps`:
    - Steps: Importing draft climbs -> Resolving climb names -> Checking for duplicates -> Importing ascents -> Importing attempts -> Importing circuits -> Building sessions.
@@ -108,6 +120,7 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 **Component:** `ControllersSection`
 
 **Controller List:**
+
 - Cards for each registered controller showing:
   - Name (or "Unnamed Controller").
   - Status chip: Online (green), Offline (default), Never Connected (default).
@@ -117,11 +130,13 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
   - "Delete Controller" red outlined button with confirmation popover.
 
 **Add Controller Dialog:**
+
 - Name input (optional, max 100 chars).
 - Cascading select dropdowns: Board Type -> Layout -> Size -> Hold Sets (multi-select, auto-selects all on size change).
 - "Register Controller" contained button.
 
 **API Key Success Dialog:**
+
 - Warning alert: "Save this key now -- you won't be able to see it again."
 - Controller name display.
 - Monospace read-only text field with the API key.
@@ -135,11 +150,13 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 **Component:** `DeleteAccountSection`
 
 **Main card:**
+
 - "Delete Account" title.
 - Warning text about permanent deletion.
 - "Delete Account" red outlined button.
 
 **Confirmation Dialog:**
+
 - Title: "Delete Your Account".
 - Warning text about irreversibility.
 - Loading state while fetching `deleteAccountInfo` (published climb count).
@@ -150,6 +167,7 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 - Calls `DELETE_ACCOUNT` mutation, then `signOut` and redirect to home.
 
 **Data operations:**
+
 - `profile` -- REST `GET /api/internal/profile`.
 - `updateProfile` -- REST `PUT /api/internal/profile`.
 - `auroraCredentials` -- REST `GET/POST/DELETE /api/internal/aurora-credentials`.
@@ -162,4 +180,3 @@ Card for each board type (iterates `AURORA_BOARDS`: kilter, tension).
 - `deleteController` -- REST DELETE.
 
 ---
-

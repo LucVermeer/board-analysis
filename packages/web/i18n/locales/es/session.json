@@ -257,7 +257,16 @@
     },
     "betaVideos": {
       "title": "Videos Beta",
-      "empty": "Sin videos beta todavía. ¡Sé el primero en compartir!"
+      "empty": "Sin videos beta todavía. ¡Sé el primero en compartir!",
+      "videoCount_one": "{{count}} video",
+      "videoCount_other": "{{count}} videos",
+      "addButton": "Adjuntar un video beta",
+      "addTitle": "Adjuntar un video beta",
+      "urlPlaceholder": "Pega un enlace de TikTok o Instagram",
+      "submitButton": "Adjuntar",
+      "submitting": "Adjuntando...",
+      "attachSuccess": "Video beta adjuntado",
+      "attachError": "No se pudo adjuntar el video"
     },
     "angleSelector": {
       "title": "Seleccionar ángulo"

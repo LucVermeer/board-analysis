@@ -18,7 +18,7 @@ import BoardCard from '@/app/components/board-entity/board-card';
 import FollowButton from '@/app/components/ui/follow-button';
 import { useGeolocation } from '@/app/hooks/use-geolocation';
 import { useSearchBoardsMap } from '@/app/hooks/use-search-boards-map';
-import { FOLLOW_BOARD, UNFOLLOW_BOARD } from '@/app/lib/graphql/operations';
+import { FOLLOW_BOARD, UNFOLLOW_BOARD } from '@boardsesh/graphql/operations';
 import { themeTokens } from '@/app/theme/theme-config';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import BoardSearchMap from './board-search-map';

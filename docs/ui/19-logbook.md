@@ -38,22 +38,23 @@ Shows ascents from followed users on the same climb. Uses `GET_FOLLOWING_CLIMB_A
 
 **Form fields (label-value rows, 120px label width):**
 
-| Field | Component | Details |
-|-------|-----------|---------|
-| Boulder | Text + optional Mirrored chip | Climb name (bold), mirror toggle chip (Tension boards only) with tooltip |
-| Date and Time | `DateTimePicker` | Defaults to now, small size |
-| Angle | `Select` with angle options | Board-specific angles, defaults to effective angle from route/party/climb. Error state when null. 0 degrees is a valid angle. |
-| Attempts | `TextField` type number | Min 1, max 999, default 1. Flash = 1 attempt, Send = 2+ attempts |
-| Quality | `Rating` (ascent only) | 1-5 stars, default 0 |
-| Difficulty | `Select` (ascent only) | Grade override dropdown, "No override" default |
-| Notes | `TextField` multiline | 3 rows, optional |
-| Beta Video | `TextField` (ascent only) | URL input, validated against TikTok/Instagram/YouTube patterns. Helper text shown. |
+| Field         | Component                     | Details                                                                                                                       |
+| ------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Boulder       | Text + optional Mirrored chip | Climb name (bold), mirror toggle chip (Tension boards only) with tooltip                                                      |
+| Date and Time | `DateTimePicker`              | Defaults to now, small size                                                                                                   |
+| Angle         | `Select` with angle options   | Board-specific angles, defaults to effective angle from route/party/climb. Error state when null. 0 degrees is a valid angle. |
+| Attempts      | `TextField` type number       | Min 1, max 999, default 1. Flash = 1 attempt, Send = 2+ attempts                                                              |
+| Quality       | `Rating` (ascent only)        | 1-5 stars, default 0                                                                                                          |
+| Difficulty    | `Select` (ascent only)        | Grade override dropdown, "No override" default                                                                                |
+| Notes         | `TextField` multiline         | 3 rows, optional                                                                                                              |
+| Beta Video    | `TextField` (ascent only)     | URL input, validated against TikTok/Instagram/YouTube patterns. Helper text shown.                                            |
 
 **Submit button:** Full-width, large, contained. Text shows "Log at X degrees" when angle is set, or generic "Log" when not. Disabled when saving, video URL invalid, or angle is null.
 
 **Cancel button:** Full-width, large, outlined.
 
 **Wall Drift Banner:**
+
 - Warning `Alert` shown when the party session's current climb differs from the one being logged.
 - Shows which climb is on the wall vs. which is being logged.
 - "Switch to [climb name]" outlined button (with dirty-form confirmation via `window.confirm`).
@@ -66,6 +67,7 @@ Shows ascents from followed users on the same climb. Uses `GET_FOLLOWING_CLIMB_A
 Full logbook browser with:
 
 **Search and Filters** (`LogbookSearchForm`):
+
 - Search text field with magnifying glass icon.
 - Board filter strip (same as other pages).
 - Collapsible filter sections:
@@ -77,6 +79,7 @@ Full logbook browser with:
 
 **Feed Items** (`LogbookFeedItem`):
 Swipeable cards with:
+
 - Climb thumbnail (`AscentThumbnail`).
 - Board/layout display name.
 - Climb name, grade, ascent status icon.
@@ -88,9 +91,11 @@ Swipeable cards with:
 - Three-dot menu: Edit, Delete, Post to Instagram, Attach Beta Video.
 
 **Export:**
+
 - Download button for per-board JSON export via backend API.
 
 **Data operations:**
+
 - `ticks` / `userTicks` -- User's tick/ascent data (used by `BoardProvider`).
 - `userAscentsFeed` / `GET_USER_ASCENTS_FEED` -- Paginated ascent feed with filters (board, grade range, status, date range, angle range, sort).
 - `saveTick` -- Creates a new tick/ascent.
@@ -100,4 +105,3 @@ Swipeable cards with:
 - `followingClimbAscents` / `GET_FOLLOWING_CLIMB_ASCENTS` -- Ascents from followed users on a specific climb.
 
 ---
-

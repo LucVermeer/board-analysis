@@ -12,7 +12,7 @@ import {
   CLIMB_STATS_HISTORY,
   type ClimbStatsHistoryEntry,
   type ClimbStatsHistoryResponse,
-} from '@/app/lib/graphql/operations/climb-stats-history';
+} from '@boardsesh/graphql/operations/climb-stats-history';
 import { themeTokens } from '@/app/theme/theme-config';
 
 // Consistent color palette for angle lines, using design tokens

@@ -15,7 +15,7 @@ import {
   GET_COMMENTS,
   type GetCommentsQueryVariables,
   type GetCommentsQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import CommentItem from './comment-item';
 
 type CommentListProps = {

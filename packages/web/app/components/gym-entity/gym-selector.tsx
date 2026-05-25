@@ -10,7 +10,7 @@ import AddOutlined from '@mui/icons-material/AddOutlined';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_MY_GYMS, type GetMyGymsQueryVariables, type GetMyGymsQueryResponse } from '@/app/lib/graphql/operations';
+import { GET_MY_GYMS, type GetMyGymsQueryVariables, type GetMyGymsQueryResponse } from '@boardsesh/graphql/operations';
 import type { Gym } from '@boardsesh/shared-schema';
 import CreateGymForm from './create-gym-form';
 

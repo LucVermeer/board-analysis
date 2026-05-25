@@ -1,4 +1,5 @@
 import { gql } from 'graphql-request';
+import type { AttachBetaLinkInput, BetaLinksGqlRow } from '@boardsesh/shared-schema';
 
 export const GET_BETA_LINKS = gql`
   query GetBetaLinks($boardType: String!, $climbUuid: String!) {
@@ -13,6 +14,18 @@ export const GET_BETA_LINKS = gql`
     }
   }
 `;
+
+export type GetBetaLinksQueryVariables = { boardType: string; climbUuid: string };
+export type GetBetaLinksQueryResponse = { betaLinks: BetaLinksGqlRow[] };
+
+export const ATTACH_BETA_LINK = gql`
+  mutation AttachBetaLink($input: AttachBetaLinkInput!) {
+    attachBetaLink(input: $input)
+  }
+`;
+
+export type AttachBetaLinkMutationVariables = { input: AttachBetaLinkInput };
+export type AttachBetaLinkMutationResponse = { attachBetaLink: boolean };
 
 export const GET_RECENT_BETA_LINKS = gql`
   query GetRecentBetaLinks($limit: Int, $boardType: String) {

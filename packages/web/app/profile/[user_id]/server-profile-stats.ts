@@ -10,7 +10,7 @@ import type { LogbookEntry } from './utils/profile-constants';
 import type {
   GetUserClimbPercentileQueryResponse,
   GetUserProfileStatsQueryResponse,
-} from '@/app/lib/graphql/operations/ticks';
+} from '@boardsesh/graphql/operations/ticks';
 
 export type ProfileStatsData = {
   initialProfileStats: GetUserProfileStatsQueryResponse['userProfileStats'] | null;

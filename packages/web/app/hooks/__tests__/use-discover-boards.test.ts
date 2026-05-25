@@ -15,7 +15,7 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   useWsAuthToken: () => ({ token: 'test-token', isAuthenticated: true }),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   SEARCH_BOARDS: 'SEARCH_BOARDS_QUERY',
 }));
 

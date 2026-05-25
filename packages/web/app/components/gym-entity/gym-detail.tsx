@@ -36,7 +36,7 @@ import {
   type GetGymQueryVariables,
   type DeleteGymMutationVariables,
   type DeleteGymMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { useSession } from 'next-auth/react';
 import { themeTokens } from '@/app/theme/theme-config';
 import FollowButton from '@/app/components/ui/follow-button';

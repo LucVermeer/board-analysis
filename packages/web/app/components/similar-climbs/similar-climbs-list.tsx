@@ -26,7 +26,7 @@ import {
   SIMILAR_CLIMBS_QUERY,
   type SimilarClimbsResponse,
   type SimilarClimbsVariables,
-} from '@/app/lib/graphql/operations/new-climb-feed';
+} from '@boardsesh/graphql/operations/new-climb-feed';
 import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';
 import { constructClimbViewUrlWithSlugs } from '@/app/lib/url-utils';
 import styles from './similar-climbs-list.module.css';

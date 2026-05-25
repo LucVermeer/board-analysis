@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
-import type { AscentFeedItem } from '@/app/lib/graphql/operations/ticks';
+import type { AscentFeedItem } from '@boardsesh/graphql/operations/ticks';
 import LogbookFeedItem from '../logbook-feed-item';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 

@@ -52,6 +52,7 @@
         "@boardsesh/board-constants": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
+        "@boardsesh/graphql": "*",
         "@boardsesh/shared-schema": "*",
         "@escape.tech/graphql-armor-cost-limit": "^2.4.3",
         "@escape.tech/graphql-armor-max-depth": "^2.4.2",
@@ -146,6 +147,7 @@
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/climb-filters": "*",
+        "@boardsesh/graphql": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",
@@ -256,6 +258,18 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/shared/graphql": {
+      "name": "@boardsesh/graphql",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/shared-schema": "*",
+        "graphql": "^16.13.0",
+        "graphql-request": "^7.4.0",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared/play-view": {
       "name": "@boardsesh/play-view",
       "version": "1.0.0",
@@ -292,6 +306,7 @@
         "@boardsesh/climb-filters": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
+        "@boardsesh/graphql": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/shared-schema": "*",
@@ -694,6 +709,8 @@
     "@boardsesh/crypto": ["@boardsesh/crypto@workspace:packages/crypto"],
 
     "@boardsesh/db": ["@boardsesh/db@workspace:packages/db"],
+
+    "@boardsesh/graphql": ["@boardsesh/graphql@workspace:packages/shared/graphql"],
 
     "@boardsesh/mobile": ["@boardsesh/mobile@workspace:packages/mobile"],
 

@@ -2,7 +2,7 @@ import 'server-only';
 import { type RequestDocument, type Variables, GraphQLClient } from 'graphql-request';
 import { getGraphQLHttpUrl } from './client';
 import type { GroupedNotificationConnection, UserBoard } from '@boardsesh/shared-schema';
-import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@/app/lib/graphql/operations/boards';
+import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@boardsesh/graphql/operations/boards';
 import {
   GET_ALL_USER_PLAYLISTS,
   GET_PLAYLIST,
@@ -15,8 +15,8 @@ import {
   type GetPlaylistClimbsInput,
   type GetSmartPlaylistInput,
   type GetSmartPlaylistQueryResponse,
-} from '@/app/lib/graphql/operations/playlists';
-import { GET_GROUPED_NOTIFICATIONS } from '@/app/lib/graphql/operations/notifications';
+} from '@boardsesh/graphql/operations/playlists';
+import { GET_GROUPED_NOTIFICATIONS } from '@boardsesh/graphql/operations/notifications';
 
 /**
  * Execute a GraphQL query with an auth token (non-cached, per-user data).

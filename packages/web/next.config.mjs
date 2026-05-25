@@ -20,6 +20,7 @@ const nextConfig = {
     '@boardsesh/moonboard-ocr',
     '@boardsesh/ble-protocol',
     '@boardsesh/board-config',
+    '@boardsesh/graphql',
     '@boardsesh/queue',
   ],
   // Empty turbopack config to silence warning about webpack config
@@ -39,7 +40,7 @@ const nextConfig = {
       [
         '@swc-contrib/plugin-graphql-codegen-client-preset',
         {
-          artifactDirectory: './packages/web/app/lib/graphql/generated',
+          artifactDirectory: './packages/shared/graphql/src/generated',
           gqlTagName: 'graphql',
         },
       ],

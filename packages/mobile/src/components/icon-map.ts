@@ -93,13 +93,17 @@ export const iconMap = {
   location: { ios: 'location', android: 'map-marker-outline' },
   'location.fill': { ios: 'location.fill', android: 'map-marker' },
   clock: { ios: 'clock', android: 'clock-outline' },
-  history: { ios: 'clock.arrow.circlepath', android: 'history' },
   filter: { ios: 'line.3.horizontal.decrease', android: 'filter-variant' },
   sort: { ios: 'arrow.up.arrow.down', android: 'sort-variant' },
   refresh: { ios: 'arrow.clockwise', android: 'refresh' },
   photo: { ios: 'photo', android: 'image-outline' },
   camera: { ios: 'camera', android: 'camera-outline' },
   video: { ios: 'video', android: 'video-outline' },
+  instagram: { ios: 'camera.fill', android: 'instagram' },
+  // MaterialCommunityIcons has no standalone tiktok glyph — `play-box` is the
+  // closest neutral "short-form video clip" cue and matches our visual
+  // placement (small badge on a video thumbnail).
+  tiktok: { ios: 'play.rectangle.fill', android: 'play-box' },
 } as const satisfies Record<string, IconMapping>;
 
 export type IconName = keyof typeof iconMap;

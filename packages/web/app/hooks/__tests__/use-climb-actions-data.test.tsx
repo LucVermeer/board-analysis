@@ -4,7 +4,7 @@ import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { useClimbActionsData } from '../use-climb-actions-data';
 import { createQueryWrapper } from '@/app/test-utils/test-providers';
-import type { Playlist } from '@/app/lib/graphql/operations/playlists';
+import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 import React from 'react';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
@@ -29,12 +29,12 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
-vi.mock('@/app/lib/graphql/operations/favorites', () => ({
+vi.mock('@boardsesh/graphql/operations/favorites', () => ({
   GET_FAVORITES: 'GET_FAVORITES',
   TOGGLE_FAVORITE: 'TOGGLE_FAVORITE',
 }));
 
-vi.mock('@/app/lib/graphql/operations/playlists', () => ({
+vi.mock('@boardsesh/graphql/operations/playlists', () => ({
   GET_ALL_USER_PLAYLISTS: 'GET_ALL_USER_PLAYLISTS',
   GET_PLAYLISTS_FOR_CLIMBS: 'GET_PLAYLISTS_FOR_CLIMBS',
   ADD_CLIMB_TO_PLAYLIST: 'ADD_CLIMB_TO_PLAYLIST',

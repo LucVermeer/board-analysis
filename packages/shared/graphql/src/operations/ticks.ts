@@ -1,5 +1,5 @@
 import { gql } from 'graphql-request';
-import type { Tick, SaveTickInput, GetTicksInput, AttachBetaLinkInput } from '@boardsesh/shared-schema';
+import type { Tick, SaveTickInput, GetTicksInput } from '@boardsesh/shared-schema';
 
 export const GET_TICKS = gql`
   query GetTicks($input: GetTicksInput!) {
@@ -115,19 +115,8 @@ export type SaveTickMutationResponse = {
   saveTick: TickFromSaveTick;
 };
 
-export const ATTACH_BETA_LINK = gql`
-  mutation AttachBetaLink($input: AttachBetaLinkInput!) {
-    attachBetaLink(input: $input)
-  }
-`;
-
-export type AttachBetaLinkMutationVariables = {
-  input: AttachBetaLinkInput;
-};
-
-export type AttachBetaLinkMutationResponse = {
-  attachBetaLink: boolean;
-};
+// ATTACH_BETA_LINK and its types now live in ./beta-links — kept colocated
+// with the beta-video-specific operations.
 
 export const DELETE_TICK = gql`
   mutation DeleteTick($uuid: ID!) {

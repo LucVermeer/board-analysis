@@ -14,7 +14,7 @@ import {
   type ClimbSearchInputVariables,
   type ClimbSearchResponse,
   SEARCH_CLIMBS,
-} from '@/app/lib/graphql/operations/climb-search';
+} from '@boardsesh/graphql/operations/climb-search';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { normalizeMinRatingFilter } from '@/app/lib/climb-quality-filter-options';
 import { track } from '@/app/lib/analytics';

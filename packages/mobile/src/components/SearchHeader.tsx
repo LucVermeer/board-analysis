@@ -19,70 +19,66 @@ type SearchHeaderProps = {
   onBlur: () => void;
 };
 
-export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(
-  function SearchHeader({ placeholder, onChangeText, onFocus, onBlur }, ref) {
-    const inputRef = useRef<TextInput>(null);
-    const { systemColors } = useTheme();
-    const [text, setText] = useState('');
+export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(function SearchHeader(
+  { placeholder, onChangeText, onFocus, onBlur },
+  ref,
+) {
+  const inputRef = useRef<TextInput>(null);
+  const { systemColors } = useTheme();
+  const [text, setText] = useState('');
 
-    useImperativeHandle(ref, () => ({
-      blur: () => inputRef.current?.blur(),
-      focus: () => inputRef.current?.focus(),
-      getText: () => text,
-      setText: (newText: string) => {
-        setText(newText);
-        onChangeText(newText);
-      },
-    }));
+  useImperativeHandle(ref, () => ({
+    blur: () => inputRef.current?.blur(),
+    focus: () => inputRef.current?.focus(),
+    getText: () => text,
+    setText: (newText: string) => {
+      setText(newText);
+      onChangeText(newText);
+    },
+  }));
 
-    const handleChange = useCallback(
-      (newText: string) => {
-        setText(newText);
-        onChangeText(newText);
-      },
-      [onChangeText],
-    );
+  const handleChange = useCallback(
+    (newText: string) => {
+      setText(newText);
+      onChangeText(newText);
+    },
+    [onChangeText],
+  );
 
-    const handleClear = useCallback(() => {
-      setText('');
-      onChangeText('');
-      inputRef.current?.focus();
-    }, [onChangeText]);
+  const handleClear = useCallback(() => {
+    setText('');
+    onChangeText('');
+    inputRef.current?.focus();
+  }, [onChangeText]);
 
-    return (
-      <View style={[styles.container, { backgroundColor: systemColors.fill as string }]}>
-        <Icon name="search" size={16} color={iosSystemColors.systemGray} />
-        <TextInput
-          ref={inputRef}
-          value={text}
-          onChangeText={handleChange}
-          onFocus={onFocus}
-          onBlur={onBlur}
-          placeholder={placeholder}
-          placeholderTextColor={iosSystemColors.systemGray}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          clearButtonMode="never"
-          style={[styles.input, { color: systemColors.label as string }]}
-          accessibilityLabel={placeholder}
-        />
-        {text.length > 0 && (
-          <Pressable
-            onPress={handleClear}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Clear search"
-          >
-            <View style={styles.clearButton}>
-              <Icon name="close" size={12} color={iosSystemColors.white} />
-            </View>
-          </Pressable>
-        )}
-      </View>
-    );
-  },
-);
+  return (
+    <View style={[styles.container, { backgroundColor: systemColors.fill as string }]}>
+      <Icon name="search" size={16} color={iosSystemColors.systemGray} />
+      <TextInput
+        ref={inputRef}
+        value={text}
+        onChangeText={handleChange}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        placeholderTextColor={iosSystemColors.systemGray}
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        clearButtonMode="never"
+        style={[styles.input, { color: systemColors.label as string }]}
+        accessibilityLabel={placeholder}
+      />
+      {text.length > 0 && (
+        <Pressable onPress={handleClear} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+          <View style={styles.clearButton}>
+            <Icon name="close" size={12} color={iosSystemColors.white} />
+          </View>
+        </Pressable>
+      )}
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -20,7 +20,7 @@ import {
   UNFOLLOW_SETTER,
   type GetSetterProfileQueryVariables,
   type GetSetterProfileQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { themeTokens } from '@/app/theme/theme-config';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { shareWithFallback } from '@/app/lib/share-utils';

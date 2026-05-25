@@ -8,7 +8,7 @@ import {
   GET_BULK_VOTE_SUMMARIES,
   type GetBulkVoteSummariesQueryVariables,
   type GetBulkVoteSummariesQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { SocialEntityType, VoteSummary } from '@boardsesh/shared-schema';
 
 type VoteSummaryContextValue = {

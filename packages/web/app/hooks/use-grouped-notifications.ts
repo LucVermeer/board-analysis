@@ -8,7 +8,7 @@ import {
   GET_GROUPED_NOTIFICATIONS,
   type GetGroupedNotificationsQueryResponse,
   type GetGroupedNotificationsQueryVariables,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { GroupedNotification, GroupedNotificationConnection } from '@boardsesh/shared-schema';
 import { UNREAD_COUNT_QUERY_KEY } from './use-unread-notification-count';
 

@@ -76,9 +76,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     if (!isSwiping) return { opacity: 0, transform: [{ translateX: screenWidth }] };
 
     const peekOffset =
-      peekDirection.value === 'next'
-        ? screenWidth + translateX.value
-        : -screenWidth + translateX.value;
+      peekDirection.value === 'next' ? screenWidth + translateX.value : -screenWidth + translateX.value;
 
     return {
       opacity: 1,

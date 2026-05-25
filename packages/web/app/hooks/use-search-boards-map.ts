@@ -9,7 +9,7 @@ import {
   SEARCH_BOARDS,
   type SearchBoardsQueryResponse,
   type SearchBoardsQueryVariables,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { UserBoard, UserBoardConnection } from '@boardsesh/shared-schema';
 
 export type SearchBoardsMapInput = {

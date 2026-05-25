@@ -19,20 +19,20 @@ Users open the play view through four paths:
 
 The drawer manages a composite state with these primary variables:
 
-| State Variable | Type | Description |
-|---|---|---|
-| `activeDrawer` | `'none' \| 'play' \| 'queue' \| 'tick'` | Which top-level view the queue control bar is showing. The play view is open when this equals `'play'`. |
-| `isQueueOpen` | `boolean` | Nested queue drawer is visible (stacked over play view). |
-| `isActionsOpen` | `boolean` | Climb actions drawer is visible (stacked over play view). |
-| `isPlaylistSelectorOpen` | `boolean` | Playlist selection drawer is visible (stacked over play view). |
-| `isTickBarActive` | `boolean` | The tick bar is expanded, overlaying the board area. |
-| `isBoardZoomed` | `boolean` | The board is pinch-zoomed in. Disables horizontal swipe navigation and locks vertical scroll. |
-| `drawerDisplayedItem` | `ClimbQueueItem \| null` | In party sessions, the climb the drawer is locally previewing. When null, the drawer shows the wall climb (`currentClimbQueueItem`). |
-| `pendingClimbUuid` | `string \| null` | Set when the user presses the lightbulb to take control in party mode. Cleared when the wall-confirm event arrives or the 2-second timeout fires. Drives the lightbulb pulse animation. |
-| `lightDrawerOpen` | `boolean` | The light-control drawer (disco, glyphs, palette, BLE disconnect) is open. Mounted lazily on first open via `hasOpenedLightDrawer`. |
-| `showLightbulbCoachmark` | `boolean` | First-run coachmark pulse on the lightbulb. Read from IndexedDB key `swipeHint:lightbulbSeen`. |
-| `drawerOpen` | `boolean` | Internal CSS-level open state, separated from `isOpen` to allow animation timing. |
-| `sectionsEverEnabled` | `boolean` | Flips to true after the drawer's open transition completes. Gates below-fold section mounting. |
+| State Variable           | Type                                    | Description                                                                                                                                                                             |
+| ------------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `activeDrawer`           | `'none' \| 'play' \| 'queue' \| 'tick'` | Which top-level view the queue control bar is showing. The play view is open when this equals `'play'`.                                                                                 |
+| `isQueueOpen`            | `boolean`                               | Nested queue drawer is visible (stacked over play view).                                                                                                                                |
+| `isActionsOpen`          | `boolean`                               | Climb actions drawer is visible (stacked over play view).                                                                                                                               |
+| `isPlaylistSelectorOpen` | `boolean`                               | Playlist selection drawer is visible (stacked over play view).                                                                                                                          |
+| `isTickBarActive`        | `boolean`                               | The tick bar is expanded, overlaying the board area.                                                                                                                                    |
+| `isBoardZoomed`          | `boolean`                               | The board is pinch-zoomed in. Disables horizontal swipe navigation and locks vertical scroll.                                                                                           |
+| `drawerDisplayedItem`    | `ClimbQueueItem \| null`                | In party sessions, the climb the drawer is locally previewing. When null, the drawer shows the wall climb (`currentClimbQueueItem`).                                                    |
+| `pendingClimbUuid`       | `string \| null`                        | Set when the user presses the lightbulb to take control in party mode. Cleared when the wall-confirm event arrives or the 2-second timeout fires. Drives the lightbulb pulse animation. |
+| `lightDrawerOpen`        | `boolean`                               | The light-control drawer (disco, glyphs, palette, BLE disconnect) is open. Mounted lazily on first open via `hasOpenedLightDrawer`.                                                     |
+| `showLightbulbCoachmark` | `boolean`                               | First-run coachmark pulse on the lightbulb. Read from IndexedDB key `swipeHint:lightbulbSeen`.                                                                                          |
+| `drawerOpen`             | `boolean`                               | Internal CSS-level open state, separated from `isOpen` to allow animation timing.                                                                                                       |
+| `sectionsEverEnabled`    | `boolean`                               | Flips to true after the drawer's open transition completes. Gates below-fold section mounting.                                                                                          |
 
 **State transitions:**
 
@@ -150,16 +150,17 @@ Implemented by the `useCardSwipeNavigation` hook (wraps `react-swipeable`):
 
 **Animation timing constants:**
 
-| Constant | Value | Description |
-|---|---|---|
-| `EXIT_DURATION` | 300ms | Slide-off animation (card exits screen) |
-| `SNAP_BACK_DURATION` | 200ms | Snap-back when swipe doesn't meet threshold |
-| `CLIP_EXIT_DURATION` | 100ms | Delay before triggering navigation in `delayNavigation` mode |
-| `ENTER_ANIMATION_DURATION` | 170ms | Enter crossfade/transition for the new climb |
+| Constant                   | Value | Description                                                  |
+| -------------------------- | ----- | ------------------------------------------------------------ |
+| `EXIT_DURATION`            | 300ms | Slide-off animation (card exits screen)                      |
+| `SNAP_BACK_DURATION`       | 200ms | Snap-back when swipe doesn't meet threshold                  |
+| `CLIP_EXIT_DURATION`       | 100ms | Delay before triggering navigation in `delayNavigation` mode |
+| `ENTER_ANIMATION_DURATION` | 170ms | Enter crossfade/transition for the new climb                 |
 
 **Peek animation:**
 
 During a swipe, the next or previous climb's board slides in from the edge:
+
 - Next climb: `translateX(max(0px, calc(100% + {swipeOffset}px)))` (slides in from right)
 - Previous climb: `translateX(min(0px, calc(-100% + {swipeOffset}px)))` (slides in from left)
 - The peek container is `position: absolute`, `inset: 0`, with `overflow: clip`.
@@ -179,6 +180,7 @@ A native non-passive `touchmove` listener is attached to the carousel element. W
 **Drift state:**
 
 When a non-driver has swiped to a different climb than the wall climb:
+
 - `isDriftedFromWall` is true.
 - Swiping left (previous) snaps back to the wall climb by clearing `drawerDisplayedItem`.
 - The mini session bar shows a "return to wall climb" button.
@@ -235,14 +237,12 @@ Buttons from left to right:
 3. **Favorite button** (`Favorite` filled / `FavoriteBorderOutlined` outlined). Toggles favorite status. When favorited: filled heart icon with `themeTokens.colors.error` (red). When not favorited: outlined heart. Calls `toggleFavorite()`.
 
 4. **Lightbulb button** (`Lightbulb` filled / `LightbulbOutlined`). The primary wall-control gesture. Visual states:
-
    - **Active** (`lightbulbActive=true`): Filled `Lightbulb` icon in `themeTokens.colors.warning` (amber), with a CSS glow animation (`connectedGlow`, 1.5s ease-in-out infinite alternate, filter drop-shadow oscillating between 2px and 6px).
    - **Inactive**: Outlined `LightbulbOutlined` icon, default color.
    - **Pending** (`lightbulbPending=true`): Box-shadow pulse animation (`lightbulbPulse`, 1100ms ease-in-out infinite). Amber box-shadow expands to 6px and fades.
    - **Coachmark** (`lightbulbCoachmark=true`): Same pulse animation but single iteration (900ms). A MUI `Tooltip` with `placement="top"` and `arrow` shows coachmark text. The tooltip auto-dismisses on animation end via `onAnimationEnd`.
 
    Tap behavior varies by context:
-
    - **Solo, disconnected**: Opens the Bluetooth device picker (`bluetoothConnect()`).
    - **Solo, connected**: Sends the displayed climb to the board via `takeControl(currentClimb)`. Clears any drawer-local preview.
    - **Party, non-driver**: Takes wall control via `takeControl(currentClimb)`. Arms the 2-second wall-confirm watcher (`armWallConfirmWatcher`). Sets `pendingClimbUuid`. Clears drawer-local preview.
@@ -282,11 +282,13 @@ A full-area overlay (`position: absolute`, `inset: 0`, `z-index: 9`) that darken
 Positioned absolutely at the bottom of the board section wrapper (`bottom: 0`, `left: 0`, `right: 0`, `z-index: 10`). Slides up from below via `transform: translateY(100%)` -> `translateY(0)` with 200ms ease-out transition.
 
 **Container styling:**
+
 - Inner container has rounded top corners (`border-radius: 12px 12px 0 0`), shadow (`0 -4px 12px rgba(0, 0, 0, 0.15)`), `touch-action: pan-x`.
 - Background: In dark mode, `var(--semantic-surfaceElevated)`. In light mode, `var(--semantic-surface)`.
 - Grade tint overlay: A semi-transparent grade-colored overlay applied as `background-image: linear-gradient({gradeTintColor}, {gradeTintColor})`. The tint color is computed from `currentClimb.difficulty` via `getGradeTintColor()`.
 
 **Toolbar row** (top of tick bar, flex `justify-content: space-between`):
+
 - **Expand/collapse toggle** (left): Down arrow when expanded, up arrow when collapsed. 16px icon, 0.7 opacity. Label text ("expand" / "collapse"), 12px font, weight 600. The expanded state is persisted to IndexedDB key `tickBarExpanded`.
 - **Close button** (right): Small `IconButton` with `CloseOutlined` (16px). Background: `action.selected`.
 
@@ -295,6 +297,7 @@ Positioned absolutely at the bottom of the board section wrapper (`bottom: 0`, `
 The tick bar delegates to `QuickTickBar`, which manages tick target state, grade/quality/tries pickers, and save logic.
 
 **Compact mode** (default, `expanded=false`):
+
 - **Picker panel**: Slides up when a control is tapped, showing one picker at a time (stars, grade, or tries). 200ms height transition.
 - **Controls row**: Two sections:
   - Left: Comment input field (flex: 1) + grade button. The comment is a `TextField` with `ChatBubbleOutlineOutlined` start adornment, placeholder text, multiline (1 row collapsed, 4 rows when focused), max 2000 chars.
@@ -302,6 +305,7 @@ The tick bar delegates to `QuickTickBar`, which manages tick target state, grade
 - **Grade button** (`TickGradeButton`): Shows the selected grade or the consensus grade. Tapping expands the inline grade picker (horizontal scrollable list of grade chips).
 
 **Expanded mode** (`expanded=true`):
+
 - All pickers visible simultaneously in labeled rows:
   - Grade row: Label + horizontal scrollable grade picker (`InlineGradePicker`).
   - Tries row: Label + tries counter (`InlineTriesPicker`).
@@ -309,11 +313,13 @@ The tick bar delegates to `QuickTickBar`, which manages tick target state, grade
   - Comment row: Chat icon + multiline `TextField` (2-4 rows).
 
 **Ascent type logic:**
+
 - **Flash**: First attempt on a climb with no prior logbook history (`!hasPriorHistory && attemptCount === 1`).
 - **Send**: Any other successful ascent (has prior history, or attempt count > 1).
 - The `isFlash` state is reported to the parent via `onIsFlashChange` so the tick buttons can update their appearance.
 
 **Action buttons** (bottom of tick bar, flex row, `justify-content: flex-end`, `gap: 8px`):
+
 - **Attempt button** (left): `IconButton` with `PersonFallingIcon` (custom SVG icon). Background: `themeTokens.colors.errorMuted`, icon color: `themeTokens.colors.error`. Label: "Attempt". Calls `quickTickBarRef.current.saveAttempt()`.
 - **Tick button** (right): `IconButton` with `TickIcon` (checkmark or flash icon). Background transitions between `themeTokens.colors.amber` (flash, with dark text `neutral[900]`) and `themeTokens.colors.success` (send, with white text). 150ms ease transition on background-color and color. Label: "Flash" or "Tick" depending on `isFlash`. Calls `quickTickBarRef.current.save()`.
 
@@ -440,12 +446,14 @@ Tapping the queue button in the action bar sets `isQueueOpen=true` and mounts th
 A `SwipeableDrawer` with `placement="bottom"`, `height="60%"`, `disablePortal` (stacks within the play view drawer), `swipeEnabled=false`, `showDragHandle=false`. Custom drag-to-resize is implemented via `useDrawerDragResize` hook.
 
 **Custom drag header** (`div.queueDragHeader`, `touch-action: none`, `user-select: none`):
+
 - Drag handle bar (horizontal pill, matching the standard drawer drag handle style).
 - Title bar: "Queue" title (h6, semibold) on the left. Right side shows:
   - **Normal mode**: History toggle button (`HistoryOutlined`, bordered when active) + Edit button (`EditOutlined`).
   - **Edit mode**: "Clear" button (`DeleteOutlined` + text, clears entire queue) + Close edit button (`CloseOutlined`).
 
 **Queue body** (`div.queueBodyLayout`, flex column):
+
 - Scroll container (`div.queueScrollContainer`): `overflow-y: auto`, `-webkit-overflow-scrolling: touch`, `overscroll-behavior-y: contain`, `touch-action: pan-y`. Has pull-to-close gesture via `usePullToClose` hook.
 - `QueueList` component renders the queue in three regions:
   - **History** (collapsible via history toggle, shown by default): Past climbs that have been played. Capped at 5 items with a "Show full history" toggle.

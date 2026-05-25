@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import type { BoardSerialConfig } from '@/app/lib/graphql/operations';
-import { GET_BOARDS_BY_SERIAL_NUMBERS, GET_MY_BOARD_SERIAL_CONFIGS } from '@/app/lib/graphql/operations';
+import type { BoardSerialConfig } from '@boardsesh/graphql/operations';
+import { GET_BOARDS_BY_SERIAL_NUMBERS, GET_MY_BOARD_SERIAL_CONFIGS } from '@boardsesh/graphql/operations';
 
 const mockRequest = vi.fn();
 vi.mock('@/app/lib/graphql/client', () => ({

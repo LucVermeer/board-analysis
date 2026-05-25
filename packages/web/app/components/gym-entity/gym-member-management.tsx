@@ -24,7 +24,7 @@ import {
   type GetGymMembersQueryResponse,
   type RemoveGymMemberMutationVariables,
   type RemoveGymMemberMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { GymMember } from '@boardsesh/shared-schema';
 
 type GymMemberManagementProps = {

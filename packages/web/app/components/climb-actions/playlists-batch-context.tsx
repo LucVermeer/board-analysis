@@ -2,10 +2,10 @@
 
 import React, { useMemo } from 'react';
 import { createTypedContext } from '@/app/lib/create-typed-context';
-import type { Playlist } from '@/app/lib/graphql/operations/playlists';
+import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 
 // Re-export Playlist type for convenience
-export type { Playlist } from '@/app/lib/graphql/operations/playlists';
+export type { Playlist } from '@boardsesh/graphql/operations/playlists';
 
 type PlaylistsContextValue = {
   playlists: Playlist[];

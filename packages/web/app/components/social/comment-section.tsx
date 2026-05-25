@@ -18,7 +18,7 @@ import {
   COMMENT_UPDATES_SUBSCRIPTION,
   type CommentUpdatesSubscriptionResponse,
   type CommentUpdatesSubscriptionVariables,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import CommentForm from './comment-form';
 import CommentList from './comment-list';
 

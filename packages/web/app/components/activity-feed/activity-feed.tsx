@@ -12,7 +12,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { EmptyState } from '@/app/components/ui/empty-state';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_SESSION_GROUPED_FEED, type GetSessionGroupedFeedQueryResponse } from '@/app/lib/graphql/operations';
+import { GET_SESSION_GROUPED_FEED, type GetSessionGroupedFeedQueryResponse } from '@boardsesh/graphql/operations';
 import type { SessionFeedItem, SessionFeedResult } from '@boardsesh/shared-schema';
 import { VoteSummaryProvider } from '@/app/components/social/vote-summary-context';
 import SessionFeedCard from './session-feed-card';

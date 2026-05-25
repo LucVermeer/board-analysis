@@ -15,7 +15,7 @@ import {
   type GetUserFavoriteClimbsQueryResponse,
   type GetUserFavoriteClimbsQueryVariables,
   GET_USER_FAVORITE_CLIMBS,
-} from '@/app/lib/graphql/operations/favorites';
+} from '@boardsesh/graphql/operations/favorites';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useQueueActions } from '@/app/components/graphql-queue';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';

@@ -47,7 +47,7 @@ vi.mock('@/app/components/graphql-queue/graphql-client', () => ({
   GraphQLOperationError: FakeGraphQLOperationError,
 }));
 
-vi.mock('@/app/lib/graphql/operations/new-climb-feed', () => ({
+vi.mock('@boardsesh/graphql/operations/new-climb-feed', () => ({
   SAVE_CLIMB_MUTATION: 'SAVE_CLIMB_MUTATION',
 }));
 

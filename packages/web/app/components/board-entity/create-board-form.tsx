@@ -8,7 +8,7 @@ import {
   CREATE_BOARD,
   type CreateBoardMutationVariables,
   type CreateBoardMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import { constructBoardSlugListUrl } from '@/app/lib/url-utils';
 import type { UserBoard } from '@boardsesh/shared-schema';

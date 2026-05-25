@@ -13,6 +13,7 @@
 **Main content:** Centered card, `maxWidth: 400px`, `paddingTop: 48px`
 
 **Card contents:**
+
 1. **Logo** (centered, size md)
 2. **Subtitle** (body2, text.secondary): `login.subtitle`
 3. **Tab selector** (MUI `Tabs`, centered):
@@ -46,6 +47,7 @@
    - Loading state: Skeleton placeholders while providers config loads
 
 **User actions:**
+
 - Switch between Sign In / Create Account tabs
 - Submit login form (Enter key or button tap)
 - Submit registration form
@@ -53,6 +55,7 @@
 - Tap back button
 
 **States:**
+
 - Loading: session status `loading` -- renders nothing
 - Authenticated: session status `authenticated` -- redirects to `callbackUrl` (default `/`)
 - Error from URL param `?error=CredentialsSignin` -- shows "Invalid credentials" toast
@@ -63,17 +66,20 @@
 - Field validation errors: red border + helper text on individual fields
 
 **Data sources:**
+
 - NextAuth `signIn()` for credential login
 - `/api/auth/register` POST for registration
 - `/api/auth/providers-config` GET for available OAuth providers
 - `callbackUrl` query parameter for post-auth redirect
 
 **Navigation:**
+
 - Back button -> previous page
 - Successful login -> `callbackUrl` or `/`
 - Social login -> OAuth flow -> callback -> `callbackUrl`
 
 **Mobile adaptation notes:**
+
 - Replace MUI `Tabs` with segmented control or custom tab component
 - Social login uses `expo-auth-session` or `expo-web-browser` for OAuth
 - Apple Sign-In via `expo-apple-authentication`
@@ -90,6 +96,7 @@
 **Layout:** Same shell as login page (header bar + centered card)
 
 **Card contents:**
+
 - If no error: Mail icon (48px, primary color), "Check your email" title (h3), description text
 - If error (from `?error=` param, codes: `EmailNotVerified`, `InvalidToken`, `TokenExpired`, `TooManyAttempts`): Cancel icon (48px, error color), Alert with error message
 - Email input field with `MailOutlined` adornment for resend
@@ -107,6 +114,7 @@
 **Layout:** Same shell as login page
 
 **Card contents:**
+
 - Cancel icon (48px, error color)
 - "Authentication Error" title (h3)
 - Alert (severity=error) with localized message based on `?error=` param
@@ -122,4 +130,3 @@
 This page is a web-only entry point for mobile OAuth flows. It auto-submits a hidden form to the NextAuth provider endpoint. Shows a `CircularProgress` spinner and "Signing in..." text. Only allows providers: `google`, `apple`, `facebook`.
 
 ---
-

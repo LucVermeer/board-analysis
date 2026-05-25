@@ -27,7 +27,7 @@ import LinkOutlined from '@mui/icons-material/LinkOutlined';
 import dynamic from 'next/dynamic';
 import { formatTickRelativeTime } from '@/app/lib/format-tick-time';
 import { track } from '@/app/lib/analytics';
-import type { AscentFeedItem } from '@/app/lib/graphql/operations/ticks';
+import type { AscentFeedItem } from '@boardsesh/graphql/operations/ticks';
 import type { BoardDetails, BoardName } from '@/app/lib/types';
 import { useOptionalQueueActions } from '@/app/components/graphql-queue';
 import { AscentStatusIcon } from '@/app/components/ascent-status/ascent-status-icon';

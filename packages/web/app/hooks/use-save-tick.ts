@@ -4,7 +4,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWsAuthToken } from './use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { SAVE_TICK, type SaveTickMutationVariables, type SaveTickMutationResponse } from '@/app/lib/graphql/operations';
+import {
+  SAVE_TICK,
+  type SaveTickMutationVariables,
+  type SaveTickMutationResponse,
+} from '@boardsesh/graphql/operations';
 import type { BoardName } from '@/app/lib/types';
 import {
   accumulatedLogbookQueryKey,

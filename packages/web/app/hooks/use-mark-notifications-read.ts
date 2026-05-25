@@ -8,7 +8,7 @@ import {
   MARK_ALL_NOTIFICATIONS_READ,
   type MarkGroupNotificationsReadMutationVariables,
   type MarkGroupNotificationsReadMutationResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { GroupedNotification, GroupedNotificationConnection } from '@boardsesh/shared-schema';
 import { UNREAD_COUNT_QUERY_KEY } from './use-unread-notification-count';
 import { GROUPED_NOTIFICATIONS_QUERY_KEY } from './use-grouped-notifications';

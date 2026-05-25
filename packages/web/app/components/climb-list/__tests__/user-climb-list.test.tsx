@@ -21,7 +21,7 @@ vi.mock('@/app/hooks/use-ws-auth-token', () => ({
   }),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   GET_USER_CLIMBS: 'GET_USER_CLIMBS',
 }));
 

@@ -14,7 +14,7 @@ import {
   GET_FOLLOWING_ASCENTS_FEED,
   type GetFollowingAscentsFeedQueryVariables,
   type GetFollowingAscentsFeedQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import type { FollowingAscentFeedItem } from '@boardsesh/shared-schema';
 import { VoteSummaryProvider } from '@/app/components/social/vote-summary-context';
 import SocialFeedItem from '@/app/components/activity-feed/social-feed-item';

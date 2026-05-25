@@ -53,7 +53,7 @@ import {
   type AddClimbToPlaylistMutationResponse,
   type AddClimbToPlaylistMutationVariables,
   ADD_CLIMB_TO_PLAYLIST,
-} from '@/app/lib/graphql/operations/playlists';
+} from '@boardsesh/graphql/operations/playlists';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { shareWithFallback } from '@/app/lib/share-utils';
 import { LoadingSpinner } from '@/app/components/ui/loading-spinner';

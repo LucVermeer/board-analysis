@@ -29,13 +29,13 @@ The Start Session drawer is the entry point for creating a new climbing session.
 
 **Form fields (`SessionCreationForm`):**
 
-| Field | Type | Constraints | Notes |
-|---|---|---|---|
-| Session name | `TextField` (small) | Optional, max 100 chars | Placeholder from i18n |
-| Session goal | `TextField` (small, multiline 2-4 rows) | Optional, max 500 chars | Helper text shows character count |
-| Session colour | 12 circular `Chip` buttons | Optional, tap to toggle | Colours: `#F44336, #E91E63, #9C27B0, #673AB7, #3F51B5, #2196F3, #00BCD4, #009688, #4CAF50, #8BC34A, #FF9800, #FF5722`. Selected chip gets a 3px white border. |
-| Discoverable | `Switch` | Boolean, defaults false | Hidden for anonymous users. Label + description text. |
-| Permanent session | `Switch` + `FormControlLabel` | Boolean, defaults false | Only shown when `isGymAdmin` is true. |
+| Field             | Type                                    | Constraints             | Notes                                                                                                                                                         |
+| ----------------- | --------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session name      | `TextField` (small)                     | Optional, max 100 chars | Placeholder from i18n                                                                                                                                         |
+| Session goal      | `TextField` (small, multiline 2-4 rows) | Optional, max 500 chars | Helper text shows character count                                                                                                                             |
+| Session colour    | 12 circular `Chip` buttons              | Optional, tap to toggle | Colours: `#F44336, #E91E63, #9C27B0, #673AB7, #3F51B5, #2196F3, #00BCD4, #009688, #4CAF50, #8BC34A, #FF9800, #FF5722`. Selected chip gets a 3px white border. |
+| Discoverable      | `Switch`                                | Boolean, defaults false | Hidden for anonymous users. Label + description text.                                                                                                         |
+| Permanent session | `Switch` + `FormControlLabel`           | Boolean, defaults false | Only shown when `isGymAdmin` is true.                                                                                                                         |
 
 **Submit flow:**
 
@@ -201,16 +201,15 @@ The `SeshSettingsDrawer` (`sesh-settings-drawer.tsx`) is the session management 
 
 ### Data Layer
 
-| Operation | Type | Purpose |
-|---|---|---|
-| `createSession` | Mutation | Creates a new session with form data and board path |
-| `joinSession` | Mutation | Adds the current user to an existing session |
-| `endSession` / `endSessionWithSummary` | Action | Ends the active session and fetches summary |
-| `deactivateSession` | Action | Deactivates the session locally without ending it on the server |
-| `sessionDetail` | Query | Fetches full session data including ticks, participants, stats |
-| `sessionSummary` | Query | Fetches end-of-session summary data |
-| `nearbySessions` | Query | Lists discoverable sessions near the user |
-| `mySessions` | Query | Lists sessions the user has participated in |
+| Operation                              | Type     | Purpose                                                         |
+| -------------------------------------- | -------- | --------------------------------------------------------------- |
+| `createSession`                        | Mutation | Creates a new session with form data and board path             |
+| `joinSession`                          | Mutation | Adds the current user to an existing session                    |
+| `endSession` / `endSessionWithSummary` | Action   | Ends the active session and fetches summary                     |
+| `deactivateSession`                    | Action   | Deactivates the session locally without ending it on the server |
+| `sessionDetail`                        | Query    | Fetches full session data including ticks, participants, stats  |
+| `sessionSummary`                       | Query    | Fetches end-of-session summary data                             |
+| `nearbySessions`                       | Query    | Lists discoverable sessions near the user                       |
+| `mySessions`                           | Query    | Lists sessions the user has participated in                     |
 
 ---
-

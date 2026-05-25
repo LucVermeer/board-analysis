@@ -6,7 +6,7 @@ import {
   getHealthKitAutoSync,
 } from './healthkit-bridge';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { SET_SESSION_HEALTHKIT_WORKOUT_ID } from '@/app/lib/graphql/operations/activity-feed';
+import { SET_SESSION_HEALTHKIT_WORKOUT_ID } from '@boardsesh/graphql/operations/activity-feed';
 
 // Guards against duplicate saves when both end-session paths fire for the
 // same session. Stores sessionIds that are currently being saved or have

@@ -26,7 +26,7 @@ vi.mock('@/app/components/social/follower-count', () => ({
   ),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   FOLLOW_USER: 'FOLLOW_USER',
   UNFOLLOW_USER: 'UNFOLLOW_USER',
 }));

@@ -16,11 +16,13 @@ const config: CodegenConfig = {
         enumsAsTypes: true,
       },
     },
-    'packages/web/app/lib/graphql/generated/': {
+    'packages/shared/graphql/src/generated/': {
       preset: 'client',
       documents: [
+        'packages/shared/graphql/src/**/*.ts',
+        '!packages/shared/graphql/src/generated/**',
         'packages/web/app/**/*.{ts,tsx}',
-        '!packages/web/app/lib/graphql/generated/**',
+        '!packages/web/app/lib/graphql/**',
         '!packages/web/**/*.test.{ts,tsx}',
       ],
       presetConfig: {

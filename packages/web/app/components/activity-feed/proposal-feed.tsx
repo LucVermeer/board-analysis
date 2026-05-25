@@ -14,7 +14,7 @@ import {
   BROWSE_PROPOSALS,
   type BrowseProposalsVariables,
   type BrowseProposalsResponse,
-} from '@/app/lib/graphql/operations/proposals';
+} from '@boardsesh/graphql/operations/proposals';
 import type { Proposal, ProposalConnection } from '@boardsesh/shared-schema';
 import ProposalCard from '@/app/components/social/proposal-card';
 import FeedItemSkeleton from './feed-item-skeleton';

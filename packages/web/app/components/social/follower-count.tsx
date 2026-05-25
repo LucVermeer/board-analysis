@@ -24,7 +24,7 @@ import {
   type GetFollowersQueryResponse,
   type GetFollowingQueryVariables,
   type GetFollowingQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import type { PublicUserProfile } from '@boardsesh/shared-schema';

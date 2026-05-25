@@ -10,7 +10,7 @@ import {
   ADD_USER_TO_SESSION,
   REMOVE_USER_FROM_SESSION,
   type GetSessionDetailQueryResponse,
-} from '@/app/lib/graphql/operations/activity-feed';
+} from '@boardsesh/graphql/operations/activity-feed';
 import type { SessionDetail } from '@boardsesh/shared-schema';
 
 export const SESSION_DETAIL_QUERY_KEY = (sessionId: string) => ['sessionDetail', sessionId] as const;

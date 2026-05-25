@@ -58,7 +58,11 @@ export const InlineGradePicker = React.memo(function InlineGradePicker({
 
         const chipStyle: ViewStyle = {
           ...styles.chip,
-          borderColor: isSelected ? brandColors.primary : isConsensus ? brandColors.primary + '60' : 'rgba(60, 60, 67, 0.18)',
+          borderColor: isSelected
+            ? brandColors.primary
+            : isConsensus
+              ? brandColors.primary + '60'
+              : 'rgba(60, 60, 67, 0.18)',
           backgroundColor: isSelected ? brandColors.primary : 'transparent',
         };
 
@@ -71,11 +75,7 @@ export const InlineGradePicker = React.memo(function InlineGradePicker({
             accessibilityLabel={grade.name}
           >
             <View style={chipStyle}>
-              <Text
-                variant="footnote"
-                color={isSelected ? iosSystemColors.white : undefined}
-                style={styles.chipText}
-              >
+              <Text variant="footnote" color={isSelected ? iosSystemColors.white : undefined} style={styles.chipText}>
                 {grade.name}
               </Text>
             </View>

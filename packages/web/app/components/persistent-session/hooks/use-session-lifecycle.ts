@@ -12,17 +12,19 @@ import {
   QUEUE_UPDATES,
   SESSION_UPDATES,
   EVENTS_REPLAY,
-  type SubscriptionQueueEvent,
-  type SessionEvent,
-  type QueueEvent,
-  type EventsReplayResponse,
-  type SessionSummary,
+} from '@boardsesh/graphql/operations/queue-session';
+import type {
+  SubscriptionQueueEvent,
+  SessionEvent,
+  QueueEvent,
+  EventsReplayResponse,
+  SessionSummary,
 } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../../queue-control/types';
 import { computeQueueStateHash } from '@/app/utils/hash';
 import { setPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@/app/lib/graphql/operations/sessions';
+import { END_SESSION as END_SESSION_GQL, type EndSessionResponse } from '@boardsesh/graphql/operations/sessions';
 import { fetchAutoFinishedSummary } from './use-queue-storage';
 import { coerceSessionUser, upsertSessionUser } from '../event-utils';
 import { TransientJoinError } from '../errors';

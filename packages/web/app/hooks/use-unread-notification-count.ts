@@ -6,7 +6,7 @@ import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
   GET_UNREAD_NOTIFICATION_COUNT,
   type GetUnreadNotificationCountQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 
 export const UNREAD_COUNT_QUERY_KEY = ['notifications', 'unreadCount'] as const;
 

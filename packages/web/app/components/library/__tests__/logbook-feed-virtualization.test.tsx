@@ -5,7 +5,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/app/test-utils/test-providers';
-import type { LayoutStats, AscentFeedItem } from '@/app/lib/graphql/operations/ticks';
+import type { LayoutStats, AscentFeedItem } from '@boardsesh/graphql/operations/ticks';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
 // --- Capture virtualizer config so tests can pin overscan / count. ---
@@ -69,8 +69,8 @@ vi.mock('@/app/lib/backend-url', () => ({
   getBackendHttpUrl: () => 'http://backend.test',
 }));
 
-vi.mock('@/app/lib/graphql/operations/ticks', async () => {
-  const actual = await vi.importActual<Record<string, unknown>>('@/app/lib/graphql/operations/ticks');
+vi.mock('@boardsesh/graphql/operations/ticks', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('@boardsesh/graphql/operations/ticks');
   return {
     ...actual,
     GET_USER_ASCENTS_FEED: 'GET_USER_ASCENTS_FEED',

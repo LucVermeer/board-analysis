@@ -28,9 +28,8 @@ vi.mock('../board-backgrounds-manifest', () => ({
   },
 }));
 
-const { toFilesystemPath, ensureBackgroundsCached, tryGetBackgroundPathsSync } = await import(
-  '../background-image-cache'
-);
+const { toFilesystemPath, ensureBackgroundsCached, tryGetBackgroundPathsSync } =
+  await import('../background-image-cache');
 const { getBoardRenderData } = await import('../board-details');
 
 describe('toFilesystemPath', () => {

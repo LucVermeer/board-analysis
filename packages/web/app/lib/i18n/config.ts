@@ -33,6 +33,15 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep session:mobile.community.avgQuality
 // i18n-keep session:mobile.betaVideos.title
 // i18n-keep session:mobile.betaVideos.empty
+// i18n-keep session:mobile.betaVideos.videoCount_one
+// i18n-keep session:mobile.betaVideos.videoCount_other
+// i18n-keep session:mobile.betaVideos.addButton
+// i18n-keep session:mobile.betaVideos.addTitle
+// i18n-keep session:mobile.betaVideos.urlPlaceholder
+// i18n-keep session:mobile.betaVideos.submitButton
+// i18n-keep session:mobile.betaVideos.submitting
+// i18n-keep session:mobile.betaVideos.attachSuccess
+// i18n-keep session:mobile.betaVideos.attachError
 // i18n-keep session:mobile.angleSelector.title
 // i18n-keep session:mobile.queueSheet.emptyQueue
 // i18n-keep session:mobile.queueSheet.toggleHistory

@@ -37,6 +37,7 @@ The driver control system manages which participant controls the physical climbi
 **BLE write serialization (`BluetoothAutoSender`):**
 
 The auto-sender uses a latest-wins queue pattern to avoid overlapping GATT operations:
+
 - While a BLE write is in flight, new climbs are stored in `pendingClimbRef`.
 - When the current write completes, the drain loop picks up whatever is pending.
 - Same-UUID re-broadcasts are deduplicated via `lastSentUuidRef` to avoid double-firing analytics and wall-confirm.
@@ -100,15 +101,14 @@ When any participant changes the board angle:
 
 ### Data Layer
 
-| Operation | Type | Purpose |
-|---|---|---|
-| `takeControl` | Mutation | Claims wall driver status, optionally with a climb |
-| `releaseControl` | Mutation | Releases wall driver status |
-| `confirmClimbOnWall` | Mutation | Confirms a climb was sent to the board via BLE |
-| `setSessionBoardPath` | Mutation | Broadcasts angle/board path change to all members |
-| `setSessionBoardSerial` | Mutation | Shares which physical board serial is connected |
-| `sessionUpdates` | Subscription | Real-time session events (driver changes, path changes, serial changes, participant joins/leaves) |
-| `queueUpdates` | Subscription | Real-time queue state changes (add, remove, reorder, current climb) |
+| Operation               | Type         | Purpose                                                                                           |
+| ----------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+| `takeControl`           | Mutation     | Claims wall driver status, optionally with a climb                                                |
+| `releaseControl`        | Mutation     | Releases wall driver status                                                                       |
+| `confirmClimbOnWall`    | Mutation     | Confirms a climb was sent to the board via BLE                                                    |
+| `setSessionBoardPath`   | Mutation     | Broadcasts angle/board path change to all members                                                 |
+| `setSessionBoardSerial` | Mutation     | Shares which physical board serial is connected                                                   |
+| `sessionUpdates`        | Subscription | Real-time session events (driver changes, path changes, serial changes, participant joins/leaves) |
+| `queueUpdates`          | Subscription | Real-time queue state changes (add, remove, reorder, current climb)                               |
 
 ---
-

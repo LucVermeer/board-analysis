@@ -5,12 +5,12 @@ import { sortObjectKeys } from '@/app/lib/cache-utils';
 import { getGraphQLHttpUrl } from './client';
 import { executeAuthenticatedGraphQL } from './server-graphql';
 import type { SessionFeedResult } from '@boardsesh/shared-schema';
-import type { DiscoverablePlaylist, DiscoverPlaylistsQueryResponse } from '@/app/lib/graphql/operations/playlists';
+import type { DiscoverablePlaylist, DiscoverPlaylistsQueryResponse } from '@boardsesh/graphql/operations/playlists';
 import type {
   GetUserClimbPercentileQueryResponse,
   GetUserProfileStatsQueryResponse,
   GetUserTicksQueryResponse,
-} from '@/app/lib/graphql/operations/ticks';
+} from '@boardsesh/graphql/operations/ticks';
 
 // Re-export uncached authenticated server functions so existing imports
 // from this file continue to work without changes.
@@ -92,7 +92,7 @@ export function createCachedGraphQLQuery<T = unknown, V extends Variables = Vari
  * Used for SSR on the home page for both authenticated and unauthenticated users.
  */
 export async function cachedSessionGroupedFeed(boardUuid?: string, isAuthenticated: boolean = false) {
-  const { GET_SESSION_GROUPED_FEED } = await import('@/app/lib/graphql/operations/activity-feed');
+  const { GET_SESSION_GROUPED_FEED } = await import('@boardsesh/graphql/operations/activity-feed');
 
   const revalidate = isAuthenticated ? 300 : 86400;
 
@@ -114,7 +114,7 @@ export async function cachedSessionGroupedFeed(boardUuid?: string, isAuthenticat
  * Cache is per-user (tag includes userId) with a 2-minute TTL.
  */
 export async function cachedUserSessionGroupedFeed(authToken: string, userId: string) {
-  const { GET_SESSION_GROUPED_FEED } = await import('@/app/lib/graphql/operations/activity-feed');
+  const { GET_SESSION_GROUPED_FEED } = await import('@boardsesh/graphql/operations/activity-feed');
 
   type Response = { sessionGroupedFeed: SessionFeedResult };
   const tag = `user-session-feed-${userId}`;
@@ -149,7 +149,7 @@ export async function cachedDiscoverPlaylists(input: { boardType?: string; layou
   popularTotalCount: number;
   recentTotalCount: number;
 } | null> {
-  const { DISCOVER_PLAYLISTS } = await import('@/app/lib/graphql/operations/playlists');
+  const { DISCOVER_PLAYLISTS } = await import('@boardsesh/graphql/operations/playlists');
   type Response = DiscoverPlaylistsQueryResponse;
 
   try {
@@ -184,7 +184,7 @@ export async function cachedDiscoverPlaylists(input: { boardType?: string; layou
 export async function cachedUserProfileStats(
   userId: string,
 ): Promise<GetUserProfileStatsQueryResponse['userProfileStats'] | null> {
-  const { GET_USER_PROFILE_STATS } = await import('@/app/lib/graphql/operations/ticks');
+  const { GET_USER_PROFILE_STATS } = await import('@boardsesh/graphql/operations/ticks');
   type Response = GetUserProfileStatsQueryResponse;
 
   try {
@@ -205,7 +205,7 @@ export async function cachedUserProfileStats(
 export async function serverUserProfileStats(
   userId: string,
 ): Promise<GetUserProfileStatsQueryResponse['userProfileStats'] | null> {
-  const { GET_USER_PROFILE_STATS } = await import('@/app/lib/graphql/operations/ticks');
+  const { GET_USER_PROFILE_STATS } = await import('@boardsesh/graphql/operations/ticks');
   try {
     const result = await executeGraphQLInternal<GetUserProfileStatsQueryResponse>(GET_USER_PROFILE_STATS, { userId });
     return result.userProfileStats;
@@ -220,7 +220,7 @@ export async function serverUserProfileStats(
 export async function cachedUserClimbPercentile(
   userId: string,
 ): Promise<GetUserClimbPercentileQueryResponse['userClimbPercentile'] | null> {
-  const { GET_USER_CLIMB_PERCENTILE } = await import('@/app/lib/graphql/operations/ticks');
+  const { GET_USER_CLIMB_PERCENTILE } = await import('@boardsesh/graphql/operations/ticks');
   type Response = GetUserClimbPercentileQueryResponse;
 
   try {
@@ -243,7 +243,7 @@ export async function cachedUserTicks(
   userId: string,
   boardType: string,
 ): Promise<GetUserTicksQueryResponse['userTicks'] | null> {
-  const { GET_USER_TICKS } = await import('@/app/lib/graphql/operations/ticks');
+  const { GET_USER_TICKS } = await import('@boardsesh/graphql/operations/ticks');
   type Response = GetUserTicksQueryResponse;
 
   try {
@@ -264,7 +264,7 @@ export async function serverUserTicks(
   userId: string,
   boardType: string,
 ): Promise<GetUserTicksQueryResponse['userTicks'] | null> {
-  const { GET_USER_TICKS } = await import('@/app/lib/graphql/operations/ticks');
+  const { GET_USER_TICKS } = await import('@boardsesh/graphql/operations/ticks');
   try {
     const result = await executeGraphQLInternal<GetUserTicksQueryResponse>(GET_USER_TICKS, { userId, boardType });
     return result.userTicks;

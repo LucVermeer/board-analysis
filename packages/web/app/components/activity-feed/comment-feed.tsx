@@ -22,7 +22,7 @@ import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
   GET_GLOBAL_COMMENT_FEED,
   type GetGlobalCommentFeedResponse,
-} from '@/app/lib/graphql/operations/comments-votes';
+} from '@boardsesh/graphql/operations/comments-votes';
 import type { Comment as CommentType, CommentConnection } from '@boardsesh/shared-schema';
 import VoteButton from '@/app/components/social/vote-button';
 import FeedItemSkeleton from './feed-item-skeleton';

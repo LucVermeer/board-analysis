@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_POPULAR_BOARD_CONFIGS, type GetPopularBoardConfigsQueryResponse } from '@/app/lib/graphql/operations';
+import { GET_POPULAR_BOARD_CONFIGS, type GetPopularBoardConfigsQueryResponse } from '@boardsesh/graphql/operations';
 import type { PopularBoardConfig } from '@boardsesh/shared-schema';
 
 type UsePopularBoardConfigsOptions = {

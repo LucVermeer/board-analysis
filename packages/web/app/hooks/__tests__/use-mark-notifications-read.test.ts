@@ -16,7 +16,7 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
-vi.mock('@/app/lib/graphql/operations', () => ({
+vi.mock('@boardsesh/graphql/operations', () => ({
   MARK_GROUP_NOTIFICATIONS_READ: 'MARK_GROUP_NOTIFICATIONS_READ_MUTATION',
   MARK_ALL_NOTIFICATIONS_READ: 'MARK_ALL_NOTIFICATIONS_READ_MUTATION',
 }));

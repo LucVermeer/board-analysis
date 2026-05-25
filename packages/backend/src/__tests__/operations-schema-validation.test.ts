@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vite-plus/test';
 import { readFileSync } from 'fs';
 import { buildSchema, parse, validate, type DocumentNode, type GraphQLSchema } from 'graphql';
 import { typeDefs } from '@boardsesh/shared-schema';
-import * as operations from '@boardsesh/shared-schema/operations';
+import * as operations from '@boardsesh/graphql/operations/queue-session';
 
 // Build a fresh schema from the raw typeDefs inside this test's `graphql`
 // instance. Importing the backend's `schema` object crosses the boundary

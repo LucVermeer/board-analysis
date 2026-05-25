@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
-import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@/app/lib/graphql/operations';
+import { GET_MY_BOARDS, type GetMyBoardsQueryResponse } from '@boardsesh/graphql/operations';
 import type { UserBoard } from '@boardsesh/shared-schema';
 
 /**

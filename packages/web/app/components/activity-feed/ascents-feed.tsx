@@ -26,7 +26,7 @@ import {
   type AscentFeedItem,
   type GetUserGroupedAscentsFeedQueryVariables,
   type GetUserGroupedAscentsFeedQueryResponse,
-} from '@/app/lib/graphql/operations';
+} from '@boardsesh/graphql/operations';
 import AscentThumbnail from './ascent-thumbnail';
 import ClimbIcons from '@/app/components/climb-card/climb-icons';
 import { ConfirmPopover } from '@/app/components/ui/confirm-popover';

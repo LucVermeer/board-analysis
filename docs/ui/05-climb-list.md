@@ -11,8 +11,9 @@
 **Layout:** Vertical scrollable list. Header row with search pills + view toggle + angle selector. Main content area with climbs. Bottom tab bar with spacer.
 
 **Header row:**
+
 - **Left (flex: 1, overflow hidden):** Search summary pills (horizontal scroll, `headerInline` prop) -- chips showing active filter descriptions. Each chip is removable.
-- **Right (flex-shrink: 0):** 
+- **Right (flex-shrink: 0):**
   - View mode toggle: two `IconButton`s side by side (gap 2px)
     - List icon (`FormatListBulletedOutlined`) -- opacity 1 when active, 0.4 when inactive
     - Grid icon (`AppsOutlined`) -- opacity 1 when active, 0.4 when inactive
@@ -23,6 +24,7 @@
 **View modes:**
 
 #### List Mode (default, persisted to IndexedDB as `climbListViewMode`)
+
 - **Virtualized:** Uses `@tanstack/react-virtual` `useWindowVirtualizer`
   - `estimateSize: () => 107` (107px per item)
   - `overscan: 10` (10 items rendered above/below viewport)
@@ -34,6 +36,7 @@
 - **Swipe hint:** `SwipeHintOrchestrator` renders after list items
 
 #### Grid Mode
+
 - **Layout:** Flexbox wrap, `gap: themeTokens.spacing[4]` (16px)
 - **Item width:** `xs: 100%`, `lg: calc(50% - 8px)` (two columns on large screens)
 - **Item component:** `ClimbCard` (see below)
@@ -41,6 +44,7 @@
 - **Not virtualized** (all visible items rendered)
 
 **Loading states:**
+
 - Initial load: 10 skeleton items matching the active view mode
 - Load more: additional skeletons appended below existing items
 - End of results: centered text "No more climbs" (when `!hasMore && climbs.length > 0`)
@@ -48,6 +52,7 @@
 **Batched rendering:** When search results are replaced (not appended), only the first 6 items render synchronously. The rest render on the next animation frame. The window scrolls to top with `behavior: 'instant'`.
 
 **Data sources:**
+
 - `searchClimbs` GraphQL query with pagination (`page`, `pageSize`)
 - `useUISearchParams()` for filter state (synced to URL query params)
 - `useInfiniteScroll()` hook for grid mode sentinel
@@ -94,11 +99,13 @@
 **Unsupported/bigger-board state:** `opacity: 0.5`, `filter: 'grayscale(80%)'`. Tap is intercepted, shows warning snackbar.
 
 **Drawers (per-item, rendered only when no parent drawer callbacks):**
+
 - Actions drawer: `ClimbActionsDrawer` at 60% height with drag-to-resize
 - Playlist selector drawer: `SwipeableDrawer` with `PlaylistSelectionContent`, max-height 70vh
 - Queue drawer: `QueueDrawer` for viewing current queue
 
 **Mobile adaptation notes:**
+
 - Use `react-native-gesture-handler` `Swipeable` for swipe actions
 - Or implement with `PanGestureHandler` + `react-native-reanimated` for custom gesture physics
 - `FlashList` replaces virtualized list with `estimatedItemSize={107}`
@@ -120,6 +127,7 @@
 **Selected state:** Content background: grade tint color or `var(--semantic-selected-light)`.
 
 **Mobile adaptation notes:**
+
 - Custom card component with `react-native-reanimated` for press animations
 - Grid layout via `FlashList` with `numColumns={1}` (phone) or `numColumns={2}` (tablet)
 
@@ -159,14 +167,15 @@
    - Sort select: Relevance, Date, Difficulty ascending, Difficulty descending
 
 **Search pills (above climb list):**
+
 - Active filters shown as removable chips in horizontal scroll
 - "Clear all" button when multiple filters active
 - Each pill shows filter summary (e.g., "V3--V7", "4+ stars", setter name)
 
 **Data sources:**
+
 - `useUISearchParams()` -- URL-synced search parameters
 - `getGradesForBoard()` -- grade list for current board
 - `useBoardProvider()` -- auth state for conditional filters
 
 ---
-
