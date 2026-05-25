@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Pressable, View, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import {
@@ -25,11 +25,57 @@ type QueueItemRowProps = {
   isCurrentClimb: boolean;
   onPress: (item: ClimbQueueItem) => void;
   onRemove: (uuid: string) => void;
+  isEditMode?: boolean;
+  isSelected?: boolean;
+  isHistoryItem?: boolean;
+  onToggleSelect?: (uuid: string) => void;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove }: QueueItemRowProps) {
+function PositionIndicator({
+  isEditMode,
+  isSelected,
+  isCurrentClimb,
+  position,
+}: {
+  isEditMode: boolean;
+  isSelected: boolean;
+  isCurrentClimb: boolean;
+  position: number;
+}) {
+  if (isEditMode) {
+    return (
+      <Icon
+        name={isSelected ? 'checkmark.circle.fill' : 'circle'}
+        size={22}
+        color={isSelected ? brandColors.primary : iosSystemColors.systemGray4}
+      />
+    );
+  }
+
+  if (isCurrentClimb) {
+    return <Icon name="play.fill" size={14} color={brandColors.primary} />;
+  }
+
+  return (
+    <Text variant="subheadline" color={iosSystemColors.systemGray} style={styles.positionText}>
+      {String(position)}
+    </Text>
+  );
+}
+
+export function QueueItemRow({
+  item,
+  position,
+  isCurrentClimb,
+  onPress,
+  onRemove,
+  isEditMode = false,
+  isSelected = false,
+  isHistoryItem = false,
+  onToggleSelect,
+}: QueueItemRowProps) {
   const { systemColors } = useTheme();
   const { t } = useTranslation('session');
   const translateX = useSharedValue(0);
@@ -37,6 +83,18 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
   const rowHeight = useSharedValue<number | undefined>(undefined);
   const isSwipeOpen = useSharedValue(false);
   const [isOpen, setIsOpen] = useState(false);
+
+  // Disable swipe for edit mode and history items
+  const swipeEnabled = !isEditMode && !isHistoryItem;
+
+  // Reset swipe position when swipe gets disabled (e.g. entering edit mode)
+  useEffect(() => {
+    if (!swipeEnabled) {
+      translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+      isSwipeOpen.value = false;
+      runOnJS(setIsOpen)(false);
+    }
+  }, [swipeEnabled]);
 
   const handleRemove = useCallback(() => {
     hapticMedium();
@@ -46,6 +104,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
+        .enabled(swipeEnabled)
         .activeOffsetX([-10, 10])
         .failOffsetY([-5, 5])
         .onUpdate((event: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
@@ -72,7 +131,7 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
             runOnJS(setIsOpen)(false);
           }
         }),
-    [],
+    [swipeEnabled],
   );
 
   const rowAnimatedStyle = useAnimatedStyle(() => ({
@@ -94,6 +153,11 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
   }));
 
   const handlePress = () => {
+    if (isEditMode) {
+      hapticSelection();
+      onToggleSelect?.(item.uuid);
+      return;
+    }
     if (isOpen) {
       // Close the swipe first
       translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
@@ -117,61 +181,73 @@ export function QueueItemRow({ item, position, isCurrentClimb, onPress, onRemove
   const climbName = item.climb?.name ?? t('mobile.queue.unknownClimb');
   const difficulty = item.climb?.difficulty ?? '';
 
+  const rowContent = (
+    <AnimatedPressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${climbName}, ${t('mobile.queue.positionLabel', { position })}`}
+      accessibilityState={{ selected: isEditMode ? isSelected : isCurrentClimb }}
+      style={[
+        styles.row,
+        isCurrentClimb && !isHistoryItem && styles.currentClimbRow,
+        isHistoryItem && styles.historyRow,
+        rowAnimatedStyle,
+      ]}
+    >
+      {/* Position number or checkbox */}
+      <View style={styles.positionContainer}>
+        <PositionIndicator
+          isEditMode={isEditMode}
+          isSelected={isSelected}
+          isCurrentClimb={isCurrentClimb}
+          position={position}
+        />
+      </View>
+
+      {/* Climb info */}
+      <View style={styles.climbInfo}>
+        <Text
+          variant="body"
+          numberOfLines={1}
+          style={isCurrentClimb && !isHistoryItem ? styles.currentClimbText : undefined}
+        >
+          {climbName}
+        </Text>
+      </View>
+
+      {/* Grade pill */}
+      {difficulty ? (
+        <View style={[styles.gradePill, isCurrentClimb && !isHistoryItem && styles.currentGradePill]}>
+          <Text
+            variant="caption1"
+            color={isCurrentClimb && !isHistoryItem ? brandColors.primary : iosSystemColors.systemGray}
+            style={styles.gradeText}
+          >
+            {difficulty}
+          </Text>
+        </View>
+      ) : null}
+    </AnimatedPressable>
+  );
+
   return (
     <Animated.View style={containerAnimatedStyle}>
       <View style={styles.swipeContainer}>
         {/* Delete action behind the row */}
-        <Animated.View style={[styles.deleteAction, deleteButtonStyle]}>
-          <Pressable
-            onPress={handleDeletePress}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.queue.removeClimb')}
-            style={styles.deleteButton}
-          >
-            <Icon name="delete" size={22} color={iosSystemColors.white} />
-          </Pressable>
-        </Animated.View>
+        {swipeEnabled && (
+          <Animated.View style={[styles.deleteAction, deleteButtonStyle]}>
+            <Pressable
+              onPress={handleDeletePress}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.queue.removeClimb')}
+              style={styles.deleteButton}
+            >
+              <Icon name="delete" size={22} color={iosSystemColors.white} />
+            </Pressable>
+          </Animated.View>
+        )}
 
-        <GestureDetector gesture={panGesture}>
-          <AnimatedPressable
-            onPress={handlePress}
-            accessibilityRole="button"
-            accessibilityLabel={`${climbName}, ${t('mobile.queue.positionLabel', { position })}`}
-            accessibilityState={{ selected: isCurrentClimb }}
-            style={[styles.row, isCurrentClimb && styles.currentClimbRow, rowAnimatedStyle]}
-          >
-            {/* Position number */}
-            <View style={styles.positionContainer}>
-              {isCurrentClimb ? (
-                <Icon name="play.fill" size={14} color={brandColors.primary} />
-              ) : (
-                <Text variant="subheadline" color={iosSystemColors.systemGray} style={styles.positionText}>
-                  {String(position)}
-                </Text>
-              )}
-            </View>
-
-            {/* Climb info */}
-            <View style={styles.climbInfo}>
-              <Text variant="body" numberOfLines={1} style={isCurrentClimb ? styles.currentClimbText : undefined}>
-                {climbName}
-              </Text>
-            </View>
-
-            {/* Grade pill */}
-            {difficulty ? (
-              <View style={[styles.gradePill, isCurrentClimb && styles.currentGradePill]}>
-                <Text
-                  variant="caption1"
-                  color={isCurrentClimb ? brandColors.primary : iosSystemColors.systemGray}
-                  style={styles.gradeText}
-                >
-                  {difficulty}
-                </Text>
-              </View>
-            ) : null}
-          </AnimatedPressable>
-        </GestureDetector>
+        {swipeEnabled ? <GestureDetector gesture={panGesture}>{rowContent}</GestureDetector> : rowContent}
       </View>
 
       {/* Separator */}
@@ -196,6 +272,9 @@ const styles = StyleSheet.create({
   },
   currentClimbRow: {
     backgroundColor: `${brandColors.primary}14`,
+  },
+  historyRow: {
+    opacity: 0.5,
   },
   positionContainer: {
     width: 28,

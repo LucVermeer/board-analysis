@@ -6,6 +6,8 @@
  * Animation tokens have moved to ./animations.ts
  */
 
+import { iosSystemColors } from './ios-colors';
+
 export const spacing = {
   0: 0,
   1: 4,
@@ -70,6 +72,20 @@ export const shadows = {
 export const opacity = {
   subtle: 0.7,
   disabled: 0.5,
+} as const;
+
+/** Shared bottom-sheet handle and background styles used by QueueSheet, AngleSelectorSheet, and PlayDrawer. */
+export const sheetStyles = {
+  indicator: {
+    backgroundColor: `${iosSystemColors.systemGray}4D`,
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+  },
+  background: {
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+  },
 } as const;
 
 export type Spacing = typeof spacing;

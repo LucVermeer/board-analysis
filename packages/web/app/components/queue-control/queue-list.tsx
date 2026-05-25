@@ -15,6 +15,7 @@ import type { Climb, BoardDetails } from '@/app/lib/types';
 import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { reorder } from '@atlaskit/pragmatic-drag-and-drop/reorder';
+import { buildQueueListModel, type QueueFlatRow } from '@boardsesh/play-view';
 import { usePathname, useParams } from 'next/navigation';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import { useSession } from 'next-auth/react';
@@ -231,54 +232,21 @@ const QueueList = forwardRef<QueueListHandle, QueueListProps>(
 
     // Build the flat row model for the unified virtualizer
     const { flatRows, scrollTargetFlatIndex } = useMemo(() => {
-      const rows: FlatRow[] = [];
-      let scrollTargetIdx = -1;
+      const sharedModel = buildQueueListModel(queue, currentClimbUuid, {
+        showHistory,
+        showFullHistory,
+        historyDisplayLimit: DEFAULT_HISTORY_DISPLAY_LIMIT,
+      });
 
-      const currentIndex = queue.findIndex((item) => item.uuid === currentClimbUuid);
-      const historyItems = currentIndex > 0 ? queue.slice(0, currentIndex) : [];
-      const currentItem = currentIndex >= 0 ? queue[currentIndex] : null;
-      // When no current climb (currentIndex === -1), show entire queue as future items
-      const futureItems = currentIndex >= 0 ? queue.slice(currentIndex + 1) : queue;
+      const rows: FlatRow[] = [...(sharedModel.flatRows as FlatRow[])];
+      const scrollTargetIdx = sharedModel.currentItemFlatIndex;
 
-      // History items — render at most DEFAULT_HISTORY_DISPLAY_LIMIT (most
-      // recent) by default. The full backlog unfolds when the user taps the
-      // "Show full history" row. queueIndex always tracks the position in the
-      // full queue so re-orders + selection state stay consistent.
-      if (showHistory && historyItems.length > 0) {
-        const hiddenCount = showFullHistory ? 0 : Math.max(0, historyItems.length - DEFAULT_HISTORY_DISPLAY_LIMIT);
-        if (hiddenCount > 0) {
-          rows.push({ type: 'history-show-all', hiddenCount });
-        }
-        const firstRenderedIdx = hiddenCount;
-        for (let i = firstRenderedIdx; i < historyItems.length; i++) {
-          rows.push({ type: 'history-item', item: historyItems[i], queueIndex: i });
-        }
-        rows.push({ type: 'history-divider' });
-      }
-
-      // Current item — always the scroll target so the virtualizer can center
-      // it on open. Fallback to the first future item when nothing is lit yet.
-      if (currentItem) {
-        scrollTargetIdx = rows.length;
-        rows.push({ type: 'current-item', item: currentItem, queueIndex: currentIndex });
-      }
-
-      // Future items
-      for (let i = 0; i < futureItems.length; i++) {
-        const originalIndex = currentIndex >= 0 ? currentIndex + 1 + i : i;
-        if (i === 0 && !currentItem) {
-          scrollTargetIdx = rows.length;
-        }
-        rows.push({ type: 'future-item', item: futureItems[i], queueIndex: originalIndex });
-      }
-
-      // Next up section (only when active and not viewOnlyMode)
+      // Web-only: suggestion section (only when active and not viewOnlyMode)
       if (active && !viewOnlyMode) {
         rows.push({ type: 'suggestion-header' });
         for (let i = 0; i < suggestedClimbs.length; i++) {
           rows.push({ type: 'suggestion', climb: suggestedClimbs[i] });
         }
-        // Loading or end message
         if (suggestedClimbs.length > 0 || isFetchingClimbs || isFetchingNextPage) {
           if (isFetchingClimbs || isFetchingNextPage) {
             rows.push({ type: 'loading' });

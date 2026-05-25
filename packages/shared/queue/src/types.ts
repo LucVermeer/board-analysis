@@ -130,4 +130,5 @@ export type QueueAction<TSearchParams extends QueueSearchParams = QueueSearchPar
   | { type: 'CLEANUP_PENDING_UPDATES_BATCH'; payload: { correlationIds: string[] } }
   | { type: 'CLEAR_RESYNC_FLAG' }
   | { type: 'OPTIMISTIC_SET_DRIVER'; payload: { participantId: string } }
-  | { type: 'OPTIMISTIC_CLEAR_DRIVER' };
+  | { type: 'OPTIMISTIC_CLEAR_DRIVER' }
+  | { type: 'CLEAR_QUEUE' };

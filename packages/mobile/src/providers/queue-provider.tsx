@@ -41,6 +41,7 @@ type QueueContextValue = {
   setSessionId: (id: string | null) => void;
   addToQueue: (item: ClimbQueueItem) => void;
   removeFromQueue: (uuid: string) => void;
+  clearQueue: () => void;
   setCurrentClimb: (item: ClimbQueueItem) => void;
   nextClimb: () => void;
   previousClimb: () => void;
@@ -212,8 +213,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const boardPath = `${boardConfig.boardName}/${boardConfig.layoutId}/${boardConfig.sizeId}/${boardConfig.setIds}/${boardConfig.angle}`;
 
       try {
-        // Location is a future feature — using 0,0 for sessions created from the queue.
-        // When expo-location is integrated, these will come from the device.
         const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {
           input: { boardPath, latitude: 0, longitude: 0, discoverable: false },
         });
@@ -232,7 +231,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     sessionCreationRef.current = createPromise;
     return createPromise;
-  }, []);
+  }, [showToast, t]);
 
   const addToQueue = useCallback(
     (item: ClimbQueueItem) => {
@@ -254,13 +253,29 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [ensureSession],
   );
 
-  const removeFromQueue = useCallback((uuid: string) => {
-    dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+  const removeFromQueue = useCallback(
+    (uuid: string) => {
+      dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
+
+      if (sessionIdRef.current) {
+        getHttpClient()
+          .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid })
+          .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
+      }
+    },
+    [showToast, t],
+  );
+
+  const clearQueue = useCallback(() => {
+    const itemsToRemove = stateRef.current.queue;
+    dispatch({ type: 'CLEAR_QUEUE' });
 
     if (sessionIdRef.current) {
-      getHttpClient()
-        .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid })
-        .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
+      for (const item of itemsToRemove) {
+        getHttpClient()
+          .request<RemoveQueueItemMutationResponse>(REMOVE_QUEUE_ITEM, { uuid: item.uuid })
+          .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
+      }
     }
   }, []);
 
@@ -286,7 +301,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [ensureSession],
+    [ensureSession, showToast, t],
   );
 
   const nextClimb = useCallback(() => {
@@ -308,7 +323,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         }
       });
     }
-  }, [ensureSession]);
+  }, [ensureSession, showToast, t]);
 
   const previousClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
@@ -329,7 +344,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         }
       });
     }
-  }, [ensureSession]);
+  }, [ensureSession, showToast, t]);
 
   const clearSession = useCallback(async () => {
     setSessionId(null);
@@ -365,6 +380,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setSessionId,
       addToQueue,
       removeFromQueue,
+      clearQueue,
       setCurrentClimb,
       nextClimb,
       previousClimb,
@@ -376,6 +392,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       sessionId,
       addToQueue,
       removeFromQueue,
+      clearQueue,
       setCurrentClimb,
       nextClimb,
       previousClimb,

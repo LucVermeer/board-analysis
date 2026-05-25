@@ -1,18 +1,29 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, Image } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import {
+  BottomSheetModal,
+  BottomSheetBackdrop,
+  BottomSheetScrollView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import type { ClimbQueueItem } from '@boardsesh/queue';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
+import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { PlayDrawerTickFab } from './PlayDrawerTickFab';
 import { QuickTickBar } from './QuickTickBar';
+import { DeferredSections } from './DeferredSections';
+import { QueueSheet } from './QueueSheet';
+import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { LogAscentSheet } from '../LogAscentSheet';
+import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
@@ -20,8 +31,29 @@ import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing } from '../../theme/tokens';
+import { spacing, sheetStyles } from '../../theme/tokens';
 import { timing } from '../../theme/animations';
+
+function climbToQueueItem(climb: Climb): ClimbQueueItem {
+  return {
+    uuid: randomUUID(),
+    climb: {
+      uuid: climb.uuid,
+      name: climb.name,
+      frames: climb.frames,
+      setter_username: climb.setter_username,
+      angle: climb.angle,
+      ascensionist_count: climb.ascensionist_count,
+      difficulty: climb.difficulty,
+      quality_average: climb.quality_average,
+      stars: climb.stars,
+      difficulty_error: climb.difficulty_error,
+      benchmark_difficulty: climb.benchmark_difficulty,
+      userAscents: climb.userAscents,
+      userAttempts: climb.userAttempts,
+    },
+  };
+}
 
 type BoardConfig = {
   boardName: string;
@@ -38,10 +70,11 @@ export type PlayDrawerHandle = {
 
 type PlayDrawerProps = {
   boardConfig: BoardConfig;
+  onAngleChange?: (angle: number) => void;
 };
 
 export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
-  { boardConfig },
+  { boardConfig, onAngleChange },
   ref,
 ) {
   const { t } = useTranslation('session');
@@ -53,8 +86,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [isFavorited, setIsFavorited] = useState(false);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
 
-  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId } = useQueue();
+  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
@@ -70,6 +104,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIds: parsedSetIds,
     });
   }, [boardName, layoutId, sizeId, setIds]);
+
+  const imageUrls = boardRenderData?.imageUrls;
+  useEffect(() => {
+    if (imageUrls) {
+      for (const url of imageUrls) {
+        Image.prefetch(url);
+      }
+    }
+  }, [imageUrls]);
 
   const navigationState = useMemo(
     () => computeNavigationState(state.queue, state.currentClimbQueueItem),
@@ -105,25 +148,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsFavorited(false);
       setIsTickBarActive(false);
       setIsSheetOpen(true);
-      const queueItem = {
-        uuid: randomUUID(),
-        climb: {
-          uuid: selectedClimb.uuid,
-          name: selectedClimb.name,
-          frames: selectedClimb.frames,
-          setter_username: selectedClimb.setter_username,
-          angle: selectedClimb.angle,
-          ascensionist_count: selectedClimb.ascensionist_count,
-          difficulty: selectedClimb.difficulty,
-          quality_average: selectedClimb.quality_average,
-          stars: selectedClimb.stars,
-          difficulty_error: selectedClimb.difficulty_error,
-          benchmark_difficulty: selectedClimb.benchmark_difficulty,
-          userAscents: selectedClimb.userAscents,
-          userAttempts: selectedClimb.userAttempts,
-        },
-      };
-      setCurrentClimb(queueItem);
+      setActiveSubDrawer('none');
+      setCurrentClimb(climbToQueueItem(selectedClimb));
       sheetRef.current?.present();
     },
     close: () => {
@@ -136,6 +162,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsMirrored(false);
     setIsTickBarActive(false);
     setIsSheetOpen(false);
+    setActiveSubDrawer('none');
   }, []);
 
   const handlePrev = useCallback(() => {
@@ -174,11 +201,19 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handleOpenActions = useCallback(() => {
-    // Phase 3: Climb actions sheet
+    setActiveSubDrawer('actions');
   }, []);
 
   const handleOpenQueue = useCallback(() => {
-    // Phase 3: Queue drawer
+    setActiveSubDrawer('queue');
+  }, []);
+
+  const handleOpenAngleSelector = useCallback(() => {
+    setActiveSubDrawer('angleSelector');
+  }, []);
+
+  const handleCloseSubDrawer = useCallback(() => {
+    setActiveSubDrawer('none');
   }, []);
 
   const handleTickFabPress = useCallback(() => {
@@ -193,6 +228,19 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
   }, []);
 
+  const handleSimilarClimbPress = useCallback(
+    (similarClimb: Climb) => {
+      setClimb(similarClimb);
+      setIsMirrored(false);
+      setIsFavorited(false);
+      setIsTickBarActive(false);
+      const queueItem = climbToQueueItem(similarClimb);
+      addToQueue(queueItem);
+      setCurrentClimb(queueItem);
+    },
+    [addToQueue, setCurrentClimb],
+  );
+
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.5} />
@@ -204,6 +252,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
+  const subDrawerOpen = activeSubDrawer !== 'none';
 
   return (
     <>
@@ -211,17 +260,18 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         ref={sheetRef}
         snapPoints={snapPoints}
         enablePanDownToClose
+        enableContentPanningGesture={!subDrawerOpen}
+        enableHandlePanningGesture={!subDrawerOpen}
         backdropComponent={renderBackdrop}
         onDismiss={handleClose}
-        handleIndicatorStyle={styles.indicator}
-        backgroundStyle={styles.background}
+        handleIndicatorStyle={sheetStyles.indicator}
+        backgroundStyle={sheetStyles.background}
       >
-        <BottomSheetView style={[styles.content, { paddingBottom: insets.bottom }]}>
+        <BottomSheetScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom }}>
           <Pressable
             onPress={() => sheetRef.current?.dismiss()}
             accessibilityRole="button"
             accessibilityLabel={t('playView.closeAria')}
-            hitSlop={8}
             style={styles.closeButton}
           >
             <Icon name="close" size={20} color={iosSystemColors.systemGray} />
@@ -243,9 +293,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   <SwipeBoardCarousel
                     boardName={boardName as BoardName}
                     boardRenderData={boardRenderData}
-                    layoutId={layoutId}
-                    sizeId={sizeId}
-                    setIds={setIds}
                     currentFrames={displayedClimb.frames}
                     nextFrames={navigationState.nextItem?.climb.frames ?? null}
                     prevFrames={navigationState.prevItem?.climb.frames ?? null}
@@ -259,7 +306,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 )}
 
                 {/* Tick FAB */}
-                <Animated.View style={[styles.fabWrapper, fabAnimatedStyle]} pointerEvents={isTickBarActive ? 'none' : 'auto'}>
+                <Animated.View
+                  style={[styles.fabWrapper, fabAnimatedStyle]}
+                  pointerEvents={isTickBarActive ? 'none' : 'auto'}
+                >
                   <PlayDrawerTickFab
                     ascentCount={ascentCount}
                     onPress={handleTickFabPress}
@@ -298,16 +348,78 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 onLightbulb={handleLightbulb}
                 onOpenActions={handleOpenActions}
                 onOpenQueue={handleOpenQueue}
+                currentAngle={angle}
+                onOpenAngleSelector={handleOpenAngleSelector}
+              />
+
+              {/* Below-fold deferred sections */}
+              <DeferredSections
+                climb={displayedClimb}
+                boardName={boardName}
+                layoutId={layoutId}
+                sizeId={sizeId}
+                setIds={setIds}
+                angle={angle}
+                enabled={isSheetOpen}
+                onSimilarClimbPress={handleSimilarClimbPress}
               />
             </>
           )}
-        </BottomSheetView>
+        </BottomSheetScrollView>
       </BottomSheetModal>
 
-      {/* Log Ascent sheet (full, via long-press).
-          TODO: still uses BottomSheet (not BottomSheetModal), so it renders
-          within the screen content area and can appear behind the nav header.
-          Follow-up: convert to BottomSheetModal once PlayDrawer is stable. */}
+      {/* Sub-drawer: Queue */}
+      {activeSubDrawer === 'queue' && (
+        <QueueSheet
+          visible={true}
+          onClose={handleCloseSubDrawer}
+          onClimbPress={(item) => {
+            setClimb(item.climb);
+            setCurrentClimb(item);
+            handleCloseSubDrawer();
+          }}
+        />
+      )}
+
+      {/* Sub-drawer: Climb actions */}
+      {activeSubDrawer === 'actions' && (
+        <ClimbActionsSheet
+          visible={true}
+          climb={displayedClimb ?? null}
+          boardName={boardName}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
+          angle={angle}
+          onAddToQueue={() => {
+            if (displayedClimb) {
+              addToQueue({
+                uuid: randomUUID(),
+                climb: displayedClimb,
+              });
+            }
+          }}
+          onToggleFavorite={handleToggleFavorite}
+          onClose={handleCloseSubDrawer}
+        />
+      )}
+
+      {/* Sub-drawer: Angle selector */}
+      {activeSubDrawer === 'angleSelector' && (
+        <AngleSelectorSheet
+          visible={true}
+          onClose={handleCloseSubDrawer}
+          boardName={boardName}
+          layoutId={layoutId}
+          currentAngle={angle}
+          onAngleChange={(newAngle) => {
+            onAngleChange?.(newAngle);
+            handleCloseSubDrawer();
+          }}
+        />
+      )}
+
+      {/* Log Ascent sheet (full, via long-press) */}
       {displayedClimb && (
         <LogAscentSheet
           visible={showLogAscent}
@@ -329,16 +441,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 });
 
 const styles = StyleSheet.create({
-  indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-  },
-  background: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
   content: {
     flex: 1,
   },
@@ -347,9 +449,9 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
     zIndex: 2,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(120, 120, 128, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',

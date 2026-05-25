@@ -222,6 +222,8 @@
     "endMessage": "Eso es todo por ahora",
     "showFullHistory_one": "Mostrar historial completo ({{count}} más)",
     "showFullHistory_other": "Mostrar historial completo ({{count}} más)",
+    "showFullHistoryAria_one": "Mostrar {{count}} elemento más del historial",
+    "showFullHistoryAria_other": "Mostrar {{count}} elementos más del historial",
     "tickHistoryClimb": "Registrar un tick para {{name}}"
   },
   "queueProvider": {
@@ -234,29 +236,61 @@
     "unknownDriver": "Alguien"
   },
   "mobile": {
+    "logbook": {
+      "title": "Registro",
+      "noEntries": "Sin ascensiones todavía",
+      "sendsAndAttempts": "{{sends}} envios, {{attempts}} intentos",
+      "sendsOnly": "{{sends}} envios",
+      "attemptsOnly": "{{attempts}} intentos"
+    },
+    "similarClimbs": {
+      "title": "Escaladas similares",
+      "empty": "No se encontraron escaladas similares",
+      "loading": "Buscando escaladas similares..."
+    },
+    "community": {
+      "title": "Comunidad",
+      "empty": "Sin datos de la comunidad todavía",
+      "ascensionists_one": "{{count}} ascensionista",
+      "ascensionists_other": "{{count}} ascensionistas",
+      "avgQuality": "Calidad promedio"
+    },
+    "betaVideos": {
+      "title": "Videos Beta",
+      "empty": "Sin videos beta todavía. ¡Sé el primero en compartir!"
+    },
+    "angleSelector": {
+      "title": "Seleccionar ángulo"
+    },
     "queue": {
-      "noSessionTitle": "Inicia una sesión para usar la cola",
-      "noSessionSubtitle": "Únete o crea una sesión desde la pestaña Boards para organizar bloques con tu grupo.",
-      "emptyTitle": "No hay bloques en la cola",
-      "emptySubtitle": "Busca bloques y añádelos a tu cola para empezar.",
-      "browseClimbs": "Buscar bloques",
-      "noClimbSelected": "Sin bloque seleccionado",
       "unknownClimb": "Bloque desconocido",
-      "logAscent": "Registrar ascenso",
-      "previousClimb": "Bloque anterior",
-      "nextClimb": "Siguiente bloque",
       "removeClimb": "Eliminar bloque",
       "positionLabel": "posición {{position}}",
-      "syncError": "Error de sincronización de la cola",
-      "sessionCreateError": "No se pudo iniciar la sesión",
-      "actionFailed": "Acción fallida, inténtalo de nuevo",
-      "endSession": "Finalizar sesión",
-      "endSessionConfirm": "¿Finalizar esta sesión y ver tus resultados?",
-      "climbCount_one": "{{count}} vía",
-      "climbCount_other": "{{count}} vías"
+      "syncError": "Error de sincronización de cola",
+      "sessionCreateError": "No se pudo crear la sesión",
+      "actionFailed": "Acción fallida. Inténtalo de nuevo.",
+      "endSession": "Terminar sesión",
+      "endSessionConfirm": "¿Estás seguro de que quieres terminar esta sesión?",
+      "climbCount_one": "{{count}} bloque",
+      "climbCount_other": "{{count}} bloques",
+      "noSessionTitle": "Sin sesión aún",
+      "noSessionSubtitle": "Inicia una sesión desde la pestaña de bloques",
+      "emptyTitle": "La cola está vacía",
+      "emptySubtitle": "Explora bloques y agrégalos a tu cola",
+      "browseClimbs": "Explorar bloques",
+      "previousClimb": "Bloque anterior",
+      "nextClimb": "Bloque siguiente",
+      "logAscent": "Registrar ascenso",
+      "noClimbSelected": "Ningún bloque seleccionado"
+    },
+    "queueSheet": {
+      "emptyQueue": "Tu cola está vacía",
+      "toggleHistory": "Mostrar historial",
+      "editQueue": "Editar cola",
+      "doneEditing": "Listo"
     },
     "toast": {
-      "sessionEnded": "Sesión finalizada"
+      "sessionEnded": "Sesión terminada"
     }
   },
   "playView": {
@@ -308,15 +342,17 @@
       "tickLabel": "marca",
       "logAttemptAria": "Registrar intento",
       "saveTickAria": "Guardar marca",
-      "gradeLabel": "Grade",
-      "triesLabel": "Tries",
-      "starsLabel": "Stars",
-      "cancelLabel": "Cancel",
+      "gradeLabel": "Grado",
+      "triesLabel": "Intentos",
+      "starsLabel": "Estrellas",
+      "cancelLabel": "Cancelar",
       "flashSaveLabel": "Flash",
-      "sendSaveLabel": "Send",
-      "logAscentAria": "Log {{status}}",
-      "decreaseTriesAria": "Decrease attempts",
-      "increaseTriesAria": "Increase attempts"
+      "sendSaveLabel": "Envío",
+      "logAscentAria": "Registrar {{status}}",
+      "decreaseTriesAria": "Disminuir intentos",
+      "increaseTriesAria": "Aumentar intentos",
+      "starRating_one": "{{count}} estrella",
+      "starRating_other": "{{count}} estrellas"
     }
   }
 }

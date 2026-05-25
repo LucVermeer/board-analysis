@@ -222,6 +222,8 @@
     "endMessage": "That's all for now",
     "showFullHistory_one": "Show full history ({{count}} more)",
     "showFullHistory_other": "Show full history ({{count}} more)",
+    "showFullHistoryAria_one": "Show {{count}} more item from history",
+    "showFullHistoryAria_other": "Show {{count}} more items from history",
     "tickHistoryClimb": "Log a tick for {{name}}"
   },
   "queueProvider": {
@@ -234,26 +236,58 @@
     "unknownDriver": "Someone"
   },
   "mobile": {
+    "logbook": {
+      "title": "Logbook",
+      "noEntries": "No ascents yet",
+      "sendsAndAttempts": "{{sends}} sends, {{attempts}} attempts",
+      "sendsOnly": "{{sends}} sends",
+      "attemptsOnly": "{{attempts}} attempts"
+    },
+    "similarClimbs": {
+      "title": "Similar Climbs",
+      "empty": "No similar climbs found",
+      "loading": "Finding similar climbs..."
+    },
+    "community": {
+      "title": "Community",
+      "empty": "No community data yet",
+      "ascensionists_one": "{{count}} ascensionist",
+      "ascensionists_other": "{{count}} ascensionists",
+      "avgQuality": "Average quality"
+    },
+    "betaVideos": {
+      "title": "Beta Videos",
+      "empty": "No beta videos yet. Be the first to share!"
+    },
+    "angleSelector": {
+      "title": "Select Angle"
+    },
     "queue": {
-      "noSessionTitle": "Start a session to use the queue",
-      "noSessionSubtitle": "Join or create a session from the Boards tab to line up climbs with your crew.",
-      "emptyTitle": "No climbs in the queue",
-      "emptySubtitle": "Browse climbs and add them to your queue to get started.",
-      "browseClimbs": "Browse climbs",
-      "noClimbSelected": "No climb selected",
       "unknownClimb": "Unknown climb",
-      "logAscent": "Log ascent",
-      "previousClimb": "Previous climb",
-      "nextClimb": "Next climb",
       "removeClimb": "Remove climb",
       "positionLabel": "position {{position}}",
-      "syncError": "Queue sync failed",
-      "sessionCreateError": "Couldn't start session",
-      "actionFailed": "Action failed, try again",
-      "endSession": "End Session",
-      "endSessionConfirm": "End this session and see your results?",
+      "syncError": "Queue sync error",
+      "sessionCreateError": "Couldn't create session",
+      "actionFailed": "Action failed. Try again.",
+      "endSession": "End session",
+      "endSessionConfirm": "Are you sure you want to end this session?",
       "climbCount_one": "{{count}} climb",
-      "climbCount_other": "{{count}} climbs"
+      "climbCount_other": "{{count}} climbs",
+      "noSessionTitle": "No session yet",
+      "noSessionSubtitle": "Start a session from the climbs tab to line up your sends",
+      "emptyTitle": "Queue is empty",
+      "emptySubtitle": "Browse climbs and add them to your queue",
+      "browseClimbs": "Browse climbs",
+      "previousClimb": "Previous climb",
+      "nextClimb": "Next climb",
+      "logAscent": "Log ascent",
+      "noClimbSelected": "No climb selected"
+    },
+    "queueSheet": {
+      "emptyQueue": "Your queue is empty",
+      "toggleHistory": "Toggle history",
+      "editQueue": "Edit queue",
+      "doneEditing": "Done editing"
     },
     "toast": {
       "sessionEnded": "Session ended"
@@ -316,7 +350,9 @@
       "sendSaveLabel": "Send",
       "logAscentAria": "Log {{status}}",
       "decreaseTriesAria": "Decrease attempts",
-      "increaseTriesAria": "Increase attempts"
+      "increaseTriesAria": "Increase attempts",
+      "starRating_one": "{{count}} star",
+      "starRating_other": "{{count}} stars"
     }
   }
 }

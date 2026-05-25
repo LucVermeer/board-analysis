@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Icon } from '../Icon';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -11,10 +12,9 @@ type InlineStarPickerProps = {
   onSelect: (value: number | null) => void;
 };
 
-export const InlineStarPicker = React.memo(function InlineStarPicker({
-  quality,
-  onSelect,
-}: InlineStarPickerProps) {
+export const InlineStarPicker = React.memo(function InlineStarPicker({ quality, onSelect }: InlineStarPickerProps) {
+  const { t } = useTranslation('session');
+
   const handlePress = useCallback(
     (value: number) => {
       hapticSelection();
@@ -30,7 +30,7 @@ export const InlineStarPicker = React.memo(function InlineStarPicker({
           key={star}
           onPress={() => handlePress(star)}
           accessibilityRole="button"
-          accessibilityLabel={`${star} star${star > 1 ? 's' : ''}`}
+          accessibilityLabel={t('playView.tickBar.starRating', { count: star })}
           accessibilityState={{ selected: quality === star }}
           style={styles.starButton}
         >
@@ -54,6 +54,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[2],
   },
   starButton: {
-    padding: spacing[1],
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

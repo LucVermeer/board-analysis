@@ -222,6 +222,8 @@
     "endMessage": "C'est tout pour l'instant",
     "showFullHistory_one": "Afficher l'historique complet ({{count}} de plus)",
     "showFullHistory_other": "Afficher l'historique complet ({{count}} de plus)",
+    "showFullHistoryAria_one": "Afficher {{count}} element de plus de l'historique",
+    "showFullHistoryAria_other": "Afficher {{count}} elements de plus de l'historique",
     "tickHistoryClimb": "Enregistrer une croix pour {{name}}"
   },
   "queueProvider": {
@@ -234,26 +236,58 @@
     "unknownDriver": "Quelqu'un"
   },
   "mobile": {
+    "logbook": {
+      "title": "Carnet",
+      "noEntries": "Pas encore d'ascensions",
+      "sendsAndAttempts": "{{sends}} envois, {{attempts}} tentatives",
+      "sendsOnly": "{{sends}} envois",
+      "attemptsOnly": "{{attempts}} tentatives"
+    },
+    "similarClimbs": {
+      "title": "Voies similaires",
+      "empty": "Aucune voie similaire trouvee",
+      "loading": "Recherche de voies similaires..."
+    },
+    "community": {
+      "title": "Communaute",
+      "empty": "Pas encore de donnees communautaires",
+      "ascensionists_one": "{{count}} grimpeur",
+      "ascensionists_other": "{{count}} grimpeurs",
+      "avgQuality": "Qualite moyenne"
+    },
+    "betaVideos": {
+      "title": "Videos Beta",
+      "empty": "Pas encore de videos beta. Soyez le premier a partager !"
+    },
+    "angleSelector": {
+      "title": "Sélectionner l'angle"
+    },
     "queue": {
-      "noSessionTitle": "Lance une session pour utiliser la file",
-      "noSessionSubtitle": "Rejoins ou crée une session depuis l'onglet Boards pour organiser tes blocs avec ta crew.",
-      "emptyTitle": "Aucun bloc dans la file",
-      "emptySubtitle": "Parcours les blocs et ajoute-les à ta file pour commencer.",
-      "browseClimbs": "Parcourir les blocs",
-      "noClimbSelected": "Aucun bloc sélectionné",
       "unknownClimb": "Bloc inconnu",
-      "logAscent": "Enregistrer l'ascension",
-      "previousClimb": "Bloc précédent",
-      "nextClimb": "Bloc suivant",
       "removeClimb": "Supprimer le bloc",
       "positionLabel": "position {{position}}",
-      "syncError": "Échec de synchronisation de la file",
-      "sessionCreateError": "Impossible de démarrer la session",
-      "actionFailed": "Action échouée, réessayez",
+      "syncError": "Erreur de synchronisation de la file",
+      "sessionCreateError": "Impossible de créer la session",
+      "actionFailed": "Action échouée. Réessayez.",
       "endSession": "Terminer la session",
-      "endSessionConfirm": "Terminer cette session et voir vos résultats ?",
-      "climbCount_one": "{{count}} voie",
-      "climbCount_other": "{{count}} voies"
+      "endSessionConfirm": "Êtes-vous sûr de vouloir terminer cette session ?",
+      "climbCount_one": "{{count}} bloc",
+      "climbCount_other": "{{count}} blocs",
+      "noSessionTitle": "Pas encore de session",
+      "noSessionSubtitle": "Lancez une session depuis l'onglet blocs",
+      "emptyTitle": "La file est vide",
+      "emptySubtitle": "Parcourez les blocs et ajoutez-les à votre file",
+      "browseClimbs": "Parcourir les blocs",
+      "previousClimb": "Bloc précédent",
+      "nextClimb": "Bloc suivant",
+      "logAscent": "Enregistrer l'ascension",
+      "noClimbSelected": "Aucun bloc sélectionné"
+    },
+    "queueSheet": {
+      "emptyQueue": "Votre file est vide",
+      "toggleHistory": "Afficher l'historique",
+      "editQueue": "Modifier la file",
+      "doneEditing": "Terminé"
     },
     "toast": {
       "sessionEnded": "Session terminée"
@@ -308,15 +342,17 @@
       "tickLabel": "tick",
       "logAttemptAria": "Enregistrer un essai",
       "saveTickAria": "Enregistrer le tick",
-      "gradeLabel": "Grade",
-      "triesLabel": "Tries",
-      "starsLabel": "Stars",
-      "cancelLabel": "Cancel",
+      "gradeLabel": "Cotation",
+      "triesLabel": "Essais",
+      "starsLabel": "Étoiles",
+      "cancelLabel": "Annuler",
       "flashSaveLabel": "Flash",
-      "sendSaveLabel": "Send",
-      "logAscentAria": "Log {{status}}",
-      "decreaseTriesAria": "Decrease attempts",
-      "increaseTriesAria": "Increase attempts"
+      "sendSaveLabel": "Envoi",
+      "logAscentAria": "Enregistrer {{status}}",
+      "decreaseTriesAria": "Diminuer les essais",
+      "increaseTriesAria": "Augmenter les essais",
+      "starRating_one": "{{count}} etoile",
+      "starRating_other": "{{count}} etoiles"
     }
   }
 }
