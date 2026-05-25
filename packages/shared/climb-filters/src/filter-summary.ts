@@ -64,7 +64,7 @@ export function getBaseFilterParts(
 export function formatFilterSummary(
   parts: string[],
   labels: Pick<FilterSummaryLabels, 'more'>,
-  maxParts?: number | null,
+  maxParts: number | null = 2,
 ): string | null {
   if (parts.length === 0) return null;
 

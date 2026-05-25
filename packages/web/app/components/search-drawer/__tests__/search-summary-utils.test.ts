@@ -202,6 +202,16 @@ describe('getQualityPanelSummary vs Status (no duplication)', () => {
     expect(pill).toContain('Projects');
   });
 
+  it('pill summary truncates at 2 items with +N more', () => {
+    const pill = getSearchPillSummary(
+      makeParams({ minGrade: 16, minRating: 3, onlyClassics: true, onlyTallClimbs: true }),
+      summaryLabels,
+    );
+    const parts = pill.split(' · ');
+    expect(parts).toHaveLength(3);
+    expect(parts[2]).toBe('+2 more');
+  });
+
   it('pill summary for drafts shows "Drafts"', () => {
     const pill = getSearchPillSummary(makeParams({ onlyDrafts: true }), summaryLabels);
     expect(pill).toContain('Drafts');
