@@ -1,0 +1,108 @@
+import { describe, it, expect } from 'vitest';
+import {
+  computePeekOffset,
+  decideSwipeDirection,
+  evaluateSwipeOutcome,
+  selectPeekDirection,
+  getEnterDirection,
+  SWIPE_THRESHOLD,
+  DIRECTION_THRESHOLD,
+} from '../swipe-carousel';
+
+describe('computePeekOffset', () => {
+  it('clamps the next-peek to 0 when finger has not moved', () => {
+    expect(computePeekOffset({ direction: 'next', swipeOffset: 0, viewportWidth: 400 })).toBe(400);
+  });
+
+  it('slides the next-peek in from the right as the finger drags left', () => {
+    expect(computePeekOffset({ direction: 'next', swipeOffset: -150, viewportWidth: 400 })).toBe(250);
+  });
+
+  it('never lets the next-peek overshoot past the viewport edge', () => {
+    expect(computePeekOffset({ direction: 'next', swipeOffset: -800, viewportWidth: 400 })).toBe(0);
+  });
+
+  it('slides the prev-peek in from the left as the finger drags right', () => {
+    expect(computePeekOffset({ direction: 'prev', swipeOffset: 150, viewportWidth: 400 })).toBe(-250);
+  });
+
+  it('never lets the prev-peek overshoot past the viewport edge', () => {
+    expect(computePeekOffset({ direction: 'prev', swipeOffset: 800, viewportWidth: 400 })).toBe(0);
+  });
+});
+
+describe('decideSwipeDirection', () => {
+  it('returns null while neither axis exceeds the threshold', () => {
+    expect(decideSwipeDirection(5, 5)).toBeNull();
+    expect(decideSwipeDirection(DIRECTION_THRESHOLD, DIRECTION_THRESHOLD)).toBeNull();
+  });
+
+  it('locks to horizontal when |dx| dominates past the threshold', () => {
+    expect(decideSwipeDirection(20, 5)).toBe('horizontal');
+    expect(decideSwipeDirection(-25, 4)).toBe('horizontal');
+  });
+
+  it('locks to vertical when |dy| dominates past the threshold', () => {
+    expect(decideSwipeDirection(5, 20)).toBe('vertical');
+    expect(decideSwipeDirection(-3, -30)).toBe('vertical');
+  });
+
+  it('honours a custom threshold', () => {
+    expect(decideSwipeDirection(25, 5, 30)).toBeNull();
+    expect(decideSwipeDirection(40, 5, 30)).toBe('horizontal');
+  });
+});
+
+describe('evaluateSwipeOutcome', () => {
+  it('returns next when swipe-left exceeds threshold and canNext is true', () => {
+    expect(evaluateSwipeOutcome({ deltaX: -100, canNext: true, canPrev: true })).toBe('next');
+  });
+
+  it('returns previous when swipe-right exceeds threshold and canPrev is true', () => {
+    expect(evaluateSwipeOutcome({ deltaX: 100, canNext: true, canPrev: true })).toBe('previous');
+  });
+
+  it('cancels when threshold is not met', () => {
+    expect(evaluateSwipeOutcome({ deltaX: -SWIPE_THRESHOLD + 1, canNext: true, canPrev: true })).toBe('cancel');
+    expect(evaluateSwipeOutcome({ deltaX: SWIPE_THRESHOLD - 1, canNext: true, canPrev: true })).toBe('cancel');
+  });
+
+  it('cancels when navigation in the requested direction is blocked', () => {
+    expect(evaluateSwipeOutcome({ deltaX: -200, canNext: false, canPrev: true })).toBe('cancel');
+    expect(evaluateSwipeOutcome({ deltaX: 200, canNext: true, canPrev: false })).toBe('cancel');
+  });
+
+  it('honours a custom threshold', () => {
+    expect(evaluateSwipeOutcome({ deltaX: -50, canNext: true, canPrev: true, threshold: 40 })).toBe('next');
+    expect(evaluateSwipeOutcome({ deltaX: -30, canNext: true, canPrev: true, threshold: 40 })).toBe('cancel');
+  });
+});
+
+describe('selectPeekDirection', () => {
+  it('locks to next when an exit-left animation is in flight', () => {
+    expect(selectPeekDirection({ animationDirection: 'left', swipeOffset: 0 })).toBe('next');
+  });
+
+  it('locks to prev when an exit-right animation is in flight', () => {
+    expect(selectPeekDirection({ animationDirection: 'right', swipeOffset: 0 })).toBe('prev');
+  });
+
+  it('falls back to the live offset sign during an active drag', () => {
+    expect(selectPeekDirection({ animationDirection: null, swipeOffset: -10 })).toBe('next');
+    expect(selectPeekDirection({ animationDirection: null, swipeOffset: 10 })).toBe('prev');
+  });
+
+  it('treats an idle gesture (offset 0) as previous', () => {
+    expect(selectPeekDirection({ animationDirection: null, swipeOffset: 0 })).toBe('prev');
+  });
+});
+
+describe('getEnterDirection', () => {
+  it('maps next-navigation to from-right (new climb enters from the right)', () => {
+    expect(getEnterDirection('next')).toBe('from-right');
+  });
+
+  it('maps previous-navigation to from-left', () => {
+    expect(getEnterDirection('previous')).toBe('from-left');
+  });
+});

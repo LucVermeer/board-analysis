@@ -1,11 +1,9 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
+import { SWIPE_THRESHOLD, EXIT_DURATION, CLIP_EXIT_DURATION } from '@boardsesh/play-view';
 import { springs } from '../../theme/animations';
 import { hapticMedium } from '../../lib/haptics';
-
-const SWIPE_THRESHOLD = 80;
-const EXIT_DURATION = 300;
 
 type UseCarouselGestureOptions = {
   onSwipeNext: () => void;
@@ -22,6 +20,8 @@ type UseCarouselGestureReturn = {
   isAnimating: SharedValue<boolean>;
 };
 
+// Delay-navigation: matches web — swap climb at CLIP_EXIT_DURATION while the
+// outgoing card finishes its EXIT_DURATION slide-off behind the peek board.
 export function useCarouselGesture({
   onSwipeNext,
   onSwipePrevious,
@@ -33,20 +33,35 @@ export function useCarouselGesture({
   const translateX = useSharedValue(0);
   const isAnimating = useSharedValue(false);
   const hasTriggeredHaptic = useSharedValue(false);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const callbacksRef = useRef({ onSwipeNext, onSwipePrevious });
   callbacksRef.current = { onSwipeNext, onSwipePrevious };
+
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    },
+    [],
+  );
 
   const triggerHaptic = () => {
     hapticMedium();
   };
 
-  const handleSwipeNext = () => {
-    callbacksRef.current.onSwipeNext();
-  };
-
-  const handleSwipePrevious = () => {
-    callbacksRef.current.onSwipePrevious();
+  const scheduleCommit = (direction: 'next' | 'previous') => {
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = setTimeout(() => {
+      commitTimerRef.current = null;
+      // Hard-set cancels the in-flight withTiming on the UI thread.
+      translateX.value = 0;
+      isAnimating.value = false;
+      if (direction === 'next') {
+        callbacksRef.current.onSwipeNext();
+      } else {
+        callbacksRef.current.onSwipePrevious();
+      }
+    }, CLIP_EXIT_DURATION);
   };
 
   const gesture = useMemo(
@@ -83,20 +98,12 @@ export function useCarouselGesture({
 
           if (offset < -SWIPE_THRESHOLD && canSwipeNext) {
             isAnimating.value = true;
-            translateX.value = withTiming(-boardWidth, { duration: EXIT_DURATION }, () => {
-              'worklet';
-              translateX.value = 0;
-              isAnimating.value = false;
-              runOnJS(handleSwipeNext)();
-            });
+            translateX.value = withTiming(-boardWidth, { duration: EXIT_DURATION });
+            runOnJS(scheduleCommit)('next');
           } else if (offset > SWIPE_THRESHOLD && canSwipePrevious) {
             isAnimating.value = true;
-            translateX.value = withTiming(boardWidth, { duration: EXIT_DURATION }, () => {
-              'worklet';
-              translateX.value = 0;
-              isAnimating.value = false;
-              runOnJS(handleSwipePrevious)();
-            });
+            translateX.value = withTiming(boardWidth, { duration: EXIT_DURATION });
+            runOnJS(scheduleCommit)('previous');
           } else {
             translateX.value = withSpring(0, springs.interactive);
           }

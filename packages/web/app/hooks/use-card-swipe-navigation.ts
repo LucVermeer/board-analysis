@@ -2,12 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSwipeable } from 'react-swipeable';
+import { EXIT_DURATION, SNAP_BACK_DURATION, CLIP_EXIT_DURATION, ENTER_ANIMATION_DURATION } from '@boardsesh/play-view';
 import { useSwipeDirection } from './use-swipe-direction';
-
-const EXIT_DURATION = 300; // ms for slide-off animation
-const SNAP_BACK_DURATION = 200; // ms for snap-back animation
-const CLIP_EXIT_DURATION = 100; // ms before starting enter — text leaves narrow clip area faster than full EXIT_DURATION
-const ENTER_ANIMATION_DURATION = 170; // ms for enter crossfade/transition after navigation
 
 export type UseCardSwipeNavigationOptions = {
   onSwipeNext: () => void;
