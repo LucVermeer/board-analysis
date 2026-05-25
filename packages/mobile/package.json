@@ -57,6 +57,7 @@
     "react-native-svg": "15.15.4"
   },
   "devDependencies": {
+    "@bacons/apple-targets": "^4.0.7",
     "@types/react": "^19.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"

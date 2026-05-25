@@ -27,6 +27,16 @@ vi.mock('../adapter', () => ({
   RNBleAdapter: vi.fn(),
 }));
 
+// adapter-factory pulls in modules/live-activity/src/index, which pulls in
+// expo-modules-core, which references the React Native `__DEV__` global at
+// import time. Short-circuiting the factory here avoids that chain — the
+// tests below only exercise the pure helpers `convertToMirroredFramesString`
+// and `dispatchMoonboardPacket`.
+vi.mock('../adapter-factory', () => ({
+  createBluetoothAdapter: vi.fn(),
+  isNativeIosBleAdapter: vi.fn().mockReturnValue(false),
+}));
+
 import { convertToMirroredFramesString, dispatchMoonboardPacket } from '../use-board-bluetooth';
 
 // ── Factory helper ─────────────────────────────────────────────────────────

@@ -1,0 +1,240 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
+import type { ClimbQueueItem } from '@boardsesh/queue';
+import { getAuthToken } from '../auth-store';
+import { BACKEND_URL, WEB_BASE_URL } from '../env';
+import {
+  startLiveActivitySession,
+  endLiveActivitySession,
+  updateLiveActivity,
+  updateLiveActivityClimb,
+  isLiveActivityAvailable,
+} from './live-activity-plugin';
+
+type BoardConfig = {
+  boardName: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+};
+
+type UseLiveActivityOptions = {
+  queue: ClimbQueueItem[];
+  currentClimbQueueItem: ClimbQueueItem | null;
+  board: BoardConfig | null;
+  sessionId: string | null;
+  isSessionActive: boolean;
+};
+
+function getGraphqlHttpUrl(): string {
+  return `${BACKEND_URL.replace(/\/+$/, '')}/graphql`;
+}
+
+function getGraphqlWsUrl(): string {
+  return BACKEND_URL.replace(/^http(s?):\/\//, 'ws$1://').replace(/\/+$/, '') + '/graphql';
+}
+
+/// React Native port of `packages/web/app/lib/live-activity/use-live-activity.ts`.
+///
+/// Lifecycle: starts a Live Activity when (iOS) + (session active) + (board
+/// selected) + (queue has content) + (Live Activities authorized in Settings).
+/// Pushes initial state, then watches the serialized queue (full update) and
+/// current climb (lightweight update) to drive ActivityKit pushes.
+///
+/// On non-iOS / Expo Go / preview builds without the native module, every
+/// call short-circuits at the plugin layer (`Platform.OS !== 'ios'` or
+/// `liveActivityNative == null`) so this hook is safe to mount unconditionally.
+export function useLiveActivity({
+  queue,
+  currentClimbQueueItem,
+  board,
+  sessionId,
+  isSessionActive,
+}: UseLiveActivityOptions): void {
+  const isActiveRef = useRef(false);
+  const generationRef = useRef(0);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authTokenLoaded, setAuthTokenLoaded] = useState(false);
+
+  // Keep refs for values the start callback needs without triggering restarts
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const authTokenRef = useRef(authToken);
+  authTokenRef.current = authToken;
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const currentClimbRef = useRef(currentClimbQueueItem);
+  currentClimbRef.current = currentClimbQueueItem;
+
+  // Memoize queue serialization so it only recomputes when the queue array
+  // changes, not on every currentClimbQueueItem navigation.
+  const serializedQueue = useMemo(
+    () =>
+      queue.map((q) => ({
+        uuid: q.uuid,
+        climbUuid: q.climb.uuid,
+        climbName: q.climb.name,
+        difficulty: q.climb.difficulty,
+        angle: q.climb.angle,
+        frames: q.climb.frames,
+        setterUsername: q.climb.setter_username,
+        mirrored: q.climb.mirrored === true,
+      })),
+    [queue],
+  );
+  const serializedQueueRef = useRef(serializedQueue);
+  serializedQueueRef.current = serializedQueue;
+
+  // Stabilize board by value so reference changes don't restart the session
+  const boardKey = board ? `${board.boardName}:${board.layoutId}:${board.sizeId}:${board.setIds}` : null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed by boardKey for value-based stability
+  const stableBoard = useMemo(() => board, [boardKey]);
+
+  // Check availability once on mount.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let cancelled = false;
+    void isLiveActivityAvailable().then((result) => {
+      if (!cancelled) setAvailable(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load auth token once. Re-load if the start effect's deps change (cheap
+  // enough — SecureStore read).
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let cancelled = false;
+    void getAuthToken().then((token) => {
+      if (cancelled) return;
+      setAuthToken(token);
+      setAuthTokenLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  // Start/end session — reacts to session activation, content presence, and
+  // board config. Does NOT restart when the current climb changes.
+  const hasContent = queue.length > 0 || currentClimbQueueItem !== null;
+  const shouldBeActive =
+    isSessionActive && hasContent && stableBoard !== null && available === true && authTokenLoaded;
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || available !== true) return;
+
+    if (shouldBeActive && !isActiveRef.current && stableBoard) {
+      isActiveRef.current = true;
+      const startGeneration = ++generationRef.current;
+
+      void startLiveActivitySession({
+        sessionId: sessionIdRef.current ?? `local-${Date.now()}`,
+        serverUrl: WEB_BASE_URL,
+        wsUrl: getGraphqlWsUrl(),
+        graphqlUrl: getGraphqlHttpUrl(),
+        authToken: authTokenRef.current ?? undefined,
+        boardName: stableBoard.boardName,
+        layoutId: stableBoard.layoutId,
+        sizeId: stableBoard.sizeId,
+        setIds: stableBoard.setIds,
+      })
+        .then(() => {
+          if (!isActiveRef.current || generationRef.current !== startGeneration) return;
+          // Send an initial update so the widget doesn't stay on "Loading...".
+          const q = queueRef.current;
+          const displayItem = currentClimbRef.current ?? (q.length > 0 ? q[0] : null);
+          if (!displayItem) return;
+          const idx = q.findIndex((item) => item.uuid === displayItem.uuid);
+          if (idx === -1) return;
+          void updateLiveActivity({
+            climbName: displayItem.climb.name,
+            climbDifficulty: displayItem.climb.difficulty,
+            angle: displayItem.climb.angle,
+            currentIndex: idx,
+            totalClimbs: q.length,
+            hasNext: idx < q.length - 1,
+            hasPrevious: idx > 0,
+            climbUuid: displayItem.climb.uuid,
+            queue: serializedQueueRef.current,
+          });
+        })
+        .catch((error) => {
+          console.warn('[LiveActivity] startSession failed:', error);
+          isActiveRef.current = false;
+        });
+    } else if (!shouldBeActive && isActiveRef.current) {
+      void endLiveActivitySession();
+      isActiveRef.current = false;
+    }
+
+    return () => {
+      if (isActiveRef.current) {
+        void endLiveActivitySession();
+        isActiveRef.current = false;
+      }
+    };
+  }, [shouldBeActive, stableBoard, available]);
+
+  // Track whether the queue-sync effect fired this render cycle so the
+  // climb-nav effect can skip its redundant lightweight update.
+  const queueSyncedRef = useRef(false);
+
+  // Effect 1: Queue sync — sends the full queue when items change.
+  useEffect(() => {
+    if (!isActiveRef.current || !stableBoard) return;
+
+    const displayItem = currentClimbRef.current ?? (queueRef.current.length > 0 ? queueRef.current[0] : null);
+    if (!displayItem) return;
+
+    const currentIndex = queueRef.current.findIndex((q) => q.uuid === displayItem.uuid);
+    if (currentIndex === -1) return;
+
+    queueSyncedRef.current = true;
+    // Reset on the next microtask so Effect 2 (climb-nav) sees true during
+    // this render's synchronous effect flush, then starts the next render
+    // clean. Effect 1 MUST remain declared before Effect 2 in source order —
+    // React runs effects top-to-bottom within a render.
+    queueMicrotask(() => {
+      queueSyncedRef.current = false;
+    });
+
+    void updateLiveActivity({
+      climbName: displayItem.climb.name,
+      climbDifficulty: displayItem.climb.difficulty,
+      angle: displayItem.climb.angle,
+      currentIndex,
+      totalClimbs: queueRef.current.length,
+      hasNext: currentIndex < queueRef.current.length - 1,
+      hasPrevious: currentIndex > 0,
+      climbUuid: displayItem.climb.uuid,
+      queue: serializedQueue,
+    });
+  }, [serializedQueue, stableBoard]);
+
+  // Effect 2: Climb navigation — lightweight update with only scalar data.
+  useEffect(() => {
+    if (!isActiveRef.current || !stableBoard) return;
+    if (queueSyncedRef.current) return;
+
+    const displayItem = currentClimbQueueItem ?? (queue.length > 0 ? queue[0] : null);
+    if (!displayItem) return;
+
+    const currentIndex = queue.findIndex((q) => q.uuid === displayItem.uuid);
+    if (currentIndex === -1) return;
+
+    void updateLiveActivityClimb({
+      climbName: displayItem.climb.name,
+      climbDifficulty: displayItem.climb.difficulty,
+      angle: displayItem.climb.angle,
+      currentIndex,
+      totalClimbs: queue.length,
+      hasNext: currentIndex < queue.length - 1,
+      hasPrevious: currentIndex > 0,
+      climbUuid: displayItem.climb.uuid,
+    });
+  }, [currentClimbQueueItem, queue, stableBoard]);
+}

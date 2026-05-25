@@ -48,7 +48,20 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       : {}),
     ios: {
       bundleIdentifier: 'com.boardsesh.app',
+      // Required by @bacons/apple-targets to assign the widget extension
+      // target's DEVELOPMENT_TEAM build setting. Matches the existing main
+      // target value baked into Boardsesh.xcodeproj/project.pbxproj.
+      appleTeamId: '9L3HKPZBH3',
       supportsTablet: false,
+      // Entitlements for the App Group (shared with the BoardseshWidgets target),
+      // shared keychain (so SharedKeychain.swift can read auth + push tokens),
+      // and APNs (so ActivityKit can register Live Activity push tokens).
+      // Matches the Capacitor app at repo-root mobile/ios/App/App/App.entitlements.
+      entitlements: {
+        'com.apple.security.application-groups': ['group.com.boardsesh.app'],
+        'keychain-access-groups': ['$(AppIdentifierPrefix)group.com.boardsesh.app'],
+        'aps-environment': 'production',
+      },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSBluetoothAlwaysUsageDescription:
@@ -60,7 +73,15 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
         NSLocationAlwaysAndWhenInUseUsageDescription:
           'Boardsesh uses your location to find nearby boards to climb on and to discover nearby climbing sessions in Party Mode.',
         NSSupportsLiveActivities: true,
-        UIBackgroundModes: ['bluetooth-central'],
+        // bluetooth-central: continuous BLE reconnect + write-during-background.
+        // remote-notification: lets the backend's 90s APNs heartbeat update
+        // the Live Activity payload while the app is suspended.
+        UIBackgroundModes: ['bluetooth-central', 'remote-notification'],
+        // Read by SharedKeychain.swift to derive the keychain access group
+        // (the expanded $(AppIdentifierPrefix) is only available in Info.plist
+        // build settings, not in Swift code). Must match the value in the
+        // keychain-access-groups entitlement above.
+        BoardseshKeychainAccessGroup: '$(AppIdentifierPrefix)group.com.boardsesh.app',
       },
     },
     android: {
@@ -75,6 +96,11 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       'expo-updates',
       'expo-web-browser',
       'react-native-ble-plx',
+      // Adds the BoardseshWidgets Xcode target on every `expo prebuild`. The
+      // widget bundle hosts the Live Activity UI (lock screen + Dynamic
+      // Island) plus the Next/Previous AppIntents. Target sources live in
+      // packages/mobile/targets/BoardseshWidgets/.
+      '@bacons/apple-targets',
     ],
     extra: {
       ...config.extra,
