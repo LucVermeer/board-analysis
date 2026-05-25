@@ -1,6 +1,8 @@
 import { File, Directory, Paths } from 'expo-file-system';
+import { Asset } from 'expo-asset';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { getBoardRenderData } from './board-details';
+import { BOARD_BACKGROUND_ASSETS } from './board-backgrounds-manifest';
 
 const bgCacheDir = new Directory(Paths.document, 'board-backgrounds');
 
@@ -43,6 +45,43 @@ export function toFilesystemPath(fileUri: string): string {
 const inflightDownloads = new Map<string, Promise<string | null>>();
 
 /**
+ * Map a backgound image URL to a key in the bundled-assets manifest.
+ * The manifest keys are URL suffixes after `/images/` — e.g. the URL
+ * `https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png`
+ * becomes `kilter/product_sizes_layouts_sets/36-1.webp` (for full quality,
+ * rewrite .png to .webp since we only bundle WebPs; for thumbnail quality
+ * the URL is already .webp via getThumbnailImageUrl).
+ * Returns null if the URL doesn't contain `/images/` (shouldn't happen
+ * for URLs produced by getBoardRenderData).
+ */
+function manifestKeyFromUrl(url: string, quality: 'thumbnail' | 'full'): string | null {
+  const marker = '/images/';
+  const idx = url.indexOf(marker);
+  if (idx < 0) return null;
+  const suffix = url.substring(idx + marker.length);
+  return quality === 'full' ? suffix.replace(/\.png$/, '.webp') : suffix;
+}
+
+/**
+ * Resolve a manifest entry to a filesystem path. For bundled assets in
+ * production builds, expo-asset's downloadAsync is a no-op local
+ * materialize and returns instantly with no network.
+ */
+async function resolveBundledAsset(manifestKey: string): Promise<string | null> {
+  const moduleId = BOARD_BACKGROUND_ASSETS[manifestKey];
+  if (moduleId === undefined) return null;
+  try {
+    const asset = Asset.fromModule(moduleId);
+    if (!asset.localUri) {
+      await asset.downloadAsync();
+    }
+    return asset.localUri ? toFilesystemPath(asset.localUri) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Ensure all background images for a board configuration are cached locally.
  * `quality: 'thumbnail'` downloads small webp variants (fast, for list rows);
  * `quality: 'full'` downloads the original full-size images (sharp, for play view).
@@ -76,6 +115,20 @@ export async function ensureBackgroundsCached(params: {
 
   for (const imageUrl of renderData.imageUrls) {
     const downloadUrl = quality === 'thumbnail' ? getThumbnailImageUrl(imageUrl) : imageUrl;
+
+    // Prefer the bundled asset when one exists for this URL — no network
+    // hit and no expo-file-system disk cache needed.
+    const manifestKey = manifestKeyFromUrl(downloadUrl, quality);
+    if (manifestKey) {
+      const bundledPath = await resolveBundledAsset(manifestKey);
+      if (bundledPath) {
+        localPaths.push(bundledPath);
+        continue;
+      }
+    }
+
+    // Manifest miss (new board the bundle doesn't know about) — fall
+    // through to the legacy network-download path with on-disk cache.
     const filename = extractFilename(downloadUrl);
     const localFile = new File(qualityDir, filename);
 

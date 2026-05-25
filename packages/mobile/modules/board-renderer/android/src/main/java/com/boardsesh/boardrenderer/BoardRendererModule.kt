@@ -16,13 +16,48 @@ class BoardRendererModule : Module() {
         File(reactCacheDir, "board-thumbnails").also { it.mkdirs() }
     }
 
+    @Volatile
+    private var pruned = false
+
+    private fun pruneCacheIfNeeded(maxBytes: Long) {
+        val files = cacheDir.listFiles() ?: return
+        var totalBytes = files.sumOf { it.length() }
+        if (totalBytes <= maxBytes) return
+
+        // Android's File.lastModified() is our LRU proxy — atime is not
+        // reliably available on the filesystems Android caches live on.
+        val sorted = files.sortedBy { it.lastModified() }
+        var removed = 0
+        for (file in sorted) {
+            if (totalBytes <= maxBytes) break
+            val size = file.length()
+            if (file.delete()) {
+                totalBytes -= size
+                removed++
+            }
+        }
+        if (removed > 0) {
+            android.util.Log.i("BoardRenderer", "Pruned $removed cached PNGs; new total $totalBytes bytes")
+        }
+    }
+
     override fun definition() = ModuleDefinition {
         Name("BoardRenderer")
 
         AsyncFunction("renderComposite") { configJson: String, backgroundPaths: List<String>, cacheKey: String ->
+            if (!pruned) {
+                synchronized(this@BoardRendererModule) {
+                    if (!pruned) {
+                        pruneCacheIfNeeded(CACHE_CAP_BYTES)
+                        pruned = true
+                    }
+                }
+            }
             val outputFile = File(cacheDir, "$cacheKey.png")
 
             if (outputFile.exists()) {
+                // Touch mtime so LRU treats hot files as recently used.
+                outputFile.setLastModified(System.currentTimeMillis())
                 return@AsyncFunction "file://${outputFile.absolutePath}"
             }
 
@@ -79,5 +114,13 @@ class BoardRendererModule : Module() {
 
             "file://${outputFile.absolutePath}"
         }
+    }
+
+    private companion object {
+        // Cap the on-disk PNG cache so heavy users don't accumulate hundreds
+        // of MB of stale renders. The cache lives in context.cacheDir, which
+        // Android may also reclaim on its own under storage pressure — this
+        // is just our explicit upper bound.
+        const val CACHE_CAP_BYTES: Long = 200L * 1024 * 1024
     }
 }

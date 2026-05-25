@@ -2,6 +2,12 @@ import ExpoModulesCore
 import UIKit
 
 public class BoardRendererModule: Module {
+  // Cap the on-disk PNG cache so heavy users don't accumulate hundreds of
+  // MB of stale renders. The cache lives in Library/Caches, which iOS may
+  // also reclaim on its own under storage pressure — this is just our
+  // explicit upper bound.
+  private static let cacheCapBytes: Int = 200 * 1024 * 1024
+
   private lazy var cacheDir: URL = {
     let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("board-thumbnails", isDirectory: true)
@@ -13,14 +19,62 @@ public class BoardRendererModule: Module {
     return dir
   }()
 
+  // Lazy-initialized once per module lifetime (i.e. once per app launch).
+  // Accessing it from renderComposite triggers the prune on first call.
+  private lazy var pruneOnce: Void = {
+    pruneCacheIfNeeded(maxBytes: BoardRendererModule.cacheCapBytes)
+  }()
+
+  private func pruneCacheIfNeeded(maxBytes: Int) {
+    let keys: [URLResourceKey] = [.contentAccessDateKey, .fileSizeKey]
+    guard let entries = try? FileManager.default.contentsOfDirectory(
+      at: cacheDir,
+      includingPropertiesForKeys: keys,
+      options: [.skipsHiddenFiles]
+    ) else { return }
+
+    var infos: [(url: URL, size: Int, accessed: Date)] = []
+    var totalBytes = 0
+    for url in entries {
+      guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
+      let size = values.fileSize ?? 0
+      let accessed = values.contentAccessDate ?? Date(timeIntervalSince1970: 0)
+      infos.append((url, size, accessed))
+      totalBytes += size
+    }
+
+    if totalBytes <= maxBytes { return }
+
+    infos.sort { $0.accessed < $1.accessed }
+    var removed = 0
+    for info in infos {
+      if totalBytes <= maxBytes { break }
+      do {
+        try FileManager.default.removeItem(at: info.url)
+        totalBytes -= info.size
+        removed += 1
+      } catch {
+        NSLog("[BoardRenderer] Failed to evict \(info.url.lastPathComponent): \(error)")
+      }
+    }
+    if removed > 0 {
+      NSLog("[BoardRenderer] Pruned \(removed) cached PNGs; new total \(totalBytes) bytes")
+    }
+  }
+
   public func definition() -> ModuleDefinition {
     Name("BoardRenderer")
 
     AsyncFunction("renderComposite") {
       (configJson: String, backgroundPaths: [String], cacheKey: String) -> String in
+      _ = self.pruneOnce
       let outputUrl = self.cacheDir.appendingPathComponent("\(cacheKey).png")
 
       if FileManager.default.fileExists(atPath: outputUrl.path) {
+        // Touch mtime so LRU treats hot files as recently used.
+        try? FileManager.default.setAttributes(
+          [.modificationDate: Date()], ofItemAtPath: outputUrl.path
+        )
         return outputUrl.absoluteString
       }
 

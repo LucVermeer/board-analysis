@@ -34,6 +34,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    // Bundle every asset under assets/. board-backgrounds/ in particular
+    // is the offline source for the native renderer's compositor — those
+    // files must ship in the IPA/APK, not be downloaded on first launch.
+    assetBundlePatterns: ['assets/**/*'],
     ...(EAS_PROJECT_ID
       ? {
           runtimeVersion: { policy: 'appVersion' as const },

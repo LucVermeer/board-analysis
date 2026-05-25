@@ -34,6 +34,29 @@ vi.mock('../board-details', () => ({
   getBoardRenderData: vi.fn(),
 }));
 
+const downloadAsyncMock = vi.fn().mockResolvedValue(undefined);
+class MockAsset {
+  localUri: string | null;
+  constructor(public moduleId: number) {
+    this.localUri = `file:///bundled/${moduleId}.webp`;
+  }
+  downloadAsync = downloadAsyncMock;
+  static fromModule(moduleId: number) {
+    return new MockAsset(moduleId);
+  }
+}
+
+vi.mock('expo-asset', () => ({
+  Asset: MockAsset,
+}));
+
+vi.mock('../board-backgrounds-manifest', () => ({
+  BOARD_BACKGROUND_ASSETS: {
+    'kilter/product_sizes_layouts_sets/36-1.webp': 100,
+    'kilter/product_sizes_layouts_sets/thumbs/36-1.webp': 101,
+  },
+}));
+
 const { getThumbnailImageUrl, extractFilename, toFilesystemPath, ensureBackgroundsCached } =
   await import('../background-image-cache');
 const { getBoardRenderData } = await import('../board-details');
@@ -151,6 +174,67 @@ describe('ensureBackgroundsCached', () => {
 
     expect(firstPaths).toEqual(['/mock/bg.webp']);
     expect(secondPaths).toEqual(['/mock/bg.webp']);
+    expect(downloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the bundled asset for thumbnail-quality when present in the manifest', async () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    const result = await ensureBackgroundsCached({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+      // quality defaults to 'thumbnail' -> getThumbnailImageUrl(...) -> thumbs/36-1.webp
+    });
+
+    expect(result).toEqual(['/bundled/101.webp']);
+    expect(downloadMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the bundled asset for full-quality by rewriting .png to .webp', async () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      imageUrls: ['https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png'],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    const result = await ensureBackgroundsCached({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+      quality: 'full',
+    });
+
+    expect(result).toEqual(['/bundled/100.webp']);
+    expect(downloadMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to network download when the manifest has no entry', async () => {
+    vi.mocked(getBoardRenderData).mockReturnValue({
+      boardWidth: 100,
+      boardHeight: 100,
+      holdsData: [],
+      imageUrls: ['https://www.boardsesh.com/images/newboard/bg.png'],
+    } as ReturnType<typeof getBoardRenderData>);
+
+    downloadMock.mockResolvedValueOnce({ uri: 'file:///mock/newbg.webp' });
+
+    const result = await ensureBackgroundsCached({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: [24],
+    });
+
+    expect(result).toEqual(['/mock/newbg.webp']);
     expect(downloadMock).toHaveBeenCalledTimes(1);
   });
 
