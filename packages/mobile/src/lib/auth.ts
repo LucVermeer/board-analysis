@@ -1,8 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
-import { WEB_BASE_URL } from './env';
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
+import { BACKEND_URL, WEB_BASE_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
 

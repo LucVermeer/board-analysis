@@ -1,7 +1,6 @@
 import { GraphQLClient } from 'graphql-request';
 import { authenticatedFetch } from '../auth-interceptor';
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
+import { BACKEND_URL } from '../env';
 
 export function getGraphQLHttpUrl(): string {
   return `${BACKEND_URL}/graphql`;

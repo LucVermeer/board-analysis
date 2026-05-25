@@ -1,7 +1,6 @@
 import { createClient, type Client } from 'graphql-ws';
 import { getAuthToken } from '../auth-store';
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
+import { BACKEND_URL } from '../env';
 
 function getWsUrl(): string {
   // Convert http(s) to ws(s), or use as-is if already ws
