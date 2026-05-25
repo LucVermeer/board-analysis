@@ -222,6 +222,8 @@
     "endMessage": "C'est tout pour l'instant",
     "showFullHistory_one": "Afficher l'historique complet ({{count}} de plus)",
     "showFullHistory_other": "Afficher l'historique complet ({{count}} de plus)",
+    "showFullHistoryAria_one": "Afficher {{count}} element de plus de l'historique",
+    "showFullHistoryAria_other": "Afficher {{count}} elements de plus de l'historique",
     "tickHistoryClimb": "Enregistrer une croix pour {{name}}"
   },
   "queueProvider": {
@@ -340,15 +342,17 @@
       "tickLabel": "tick",
       "logAttemptAria": "Enregistrer un essai",
       "saveTickAria": "Enregistrer le tick",
-      "gradeLabel": "Grade",
-      "triesLabel": "Tries",
-      "starsLabel": "Stars",
-      "cancelLabel": "Cancel",
+      "gradeLabel": "Cotation",
+      "triesLabel": "Essais",
+      "starsLabel": "Étoiles",
+      "cancelLabel": "Annuler",
       "flashSaveLabel": "Flash",
-      "sendSaveLabel": "Send",
-      "logAscentAria": "Log {{status}}",
-      "decreaseTriesAria": "Decrease attempts",
-      "increaseTriesAria": "Increase attempts"
+      "sendSaveLabel": "Envoi",
+      "logAscentAria": "Enregistrer {{status}}",
+      "decreaseTriesAria": "Diminuer les essais",
+      "increaseTriesAria": "Augmenter les essais",
+      "starRating_one": "{{count}} etoile",
+      "starRating_other": "{{count}} etoiles"
     }
   }
 }

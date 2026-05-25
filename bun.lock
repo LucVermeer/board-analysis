@@ -691,6 +691,8 @@
 
     "@boardsesh/climb-filters": ["@boardsesh/climb-filters@workspace:packages/shared/climb-filters"],
 
+    "@boardsesh/climb-filters": ["@boardsesh/climb-filters@workspace:packages/shared/climb-filters"],
+
     "@boardsesh/crypto": ["@boardsesh/crypto@workspace:packages/crypto"],
 
     "@boardsesh/db": ["@boardsesh/db@workspace:packages/db"],

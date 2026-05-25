@@ -376,6 +376,14 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
         needsResync: false,
       };
 
+    case 'CLEAR_QUEUE':
+      return {
+        ...state,
+        queue: [],
+        currentClimbQueueItem: null,
+        playlistSuggestionSource: null,
+      };
+
     case 'OPTIMISTIC_SET_DRIVER':
       // Fired from `takeControl` so the lightbulb flips before the server
       // round-trip. Idempotent — re-setting the same participant id is a no-op

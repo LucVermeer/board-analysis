@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -45,7 +45,11 @@ export function CollapsibleSection({ title, defaultExpanded = false, children }:
         </Animated.View>
       </Pressable>
 
-      {expanded && <View style={styles.content}>{children}</View>}
+      {expanded && (
+        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={styles.content}>
+          {children}
+        </Animated.View>
+      )}
     </View>
   );
 }

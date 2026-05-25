@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, Image } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import type { ClimbQueueItem } from '@boardsesh/queue';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
@@ -32,6 +33,27 @@ import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
 import { timing } from '../../theme/animations';
+
+function climbToQueueItem(climb: Climb): ClimbQueueItem {
+  return {
+    uuid: randomUUID(),
+    climb: {
+      uuid: climb.uuid,
+      name: climb.name,
+      frames: climb.frames,
+      setter_username: climb.setter_username,
+      angle: climb.angle,
+      ascensionist_count: climb.ascensionist_count,
+      difficulty: climb.difficulty,
+      quality_average: climb.quality_average,
+      stars: climb.stars,
+      difficulty_error: climb.difficulty_error,
+      benchmark_difficulty: climb.benchmark_difficulty,
+      userAscents: climb.userAscents,
+      userAttempts: climb.userAttempts,
+    },
+  };
+}
 
 type BoardConfig = {
   boardName: string;
@@ -83,6 +105,15 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     });
   }, [boardName, layoutId, sizeId, setIds]);
 
+  const imageUrls = boardRenderData?.imageUrls;
+  useEffect(() => {
+    if (imageUrls) {
+      for (const url of imageUrls) {
+        Image.prefetch(url);
+      }
+    }
+  }, [imageUrls]);
+
   const navigationState = useMemo(
     () => computeNavigationState(state.queue, state.currentClimbQueueItem),
     [state.queue, state.currentClimbQueueItem],
@@ -118,25 +149,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsTickBarActive(false);
       setIsSheetOpen(true);
       setActiveSubDrawer('none');
-      const queueItem = {
-        uuid: randomUUID(),
-        climb: {
-          uuid: selectedClimb.uuid,
-          name: selectedClimb.name,
-          frames: selectedClimb.frames,
-          setter_username: selectedClimb.setter_username,
-          angle: selectedClimb.angle,
-          ascensionist_count: selectedClimb.ascensionist_count,
-          difficulty: selectedClimb.difficulty,
-          quality_average: selectedClimb.quality_average,
-          stars: selectedClimb.stars,
-          difficulty_error: selectedClimb.difficulty_error,
-          benchmark_difficulty: selectedClimb.benchmark_difficulty,
-          userAscents: selectedClimb.userAscents,
-          userAttempts: selectedClimb.userAttempts,
-        },
-      };
-      setCurrentClimb(queueItem);
+      setCurrentClimb(climbToQueueItem(selectedClimb));
       sheetRef.current?.present();
     },
     close: () => {
@@ -220,24 +233,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setClimb(similarClimb);
       setIsMirrored(false);
       setIsFavorited(false);
-      const queueItem = {
-        uuid: randomUUID(),
-        climb: {
-          uuid: similarClimb.uuid,
-          name: similarClimb.name,
-          frames: similarClimb.frames,
-          setter_username: similarClimb.setter_username,
-          angle: similarClimb.angle,
-          ascensionist_count: similarClimb.ascensionist_count,
-          difficulty: similarClimb.difficulty,
-          quality_average: similarClimb.quality_average,
-          stars: similarClimb.stars,
-          difficulty_error: similarClimb.difficulty_error,
-          benchmark_difficulty: similarClimb.benchmark_difficulty,
-          userAscents: similarClimb.userAscents,
-          userAttempts: similarClimb.userAttempts,
-        },
-      };
+      const queueItem = climbToQueueItem(similarClimb);
       addToQueue(queueItem);
       setCurrentClimb(queueItem);
     },
@@ -275,7 +271,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
             onPress={() => sheetRef.current?.dismiss()}
             accessibilityRole="button"
             accessibilityLabel={t('playView.closeAria')}
-            hitSlop={8}
             style={styles.closeButton}
           >
             <Icon name="close" size={20} color={iosSystemColors.systemGray} />
@@ -297,9 +292,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   <SwipeBoardCarousel
                     boardName={boardName as BoardName}
                     boardRenderData={boardRenderData}
-                    layoutId={layoutId}
-                    sizeId={sizeId}
-                    setIds={setIds}
                     currentFrames={displayedClimb.frames}
                     nextFrames={navigationState.nextItem?.climb.frames ?? null}
                     prevFrames={navigationState.prevItem?.climb.frames ?? null}
@@ -376,49 +368,55 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       </BottomSheetModal>
 
       {/* Sub-drawer: Queue */}
-      <QueueSheet
-        visible={activeSubDrawer === 'queue'}
-        onClose={handleCloseSubDrawer}
-        onClimbPress={(item) => {
-          setClimb(item.climb);
-          setCurrentClimb(item);
-          handleCloseSubDrawer();
-        }}
-      />
+      {activeSubDrawer === 'queue' && (
+        <QueueSheet
+          visible={true}
+          onClose={handleCloseSubDrawer}
+          onClimbPress={(item) => {
+            setClimb(item.climb);
+            setCurrentClimb(item);
+            handleCloseSubDrawer();
+          }}
+        />
+      )}
 
       {/* Sub-drawer: Climb actions */}
-      <ClimbActionsSheet
-        visible={activeSubDrawer === 'actions'}
-        climb={displayedClimb ?? null}
-        boardName={boardName}
-        layoutId={layoutId}
-        sizeId={sizeId}
-        setIds={setIds}
-        angle={angle}
-        onAddToQueue={() => {
-          if (displayedClimb) {
-            addToQueue({
-              uuid: randomUUID(),
-              climb: displayedClimb,
-            });
-          }
-        }}
-        onToggleFavorite={handleToggleFavorite}
-        onClose={handleCloseSubDrawer}
-      />
+      {activeSubDrawer === 'actions' && (
+        <ClimbActionsSheet
+          visible={true}
+          climb={displayedClimb ?? null}
+          boardName={boardName}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
+          angle={angle}
+          onAddToQueue={() => {
+            if (displayedClimb) {
+              addToQueue({
+                uuid: randomUUID(),
+                climb: displayedClimb,
+              });
+            }
+          }}
+          onToggleFavorite={handleToggleFavorite}
+          onClose={handleCloseSubDrawer}
+        />
+      )}
 
       {/* Sub-drawer: Angle selector */}
-      <AngleSelectorSheet
-        visible={activeSubDrawer === 'angleSelector'}
-        onClose={handleCloseSubDrawer}
-        boardName={boardName}
-        layoutId={layoutId}
-        currentAngle={angle}
-        onAngleChange={(newAngle) => {
-          onAngleChange?.(newAngle);
-          handleCloseSubDrawer();
-        }}
-      />
+      {activeSubDrawer === 'angleSelector' && (
+        <AngleSelectorSheet
+          visible={true}
+          onClose={handleCloseSubDrawer}
+          boardName={boardName}
+          layoutId={layoutId}
+          currentAngle={angle}
+          onAngleChange={(newAngle) => {
+            onAngleChange?.(newAngle);
+            handleCloseSubDrawer();
+          }}
+        />
+      )}
 
       {/* Log Ascent sheet (full, via long-press) */}
       {displayedClimb && (
@@ -450,9 +448,9 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
     zIndex: 2,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(120, 120, 128, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',

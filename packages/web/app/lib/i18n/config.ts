@@ -53,6 +53,10 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep session:queueDrawer.clear
 // i18n-keep session:queueDrawer.removeItems_one
 // i18n-keep session:queueDrawer.removeItems_other
+// i18n-keep session:playView.tickBar.starRating_one
+// i18n-keep session:playView.tickBar.starRating_other
+// i18n-keep session:queueList.showFullHistoryAria_one
+// i18n-keep session:queueList.showFullHistoryAria_other
 // i18n-keep climbs:mobile.climbActions.copyLink
 // i18n-keep climbs:mobile.climbActions.linkCopied
 // i18n-keep climbs:mobile.climbActions.report

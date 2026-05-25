@@ -154,11 +154,11 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   headerButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 18,
+    borderRadius: 22,
     backgroundColor: `${iosSystemColors.systemGray}1F`,
   },
   headerButtonActive: {
