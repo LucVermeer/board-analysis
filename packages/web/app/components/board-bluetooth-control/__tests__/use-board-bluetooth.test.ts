@@ -152,7 +152,12 @@ describe('useBoardBluetooth', () => {
       skippedRoleCount: 0,
       totalPlacements: 1,
     });
-    mockGetMoonboardBluetoothPacket.mockReturnValue(new Uint8Array([9, 8, 7]));
+    mockGetMoonboardBluetoothPacket.mockReturnValue({
+      packet: new Uint8Array([9, 8, 7]),
+      skippedRoleCount: 0,
+      skippedPositionCount: 0,
+      totalPlacements: 3,
+    });
     mockGetLedPlacements.mockReturnValue({ 4131: 39 });
   });
 
