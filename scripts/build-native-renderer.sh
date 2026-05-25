@@ -82,6 +82,8 @@ if [ -z "${ANDROID_NDK_HOME:-}" ]; then
     ANDROID_NDK_HOME="$(ls -d "$HOME/Android/Sdk/ndk"/*/ 2>/dev/null | sort -V | tail -1)"
   elif [ -d "$HOME/Library/Android/sdk/ndk" ]; then
     ANDROID_NDK_HOME="$(ls -d "$HOME/Library/Android/sdk/ndk"/*/ 2>/dev/null | sort -V | tail -1)"
+  elif [ -d "/opt/homebrew/share/android-commandlinetools/ndk" ]; then
+    ANDROID_NDK_HOME="$(ls -d "/opt/homebrew/share/android-commandlinetools/ndk"/*/ 2>/dev/null | sort -V | tail -1)"
   fi
 fi
 
@@ -89,7 +91,15 @@ if [ -z "${ANDROID_NDK_HOME:-}" ]; then
   echo "WARNING: ANDROID_NDK_HOME not set and NDK not found. Skipping Android builds."
   echo "Set ANDROID_NDK_HOME to your NDK installation directory."
 else
-  TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+  # NDK only ships an x86_64 toolchain on macOS (runs under Rosetta on Apple
+  # Silicon) and on Linux. uname -m would otherwise resolve to arm64/aarch64
+  # and miss the actual prebuilt directory.
+  case "$(uname -s)" in
+    Darwin) HOST_TAG="darwin-x86_64" ;;
+    Linux)  HOST_TAG="linux-x86_64" ;;
+    *)      HOST_TAG="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" ;;
+  esac
+  TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG"
 
   for target in "${!ANDROID_TARGETS[@]}"; do
     abi="${ANDROID_TARGETS[$target]}"
