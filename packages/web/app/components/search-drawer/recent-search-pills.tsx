@@ -89,7 +89,7 @@ const RecentSearchPills: React.FC = () => {
             ...DEFAULT_SEARCH_PARAMS,
             ...search.filters,
           } as SearchRequestPagination;
-          const tooltipText = getSearchPillFullSummary(fullFilters, summaryLabels) ?? undefined;
+          const tooltipText = getSearchPillFullSummary(fullFilters, summaryLabels);
           return (
             <button
               key={search.id}

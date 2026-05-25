@@ -72,6 +72,11 @@ describe('getBaseFilterParts', () => {
     const filters: BaseFilters = { name: 'test', minGrade: 10, minAscents: 5 };
     expect(getBaseFilterParts(filters, mockGrades, labels)).toEqual(['"test"', 'V4+', '5+ ascents']);
   });
+
+  it('includes minAscents >= 2 (web suppresses this for the Established chip separately)', () => {
+    expect(getBaseFilterParts({ minAscents: 2 }, mockGrades, labels)).toEqual(['2+ ascents']);
+    expect(getBaseFilterParts({ minAscents: 10 }, mockGrades, labels)).toEqual(['10+ ascents']);
+  });
 });
 
 describe('formatFilterSummary', () => {
@@ -100,5 +105,10 @@ describe('formatFilterSummary', () => {
   it('shows all parts when count equals maxParts', () => {
     const parts = ['V4+', 'Quality', '25+ ascents'];
     expect(formatFilterSummary(parts, labels, 3)).toBe('V4+ · Quality · 25+ ascents');
+  });
+
+  it('shows all parts when maxParts is null (no limit)', () => {
+    const parts = ['V4+', 'Quality', '25+ ascents', '3+ stars'];
+    expect(formatFilterSummary(parts, labels, null)).toBe('V4+ · Quality · 25+ ascents · 3+ stars');
   });
 });

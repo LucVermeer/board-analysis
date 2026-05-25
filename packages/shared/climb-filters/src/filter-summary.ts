@@ -64,11 +64,11 @@ export function getBaseFilterParts(
 export function formatFilterSummary(
   parts: string[],
   labels: Pick<FilterSummaryLabels, 'more'>,
-  maxParts = 2,
+  maxParts?: number | null,
 ): string | null {
   if (parts.length === 0) return null;
 
-  if (parts.length <= maxParts) {
+  if (maxParts == null || parts.length <= maxParts) {
     return parts.join(' · ');
   }
 
