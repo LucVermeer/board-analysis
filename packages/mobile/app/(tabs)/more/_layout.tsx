@@ -14,6 +14,8 @@ export default function MoreLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: t('mobile.more.title') }} />
+      {/* i18n-ignore-next-line — preview-only screen */}
+      <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />
     </Stack>
   );
 }
