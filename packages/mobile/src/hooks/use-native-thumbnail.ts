@@ -188,7 +188,15 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
   const outputWidth = params.outputWidth ?? 200;
   const backgroundQuality = params.backgroundQuality ?? 'thumbnail';
   const serverUrl = getServerFallbackUri(params);
-  const [uri, setUri] = useState(serverUrl);
+
+  // Track the native render output keyed by cacheKey. Storing the key
+  // alongside the URI means a prop change instantly invalidates the
+  // previous render (cache key no longer matches the requested one), and
+  // the returned URI falls back to the fresh serverUrl until the new
+  // render completes. Without this, props could change and the hook
+  // would keep showing the previous climb's PNG for one frame (or
+  // forever, in the no-native-module path).
+  const [nativeRender, setNativeRender] = useState<{ key: string; uri: string } | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -198,32 +206,29 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
     };
   }, []);
 
+  const currentCacheKey = buildCacheKey(
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    frames,
+    outputWidth,
+    backgroundQuality,
+  );
+
   useEffect(() => {
     const nativeModule = getNativeModule();
-    if (!nativeModule) {
-      setUri(serverUrl);
-      return;
-    }
+    if (!nativeModule) return;
 
     const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds, outputWidth);
     if (!boardConfig) return;
 
-    const cacheKey = buildCacheKey(
-      boardName,
-      layoutId,
-      sizeId,
-      setIds,
-      frames,
-      outputWidth,
-      backgroundQuality,
-    );
-
     // Reuse an in-flight render for the same cache key
-    const existingRender = inflightRenders.get(cacheKey);
+    const existingRender = inflightRenders.get(currentCacheKey);
     if (existingRender) {
       existingRender
         .then((fileUri) => {
-          if (mountedRef.current) setUri(fileUri);
+          if (mountedRef.current) setNativeRender({ key: currentCacheKey, uri: fileUri });
         })
         .catch(() => {});
       return;
@@ -243,22 +248,25 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
         frames,
       });
 
-      return nativeModule.renderComposite(configJson, backgroundPaths, cacheKey);
+      return nativeModule.renderComposite(configJson, backgroundPaths, currentCacheKey);
     })();
 
-    inflightRenders.set(cacheKey, renderPromise);
+    inflightRenders.set(currentCacheKey, renderPromise);
 
     renderPromise
       .then((fileUri) => {
-        if (mountedRef.current) setUri(fileUri);
+        if (mountedRef.current) setNativeRender({ key: currentCacheKey, uri: fileUri });
       })
       .catch(() => {
-        // Native render failed -- keep server URL fallback
+        // Native render failed -- the derived display URI stays on serverUrl
       })
       .finally(() => {
-        inflightRenders.delete(cacheKey);
+        inflightRenders.delete(currentCacheKey);
       });
-  }, [frames, boardName, layoutId, sizeId, setIds, outputWidth, backgroundQuality, serverUrl]);
+  }, [currentCacheKey, frames, boardName, layoutId, sizeId, setIds, outputWidth, backgroundQuality]);
 
+  // Only return the native URI if it matches the *current* cache key —
+  // a stale render (from before a prop change) would otherwise show.
+  const uri = nativeRender?.key === currentCacheKey ? nativeRender.uri : serverUrl;
   return { uri };
 }

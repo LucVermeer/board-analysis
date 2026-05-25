@@ -89,17 +89,29 @@ function manifestKeyFromUrl(url: string, quality: 'thumbnail' | 'full'): string 
 /**
  * Resolve a manifest entry to a filesystem path. For bundled assets in
  * production builds, expo-asset's downloadAsync is a no-op local
- * materialize and returns instantly with no network.
+ * materialize and returns instantly with no network. In dev mode the
+ * asset is initially exposed as an http://localhost:8081 URL served by
+ * Metro — downloadAsync materializes it to FileSystem.cacheDirectory
+ * so the native compositor's UIImage(contentsOfFile:) /
+ * BitmapFactory.decodeFile have a real path to read.
+ *
+ * Returns null if we can't get a usable file:// URI — the caller falls
+ * back to the network-download path.
  */
 async function resolveBundledAsset(manifestKey: string): Promise<string | null> {
   const moduleId = BOARD_BACKGROUND_ASSETS[manifestKey];
   if (moduleId === undefined) return null;
   try {
     const asset = Asset.fromModule(moduleId);
-    if (!asset.localUri) {
+    // Always call downloadAsync (idempotent) so a dev-mode http:// localUri
+    // is replaced with a file:// path materialized to disk.
+    if (!asset.localUri || !asset.localUri.startsWith('file://')) {
       await asset.downloadAsync();
     }
-    return asset.localUri ? toFilesystemPath(asset.localUri) : null;
+    if (!asset.localUri || !asset.localUri.startsWith('file://')) {
+      return null;
+    }
+    return toFilesystemPath(asset.localUri);
   } catch {
     return null;
   }
