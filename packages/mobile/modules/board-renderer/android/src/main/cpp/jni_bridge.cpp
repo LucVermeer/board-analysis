@@ -47,6 +47,9 @@ Java_com_boardsesh_boardrenderer_BoardRendererBridge_nativeRender(
     uint32_t totalLen = 8 + outLen;
     jbyteArray output = env->NewByteArray(static_cast<jsize>(totalLen));
     if (!output) {
+        // NewByteArray on failure leaves an OutOfMemoryError pending. Don't
+        // clear it — let it propagate into Kotlin so the caller actually
+        // sees the failure instead of receiving a silent null.
         board_renderer_free(outData, outLen);
         return nullptr;
     }

@@ -45,6 +45,30 @@ export function toFilesystemPath(fileUri: string): string {
 const inflightDownloads = new Map<string, Promise<string | null>>();
 
 /**
+ * Track directories we've already ensured exist this session. expo-file-system's
+ * .exists is a syscall — without this, every thumbnail render restats the same
+ * board-backgrounds/<board>/<quality> tree.
+ */
+const ensuredDirs = new Set<string>();
+
+function ensureDir(dir: Directory): void {
+  if (ensuredDirs.has(dir.uri)) return;
+  if (!dir.exists) {
+    dir.create();
+  }
+  ensuredDirs.add(dir.uri);
+}
+
+/**
+ * Apply the same .png -> .webp rewrite the bundled-asset manifest uses,
+ * so the network-download fallback path also fetches the smaller .webp
+ * variant (the server has both side by side).
+ */
+function preferredFullQualityUrl(imageUrl: string): string {
+  return imageUrl.replace(/\.png$/, '.webp');
+}
+
+/**
  * Map a backgound image URL to a key in the bundled-assets manifest.
  * The manifest keys are URL suffixes after `/images/` — e.g. the URL
  * `https://www.boardsesh.com/images/kilter/product_sizes_layouts_sets/36-1.png`
@@ -99,22 +123,17 @@ export async function ensureBackgroundsCached(params: {
   const renderData = getBoardRenderData(params);
   if (!renderData) return [];
 
-  if (!bgCacheDir.exists) {
-    bgCacheDir.create();
-  }
+  ensureDir(bgCacheDir);
   const boardDir = new Directory(bgCacheDir, params.boardName);
-  if (!boardDir.exists) {
-    boardDir.create();
-  }
+  ensureDir(boardDir);
   const qualityDir = new Directory(boardDir, quality);
-  if (!qualityDir.exists) {
-    qualityDir.create();
-  }
+  ensureDir(qualityDir);
 
   const localPaths: string[] = [];
 
   for (const imageUrl of renderData.imageUrls) {
-    const downloadUrl = quality === 'thumbnail' ? getThumbnailImageUrl(imageUrl) : imageUrl;
+    const downloadUrl =
+      quality === 'thumbnail' ? getThumbnailImageUrl(imageUrl) : preferredFullQualityUrl(imageUrl);
 
     // Prefer the bundled asset when one exists for this URL — no network
     // hit and no expo-file-system disk cache needed.

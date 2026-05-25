@@ -11,12 +11,18 @@ type NativeThumbnailParams = {
   layoutId: number;
   sizeId: number;
   setIds: string;
-  mirrored?: boolean;
   /** Output PNG width in pixels. Defaults to 200 (thumbnail). */
   outputWidth?: number;
   /** Background image quality to download + composite. Defaults to 'thumbnail'. */
   backgroundQuality?: 'thumbnail' | 'full';
 };
+
+// Note: no `mirrored` here. Callers (ClimbListThumbnail, BoardImageNative)
+// flip with a CSS scaleX(-1) so a single cached PNG serves both
+// orientations. If we ever need true Rust-side mirroring (e.g. for an
+// export pipeline that doesn't go through <Image>), thread it back in
+// AND propagate to configBase.mirrored — don't just re-add the cache
+// key suffix, that desyncs the cache from what gets rendered.
 
 type NativeThumbnailResult = {
   uri: string;
@@ -61,14 +67,13 @@ export function buildCacheKey(
   sizeId: number,
   setIds: string,
   frames: string,
-  mirrored: boolean,
   outputWidth: number = 200,
   backgroundQuality: 'thumbnail' | 'full' = 'thumbnail',
 ): string {
   const framesHash = fnv1aHex(frames);
   const sizeTag = outputWidth === 200 ? '' : `_w${outputWidth}`;
   const qualityTag = backgroundQuality === 'thumbnail' ? '' : `_${backgroundQuality}`;
-  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${framesHash}${mirrored ? '_m' : ''}${sizeTag}${qualityTag}`;
+  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${framesHash}${sizeTag}${qualityTag}`;
 }
 
 function getBoardConfig(
@@ -109,7 +114,6 @@ function getBoardConfig(
     board_height: renderData.boardHeight,
     output_width: outputWidth,
     thumbnail: isThumbnailStyle,
-    mirrored: false,
     holds: renderData.holdsData.map((hold) => ({
       id: hold.id,
       mirroredHoldId: hold.mirroredHoldId,
@@ -180,7 +184,7 @@ export function getServerFallbackUri(params: NativeThumbnailParams): string {
  * is unavailable or the render fails.
  */
 export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbnailResult {
-  const { frames, boardName, layoutId, sizeId, setIds, mirrored } = params;
+  const { frames, boardName, layoutId, sizeId, setIds } = params;
   const outputWidth = params.outputWidth ?? 200;
   const backgroundQuality = params.backgroundQuality ?? 'thumbnail';
   const serverUrl = getServerFallbackUri(params);
@@ -210,7 +214,6 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
       sizeId,
       setIds,
       frames,
-      mirrored ?? false,
       outputWidth,
       backgroundQuality,
     );
@@ -237,7 +240,6 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
 
       const configJson = JSON.stringify({
         ...boardConfig.configBase,
-        mirrored: mirrored ?? false,
         frames,
       });
 
@@ -256,7 +258,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
       .finally(() => {
         inflightRenders.delete(cacheKey);
       });
-  }, [frames, boardName, layoutId, sizeId, setIds, mirrored, outputWidth, backgroundQuality, serverUrl]);
+  }, [frames, boardName, layoutId, sizeId, setIds, outputWidth, backgroundQuality, serverUrl]);
 
   return { uri };
 }

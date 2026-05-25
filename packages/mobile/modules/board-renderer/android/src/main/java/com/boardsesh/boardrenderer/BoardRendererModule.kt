@@ -8,6 +8,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
 
 class BoardRendererModule : Module() {
     private val cacheDir: File by lazy {
@@ -86,37 +87,15 @@ class BoardRendererModule : Module() {
                 }
             }
 
-            // Draw RGBA overlay — convert RGBA (Rust/tiny-skia output, with
-            // premultiplied alpha) to ARGB (Android Bitmap.Config.ARGB_8888,
-            // which expects non-premultiplied channels). Without un-premultiplying,
-            // semi-transparent holds render with darkened RGB. iOS doesn't need
-            // this because CGImageAlphaInfo.premultipliedLast accepts the
-            // tiny-skia format directly.
+            // Draw RGBA overlay — tiny-skia returns premultiplied RGBA, and
+            // ARGB_8888 bitmaps default to premultiplied storage in the same
+            // byte layout, so copyPixelsFromBuffer lets us hand the buffer
+            // straight to the bitmap with no per-pixel JVM loop. setPremultiplied
+            // is true by default but we set it explicitly so future changes
+            // can't accidentally flip it.
             val overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            val pixelCount = rgbaData.size / 4
-            val argbPixels = IntArray(pixelCount)
-            for (pixelIndex in 0 until pixelCount) {
-                val byteOffset = pixelIndex * 4
-                val premultipliedRed = rgbaData[byteOffset].toInt() and 0xFF
-                val premultipliedGreen = rgbaData[byteOffset + 1].toInt() and 0xFF
-                val premultipliedBlue = rgbaData[byteOffset + 2].toInt() and 0xFF
-                val alpha = rgbaData[byteOffset + 3].toInt() and 0xFF
-                val red: Int
-                val green: Int
-                val blue: Int
-                if (alpha == 0) {
-                    red = 0; green = 0; blue = 0
-                } else if (alpha == 255) {
-                    red = premultipliedRed; green = premultipliedGreen; blue = premultipliedBlue
-                } else {
-                    // straight = round(premultiplied * 255 / alpha)
-                    red = ((premultipliedRed * 255 + alpha / 2) / alpha).coerceAtMost(255)
-                    green = ((premultipliedGreen * 255 + alpha / 2) / alpha).coerceAtMost(255)
-                    blue = ((premultipliedBlue * 255 + alpha / 2) / alpha).coerceAtMost(255)
-                }
-                argbPixels[pixelIndex] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
-            }
-            overlayBitmap.setPixels(argbPixels, 0, width, 0, 0, width, height)
+            overlayBitmap.setPremultiplied(true)
+            overlayBitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgbaData))
             canvas.drawBitmap(overlayBitmap, 0f, 0f, null)
             overlayBitmap.recycle()
 
