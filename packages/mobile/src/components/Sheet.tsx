@@ -7,12 +7,13 @@ type SheetProps = {
   children: ReactNode;
   snapPoints?: (string | number)[];
   enableDynamicSizing?: boolean;
+  onChange?: (index: number) => void;
   onClose?: () => void;
   enablePanDownToClose?: boolean;
 };
 
 export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
-  { children, snapPoints: customSnapPoints, enableDynamicSizing = false, onClose, enablePanDownToClose = true },
+  { children, snapPoints: customSnapPoints, enableDynamicSizing = false, onChange, onClose, enablePanDownToClose = true },
   ref,
 ) {
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
@@ -24,9 +25,13 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [],
   );
 
-  const handleChange = useCallback((index: number) => {
-    if (index >= 0) hapticMedium();
-  }, []);
+  const handleChange = useCallback(
+    (index: number) => {
+      if (index >= 0) hapticMedium();
+      onChange?.(index);
+    },
+    [onChange],
+  );
 
   return (
     <BottomSheet

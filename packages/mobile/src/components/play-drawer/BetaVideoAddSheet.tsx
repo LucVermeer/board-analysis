@@ -30,6 +30,7 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
   const { t } = useTranslation('session');
   const { showToast } = useToast();
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const inputRef = useRef<TextInput>(null);
   const [url, setUrl] = useState('');
 
   const attach = useAttachBetaLink();
@@ -38,6 +39,10 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
     open: () => bottomSheetRef.current?.snapToIndex(0),
     close: () => bottomSheetRef.current?.close(),
   }));
+
+  const handleSheetChange = useCallback((index: number) => {
+    if (index >= 0) inputRef.current?.focus();
+  }, []);
 
   const trimmed = url.trim();
   const hasInput = trimmed.length > 0;
@@ -73,7 +78,7 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
   const snapPoints = useMemo(() => ['40%'], []);
 
   return (
-    <Sheet ref={bottomSheetRef} snapPoints={snapPoints} onClose={handleClose}>
+    <Sheet ref={bottomSheetRef} snapPoints={snapPoints} onChange={handleSheetChange} onClose={handleClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
@@ -84,6 +89,7 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
           </Text>
 
           <TextInput
+            ref={inputRef}
             value={url}
             onChangeText={setUrl}
             placeholder={t('mobile.betaVideos.urlPlaceholder')}
@@ -91,7 +97,6 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
             keyboardType="url"
             autoCapitalize="none"
             autoCorrect={false}
-            autoFocus
             returnKeyType="send"
             onSubmitEditing={handleSubmit}
             style={styles.input}
