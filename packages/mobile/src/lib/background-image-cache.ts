@@ -49,6 +49,9 @@ export async function ensureBackgroundsCached(params: {
   const renderData = getBoardRenderData(params);
   if (!renderData) return [];
 
+  if (!bgCacheDir.exists) {
+    bgCacheDir.create();
+  }
   const boardDir = new Directory(bgCacheDir, params.boardName);
   if (!boardDir.exists) {
     boardDir.create();
