@@ -1,7 +1,6 @@
 import { getAuthToken, getRefreshToken, storeTokens, isTokenExpiringSoon } from './auth-store';
 import { signOut } from './auth';
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
+import { BACKEND_URL } from './env';
 
 let refreshPromise: Promise<boolean> | null = null;
 

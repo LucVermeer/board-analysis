@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet, Image } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -70,15 +70,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIds: parsedSetIds,
     });
   }, [boardName, layoutId, sizeId, setIds]);
-
-  const imageUrls = boardRenderData?.imageUrls;
-  useEffect(() => {
-    if (imageUrls) {
-      for (const url of imageUrls) {
-        Image.prefetch(url);
-      }
-    }
-  }, [imageUrls]);
 
   const navigationState = useMemo(
     () => computeNavigationState(state.queue, state.currentClimbQueueItem),
@@ -252,6 +243,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   <SwipeBoardCarousel
                     boardName={boardName as BoardName}
                     boardRenderData={boardRenderData}
+                    layoutId={layoutId}
+                    sizeId={sizeId}
+                    setIds={setIds}
                     currentFrames={displayedClimb.frames}
                     nextFrames={navigationState.nextItem?.climb.frames ?? null}
                     prevFrames={navigationState.prevItem?.climb.frames ?? null}

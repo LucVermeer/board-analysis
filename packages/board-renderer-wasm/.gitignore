@@ -1,6 +1,0 @@
-# Rust build artifacts
-target/
-
-# wasm-pack generates a .gitignore in pkg/ that ignores everything.
-# We override it because we want to commit the built WASM for deployment.
-!pkg/

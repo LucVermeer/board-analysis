@@ -34,6 +34,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    // Board backgrounds are bundled via explicit require() in
+    // src/lib/board-backgrounds-manifest.ts (canonical files live in
+    // packages/web/public/images, no duplication), so they're picked up
+    // by Metro regardless of this pattern. Keep the default-ish glob for
+    // anything we drop under assets/ later.
+    assetBundlePatterns: ['assets/**/*'],
     ...(EAS_PROJECT_ID
       ? {
           runtimeVersion: { policy: 'appVersion' as const },

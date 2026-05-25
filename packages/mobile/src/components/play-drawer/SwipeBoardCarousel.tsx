@@ -3,20 +3,20 @@ import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useDerivedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
 import type { BoardName } from '@boardsesh/shared-schema';
-import { BoardRenderer } from '../board-renderer';
+import { BoardImageNative } from '../BoardImageNative';
 import { useCarouselGesture } from './use-carousel-gesture';
-import type { HoldPlacement } from '../board-renderer/types';
 
 type BoardRenderData = {
   boardWidth: number;
   boardHeight: number;
-  imageUrls: string[];
-  holdsData: HoldPlacement[];
 };
 
 type SwipeBoardCarouselProps = {
   boardName: BoardName;
   boardRenderData: BoardRenderData;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
   currentFrames: string;
   nextFrames: string | null;
   prevFrames: string | null;
@@ -31,6 +31,9 @@ type SwipeBoardCarouselProps = {
 export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   boardName,
   boardRenderData,
+  layoutId,
+  sizeId,
+  setIds,
   currentFrames,
   nextFrames,
   prevFrames,
@@ -83,33 +86,35 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     };
   });
 
-  const { boardWidth, boardHeight, imageUrls, holdsData } = boardRenderData;
+  const { boardWidth, boardHeight } = boardRenderData;
   const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
 
   return (
     <GestureDetector gesture={gesture}>
       <View style={styles.container}>
         <Animated.View style={[styles.boardWrapper, currentStyle]}>
-          <BoardRenderer
+          <BoardImageNative
             frames={currentFrames}
             boardName={boardName}
+            layoutId={layoutId}
+            sizeId={sizeId}
+            setIds={setIds}
             boardWidth={boardWidth}
             boardHeight={boardHeight}
-            imageUrls={imageUrls}
-            holdsData={holdsData}
             mirrored={mirrored}
           />
         </Animated.View>
 
         <Animated.View style={[styles.peekWrapper, peekStyle]}>
           {peekFrames && (
-            <BoardRenderer
+            <BoardImageNative
               frames={peekFrames}
               boardName={boardName}
+              layoutId={layoutId}
+              sizeId={sizeId}
+              setIds={setIds}
               boardWidth={boardWidth}
               boardHeight={boardHeight}
-              imageUrls={imageUrls}
-              holdsData={holdsData}
               mirrored={mirrored}
             />
           )}

@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum HoldRenderStyle {
     #[default]
@@ -15,6 +15,10 @@ pub struct RenderConfig {
     pub board_height: f32,
     pub output_width: u32,
     pub frames: String,
+    // Mobile callers omit this — they mirror via CSS scaleX(-1) on the
+    // rendered PNG to keep a single cached output per climb. Web/wasm
+    // callers still pass it when they need true Rust-side mirroring.
+    #[serde(default)]
     pub mirrored: bool,
     pub thumbnail: bool,
     pub holds: Vec<HoldData>,
