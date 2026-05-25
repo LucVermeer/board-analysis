@@ -233,6 +233,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setClimb(similarClimb);
       setIsMirrored(false);
       setIsFavorited(false);
+      setIsTickBarActive(false);
       const queueItem = climbToQueueItem(similarClimb);
       addToQueue(queueItem);
       setCurrentClimb(queueItem);

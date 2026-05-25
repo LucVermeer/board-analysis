@@ -25,17 +25,6 @@ export const CommunitySection = memo(function CommunitySection({
   const hasQuality = qualityNum > 0;
   const hasAscensionists = ascensionistCount > 0;
 
-  if (!hasQuality && !hasAscensionists) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Icon name="people" size={20} color={iosSystemColors.systemGray} />
-        <Text variant="subheadline" color={iosSystemColors.systemGray}>
-          {t('mobile.community.empty')}
-        </Text>
-      </View>
-    );
-  }
-
   const starIcons = useMemo(() => {
     if (!hasQuality) return null;
     const fullStars = Math.floor(qualityNum);
@@ -48,11 +37,21 @@ export const CommunitySection = memo(function CommunitySection({
         color={starIndex < fullStars ? iosSystemColors.starGold : iosSystemColors.systemGray4}
       />
     ));
-  }, [qualityNum]);
+  }, [qualityNum, hasQuality]);
+
+  if (!hasQuality && !hasAscensionists) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Icon name="people" size={20} color={iosSystemColors.systemGray} />
+        <Text variant="subheadline" color={iosSystemColors.systemGray}>
+          {t('mobile.community.empty')}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Quality rating */}
       {hasQuality && (
         <View style={styles.statRow}>
           <View style={styles.starsRow}>{starIcons}</View>
@@ -62,7 +61,6 @@ export const CommunitySection = memo(function CommunitySection({
         </View>
       )}
 
-      {/* Ascensionist count */}
       {hasAscensionists && (
         <View style={styles.statRow}>
           <Icon name="people" size={18} color={iosSystemColors.systemGray} />

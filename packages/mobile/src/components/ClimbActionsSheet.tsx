@@ -74,17 +74,23 @@ function ClimbActionsSheet({
 
   const handleCopyLink = useCallback(async () => {
     if (!climb) return;
-    const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
-    await Clipboard.setStringAsync(url);
-    showToast(t('mobile.climbActions.linkCopied'), 'info');
-    onClose();
+    try {
+      const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
+      await Clipboard.setStringAsync(url);
+      showToast(t('mobile.climbActions.linkCopied'), 'info');
+    } finally {
+      onClose();
+    }
   }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose, showToast, t]);
 
   const handleReport = useCallback(async () => {
     if (!climb) return;
-    const reportUrl = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}?report=true`;
-    await WebBrowser.openBrowserAsync(reportUrl);
-    onClose();
+    try {
+      const reportUrl = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}?report=true`;
+      await WebBrowser.openBrowserAsync(reportUrl);
+    } finally {
+      onClose();
+    }
   }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose]);
 
   const handleClose = useCallback(() => {

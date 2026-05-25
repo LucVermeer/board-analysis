@@ -39,7 +39,10 @@ export const DeferredSections = memo(function DeferredSections({
   const [readyToRender, setReadyToRender] = useState(false);
   const previousClimbUuid = useRef(climb.uuid);
 
-  // Reset readyToRender when the climb changes
+  // Both effects key on climb.uuid. React runs effects in declaration order
+  // within the same commit, so the reset below always fires before the
+  // InteractionManager re-schedule — readyToRender goes false, then the
+  // deferred callback sets it back to true after animations settle.
   useEffect(() => {
     if (climb.uuid !== previousClimbUuid.current) {
       previousClimbUuid.current = climb.uuid;
@@ -47,7 +50,6 @@ export const DeferredSections = memo(function DeferredSections({
     }
   }, [climb.uuid]);
 
-  // Defer rendering until after interactions complete
   useEffect(() => {
     if (!enabled) {
       setReadyToRender(false);

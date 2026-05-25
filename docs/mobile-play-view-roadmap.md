@@ -34,7 +34,7 @@ The authoritative design spec for the play view lives at [`docs/ui/06-play-view.
 | Inline tick bar                                   | Done | Done    | QuickTickBar logic                     | 2     |
 | Wake lock                                         | Done | Done    | --                                     | 2     |
 | Queue drawer (nested)                             | Done | Done    | Queue list model (buildQueueListModel) | 3     |
-| Below-fold sections (logbook, similar, community) | Done | Done    | Section data types                     | 3     |
+| Below-fold sections (logbook, similar, community) | Done | Stub    | Section data types                     | 3     |
 | Climb actions sheet                               | Done | Done    | Action definitions                     | 3     |
 | Angle selector                                    | Done | Done    | Angle range utils                      | 3     |
 | Zoom/pan                                          | Done | Planned | Transform math                         | 4     |
