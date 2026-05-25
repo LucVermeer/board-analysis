@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
-import type { ClimbFilters } from '../components/ClimbFilterSheet';
+import type { ClimbFilters } from './climb-filter-types';
+export { getFilterKey } from './filter-key';
 
 export type RecentFilter = {
   id: string;
@@ -12,10 +13,7 @@ export type RecentFilter = {
 const RECENT_FILTERS_KEY = 'boardsesh_recent_filters';
 const MAX_ITEMS = 10;
 
-export function getFilterKey(filters: ClimbFilters, searchText: string): string {
-  const combined = { ...filters, name: searchText };
-  return JSON.stringify(combined, Object.keys(combined).sort());
-}
+import { getFilterKey } from './filter-key';
 
 export async function getRecentFilters(): Promise<RecentFilter[]> {
   try {

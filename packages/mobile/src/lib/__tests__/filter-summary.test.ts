@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Grade } from '@boardsesh/shared-schema';
 import { getFilterSummary } from '../filter-summary';
-import { DEFAULT_FILTERS, type ClimbFilters } from '../../components/ClimbFilterSheet';
+import { DEFAULT_FILTERS, type ClimbFilters } from '../climb-filter-types';
 
 const mockGrades: Grade[] = [
   { difficultyId: 1, name: 'V0' },
