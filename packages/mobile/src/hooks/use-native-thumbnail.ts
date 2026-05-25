@@ -156,6 +156,25 @@ function getNativeModule() {
 }
 
 /**
+ * The URI the hook starts with on first render and stays on when the
+ * native renderer is unavailable (Expo Go, dev build without Rust libs,
+ * native render failure). Exported so the fallback contract can be unit
+ * tested without spinning up a React render — the hook itself just
+ * calls this to seed useState.
+ *
+ * Background quality is matched to the requested render quality so the
+ * brief pre-native-render frame already looks roughly right: sharp full
+ * server render for play view, fast thumbnail for list rows.
+ */
+export function getServerFallbackUri(params: NativeThumbnailParams): string {
+  const { frames, boardName, layoutId, sizeId, setIds } = params;
+  const backgroundQuality = params.backgroundQuality ?? 'thumbnail';
+  return backgroundQuality === 'full'
+    ? buildFullRenderUrl({ boardName, layoutId, sizeId, setIds, frames })
+    : buildThumbnailUrl({ boardName, layoutId, sizeId, setIds, frames });
+}
+
+/**
  * Hook that attempts native (Rust + platform compositor) thumbnail
  * rendering, falling back to the server URL when the native module
  * is unavailable or the render fails.
@@ -164,13 +183,7 @@ export function useNativeThumbnail(params: NativeThumbnailParams): NativeThumbna
   const { frames, boardName, layoutId, sizeId, setIds, mirrored } = params;
   const outputWidth = params.outputWidth ?? 200;
   const backgroundQuality = params.backgroundQuality ?? 'thumbnail';
-  // Match the fallback URL quality to the requested render quality so the
-  // brief pre-native-render frame already looks roughly right (sharp full
-  // server render for play view, fast thumbnail for list rows).
-  const serverUrl =
-    backgroundQuality === 'full'
-      ? buildFullRenderUrl({ boardName, layoutId, sizeId, setIds, frames })
-      : buildThumbnailUrl({ boardName, layoutId, sizeId, setIds, frames });
+  const serverUrl = getServerFallbackUri(params);
   const [uri, setUri] = useState(serverUrl);
   const mountedRef = useRef(true);
 

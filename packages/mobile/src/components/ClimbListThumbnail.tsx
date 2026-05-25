@@ -22,7 +22,11 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
   setIds,
   mirrored,
 }: ClimbListThumbnailProps) {
-  const { uri } = useNativeThumbnail({ frames, boardName, layoutId, sizeId, setIds, mirrored });
+  // Mirror via CSS only — passing `mirrored` to the Rust renderer too
+  // would double-flip, and we'd cache two PNGs per climb instead of one.
+  // BoardImageNative (the play-view full-size renderer) follows the
+  // same pattern.
+  const { uri } = useNativeThumbnail({ frames, boardName, layoutId, sizeId, setIds });
 
   return (
     <Image

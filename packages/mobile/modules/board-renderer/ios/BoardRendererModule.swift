@@ -26,26 +26,30 @@ public class BoardRendererModule: Module {
   }()
 
   private func pruneCacheIfNeeded(maxBytes: Int) {
-    let keys: [URLResourceKey] = [.contentAccessDateKey, .fileSizeKey]
+    // Sort by modificationDate (not contentAccessDate) because that's what
+    // we can reliably bump on a cache hit via setAttributes(.modificationDate:).
+    // contentAccessDate is read-only via URLResourceKey on most volumes, so
+    // mixing the two would let hot files appear stale after a relaunch.
+    let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
     guard let entries = try? FileManager.default.contentsOfDirectory(
       at: cacheDir,
       includingPropertiesForKeys: keys,
       options: [.skipsHiddenFiles]
     ) else { return }
 
-    var infos: [(url: URL, size: Int, accessed: Date)] = []
+    var infos: [(url: URL, size: Int, modified: Date)] = []
     var totalBytes = 0
     for url in entries {
       guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
       let size = values.fileSize ?? 0
-      let accessed = values.contentAccessDate ?? Date(timeIntervalSince1970: 0)
-      infos.append((url, size, accessed))
+      let modified = values.contentModificationDate ?? Date(timeIntervalSince1970: 0)
+      infos.append((url, size, modified))
       totalBytes += size
     }
 
     if totalBytes <= maxBytes { return }
 
-    infos.sort { $0.accessed < $1.accessed }
+    infos.sort { $0.modified < $1.modified }
     var removed = 0
     for info in infos {
       if totalBytes <= maxBytes { break }

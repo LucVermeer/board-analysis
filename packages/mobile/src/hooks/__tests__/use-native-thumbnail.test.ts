@@ -22,7 +22,21 @@ vi.mock('../../lib/background-image-cache', () => ({
   ensureBackgroundsCached: vi.fn().mockResolvedValue([]),
 }));
 
-const { buildCacheKey } = await import('../use-native-thumbnail');
+vi.mock('../../lib/thumbnail-url', () => ({
+  buildThumbnailUrl: ({ frames }: { frames: string }) =>
+    `https://server.test/thumb?frames=${frames}`,
+  buildFullRenderUrl: ({ frames }: { frames: string }) =>
+    `https://server.test/full?frames=${frames}`,
+}));
+
+// Simulate the Expo Go / dev-build-without-Rust-libs case: requireNativeModule
+// throws. The hook's try/catch around require() should swallow this so the
+// initial server URL stays as-is.
+vi.mock('../../../modules/board-renderer/src/index', () => {
+  throw new Error('Native module not available (simulated Expo Go)');
+});
+
+const { buildCacheKey, getServerFallbackUri } = await import('../use-native-thumbnail');
 
 describe('buildCacheKey', () => {
   it('hashes the frames component so the key fits in a filename', () => {
@@ -75,9 +89,43 @@ describe('buildCacheKey', () => {
   });
 });
 
-// Hook-level behavior (native module fallback, render failure fallback,
-// inflight dedup, unmount guard) is intentionally not tested here yet:
-// the mobile package's vitest setup doesn't have react-dom or a hook
-// test runner wired up. The dedup contract is exercised at the
+// Verifies the Expo Go / no-native-module fallback contract. The hook
+// seeds useState with getServerFallbackUri's result and only ever
+// overwrites it from the native render path, so if getNativeModule()
+// returns null (require throws — simulated by the vi.mock above), the
+// hook's returned uri equals what this function returns.
+describe('getServerFallbackUri (Expo Go fallback contract)', () => {
+  const baseParams = {
+    frames: 'p1r42',
+    boardName: 'kilter' as const,
+    layoutId: 1,
+    sizeId: 10,
+    setIds: '24',
+  };
+
+  it('defaults to the thumbnail server URL', () => {
+    expect(getServerFallbackUri(baseParams)).toBe(
+      'https://server.test/thumb?frames=p1r42',
+    );
+  });
+
+  it('uses the full-render server URL when backgroundQuality is "full"', () => {
+    expect(getServerFallbackUri({ ...baseParams, backgroundQuality: 'full' })).toBe(
+      'https://server.test/full?frames=p1r42',
+    );
+  });
+
+  it('uses the thumbnail server URL when backgroundQuality is "thumbnail" explicitly', () => {
+    expect(
+      getServerFallbackUri({ ...baseParams, backgroundQuality: 'thumbnail' }),
+    ).toBe('https://server.test/thumb?frames=p1r42');
+  });
+});
+
+// Other hook-level behaviors (native render success path, inflight dedup,
+// unmount guard) need a working React hook test runner with a single React
+// instance — the @testing-library/react + jsdom + bun-resolved React 19
+// combo currently produces a null dispatcher for useState. Until that
+// setup is sorted out, the dedup contract is exercised at the
 // background-image-cache layer in background-image-cache.test.ts; the
-// remaining hook behaviors are covered by manual QA on device.
+// success path is covered by manual QA on device.
