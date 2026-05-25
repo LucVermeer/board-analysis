@@ -26,6 +26,7 @@ import { LogAscentSheet } from '../LogAscentSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
+import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
@@ -89,6 +90,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
+  const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
@@ -188,8 +190,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [displayedClimb, boardName, angle, toggleFavoriteMutate]);
 
   const handleLightbulb = useCallback(() => {
-    // Phase 5: BLE integration
-  }, []);
+    if (!bluetooth) return;
+    if (!bluetooth.isConnected) {
+      void bluetooth.connect();
+      return;
+    }
+    if (!displayedClimb) return;
+    setCurrentClimb(climbToQueueItem(displayedClimb));
+  }, [bluetooth, displayedClimb, setCurrentClimb]);
 
   const handleOpenActions = useCallback(() => {
     setActiveSubDrawer('actions');
@@ -338,7 +346,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 supportsMirroring={supportsMirroring}
                 isFavorited={isFavorited}
                 remainingQueueCount={navigationState.remainingCount}
-                lightbulbActive={false}
+                lightbulbActive={bluetooth?.isConnected ?? false}
                 onPrevClick={handlePrev}
                 onNextClick={handleNext}
                 onMirror={handleMirror}
