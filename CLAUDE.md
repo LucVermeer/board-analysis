@@ -85,7 +85,7 @@ curl -fsSL https://vite.plus | bash
 
 # Mobile OTA updates (optional — only needed for `vp run mobile:publish`):
 # Set EXPO_PUBLIC_EAS_PROJECT_ID in your shell or packages/mobile/.env
-# Get the value from expo.dev → project settings → Project ID
+# to override the default project ID committed in app.config.ts
 
 # Note: VERCEL_URL is automatically set by Vercel for deployments
 # For local development, the app defaults to http://localhost:3000
