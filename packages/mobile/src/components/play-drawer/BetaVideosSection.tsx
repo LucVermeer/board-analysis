@@ -2,6 +2,7 @@ import { memo, useCallback, useRef } from 'react';
 import { ScrollView, View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Haptics from 'expo-haptics';
+import { betaLinkIdentity } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { useBetaLinks } from '../../lib/graphql/hooks';
@@ -29,12 +30,17 @@ export const BetaVideosSection = memo(function BetaVideosSection({
   const { t } = useTranslation('session');
   const { isAuthenticated } = useAuth();
   const addSheetRef = useRef<BetaVideoAddSheetHandle>(null);
-  const { data: links, isLoading, isError } = useBetaLinks(boardName, climbUuid);
+  const { data: links, isLoading, isError, refetch, isRefetching } = useBetaLinks(boardName, climbUuid);
 
   const handleOpenAddSheet = useCallback(() => {
     void Haptics.selectionAsync();
     addSheetRef.current?.open();
   }, []);
+
+  const handleRetry = useCallback(() => {
+    void Haptics.selectionAsync();
+    void refetch();
+  }, [refetch]);
 
   const hasContent = links !== undefined && links.length > 0;
 
@@ -71,7 +77,29 @@ export const BetaVideosSection = memo(function BetaVideosSection({
             <View key={`skeleton-${index}`} style={styles.skeletonCard} />
           ))}
         </ScrollView>
-      ) : isError || !links || links.length === 0 ? (
+      ) : isError ? (
+        <View style={styles.errorContainer}>
+          <Icon name="error" size={20} color={iosSystemColors.systemRed} />
+          <Text variant="subheadline" color={iosSystemColors.systemGray} style={styles.errorText}>
+            {t('mobile.betaVideos.errorTitle')}
+          </Text>
+          <Pressable
+            onPress={handleRetry}
+            disabled={isRefetching}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.betaVideos.retry')}
+            style={({ pressed }) => [
+              styles.retryButton,
+              isRefetching && styles.retryButtonDisabled,
+              pressed && !isRefetching && styles.retryButtonPressed,
+            ]}
+          >
+            <Text variant="footnote" color={brandColors.primary}>
+              {t('mobile.betaVideos.retry')}
+            </Text>
+          </Pressable>
+        </View>
+      ) : !links || links.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Icon name="video" size={20} color={iosSystemColors.systemGray} />
           <Text variant="subheadline" color={iosSystemColors.systemGray}>
@@ -88,7 +116,7 @@ export const BetaVideosSection = memo(function BetaVideosSection({
           snapToAlignment="start"
         >
           {links.map((link) => (
-            <BetaVideoCard key={`${link.link}-${link.created_at}`} link={link} />
+            <BetaVideoCard key={betaLinkIdentity(link.link)} link={link} />
           ))}
         </ScrollView>
       )}
@@ -135,5 +163,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing[2],
     paddingVertical: spacing[3],
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingVertical: spacing[3],
+  },
+  errorText: {
+    flex: 1,
+  },
+  retryButton: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: brandColors.primary,
+  },
+  retryButtonDisabled: {
+    opacity: 0.5,
+  },
+  retryButtonPressed: {
+    backgroundColor: `${brandColors.primary}1A`,
   },
 });

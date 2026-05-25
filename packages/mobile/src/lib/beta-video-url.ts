@@ -18,8 +18,11 @@ export type { BetaLink, BetaLinksGqlRow };
  * handler. The GraphQL resolver returns the path as a backend-relative URL;
  * mobile always talks to the backend over `BACKEND_URL`, so prepend it when
  * the value is a path (not already an absolute URL).
+ *
+ * Exported for tests; production callers should use `mapBetaLink` /
+ * `mapBetaLinks` which thread it into the shared mapper.
  */
-function absolutizeThumbnail(thumbnail: string | null): string | null {
+export function absolutizeThumbnail(thumbnail: string | null): string | null {
   if (!thumbnail || !thumbnail.startsWith('/')) return thumbnail;
   return `${BACKEND_URL.replace(/\/+$/, '')}${thumbnail}`;
 }

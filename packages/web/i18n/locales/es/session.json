@@ -266,7 +266,14 @@
       "submitButton": "Adjuntar",
       "submitting": "Adjuntando...",
       "attachSuccess": "Video beta adjuntado",
-      "attachError": "No se pudo adjuntar el video"
+      "attachError": "No se pudo adjuntar el video",
+      "errorTitle": "No se pudieron cargar los videos beta",
+      "retry": "Reintentar",
+      "cardLabelWithUser": "Video beta de @{{username}}",
+      "cardLabel": "Video beta",
+      "openError": "No se pudo abrir este enlace",
+      "imageError": "No se pudo cargar la imagen",
+      "urlInvalid": "Debe ser una URL de Instagram o TikTok"
     },
     "angleSelector": {
       "title": "Seleccionar ángulo"

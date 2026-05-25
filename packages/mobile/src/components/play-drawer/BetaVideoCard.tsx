@@ -1,12 +1,14 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Pressable, View, StyleSheet, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 import type { BetaLink } from '@boardsesh/shared-schema';
 import { isInstagramUrl, isTikTokUrl } from '@boardsesh/shared-schema';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
+import { useToast } from '../../providers/toast-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
@@ -19,28 +21,46 @@ type Props = {
 };
 
 export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
-  const onPress = useCallback(() => {
+  const { t } = useTranslation('session');
+  const { showToast } = useToast();
+  const [imageFailed, setImageFailed] = useState(false);
+
+  const onPress = useCallback(async () => {
     void Haptics.selectionAsync();
-    void Linking.openURL(link.link);
-  }, [link.link]);
+    try {
+      const canOpen = await Linking.canOpenURL(link.link);
+      if (!canOpen) {
+        showToast(t('mobile.betaVideos.openError'), 'error');
+        return;
+      }
+      await Linking.openURL(link.link);
+    } catch {
+      showToast(t('mobile.betaVideos.openError'), 'error');
+    }
+  }, [link.link, showToast, t]);
 
   const platform = detectPlatform(link.link);
   const username = link.foreign_username?.trim();
+  const accessibilityLabel = username
+    ? t('mobile.betaVideos.cardLabelWithUser', { username })
+    : t('mobile.betaVideos.cardLabel');
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="link"
-      accessibilityLabel={username ? `Beta video by @${username}` : 'Beta video'}
+      accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      {link.thumbnail ? (
+      {link.thumbnail && !imageFailed ? (
         <Image
           source={{ uri: link.thumbnail }}
           style={styles.thumbnail}
           contentFit="cover"
           transition={150}
           recyclingKey={link.thumbnail}
+          onError={() => setImageFailed(true)}
+          accessibilityIgnoresInvertColors
         />
       ) : (
         <View style={[styles.thumbnail, styles.thumbnailFallback]}>

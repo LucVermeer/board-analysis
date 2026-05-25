@@ -266,7 +266,14 @@
       "submitButton": "Attach",
       "submitting": "Attaching...",
       "attachSuccess": "Beta video attached",
-      "attachError": "Couldn't attach video"
+      "attachError": "Couldn't attach video",
+      "errorTitle": "Couldn't load beta videos",
+      "retry": "Try again",
+      "cardLabelWithUser": "Beta video by @{{username}}",
+      "cardLabel": "Beta video",
+      "openError": "Couldn't open this link",
+      "imageError": "Image failed to load",
+      "urlInvalid": "Needs to be an Instagram or TikTok URL"
     },
     "angleSelector": {
       "title": "Select Angle"

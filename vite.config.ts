@@ -42,6 +42,8 @@ export default defineConfig({
       './packages/shared/queue/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',
+      './packages/shared/graphql/vite.config.ts',
+      './packages/shared-schema/vite.config.ts',
       './packages/mobile/vite.config.ts',
     ],
   },

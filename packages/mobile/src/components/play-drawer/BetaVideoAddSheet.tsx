@@ -3,7 +3,7 @@ import { View, StyleSheet, TextInput, Pressable, KeyboardAvoidingView, Platform 
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
-import { BETA_VIDEO_URL_VALIDATION_MESSAGE, isBetaVideoUrl } from '@boardsesh/shared-schema';
+import { isBetaVideoUrl } from '@boardsesh/shared-schema';
 import { Sheet } from '../Sheet';
 import { Text } from '../Text';
 import { useAttachBetaLink } from '../../lib/graphql/hooks';
@@ -40,8 +40,11 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
   }));
 
   const trimmed = url.trim();
-  const isValid = trimmed.length > 0 && isBetaVideoUrl(trimmed);
-  const showError = trimmed.length > 0 && !isValid;
+  const hasInput = trimmed.length > 0;
+  const isValid = hasInput && isBetaVideoUrl(trimmed);
+  // Don't shout at the user before they've typed anything; only surface the
+  // validation hint once they've entered something that fails the pattern.
+  const showError = hasInput && !isValid;
 
   const handleClose = useCallback(() => {
     setUrl('');
@@ -96,7 +99,7 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
 
           {showError && (
             <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
-              {BETA_VIDEO_URL_VALIDATION_MESSAGE}
+              {t('mobile.betaVideos.urlInvalid')}
             </Text>
           )}
 
