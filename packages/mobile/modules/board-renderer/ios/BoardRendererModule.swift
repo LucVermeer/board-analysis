@@ -5,7 +5,11 @@ public class BoardRendererModule: Module {
   private lazy var cacheDir: URL = {
     let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("board-thumbnails", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    do {
+      try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    } catch {
+      NSLog("[BoardRenderer] Failed to create cache dir at \(dir.path): \(error)")
+    }
     return dir
   }()
 

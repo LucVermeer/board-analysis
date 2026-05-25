@@ -11,6 +11,11 @@ extern "C" {
     void board_renderer_free(uint8_t *ptr, uint32_t len);
 }
 
+// NOTE: GetStringUTFChars returns JNI Modified UTF-8, not standard UTF-8.
+// The Rust side (std::str::from_utf8) expects standard UTF-8 and will reject
+// surrogate-pair sequences. This is safe today because board config JSON is
+// ASCII-only (no non-ASCII strings in keys/values). If that ever changes,
+// switch to GetStringChars + manual UTF-16 -> UTF-8 conversion.
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_boardsesh_boardrenderer_BoardRendererBridge_nativeRender(
     JNIEnv *env,

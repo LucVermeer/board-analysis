@@ -11,7 +11,9 @@ import java.io.FileOutputStream
 
 class BoardRendererModule : Module() {
     private val cacheDir: File by lazy {
-        File(appContext.reactContext?.cacheDir, "board-thumbnails").also { it.mkdirs() }
+        val reactCacheDir = appContext.reactContext?.cacheDir
+            ?: throw IllegalStateException("BoardRenderer: reactContext.cacheDir unavailable")
+        File(reactCacheDir, "board-thumbnails").also { it.mkdirs() }
     }
 
     override fun definition() = ModuleDefinition {

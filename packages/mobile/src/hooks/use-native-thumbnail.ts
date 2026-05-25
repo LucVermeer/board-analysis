@@ -35,6 +35,22 @@ const boardConfigCache = new Map<
 /** Bump when the Rust renderer output format changes */
 const RENDERER_VERSION = 1;
 
+/**
+ * FNV-1a 32-bit hash, returned as 8-char hex. Used to keep the cache
+ * filename bounded — long climbs can produce frame strings hundreds of
+ * chars long, and both iOS and Android cap filenames at 255 bytes.
+ * Non-cryptographic; collision risk for our domain (bounded JSON-ish
+ * input) is negligible.
+ */
+function fnv1aHex(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let charIndex = 0; charIndex < input.length; charIndex++) {
+    hash ^= input.charCodeAt(charIndex);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
 export function buildCacheKey(
   boardName: string,
   layoutId: number,
@@ -43,7 +59,8 @@ export function buildCacheKey(
   frames: string,
   mirrored: boolean,
 ): string {
-  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${frames}${mirrored ? '_m' : ''}`;
+  const framesHash = fnv1aHex(frames);
+  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${setIds}_${framesHash}${mirrored ? '_m' : ''}`;
 }
 
 function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, setIds: string) {

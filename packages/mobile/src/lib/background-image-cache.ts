@@ -23,7 +23,7 @@ export function getThumbnailImageUrl(fullImageUrl: string): string {
 }
 
 export function extractFilename(imageUrl: string): string {
-  return imageUrl.split('/').pop() ?? 'unknown.webp';
+  return imageUrl.split('/').pop() ?? '';
 }
 
 /**
@@ -34,6 +34,13 @@ export function extractFilename(imageUrl: string): string {
 export function toFilesystemPath(fileUri: string): string {
   return fileUri.replace(/^file:\/\//, '');
 }
+
+/**
+ * Dedupe concurrent downloads of the same URL. Multiple thumbnails on
+ * screen at the same time share their background images; without this,
+ * every visible row would issue an independent download for the same file.
+ */
+const inflightDownloads = new Map<string, Promise<string | null>>();
 
 /**
  * Ensure all background images for a board configuration are cached locally.
@@ -69,13 +76,28 @@ export async function ensureBackgroundsCached(params: {
       continue;
     }
 
-    try {
-      const downloaded = await File.downloadFileAsync(thumbUrl, localFile);
-      if (downloaded) {
-        localPaths.push(toFilesystemPath(downloaded.uri));
+    const existingDownload = inflightDownloads.get(thumbUrl);
+    if (existingDownload) {
+      const inflightPath = await existingDownload;
+      if (inflightPath) localPaths.push(inflightPath);
+      continue;
+    }
+
+    const downloadPromise = (async () => {
+      try {
+        const downloaded = await File.downloadFileAsync(thumbUrl, localFile);
+        return downloaded ? toFilesystemPath(downloaded.uri) : null;
+      } catch {
+        return null;
       }
-    } catch {
-      // Download failed — skip this background layer
+    })();
+
+    inflightDownloads.set(thumbUrl, downloadPromise);
+    try {
+      const downloadedPath = await downloadPromise;
+      if (downloadedPath) localPaths.push(downloadedPath);
+    } finally {
+      inflightDownloads.delete(thumbUrl);
     }
   }
 

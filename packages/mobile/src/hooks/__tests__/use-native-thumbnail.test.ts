@@ -25,31 +25,28 @@ vi.mock('../../lib/background-image-cache', () => ({
 const { buildCacheKey } = await import('../use-native-thumbnail');
 
 describe('buildCacheKey', () => {
-  it('includes all parameters in the key', () => {
+  it('hashes the frames component so the key fits in a filename', () => {
     const key = buildCacheKey('kilter', 1, 10, '24,25', 'p1r42p2r43', false);
-    expect(key).toContain('kilter');
-    expect(key).toContain('1');
-    expect(key).toContain('10');
-    expect(key).toContain('24,25');
-    expect(key).toContain('p1r42p2r43');
+    // v<version>_<board>_<layout>_<size>_<sets>_<8-hex-hash>
+    expect(key).toMatch(/^v\d+_kilter_1_10_24,25_[0-9a-f]{8}$/);
   });
 
   it('produces different keys for different frames', () => {
-    const keyA = buildCacheKey('kilter', 1, 10, '24', 'p1r42', false);
-    const keyB = buildCacheKey('kilter', 1, 10, '24', 'p2r43', false);
-    expect(keyA).not.toBe(keyB);
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42', false)).not.toBe(
+      buildCacheKey('kilter', 1, 10, '24', 'p2r43', false),
+    );
   });
 
   it('produces different keys for mirrored vs non-mirrored', () => {
-    const normal = buildCacheKey('kilter', 1, 10, '24', 'p1r42', false);
-    const mirrored = buildCacheKey('kilter', 1, 10, '24', 'p1r42', true);
-    expect(normal).not.toBe(mirrored);
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42', false)).not.toBe(
+      buildCacheKey('kilter', 1, 10, '24', 'p1r42', true),
+    );
   });
 
   it('produces different keys for different boards', () => {
-    const kilter = buildCacheKey('kilter', 1, 10, '24', 'p1r42', false);
-    const tension = buildCacheKey('tension', 1, 10, '24', 'p1r42', false);
-    expect(kilter).not.toBe(tension);
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42', false)).not.toBe(
+      buildCacheKey('tension', 1, 10, '24', 'p1r42', false),
+    );
   });
 
   it('is deterministic', () => {
@@ -58,14 +55,29 @@ describe('buildCacheKey', () => {
     expect(keyA).toBe(keyB);
   });
 
+  it('does not collide on similar parameter values', () => {
+    expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42', false)).not.toBe(
+      buildCacheKey('kilter', 11, 0, '24', 'p1r42', false),
+    );
+  });
+
+  it('produces a bounded-length key for very long frame strings', () => {
+    // iOS/Android cap filenames at 255 bytes; a busy climb's frames string can
+    // grow well past that without hashing.
+    const longFrames = 'p1234r42'.repeat(500);
+    const key = buildCacheKey('kilter', 1, 10, '24', longFrames, false);
+    expect(key.length).toBeLessThan(64);
+  });
+
   it('includes a version prefix', () => {
     const key = buildCacheKey('kilter', 1, 10, '24', 'p1r42', false);
     expect(key).toMatch(/^v\d+_/);
   });
-
-  it('does not collide on similar parameter values', () => {
-    const keyA = buildCacheKey('kilter', 1, 10, '24', 'p1r42', false);
-    const keyB = buildCacheKey('kilter', 11, 0, '24', 'p1r42', false);
-    expect(keyA).not.toBe(keyB);
-  });
 });
+
+// Hook-level behavior (native module fallback, render failure fallback,
+// inflight dedup, unmount guard) is intentionally not tested here yet:
+// the mobile package's vitest setup doesn't have react-dom or a hook
+// test runner wired up. The dedup contract is exercised at the
+// background-image-cache layer in background-image-cache.test.ts; the
+// remaining hook behaviors are covered by manual QA on device.

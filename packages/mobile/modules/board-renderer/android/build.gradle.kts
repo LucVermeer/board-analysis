@@ -28,5 +28,5 @@ android {
 }
 
 dependencies {
-    implementation("expo:modules-core:latest.release")
+    implementation("expo:modules-core:56.0.12")
 }
