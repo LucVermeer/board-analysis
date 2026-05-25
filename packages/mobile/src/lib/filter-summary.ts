@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import { getBaseFilterParts, formatFilterSummary, type FilterSummaryLabels } from '@boardsesh/climb-filters';
-import { DEFAULT_FILTERS, type ClimbFilters } from '../components/ClimbFilterSheet';
+import { DEFAULT_FILTERS, type ClimbFilters } from './climb-filter-types';
 
 function buildLabels(t: TFunction<'climbs'>): FilterSummaryLabels {
   return {
@@ -33,8 +33,10 @@ export function getFilterSummary(
   const labels = buildLabels(t);
   const parts = getBaseFilterParts(
     {
-      minGrade: filters.minGrade,
-      maxGrade: filters.maxGrade,
+      // Only include grade bounds when grades data is available — without it
+      // getGradeName falls back to "#N" which is uninformative to the user.
+      minGrade: grades != null ? filters.minGrade : undefined,
+      maxGrade: grades != null ? filters.maxGrade : undefined,
       minAscents: filters.minAscents,
       minRating: filters.minRating,
       sortBy: filters.sortBy,

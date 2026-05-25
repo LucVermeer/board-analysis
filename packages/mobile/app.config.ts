@@ -19,7 +19,7 @@ function resolveDevMetadata(): {
   return { branchName, qaNotes, qaNotesFilePath };
 }
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: boolean } => {
   const devMetadata = resolveDevMetadata();
   const hasDevMetadata = devMetadata.branchName || devMetadata.qaNotes || devMetadata.qaNotesFilePath;
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { BottomSheetFlatList, type BottomSheetFlatListMethods } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { buildQueueListModel, type QueueFlatRow } from '@boardsesh/play-view';
@@ -40,7 +40,7 @@ export function QueueList({
 }: QueueListProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
-  const flatListRef = useRef<InstanceType<typeof BottomSheetFlatList>>(null);
+  const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -59,11 +59,7 @@ export function QueueList({
   useEffect(() => {
     if (autoScrollOnMount && currentItemFlatIndex >= 0 && flatRows.length > 0) {
       const timer = setTimeout(() => {
-        (
-          flatListRef.current as {
-            scrollToIndex?: (params: { index: number; animated: boolean; viewPosition: number }) => void;
-          }
-        )?.scrollToIndex?.({
+        flatListRef.current?.scrollToIndex?.({
           index: currentItemFlatIndex,
           animated: true,
           viewPosition: 0.3,
@@ -173,7 +169,7 @@ export function QueueList({
 
   return (
     <BottomSheetFlatList
-      ref={flatListRef as unknown as React.RefObject<InstanceType<typeof BottomSheetFlatList>>}
+      ref={flatListRef}
       data={flatRows}
       keyExtractor={keyExtractor}
       renderItem={renderRow}

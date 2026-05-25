@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getFilterKey } from '../recent-filter-store';
-import type { ClimbFilters } from '../../components/ClimbFilterSheet';
+import { getFilterKey } from '../filter-key';
+import type { ClimbFilters } from '../climb-filter-types';
 
 const defaultFilters: ClimbFilters = {
   sortBy: 'popular',
