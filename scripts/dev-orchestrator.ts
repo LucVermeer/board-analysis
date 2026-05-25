@@ -9,6 +9,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveTailscaleHostname as resolveTailscaleHostResolution } from './lib/tailscale-hostname';
+
 // `vp run dev` always launches its own backend so that two worktrees / two
 // branches can never accidentally share one backend instance — that path
 // silently lets the frontend on branch A talk to the backend built from
@@ -23,7 +25,6 @@ const HEALTH_CHECK_TIMEOUT_MS = 5000;
 const HEALTH_CHECK_INTERVAL_MS = 500;
 const HEALTH_CHECK_MAX_ATTEMPTS = HEALTH_CHECK_TIMEOUT_MS / HEALTH_CHECK_INTERVAL_MS;
 
-const TAILSCALE_STATUS_TIMEOUT_MS = 1500;
 const TAILSCALE_CERT_TIMEOUT_MS = 60_000;
 
 // OOM guard configuration. The dev host has crashed twice from running too many
@@ -226,23 +227,13 @@ function loadGeneratedDevDbEnv(): DevDbEnv {
   return env;
 }
 
-/**
- * Resolve the Tailscale hostname from `tailscale status --json`. Returns null
- * if Tailscale isn't installed, not logged in, or not reporting a DNS name.
- */
+// Resolve the Tailscale hostname using the shared helper, narrowing to
+// `string | null` since the orchestrator only cares about "do we have a
+// Tailnet hostname or not?" — the structured fallback reason is only useful
+// for the dev-script logging paths.
 function resolveTailscaleHostname(): string | null {
-  try {
-    const statusJson = execFileSync('tailscale', ['status', '--json'], {
-      encoding: 'utf8',
-      timeout: TAILSCALE_STATUS_TIMEOUT_MS,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const parsed = JSON.parse(statusJson) as { Self?: { DNSName?: string } };
-    const dns = parsed.Self?.DNSName?.trim().replace(/\.$/, '');
-    return dns && /^[a-zA-Z0-9.-]+$/.test(dns) ? dns.toLowerCase() : null;
-  } catch {
-    return null;
-  }
+  const resolution = resolveTailscaleHostResolution();
+  return resolution.source === 'fallback' ? null : resolution.hostname;
 }
 
 type ProvisionResult = {

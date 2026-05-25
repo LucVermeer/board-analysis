@@ -38,34 +38,13 @@ export function resolveTailscaleHostname(): TailscaleHostResolution {
     };
   }
 
+  let statusJson: string;
   try {
-    const statusJson = execFileSync('tailscale', ['status', '--json'], {
+    statusJson = execFileSync('tailscale', ['status', '--json'], {
       encoding: 'utf8',
       timeout: TAILSCALE_STATUS_TIMEOUT_MS,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-
-    const parsed = JSON.parse(statusJson) as { Self?: { DNSName?: string } };
-    const dnsName = parsed.Self?.DNSName;
-
-    if (!dnsName) {
-      return {
-        hostname: 'localhost',
-        source: 'fallback',
-        reason: 'tailscale status missing Self.DNSName; falling back to localhost',
-      };
-    }
-
-    const normalizedDnsName = normalizeHostname(dnsName);
-    if (!normalizedDnsName) {
-      return {
-        hostname: 'localhost',
-        source: 'fallback',
-        reason: 'tailscale DNSName invalid; falling back to localhost',
-      };
-    }
-
-    return { hostname: normalizedDnsName, source: 'tailscale' };
   } catch (error) {
     const errorCode = (error as NodeJS.ErrnoException).code;
     if (errorCode === 'ENOENT') {
@@ -82,4 +61,43 @@ export function resolveTailscaleHostname(): TailscaleHostResolution {
       reason: 'tailscale unavailable; falling back to localhost',
     };
   }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(statusJson);
+  } catch {
+    return {
+      hostname: 'localhost',
+      source: 'fallback',
+      reason: 'tailscale status returned malformed JSON; falling back to localhost',
+    };
+  }
+
+  const dnsName = extractSelfDnsName(parsed);
+  if (!dnsName) {
+    return {
+      hostname: 'localhost',
+      source: 'fallback',
+      reason: 'tailscale status missing Self.DNSName; falling back to localhost',
+    };
+  }
+
+  const normalizedDnsName = normalizeHostname(dnsName);
+  if (!normalizedDnsName) {
+    return {
+      hostname: 'localhost',
+      source: 'fallback',
+      reason: 'tailscale DNSName invalid; falling back to localhost',
+    };
+  }
+
+  return { hostname: normalizedDnsName, source: 'tailscale' };
+}
+
+function extractSelfDnsName(parsed: unknown): string | null {
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const self = (parsed as { Self?: unknown }).Self;
+  if (typeof self !== 'object' || self === null) return null;
+  const dnsName = (self as { DNSName?: unknown }).DNSName;
+  return typeof dnsName === 'string' ? dnsName : null;
 }
