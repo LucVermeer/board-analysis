@@ -79,6 +79,26 @@ export function flagsToStatus(flags: StatusFlags): StatusFilter {
   return 'any';
 }
 
+/**
+ * Returns the patch to apply when the user changes the Status filter.
+ * Mirrors web's status side-effects: established sets `minAscents >= 2`,
+ * drafts switches sort to newest-first, and any/projects resets `minAscents`.
+ *
+ * Use as: `setState((previous) => ({ ...previous, ...applyStatusChange(previous, newStatus) }))`.
+ */
+export function applyStatusChange(_previous: ClimbFilterState, newStatus: StatusFilter): Partial<ClimbFilterState> {
+  switch (newStatus) {
+    case 'drafts':
+      return { status: 'drafts', minAscents: undefined, sortBy: 'creation', sortOrder: 'desc' };
+    case 'established':
+      return { status: 'established', minAscents: 2 };
+    case 'projects':
+      return { status: 'projects', minAscents: undefined };
+    case 'any':
+      return { status: 'any', minAscents: undefined };
+  }
+}
+
 export type BoardSearchConfig = {
   boardName: string;
   layoutId: number;

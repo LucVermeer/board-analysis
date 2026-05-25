@@ -3,17 +3,11 @@ import type { Grade } from '@boardsesh/shared-schema';
 import {
   getBaseFilterParts,
   formatFilterSummary,
+  gradeAccuracyBucket,
   type FilterSummaryLabels,
   type SortOption,
 } from '@boardsesh/climb-filters';
 import { DEFAULT_FILTERS, type ClimbFilters } from './climb-filter-types';
-
-function accuracyKey(value: string): 'off' | 'loose' | 'moderate' | 'tight' {
-  if (value === '0' || value === 'off') return 'off';
-  if (value === '0.2') return 'loose';
-  if (value === '0.1') return 'moderate';
-  return 'tight';
-}
 
 function buildLabels(t: TFunction<'climbs'>): FilterSummaryLabels {
   return {
@@ -26,7 +20,7 @@ function buildLabels(t: TFunction<'climbs'>): FilterSummaryLabels {
     // i18n-keep mobile.search.settersCount
     setters: (count) => t('mobile.search.settersCount', { count }),
     // i18n-keep mobile.filter.accuracy.off mobile.filter.accuracy.loose mobile.filter.accuracy.moderate mobile.filter.accuracy.tight
-    gradeAccuracy: (value) => t(`mobile.filter.accuracy.${accuracyKey(value)}`),
+    gradeAccuracy: (value) => t(`mobile.filter.accuracy.${gradeAccuracyBucket(value)}`),
     tallOnly: () => t('mobile.filter.tall'),
     wideOnly: () => t('mobile.filter.wide'),
     // i18n-keep mobile.filter.status.drafts mobile.filter.status.established mobile.filter.status.projects

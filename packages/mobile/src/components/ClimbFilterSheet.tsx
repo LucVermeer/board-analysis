@@ -7,6 +7,9 @@ import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import {
   hasActiveClimbFilters,
+  applyStatusChange,
+  gradeAccuracyBucket,
+  type GradeAccuracyBucket,
   type SortOption,
   type SortOrder,
   type StatusFilter,
@@ -14,6 +17,8 @@ import {
   SORT_OPTIONS,
   GRADE_ACCURACY_VALUES,
   STATUS_FILTER_VALUES,
+  MIN_ASCENTS_FILTER_OPTIONS,
+  formatMinAscentsFilterCount,
 } from '@boardsesh/climb-filters';
 import { Text } from './Text';
 import { Button } from './Button';
@@ -54,14 +59,10 @@ type ClimbFilterSheetProps = {
   onApply: (filters: ClimbFilters) => void;
 };
 
-const ASCENT_OPTIONS = [
-  { label: 'any', value: undefined },
-  { label: '5+', value: 5 },
-  { label: '10+', value: 10 },
-  { label: '25+', value: 25 },
-  { label: '50+', value: 50 },
-  { label: '100+', value: 100 },
-] as const;
+// Bucket values come from the shared canonical list so mobile and web stay
+// in lockstep (web's `MinAscentsBucketPicker` consumes the same list).
+// `0` is the "any" sentinel — rendered with a localised label.
+const ASCENT_BUCKET_VALUES = MIN_ASCENTS_FILTER_OPTIONS;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -175,12 +176,17 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(currentFilters);
   const [expandedSection, setExpandedSection] = useState<SectionKey | null>('sort');
 
+  // Seed `localFilters` from `currentFilters` only when the sheet opens. Keeping
+  // `currentFilters` in the deps list would re-run this whenever the parent
+  // re-references its filters object, wiping the user's in-flight edits.
+  const currentFiltersRef = useRef(currentFilters);
+  currentFiltersRef.current = currentFilters;
   useEffect(() => {
     if (visible) {
-      setLocalFilters(currentFilters);
+      setLocalFilters(currentFiltersRef.current);
       setExpandedSection('sort');
     }
-  }, [visible, currentFilters]);
+  }, [visible]);
 
   // Receive setter selection from the dedicated picker route.
   useEffect(() => {
@@ -276,12 +282,11 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
     [setFiltersPatch],
   );
 
-  const handleStatusChange = useCallback(
-    (status: StatusFilter) => {
-      setFiltersPatch({ status });
-    },
-    [setFiltersPatch],
-  );
+  const handleStatusChange = useCallback((status: StatusFilter) => {
+    // Status carries side-effects (established → minAscents=2, drafts → sort=newest);
+    // applyStatusChange centralises the patch so web and mobile agree.
+    setLocalFilters((previous) => ({ ...previous, ...applyStatusChange(previous, status) }));
+  }, []);
 
   const handleAccuracyChange = useCallback(
     (value: GradeAccuracyValue | 'off') => {
@@ -330,7 +335,9 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
         sizeId: String(boardConfig.sizeId),
         setIds: boardConfig.setIds,
         angle: String(boardConfig.angle),
-        selected: (localFilters.setter ?? []).join(','),
+        // Setter usernames can contain commas (notably MoonBoard-imported names),
+        // so JSON-encode instead of comma-joining.
+        selected: JSON.stringify(localFilters.setter ?? []),
       },
     });
   }, [router, boardConfig, localFilters.setter]);
@@ -530,14 +537,20 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
               {t('mobile.filter.minAscents')}
             </Text>
             <View style={styles.chipRow}>
-              {ASCENT_OPTIONS.map((option) => (
-                <Chip
-                  key={option.label}
-                  label={option.label === 'any' ? t('mobile.filter.anyAscents') : option.label}
-                  selected={localFilters.minAscents === option.value}
-                  onPress={() => setFiltersPatch({ minAscents: option.value })}
-                />
-              ))}
+              {ASCENT_BUCKET_VALUES.map((bucket) => {
+                const isAny = bucket === 0;
+                // Mobile stores "any" as `undefined`; the canonical bucket list
+                // includes 0 as the sentinel that we present as "any".
+                const filterValue = isAny ? undefined : bucket;
+                return (
+                  <Chip
+                    key={bucket}
+                    label={isAny ? t('mobile.filter.anyAscents') : `${formatMinAscentsFilterCount(bucket)}+`}
+                    selected={localFilters.minAscents === filterValue}
+                    onPress={() => setFiltersPatch({ minAscents: filterValue })}
+                  />
+                );
+              })}
             </View>
 
             <View style={styles.subsectionGap} />

@@ -32,10 +32,18 @@ export default function SettersPicker() {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
 
-  const initialSelected = useMemo<string[]>(
-    () => (params.selected ? params.selected.split(',').filter(Boolean) : []),
-    [params.selected],
-  );
+  const initialSelected = useMemo<string[]>(() => {
+    if (!params.selected) return [];
+    // Older sessions used a comma-joined string; new sessions JSON-encode the
+    // list (setter usernames can contain commas).
+    try {
+      const parsed: unknown = JSON.parse(params.selected);
+      if (Array.isArray(parsed)) return parsed.filter((entry): entry is string => typeof entry === 'string');
+    } catch {
+      // Fall through to legacy comma-split for backwards compat.
+    }
+    return params.selected.split(',').filter(Boolean);
+  }, [params.selected]);
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSelected));
   const [searchInput, setSearchInput] = useState('');
@@ -70,10 +78,15 @@ export default function SettersPicker() {
 
   const { data: setters, isLoading } = useSetterStats(queryInput, hasBoardConfig);
 
-  const apply = useCallback(() => {
+  const done = useCallback(() => {
     emitSetterSelection(Array.from(selected));
     router.back();
   }, [router, selected]);
+
+  const cancel = useCallback(() => {
+    // Swipe-down also dismisses without applying — same intent as tapping Cancel.
+    router.back();
+  }, [router]);
 
   const clear = useCallback(() => {
     hapticSelection();
@@ -83,21 +96,21 @@ export default function SettersPicker() {
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <Pressable onPress={apply} hitSlop={8} accessibilityRole="button">
+        <Pressable onPress={done} hitSlop={8} accessibilityRole="button">
           <Text variant="subheadline" color={brandColors.primary} style={styles.headerAction}>
-            {t('mobile.filter.apply')}
+            {t('mobile.filter.done')}
           </Text>
         </Pressable>
       ),
       headerLeft: () => (
-        <Pressable onPress={clear} hitSlop={8} accessibilityRole="button">
+        <Pressable onPress={cancel} hitSlop={8} accessibilityRole="button">
           <Text variant="subheadline" color={brandColors.primary}>
-            {t('mobile.filter.reset')}
+            {t('mobile.filter.cancel')}
           </Text>
         </Pressable>
       ),
     });
-  }, [navigation, apply, clear, t]);
+  }, [navigation, done, cancel, t]);
 
   const toggle = useCallback((username: string) => {
     hapticSelection();
@@ -151,6 +164,19 @@ export default function SettersPicker() {
           style={[styles.searchInput, { color: systemColors.label as string }]}
         />
       </View>
+
+      {selected.size > 0 ? (
+        <View style={styles.selectionBar}>
+          <Text variant="footnote" style={styles.selectionCount}>
+            {t('mobile.search.settersCount', { count: selected.size })}
+          </Text>
+          <Pressable onPress={clear} hitSlop={8} accessibilityRole="button">
+            <Text variant="footnote" color={brandColors.primary}>
+              {t('mobile.filter.clearAll')}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {isLoading ? (
         <View style={styles.loading}>
@@ -233,5 +259,15 @@ const styles = StyleSheet.create({
   },
   headerAction: {
     fontWeight: '600',
+  },
+  selectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  selectionCount: {
+    opacity: 0.55,
   },
 });

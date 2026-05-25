@@ -644,7 +644,10 @@
       "wide": "Wide climbs only",
       "wideDescription": "Use the 10x10 side expansion",
       "searchSetters": "Search setters",
-      "noSetters": "No setters yet"
+      "noSetters": "No setters yet",
+      "cancel": "Cancel",
+      "done": "Done",
+      "clearAll": "Clear all"
     },
     "search": {
       "recentFilters": "Recent",

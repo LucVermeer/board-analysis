@@ -19,6 +19,7 @@ import { PlayDrawer, type PlayDrawerHandle } from '../../../src/components/play-
 import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { useDefaultBoard, useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { useAuth } from '../../../src/providers/auth-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import {
@@ -114,12 +115,16 @@ export default function ClimbList() {
     };
   }, []);
 
-  // Load recent filters on mount
+  const { isAuthenticated } = useAuth();
+
+  // Load recent filters on mount. Pass auth state so auth-gated fields get
+  // stripped from pills written by a prior signed-in session — otherwise a
+  // tapped pill would silently no-op on the backend while looking active.
   useEffect(() => {
-    getRecentFilters()
+    getRecentFilters({ isAuthenticated })
       .then(setRecentFilters)
       .catch(() => {});
-  }, []);
+  }, [isAuthenticated]);
 
   const { data: defaultBoard, isLoading: isBoardLoading } = useDefaultBoard();
 
@@ -222,12 +227,12 @@ export default function ClimbList() {
       if (hasActiveFilters(newFilters) || currentSearch.length > 0) {
         const label = getFilterSummary(newFilters, currentSearch, gradesRef.current, t);
         addRecentFilter(label, newFilters, currentSearch)
-          .then(() => getRecentFilters())
+          .then(() => getRecentFilters({ isAuthenticated }))
           .then(setRecentFilters)
           .catch(() => {});
       }
     },
-    [t],
+    [t, isAuthenticated],
   );
 
   const handleApplyRecentFilter = useCallback((pillFilters: ClimbFilters, pillSearchText: string) => {

@@ -4,6 +4,7 @@ import {
   hasActiveClimbFilters,
   statusToFlags,
   flagsToStatus,
+  applyStatusChange,
   toClimbSearchInput,
   type ClimbFilterState,
   type BoardSearchConfig,
@@ -208,5 +209,46 @@ describe('toClimbSearchInput', () => {
     expect(result.angle).toBe(40);
     expect(result.page).toBe(3);
     expect(result.pageSize).toBe(100);
+  });
+});
+
+describe('applyStatusChange', () => {
+  it('drafts: sets onlyDrafts intent, clears minAscents, switches sort to newest', () => {
+    const previous: ClimbFilterState = { ...DEFAULT_CLIMB_FILTER_STATE, minAscents: 25 };
+    expect(applyStatusChange(previous, 'drafts')).toEqual({
+      status: 'drafts',
+      minAscents: undefined,
+      sortBy: 'creation',
+      sortOrder: 'desc',
+    });
+  });
+
+  it('established: sets minAscents to 2 (parity with web)', () => {
+    expect(applyStatusChange(DEFAULT_CLIMB_FILTER_STATE, 'established')).toEqual({
+      status: 'established',
+      minAscents: 2,
+    });
+  });
+
+  it('projects: clears minAscents', () => {
+    const previous: ClimbFilterState = { ...DEFAULT_CLIMB_FILTER_STATE, minAscents: 50 };
+    expect(applyStatusChange(previous, 'projects')).toEqual({
+      status: 'projects',
+      minAscents: undefined,
+    });
+  });
+
+  it('any: clears minAscents (including the established=2 leftover)', () => {
+    const previous: ClimbFilterState = { ...DEFAULT_CLIMB_FILTER_STATE, status: 'established', minAscents: 2 };
+    expect(applyStatusChange(previous, 'any')).toEqual({
+      status: 'any',
+      minAscents: undefined,
+    });
+  });
+
+  it('produces a patch that, when applied to established, flows minAscents=2 through toClimbSearchInput', () => {
+    const patched: ClimbFilterState = { ...DEFAULT_CLIMB_FILTER_STATE, ...applyStatusChange(DEFAULT_CLIMB_FILTER_STATE, 'established') };
+    const input = toClimbSearchInput(patched, board, pagination);
+    expect(input.minAscents).toBe(2);
   });
 });

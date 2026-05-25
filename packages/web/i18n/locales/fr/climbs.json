@@ -644,7 +644,10 @@
       "wide": "Voies larges uniquement",
       "wideDescription": "Utilisent l'extension 10x10",
       "searchSetters": "Rechercher des ouvreurs",
-      "noSetters": "Aucun ouvreur"
+      "noSetters": "Aucun ouvreur",
+      "cancel": "Annuler",
+      "done": "OK",
+      "clearAll": "Tout effacer"
     },
     "search": {
       "recentFilters": "Récents",

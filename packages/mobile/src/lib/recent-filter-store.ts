@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { SORT_OPTIONS, STATUS_FILTER_VALUES, type SortOption, type StatusFilter } from '@boardsesh/climb-filters';
 import type { ClimbFilters } from './climb-filter-types';
 import { getFilterKey } from './filter-key';
 
@@ -15,10 +16,56 @@ export type RecentFilter = {
 const RECENT_FILTERS_KEY = 'boardsesh_recent_filters';
 const MAX_ITEMS = 10;
 
-export async function getRecentFilters(): Promise<RecentFilter[]> {
+// Fields the backend only honours for authenticated users. When loading
+// pills while signed out we strip these so a recent search from a previous
+// signed-in session doesn't silently no-op (UI would show the pill as
+// "active" but the list would be unfiltered).
+const AUTH_GATED_FIELDS = [
+  'hideAttempted',
+  'hideCompleted',
+  'showOnlyAttempted',
+  'showOnlyCompleted',
+] as const satisfies ReadonlyArray<keyof ClimbFilters>;
+
+function isValidEntry(entry: unknown): entry is RecentFilter {
+  if (entry == null || typeof entry !== 'object') return false;
+  const candidate = entry as { filters?: { sortBy?: unknown; status?: unknown }; id?: unknown; label?: unknown };
+  if (typeof candidate.id !== 'string' || typeof candidate.label !== 'string') return false;
+  const filters = candidate.filters;
+  if (filters == null) return false;
+  if (typeof filters.sortBy !== 'string' || !(SORT_OPTIONS as readonly string[]).includes(filters.sortBy)) return false;
+  if (filters.status != null && !(STATUS_FILTER_VALUES as readonly string[]).includes(filters.status as string)) {
+    return false;
+  }
+  return true;
+}
+
+function stripAuthGatedFields(filters: ClimbFilters): ClimbFilters {
+  const sanitized = { ...filters };
+  for (const field of AUTH_GATED_FIELDS) {
+    delete sanitized[field];
+  }
+  return sanitized;
+}
+
+/**
+ * Read recent filter pills from secure storage. Drops entries written by
+ * older app versions that carry an unknown `sortBy` or `status`. Pass
+ * `isAuthenticated = false` to also strip auth-gated filters from each
+ * entry — used by the climbs tab so signed-out users don't tap pills that
+ * silently no-op on the backend.
+ */
+export async function getRecentFilters(options?: { isAuthenticated?: boolean }): Promise<RecentFilter[]> {
   try {
     const value = await SecureStore.getItemAsync(RECENT_FILTERS_KEY);
-    return value ? JSON.parse(value) : [];
+    if (!value) return [];
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    const valid = parsed.filter(isValidEntry);
+    if (options?.isAuthenticated === false) {
+      return valid.map((entry) => ({ ...entry, filters: stripAuthGatedFields(entry.filters) }));
+    }
+    return valid;
   } catch {
     return [];
   }
@@ -53,3 +100,6 @@ export async function clearRecentFilters(): Promise<void> {
     // Storage failure is non-critical
   }
 }
+
+// Re-exported for test setup convenience.
+export const _AUTH_GATED_FIELDS_FOR_TESTS = AUTH_GATED_FIELDS;

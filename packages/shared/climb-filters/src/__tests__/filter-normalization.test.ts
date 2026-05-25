@@ -4,6 +4,7 @@ import {
   normalizeMinRatingFilter,
   formatMinAscentsFilterCount,
   getMinRatingPickerValue,
+  gradeAccuracyBucket,
 } from '../filter-normalization';
 
 describe('normalizeMinAscentsFilter', () => {
@@ -74,5 +75,19 @@ describe('getMinRatingPickerValue', () => {
   it('returns normalized value for positive input', () => {
     expect(getMinRatingPickerValue(3)).toBe(3);
     expect(getMinRatingPickerValue(5)).toBe(5);
+  });
+});
+
+describe('gradeAccuracyBucket', () => {
+  it('maps wire values to UX buckets', () => {
+    expect(gradeAccuracyBucket('0')).toBe('off');
+    expect(gradeAccuracyBucket('0.2')).toBe('loose');
+    expect(gradeAccuracyBucket('0.1')).toBe('moderate');
+    expect(gradeAccuracyBucket('0.05')).toBe('tight');
+  });
+
+  it('treats null and undefined as off', () => {
+    expect(gradeAccuracyBucket(null)).toBe('off');
+    expect(gradeAccuracyBucket(undefined)).toBe('off');
   });
 });

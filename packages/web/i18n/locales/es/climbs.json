@@ -644,7 +644,10 @@
       "wide": "Solo vías anchas",
       "wideDescription": "Usan la extensión 10x10",
       "searchSetters": "Buscar equipadores",
-      "noSetters": "Sin equipadores"
+      "noSetters": "Sin equipadores",
+      "cancel": "Cancelar",
+      "done": "Listo",
+      "clearAll": "Borrar todo"
     },
     "search": {
       "recentFilters": "Recientes",
