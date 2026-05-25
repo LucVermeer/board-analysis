@@ -30,12 +30,16 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
   const { t } = useTranslation('session');
   const { showToast } = useToast();
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const inputRef = useRef<TextInput>(null);
   const [url, setUrl] = useState('');
 
   const attach = useAttachBetaLink();
 
   useImperativeHandle(ref, () => ({
-    open: () => bottomSheetRef.current?.snapToIndex(0),
+    open: () => {
+      bottomSheetRef.current?.snapToIndex(0);
+      setTimeout(() => inputRef.current?.focus(), 300);
+    },
     close: () => bottomSheetRef.current?.close(),
   }));
 
@@ -84,6 +88,7 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
           </Text>
 
           <TextInput
+            ref={inputRef}
             value={url}
             onChangeText={setUrl}
             placeholder={t('mobile.betaVideos.urlPlaceholder')}
@@ -91,7 +96,6 @@ export const BetaVideoAddSheet = forwardRef<BetaVideoAddSheetHandle, Props>(func
             keyboardType="url"
             autoCapitalize="none"
             autoCorrect={false}
-            autoFocus
             returnKeyType="send"
             onSubmitEditing={handleSubmit}
             style={styles.input}
