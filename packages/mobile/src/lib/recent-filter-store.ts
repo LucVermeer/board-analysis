@@ -34,10 +34,23 @@ function isValidEntry(entry: unknown): entry is RecentFilter {
   const filters = candidate.filters;
   if (filters == null) return false;
   if (typeof filters.sortBy !== 'string' || !(SORT_OPTIONS as readonly string[]).includes(filters.sortBy)) return false;
+  // If status is present but unknown, drop. Missing status is normalized
+  // later (older app versions wrote entries before the field existed); see
+  // normalizeEntry.
   if (filters.status != null && !(STATUS_FILTER_VALUES as readonly string[]).includes(filters.status as string)) {
     return false;
   }
   return true;
+}
+
+// Backfill defaults that were added after old entries were written. Without
+// this, an entry missing `status` would render as "active" since
+// `hasActiveClimbFilters` treats `undefined !== 'any'` as a change.
+function normalizeEntry(entry: RecentFilter): RecentFilter {
+  if (entry.filters.status == null) {
+    return { ...entry, filters: { ...entry.filters, status: 'any' } };
+  }
+  return entry;
 }
 
 function stripAuthGatedFields(filters: ClimbFilters): ClimbFilters {
@@ -61,7 +74,7 @@ export async function getRecentFilters(options?: { isAuthenticated?: boolean }):
     if (!value) return [];
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    const valid = parsed.filter(isValidEntry);
+    const valid = parsed.filter(isValidEntry).map(normalizeEntry);
     if (options?.isAuthenticated === false) {
       return valid.map((entry) => ({ ...entry, filters: stripAuthGatedFields(entry.filters) }));
     }

@@ -115,6 +115,22 @@ describe('getRecentFilters sanitizer', () => {
     expect(result[0]?.filters.minGrade).toBe(10);
   });
 
+  it('normalizes entries missing status (legacy app versions) to status="any"', async () => {
+    const { getRecentFilters } = await import('../recent-filter-store');
+    await seed([
+      {
+        id: '1',
+        label: 'pre-status',
+        filters: { sortBy: 'ascents', sortOrder: 'desc', minGrade: 10 },
+        searchText: '',
+        timestamp: 0,
+      },
+    ]);
+    const result = await getRecentFilters();
+    expect(result).toHaveLength(1);
+    expect(result[0]?.filters.status).toBe('any');
+  });
+
   it('keeps auth-gated fields when isAuthenticated=true', async () => {
     const { getRecentFilters } = await import('../recent-filter-store');
     await seed([

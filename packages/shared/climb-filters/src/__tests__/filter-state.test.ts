@@ -212,6 +212,15 @@ describe('toClimbSearchInput', () => {
   });
 });
 
+describe('GRADE_ACCURACY_VALUES ordering', () => {
+  it('iterates in UX progression: off, loose, moderate, tight', async () => {
+    // Smaller numeric value = stricter accuracy. The UI consumes this list
+    // directly to render the radio, so the order matters.
+    const { GRADE_ACCURACY_VALUES } = await import('../filter-state');
+    expect([...GRADE_ACCURACY_VALUES]).toEqual(['0', '0.2', '0.1', '0.05']);
+  });
+});
+
 describe('applyStatusChange', () => {
   it('drafts: sets onlyDrafts intent, clears minAscents, switches sort to newest', () => {
     const previous: ClimbFilterState = { ...DEFAULT_CLIMB_FILTER_STATE, minAscents: 25 };

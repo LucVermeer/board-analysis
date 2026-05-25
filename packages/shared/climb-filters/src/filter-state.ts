@@ -6,7 +6,11 @@ export type SortOption = (typeof SORT_OPTIONS)[number];
 export const SORT_ORDERS = ['asc', 'desc'] as const;
 export type SortOrder = (typeof SORT_ORDERS)[number];
 
-export const GRADE_ACCURACY_VALUES = ['0', '0.05', '0.1', '0.2'] as const;
+// Ordered from no-filter through loosest to tightest so UIs that iterate
+// this list render the natural progression (Off → Loose → Moderate → Tight).
+// The numeric values correspond to the allowed delta from a climb's
+// difficulty_average, so smaller = stricter.
+export const GRADE_ACCURACY_VALUES = ['0', '0.2', '0.1', '0.05'] as const;
 export type GradeAccuracyValue = (typeof GRADE_ACCURACY_VALUES)[number];
 
 export const STATUS_FILTER_VALUES = ['any', 'drafts', 'established', 'projects'] as const;
