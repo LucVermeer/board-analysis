@@ -82,6 +82,12 @@ export const queriesTypeDefs = /* GraphQL */ `
     climb(boardName: String!, layoutId: Int!, sizeId: Int!, setIds: String!, angle: Int!, climbUuid: ID!): Climb
 
     """
+    Setter usernames with climb counts for the given board, optionally filtered by username substring.
+    Powers the setter filter autocomplete.
+    """
+    setterStats(input: SetterStatsInput!): [SetterStat!]!
+
+    """
     Get climb stats history for a climb over the last 12 months.
     Returns snapshots captured during shared sync for trend analysis.
     """

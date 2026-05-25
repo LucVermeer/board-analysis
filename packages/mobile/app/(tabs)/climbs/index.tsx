@@ -4,6 +4,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
+import { toClimbSearchInput } from '@boardsesh/climb-filters';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
@@ -163,22 +164,13 @@ export default function ClimbList() {
   }, [debouncedSearch, filters]);
 
   const searchInput = useMemo(
-    () => ({
-      boardName,
-      layoutId,
-      sizeId,
-      setIds,
-      angle,
-      ...(debouncedSearch.length > 0 ? { name: debouncedSearch } : {}),
-      page: pageNumber,
-      pageSize: PAGE_SIZE,
-      sortBy: filters.sortBy,
-      sortOrder: filters.sortOrder,
-      ...(filters.minGrade != null ? { minGrade: filters.minGrade } : {}),
-      ...(filters.maxGrade != null ? { maxGrade: filters.maxGrade } : {}),
-      ...(filters.minAscents != null ? { minAscents: filters.minAscents } : {}),
-      ...(filters.minRating != null ? { minRating: filters.minRating } : {}),
-    }),
+    () =>
+      toClimbSearchInput(
+        filters,
+        { boardName, layoutId, sizeId, setIds, angle },
+        { page: pageNumber, pageSize: PAGE_SIZE },
+        { name: debouncedSearch },
+      ),
     [boardName, layoutId, sizeId, setIds, angle, debouncedSearch, pageNumber, filters],
   );
 
@@ -353,7 +345,7 @@ export default function ClimbList() {
       <ClimbFilterSheet
         visible={showFilters}
         onDismiss={handleDismissFilters}
-        boardName={boardName}
+        boardConfig={boardConfig}
         currentFilters={filters}
         onApply={handleApplyFilters}
       />

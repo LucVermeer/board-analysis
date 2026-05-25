@@ -5,12 +5,13 @@ import type { ClimbFilters } from '../climb-filter-types';
 const defaultFilters: ClimbFilters = {
   sortBy: 'popular',
   sortOrder: 'desc',
+  status: 'any',
 };
 
 describe('getFilterKey', () => {
   it('produces a stable key regardless of property insertion order', () => {
-    const filtersA: ClimbFilters = { sortBy: 'popular', sortOrder: 'desc', minGrade: 10 };
-    const filtersB: ClimbFilters = { minGrade: 10, sortOrder: 'desc', sortBy: 'popular' };
+    const filtersA: ClimbFilters = { sortBy: 'popular', sortOrder: 'desc', status: 'any', minGrade: 10 };
+    const filtersB: ClimbFilters = { minGrade: 10, sortOrder: 'desc', sortBy: 'popular', status: 'any' };
     expect(getFilterKey(filtersA, '')).toBe(getFilterKey(filtersB, ''));
   });
 
@@ -27,8 +28,8 @@ describe('getFilterKey', () => {
   });
 
   it('treats undefined optional fields as absent', () => {
-    const filtersA: ClimbFilters = { sortBy: 'popular', sortOrder: 'desc' };
-    const filtersB: ClimbFilters = { sortBy: 'popular', sortOrder: 'desc', minGrade: undefined };
+    const filtersA: ClimbFilters = { sortBy: 'popular', sortOrder: 'desc', status: 'any' };
+    const filtersB: ClimbFilters = { sortBy: 'popular', sortOrder: 'desc', status: 'any', minGrade: undefined };
     expect(getFilterKey(filtersA, '')).toBe(getFilterKey(filtersB, ''));
   });
 

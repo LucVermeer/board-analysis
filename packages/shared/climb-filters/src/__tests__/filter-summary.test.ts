@@ -79,6 +79,86 @@ describe('getBaseFilterParts', () => {
   });
 });
 
+describe('getBaseFilterParts — extended fields', () => {
+  const extendedLabels: FilterSummaryLabels = {
+    ...labels,
+    setters: (count) => `${count} setter${count === 1 ? '' : 's'}`,
+    gradeAccuracy: (value) => `±${value}`,
+    tallOnly: () => 'Tall only',
+    wideOnly: () => 'Wide only',
+    status: (kind) => `Status: ${kind}`,
+    hideAttempted: () => 'Hide attempted',
+    hideCompleted: () => 'Hide completed',
+    showOnlyAttempted: () => 'Only attempted',
+    showOnlyCompleted: () => 'Only completed',
+  };
+
+  it('emits a setters part when setter array is non-empty', () => {
+    expect(getBaseFilterParts({ setter: ['alice', 'bob'] }, mockGrades, extendedLabels)).toEqual(['2 setters']);
+  });
+
+  it('omits setters part when array is empty', () => {
+    expect(getBaseFilterParts({ setter: [] }, mockGrades, extendedLabels)).toEqual([]);
+  });
+
+  it('emits gradeAccuracy part', () => {
+    expect(getBaseFilterParts({ gradeAccuracy: '0.1' }, mockGrades, extendedLabels)).toEqual(['±0.1']);
+  });
+
+  it('emits tallOnly and wideOnly parts', () => {
+    expect(getBaseFilterParts({ onlyTallClimbs: true, onlyWideClimbs: true }, mockGrades, extendedLabels)).toEqual([
+      'Tall only',
+      'Wide only',
+    ]);
+  });
+
+  it('emits status part only for drafts/projects', () => {
+    expect(getBaseFilterParts({ status: 'drafts' }, mockGrades, extendedLabels)).toEqual(['Status: drafts']);
+    expect(getBaseFilterParts({ status: 'projects' }, mockGrades, extendedLabels)).toEqual(['Status: projects']);
+  });
+
+  it('omits status part for any and established', () => {
+    expect(getBaseFilterParts({ status: 'any' }, mockGrades, extendedLabels)).toEqual([]);
+    expect(getBaseFilterParts({ status: 'established' }, mockGrades, extendedLabels)).toEqual([]);
+  });
+
+  it('emits personal progress parts when flags set', () => {
+    expect(
+      getBaseFilterParts(
+        {
+          hideAttempted: true,
+          hideCompleted: true,
+          showOnlyAttempted: true,
+          showOnlyCompleted: true,
+        },
+        mockGrades,
+        extendedLabels,
+      ),
+    ).toEqual(['Hide attempted', 'Hide completed', 'Only attempted', 'Only completed']);
+  });
+
+  it('omits extended parts when corresponding labels are not provided', () => {
+    // labels here only has the original 6 callbacks — no extended ones.
+    expect(
+      getBaseFilterParts(
+        {
+          setter: ['alice'],
+          gradeAccuracy: '0.1',
+          onlyTallClimbs: true,
+          onlyWideClimbs: true,
+          status: 'drafts',
+          hideAttempted: true,
+          hideCompleted: true,
+          showOnlyAttempted: true,
+          showOnlyCompleted: true,
+        },
+        mockGrades,
+        labels,
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe('formatFilterSummary', () => {
   it('returns null when no parts', () => {
     expect(formatFilterSummary([], labels)).toBeNull();

@@ -6,6 +6,8 @@ import type {
   Climb,
   ClimbSearchInput,
   Grade,
+  SetterStat,
+  SetterStatsInput,
   Angle,
   MyBoardsInput,
   SearchBoardsInput,
@@ -289,6 +291,23 @@ export type SearchClimbsQueryResponse = {
     climbs: Climb[];
     hasMore: boolean;
   };
+};
+
+export const GET_SETTER_STATS = gql`
+  query GetSetterStats($input: SetterStatsInput!) {
+    setterStats(input: $input) {
+      setterUsername
+      climbCount
+    }
+  }
+`;
+
+export type GetSetterStatsQueryVariables = {
+  input: SetterStatsInput;
+};
+
+export type GetSetterStatsQueryResponse = {
+  setterStats: SetterStat[];
 };
 
 export const SEARCH_CLIMBS_COUNT = gql`

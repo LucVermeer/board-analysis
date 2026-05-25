@@ -209,7 +209,8 @@
       "climbs": "Bloques",
       "climb": "Bloque",
       "queue": "Cola",
-      "profile": "Perfil"
+      "profile": "Perfil",
+      "setters": "Equipadores"
     },
     "play": {
       "sendCount_one": "{{count}} envío",

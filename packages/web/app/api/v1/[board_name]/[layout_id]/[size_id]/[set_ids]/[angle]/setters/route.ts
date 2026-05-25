@@ -1,4 +1,5 @@
-import { type SetterStat, getSetterStats } from '@/app/lib/db/queries/climbs/setter-stats';
+import { type SetterStat, getSetterStats } from '@boardsesh/db/queries';
+import { dbzRead } from '@/app/lib/db/db';
 import type { BoardRouteParameters, ErrorResponse } from '@/app/lib/types';
 import { parseBoardRouteParamsWithSlugs } from '@/app/lib/url-utils.server';
 import { NextResponse } from 'next/server';
@@ -21,7 +22,7 @@ export async function GET(
     const url = new URL(req.url);
     const searchQuery = url.searchParams.get('search') || undefined;
 
-    const setterStats = await getSetterStats(parsedParams, searchQuery);
+    const setterStats = await getSetterStats(dbzRead, parsedParams, searchQuery);
 
     return NextResponse.json(setterStats);
   } catch (error) {

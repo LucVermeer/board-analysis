@@ -14,10 +14,12 @@ const mockGrades: Grade[] = [
 const mockT = ((key: string, options?: Record<string, unknown>) => {
   const translations: Record<string, string> = {
     'mobile.filter.title': 'Filters',
-    'mobile.filter.quality': 'Quality',
-    'mobile.filter.difficulty': 'Difficulty',
-    'mobile.filter.newest': 'Newest',
-    'mobile.filter.popular': 'Popular',
+    'mobile.filter.sort.ascents': 'Ascents',
+    'mobile.filter.sort.quality': 'Quality',
+    'mobile.filter.sort.difficulty': 'Difficulty',
+    'mobile.filter.sort.name': 'Name',
+    'mobile.filter.sort.popular': 'Popular',
+    'mobile.filter.sort.creation': 'Newest',
   };
   if (translations[key]) return translations[key];
 

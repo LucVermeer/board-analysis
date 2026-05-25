@@ -11,7 +11,8 @@
       "climbs": "Blocs",
       "climb": "Bloc",
       "queue": "File",
-      "profile": "Profil"
+      "profile": "Profil",
+      "setters": "Ouvreurs"
     },
     "play": {
       "sendCount_one": "{{count}} envoi",

@@ -595,7 +595,56 @@
       "minRating": "Min note",
       "anyRating": "Tous",
       "apply": "Appliquer les filtres",
-      "reset": "Réinitialiser"
+      "reset": "Réinitialiser",
+      "section": {
+        "sort": "Tri",
+        "climb": "Voie",
+        "quality": "Qualité",
+        "status": "Statut",
+        "progress": "Progression"
+      },
+      "sort": {
+        "ascents": "Ascensions",
+        "quality": "Qualité",
+        "difficulty": "Difficulté",
+        "name": "Nom",
+        "popular": "Populaires",
+        "creation": "Plus récentes"
+      },
+      "sortOrderLabel": "Sens",
+      "sortOrder": {
+        "asc": "Croissant",
+        "desc": "Décroissant"
+      },
+      "status": {
+        "any": "Toutes",
+        "drafts": "Brouillons",
+        "established": "Publiées",
+        "projects": "Projets"
+      },
+      "accuracy": {
+        "label": "Précision de la cotation",
+        "off": "Désactivée",
+        "loose": "Large",
+        "moderate": "Modérée",
+        "tight": "Stricte"
+      },
+      "progress": {
+        "hideAttempted": "Masquer essayées",
+        "hideCompleted": "Masquer réussies",
+        "onlyAttempted": "Uniquement essayées",
+        "onlyCompleted": "Uniquement réussies"
+      },
+      "signInForDrafts": "Connecte-toi pour filtrer tes brouillons",
+      "signInForProgress": "Connecte-toi pour filtrer selon tes réalisations",
+      "setters": "Ouvreurs",
+      "none": "Aucun",
+      "tall": "Voies hautes uniquement",
+      "tallDescription": "Atteignent le haut du mur",
+      "wide": "Voies larges uniquement",
+      "wideDescription": "Utilisent l'extension 10x10",
+      "searchSetters": "Rechercher des ouvreurs",
+      "noSetters": "Aucun ouvreur"
     },
     "search": {
       "recentFilters": "Récents",
@@ -605,7 +654,11 @@
       "gradeMax": "Jusqu'à {{grade}}",
       "ascents": "{{count}}+ ascensions",
       "rating": "{{count}}+ étoiles",
-      "more": "+{{count}} de plus"
+      "more": "+{{count}} de plus",
+      "settersCount_one": "{{count}} ouvreur",
+      "settersCount_other": "{{count}} ouvreurs",
+      "climbsCount_one": "{{count}} voie",
+      "climbsCount_other": "{{count}} voies"
     },
     "climbRow": {
       "addToQueue": "Ajouter à la file",

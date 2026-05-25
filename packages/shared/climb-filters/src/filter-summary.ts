@@ -8,6 +8,17 @@ export type FilterSummaryLabels = {
   ascents: (count: number) => string;
   rating: (count: number) => string;
   more: (count: number) => string;
+  // Optional — only emit a summary part when a label is supplied. Callers that
+  // never set these fields can omit them.
+  setters?: (count: number) => string;
+  gradeAccuracy?: (value: string) => string;
+  tallOnly?: () => string;
+  wideOnly?: () => string;
+  status?: (kind: 'drafts' | 'established' | 'projects') => string;
+  hideAttempted?: () => string;
+  hideCompleted?: () => string;
+  showOnlyAttempted?: () => string;
+  showOnlyCompleted?: () => string;
 };
 
 export type BaseFilters = {
@@ -18,6 +29,15 @@ export type BaseFilters = {
   sortBy?: string;
   defaultSortBy?: string;
   name?: string;
+  setter?: string[];
+  gradeAccuracy?: string;
+  onlyTallClimbs?: boolean;
+  onlyWideClimbs?: boolean;
+  status?: 'any' | 'drafts' | 'established' | 'projects';
+  hideAttempted?: boolean;
+  hideCompleted?: boolean;
+  showOnlyAttempted?: boolean;
+  showOnlyCompleted?: boolean;
 };
 
 // Web suppresses minAscents >= 2 when the "Established" status chip is active
@@ -56,6 +76,44 @@ export function getBaseFilterParts(
 
   if (filters.minRating != null) {
     parts.push(labels.rating(filters.minRating));
+  }
+
+  if (filters.setter != null && filters.setter.length > 0 && labels.setters) {
+    parts.push(labels.setters(filters.setter.length));
+  }
+
+  if (filters.gradeAccuracy != null && labels.gradeAccuracy) {
+    parts.push(labels.gradeAccuracy(filters.gradeAccuracy));
+  }
+
+  if (filters.onlyTallClimbs && labels.tallOnly) {
+    parts.push(labels.tallOnly());
+  }
+
+  if (filters.onlyWideClimbs && labels.wideOnly) {
+    parts.push(labels.wideOnly());
+  }
+
+  // 'any' is the catch-all default and 'established' overlaps the usual
+  // "non-draft, non-project" result set — neither produces a part.
+  if ((filters.status === 'drafts' || filters.status === 'projects') && labels.status) {
+    parts.push(labels.status(filters.status));
+  }
+
+  if (filters.hideAttempted && labels.hideAttempted) {
+    parts.push(labels.hideAttempted());
+  }
+
+  if (filters.hideCompleted && labels.hideCompleted) {
+    parts.push(labels.hideCompleted());
+  }
+
+  if (filters.showOnlyAttempted && labels.showOnlyAttempted) {
+    parts.push(labels.showOnlyAttempted());
+  }
+
+  if (filters.showOnlyCompleted && labels.showOnlyCompleted) {
+    parts.push(labels.showOnlyCompleted());
   }
 
   return parts;
