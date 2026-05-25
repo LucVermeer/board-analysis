@@ -1,15 +1,6 @@
 name: Mobile CI
 
 on:
-  push:
-    branches-ignore: [main]
-    paths:
-      - 'packages/mobile/**'
-      - 'packages/shared/**'
-      - 'packages/board-constants/**'
-      - 'packages/shared-schema/**'
-      - 'vite.config.ts'
-      - '.github/workflows/mobile-tests.yml'
   pull_request:
     paths:
       - 'packages/mobile/**'
