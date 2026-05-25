@@ -34,16 +34,16 @@ function getGraphqlWsUrl(): string {
   return BACKEND_URL.replace(/^http(s?):\/\//, 'ws$1://').replace(/\/+$/, '') + '/graphql';
 }
 
-/// React Native port of `packages/web/app/lib/live-activity/use-live-activity.ts`.
-///
-/// Lifecycle: starts a Live Activity when (iOS) + (session active) + (board
-/// selected) + (queue has content) + (Live Activities authorized in Settings).
-/// Pushes initial state, then watches the serialized queue (full update) and
-/// current climb (lightweight update) to drive ActivityKit pushes.
-///
-/// On non-iOS / Expo Go / preview builds without the native module, every
-/// call short-circuits at the plugin layer (`Platform.OS !== 'ios'` or
-/// `liveActivityNative == null`) so this hook is safe to mount unconditionally.
+// React Native port of `packages/web/app/lib/live-activity/use-live-activity.ts`.
+// 
+// Lifecycle: starts a Live Activity when (iOS) + (session active) + (board
+// selected) + (queue has content) + (Live Activities authorized in Settings).
+// Pushes initial state, then watches the serialized queue (full update) and
+// current climb (lightweight update) to drive ActivityKit pushes.
+// 
+// On non-iOS / Expo Go / preview builds without the native module, every
+// call short-circuits at the plugin layer (`Platform.OS !== 'ios'` or
+// `liveActivityNative == null`) so this hook is safe to mount unconditionally.
 export function useLiveActivity({
   queue,
   currentClimbQueueItem,

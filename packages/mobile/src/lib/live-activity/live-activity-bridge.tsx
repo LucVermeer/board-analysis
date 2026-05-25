@@ -10,15 +10,15 @@ type LiveActivityBridgeProps = {
   setIds: string;
 };
 
-/// Renderless component that mounts useLiveActivity() with the active
-/// queue + board context, and wires the native `queueNavigate` event
-/// (fired when the user taps Next/Previous on the Dynamic Island) into
-/// the queue reducer so the app's currentClimbQueueItem stays in sync
-/// with the widget.
-///
-/// Mount inside BluetoothProviderWrapper (i.e. only when a board has been
-/// selected) so a guest user without a board doesn't trigger Live Activity
-/// authorization prompts at random.
+// Renderless component that mounts useLiveActivity() with the active
+// queue + board context, and wires the native `queueNavigate` event
+// (fired when the user taps Next/Previous on the Dynamic Island) into
+// the queue reducer so the app's currentClimbQueueItem stays in sync
+// with the widget.
+// 
+// Mount inside BluetoothProviderWrapper (i.e. only when a board has been
+// selected) so a guest user without a board doesn't trigger Live Activity
+// authorization prompts at random.
 export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: LiveActivityBridgeProps) {
   const { state, sessionId, nextClimb, previousClimb } = useQueue();
 

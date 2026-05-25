@@ -38,6 +38,10 @@ export class RNBleAdapter implements BluetoothAdapter {
 
     let autoSelectResolve: ((deviceId: string) => void) | null = null;
     let autoSelectReject: ((error: Error) => void) | null = null;
+    // Lets the scan-timeout reject the picker promise when no devices have
+    // turned up yet — pre-fix the picker UI would hang forever after the 30s
+    // scan window stopped scanning. Same shape used by NativeIosBleAdapter.
+    let pickerTimeoutReject: ((error: Error) => void) | null = null;
 
     let selectionPromise: Promise<string>;
     if (targetSerial) {
@@ -46,9 +50,21 @@ export class RNBleAdapter implements BluetoothAdapter {
         autoSelectReject = reject;
       });
     } else {
-      selectionPromise = this.devicePicker((onUpdate) => {
-        updateListener = onUpdate;
-        pushDevices();
+      selectionPromise = new Promise<string>((resolve, reject) => {
+        pickerTimeoutReject = reject;
+        this.devicePicker((onUpdate) => {
+          updateListener = onUpdate;
+          pushDevices();
+        }).then(
+          (deviceId) => {
+            pickerTimeoutReject = null;
+            resolve(deviceId);
+          },
+          (error) => {
+            pickerTimeoutReject = null;
+            reject(error);
+          },
+        );
       });
     }
 
@@ -80,6 +96,11 @@ export class RNBleAdapter implements BluetoothAdapter {
       if (autoSelectReject) {
         autoSelectReject(new Error('Target board not found during scan'));
         autoSelectReject = null;
+        return;
+      }
+      if (pickerTimeoutReject && devices.size === 0) {
+        pickerTimeoutReject(new Error('No boards found within scan window'));
+        pickerTimeoutReject = null;
       }
     }, SCAN_TIMEOUT_MS);
 

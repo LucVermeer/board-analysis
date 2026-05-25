@@ -94,11 +94,20 @@ enum ClimbNavigationIntent {
             defaults.set(direction.rawValue, forKey: SharedConstants.pendingActionKey)
             defaults.removeObject(forKey: SharedConstants.widgetNavigateCorrelationIdKey)
         }
-        postQueueNavigateDarwinNotification()
 
+        // Wait for the native BLE write to drain before waking JS via the
+        // Darwin notification. Without this, the JS-side BluetoothAutoSender
+        // can dispatch its own write for the same climb while BoardBleManager
+        // is still chunking out the intent's packet — at best it interleaves
+        // wastefully on the UART, at worst it stalls a marginal connection.
+        // Serializing here means BoardBleManager's queue has fully drained
+        // by the time AutoSender's write enqueues, so the same-content
+        // re-send is a fast no-op against the wall's last-frame buffer.
         #if !WIDGET_EXTENSION
         await bleWrite
         #endif
+
+        postQueueNavigateDarwinNotification()
     }
 
     private static func postQueueNavigateDarwinNotification() {

@@ -7,9 +7,9 @@ import {
   type WidgetQueueNavigateEvent,
 } from '../../../modules/live-activity/src/index';
 
-/// Thin wrapper around the native LiveActivity Expo Module. All methods are
-/// no-ops (or return safe defaults) when the module is unavailable — on
-/// Android, in Expo Go, or in a preview build that predates the module.
+// Thin wrapper around the native LiveActivity Expo Module. All methods are
+// no-ops (or return safe defaults) when the module is unavailable — on
+// Android, in Expo Go, or in a preview build that predates the module.
 
 export async function isLiveActivityAvailable(): Promise<boolean> {
   if (Platform.OS !== 'ios' || !liveActivityNative) return false;

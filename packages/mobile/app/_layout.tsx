@@ -28,18 +28,13 @@ function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  // setIds isn't currently part of useDefaultBoard's shape; default to "" so
-  // the native side can still construct thumbnail URLs (the widget renders a
-  // placeholder when this is empty). Update once useDefaultBoard exposes it.
-  const setIds = '';
-
   return (
     <BluetoothProvider boardName={defaultBoard.boardType} layoutId={defaultBoard.layoutId} sizeId={defaultBoard.sizeId}>
       <LiveActivityBridge
         boardName={defaultBoard.boardType}
         layoutId={defaultBoard.layoutId}
         sizeId={defaultBoard.sizeId}
-        setIds={setIds}
+        setIds={defaultBoard.setIds}
       />
       {children}
     </BluetoothProvider>

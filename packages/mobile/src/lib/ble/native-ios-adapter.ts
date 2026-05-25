@@ -21,13 +21,13 @@ function uint8ArrayToHex(bytes: Uint8Array): string {
   return hex;
 }
 
-/// Adapter that drives the BoardBleManager Swift singleton via the
-/// `@boardsesh/live-activity-module` Expo Module. iOS-only — guarded at the
-/// factory level. Keeps the encoding-in-JS pattern the existing
-/// `useBoardBluetooth` hook uses (climb frames → hex packet → native write),
-/// but additionally calls `configureBoard` so that the widget intent path
-/// (Dynamic Island next/prev → BoardBleManager.displayCurrentItemAwaitingReady)
-/// has the board metadata it needs to encode without going through JS.
+// Adapter that drives the BoardBleManager Swift singleton via the
+// `@boardsesh/live-activity-module` Expo Module. iOS-only — guarded at the
+// factory level. Keeps the encoding-in-JS pattern the existing
+// `useBoardBluetooth` hook uses (climb frames → hex packet → native write),
+// but additionally calls `configureBoard` so that the widget intent path
+// (Dynamic Island next/prev → BoardBleManager.displayCurrentItemAwaitingReady)
+// has the board metadata it needs to encode without going through JS.
 export class NativeIosBleAdapter implements BluetoothAdapter {
   private connectedDeviceId: string | null = null;
   private disconnectCallback: (() => void) | null = null;
@@ -53,6 +53,10 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
 
     let autoSelectResolve: ((deviceId: string) => void) | null = null;
     let autoSelectReject: ((error: Error) => void) | null = null;
+    // Lets the scan-timeout reject the picker promise when no devices have
+    // turned up yet. Without this, the picker UI hangs forever after the 30s
+    // scan window stops scanning. Same fix needed for RNBleAdapter.
+    let pickerTimeoutReject: ((error: Error) => void) | null = null;
 
     let selectionPromise: Promise<string>;
     if (targetSerial) {
@@ -61,9 +65,21 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
         autoSelectReject = reject;
       });
     } else {
-      selectionPromise = this.devicePicker((onUpdate) => {
-        updateListener = onUpdate;
-        pushDevices();
+      selectionPromise = new Promise<string>((resolve, reject) => {
+        pickerTimeoutReject = reject;
+        this.devicePicker((onUpdate) => {
+          updateListener = onUpdate;
+          pushDevices();
+        }).then(
+          (deviceId) => {
+            pickerTimeoutReject = null;
+            resolve(deviceId);
+          },
+          (error) => {
+            pickerTimeoutReject = null;
+            reject(error);
+          },
+        );
       });
     }
 
@@ -92,6 +108,14 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       if (autoSelectReject) {
         autoSelectReject(new Error('Target board not found during scan'));
         autoSelectReject = null;
+        return;
+      }
+      // Picker flow with no auto-select target. If the user hasn't seen any
+      // devices yet, surface the timeout — otherwise leave the picker open
+      // so they can still tap a discovered board.
+      if (pickerTimeoutReject && devices.size === 0) {
+        pickerTimeoutReject(new Error('No boards found within scan window'));
+        pickerTimeoutReject = null;
       }
     }, SCAN_TIMEOUT_MS);
 
@@ -158,14 +182,14 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     };
   }
 
-  /// Persists the active board configuration into BoardBleManager via shared
-  /// UserDefaults. Required for the widget intent path: when the user taps
-  /// next/previous on the Dynamic Island, the intent calls
-  /// `BoardBleManager.displayCurrentItemAwaitingReady(items, currentIndex)`
-  /// which encodes the wall packet using this configuration. Without this,
-  /// JS-driven writes still work (we already hex-encode in JS), but the
-  /// Dynamic Island path silently no-ops because BoardBleManager has no
-  /// configuration to encode against.
+  // Persists the active board configuration into BoardBleManager via shared
+  // UserDefaults. Required for the widget intent path: when the user taps
+  // next/previous on the Dynamic Island, the intent calls
+  // `BoardBleManager.displayCurrentItemAwaitingReady(items, currentIndex)`
+  // which encodes the wall packet using this configuration. Without this,
+  // JS-driven writes still work (we already hex-encode in JS), but the
+  // Dynamic Island path silently no-ops because BoardBleManager has no
+  // configuration to encode against.
   async configureBoard(options: NativeBleConfigureBoardOptions): Promise<void> {
     const native = this.requireNative();
     await native.configureBoard(options);
