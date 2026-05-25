@@ -4,6 +4,7 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetFlatList,
   type BottomSheetBackdropProps,
+  type BottomSheetFlatListMethods,
 } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -36,9 +37,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
 }: AngleSelectorSheetProps) {
   const { t } = useTranslation('session');
   const sheetRef = useRef<BottomSheet>(null);
-  const flatListRef = useRef<{
-    scrollToIndex?: (params: { index: number; animated: boolean; viewPosition: number }) => void;
-  }>(null);
+  const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
 
   const snapPoints = useMemo(() => ['50%'], []);
 
@@ -157,7 +156,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
         <Text variant="headline">{t('mobile.angleSelector.title')}</Text>
       </View>
       <BottomSheetFlatList
-        ref={flatListRef as unknown as React.RefObject<InstanceType<typeof BottomSheetFlatList>>}
+        ref={flatListRef}
         data={angles}
         keyExtractor={keyExtractor}
         renderItem={renderAngleRow}
