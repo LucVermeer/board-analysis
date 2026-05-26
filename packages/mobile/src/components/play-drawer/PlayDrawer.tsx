@@ -28,6 +28,7 @@ import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
@@ -92,6 +93,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
+  const { formatGrade } = useGradeFormat();
 
   const { boardName, layoutId, sizeId, setIds, angle } = boardConfig;
 
@@ -284,7 +286,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
             <>
               <PlayDrawerHeader
                 name={displayedClimb.name}
-                difficulty={displayedClimb.difficulty}
+                difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
+                rawDifficulty={displayedClimb.difficulty}
                 qualityAverage={displayedClimb.quality_average}
                 ascensionistCount={displayedClimb.ascensionist_count}
                 stars={displayedClimb.stars}

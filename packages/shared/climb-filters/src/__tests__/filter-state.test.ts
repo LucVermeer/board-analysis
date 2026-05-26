@@ -256,7 +256,10 @@ describe('applyStatusChange', () => {
   });
 
   it('produces a patch that, when applied to established, flows minAscents=2 through toClimbSearchInput', () => {
-    const patched: ClimbFilterState = { ...DEFAULT_CLIMB_FILTER_STATE, ...applyStatusChange(DEFAULT_CLIMB_FILTER_STATE, 'established') };
+    const patched: ClimbFilterState = {
+      ...DEFAULT_CLIMB_FILTER_STATE,
+      ...applyStatusChange(DEFAULT_CLIMB_FILTER_STATE, 'established'),
+    };
     const input = toClimbSearchInput(patched, board, pagination);
     expect(input.minAscents).toBe(2);
   });

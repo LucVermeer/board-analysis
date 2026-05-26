@@ -5,6 +5,15 @@ import {
   getGradeTextColor,
   getGradeTintColor,
   hexToHSL,
+  formatGrade,
+  formatVGrade,
+  formatFontGrade,
+  softenColor,
+  getSoftGradeColor,
+  getSoftVGradeColor,
+  getSoftFontGradeColor,
+  getSoftGradeColorByFormat,
+  DEFAULT_GRADE_DISPLAY_FORMAT,
 } from '../grade-display';
 
 describe('getGradeColorWithOpacity', () => {
@@ -134,5 +143,116 @@ describe('hexToHSL', () => {
     expect(result.h).toBe(0);
     expect(result.s).toBe(0);
     expect(result.l).toBeCloseTo(1, 5);
+  });
+});
+
+describe('formatVGrade', () => {
+  it('extracts the V part of a combined difficulty', () => {
+    expect(formatVGrade('6a/V3')).toBe('V3');
+    // The Font part has no "+" so no disambiguation suffix, regardless of mapping count.
+    expect(formatVGrade('7b/V8')).toBe('V8');
+  });
+
+  it('adds "+" when the Font part has "+" AND V-grade has multiple Font mappings', () => {
+    // V5 maps from both "6c" and "6c+" in BOULDER_GRADES → "+" is meaningful.
+    expect(formatVGrade('6c+/V5')).toBe('V5+');
+  });
+
+  it('does not add "+" when V-grade has only one Font mapping', () => {
+    // V7 only comes from "7a+" → no disambiguation needed.
+    expect(formatVGrade('7a+/V7')).toBe('V7');
+  });
+
+  it('accepts a bare V label', () => {
+    expect(formatVGrade('V10')).toBe('V10');
+  });
+
+  it('returns null for missing / unparseable input', () => {
+    expect(formatVGrade(null)).toBeNull();
+    expect(formatVGrade(undefined)).toBeNull();
+    expect(formatVGrade('')).toBeNull();
+    expect(formatVGrade('not a grade')).toBeNull();
+  });
+});
+
+describe('formatFontGrade', () => {
+  it('uppercases the Font part of a combined difficulty', () => {
+    expect(formatFontGrade('6a/V3')).toBe('6A');
+    expect(formatFontGrade('7b+/V8')).toBe('7B+');
+  });
+
+  it('falls back to a standalone Font match', () => {
+    expect(formatFontGrade('6a')).toBe('6A');
+    expect(formatFontGrade('7b+')).toBe('7B+');
+  });
+
+  it('returns null for missing / unparseable input', () => {
+    expect(formatFontGrade(null)).toBeNull();
+    expect(formatFontGrade(undefined)).toBeNull();
+    expect(formatFontGrade('')).toBeNull();
+    expect(formatFontGrade('Vasdf')).toBeNull();
+  });
+});
+
+describe('formatGrade', () => {
+  it('routes to V or Font based on format', () => {
+    expect(formatGrade('6c+/V5', 'v-grade')).toBe('V5+');
+    expect(formatGrade('6c+/V5', 'font')).toBe('6C+');
+  });
+
+  it('defaults to V via DEFAULT_GRADE_DISPLAY_FORMAT export', () => {
+    expect(DEFAULT_GRADE_DISPLAY_FORMAT).toBe('v-grade');
+    expect(formatGrade('6a/V3', DEFAULT_GRADE_DISPLAY_FORMAT)).toBe('V3');
+  });
+
+  it('returns null gracefully', () => {
+    expect(formatGrade(null, 'v-grade')).toBeNull();
+    expect(formatGrade(undefined, 'font')).toBeNull();
+  });
+});
+
+describe('softenColor', () => {
+  it('returns a light-mode HSL with the source hue', () => {
+    // #FF0000 is hue 0 (red).
+    expect(softenColor('#FF0000', false)).toBe('hsl(0, 72%, 44%)');
+  });
+
+  it('returns a dark-mode HSL with higher lightness for contrast', () => {
+    expect(softenColor('#FF0000', true)).toBe('hsl(0, 80%, 77%)');
+  });
+
+  it('treats the absence of darkMode as light-mode', () => {
+    expect(softenColor('#FF0000')).toBe(softenColor('#FF0000', false));
+  });
+});
+
+describe('getSoftGradeColor variants', () => {
+  it('returns a softened color for a recognised V-grade', () => {
+    const color = getSoftVGradeColor('V3');
+    expect(color).toMatch(/^hsl\(\d+, 72%, 44%\)$/);
+  });
+
+  it('returns a softened color for a recognised Font grade', () => {
+    const color = getSoftFontGradeColor('6a');
+    expect(color).toMatch(/^hsl\(\d+, 72%, 44%\)$/);
+  });
+
+  it('returns undefined for unknown grades', () => {
+    expect(getSoftVGradeColor('V99')).toBeUndefined();
+    expect(getSoftFontGradeColor('9z')).toBeUndefined();
+    expect(getSoftGradeColor(null)).toBeUndefined();
+    expect(getSoftGradeColor(undefined)).toBeUndefined();
+  });
+
+  it('uses the V part when format is "v-grade"', () => {
+    const byFormat = getSoftGradeColorByFormat('6a/V3', 'v-grade');
+    const byV = getSoftVGradeColor('V3');
+    expect(byFormat).toBe(byV);
+  });
+
+  it('uses the Font part when format is "font"', () => {
+    const byFormat = getSoftGradeColorByFormat('6a/V3', 'font');
+    const byFont = getSoftFontGradeColor('6A');
+    expect(byFormat).toBe(byFont);
   });
 });

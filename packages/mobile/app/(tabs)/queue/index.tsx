@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View, Pressable, StyleSheet, RefreshControl, useColorScheme } from 'react-native';
+import { View, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,51 +8,34 @@ import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../../src/providers/bluetooth-provider';
 import { QueueItemRow } from '../../../src/components/QueueItemRow';
-import { BluetoothStatusIcon } from '../../../src/components/ble/BluetoothStatusIcon';
 import { ConnectionBanner } from '../../../src/components/ble/ConnectionBanner';
-import { EndSessionSheet } from '../../../src/components/EndSessionSheet';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
-import { LogAscentSheet } from '../../../src/components/LogAscentSheet';
-import { hapticSelection } from '../../../src/lib/haptics';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
 import { useTheme } from '../../../src/providers/theme-provider';
-import { useDefaultBoard } from '../../../src/lib/graphql/hooks';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 
-const TAB_BAR_HEIGHT = 49;
-
 export default function QueueScreen() {
-  const { state, sessionId, removeFromQueue, setCurrentClimb, nextClimb, previousClimb, endSession } = useQueue();
-  const { data: defaultBoard } = useDefaultBoard();
+  const { state, sessionId, removeFromQueue, setCurrentClimb } = useQueue();
   const { systemColors, brandColors } = useTheme();
-  const [showLogAscent, setShowLogAscent] = useState(false);
-  const [showEndSession, setShowEndSession] = useState(false);
-  const [isEnding, setIsEnding] = useState(false);
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation('session');
+  const insets = useSafeAreaInsets();
+
+  // Clear the persistent queue bar + tab bar + home-indicator inset.
+  // Derived from the constants exported by PersistentQueueBar so devices
+  // with a non-zero bottom inset (iPhone 14, etc.) don't clip the last row.
+  const listBottomPadding = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
 
   const bluetooth = useOptionalBluetoothContext();
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  // Show the banner when an unexpected disconnect occurs, hide when dismissed.
-  // bannerDismissed resets when the user reconnects (connect sets
-  // disconnectedUnexpectedly to false, which makes showConnectionBanner
-  // false regardless of bannerDismissed).
+  // Banner shows on unexpected disconnect, hides on dismiss. bannerDismissed
+  // resets implicitly when the user reconnects (connect flips
+  // disconnectedUnexpectedly to false, so showConnectionBanner is false
+  // regardless of bannerDismissed).
   const showConnectionBanner = !!bluetooth?.disconnectedUnexpectedly && !bannerDismissed;
-
-  const handleBluetoothPress = useCallback(() => {
-    if (!bluetooth) return;
-    if (bluetooth.isConnected) {
-      void bluetooth.disconnect();
-    } else {
-      setBannerDismissed(false);
-      void bluetooth.connect();
-    }
-  }, [bluetooth]);
 
   const handleReconnect = useCallback(() => {
     if (!bluetooth) return;
@@ -64,48 +47,9 @@ export default function QueueScreen() {
     setBannerDismissed(true);
   }, []);
 
-  const navBarBackground = isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-  const navBarBottomPadding = insets.bottom + TAB_BAR_HEIGHT;
-
   const { queue, currentClimbQueueItem } = state;
 
-  const currentClimbIndex = useMemo(() => {
-    if (!currentClimbQueueItem) return -1;
-    return queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
-  }, [queue, currentClimbQueueItem]);
-
-  const hasPrevious = currentClimbIndex > 0;
-  const hasNext = currentClimbIndex >= 0 && currentClimbIndex < queue.length - 1;
-
-  const handlePrevious = useCallback(() => {
-    hapticSelection();
-    previousClimb();
-  }, [previousClimb]);
-
-  const handleNext = useCallback(() => {
-    hapticSelection();
-    nextClimb();
-  }, [nextClimb]);
-
-  const handleLogAscent = useCallback(() => {
-    hapticSelection();
-    setShowLogAscent(true);
-  }, []);
-
-  const handleEndSessionPress = useCallback(() => {
-    hapticSelection();
-    setShowEndSession(true);
-  }, []);
-
-  const handleEndSessionConfirm = useCallback(async () => {
-    setIsEnding(true);
-    const summary = await endSession();
-    setIsEnding(false);
-    setShowEndSession(false);
-    if (summary) {
-      router.push({ pathname: '/(tabs)/queue/summary', params: { sessionId: summary.sessionId } });
-    }
-  }, [endSession, router]);
+  const currentClimbUuid = useMemo(() => currentClimbQueueItem?.uuid, [currentClimbQueueItem]);
 
   const handleItemPress = useCallback(
     (item: ClimbQueueItem) => {
@@ -123,7 +67,7 @@ export default function QueueScreen() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: ClimbQueueItem; index: number }) => {
-      const isActive = currentClimbQueueItem?.uuid === item.uuid;
+      const isActive = currentClimbUuid === item.uuid;
       return (
         <QueueItemRow
           item={item}
@@ -134,12 +78,11 @@ export default function QueueScreen() {
         />
       );
     },
-    [currentClimbQueueItem?.uuid, handleItemPress, handleItemRemove],
+    [currentClimbUuid, handleItemPress, handleItemRemove],
   );
 
   const keyExtractor = useCallback((item: ClimbQueueItem) => item.uuid, []);
 
-  // No active session state
   if (!sessionId) {
     return (
       <View style={styles.emptyContainer}>
@@ -156,7 +99,6 @@ export default function QueueScreen() {
     );
   }
 
-  // Empty queue state
   if (queue.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -183,7 +125,6 @@ export default function QueueScreen() {
     );
   }
 
-  // Queue list
   return (
     <View style={styles.container}>
       {bluetooth && (
@@ -203,128 +144,13 @@ export default function QueueScreen() {
           <RefreshControl
             refreshing={false}
             onRefresh={() => {
-              // A pull-to-refresh would trigger a full resync request.
-              // The subscription will deliver a FullSync event automatically
-              // when the WS reconnects. For now this is a no-op placeholder.
+              // Pull-to-refresh as resync trigger — the WS subscription emits a
+              // FullSync on reconnect, so explicit resync isn't needed here yet.
             }}
             tintColor={brandColors.primary}
           />
         }
-        contentContainerStyle={styles.listContent}
-      />
-
-      {/* Navigation controls */}
-      <Animated.View
-        entering={FadeIn.duration(200)}
-        style={[
-          styles.navBar,
-          {
-            backgroundColor: navBarBackground,
-            borderTopColor: systemColors.separator,
-            paddingBottom: navBarBottomPadding,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={handlePrevious}
-          disabled={!hasPrevious}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.queue.previousClimb')}
-          accessibilityState={{ disabled: !hasPrevious }}
-          style={[styles.navButton, !hasPrevious && styles.navButtonDisabled]}
-          hitSlop={8}
-        >
-          <Icon name="chevron.left" size={22} color={hasPrevious ? brandColors.primary : systemColors.secondaryLabel} />
-        </Pressable>
-
-        <View style={styles.navClimbInfo}>
-          {currentClimbQueueItem ? (
-            <>
-              <Text variant="subheadline" numberOfLines={1} color={systemColors.label} style={styles.navClimbName}>
-                {currentClimbQueueItem.climb?.name ?? t('mobile.queue.unknownClimb')}
-              </Text>
-              {currentClimbQueueItem.climb?.difficulty ? (
-                <Text variant="caption1" color={systemColors.secondaryLabel}>
-                  {currentClimbQueueItem.climb.difficulty}
-                </Text>
-              ) : null}
-            </>
-          ) : (
-            <Text variant="subheadline" color={systemColors.secondaryLabel}>
-              {t('mobile.queue.noClimbSelected')}
-            </Text>
-          )}
-        </View>
-
-        <Pressable
-          onPress={handleNext}
-          disabled={!hasNext}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.queue.nextClimb')}
-          accessibilityState={{ disabled: !hasNext }}
-          style={[styles.navButton, !hasNext && styles.navButtonDisabled]}
-          hitSlop={8}
-        >
-          <Icon name="chevron.right" size={22} color={hasNext ? brandColors.primary : systemColors.secondaryLabel} />
-        </Pressable>
-
-        <Pressable
-          onPress={handleLogAscent}
-          disabled={!currentClimbQueueItem}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.queue.logAscent')}
-          style={[styles.navButton, !currentClimbQueueItem && styles.navButtonDisabled]}
-          hitSlop={8}
-        >
-          <Icon
-            name="tick"
-            size={22}
-            color={currentClimbQueueItem ? brandColors.primary : systemColors.secondaryLabel}
-          />
-        </Pressable>
-
-        {bluetooth && (
-          <BluetoothStatusIcon
-            isConnected={bluetooth.isConnected}
-            isScanning={bluetooth.loading}
-            onPress={handleBluetoothPress}
-          />
-        )}
-
-        <Pressable
-          onPress={handleEndSessionPress}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.queue.endSession')}
-          style={styles.navButton}
-          hitSlop={8}
-        >
-          <Icon name="end.session" size={22} color={brandColors.error} />
-        </Pressable>
-      </Animated.View>
-
-      {currentClimbQueueItem && defaultBoard && (
-        <LogAscentSheet
-          visible={showLogAscent}
-          onDismiss={() => setShowLogAscent(false)}
-          climbUuid={currentClimbQueueItem.climb.uuid}
-          climbName={currentClimbQueueItem.climb.name}
-          boardName={defaultBoard.boardType}
-          angle={currentClimbQueueItem.climb.angle}
-          isMirror={currentClimbQueueItem.climb.mirrored === true}
-          isBenchmark={currentClimbQueueItem.climb.benchmark_difficulty != null}
-          layoutId={defaultBoard.layoutId}
-          sizeId={defaultBoard.sizeId}
-          setIds={defaultBoard.setIds}
-          sessionId={sessionId}
-        />
-      )}
-
-      <EndSessionSheet
-        visible={showEndSession}
-        onDismiss={() => setShowEndSession(false)}
-        onConfirm={handleEndSessionConfirm}
-        isEnding={isEnding}
-        climbCount={queue.length}
+        contentContainerStyle={{ paddingBottom: listBottomPadding }}
       />
     </View>
   );
@@ -333,9 +159,6 @@ export default function QueueScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  listContent: {
-    paddingBottom: 80, // Space for the nav bar
   },
   emptyContainer: {
     flex: 1,
@@ -357,36 +180,5 @@ const styles = StyleSheet.create({
   },
   browseButton: {
     marginTop: 16,
-  },
-  navBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  navButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 22,
-  },
-  navButtonDisabled: {
-    opacity: 0.4,
-  },
-  navClimbInfo: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  navClimbName: {
-    fontWeight: '600',
-    textAlign: 'center',
   },
 });

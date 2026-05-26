@@ -1,7 +1,20 @@
 import { type Dispatch, type RefObject, useEffect } from 'react';
 import type { SubscriptionQueueEvent } from '@boardsesh/shared-schema';
-import type { ClimbQueueItem, QueueAction } from '../../queue-control/types';
+import { mapQueueEventToAction, type SyncQueueEvent } from '@boardsesh/queue';
+import type { QueueAction } from '../../queue-control/types';
 import { track } from '@/app/lib/analytics';
+
+/**
+ * Adapt a wire-format `SubscriptionQueueEvent` (from `@boardsesh/shared-schema`)
+ * to the coordinator's `SyncQueueEvent`. The two unions are structurally
+ * compatible — they share `addedItem` / `currentItem` field names and the same
+ * `__typename` set — but their `ClimbQueueItem` types come from different
+ * packages so TS can't infer assignability directly. Runtime shapes match
+ * because both flow from the same GraphQL schema codegen.
+ */
+function toSyncQueueEvent(event: SubscriptionQueueEvent): SyncQueueEvent {
+  return event as unknown as SyncQueueEvent;
+}
 
 type UseQueueEventSubscriptionParams = {
   isPersistentSessionActive: boolean;
@@ -40,24 +53,16 @@ export function useQueueEventSubscription({
     if (!isPersistentSessionActive) return;
 
     const unsubscribe = persistentSession.subscribeToQueueEvents((event: SubscriptionQueueEvent) => {
-      switch (event.__typename) {
-        case 'FullSync':
-          dispatch({
-            type: 'INITIAL_QUEUE_DATA',
-            payload: {
-              queue: event.state.queue as ClimbQueueItem[],
-              currentClimbQueueItem: event.state.currentClimbQueueItem as ClimbQueueItem | null,
-            },
-          });
-          break;
+      // Wire-format → reducer-action mapping lives in @boardsesh/queue so web and
+      // mobile share one source of truth (incl. the echo-suppression hints on
+      // DELTA_UPDATE_CURRENT_CLIMB). Analytics + side effects stay here.
+      const result = mapQueueEventToAction(toSyncQueueEvent(event), {
+        myClientId: persistentSession.clientId ?? undefined,
+      });
+      if (result.kind !== 'dispatch') return;
+      dispatch(result.action as QueueAction);
+      switch (result.eventType) {
         case 'QueueItemAdded':
-          dispatch({
-            type: 'DELTA_ADD_QUEUE_ITEM',
-            payload: {
-              item: event.addedItem as ClimbQueueItem,
-              position: event.position ?? undefined,
-            },
-          });
           track('Climb Added to Queue', {
             boardLayout: boardLayoutName ?? null,
             addedFromTab: 'peer_broadcast',
@@ -66,48 +71,10 @@ export function useQueueEventSubscription({
           });
           break;
         case 'QueueItemRemoved':
-          dispatch({
-            type: 'DELTA_REMOVE_QUEUE_ITEM',
-            payload: { uuid: event.uuid },
-          });
           track('Climb Removed from Queue', {
             boardLayout: boardLayoutName ?? null,
             partyMode: true,
             removedBy: 'peer',
-          });
-          break;
-        case 'QueueReordered':
-          dispatch({
-            type: 'DELTA_REORDER_QUEUE_ITEM',
-            payload: {
-              uuid: event.uuid,
-              oldIndex: event.oldIndex,
-              newIndex: event.newIndex,
-            },
-          });
-          break;
-        case 'CurrentClimbChanged':
-          dispatch({
-            type: 'DELTA_UPDATE_CURRENT_CLIMB',
-            payload: {
-              item: event.currentItem as ClimbQueueItem | null,
-              shouldAddToQueue: (event.currentItem as ClimbQueueItem | null)?.suggested ?? false,
-              isServerEvent: true,
-              eventClientId: event.clientId || undefined,
-              myClientId: persistentSession.clientId || undefined,
-              serverCorrelationId: event.correlationId || undefined,
-            },
-          });
-          break;
-        case 'ClimbMirrored':
-          // Pass the server-issued mirroredUuid so the reducer can suppress
-          // the mutation when the local current climb has drifted to a
-          // different uuid (peer navigated away mid-mirror). Without this
-          // guard the local view would mirror the wrong climb in that race
-          // until the next FullSync corrects it.
-          dispatch({
-            type: 'DELTA_MIRROR_CURRENT_CLIMB',
-            payload: { mirrored: event.mirrored, mirroredUuid: event.mirroredUuid ?? null },
           });
           break;
       }

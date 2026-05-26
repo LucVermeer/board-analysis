@@ -9,7 +9,11 @@ import { spacing } from '../../theme/tokens';
 
 type PlayDrawerHeaderProps = {
   name: string;
+  /** Display label (already formatted to V or Font per user preference). */
   difficulty: string;
+  /** Raw difficulty (e.g. "6a/V3") used for grade-color lookup. Optional —
+   *  falls back to `difficulty` if not provided. */
+  rawDifficulty?: string;
   qualityAverage: string;
   ascensionistCount: number;
   stars: number;
@@ -19,13 +23,17 @@ type PlayDrawerHeaderProps = {
 export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   name,
   difficulty,
+  rawDifficulty,
   qualityAverage,
   ascensionistCount,
   stars,
   setterUsername,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
-  const gradeColor = useMemo(() => getGradeColor(difficulty) ?? DEFAULT_GRADE_COLOR, [difficulty]);
+  const gradeColor = useMemo(
+    () => getGradeColor(rawDifficulty ?? difficulty) ?? DEFAULT_GRADE_COLOR,
+    [rawDifficulty, difficulty],
+  );
 
   const qualityNum = parseFloat(qualityAverage);
   const qualityDisplay = stars > 0 ? stars.toFixed(1) : qualityNum > 0 ? qualityNum.toFixed(1) : null;

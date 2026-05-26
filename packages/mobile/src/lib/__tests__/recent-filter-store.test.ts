@@ -69,8 +69,20 @@ describe('getRecentFilters sanitizer', () => {
   it('drops entries whose sortBy is not a known SortOption', async () => {
     const { getRecentFilters } = await import('../recent-filter-store');
     await seed([
-      { id: '1', label: 'legacy', filters: { sortBy: 'newest', sortOrder: 'desc', status: 'any' }, searchText: '', timestamp: 0 },
-      { id: '2', label: 'ok', filters: { sortBy: 'ascents', sortOrder: 'desc', status: 'any' }, searchText: '', timestamp: 1 },
+      {
+        id: '1',
+        label: 'legacy',
+        filters: { sortBy: 'newest', sortOrder: 'desc', status: 'any' },
+        searchText: '',
+        timestamp: 0,
+      },
+      {
+        id: '2',
+        label: 'ok',
+        filters: { sortBy: 'ascents', sortOrder: 'desc', status: 'any' },
+        searchText: '',
+        timestamp: 1,
+      },
     ]);
     const result = await getRecentFilters();
     expect(result).toHaveLength(1);
@@ -80,7 +92,13 @@ describe('getRecentFilters sanitizer', () => {
   it('drops entries whose status is not a known StatusFilter', async () => {
     const { getRecentFilters } = await import('../recent-filter-store');
     await seed([
-      { id: 'bad', label: 'x', filters: { sortBy: 'ascents', sortOrder: 'desc', status: 'mystery' }, searchText: '', timestamp: 0 },
+      {
+        id: 'bad',
+        label: 'x',
+        filters: { sortBy: 'ascents', sortOrder: 'desc', status: 'mystery' },
+        searchText: '',
+        timestamp: 0,
+      },
     ]);
     expect(await getRecentFilters()).toHaveLength(0);
   });

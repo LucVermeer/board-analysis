@@ -30,6 +30,11 @@
       "import": "./src/grade-colors.ts",
       "default": "./src/grade-colors.ts"
     },
+    "./boulder-grade-mapping": {
+      "types": "./src/boulder-grade-mapping.ts",
+      "import": "./src/boulder-grade-mapping.ts",
+      "default": "./src/boulder-grade-mapping.ts"
+    },
     "./moonboard": {
       "types": "./src/moonboard.ts",
       "import": "./src/moonboard.ts",

@@ -11,6 +11,8 @@ import { I18nProvider } from '../src/providers/i18n-provider';
 import { BluetoothProvider } from '../src/providers/bluetooth-provider';
 import { ToastProvider } from '../src/providers/toast-provider';
 import { QueueProvider } from '../src/providers/queue-provider';
+import { DrawerHostProvider } from '../src/providers/drawer-host-provider';
+import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
 import { useDefaultBoard } from '../src/lib/graphql/hooks';
 import { LiveActivityBridge } from '../src/lib/live-activity/live-activity-bridge';
 
@@ -56,12 +58,15 @@ export default function RootLayout() {
               <ToastProvider>
                 <BottomSheetModalProvider>
                   <QueueProvider>
-                    <BluetoothProviderWrapper>
-                      <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                        <Stack.Screen name="(tabs)" />
-                        <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
-                      </Stack>
-                    </BluetoothProviderWrapper>
+                    <DrawerHostProvider>
+                      <BluetoothProviderWrapper>
+                        <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                          <Stack.Screen name="(tabs)" />
+                          <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
+                        </Stack>
+                        <PersistentQueueBar />
+                      </BluetoothProviderWrapper>
+                    </DrawerHostProvider>
                   </QueueProvider>
                 </BottomSheetModalProvider>
               </ToastProvider>
