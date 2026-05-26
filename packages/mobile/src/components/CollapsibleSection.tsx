@@ -17,6 +17,8 @@ type CollapsibleSectionProps = {
    * (e.g. Beta Videos) where users should always see the content.
    */
   keepExpanded?: boolean;
+  /** Short text shown next to the title when the section is collapsed (e.g. active filter values). */
+  summary?: string | null;
   /** Optional trailing action rendered in the header (e.g. an Attach button). */
   headerAction?: ReactNode;
   children: ReactNode;
@@ -26,6 +28,7 @@ export function CollapsibleSection({
   title,
   defaultExpanded = false,
   keepExpanded = false,
+  summary,
   headerAction,
   children,
 }: CollapsibleSectionProps) {
@@ -44,7 +47,12 @@ export function CollapsibleSection({
   }
 
   return (
-    <CollapsibleSectionInternal title={title} defaultExpanded={defaultExpanded} headerAction={headerAction}>
+    <CollapsibleSectionInternal
+      title={title}
+      defaultExpanded={defaultExpanded}
+      summary={summary}
+      headerAction={headerAction}
+    >
       {children}
     </CollapsibleSectionInternal>
   );
@@ -53,11 +61,13 @@ export function CollapsibleSection({
 function CollapsibleSectionInternal({
   title,
   defaultExpanded,
+  summary,
   headerAction,
   children,
 }: {
   title: string;
   defaultExpanded: boolean;
+  summary?: string | null;
   headerAction?: ReactNode;
   children: ReactNode;
 }) {
@@ -89,6 +99,11 @@ function CollapsibleSectionInternal({
         <Text variant="headline" style={styles.title}>
           {title}
         </Text>
+        {!expanded && summary ? (
+          <Text variant="footnote" style={styles.summary} numberOfLines={1}>
+            {summary}
+          </Text>
+        ) : null}
         {headerAction}
         <Animated.View style={chevronStyle}>
           <Icon name="chevron.down" size={16} color={iosSystemColors.systemGray} />
@@ -119,6 +134,11 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
+  },
+  summary: {
+    opacity: 0.55,
+    flexShrink: 1,
+    marginRight: spacing[2],
   },
   content: {
     paddingHorizontal: spacing[4],

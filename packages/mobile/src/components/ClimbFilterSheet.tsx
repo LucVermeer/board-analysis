@@ -172,7 +172,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
   const { data: grades } = useGrades(boardName);
 
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(currentFilters);
-  const [openCount, setOpenCount] = useState(0);
+  const [sectionResetKey, setOpenCount] = useState(0);
 
   const currentFiltersRef = useRef(currentFilters);
   currentFiltersRef.current = currentFilters;
@@ -225,6 +225,57 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
     }),
     [t],
   );
+
+  const gradeSummary = useMemo(() => {
+    const { minGrade, maxGrade } = localFilters;
+    if (minGrade == null && maxGrade == null) return null;
+    const minName = minGrade != null ? (grades?.find((g) => g.difficultyId === minGrade)?.name ?? '?') : '–';
+    const maxName = maxGrade != null ? (grades?.find((g) => g.difficultyId === maxGrade)?.name ?? '?') : '–';
+    return `${minName}–${maxName}`;
+  }, [localFilters, grades]);
+
+  const climbSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (gradeSummary) parts.push(gradeSummary);
+    if (localFilters.setter && localFilters.setter.length > 0) {
+      parts.push(t('mobile.search.settersCount', { count: localFilters.setter.length }));
+    }
+    if (localFilters.onlyTallClimbs) parts.push(t('mobile.filter.tall'));
+    if (localFilters.onlyWideClimbs) parts.push(t('mobile.filter.wide'));
+    return parts.join(' · ') || null;
+  }, [gradeSummary, localFilters.setter, localFilters.onlyTallClimbs, localFilters.onlyWideClimbs, t]);
+
+  const qualitySummary = useMemo(() => {
+    const parts: string[] = [];
+    if (localFilters.minAscents != null) {
+      parts.push(t('mobile.search.ascents', { count: localFilters.minAscents }));
+    }
+    if (localFilters.minRating != null) {
+      parts.push(t('mobile.search.rating', { count: localFilters.minRating }));
+    }
+    if (localFilters.gradeAccuracy != null) {
+      parts.push(accuracyLabels[localFilters.gradeAccuracy]);
+    }
+    return parts.join(' · ') || null;
+  }, [localFilters.minAscents, localFilters.minRating, localFilters.gradeAccuracy, accuracyLabels, t]);
+
+  const statusSummary = localFilters.status !== 'any' ? statusLabels[localFilters.status] : null;
+
+  const progressSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (localFilters.hideAttempted) parts.push(t('mobile.filter.progress.hideAttempted'));
+    if (localFilters.hideCompleted) parts.push(t('mobile.filter.progress.hideCompleted'));
+    if (localFilters.showOnlyAttempted) parts.push(t('mobile.filter.progress.onlyAttempted'));
+    if (localFilters.showOnlyCompleted) parts.push(t('mobile.filter.progress.onlyCompleted'));
+    return parts.join(' · ') || (isAuthenticated ? null : t('mobile.filter.signInForProgress'));
+  }, [
+    localFilters.hideAttempted,
+    localFilters.hideCompleted,
+    localFilters.showOnlyAttempted,
+    localFilters.showOnlyCompleted,
+    isAuthenticated,
+    t,
+  ]);
 
   const sortOrderOptions = useMemo(
     () => [
@@ -359,8 +410,8 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
       </View>
 
       <BottomSheetScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View key={openCount} style={styles.sectionsContainer}>
-            <CollapsibleSection title={t('mobile.filter.section.climb')} defaultExpanded>
+        <View key={sectionResetKey} style={styles.sectionsContainer}>
+            <CollapsibleSection title={t('mobile.filter.section.climb')} summary={climbSummary} defaultExpanded>
               {grades && grades.length > 0 ? (
                 <View>
                   <Text variant="footnote" style={styles.subsectionLabel}>
@@ -453,7 +504,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
               />
             </CollapsibleSection>
 
-            <CollapsibleSection title={t('mobile.filter.section.quality')}>
+            <CollapsibleSection title={t('mobile.filter.section.quality')} summary={qualitySummary}>
               <Text variant="footnote" style={styles.subsectionLabel}>
                 {t('mobile.filter.minAscents')}
               </Text>
@@ -506,11 +557,11 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
               <RadioGroup options={accuracyOptions} value={accuracyValue} onChange={handleAccuracyChange} />
             </CollapsibleSection>
 
-            <CollapsibleSection title={t('mobile.filter.section.status')}>
+            <CollapsibleSection title={t('mobile.filter.section.status')} summary={statusSummary}>
               <RadioGroup options={statusOptions} value={localFilters.status} onChange={handleStatusChange} />
             </CollapsibleSection>
 
-            <CollapsibleSection title={t('mobile.filter.section.progress')}>
+            <CollapsibleSection title={t('mobile.filter.section.progress')} summary={progressSummary}>
               {isAuthenticated ? (
                 <>
                   <SwitchRow
