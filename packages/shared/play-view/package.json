@@ -15,7 +15,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@boardsesh/board-config": "*",
     "@boardsesh/board-constants": "*",
     "@boardsesh/queue": "*"
   },

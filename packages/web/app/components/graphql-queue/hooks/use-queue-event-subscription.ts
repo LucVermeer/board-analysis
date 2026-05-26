@@ -4,6 +4,18 @@ import { mapQueueEventToAction, type SyncQueueEvent } from '@boardsesh/queue';
 import type { QueueAction } from '../../queue-control/types';
 import { track } from '@/app/lib/analytics';
 
+/**
+ * Adapt a wire-format `SubscriptionQueueEvent` (from `@boardsesh/shared-schema`)
+ * to the coordinator's `SyncQueueEvent`. The two unions are structurally
+ * compatible — they share `addedItem` / `currentItem` field names and the same
+ * `__typename` set — but their `ClimbQueueItem` types come from different
+ * packages so TS can't infer assignability directly. Runtime shapes match
+ * because both flow from the same GraphQL schema codegen.
+ */
+function toSyncQueueEvent(event: SubscriptionQueueEvent): SyncQueueEvent {
+  return event as unknown as SyncQueueEvent;
+}
+
 type UseQueueEventSubscriptionParams = {
   isPersistentSessionActive: boolean;
   dispatch: Dispatch<QueueAction>;
@@ -44,7 +56,7 @@ export function useQueueEventSubscription({
       // Wire-format → reducer-action mapping lives in @boardsesh/queue so web and
       // mobile share one source of truth (incl. the echo-suppression hints on
       // DELTA_UPDATE_CURRENT_CLIMB). Analytics + side effects stay here.
-      const result = mapQueueEventToAction(event as unknown as SyncQueueEvent, {
+      const result = mapQueueEventToAction(toSyncQueueEvent(event), {
         myClientId: persistentSession.clientId ?? undefined,
       });
       if (result.kind !== 'dispatch') return;

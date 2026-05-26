@@ -12,10 +12,7 @@ import { ConnectionBanner } from '../../../src/components/ble/ConnectionBanner';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
-import {
-  BAR_CONTENT_HEIGHT,
-  TAB_BAR_HEIGHT,
-} from '../../../src/components/queue-control/persistent-queue-bar';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
 import { useTheme } from '../../../src/providers/theme-provider';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 

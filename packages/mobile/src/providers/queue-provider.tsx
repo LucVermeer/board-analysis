@@ -219,6 +219,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // showToast and t aren't stable callbacks — capture via refs so the WS
+  // subscription effect doesn't tear down & re-subscribe on locale change
+  // (which would briefly miss in-flight peer events). coordinator and dispatch
+  // are stable (useMemo([]) / useReducer respectively) so they can sit in the
+  // dep array directly.
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const tRef = useRef(t);
+  tRef.current = t;
+
   useEffect(() => {
     if (!sessionId) {
       unsubscribeRef.current?.();
@@ -238,9 +248,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           if (!data?.queueUpdates) return;
           const result = coordinator.mapIncomingEvent(toSyncQueueEvent(data.queueUpdates));
           if (result.kind === 'dispatch') dispatch(result.action);
+          // TODO(analytics-parity): web's use-queue-event-subscription.ts
+          // tracks peer-broadcast QueueItemAdded/QueueItemRemoved via track().
+          // Mobile lacks an analytics module today; revisit once the mobile
+          // analytics surface exists.
         },
         error: () => {
-          showToast(t('mobile.queue.syncError'), 'error');
+          showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
         },
         complete: () => {},
       },
@@ -252,7 +266,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       cleanup();
       unsubscribeRef.current = null;
     };
-  }, [sessionId]);
+  }, [sessionId, coordinator]);
 
   const ensureSession = useCallback(async (): Promise<string | null> => {
     if (sessionIdRef.current) return sessionIdRef.current;

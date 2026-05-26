@@ -142,6 +142,15 @@ export function mapQueueEventToAction<TSearchParams extends QueueSearchParams = 
 
     case 'CurrentClimbChanged': {
       const incoming = event.currentItem !== undefined ? event.currentItem : (event.item ?? null);
+      // Always request insertion when there's an incoming item — the reducer's
+      // idempotent guard skips climbs already in the queue. This is the safe
+      // default for two reasons:
+      //   1. Slim subscription payloads (mobile uses uuid/name/frames only) don't
+      //      carry `suggested`, so gating on incoming?.suggested would silently
+      //      drop legitimate inserts after a dropped QueueItemAdded on reconnect.
+      //   2. Browsing-only navigations on web already pass non-suggested items
+      //      that exist in the queue, so the idempotent guard makes
+      //      shouldAddToQueue:true a no-op there.
       return {
         kind: 'dispatch',
         eventType: 'CurrentClimbChanged',
@@ -150,7 +159,7 @@ export function mapQueueEventToAction<TSearchParams extends QueueSearchParams = 
           type: 'DELTA_UPDATE_CURRENT_CLIMB',
           payload: {
             item: incoming,
-            shouldAddToQueue: incoming?.suggested ?? false,
+            shouldAddToQueue: incoming != null,
             isServerEvent: true,
             eventClientId: event.clientId ?? undefined,
             myClientId: context?.myClientId ?? undefined,

@@ -7,7 +7,9 @@ import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-col
 import { useBluetoothConnectedStatus } from '../lib/ble/bluetooth-status-store';
 import { brandColors } from '../theme/colors';
 
-const TAB_BAR_HEIGHT = 49;
+// Exported so the persistent queue bar (which docks above the tab bar) and
+// FlashLists below it can compute their layouts off the same constant.
+export const TAB_BAR_HEIGHT = 49;
 
 type TabIconName = 'view-dashboard' | 'magnify' | 'playlist-play' | 'account' | 'dots-horizontal';
 

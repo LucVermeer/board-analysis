@@ -6,10 +6,12 @@
  *
  * Default board comes from `useDefaultBoard()`; callers can override via the
  * second arg to `openPlayDrawer` if needed (e.g. opening a climb from a
- * different board context).
+ * different board context). The active boardConfig is exposed through the
+ * context so consumers (like the persistent bar's log-ascent button) don't
+ * have to call `useDefaultBoard()` independently.
  */
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Climb } from '@boardsesh/shared-schema';
 import { PlayDrawer, type PlayDrawerHandle } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
@@ -37,6 +39,9 @@ export type LogAscentInput = {
 };
 
 type DrawerHostValue = {
+  /** Currently resolved board config (override OR default board). Null while
+   *  the default board is still loading and no override is set. */
+  boardConfig: BoardConfig | null;
   openPlayDrawer: (climb: Climb, boardConfig?: BoardConfig) => void;
   openLogAscent: (input: LogAscentInput) => void;
 };
@@ -55,20 +60,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
 
-  const openPlayDrawer = useCallback((climb: Climb, override?: BoardConfig) => {
-    if (override) setBoardConfigOverride(override);
-    else setBoardConfigOverride(null);
-    // Wait a tick so the boardConfig prop on PlayDrawer is up to date before
-    // its imperative open is called. State setters batch; the subsequent
-    // open() runs after the render flush.
-    requestAnimationFrame(() => playDrawerRef.current?.open(climb));
-  }, []);
-
-  const openLogAscent = useCallback((input: LogAscentInput) => {
-    setLogAscentInput(input);
-  }, []);
-
-  const dismissLogAscent = useCallback(() => setLogAscentInput(null), []);
+  // Climb to open after the boardConfig override has committed. We can't
+  // open synchronously inside openPlayDrawer when an override is supplied
+  // because the new override hasn't propagated to PlayDrawer's `boardConfig`
+  // prop yet — a single requestAnimationFrame is unreliable on low-end
+  // Android. Stash the climb here and let the useEffect below open the
+  // drawer when activeBoardConfig actually matches the override.
+  const pendingOverrideClimbRef = useRef<Climb | null>(null);
 
   const activeBoardConfig: BoardConfig | null = useMemo(() => {
     if (boardConfigOverride) return boardConfigOverride;
@@ -82,7 +80,37 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     };
   }, [boardConfigOverride, defaultBoard]);
 
-  const value = useMemo<DrawerHostValue>(() => ({ openPlayDrawer, openLogAscent }), [openPlayDrawer, openLogAscent]);
+  const openPlayDrawer = useCallback((climb: Climb, override?: BoardConfig) => {
+    if (override) {
+      pendingOverrideClimbRef.current = climb;
+      setBoardConfigOverride(override);
+      return;
+    }
+    setBoardConfigOverride(null);
+    pendingOverrideClimbRef.current = null;
+    playDrawerRef.current?.open(climb);
+  }, []);
+
+  // Open after the override has flowed through `activeBoardConfig` into
+  // PlayDrawer's props.
+  useEffect(() => {
+    if (!pendingOverrideClimbRef.current) return;
+    if (!activeBoardConfig) return;
+    const climb = pendingOverrideClimbRef.current;
+    pendingOverrideClimbRef.current = null;
+    playDrawerRef.current?.open(climb);
+  }, [activeBoardConfig]);
+
+  const openLogAscent = useCallback((input: LogAscentInput) => {
+    setLogAscentInput(input);
+  }, []);
+
+  const dismissLogAscent = useCallback(() => setLogAscentInput(null), []);
+
+  const value = useMemo<DrawerHostValue>(
+    () => ({ boardConfig: activeBoardConfig, openPlayDrawer, openLogAscent }),
+    [activeBoardConfig, openPlayDrawer, openLogAscent],
+  );
 
   return (
     <DrawerHostContext.Provider value={value}>

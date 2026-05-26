@@ -274,7 +274,6 @@
       "name": "@boardsesh/play-view",
       "version": "1.0.0",
       "dependencies": {
-        "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/queue": "*",
       },

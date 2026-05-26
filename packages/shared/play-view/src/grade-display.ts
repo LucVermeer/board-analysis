@@ -1,5 +1,8 @@
 import { getGradeColor, getVGradeColor, getFontGradeColor } from '@boardsesh/board-constants/grade-colors';
-import { BOULDER_GRADES } from '@boardsesh/board-config';
+// Import via the narrow `/boulder-grade-mapping` deep-path so we don't pull
+// the whole @boardsesh/board-config module graph (board image dimensions,
+// set IDs, moonboard config) into anything that touches the grade helpers.
+import { BOULDER_GRADES } from '@boardsesh/board-constants/boulder-grade-mapping';
 
 // Re-export for convenience
 export { getGradeColor };

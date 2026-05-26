@@ -30,13 +30,15 @@ import { useTheme } from '../../providers/theme-provider';
 import { useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
-import { useDefaultBoard } from '../../lib/graphql/hooks';
 import { hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
+import { TAB_BAR_HEIGHT } from '../BlurTabBar';
 import { useRouter } from 'expo-router';
 
-export const TAB_BAR_HEIGHT = 49;
 export const BAR_CONTENT_HEIGHT = 56;
+// Re-export so layout consumers that already import bar metrics from this
+// module don't need to know which file owns the tab-bar height.
+export { TAB_BAR_HEIGHT };
 
 type ClimbDisplay = {
   difficulty: string | null | undefined;
@@ -77,8 +79,7 @@ function ClimbLabel({ display, labelColor, formattedGrade, chipBackground }: Cli
 
 export function PersistentQueueBar() {
   const { state, nextClimb, previousClimb, sessionId, endSession } = useQueue();
-  const { openPlayDrawer, openLogAscent } = useDrawerHost();
-  const { data: defaultBoard } = useDefaultBoard();
+  const { boardConfig, openPlayDrawer, openLogAscent } = useDrawerHost();
   const bluetooth = useOptionalBluetoothContext();
   const insets = useSafeAreaInsets();
   const { systemColors, brandColors } = useTheme();
@@ -163,21 +164,21 @@ export function PersistentQueueBar() {
   }));
 
   const handleTick = useCallback(() => {
-    if (!currentClimbQueueItem?.climb || !defaultBoard) return;
+    if (!currentClimbQueueItem?.climb || !boardConfig) return;
     hapticSelection();
     openLogAscent({
       climbUuid: currentClimbQueueItem.climb.uuid,
       climbName: currentClimbQueueItem.climb.name,
-      boardName: defaultBoard.boardType,
+      boardName: boardConfig.boardName,
       angle: currentClimbQueueItem.climb.angle,
       isMirror: currentClimbQueueItem.climb.mirrored === true,
       isBenchmark: currentClimbQueueItem.climb.benchmark_difficulty != null,
-      layoutId: defaultBoard.layoutId,
-      sizeId: defaultBoard.sizeId,
-      setIds: defaultBoard.setIds,
+      layoutId: boardConfig.layoutId,
+      sizeId: boardConfig.sizeId,
+      setIds: boardConfig.setIds,
       sessionId,
     });
-  }, [openLogAscent, currentClimbQueueItem, defaultBoard, sessionId]);
+  }, [openLogAscent, currentClimbQueueItem, boardConfig, sessionId]);
 
   const handleBluetoothPress = useCallback(() => {
     if (!bluetooth) return;
@@ -295,7 +296,7 @@ export function PersistentQueueBar() {
 
           <Pressable
             onPress={handleTick}
-            disabled={!currentClimbQueueItem || !defaultBoard}
+            disabled={!currentClimbQueueItem || !boardConfig}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.queue.logAscent')}
             hitSlop={8}

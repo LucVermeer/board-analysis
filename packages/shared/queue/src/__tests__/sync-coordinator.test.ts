@@ -124,7 +124,9 @@ describe('mapQueueEventToAction', () => {
           eventClientId: 'peer-1',
           myClientId: 'me',
           serverCorrelationId: 'corr-7',
-          shouldAddToQueue: false,
+          // Always request insertion when an incoming item is present —
+          // reducer's idempotent guard skips climbs already in the queue.
+          shouldAddToQueue: true,
         },
       });
     });
@@ -138,21 +140,24 @@ describe('mapQueueEventToAction', () => {
       expect(result.action).toMatchObject({ payload: { item, isServerEvent: true } });
     });
 
-    it('threads `suggested: true` through shouldAddToQueue', () => {
-      const item = makeItem('sug', { suggested: true });
-      const event: SyncQueueEvent = { __typename: 'CurrentClimbChanged', currentItem: item };
+    it('requests insertion regardless of whether the incoming item carries `suggested`', () => {
+      // Slim mobile subscription payloads omit `suggested`. The reducer's
+      // idempotent guard handles already-queued climbs, so always asking for
+      // insertion is safe and prevents state drift after a dropped insert.
+      const slimItem = makeItem('slim');
+      const event: SyncQueueEvent = { __typename: 'CurrentClimbChanged', currentItem: slimItem };
       const result = mapQueueEventToAction(event);
       expect(result.kind).toBe('dispatch');
       if (result.kind !== 'dispatch') return;
       expect(result.action).toMatchObject({ payload: { shouldAddToQueue: true } });
     });
 
-    it('preserves an explicit `currentItem: null` (driver cleared the wall)', () => {
+    it('preserves an explicit `currentItem: null` (driver cleared the wall) and does NOT request insertion', () => {
       const event: SyncQueueEvent = { __typename: 'CurrentClimbChanged', currentItem: null };
       const result = mapQueueEventToAction(event);
       expect(result.kind).toBe('dispatch');
       if (result.kind !== 'dispatch') return;
-      expect(result.action).toMatchObject({ payload: { item: null } });
+      expect(result.action).toMatchObject({ payload: { item: null, shouldAddToQueue: false } });
     });
   });
 
