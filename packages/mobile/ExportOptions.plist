@@ -12,7 +12,7 @@
     <dict>
         <key>com.boardsesh.app</key>
         <string>Boardsesh App Store Distribution Second</string>
-        <key>com.boardsesh.app.BoardseshWidgets</key>
+        <key>com.boardsesh.app.widgets</key>
         <string>Boardsesh Widgets App Store Distribution</string>
     </dict>
     <key>uploadBitcode</key>
