@@ -78,7 +78,6 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep climbs:mobile.climbActions.report
 // Mobile climb filter sheet
 // i18n-keep common:mobile.nav.setters
-// i18n-keep climbs:mobile.filter.section.sort
 // i18n-keep climbs:mobile.filter.section.climb
 // i18n-keep climbs:mobile.filter.section.quality
 // i18n-keep climbs:mobile.filter.section.status

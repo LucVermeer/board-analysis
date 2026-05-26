@@ -58,7 +58,7 @@ function CollapsibleSectionInternal({
 }: {
   title: string;
   defaultExpanded: boolean;
-  headerAction: ReactNode;
+  headerAction?: ReactNode;
   children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -82,6 +82,7 @@ function CollapsibleSectionInternal({
       <Pressable
         onPress={toggleExpanded}
         accessibilityRole="button"
+        accessibilityLabel={title}
         accessibilityState={{ expanded }}
         style={styles.header}
       >

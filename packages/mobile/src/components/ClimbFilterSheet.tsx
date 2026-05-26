@@ -1,6 +1,10 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { View, Pressable, ScrollView, StyleSheet, type ViewStyle } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetScrollView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -167,12 +171,14 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
   const { data: grades } = useGrades(boardName);
 
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(currentFilters);
+  const [openCount, setOpenCount] = useState(0);
 
   const currentFiltersRef = useRef(currentFilters);
   currentFiltersRef.current = currentFilters;
   useEffect(() => {
     if (visible) {
       setLocalFilters(currentFiltersRef.current);
+      setOpenCount((c) => c + 1);
     }
   }, [visible]);
 
@@ -341,18 +347,17 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
       handleIndicatorStyle={styles.indicator}
       backgroundStyle={backgroundStyle}
     >
-      <BottomSheetView style={styles.content}>
-        <View style={styles.header}>
-          <Text variant="title3">{t('mobile.filter.title')}</Text>
-          <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
-            <Text variant="subheadline" color={brandColors.primary}>
-              {t('mobile.filter.reset')}
-            </Text>
-          </Pressable>
-        </View>
+      <View style={styles.header}>
+        <Text variant="title3">{t('mobile.filter.title')}</Text>
+        <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
+          <Text variant="subheadline" color={brandColors.primary}>
+            {t('mobile.filter.reset')}
+          </Text>
+        </Pressable>
+      </View>
 
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.sectionsContainer}>
+      <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View key={openCount} style={styles.sectionsContainer}>
             <CollapsibleSection title={t('mobile.filter.section.climb')} defaultExpanded>
               {grades && grades.length > 0 ? (
                 <View>
@@ -422,7 +427,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipRow}
+                contentContainerStyle={styles.horizontalChipRow}
               >
                 {SORT_OPTIONS.map((option) => (
                   <Chip
@@ -534,7 +539,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
               )}
             </CollapsibleSection>
           </View>
-        </ScrollView>
+        </BottomSheetScrollView>
 
         <View style={styles.footer}>
           <Button
@@ -545,7 +550,6 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
             style={styles.applyButton}
           />
         </View>
-      </BottomSheetView>
     </BottomSheet>
   );
 }
@@ -557,18 +561,12 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
   },
-  content: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[3],
-  },
-  scrollView: {
-    flex: 1,
   },
   scrollContent: {
     paddingBottom: spacing[4],
@@ -589,6 +587,10 @@ const styles = StyleSheet.create({
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  horizontalChipRow: {
+    flexDirection: 'row',
     gap: spacing[2],
   },
   chipText: {
