@@ -75,6 +75,32 @@ jobs:
         working-directory: packages/mobile/ios
         run: pod install
 
+      - name: Configure per-target code signing
+        run: |
+          ruby <<'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('packages/mobile/ios/Boardsesh.xcodeproj')
+
+          profiles = {
+            'Boardsesh'        => 'Boardsesh App Store Distribution Second',
+            'BoardseshWidgets' => 'Boardsesh Widgets App Store Distribution',
+          }
+
+          project.targets.each do |target|
+            next unless profiles.key?(target.name)
+            target.build_configurations.each do |config|
+              next unless config.name == 'Release'
+              config.build_settings['CODE_SIGN_STYLE']                = 'Manual'
+              config.build_settings['DEVELOPMENT_TEAM']               = '9L3HKPZBH3'
+              config.build_settings['CODE_SIGN_IDENTITY']             = 'Apple Distribution'
+              config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = profiles[target.name]
+            end
+          end
+
+          project.save
+          puts 'Per-target code signing configured for: ' + profiles.keys.join(', ')
+          RUBY
+
       - name: Compute build number
         id: build_number
         run: |
@@ -108,13 +134,16 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
           security list-keychains -d user -s "$KEYCHAIN_NAME" $(security list-keychains -d user | tr -d '"')
 
-      - name: Install provisioning profile
+      - name: Install provisioning profiles
         env:
           APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROVISIONING_PROFILE_BASE64 }}
+          WIDGET_PROFILE_BASE64: ${{ secrets.IOS_WIDGET_PROVISIONING_PROFILE_BASE64 }}
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$APP_PROFILE_BASE64" | base64 --decode \
             > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
+          echo "$WIDGET_PROFILE_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/widget.mobileprovision
 
       - name: Setup App Store Connect API key
         env:
@@ -141,8 +170,7 @@ jobs:
             -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             CURRENT_PROJECT_VERSION=${{ steps.build_number.outputs.value }} \
-            DEVELOPMENT_TEAM=9L3HKPZBH3 \
-            CODE_SIGN_STYLE=Automatic
+            DEVELOPMENT_TEAM=9L3HKPZBH3
 
       - name: Export archive (uploads to TestFlight)
         env:
