@@ -44,6 +44,10 @@ describe('ClimbFilterSheet section state reset on re-open', () => {
     expect(sheetSource).toContain('key={openCount}');
     expect(sheetSource).toMatch(/setOpenCount\(\s*\(c\)\s*=>\s*c\s*\+\s*1\s*\)/);
   });
+
+  it('resets scroll position to top when sheet opens', () => {
+    expect(sheetSource).toContain('scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false })');
+  });
 });
 
 describe('ClimbFilterSheet uses BottomSheetScrollView', () => {

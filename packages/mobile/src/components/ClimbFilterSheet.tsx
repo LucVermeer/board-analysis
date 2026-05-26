@@ -167,6 +167,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const sheetRef = useRef<BottomSheet>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const boardName = boardConfig?.boardName ?? '';
   const { data: grades } = useGrades(boardName);
 
@@ -179,6 +180,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
     if (visible) {
       setLocalFilters(currentFiltersRef.current);
       setOpenCount((c) => c + 1);
+      scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
     }
   }, [visible]);
 
@@ -356,7 +358,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
         </Pressable>
       </View>
 
-      <BottomSheetScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <BottomSheetScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View key={openCount} style={styles.sectionsContainer}>
             <CollapsibleSection title={t('mobile.filter.section.climb')} defaultExpanded>
               {grades && grades.length > 0 ? (
