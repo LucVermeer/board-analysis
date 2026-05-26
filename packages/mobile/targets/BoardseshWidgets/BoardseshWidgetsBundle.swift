@@ -3,7 +3,10 @@ import SwiftUI
 
 @main
 struct BoardseshWidgetsBundle: WidgetBundle {
+    @WidgetBundleBuilder
     var body: some Widget {
-        ClimbSessionLiveActivity()
+        if #available(iOS 17.0, *) {
+            ClimbSessionLiveActivity()
+        }
     }
 }

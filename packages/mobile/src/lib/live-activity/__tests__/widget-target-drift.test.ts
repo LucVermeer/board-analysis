@@ -37,7 +37,10 @@ describe('Widget target Swift drift', () => {
     it(`${file} stays byte-identical between module and widget target`, () => {
       const moduleHash = sha(join(MODULE_IOS, file));
       const widgetHash = sha(join(WIDGET_TARGET, file));
-      expect(widgetHash, `${file}: widget target copy drifted from module copy. ` + 'Update both copies and re-run this test.').toBe(moduleHash);
+      expect(
+        widgetHash,
+        `${file}: widget target copy drifted from module copy. ` + 'Update both copies and re-run this test.',
+      ).toBe(moduleHash);
     });
   }
 });

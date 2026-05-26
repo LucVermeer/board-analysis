@@ -101,6 +101,10 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // Island) plus the Next/Previous AppIntents. Target sources live in
       // packages/mobile/targets/BoardseshWidgets/.
       '@bacons/apple-targets',
+      // @bacons/apple-targets owns target creation, but it does not expose
+      // arbitrary Xcode build settings. This follow-up plugin adds the
+      // WIDGET_EXTENSION Swift flag so widget-only compiles skip main-app BLE.
+      './plugins/with-boardsesh-widget-build-settings',
     ],
     extra: {
       ...config.extra,

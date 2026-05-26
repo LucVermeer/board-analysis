@@ -1,8 +1,4 @@
-import {
-  AURORA_ADVERTISED_SERVICE_UUID,
-  UART_SERVICE_UUID,
-  parseSerialNumber,
-} from '@boardsesh/ble-protocol';
+import { AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID, parseSerialNumber } from '@boardsesh/ble-protocol';
 import {
   boardBleNative,
   type NativeBleConfigureBoardOptions,

@@ -15,7 +15,7 @@ type LiveActivityBridgeProps = {
 // (fired when the user taps Next/Previous on the Dynamic Island) into
 // the queue reducer so the app's currentClimbQueueItem stays in sync
 // with the widget.
-// 
+//
 // Mount inside BluetoothProviderWrapper (i.e. only when a board has been
 // selected) so a guest user without a board doesn't trigger Live Activity
 // authorization prompts at random.
