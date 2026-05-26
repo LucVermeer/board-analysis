@@ -3,6 +3,7 @@ import { View, Pressable, ScrollView, StyleSheet, type ViewStyle } from 'react-n
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
+  BottomSheetView,
   type BottomSheetBackdropProps,
   type BottomSheetScrollViewMethods,
 } from '@gorhom/bottom-sheet';
@@ -233,7 +234,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
     const minName = minGrade != null ? (grades?.find((g) => g.difficultyId === minGrade)?.name ?? '?') : '–';
     const maxName = maxGrade != null ? (grades?.find((g) => g.difficultyId === maxGrade)?.name ?? '?') : '–';
     return `${minName}–${maxName}`;
-  }, [localFilters, grades]);
+  }, [localFilters.minGrade, localFilters.maxGrade, grades]);
 
   const climbSummary = useMemo(() => {
     const parts: string[] = [];
@@ -417,18 +418,19 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
       handleIndicatorStyle={styles.indicator}
       backgroundStyle={backgroundStyle}
     >
-      <View style={styles.header}>
-        <Text variant="title3">{t('mobile.filter.title')}</Text>
-        <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
-          <Text variant="subheadline" color={brandColors.primary}>
-            {t('mobile.filter.reset')}
-          </Text>
-        </Pressable>
-      </View>
+      <BottomSheetView style={styles.sheetContent}>
+        <View style={styles.header}>
+          <Text variant="title3">{t('mobile.filter.title')}</Text>
+          <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
+            <Text variant="subheadline" color={brandColors.primary}>
+              {t('mobile.filter.reset')}
+            </Text>
+          </Pressable>
+        </View>
 
-      <BottomSheetScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View key={sectionResetKey} style={styles.sectionsContainer}>
-            <CollapsibleSection title={t('mobile.filter.section.climb')} summary={climbSummary} defaultExpanded>
+        <BottomSheetScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.sectionsContainer}>
+            <CollapsibleSection title={t('mobile.filter.section.climb')} summary={climbSummary} defaultExpanded resetKey={sectionResetKey}>
               {grades && grades.length > 0 ? (
                 <View>
                   <Text variant="footnote" style={styles.subsectionLabel}>
@@ -521,7 +523,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
               />
             </CollapsibleSection>
 
-            <CollapsibleSection title={t('mobile.filter.section.quality')} summary={qualitySummary}>
+            <CollapsibleSection title={t('mobile.filter.section.quality')} summary={qualitySummary} resetKey={sectionResetKey}>
               <Text variant="footnote" style={styles.subsectionLabel}>
                 {t('mobile.filter.minAscents')}
               </Text>
@@ -574,11 +576,11 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
               <RadioGroup options={accuracyOptions} value={accuracyValue} onChange={handleAccuracyChange} />
             </CollapsibleSection>
 
-            <CollapsibleSection title={t('mobile.filter.section.status')} summary={statusSummary}>
+            <CollapsibleSection title={t('mobile.filter.section.status')} summary={statusSummary} resetKey={sectionResetKey}>
               <RadioGroup options={statusOptions} value={localFilters.status} onChange={handleStatusChange} />
             </CollapsibleSection>
 
-            <CollapsibleSection title={t('mobile.filter.section.progress')} summary={progressSummary}>
+            <CollapsibleSection title={t('mobile.filter.section.progress')} summary={progressSummary} resetKey={sectionResetKey}>
               {isAuthenticated ? (
                 <>
                   <SwitchRow
@@ -611,15 +613,16 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
           </View>
         </BottomSheetScrollView>
 
-        <View style={styles.footer}>
-          <Button
-            title={t('mobile.filter.apply')}
-            onPress={handleApply}
-            variant="filled"
-            size="large"
-            style={styles.applyButton}
-          />
-        </View>
+          <View style={styles.footer}>
+            <Button
+              title={t('mobile.filter.apply')}
+              onPress={handleApply}
+              variant="filled"
+              size="large"
+              style={styles.applyButton}
+            />
+          </View>
+      </BottomSheetView>
     </BottomSheet>
   );
 }
@@ -630,6 +633,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 5,
     borderRadius: 3,
+  },
+  sheetContent: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',

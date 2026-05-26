@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text } from './Text';
@@ -19,6 +19,8 @@ type CollapsibleSectionProps = {
   keepExpanded?: boolean;
   /** Short text shown next to the title when the section is collapsed (e.g. active filter values). */
   summary?: string | null;
+  /** When this value changes, expanded state resets to `defaultExpanded` without remounting the tree. */
+  resetKey?: number;
   /** Optional trailing action rendered in the header (e.g. an Attach button). */
   headerAction?: ReactNode;
   children: ReactNode;
@@ -29,6 +31,7 @@ export function CollapsibleSection({
   defaultExpanded = false,
   keepExpanded = false,
   summary,
+  resetKey,
   headerAction,
   children,
 }: CollapsibleSectionProps) {
@@ -51,6 +54,7 @@ export function CollapsibleSection({
       title={title}
       defaultExpanded={defaultExpanded}
       summary={summary}
+      resetKey={resetKey}
       headerAction={headerAction}
     >
       {children}
@@ -62,17 +66,29 @@ function CollapsibleSectionInternal({
   title,
   defaultExpanded,
   summary,
+  resetKey,
   headerAction,
   children,
 }: {
   title: string;
   defaultExpanded: boolean;
   summary?: string | null;
+  resetKey?: number;
   headerAction?: ReactNode;
   children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const chevronRotation = useSharedValue(defaultExpanded ? 1 : 0);
+
+  const isFirstReset = useRef(true);
+  useEffect(() => {
+    if (isFirstReset.current) {
+      isFirstReset.current = false;
+      return;
+    }
+    setExpanded(defaultExpanded);
+    chevronRotation.value = withTiming(defaultExpanded ? 1 : 0, { duration: timing.normal });
+  }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleExpanded = useCallback(() => {
     hapticSelection();
