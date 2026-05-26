@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../../src/providers/queue-provider';
@@ -11,6 +12,10 @@ import { ConnectionBanner } from '../../../src/components/ble/ConnectionBanner';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
+import {
+  BAR_CONTENT_HEIGHT,
+  TAB_BAR_HEIGHT,
+} from '../../../src/components/queue-control/persistent-queue-bar';
 import { useTheme } from '../../../src/providers/theme-provider';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 
@@ -19,6 +24,12 @@ export default function QueueScreen() {
   const { systemColors, brandColors } = useTheme();
   const router = useRouter();
   const { t } = useTranslation('session');
+  const insets = useSafeAreaInsets();
+
+  // Clear the persistent queue bar + tab bar + home-indicator inset.
+  // Derived from the constants exported by PersistentQueueBar so devices
+  // with a non-zero bottom inset (iPhone 14, etc.) don't clip the last row.
+  const listBottomPadding = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
 
   const bluetooth = useOptionalBluetoothContext();
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -142,7 +153,7 @@ export default function QueueScreen() {
             tintColor={brandColors.primary}
           />
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={{ paddingBottom: listBottomPadding }}
       />
     </View>
   );
@@ -151,9 +162,6 @@ export default function QueueScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  listContent: {
-    paddingBottom: 120, // Space for the global PersistentQueueBar + tab bar + safe area
   },
   emptyContainer: {
     flex: 1,

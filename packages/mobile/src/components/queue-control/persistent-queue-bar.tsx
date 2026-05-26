@@ -35,8 +35,8 @@ import { hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
 import { useRouter } from 'expo-router';
 
-const TAB_BAR_HEIGHT = 49;
-const BAR_CONTENT_HEIGHT = 56;
+export const TAB_BAR_HEIGHT = 49;
+export const BAR_CONTENT_HEIGHT = 56;
 
 type ClimbDisplay = {
   difficulty: string | null | undefined;
