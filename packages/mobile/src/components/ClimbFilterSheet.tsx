@@ -4,6 +4,7 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
+  type BottomSheetScrollViewMethods,
 } from '@gorhom/bottom-sheet';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
@@ -167,19 +168,19 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const sheetRef = useRef<BottomSheet>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<BottomSheetScrollViewMethods>(null);
   const boardName = boardConfig?.boardName ?? '';
   const { data: grades } = useGrades(boardName);
 
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(currentFilters);
-  const [sectionResetKey, setOpenCount] = useState(0);
+  const [sectionResetKey, setSectionResetKey] = useState(0);
 
   const currentFiltersRef = useRef(currentFilters);
   currentFiltersRef.current = currentFilters;
   useEffect(() => {
     if (visible) {
       setLocalFilters(currentFiltersRef.current);
-      setOpenCount((c) => c + 1);
+      setSectionResetKey((c) => c + 1);
       scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
     }
   }, [visible]);
@@ -242,8 +243,24 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
     }
     if (localFilters.onlyTallClimbs) parts.push(t('mobile.filter.tall'));
     if (localFilters.onlyWideClimbs) parts.push(t('mobile.filter.wide'));
+    if (localFilters.sortBy !== DEFAULT_FILTERS.sortBy || localFilters.sortOrder !== DEFAULT_FILTERS.sortOrder) {
+      parts.push(
+        `${sortLabels[localFilters.sortBy]} · ${
+          localFilters.sortOrder === 'asc' ? t('mobile.filter.sortOrder.asc') : t('mobile.filter.sortOrder.desc')
+        }`,
+      );
+    }
     return parts.join(' · ') || null;
-  }, [gradeSummary, localFilters.setter, localFilters.onlyTallClimbs, localFilters.onlyWideClimbs, t]);
+  }, [
+    gradeSummary,
+    localFilters.setter,
+    localFilters.onlyTallClimbs,
+    localFilters.onlyWideClimbs,
+    localFilters.sortBy,
+    localFilters.sortOrder,
+    sortLabels,
+    t,
+  ]);
 
   const qualitySummary = useMemo(() => {
     const parts: string[] = [];
