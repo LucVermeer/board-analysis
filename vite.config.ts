@@ -38,6 +38,7 @@ export default defineConfig({
       './packages/moonboard-ocr/vite.config.ts',
       './packages/board-constants/vite.config.ts',
       './packages/aurora-sync/vite.config.ts',
+      './packages/crypto/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
