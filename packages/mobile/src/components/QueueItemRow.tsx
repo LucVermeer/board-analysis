@@ -14,6 +14,7 @@ import { Icon } from './Icon';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { useTheme } from '../providers/theme-provider';
+import { useGradeFormat } from '../hooks/use-grade-format';
 import { hapticSelection, hapticMedium } from '../lib/haptics';
 
 const SWIPE_DELETE_THRESHOLD = -80;
@@ -178,8 +179,10 @@ export function QueueItemRow({
     });
   };
 
+  const { formatGrade } = useGradeFormat();
   const climbName = item.climb?.name ?? t('mobile.queue.unknownClimb');
-  const difficulty = item.climb?.difficulty ?? '';
+  const rawDifficulty = item.climb?.difficulty ?? '';
+  const difficulty = formatGrade(rawDifficulty) ?? rawDifficulty;
 
   const rowContent = (
     <AnimatedPressable

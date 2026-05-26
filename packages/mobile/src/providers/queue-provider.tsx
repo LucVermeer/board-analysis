@@ -10,7 +10,13 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { queueReducer, initialState } from '@boardsesh/queue';
+import {
+  queueReducer,
+  initialState,
+  createQueueSyncCoordinator,
+  generateClientId,
+  type SyncQueueEvent,
+} from '@boardsesh/queue';
 import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from '@boardsesh/queue';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import { getWsClient } from '../lib/graphql/ws-client';
@@ -60,6 +66,13 @@ export function useQueue(): QueueContextValue {
 const defaultSearchParams: QueueSearchParams = {};
 
 // -- Subscription event types (used only for the event discriminated union) --
+//
+// Mirrors what the QUEUE_UPDATES_SUBSCRIPTION request asks for. The
+// SubscriptionQueueItem variant comes back nested under each event; the
+// outer envelope carries server bookkeeping (sequence, stateHash) plus the
+// echo-suppression hints (`clientId`, `correlationId`) on CurrentClimbChanged.
+// We adapt these to the coordinator's wider `SyncQueueEvent` shape before
+// dispatching.
 
 type FullSyncEvent = {
   __typename: 'FullSync';
@@ -87,14 +100,86 @@ type QueueItemRemovedEvent = {
   uuid: string;
 };
 
+type QueueReorderedEvent = {
+  __typename: 'QueueReordered';
+  sequence: number;
+  stateHash: string;
+  uuid: string;
+  oldIndex: number;
+  newIndex: number;
+};
+
 type CurrentClimbChangedEvent = {
   __typename: 'CurrentClimbChanged';
   sequence: number;
   stateHash: string;
   item: SubscriptionQueueItem | null;
+  clientId: string | null;
+  correlationId: string | null;
 };
 
-type QueueUpdateEvent = FullSyncEvent | QueueItemAddedEvent | QueueItemRemovedEvent | CurrentClimbChangedEvent;
+type ClimbMirroredEvent = {
+  __typename: 'ClimbMirrored';
+  sequence: number;
+  stateHash: string;
+  uuid: string | null;
+  mirrored: boolean;
+};
+
+type QueueUpdateEvent =
+  | FullSyncEvent
+  | QueueItemAddedEvent
+  | QueueItemRemovedEvent
+  | QueueReorderedEvent
+  | CurrentClimbChangedEvent
+  | ClimbMirroredEvent;
+
+function toSyncQueueEvent(event: QueueUpdateEvent): SyncQueueEvent {
+  switch (event.__typename) {
+    case 'FullSync': {
+      return {
+        __typename: 'FullSync',
+        state: {
+          queue: event.state.queue.map(toClimbQueueItem),
+          currentClimbQueueItem: event.state.currentClimbQueueItem
+            ? toClimbQueueItem(event.state.currentClimbQueueItem)
+            : null,
+        },
+      };
+    }
+    case 'QueueItemAdded':
+      return {
+        __typename: 'QueueItemAdded',
+        item: toClimbQueueItem(event.item),
+        position: event.position,
+      };
+    case 'QueueItemRemoved':
+      return { __typename: 'QueueItemRemoved', uuid: event.uuid };
+    case 'QueueReordered':
+      return {
+        __typename: 'QueueReordered',
+        uuid: event.uuid,
+        oldIndex: event.oldIndex,
+        newIndex: event.newIndex,
+      };
+    case 'CurrentClimbChanged':
+      return {
+        __typename: 'CurrentClimbChanged',
+        item: event.item ? toClimbQueueItem(event.item) : null,
+        clientId: event.clientId,
+        correlationId: event.correlationId,
+      };
+    case 'ClimbMirrored':
+      return {
+        __typename: 'ClimbMirrored',
+        mirrored: event.mirrored,
+        // Server emits the canonical queue-item uuid under `uuid`; the
+        // coordinator forwards it as `mirroredUuid` for the reducer's
+        // race-guard against driver navigating mid-mirror.
+        mirroredUuid: event.uuid,
+      };
+  }
+}
 
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
@@ -106,6 +191,23 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const sessionCreationRef = useRef<Promise<string | null> | null>(null);
   const { showToast } = useToast();
   const { t } = useTranslation('session');
+
+  // Build the sync coordinator once per provider mount. The clientId is
+  // generated fresh per app launch (no persistence needed today — only
+  // matters within a single WebSocket session for echo suppression). Pass
+  // the reducer's dispatch in so the coordinator can prune timed-out
+  // pending correlation IDs.
+  const dispatchRef = useRef(dispatch);
+  dispatchRef.current = dispatch;
+  const coordinator = useMemo(
+    () =>
+      createQueueSyncCoordinator({
+        clientId: generateClientId(),
+        dispatch: (action) => dispatchRef.current(action),
+      }),
+    [],
+  );
+  useEffect(() => () => coordinator.dispose(), [coordinator]);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -134,58 +236,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       {
         next: ({ data }) => {
           if (!data?.queueUpdates) return;
-          const event = data.queueUpdates;
-
-          switch (event.__typename) {
-            case 'FullSync': {
-              const queueItems = event.state.queue.map(toClimbQueueItem);
-              const currentItem = event.state.currentClimbQueueItem
-                ? toClimbQueueItem(event.state.currentClimbQueueItem)
-                : null;
-
-              dispatch({
-                type: 'INITIAL_QUEUE_DATA',
-                payload: {
-                  queue: queueItems,
-                  currentClimbQueueItem: currentItem,
-                },
-              });
-              break;
-            }
-
-            case 'QueueItemAdded': {
-              const addedItem = toClimbQueueItem(event.item);
-              dispatch({
-                type: 'DELTA_ADD_QUEUE_ITEM',
-                payload: {
-                  item: addedItem,
-                  position: event.position ?? undefined,
-                },
-              });
-              break;
-            }
-
-            case 'QueueItemRemoved': {
-              dispatch({
-                type: 'DELTA_REMOVE_QUEUE_ITEM',
-                payload: { uuid: event.uuid },
-              });
-              break;
-            }
-
-            case 'CurrentClimbChanged': {
-              const changedItem = event.item ? toClimbQueueItem(event.item) : null;
-              dispatch({
-                type: 'DELTA_UPDATE_CURRENT_CLIMB',
-                payload: {
-                  item: changedItem,
-                  isServerEvent: true,
-                  shouldAddToQueue: true,
-                },
-              });
-              break;
-            }
-          }
+          const result = coordinator.mapIncomingEvent(toSyncQueueEvent(data.queueUpdates));
+          if (result.kind === 'dispatch') dispatch(result.action);
         },
         error: () => {
           showToast(t('mobile.queue.syncError'), 'error');
@@ -279,72 +331,45 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const setCurrentClimb = useCallback(
-    (item: ClimbQueueItem) => {
+  // Optimistic local dispatch + correlated SET_CURRENT_CLIMB mutation.
+  // The reducer stores `correlationId` in pendingCurrentClimbUpdates so the
+  // echoed CurrentClimbChanged event (carrying the same id back in
+  // `serverCorrelationId`) is suppressed instead of re-applied.
+  const dispatchSetCurrent = useCallback(
+    (item: ClimbQueueItem, shouldAddToQueue: boolean) => {
+      const correlationId = coordinator.generateCorrelationId();
       dispatch({
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: {
-          item,
-          shouldAddToQueue: true,
-          isServerEvent: false,
-        },
+        payload: { item, shouldAddToQueue, isServerEvent: false, correlationId },
       });
-
+      coordinator.trackPendingMutation(correlationId);
       ensureSession().then((activeSessionId) => {
-        if (activeSessionId) {
-          getHttpClient()
-            .request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, {
-              item: { uuid: item.uuid, climb: item.climb },
-              shouldAddToQueue: true,
-            })
-            .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
-        }
+        if (!activeSessionId) return;
+        getHttpClient()
+          .request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, {
+            item: { uuid: item.uuid, climb: item.climb },
+            shouldAddToQueue,
+            correlationId,
+          })
+          .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
       });
     },
-    [ensureSession, showToast, t],
+    [coordinator, ensureSession, showToast, t],
   );
+
+  const setCurrentClimb = useCallback((item: ClimbQueueItem) => dispatchSetCurrent(item, true), [dispatchSetCurrent]);
 
   const nextClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
     const nextItem = findNextQueueItem(queue, currentClimbQueueItem);
-    if (nextItem) {
-      dispatch({
-        type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: { item: nextItem, isServerEvent: false },
-      });
-      ensureSession().then((activeSessionId) => {
-        if (activeSessionId) {
-          getHttpClient()
-            .request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, {
-              item: { uuid: nextItem.uuid, climb: nextItem.climb },
-              shouldAddToQueue: false,
-            })
-            .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
-        }
-      });
-    }
-  }, [ensureSession, showToast, t]);
+    if (nextItem) dispatchSetCurrent(nextItem, false);
+  }, [dispatchSetCurrent]);
 
   const previousClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
     const prevItem = findPreviousQueueItem(queue, currentClimbQueueItem);
-    if (prevItem) {
-      dispatch({
-        type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: { item: prevItem, isServerEvent: false },
-      });
-      ensureSession().then((activeSessionId) => {
-        if (activeSessionId) {
-          getHttpClient()
-            .request<SetCurrentClimbMutationResponse>(SET_CURRENT_CLIMB, {
-              item: { uuid: prevItem.uuid, climb: prevItem.climb },
-              shouldAddToQueue: false,
-            })
-            .catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
-        }
-      });
-    }
-  }, [ensureSession, showToast, t]);
+    if (prevItem) dispatchSetCurrent(prevItem, false);
+  }, [dispatchSetCurrent]);
 
   const clearSession = useCallback(async () => {
     setSessionId(null);

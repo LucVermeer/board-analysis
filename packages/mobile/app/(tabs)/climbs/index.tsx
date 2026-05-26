@@ -15,7 +15,7 @@ import {
   DEFAULT_FILTERS,
   type ClimbFilters,
 } from '../../../src/components/ClimbFilterSheet';
-import { PlayDrawer, type PlayDrawerHandle } from '../../../src/components/play-drawer';
+import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { useDefaultBoard, useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
@@ -38,7 +38,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 export default function ClimbList() {
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
-  const playDrawerRef = useRef<PlayDrawerHandle>(null);
+  const { openPlayDrawer } = useDrawerHost();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -214,9 +214,12 @@ export default function ClimbList() {
     [hasBoardConfig, boardName, layoutId, sizeId, setIds, angle],
   );
 
-  const handleClimbPress = useCallback((climb: Climb) => {
-    playDrawerRef.current?.open(climb);
-  }, []);
+  const handleClimbPress = useCallback(
+    (climb: Climb) => {
+      openPlayDrawer(climb);
+    },
+    [openPlayDrawer],
+  );
 
   const handleApplyFilters = useCallback(
     (newFilters: ClimbFilters) => {
@@ -354,7 +357,6 @@ export default function ClimbList() {
         currentFilters={filters}
         onApply={handleApplyFilters}
       />
-      {boardConfig && <PlayDrawer ref={playDrawerRef} boardConfig={boardConfig} />}
     </View>
   );
 }

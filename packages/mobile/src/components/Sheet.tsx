@@ -13,7 +13,14 @@ type SheetProps = {
 };
 
 export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
-  { children, snapPoints: customSnapPoints, enableDynamicSizing = false, onChange, onClose, enablePanDownToClose = true },
+  {
+    children,
+    snapPoints: customSnapPoints,
+    enableDynamicSizing = false,
+    onChange,
+    onClose,
+    enablePanDownToClose = true,
+  },
   ref,
 ) {
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);

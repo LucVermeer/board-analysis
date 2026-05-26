@@ -14,6 +14,7 @@ import { useDoubleTapFavorite } from '../hooks/use-double-tap-favorite';
 import { hapticLight, hapticMedium, hapticSuccess } from '../lib/haptics';
 import { formatSends, formatQuality } from '../lib/format-climb-stats';
 import { getGradeTintColor } from '@boardsesh/play-view';
+import { useGradeFormat } from '../hooks/use-grade-format';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { brandColors } from '../theme/colors';
@@ -60,8 +61,10 @@ const ClimbListRow = React.memo(function ClimbListRow({
   const { t } = useTranslation('climbs');
   const { colorScheme, systemColors } = useTheme();
   const isDark = colorScheme === 'dark';
+  const { formatGrade } = useGradeFormat();
 
   const gradeColor = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
+  const formattedGrade = formatGrade(climb.difficulty);
 
   // --- Double-tap favorite (ephemeral heart animation only — favorite status
   // is not available in the search query, so we don't show it in the subtitle) ---
@@ -337,7 +340,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
           {/* Right: Colorized grade + menu button */}
           <View style={styles.rightSection}>
             <Text variant="headline" numberOfLines={1} style={[styles.gradeText, { color: gradeColor }]}>
-              {climb.difficulty}
+              {formattedGrade ?? climb.difficulty}
             </Text>
             <Pressable
               onPress={handleMenuPress}

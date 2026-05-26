@@ -816,10 +816,25 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
         stateHash
         uuid
       }
+      ... on QueueReordered {
+        sequence
+        stateHash
+        uuid
+        oldIndex
+        newIndex
+      }
       ... on CurrentClimbChanged {
         sequence
         stateHash
         item { uuid climb { uuid name frames } }
+        clientId
+        correlationId
+      }
+      ... on ClimbMirrored {
+        sequence
+        stateHash
+        uuid
+        mirrored
       }
     }
   }

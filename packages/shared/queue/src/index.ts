@@ -31,3 +31,19 @@ export {
   getPlaylistPeekQueueItemUuid,
   isPlaylistPeekQueueItemUuid,
 } from './playlist-suggestions';
+
+export {
+  createQueueSyncCoordinator,
+  mapQueueEventToAction,
+  generateClientId,
+  generateCorrelationId,
+  DEFAULT_PENDING_TTL_MS,
+} from './sync-coordinator';
+export type {
+  SyncQueueEvent,
+  MapEventContext,
+  EventMappingResult,
+  SyncCoordinator,
+  SyncCoordinatorOptions,
+  ScheduleCleanupFn,
+} from './sync-coordinator';
