@@ -5,7 +5,10 @@ import { existsSync, readFileSync, mkdirSync, createWriteStream } from 'node:fs'
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveTailscaleHostname } from './lib/tailscale-hostname';
+
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const METRO_DEFAULT_PORT = '8081';
 const BOARDSESH_DIR = join(ROOT_DIR, '.boardsesh');
 const METRO_LOG_PATH = join(BOARDSESH_DIR, 'mobile-metro.log');
 const DEFAULT_QA_NOTES_PATH = join(BOARDSESH_DIR, 'qa-notes.md');
@@ -98,10 +101,18 @@ function resolveQaNotes(explicitPath: string | null): { contents: string | null;
 const { qaNotesFilePath: cliQaNotesPath, passthroughArgs } = parseArgs(process.argv.slice(2));
 const branchName = resolveCurrentBranchName();
 const qaNotes = resolveQaNotes(cliQaNotesPath);
+const tailscale = resolveTailscaleHostname();
 
 console.log(`[dev:mobile] Branch: ${branchName ?? '(detached)'}`);
 if (qaNotes.filePath) {
   console.log(`[dev:mobile] QA notes: ${qaNotes.filePath}`);
+}
+console.log(`[dev:mobile] Hostname: ${tailscale.hostname} (${tailscale.source})`);
+if (tailscale.reason) {
+  console.log(`[dev:mobile] ${tailscale.reason}`);
+}
+if (tailscale.source !== 'fallback') {
+  console.log(`[dev:mobile] Metro: http://${tailscale.hostname}:${METRO_DEFAULT_PORT}`);
 }
 console.log(`[dev:mobile] Metro log: .boardsesh/mobile-metro.log`);
 
@@ -112,8 +123,18 @@ const childEnv: NodeJS.ProcessEnv = { ...process.env };
 if (branchName) childEnv.BOARDSESH_DEV_BRANCH_NAME = branchName;
 if (qaNotes.contents) childEnv.BOARDSESH_DEV_QA_NOTES = qaNotes.contents;
 if (qaNotes.filePath) childEnv.BOARDSESH_DEV_QA_NOTES_FILE = qaNotes.filePath;
+if (tailscale.source !== 'fallback') {
+  childEnv.REACT_NATIVE_PACKAGER_HOSTNAME = tailscale.hostname;
+}
 
-const child = spawn('bunx', ['expo', 'start', ...passthroughArgs], {
+// Bind Metro on 0.0.0.0 (Expo's --host lan) so devices on the same Tailnet can
+// reach the bundler. Respect a user-supplied --host so manual overrides win.
+const userPassedHost = passthroughArgs.some((arg) => arg === '--host' || arg.startsWith('--host='));
+const expoArgs = userPassedHost
+  ? ['expo', 'start', ...passthroughArgs]
+  : ['expo', 'start', '--host', 'lan', ...passthroughArgs];
+
+const child = spawn('bunx', expoArgs, {
   cwd: join(ROOT_DIR, 'packages', 'mobile'),
   env: childEnv,
   stdio: ['inherit', 'pipe', 'pipe'],
