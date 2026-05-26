@@ -9,7 +9,7 @@ export { QueueSheetHeader } from './QueueSheetHeader';
 export { QueueList } from './QueueList';
 export { AngleSelectorSheet } from './AngleSelectorSheet';
 export { DeferredSections } from './DeferredSections';
-export { CollapsibleSection } from './CollapsibleSection';
+export { CollapsibleSection } from '../CollapsibleSection';
 export { LogbookSection } from './LogbookSection';
 export { SimilarClimbsSection } from './SimilarClimbsSection';
 export { CommunitySection } from './CommunitySection';
