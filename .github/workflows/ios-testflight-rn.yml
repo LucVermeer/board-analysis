@@ -142,9 +142,7 @@ jobs:
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
             CURRENT_PROJECT_VERSION=${{ steps.build_number.outputs.value }} \
             DEVELOPMENT_TEAM=9L3HKPZBH3 \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="Boardsesh App Store Distribution Second"
+            CODE_SIGN_STYLE=Automatic
 
       - name: Export archive (uploads to TestFlight)
         env:
