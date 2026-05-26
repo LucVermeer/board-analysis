@@ -276,14 +276,13 @@ export function PersistentQueueBar() {
           </GestureDetector>
 
           <Pressable
-            onPress={handleTick}
-            disabled={!currentClimbQueueItem || !defaultBoard}
+            onPress={handleEndSessionPress}
             accessibilityRole="button"
-            accessibilityLabel={t('mobile.queue.logAscent')}
+            accessibilityLabel={t('mobile.queue.endSession')}
             hitSlop={8}
             style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
           >
-            <Icon name="tick" size={26} color={brandColors.primary} />
+            <Icon name="end.session" size={24} color={brandColors.error} />
           </Pressable>
 
           {bluetooth ? (
@@ -295,13 +294,14 @@ export function PersistentQueueBar() {
           ) : null}
 
           <Pressable
-            onPress={handleEndSessionPress}
+            onPress={handleTick}
+            disabled={!currentClimbQueueItem || !defaultBoard}
             accessibilityRole="button"
-            accessibilityLabel={t('mobile.queue.endSession')}
+            accessibilityLabel={t('mobile.queue.logAscent')}
             hitSlop={8}
             style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
           >
-            <Icon name="end.session" size={24} color={brandColors.error} />
+            <Icon name="tick" size={26} color={brandColors.primary} />
           </Pressable>
         </View>
       </Animated.View>
