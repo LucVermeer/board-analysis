@@ -8,9 +8,9 @@ was rewritten as Expo `Module` / `AsyncFunction` / `Events` calls.
 
 ## Exposed Module classes
 
-| Class | JS lookup | What it wraps |
-| --- | --- | --- |
-| `BoardBleModule` | `requireOptionalNativeModule('BoardBle')` | The `BoardBleManager` singleton — scan, connect, write, configureBoard, plus `scanResult` and `disconnected` listener events |
+| Class                | JS lookup                                     | What it wraps                                                                                                                                                   |
+| -------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BoardBleModule`     | `requireOptionalNativeModule('BoardBle')`     | The `BoardBleManager` singleton — scan, connect, write, configureBoard, plus `scanResult` and `disconnected` listener events                                    |
 | `LiveActivityModule` | `requireOptionalNativeModule('LiveActivity')` | The Live Activity lifecycle (start/end/update), push-token registration with the backend, and the widget `queueNavigate` event the Darwin notification surfaces |
 
 Both classes register independently via `expo-module.config.json`. JS
@@ -52,7 +52,7 @@ suite sha-compares the two copies and fails CI on drift. Do not
 plus EAS Build's cache behavior make symlinks unreliable across CI hosts.
 
 The widget target also defines the `WIDGET_EXTENSION` Swift compilation
-flag (via `expo-target.config.js → xcodeProjectSettings.OTHER_SWIFT_FLAGS`)
+flag (via `packages/mobile/plugins/with-boardsesh-widget-build-settings.js`)
 so the `#if !WIDGET_EXTENSION` blocks in `ClimbNavigationIntent.swift`
 skip the `LiveActivityBleBridge` reference when compiled into the widget
 process (it can't link `BoardBleManager`).

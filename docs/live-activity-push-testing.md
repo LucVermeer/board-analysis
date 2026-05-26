@@ -199,6 +199,7 @@ Source locations:
 
 - Main-app Swift (BoardBleManager, LiveActivityManager, SessionWebSocketManager, intents, helpers): `packages/mobile/modules/live-activity/ios/`
 - Widget extension target (Live Activity SwiftUI, AppIntents, WidgetNetworking, plus byte-identical copies of ClimbSessionAttributes / SharedConstants / SharedKeychain / Intent files): `packages/mobile/targets/BoardseshWidgets/` — managed by `@bacons/apple-targets`
+- Widget target build settings that @bacons/apple-targets does not expose directly, including `WIDGET_EXTENSION`: `packages/mobile/plugins/with-boardsesh-widget-build-settings.js`
 
 #### 1. Generate the native project
 

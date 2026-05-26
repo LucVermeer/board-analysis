@@ -30,14 +30,8 @@ type BoardBleNativeModule = {
   write(value: string): Promise<void>;
   cancelWrites(): Promise<void>;
   configureBoard(options: NativeBleConfigureBoardOptions): Promise<void>;
-  addListener(
-    event: 'scanResult',
-    listener: (payload: NativeBleScanEvent) => void,
-  ): EventSubscription;
-  addListener(
-    event: 'disconnected',
-    listener: (payload: NativeBleDisconnectEvent) => void,
-  ): EventSubscription;
+  addListener(event: 'scanResult', listener: (payload: NativeBleScanEvent) => void): EventSubscription;
+  addListener(event: 'disconnected', listener: (payload: NativeBleDisconnectEvent) => void): EventSubscription;
 };
 
 // requireOptionalNativeModule returns null in Expo Go or any binary without
@@ -96,10 +90,7 @@ type LiveActivityNativeModule = {
   endSession(): Promise<void>;
   updateActivity(options: LiveActivityUpdateOptions): Promise<void>;
   updateActivityClimb(options: LiveActivityClimbUpdateOptions): Promise<void>;
-  addListener(
-    event: 'queueNavigate',
-    listener: (payload: WidgetQueueNavigateEvent) => void,
-  ): EventSubscription;
+  addListener(event: 'queueNavigate', listener: (payload: WidgetQueueNavigateEvent) => void): EventSubscription;
 };
 
 export const liveActivityNative = requireOptionalNativeModule<LiveActivityNativeModule>('LiveActivity');

@@ -35,12 +35,12 @@ function getGraphqlWsUrl(): string {
 }
 
 // React Native port of `packages/web/app/lib/live-activity/use-live-activity.ts`.
-// 
+//
 // Lifecycle: starts a Live Activity when (iOS) + (session active) + (board
 // selected) + (queue has content) + (Live Activities authorized in Settings).
 // Pushes initial state, then watches the serialized queue (full update) and
 // current climb (lightweight update) to drive ActivityKit pushes.
-// 
+//
 // On non-iOS / Expo Go / preview builds without the native module, every
 // call short-circuits at the plugin layer (`Platform.OS !== 'ios'` or
 // `liveActivityNative == null`) so this hook is safe to mount unconditionally.
@@ -121,8 +121,7 @@ export function useLiveActivity({
   // Start/end session — reacts to session activation, content presence, and
   // board config. Does NOT restart when the current climb changes.
   const hasContent = queue.length > 0 || currentClimbQueueItem !== null;
-  const shouldBeActive =
-    isSessionActive && hasContent && stableBoard !== null && available === true && authTokenLoaded;
+  const shouldBeActive = isSessionActive && hasContent && stableBoard !== null && available === true && authTokenLoaded;
 
   useEffect(() => {
     if (Platform.OS !== 'ios' || available !== true) return;

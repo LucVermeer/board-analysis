@@ -8,7 +8,7 @@ import type { BluetoothAdapter, DevicePickerFn } from './types';
 // platform. iOS uses the native Swift BoardBleManager (so widget Live
 // Activity intents can drive the wall synchronously); Android continues to
 // use react-native-ble-plx via RNBleAdapter.
-// 
+//
 // Falls back to RNBleAdapter on iOS only if the native module wasn't linked
 // into the running binary — covers Expo Go and any preview build older than
 // the one that bundled the live-activity module. Production preview builds

@@ -2,6 +2,9 @@
 /// this folder are compiled into the BoardseshWidgets bundle; their Swift
 /// uses `#if WIDGET_EXTENSION` to gate code that must not run in the widget
 /// process (e.g. LiveActivityBleBridge, which lives in the main app target).
+/// The `WIDGET_EXTENSION` Swift flag is applied by
+/// `packages/mobile/plugins/with-boardsesh-widget-build-settings.js` after
+/// @bacons/apple-targets creates the generated Xcode target.
 ///
 /// Files duplicated from the main app target (ClimbSessionAttributes,
 /// SharedConstants, SharedKeychain) are intentional copies. Each Xcode
@@ -13,17 +16,11 @@ module.exports = {
   type: 'widget',
   name: 'BoardseshWidgets',
   bundleIdentifier: 'com.boardsesh.app.widgets',
-  deploymentTarget: '16.1',
+  deploymentTarget: '17.0',
   frameworks: ['ActivityKit', 'WidgetKit', 'AppIntents', 'SwiftUI'],
   entitlements: {
     'com.apple.security.application-groups': ['group.com.boardsesh.app'],
     'keychain-access-groups': ['$(AppIdentifierPrefix)group.com.boardsesh.app'],
-  },
-  // Adds `-DWIDGET_EXTENSION` so the `#if WIDGET_EXTENSION` guards in
-  // ClimbNavigationIntent.swift skip the LiveActivityBleBridge reference
-  // when compiled into the widget bundle.
-  xcodeProjectSettings: {
-    OTHER_SWIFT_FLAGS: '-DWIDGET_EXTENSION',
   },
   // BoardseshKeychainAccessGroup is read by SharedKeychain.swift to derive
   // the keychain access group. Must match the value in the widget's

@@ -86,7 +86,7 @@ describe('NativeIosBleAdapter scan timeout', () => {
     expect(nativeMock.stopScan).toHaveBeenCalled();
   });
 
-  it('does NOT reject the picker when devices have been discovered (user just hasn\'t picked yet)', async () => {
+  it("does NOT reject the picker when devices have been discovered (user just hasn't picked yet)", async () => {
     // Returns a promise that resolves only when we call manualPick later —
     // mirrors the user tapping a device in the picker UI after scan times out.
     let manualPick: (deviceId: string) => void = () => {};
