@@ -234,13 +234,10 @@ export function PersistentQueueBar() {
         style={[
           styles.bar,
           {
-            // Sit directly above the BlurTabBar (which is height
-            // TAB_BAR_HEIGHT + insets.bottom). Painting at bottom: 0 with a
-            // paddingBottom hack covers the tab bar with the bar's opaque
-            // background and visually hides the navigation buttons.
+            // Sit directly above the BlurTabBar — side margins + rounded
+            // corners give the floating-card look; no extra vertical gap.
             bottom: insets.bottom + TAB_BAR_HEIGHT,
             backgroundColor: tintBackground ?? systemColors.background,
-            borderTopColor: systemColors.separator,
           },
         ]}
       >
@@ -323,11 +320,18 @@ export function PersistentQueueBar() {
 const styles = StyleSheet.create({
   bar: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    // `bottom` is set inline from safe-area insets + tab-bar height so the
-    // bar sits above the BlurTabBar instead of painting over it.
-    borderTopWidth: StyleSheet.hairlineWidth,
+    left: 8,
+    right: 8,
+    // `bottom` is set inline from safe-area insets + tab-bar height so
+    // the bar sits flush against the tab bar with all four corners
+    // rounded (Spotify mini-player style).
+    borderRadius: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
   },
   row: {
     flexDirection: 'row',
