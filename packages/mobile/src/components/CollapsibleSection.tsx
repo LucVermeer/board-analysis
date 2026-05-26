@@ -1,11 +1,12 @@
 import { type ReactNode, useCallback, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Text } from '../Text';
-import { Icon } from '../Icon';
-import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing, borderRadius } from '../../theme/tokens';
-import { timing } from '../../theme/animations';
+import { Text } from './Text';
+import { Icon } from './Icon';
+import { hapticSelection } from '../lib/haptics';
+import { iosSystemColors } from '../theme/ios-colors';
+import { spacing, borderRadius } from '../theme/tokens';
+import { timing } from '../theme/animations';
 
 type CollapsibleSectionProps = {
   title: string;
@@ -64,6 +65,7 @@ function CollapsibleSectionInternal({
   const chevronRotation = useSharedValue(defaultExpanded ? 1 : 0);
 
   const toggleExpanded = useCallback(() => {
+    hapticSelection();
     setExpanded((prev) => {
       const next = !prev;
       chevronRotation.value = withTiming(next ? 1 : 0, { duration: timing.normal });

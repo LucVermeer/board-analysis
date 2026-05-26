@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { InteractionManager, View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Climb } from '@boardsesh/shared-schema';
-import { CollapsibleSection } from './CollapsibleSection';
+import { CollapsibleSection } from '../CollapsibleSection';
 import { LogbookSection } from './LogbookSection';
 import { SimilarClimbsSection } from './SimilarClimbsSection';
 import { CommunitySection } from './CommunitySection';
