@@ -12,7 +12,7 @@
 module.exports = {
   type: 'widget',
   name: 'BoardseshWidgets',
-  bundleIdentifier: 'com.boardsesh.app.BoardseshWidgets',
+  bundleIdentifier: 'com.boardsesh.app.widgets',
   deploymentTarget: '16.1',
   frameworks: ['ActivityKit', 'WidgetKit', 'AppIntents', 'SwiftUI'],
   entitlements: {
