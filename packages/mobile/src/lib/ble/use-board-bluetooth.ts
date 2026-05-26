@@ -10,7 +10,7 @@ import {
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
-import { RNBleAdapter } from './adapter';
+import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 
@@ -218,7 +218,7 @@ export function useBoardBluetooth({
       setLoading(true);
 
       try {
-        const adapter = new RNBleAdapter(devicePicker);
+        const adapter = createBluetoothAdapter(devicePicker);
 
         const available = await adapter.isAvailable();
         if (!available) {
@@ -237,6 +237,32 @@ export function useBoardBluetooth({
 
         unsubDisconnectRef.current = adapter.onDisconnect(handleDisconnection);
         adapterRef.current = adapter;
+
+        // Push board configuration into the native BoardBleManager so the
+        // Dynamic Island widget intent path (next/prev tapped while the app
+        // is backgrounded) can encode wall packets from queue items stored in
+        // the App Group without going through JS. No-op on Android.
+        if (isNativeIosBleAdapter(adapter) && layoutId !== undefined && sizeId !== undefined) {
+          try {
+            await adapter.configureBoard({
+              boardName,
+              layoutId,
+              sizeId,
+              apiLevel: apiLevelRef.current,
+              deviceName: connection.deviceName,
+              colorOverrides: ledColorOverrides
+                ? Object.fromEntries(
+                    Object.entries(ledColorOverrides).filter(([, value]) => typeof value === 'string') as [
+                      string,
+                      string,
+                    ][],
+                  )
+                : undefined,
+            });
+          } catch (error) {
+            console.warn('[BLE] Failed to push board configuration to native side:', error);
+          }
+        }
 
         // TODO: analytics (Phase 6)
 

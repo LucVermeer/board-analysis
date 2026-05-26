@@ -143,7 +143,16 @@ If `POSTHOG_PROJECT_KEY` is unset, Live Activity product analytics are skipped a
 
 ## iOS Build Configuration
 
-### 1. Signing and Capabilities
+> **Two iOS apps, same setup.** The Live Activity stack lives in both the
+> deprecating Capacitor app at repo-root `mobile/` and the React Native /
+> Expo app at `packages/mobile/`. They share the bundle identifier
+> `com.boardsesh.app`, the App Group `group.com.boardsesh.app`, and the
+> keychain access group — so the Apple Developer Portal capabilities apply
+> to both. Pick the section that matches the app you're testing.
+
+### Capacitor app (repo-root `mobile/`)
+
+#### 1. Signing and Capabilities
 
 Open `mobile/ios/App/App.xcworkspace` in Xcode:
 
@@ -160,7 +169,7 @@ Do the same for the **BoardseshWidgets** target:
 1. Set the same Team
 2. Ensure **App Groups** includes `group.com.boardsesh.app`
 
-### 2. Set the Dev Server URL
+#### 2. Set the Dev Server URL
 
 ```bash
 # Set your Tailscale hostname so the iOS app connects to your local server
@@ -173,9 +182,75 @@ Then sync the Capacitor config:
 cd mobile && npx cap sync ios
 ```
 
-### 3. Build and Run
+#### 3. Build and Run
 
 Build to your iPhone from Xcode (Product > Run, or Cmd+R). The app must be a **development build** signed by your team — simulator builds do not support Live Activities or push notifications.
+
+### React Native / Expo app (`packages/mobile/`)
+
+The Expo app reaches the same Swift stack via two Expo Modules and a widget
+target generated at prebuild time. `packages/mobile/app.config.ts` already
+declares the App Group, keychain access group, `aps-environment`, the
+`remote-notification` background mode, and the `appleTeamId` — so prebuild
+produces a project that Xcode opens with the capabilities pre-wired. You do
+not need to add them manually in Xcode.
+
+Source locations:
+
+- Main-app Swift (BoardBleManager, LiveActivityManager, SessionWebSocketManager, intents, helpers): `packages/mobile/modules/live-activity/ios/`
+- Widget extension target (Live Activity SwiftUI, AppIntents, WidgetNetworking, plus byte-identical copies of ClimbSessionAttributes / SharedConstants / SharedKeychain / Intent files): `packages/mobile/targets/BoardseshWidgets/` — managed by `@bacons/apple-targets`
+
+#### 1. Generate the native project
+
+```bash
+# Regenerates packages/mobile/ios/ from app.config.ts + plugins, adding
+# the BoardseshWidgets target. Run this whenever any Expo native config or
+# the widget target's expo-target.config.js changes.
+cd packages/mobile && bunx expo prebuild --platform ios --clean
+```
+
+#### 2. Build to a device
+
+Native code changes (Swift, entitlements, new Xcode targets, etc.) cannot
+ship via EAS Update — testers need a fresh installable client:
+
+```bash
+vp run mobile:preview-build
+```
+
+This produces a development-signed build that bundles the native module
+binary + the widget extension. Install it on a physical iPhone running
+**iOS 17+** (Live Activities + AppIntents require it). The simulator can
+exercise the lock-screen Live Activity but not the Dynamic Island or
+ActivityKit push tokens — use a real device for the push-update path.
+
+JS-only iterations after the first install ship via:
+
+```bash
+vp run mobile:publish
+bunx eas-cli@16 channel:edit preview-1 --branch <your-branch>
+```
+
+#### 3. Point at a local backend
+
+The Expo app reads the backend URL from `EXPO_PUBLIC_BACKEND_URL`. To point
+at your machine over Tailscale:
+
+```bash
+EXPO_PUBLIC_BACKEND_URL=http://your-machine.tailscale-domain:3000 vp run dev:mobile
+```
+
+The dev server picks up `.boardsesh/qa-notes.md` automatically and exposes
+it under the More tab via `DevMetadataPanel`.
+
+#### 4. Verify in Console.app
+
+Filter by `subsystem:com.boardsesh.app`. Useful categories:
+
+- `BoardBleManager` — connect / write / reconnect
+- `LiveActivityModule` — session lifecycle + push-token registration
+- `LiveActivityManager` — ActivityKit start / update / end
+- `LiveActivityIntent` — fires once per Dynamic Island button tap, prefix logs with `bundle=` so you can tell whether the intent ran in the main app or widget process
 
 ## Running the Full Stack
 

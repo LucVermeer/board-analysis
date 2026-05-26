@@ -1,0 +1,7 @@
+{
+  "name": "@boardsesh/live-activity-module",
+  "version": "0.1.0",
+  "description": "iOS-native bridge for Live Activities + the BoardBleManager that backs them. Ported from the Capacitor app at repo-root mobile/.",
+  "license": "MIT",
+  "main": "src/index.ts"
+}

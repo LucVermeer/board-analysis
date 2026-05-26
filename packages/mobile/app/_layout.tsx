@@ -12,6 +12,7 @@ import { BluetoothProvider } from '../src/providers/bluetooth-provider';
 import { ToastProvider } from '../src/providers/toast-provider';
 import { QueueProvider } from '../src/providers/queue-provider';
 import { useDefaultBoard } from '../src/lib/graphql/hooks';
+import { LiveActivityBridge } from '../src/lib/live-activity/live-activity-bridge';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,6 +30,12 @@ function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
 
   return (
     <BluetoothProvider boardName={defaultBoard.boardType} layoutId={defaultBoard.layoutId} sizeId={defaultBoard.sizeId}>
+      <LiveActivityBridge
+        boardName={defaultBoard.boardType}
+        layoutId={defaultBoard.layoutId}
+        sizeId={defaultBoard.sizeId}
+        setIds={defaultBoard.setIds}
+      />
       {children}
     </BluetoothProvider>
   );
