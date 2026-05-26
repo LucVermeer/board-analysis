@@ -26,6 +26,7 @@ const DUPLICATED_FILES = [
   'PreviousClimbIntent.swift',
   'SharedConstants.swift',
   'SharedKeychain.swift',
+  'WidgetNetworking.swift',
 ];
 
 function sha(path: string): string {

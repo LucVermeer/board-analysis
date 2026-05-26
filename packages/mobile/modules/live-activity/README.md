@@ -44,6 +44,7 @@ the files listed below have **byte-identical copies** in both folders:
 - `ClimbSessionAttributes.swift`
 - `SharedConstants.swift`
 - `SharedKeychain.swift`
+- `WidgetNetworking.swift`
 
 When you change one, change the other. The
 `src/lib/live-activity/__tests__/widget-target-drift.test.ts` vitest
