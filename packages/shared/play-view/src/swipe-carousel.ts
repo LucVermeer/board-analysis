@@ -9,6 +9,11 @@ export const SNAP_BACK_DURATION = 200;
 export const CLIP_EXIT_DURATION = 100;
 export const ENTER_ANIMATION_DURATION = 170;
 
+// Zoom constants shared between web (useZoomPan) and mobile (useZoomPanGesture).
+export const MIN_SCALE = 1;
+export const MAX_SCALE = 4;
+export const ZOOM_THRESHOLD = 1.02;
+
 export type SwipeDirection = 'left' | 'right';
 export type AnimationDirection = SwipeDirection | null;
 export type EnterDirection = 'from-left' | 'from-right';

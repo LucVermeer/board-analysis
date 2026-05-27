@@ -2,10 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useGesture } from '@use-gesture/react';
-
-const MIN_SCALE = 1;
-const MAX_SCALE = 4;
-const ZOOM_THRESHOLD = 1.02; // Consider "zoomed" above this
+import { MIN_SCALE, MAX_SCALE, ZOOM_THRESHOLD } from '@boardsesh/play-view';
 
 type UseZoomPanOptions = {
   enabled?: boolean;

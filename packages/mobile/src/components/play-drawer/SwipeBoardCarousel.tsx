@@ -1,11 +1,17 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useDerivedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
-import { GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useDerivedValue,
+  useAnimatedReaction,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
 import { useCarouselGesture } from './use-carousel-gesture';
+import { useZoomPanGesture } from './use-zoom-pan-gesture';
 
 type BoardRenderData = {
   boardWidth: number;
@@ -26,6 +32,7 @@ type SwipeBoardCarouselProps = {
   canSwipePrevious: boolean;
   onSwipeNext: () => void;
   onSwipePrevious: () => void;
+  onZoomChange?: (isZoomed: boolean, resetZoom: () => void) => void;
   enabled?: boolean;
 };
 
@@ -43,17 +50,47 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   canSwipePrevious,
   onSwipeNext,
   onSwipePrevious,
+  onZoomChange,
   enabled = true,
 }: SwipeBoardCarouselProps) {
   const { width: screenWidth } = useWindowDimensions();
+  const [containerHeight, setContainerHeight] = useState(0);
 
-  const { gesture, translateX } = useCarouselGesture({
+  const {
+    pinchGesture,
+    zoomPanGesture,
+    isZoomed,
+    resetZoom,
+    animatedZoomStyle,
+  } = useZoomPanGesture({
+    enabled,
+    containerWidth: screenWidth,
+    containerHeight,
+  });
+
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+
+  useEffect(() => {
+    onZoomChangeRef.current?.(isZoomed, resetZoom);
+  }, [isZoomed, resetZoom]);
+
+  // Reset zoom when climb changes
+  const prevFramesRef = useRef(currentFrames);
+  useEffect(() => {
+    if (prevFramesRef.current !== currentFrames) {
+      prevFramesRef.current = currentFrames;
+      resetZoom();
+    }
+  }, [currentFrames, resetZoom]);
+
+  const { gesture: swipeGesture, translateX } = useCarouselGesture({
     onSwipeNext,
     onSwipePrevious,
     canSwipeNext,
     canSwipePrevious,
     boardWidth: screenWidth,
-    enabled,
+    enabled: enabled && !isZoomed,
   });
 
   const currentStyle = useAnimatedStyle(() => ({
@@ -62,9 +99,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
 
   const peekDirection = useDerivedValue<PeekDirection>(() => (translateX.value < 0 ? 'next' : 'prev'));
 
-  // Mirror direction into JS state so the React tree can swap the peek board's
-  // climb frames between renders.
-  const [jsDirection, setJsDirection] = React.useState<PeekDirection>('next');
+  const [jsDirection, setJsDirection] = useState<PeekDirection>('next');
   useAnimatedReaction(
     () => peekDirection.value,
     (direction) => {
@@ -75,7 +110,6 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
 
   const peekStyle = useAnimatedStyle(() => {
     if (translateX.value === 0) {
-      // Park the peek board off-screen when idle so it does not intercept layout.
       return { opacity: 0, transform: [{ translateX: screenWidth }] };
     }
     const offset = computePeekOffset({
@@ -89,20 +123,31 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   const { boardWidth, boardHeight } = boardRenderData;
   const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
 
+  const composedGesture = React.useMemo(
+    () => Gesture.Simultaneous(pinchGesture, Gesture.Race(zoomPanGesture, swipeGesture)),
+    [pinchGesture, zoomPanGesture, swipeGesture],
+  );
+
+  const handleLayout = useCallback((event: { nativeEvent: { layout: { height: number } } }) => {
+    setContainerHeight(event.nativeEvent.layout.height);
+  }, []);
+
   return (
-    <GestureDetector gesture={gesture}>
-      <View style={styles.container}>
+    <GestureDetector gesture={composedGesture}>
+      <View style={styles.container} onLayout={handleLayout}>
         <Animated.View style={[styles.boardWrapper, currentStyle]}>
-          <BoardImageNative
-            frames={currentFrames}
-            boardName={boardName}
-            layoutId={layoutId}
-            sizeId={sizeId}
-            setIds={setIds}
-            boardWidth={boardWidth}
-            boardHeight={boardHeight}
-            mirrored={mirrored}
-          />
+          <Animated.View style={animatedZoomStyle}>
+            <BoardImageNative
+              frames={currentFrames}
+              boardName={boardName}
+              layoutId={layoutId}
+              sizeId={sizeId}
+              setIds={setIds}
+              boardWidth={boardWidth}
+              boardHeight={boardHeight}
+              mirrored={mirrored}
+            />
+          </Animated.View>
         </Animated.View>
 
         <Animated.View style={[styles.peekWrapper, peekStyle]} pointerEvents="none">
@@ -126,6 +171,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     width: '100%',
     overflow: 'hidden',
   },

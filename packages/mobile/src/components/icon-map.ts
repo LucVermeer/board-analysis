@@ -96,6 +96,7 @@ export const iconMap = {
   filter: { ios: 'line.3.horizontal.decrease', android: 'filter-variant' },
   sort: { ios: 'arrow.up.arrow.down', android: 'sort-variant' },
   refresh: { ios: 'arrow.clockwise', android: 'refresh' },
+  'crop.free': { ios: 'viewfinder', android: 'crop-free' },
   photo: { ios: 'photo', android: 'image-outline' },
   camera: { ios: 'camera', android: 'camera-outline' },
   video: { ios: 'video', android: 'video-outline' },
