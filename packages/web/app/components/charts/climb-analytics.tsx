@@ -384,7 +384,9 @@ export default function ClimbAnalytics({ climbUuid, boardType }: ClimbAnalyticsP
               {
                 valueFormatter: (value: number) => formatDifficultyTick(value, gradeFormat),
                 tickLabelStyle: { fontSize: 10 },
-                tickMinStep: 1,
+                tickInterval: gradeTickValues,
+                min: gradeTickValues[0],
+                max: gradeTickValues[gradeTickValues.length - 1],
               },
             ]}
             height={220}
