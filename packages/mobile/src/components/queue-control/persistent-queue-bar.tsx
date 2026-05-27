@@ -296,6 +296,7 @@ export function PersistentQueueBar() {
               accessibilityLabel={
                 bluetooth.isConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')
               }
+              scanningAccessibilityHint={tSettings('ble.scanning')}
             />
           ) : null}
 

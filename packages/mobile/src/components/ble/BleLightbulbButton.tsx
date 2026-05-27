@@ -8,15 +8,18 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Icon } from '../Icon';
-import { hapticLight } from '../../lib/haptics';
+import { hapticLight, hapticMedium } from '../../lib/haptics';
 import { useTheme } from '../../providers/theme-provider';
 import { timing } from '../../theme/animations';
+import { getBleLightbulbAccessibilityHint, getBleLightbulbVisualState } from './ble-lightbulb-button-state';
 
 type BleLightbulbButtonProps = {
   isConnected: boolean;
   isScanning: boolean;
   onPress: () => void;
   accessibilityLabel: string;
+  scanningAccessibilityHint?: string;
+  haptic?: 'light' | 'medium' | 'none';
   size?: number;
 };
 
@@ -27,6 +30,8 @@ export function BleLightbulbButton({
   isScanning,
   onPress,
   accessibilityLabel,
+  scanningAccessibilityHint,
+  haptic = 'light',
   size = 24,
 }: BleLightbulbButtonProps) {
   const { systemColors, brandColors } = useTheme();
@@ -46,32 +51,40 @@ export function BleLightbulbButton({
   }));
 
   const handlePress = () => {
-    hapticLight();
+    if (haptic === 'light') {
+      hapticLight();
+    } else if (haptic === 'medium') {
+      hapticMedium();
+    }
     onPress();
   };
 
-  const iconName = isConnected ? 'lightbulb.fill' : 'lightbulb';
-  const iconColor = isConnected ? brandColors.warning : (systemColors.secondaryLabel as string);
+  const visualState = getBleLightbulbVisualState({
+    isConnected,
+    connectedColor: brandColors.warning,
+    disconnectedColor: systemColors.secondaryLabel as string,
+  });
 
   return (
     <AnimatedPressable
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ selected: isConnected, busy: isScanning }}
+      accessibilityHint={getBleLightbulbAccessibilityHint(isScanning, scanningAccessibilityHint)}
+      accessibilityState={{ selected: isConnected }}
       hitSlop={8}
       style={({ pressed }) => [
         styles.container,
+        animatedStyle,
         isConnected && {
-          backgroundColor: `${brandColors.warning}24`,
-          shadowColor: brandColors.warning,
+          backgroundColor: visualState.backgroundColor,
+          shadowColor: visualState.shadowColor,
         },
         isConnected && styles.connected,
         pressed && styles.pressed,
-        animatedStyle,
       ]}
     >
-      <Icon name={iconName} size={size} color={iconColor} />
+      <Icon name={visualState.iconName} size={size} color={visualState.iconColor} />
     </AnimatedPressable>
   );
 }

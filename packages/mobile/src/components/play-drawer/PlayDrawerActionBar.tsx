@@ -101,6 +101,8 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
         isScanning={lightbulbPending}
         onPress={onLightbulb}
         accessibilityLabel={lightbulbActive ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
+        scanningAccessibilityHint={tSettings('ble.scanning')}
+        haptic="medium"
       />
 
       {/* Angle pill */}
