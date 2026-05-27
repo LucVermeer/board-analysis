@@ -50,7 +50,7 @@ The following table compares every web feature against the current state of the 
 | **Queue: Navigation controls**           | Previous/next, current climb info               | Built     | Complete | Bottom nav bar with prev/next buttons, current climb name/grade                       |
 | **Queue: Drag reorder**                  | Drag-and-drop reorder via handle                | Not built | Missing  | No drag reorder gesture in mobile queue                                               |
 | **Queue: Swipe actions**                 | Swipe to remove from queue                      | Not built | Missing  | Remove only via button, no swipe gesture                                              |
-| **Queue: Bluetooth send**                | Send climb to board via BLE                     | Built     | Complete | `BluetoothStatusIcon` + `ConnectionBanner` in queue nav bar                           |
+| **Queue: Bluetooth send**                | Send climb to board via BLE                     | Built     | Complete | `BleLightbulbButton` + `ConnectionBanner` in queue nav bar                            |
 | **Session: Create**                      | Create session drawer with goal/name            | Not built | Missing  | Sessions auto-created when first tick is logged                                       |
 | **Session: Summary**                     | End session with full summary view              | Built     | Complete | `SessionSummaryScreen` with stats, grade chart, participants, goal                    |
 | **Session: Details**                     | Session detail page with all ticks              | Not built | Missing  | No dedicated session detail screen                                                    |
