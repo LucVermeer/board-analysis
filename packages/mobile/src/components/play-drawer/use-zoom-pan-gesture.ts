@@ -4,6 +4,7 @@ import {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  cancelAnimation,
   runOnJS,
   type SharedValue,
   type AnimatedStyle,
@@ -26,7 +27,7 @@ type UseZoomPanGestureReturn = {
   scale: SharedValue<number>;
 };
 
-function clampTranslation(
+export function clampTranslation(
   translationX: number,
   translationY: number,
   currentScale: number,
@@ -61,15 +62,26 @@ export function useZoomPanGesture({
   const pinchFocalX = useSharedValue(0);
   const pinchFocalY = useSharedValue(0);
 
+  // Shared value mirrors JS isZoomed so gesture worklets can read it without
+  // triggering gesture object recreation on zoom state transitions.
+  const isZoomedSV = useSharedValue(false);
+
   const [isZoomed, setIsZoomed] = useState(false);
   const isZoomedRef = useRef(false);
 
   const updateZoomState = useCallback((zoomed: boolean) => {
     isZoomedRef.current = zoomed;
+    isZoomedSV.value = zoomed;
     setIsZoomed(zoomed);
-  }, []);
+  }, [isZoomedSV]);
 
   const resetZoom = useCallback(() => {
+    // Cancel any in-flight animations before snapping saved values so a
+    // pinch starting mid-animation reads consistent state.
+    cancelAnimation(scale);
+    cancelAnimation(translateX);
+    cancelAnimation(translateY);
+
     scale.value = withTiming(MIN_SCALE, { duration: timing.normal });
     translateX.value = withTiming(0, { duration: timing.normal });
     translateY.value = withTiming(0, { duration: timing.normal });
@@ -91,6 +103,13 @@ export function useZoomPanGesture({
         .enabled(enabled)
         .onStart((event) => {
           'worklet';
+          // Snapshot current animated values so a pinch that starts during a
+          // reset animation picks up where the animation currently is, not
+          // where it was going. This prevents the visual jump described in #2.
+          savedScale.value = scale.value;
+          savedTranslateX.value = translateX.value;
+          savedTranslateY.value = translateY.value;
+
           pinchFocalX.value = event.focalX;
           pinchFocalY.value = event.focalY;
         })
@@ -98,7 +117,6 @@ export function useZoomPanGesture({
           'worklet';
           const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, savedScale.value * event.scale));
 
-          // Adjust translation to keep pinch focal point stable
           const focalOffsetX = pinchFocalX.value - containerWidth / 2;
           const focalOffsetY = pinchFocalY.value - containerHeight / 2;
           const scaleDelta = newScale / savedScale.value;
@@ -143,15 +161,25 @@ export function useZoomPanGesture({
     ],
   );
 
+  // The zoom pan gesture checks isZoomedSV on the UI thread instead of using
+  // the JS `isZoomed` state in the enabled() config. This keeps the gesture
+  // object stable across zoom transitions, avoiding RNGH handler re-registration.
   const zoomPanGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(enabled && isZoomed)
+        .enabled(enabled)
         .minPointers(1)
         .maxPointers(1)
+        .onStart(() => {
+          'worklet';
+          // Snapshot current values so panning during a reset animation
+          // starts from the actual position.
+          savedTranslateX.value = translateX.value;
+          savedTranslateY.value = translateY.value;
+        })
         .onUpdate((event) => {
           'worklet';
-          if (scale.value <= MIN_SCALE) return;
+          if (!isZoomedSV.value || scale.value <= MIN_SCALE) return;
 
           const newX = savedTranslateX.value + event.translationX;
           const newY = savedTranslateY.value + event.translationY;
@@ -164,7 +192,7 @@ export function useZoomPanGesture({
           savedTranslateX.value = translateX.value;
           savedTranslateY.value = translateY.value;
         }),
-    [enabled, isZoomed, containerWidth, containerHeight, scale, translateX, translateY, savedTranslateX, savedTranslateY],
+    [enabled, containerWidth, containerHeight, scale, translateX, translateY, savedTranslateX, savedTranslateY, isZoomedSV],
   );
 
   const animatedZoomStyle = useAnimatedStyle(() => ({

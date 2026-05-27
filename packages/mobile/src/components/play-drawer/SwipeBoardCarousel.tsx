@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useDerivedValue,
@@ -128,7 +128,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     [pinchGesture, zoomPanGesture, swipeGesture],
   );
 
-  const handleLayout = useCallback((event: { nativeEvent: { layout: { height: number } } }) => {
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setContainerHeight(event.nativeEvent.layout.height);
   }, []);
 
