@@ -4,21 +4,42 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import ClimbAnalytics from '../climb-analytics';
-import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
-vi.mock('react-i18next', () => ({
-  useTranslation: (ns?: string) => ({
-    t: (key: string, options?: Record<string, unknown>) => tFromCatalog(ns, key, options),
-    i18n: { language: 'en-US' },
-  }),
-  Trans: ({ children }: { children?: React.ReactNode }) => children ?? null,
-}));
+vi.mock('react-i18next', () => {
+  const keys: Record<string, string> = {
+    'analytics.noData': 'No analytics data available yet. Data is collected during sync.',
+    'analytics.ascentsOverTime': 'Ascents Over Time',
+    'analytics.qualityOverTime': 'Quality Over Time',
+    'analytics.gradeOverTime': 'Grade Over Time',
+  };
+  return {
+    useTranslation: () => ({
+      t: (key: string) => keys[key] ?? key,
+      i18n: { language: 'en-US' },
+    }),
+    Trans: ({ children }: { children?: React.ReactNode }) => children ?? null,
+  };
+});
 
 const mockRequest = vi.fn();
 const mockLineChart = vi.fn();
 
 vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
+}));
+
+vi.mock('@/app/hooks/use-grade-format', () => ({
+  useGradeFormat: () => ({
+    gradeFormat: 'v-grade' as const,
+    formatGrade: (d: string | null | undefined) => {
+      if (!d) return null;
+      const match = d.match(/V\d+/i);
+      return match ? match[0].toUpperCase() : d;
+    },
+    getGradeColor: () => undefined,
+    loaded: true,
+    setGradeFormat: () => Promise.resolve(),
+  }),
 }));
 
 vi.mock('@mui/x-charts/LineChart', () => ({
@@ -39,40 +60,40 @@ const MOCK_RESPONSE = {
       angle: 25,
       ascensionistCount: 10,
       qualityAverage: 2.6,
-      difficultyAverage: null,
-      displayDifficulty: null,
+      difficultyAverage: 16.2,
+      displayDifficulty: 16,
       createdAt: '2024-01-15T00:00:00.000Z',
     },
     {
       angle: 25,
       ascensionistCount: 12,
       qualityAverage: 2.8,
-      difficultyAverage: null,
-      displayDifficulty: null,
+      difficultyAverage: 16.8,
+      displayDifficulty: 17,
       createdAt: '2024-02-15T00:00:00.000Z',
     },
     {
       angle: 40,
       ascensionistCount: 5,
       qualityAverage: 3.1,
-      difficultyAverage: null,
-      displayDifficulty: null,
+      difficultyAverage: 18.1,
+      displayDifficulty: 18,
       createdAt: '2024-01-20T00:00:00.000Z',
     },
     {
       angle: 40,
       ascensionistCount: 8,
       qualityAverage: 3.3,
-      difficultyAverage: null,
-      displayDifficulty: null,
+      difficultyAverage: 18.5,
+      displayDifficulty: 19,
       createdAt: '2024-02-20T00:00:00.000Z',
     },
   ],
 };
 
-function getLatestChartProps(): [MockLineChartProps, MockLineChartProps] {
-  const calls = mockLineChart.mock.calls.slice(-2);
-  return [calls[0][0] as MockLineChartProps, calls[1][0] as MockLineChartProps];
+function getLatestChartProps(): [MockLineChartProps, MockLineChartProps, MockLineChartProps] {
+  const calls = mockLineChart.mock.calls.slice(-3);
+  return [calls[0][0] as MockLineChartProps, calls[1][0] as MockLineChartProps, calls[2][0] as MockLineChartProps];
 }
 
 describe('ClimbAnalytics', () => {
@@ -86,10 +107,10 @@ describe('ClimbAnalytics', () => {
     render(<ClimbAnalytics climbUuid="climb-1" boardType="kilter" />);
 
     await waitFor(() => {
-      expect(screen.getAllByTestId('mui-line-chart')).toHaveLength(2);
+      expect(screen.getAllByTestId('mui-line-chart')).toHaveLength(3);
     });
 
-    const [ascentsChart, qualityChart] = getLatestChartProps();
+    const [ascentsChart, qualityChart, gradeChart] = getLatestChartProps();
 
     expect(ascentsChart.series).toHaveLength(2);
     expect(ascentsChart.series).toEqual([
@@ -126,17 +147,33 @@ describe('ClimbAnalytics', () => {
     expect(qualityChart.series.every((series) => !('area' in series))).toBe(true);
     expect(qualityChart.series.every((series) => !('stack' in series))).toBe(true);
     expect(typeof qualityChart.xAxis[0]?.tickInterval).toBe('function');
+
+    expect(gradeChart.series).toHaveLength(2);
+    expect(gradeChart.series).toEqual([
+      expect.objectContaining({
+        label: '25°',
+        data: [16.2, 16.8],
+        showMark: true,
+      }),
+      expect.objectContaining({
+        label: '40°',
+        data: [18.1, 18.5],
+        showMark: true,
+      }),
+    ]);
+    expect(typeof gradeChart.xAxis[0]?.tickInterval).toBe('function');
   });
 
   it('does not render the removed total ascents chart', async () => {
     render(<ClimbAnalytics climbUuid="climb-1" boardType="kilter" />);
 
     await waitFor(() => {
-      expect(screen.getAllByTestId('mui-line-chart')).toHaveLength(2);
+      expect(screen.getAllByTestId('mui-line-chart')).toHaveLength(3);
     });
 
     expect(screen.getByText('Ascents Over Time')).toBeTruthy();
     expect(screen.getByText('Quality Over Time')).toBeTruthy();
+    expect(screen.getByText('Grade Over Time')).toBeTruthy();
     expect(screen.queryByText('Total Ascents (All Angles)')).toBeNull();
   });
 
@@ -144,27 +181,31 @@ describe('ClimbAnalytics', () => {
     render(<ClimbAnalytics climbUuid="climb-1" boardType="kilter" />);
 
     await waitFor(() => {
-      expect(screen.getAllByTestId('mui-line-chart')).toHaveLength(2);
+      expect(screen.getAllByTestId('mui-line-chart')).toHaveLength(3);
     });
 
     fireEvent.click(screen.getByRole('button', { name: '25°' }));
 
     await waitFor(() => {
-      const [ascentsChart, qualityChart] = getLatestChartProps();
+      const [ascentsChart, qualityChart, gradeChart] = getLatestChartProps();
       expect(ascentsChart.series).toHaveLength(1);
       expect(qualityChart.series).toHaveLength(1);
+      expect(gradeChart.series).toHaveLength(1);
       expect(ascentsChart.series[0]).toEqual(expect.objectContaining({ label: '40°' }));
       expect(qualityChart.series[0]).toEqual(expect.objectContaining({ label: '40°' }));
+      expect(gradeChart.series[0]).toEqual(expect.objectContaining({ label: '40°' }));
     });
 
     fireEvent.click(screen.getByRole('button', { name: '40°' }));
 
     await waitFor(() => {
-      const [ascentsChart, qualityChart] = getLatestChartProps();
+      const [ascentsChart, qualityChart, gradeChart] = getLatestChartProps();
       expect(ascentsChart.series).toHaveLength(1);
       expect(qualityChart.series).toHaveLength(1);
+      expect(gradeChart.series).toHaveLength(1);
       expect(ascentsChart.series[0]).toEqual(expect.objectContaining({ label: '40°' }));
       expect(qualityChart.series[0]).toEqual(expect.objectContaining({ label: '40°' }));
+      expect(gradeChart.series[0]).toEqual(expect.objectContaining({ label: '40°' }));
     });
   });
 });
