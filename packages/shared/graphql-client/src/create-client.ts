@@ -5,18 +5,8 @@ export type ExtendedClient = {
   onReconnect?: (callback: () => void) => void;
 } & Client;
 
-export type CreateGraphQLClientOptions = {
+export type BaseClientOptions = {
   url: string;
-  /**
-   * Static auth token. Mutually exclusive with `connectionParams`.
-   * Passed as `{ authToken }` in the WS connection init payload.
-   */
-  authToken?: string | null;
-  /**
-   * Async connection-params provider. Mutually exclusive with `authToken`.
-   * Called on every (re-)connect so the token can be refreshed transparently.
-   */
-  connectionParams?: () => Promise<Record<string, unknown>>;
   /** Called once after the second `connected` event (i.e. on every reconnect). */
   onReconnect?: () => void;
   /** Debug tag used in console logs. */
@@ -41,6 +31,16 @@ export type CreateGraphQLClientOptions = {
    */
   onClientCreated?: (client: ExtendedClient) => (() => void) | void;
 };
+
+/**
+ * Provide auth via a static token OR an async provider — not both.
+ * The union enforces mutual exclusivity at the type level.
+ */
+export type CreateGraphQLClientOptions = BaseClientOptions &
+  (
+    | { authToken?: string | null; connectionParams?: never }
+    | { authToken?: never; connectionParams: () => Promise<Record<string, unknown>> }
+  );
 
 /**
  * Creates a graphql-ws Client with sane retry/backoff defaults. Exposes

@@ -24,11 +24,7 @@ export function execute<TData = unknown, TVariables = Record<string, unknown>>(
     let hasResolved = false;
 
     const timer = setTimeout(() => {
-      if (!hasResolved) {
-        hasResolved = true;
-        unsubscribe();
-        reject(new Error(`GraphQL mutation '${opName}' timed out after ${timeoutMs}ms`));
-      }
+      settle(() => reject(new Error(`GraphQL mutation '${opName}' timed out after ${timeoutMs}ms`)));
     }, timeoutMs);
 
     function settle(fn: () => void) {

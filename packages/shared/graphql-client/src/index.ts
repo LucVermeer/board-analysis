@@ -17,5 +17,5 @@ export { getOperationName } from './operation-name';
 export { execute } from './execute';
 export { subscribe } from './subscribe';
 
-export type { CreateGraphQLClientOptions, ExtendedClient } from './create-client';
+export type { BaseClientOptions, CreateGraphQLClientOptions, ExtendedClient } from './create-client';
 export { createGraphQLClient } from './create-client';

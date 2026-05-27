@@ -6,5 +6,5 @@ export function buildBoardPath(
   angle?: number | string,
 ): string {
   const base = `${boardName}/${layoutId}/${sizeId}/${setIds}`;
-  return angle !== undefined ? `${base}/${angle}` : base;
+  return angle !== undefined && angle !== '' ? `${base}/${angle}` : base;
 }

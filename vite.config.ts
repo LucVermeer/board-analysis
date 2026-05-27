@@ -40,6 +40,7 @@ export default defineConfig({
       './packages/aurora-sync/vite.config.ts',
       './packages/crypto/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
+      './packages/shared/board-config/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',

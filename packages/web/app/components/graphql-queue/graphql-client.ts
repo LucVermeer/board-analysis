@@ -1,6 +1,6 @@
 import {
   createGraphQLClient as createSharedGraphQLClient,
-  type CreateGraphQLClientOptions,
+  type BaseClientOptions,
   type ExtendedClient,
 } from '@boardsesh/graphql-client';
 import { connectionManager } from '../connection-manager/websocket-connection-manager';
@@ -36,7 +36,9 @@ class SafeWebSocket extends WebSocket {
   }
 }
 
-export type GraphQLClientOptions = Omit<CreateGraphQLClientOptions, 'webSocketImpl' | 'onClientCreated'>;
+export type GraphQLClientOptions = Omit<BaseClientOptions, 'webSocketImpl' | 'onClientCreated'> & {
+  authToken?: string | null;
+};
 
 /**
  * Web wrapper around the shared `createGraphQLClient`. Injects:
