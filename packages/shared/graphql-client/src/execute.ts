@@ -19,30 +19,40 @@ export function execute<TData = unknown, TVariables = Record<string, unknown>>(
 ): Promise<TData> {
   const opName = getOperationName(operation, 'mutation');
 
-  const executionPromise = new Promise<TData>((resolve, reject) => {
+  return new Promise<TData>((resolve, reject) => {
     let result: TData | undefined;
     let hasResolved = false;
+
+    const timer = setTimeout(() => {
+      if (!hasResolved) {
+        hasResolved = true;
+        unsubscribe();
+        reject(new Error(`GraphQL mutation '${opName}' timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+
+    function settle(fn: () => void) {
+      if (hasResolved) return;
+      hasResolved = true;
+      clearTimeout(timer);
+      unsubscribe();
+      fn();
+    }
 
     const unsubscribe = client.subscribe<TData>(
       { query: operation.query, variables: operation.variables as Record<string, unknown> },
       {
         next: (data) => {
-          // GraphQL can return null data values; keep the latest payload when present.
           if ('data' in data) {
             result = data.data as TData;
           }
           if (data.errors) {
-            if (!hasResolved) {
-              hasResolved = true;
-              unsubscribe();
-              reject(new GraphQLOperationError(data.errors));
-            }
+            const errors = data.errors;
+            settle(() => reject(new GraphQLOperationError(errors)));
           }
         },
         error: (err) => {
-          if (!hasResolved) {
-            hasResolved = true;
-            unsubscribe();
+          settle(() => {
             // graphql-ws also reports server-emitted GraphQL errors through the
             // error callback when the server closes the stream with them (e.g.
             // single-error mutation rejects). Preserve extensions in that path
@@ -54,31 +64,18 @@ export function execute<TData = unknown, TVariables = Record<string, unknown>>(
             } else {
               reject(new Error(String(err)));
             }
-          }
+          });
         },
         complete: () => {
-          if (!hasResolved) {
-            hasResolved = true;
-            unsubscribe();
+          settle(() => {
             if (result === undefined) {
               reject(new Error(`GraphQL operation '${opName}' completed without data`));
               return;
             }
             resolve(result);
-          }
+          });
         },
       },
     );
-  });
-
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(`GraphQL mutation '${opName}' timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-
-  return Promise.race([executionPromise, timeoutPromise]).finally(() => {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
   });
 }

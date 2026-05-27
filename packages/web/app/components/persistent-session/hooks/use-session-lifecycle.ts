@@ -5,7 +5,7 @@ import {
   MAX_RETRY_DELAY_MS,
   BACKOFF_MULTIPLIER,
   MAX_TRANSIENT_RETRIES,
-} from '../../graphql-queue/retry-constants';
+} from '@boardsesh/graphql-client';
 import {
   JOIN_SESSION,
   LEAVE_SESSION,

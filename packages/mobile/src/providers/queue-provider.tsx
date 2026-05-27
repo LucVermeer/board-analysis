@@ -20,6 +20,7 @@ import {
 import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from '@boardsesh/queue';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import { execute } from '@boardsesh/graphql-client';
+import { buildBoardPath } from '@boardsesh/board-config';
 import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
@@ -252,7 +253,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
     const boardConfig = await getStoredBoardConfig();
     if (!boardConfig) return;
-    const boardPath = `${boardConfig.boardName}/${boardConfig.layoutId}/${boardConfig.sizeId}/${boardConfig.setIds}/${boardConfig.angle}`;
+    const boardPath = buildBoardPath(
+      boardConfig.boardName,
+      boardConfig.layoutId,
+      boardConfig.sizeId,
+      boardConfig.setIds,
+      boardConfig.angle,
+    );
     // Clear the ref if THIS join rejects so the next mutation retries instead
     // of re-awaiting a stuck-rejected promise. A transient join failure (a
     // flaky packet, a server hiccup) doesn't trigger a socket reconnect, so
@@ -343,7 +350,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const boardConfig = await getStoredBoardConfig();
       if (!boardConfig) return null;
 
-      const boardPath = `${boardConfig.boardName}/${boardConfig.layoutId}/${boardConfig.sizeId}/${boardConfig.setIds}/${boardConfig.angle}`;
+      const boardPath = buildBoardPath(
+        boardConfig.boardName,
+        boardConfig.layoutId,
+        boardConfig.sizeId,
+        boardConfig.setIds,
+        boardConfig.angle,
+      );
 
       try {
         const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {

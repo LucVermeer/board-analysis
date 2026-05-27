@@ -1,9 +1,8 @@
-import { createClient, type Client } from 'graphql-ws';
+import { createGraphQLClient, type Client } from '@boardsesh/graphql-client';
 import { getAuthToken } from '../auth-store';
 import { BACKEND_URL } from '../env';
 
 function getWsUrl(): string {
-  // Convert http(s) to ws(s), or use as-is if already ws
   const wsUrl = process.env.EXPO_PUBLIC_WS_URL;
   if (wsUrl) return wsUrl;
 
@@ -14,14 +13,12 @@ let wsClient: Client | null = null;
 
 export function getWsClient(): Client {
   if (!wsClient) {
-    wsClient = createClient({
+    wsClient = createGraphQLClient({
       url: getWsUrl(),
       connectionParams: async () => {
         const token = await getAuthToken();
         return token ? { authToken: token } : {};
       },
-      lazy: true,
-      retryAttempts: 10,
       shouldRetry: (errOrCloseEvent) => {
         if (typeof errOrCloseEvent === 'object' && errOrCloseEvent !== null && 'code' in errOrCloseEvent) {
           return (errOrCloseEvent as { code: number }).code !== 4401;

@@ -7,7 +7,16 @@ export type ExtendedClient = {
 
 export type CreateGraphQLClientOptions = {
   url: string;
+  /**
+   * Static auth token. Mutually exclusive with `connectionParams`.
+   * Passed as `{ authToken }` in the WS connection init payload.
+   */
   authToken?: string | null;
+  /**
+   * Async connection-params provider. Mutually exclusive with `authToken`.
+   * Called on every (re-)connect so the token can be refreshed transparently.
+   */
+  connectionParams?: () => Promise<Record<string, unknown>>;
   /** Called once after the second `connected` event (i.e. on every reconnect). */
   onReconnect?: () => void;
   /** Debug tag used in console logs. */
@@ -18,6 +27,11 @@ export type CreateGraphQLClientOptions = {
    * this and graphql-ws will use the global `WebSocket`.
    */
   webSocketImpl?: typeof WebSocket;
+  /**
+   * Custom retry predicate. When provided, overrides the default
+   * `() => true`. Mobile uses this to reject 4401 auth-error close codes.
+   */
+  shouldRetry?: (errOrCloseEvent: unknown) => boolean;
   /**
    * Hook fired immediately after the client is constructed, before it's
    * returned. Web uses this to register with `connectionManager` and to
@@ -35,22 +49,36 @@ export type CreateGraphQLClientOptions = {
  * this shared module.
  */
 export function createGraphQLClient(options: CreateGraphQLClientOptions): ExtendedClient {
-  const { url, authToken, onReconnect: onReconnectCallback, webSocketImpl, onClientCreated } = options;
+  const {
+    url,
+    authToken,
+    connectionParams: connectionParamsProvider,
+    onReconnect: onReconnectCallback,
+    webSocketImpl,
+    shouldRetry,
+    onClientCreated,
+  } = options;
 
   let hasConnectedOnce = false;
+
+  const resolvedConnectionParams = connectionParamsProvider
+    ? connectionParamsProvider
+    : authToken
+      ? { authToken }
+      : undefined;
 
   const client = createClient({
     url,
     ...(webSocketImpl ? { webSocketImpl } : {}),
     retryAttempts: 10,
-    shouldRetry: () => true,
+    shouldRetry: shouldRetry ?? (() => true),
     retryWait: async (retryCount) => {
       const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(BACKOFF_MULTIPLIER, retryCount), MAX_RETRY_DELAY_MS);
       await new Promise((resolve) => setTimeout(resolve, delay));
     },
     lazy: true,
     keepAlive: KEEP_ALIVE_MS,
-    connectionParams: authToken ? { authToken } : undefined,
+    connectionParams: resolvedConnectionParams,
     on: {
       connected: () => {
         if (hasConnectedOnce && onReconnectCallback) {
