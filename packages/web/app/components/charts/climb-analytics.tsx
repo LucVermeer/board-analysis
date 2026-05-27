@@ -14,6 +14,9 @@ import {
   type ClimbStatsHistoryResponse,
 } from '@boardsesh/graphql/operations/climb-stats-history';
 import { themeTokens } from '@/app/theme/theme-config';
+import { useGradeFormat } from '@/app/hooks/use-grade-format';
+import { BOULDER_GRADES, type BoulderGrade } from '@boardsesh/board-constants/boulder-grade-mapping';
+import type { GradeDisplayFormat } from '@boardsesh/play-view';
 
 // Consistent color palette for angle lines, using design tokens
 const ANGLE_COLORS = [
@@ -31,6 +34,25 @@ function getAngleColor(index: number): string {
   return ANGLE_COLORS[index % ANGLE_COLORS.length];
 }
 
+const GRADE_BY_ID: Map<number, BoulderGrade> = new Map(BOULDER_GRADES.map((g) => [g.difficulty_id, g]));
+
+const V_GRADE_TICK_IDS: number[] = BOULDER_GRADES.filter(
+  (g, i, arr) => i === 0 || g.v_grade !== arr[i - 1].v_grade,
+).map((g) => g.difficulty_id);
+
+const FONT_GRADE_TICK_IDS: number[] = BOULDER_GRADES.map((g) => g.difficulty_id);
+
+function getGradeTickIds(format: GradeDisplayFormat): number[] {
+  return format === 'font' ? FONT_GRADE_TICK_IDS : V_GRADE_TICK_IDS;
+}
+
+function formatDifficultyTick(value: number, format: GradeDisplayFormat): string {
+  const rounded = Math.round(value);
+  const grade = GRADE_BY_ID.get(rounded);
+  if (!grade) return '';
+  return format === 'font' ? grade.font_grade.toUpperCase() : grade.v_grade;
+}
+
 type GroupedData = {
   byAngle: Map<number, { date: string; value: number }[]>;
   labels: string[];
@@ -44,7 +66,7 @@ type LineSeriesOptions = {
 
 function groupByAngleAndMonth(
   rows: ClimbStatsHistoryEntry[],
-  valueKey: 'ascensionistCount' | 'qualityAverage',
+  valueKey: 'ascensionistCount' | 'qualityAverage' | 'difficultyAverage',
 ): GroupedData {
   const angleMap = new Map<number, Map<string, number[]>>();
 
@@ -139,6 +161,7 @@ type ClimbAnalyticsProps = {
 
 export default function ClimbAnalytics({ climbUuid, boardType }: ClimbAnalyticsProps) {
   const { t } = useTranslation('profile');
+  const { gradeFormat } = useGradeFormat();
   const [rows, setRows] = useState<ClimbStatsHistoryEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -204,6 +227,27 @@ export default function ClimbAnalytics({ climbUuid, boardType }: ClimbAnalyticsP
     if (!rows) return null;
     return groupByAngleAndMonth(rows, 'qualityAverage');
   }, [rows]);
+
+  const gradeData = useMemo(() => {
+    if (!rows) return null;
+    return groupByAngleAndMonth(rows, 'difficultyAverage');
+  }, [rows]);
+
+  const gradeTickValues = useMemo(() => {
+    if (!gradeData) return [];
+    let dataMin = Infinity;
+    let dataMax = -Infinity;
+    for (const points of gradeData.byAngle.values()) {
+      for (const point of points) {
+        if (point.value < dataMin) dataMin = point.value;
+        if (point.value > dataMax) dataMax = point.value;
+      }
+    }
+    if (!isFinite(dataMin)) return [];
+    const lo = Math.floor(dataMin) - 1;
+    const hi = Math.ceil(dataMax) + 1;
+    return getGradeTickIds(gradeFormat).filter((id) => id >= lo && id <= hi);
+  }, [gradeData, gradeFormat]);
 
   if (loading) {
     return (
@@ -308,6 +352,45 @@ export default function ClimbAnalytics({ climbUuid, boardType }: ClimbAnalyticsP
             ]}
             height={220}
             margin={{ top: 10, bottom: 30, left: 40, right: 10 }}
+            hideLegend={filteredAngles.length <= 1}
+            slotProps={{
+              legend: {
+                sx: { fontSize: 11 },
+              },
+            }}
+          />
+        </Box>
+      )}
+
+      {gradeData && gradeData.labels.length > 0 && gradeTickValues.length > 0 && (
+        <Box>
+          <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+            {t('analytics.gradeOverTime')}
+          </Typography>
+          <LineChart
+            series={buildLineSeries(gradeData).map((s) => ({
+              ...s,
+              valueFormatter: (v: number | null) => (v != null ? formatDifficultyTick(v, gradeFormat) : ''),
+            }))}
+            xAxis={[
+              {
+                data: gradeData.labels.map(formatMonthLabel),
+                scaleType: 'band' as const,
+                tickLabelStyle: { fontSize: 10 },
+                tickInterval: buildTickInterval(gradeData.labels.length),
+              },
+            ]}
+            yAxis={[
+              {
+                valueFormatter: (value: number) => formatDifficultyTick(value, gradeFormat),
+                tickLabelStyle: { fontSize: 10 },
+                tickInterval: gradeTickValues,
+                min: gradeTickValues[0],
+                max: gradeTickValues[gradeTickValues.length - 1],
+              },
+            ]}
+            height={220}
+            margin={{ top: 10, bottom: 30, left: 50, right: 10 }}
             hideLegend={filteredAngles.length <= 1}
             slotProps={{
               legend: {

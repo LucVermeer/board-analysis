@@ -82,7 +82,8 @@
   "analytics": {
     "noData": "Sin datos analíticos disponibles todavía. Los datos se recopilan durante la sincronización.",
     "ascentsOverTime": "Ascensos a lo largo del tiempo",
-    "qualityOverTime": "Calidad a lo largo del tiempo"
+    "qualityOverTime": "Calidad a lo largo del tiempo",
+    "gradeOverTime": "Grado a lo largo del tiempo"
   },
   "logbook": {
     "section": {
