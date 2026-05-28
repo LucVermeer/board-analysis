@@ -23,7 +23,9 @@ export const DISMISS_VELOCITY_THRESHOLD = 800;
 // Pinch-zoom focal-point math: keep the point under the focal stationary
 // across a scale change. The savedTranslate term must be multiplied by
 // scaleDelta — pinching from an already-zoomed state with the wrong formula
-// drifts the focal point off the user's fingers.
+// drifts the focal point off the user's fingers. Mobile inlines this formula
+// inside a reanimated worklet (cross-module worklet calls aren't reliable);
+// the shared definition exists as the canonical spec and for unit tests.
 export function computeFocalPinchTranslation({
   focalOffset,
   scaleDelta,
@@ -33,7 +35,6 @@ export function computeFocalPinchTranslation({
   scaleDelta: number;
   savedTranslate: number;
 }): number {
-  'worklet';
   return focalOffset * (1 - scaleDelta) + scaleDelta * savedTranslate;
 }
 

@@ -9,7 +9,7 @@ import {
   type SharedValue,
   type AnimatedStyle,
 } from 'react-native-reanimated';
-import { MIN_SCALE, MAX_SCALE, ZOOM_THRESHOLD, computeFocalPinchTranslation } from '@boardsesh/play-view';
+import { MIN_SCALE, MAX_SCALE, ZOOM_THRESHOLD } from '@boardsesh/play-view';
 import { timing } from '../../theme/animations';
 
 type UseZoomPanGestureOptions = {
@@ -117,16 +117,11 @@ export function useZoomPanGesture({
           const focalOffsetX = pinchFocalX.value - containerWidth / 2;
           const focalOffsetY = pinchFocalY.value - containerHeight / 2;
           const scaleDelta = newScale / savedScale.value;
-          const newTranslateX = computeFocalPinchTranslation({
-            focalOffset: focalOffsetX,
-            scaleDelta,
-            savedTranslate: savedTranslateX.value,
-          });
-          const newTranslateY = computeFocalPinchTranslation({
-            focalOffset: focalOffsetY,
-            scaleDelta,
-            savedTranslate: savedTranslateY.value,
-          });
+          // Inlined from computeFocalPinchTranslation in @boardsesh/play-view
+          // — keep in sync. Direct call from worklet across module boundaries
+          // isn't reliable; the shared function exists for unit tests + spec.
+          const newTranslateX = focalOffsetX * (1 - scaleDelta) + scaleDelta * savedTranslateX.value;
+          const newTranslateY = focalOffsetY * (1 - scaleDelta) + scaleDelta * savedTranslateY.value;
 
           const clamped = clampTranslation(newTranslateX, newTranslateY, newScale, containerWidth, containerHeight);
           scale.value = newScale;

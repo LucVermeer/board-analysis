@@ -17,6 +17,7 @@ import { Icon } from '../Icon';
 import { useCarouselGesture } from './use-carousel-gesture';
 import { useZoomPanGesture } from './use-zoom-pan-gesture';
 import { timing } from '../../theme/animations';
+import { overlays } from '../../theme/tokens';
 
 type BoardRenderData = {
   boardWidth: number;
@@ -65,6 +66,9 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
 }: SwipeBoardCarouselProps) {
   const { t } = useTranslation('session');
   const { width: screenWidth } = useWindowDimensions();
+  // Starts at 0; populated by onLayout. clampTranslation returns zero for the
+  // first frame before layout fires — fine since the user can't pinch in
+  // pre-layout. The pinch hook re-reads this value, no remount needed.
   const [containerHeight, setContainerHeight] = useState(0);
 
   const {
@@ -85,7 +89,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
 
   useEffect(() => {
     onResetZoomReadyRef.current?.(resetZoom);
-  }, [resetZoom]);
+  }, [resetZoom, onResetZoomReadyRef]);
 
   // Reset zoom on climb change, but only if actually zoomed — otherwise it's
   // just a no-op withTiming(1→1) and a setState(false→false).
@@ -203,7 +207,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
             accessibilityLabel={t('playView.resetZoom')}
             hitSlop={8}
           >
-            <Icon name="crop.free" size={14} color="#FFFFFF" />
+            <Icon name="crop.free" size={14} color={overlays.onScrim} />
             <Text style={styles.resetZoomLabel}>{t('playView.resetZoom')}</Text>
           </Pressable>
         </Animated.View>
@@ -241,10 +245,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: overlays.scrim,
   },
   resetZoomLabel: {
-    color: '#FFFFFF',
+    color: overlays.onScrim,
     fontSize: 12,
     fontWeight: '500',
   },

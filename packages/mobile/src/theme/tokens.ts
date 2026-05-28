@@ -74,6 +74,16 @@ export const opacity = {
   disabled: 0.5,
 } as const;
 
+/**
+ * Floating-overlay tokens. Intentionally fixed across light/dark — these are
+ * for chips/buttons that overlay arbitrary content (board images, photos) and
+ * need stable contrast regardless of the user's color scheme.
+ */
+export const overlays = {
+  scrim: 'rgba(0, 0, 0, 0.6)',
+  onScrim: '#FFFFFF',
+} as const;
+
 /** Shared bottom-sheet handle and background styles used by QueueSheet, AngleSelectorSheet, and PlayDrawer. */
 export const sheetStyles = {
   indicator: {
