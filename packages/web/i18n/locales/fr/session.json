@@ -323,6 +323,7 @@
     "triesCount_other": "{{count}} essais",
     "tickError": "Impossible d'enregistrer ton tick. Sauvegardé en brouillon.",
     "closeAria": "Fermer",
+    "resetZoom": "Réinitialiser",
     "noClimbSelected": "Aucun bloc sélectionné",
     "browseClimbs": "Parcourir les blocs",
     "actionBar": {

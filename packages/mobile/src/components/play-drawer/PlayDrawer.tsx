@@ -89,6 +89,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
+  const resetZoomRef = useRef<(() => void) | null>(null);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
   const bluetooth = useOptionalBluetoothContext();
@@ -214,6 +215,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handleTickFabPress = useCallback(() => {
+    resetZoomRef.current?.();
     setIsTickBarActive(true);
   }, []);
 
@@ -223,6 +225,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const handleTickBarDismiss = useCallback(() => {
     setIsTickBarActive(false);
+  }, []);
+
+  const handleResetZoomReady = useCallback((resetFn: () => void) => {
+    resetZoomRef.current = resetFn;
   }, []);
 
   const handleSimilarClimbPress = useCallback(
@@ -306,6 +312,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     canSwipePrevious={navigationState.canPrevious}
                     onSwipeNext={handleNext}
                     onSwipePrevious={handlePrev}
+                    onResetZoomReady={handleResetZoomReady}
                     enabled={!isTickBarActive}
                   />
                 )}

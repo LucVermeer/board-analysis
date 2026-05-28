@@ -9,6 +9,51 @@ export const SNAP_BACK_DURATION = 200;
 export const CLIP_EXIT_DURATION = 100;
 export const ENTER_ANIMATION_DURATION = 170;
 
+// Zoom constants shared between web (useZoomPan) and mobile (useZoomPanGesture).
+export const MIN_SCALE = 1;
+export const MAX_SCALE = 4;
+export const ZOOM_THRESHOLD = 1.02;
+
+// Pinch-zoom focal-point math: keep the point under the focal stationary
+// across a scale change. The savedTranslate term must be multiplied by
+// scaleDelta — pinching from an already-zoomed state with the wrong formula
+// drifts the focal point off the user's fingers. Mobile inlines this formula
+// inside a reanimated worklet (cross-module worklet calls aren't reliable);
+// the shared definition exists as the canonical spec and for unit tests.
+export function computeFocalPinchTranslation({
+  focalOffset,
+  scaleDelta,
+  savedTranslate,
+}: {
+  focalOffset: number;
+  scaleDelta: number;
+  savedTranslate: number;
+}): number {
+  return focalOffset * (1 - scaleDelta) + scaleDelta * savedTranslate;
+}
+
+// Clamp translation so zoomed content stays within the visible container —
+// at scale s the content overflows by (container * (s - 1)) / 2 on each
+// side, so the translation can move up to that much before exposing empty
+// space. Same inline / shared split as computeFocalPinchTranslation.
+export function clampTranslation(
+  translationX: number,
+  translationY: number,
+  currentScale: number,
+  containerWidth: number,
+  containerHeight: number,
+): { x: number; y: number } {
+  if (currentScale <= 1) return { x: 0, y: 0 };
+
+  const maxX = (containerWidth * (currentScale - 1)) / 2;
+  const maxY = (containerHeight * (currentScale - 1)) / 2;
+
+  return {
+    x: Math.max(-maxX, Math.min(maxX, translationX)),
+    y: Math.max(-maxY, Math.min(maxY, translationY)),
+  };
+}
+
 export type SwipeDirection = 'left' | 'right';
 export type AnimationDirection = SwipeDirection | null;
 export type EnterDirection = 'from-left' | 'from-right';

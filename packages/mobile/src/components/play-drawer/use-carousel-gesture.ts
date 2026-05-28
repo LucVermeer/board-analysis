@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
-import { SWIPE_THRESHOLD, EXIT_DURATION, CLIP_EXIT_DURATION } from '@boardsesh/play-view';
+import { SWIPE_THRESHOLD, DIRECTION_THRESHOLD, EXIT_DURATION, CLIP_EXIT_DURATION } from '@boardsesh/play-view';
 import { springs } from '../../theme/animations';
 import { hapticMedium } from '../../lib/haptics';
 
@@ -12,6 +12,7 @@ type UseCarouselGestureOptions = {
   canSwipePrevious: boolean;
   boardWidth: number;
   enabled?: boolean;
+  isZoomedSV?: SharedValue<boolean>;
 };
 
 type UseCarouselGestureReturn = {
@@ -29,11 +30,19 @@ export function useCarouselGesture({
   canSwipePrevious,
   boardWidth,
   enabled = true,
+  isZoomedSV,
 }: UseCarouselGestureOptions): UseCarouselGestureReturn {
   const translateX = useSharedValue(0);
   const isAnimating = useSharedValue(false);
   const hasTriggeredHaptic = useSharedValue(false);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mirror enabled into a shared value so the gesture useMemo doesn't rebuild
+  // when it flips — recomposing mid-session left RNGH stuck on iOS.
+  const enabledSV = useSharedValue(enabled);
+  useEffect(() => {
+    enabledSV.value = enabled;
+  }, [enabled, enabledSV]);
 
   const callbacksRef = useRef({ onSwipeNext, onSwipePrevious });
   callbacksRef.current = { onSwipeNext, onSwipePrevious };
@@ -64,12 +73,58 @@ export function useCarouselGesture({
     }, CLIP_EXIT_DURATION);
   };
 
+  // Lock direction on first significant move — matches the web pattern in
+  // useCardSwipeNavigation. Once locked horizontal, the gesture stays
+  // committed even if the user drifts vertically. failOffsetY would
+  // otherwise kill a horizontal swipe the moment Y drift crossed 10px,
+  // making carousel swipes finicky. Vertical-locked gestures fail so the
+  // touch falls through to BottomSheetScrollView.
+  const directionLock = useSharedValue<0 | 1 | -1>(0); // 0=undecided, 1=horizontal, -1=vertical
+  const startTouchX = useSharedValue(0);
+  const startTouchY = useSharedValue(0);
+
   const gesture = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-15, 15])
-        .failOffsetY([-10, 10])
-        .enabled(enabled)
+        .manualActivation(true)
+        .onTouchesDown((event) => {
+          'worklet';
+          directionLock.value = 0;
+          const touch = event.allTouches[0];
+          if (touch) {
+            startTouchX.value = touch.absoluteX;
+            startTouchY.value = touch.absoluteY;
+          }
+        })
+        .onTouchesMove((event, state) => {
+          'worklet';
+          if (!enabledSV.value || isZoomedSV?.value) {
+            state.fail();
+            return;
+          }
+          if (directionLock.value === 1) {
+            state.activate();
+            return;
+          }
+          if (directionLock.value === -1) {
+            state.fail();
+            return;
+          }
+          const touch = event.allTouches[0];
+          if (!touch) return;
+          const dx = touch.absoluteX - startTouchX.value;
+          const dy = touch.absoluteY - startTouchY.value;
+          const absX = Math.abs(dx);
+          const absY = Math.abs(dy);
+          if (absX <= DIRECTION_THRESHOLD && absY <= DIRECTION_THRESHOLD) return;
+          if (absX > absY) {
+            directionLock.value = 1;
+            state.activate();
+          } else {
+            directionLock.value = -1;
+            state.fail();
+          }
+        })
         .onStart(() => {
           'worklet';
           hasTriggeredHaptic.value = false;
@@ -108,7 +163,19 @@ export function useCarouselGesture({
             translateX.value = withSpring(0, springs.interactive);
           }
         }),
-    [enabled, canSwipeNext, canSwipePrevious, boardWidth, translateX, isAnimating, hasTriggeredHaptic],
+    [
+      canSwipeNext,
+      canSwipePrevious,
+      boardWidth,
+      translateX,
+      isAnimating,
+      hasTriggeredHaptic,
+      isZoomedSV,
+      enabledSV,
+      directionLock,
+      startTouchX,
+      startTouchY,
+    ],
   );
 
   return { gesture, translateX, isAnimating };

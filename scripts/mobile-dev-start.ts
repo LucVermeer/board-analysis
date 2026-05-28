@@ -10,6 +10,20 @@ import { resolveTailscaleHostname } from './lib/tailscale-hostname';
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const METRO_DEFAULT_PORT = '8081';
 const BOARDSESH_DIR = join(ROOT_DIR, '.boardsesh');
+
+function resolveMetroPort(args: string[]): string {
+  let port = METRO_DEFAULT_PORT;
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index];
+    if (argument === '--port' || argument === '-p') {
+      const next = args[index + 1];
+      if (next && !next.startsWith('-')) port = next;
+    } else if (argument.startsWith('--port=')) {
+      port = argument.slice('--port='.length);
+    }
+  }
+  return port;
+}
 const METRO_LOG_PATH = join(BOARDSESH_DIR, 'mobile-metro.log');
 const DEFAULT_QA_NOTES_PATH = join(BOARDSESH_DIR, 'qa-notes.md');
 
@@ -102,6 +116,7 @@ const { qaNotesFilePath: cliQaNotesPath, passthroughArgs } = parseArgs(process.a
 const branchName = resolveCurrentBranchName();
 const qaNotes = resolveQaNotes(cliQaNotesPath);
 const tailscale = resolveTailscaleHostname();
+const metroPort = resolveMetroPort(passthroughArgs);
 
 console.log(`[dev:mobile] Branch: ${branchName ?? '(detached)'}`);
 if (qaNotes.filePath) {
@@ -112,7 +127,7 @@ if (tailscale.reason) {
   console.log(`[dev:mobile] ${tailscale.reason}`);
 }
 if (tailscale.source !== 'fallback') {
-  console.log(`[dev:mobile] Metro: http://${tailscale.hostname}:${METRO_DEFAULT_PORT}`);
+  console.log(`[dev:mobile] Metro: http://${tailscale.hostname}:${metroPort}`);
 }
 console.log(`[dev:mobile] Metro log: .boardsesh/mobile-metro.log`);
 
@@ -130,9 +145,18 @@ if (tailscale.source !== 'fallback') {
 // Bind Metro on 0.0.0.0 (Expo's --host lan) so devices on the same Tailnet can
 // reach the bundler. Respect a user-supplied --host so manual overrides win.
 const userPassedHost = passthroughArgs.some((arg) => arg === '--host' || arg.startsWith('--host='));
-const expoArgs = userPassedHost
-  ? ['expo', 'start', ...passthroughArgs]
-  : ['expo', 'start', '--host', 'lan', ...passthroughArgs];
+// We ship a custom dev client (EAS preview-build flow); Metro must serve the
+// dev-client bundle, not the Expo Go one. Opt out by passing --go.
+const userPickedClient = passthroughArgs.some(
+  (arg) => arg === '--dev-client' || arg === '--go' || arg.startsWith('--dev-client=') || arg.startsWith('--go='),
+);
+const expoArgs = [
+  'expo',
+  'start',
+  ...(userPassedHost ? [] : ['--host', 'lan']),
+  ...(userPickedClient ? [] : ['--dev-client']),
+  ...passthroughArgs,
+];
 
 const child = spawn('bunx', expoArgs, {
   cwd: join(ROOT_DIR, 'packages', 'mobile'),
