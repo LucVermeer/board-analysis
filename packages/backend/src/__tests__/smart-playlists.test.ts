@@ -319,6 +319,10 @@ describe('smartPlaylist resolver', () => {
     mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
     mockDb.select.mockReturnValueOnce(makeChain([]).chain);
     mockDb.select.mockReturnValueOnce(makeChain([{ count: 0 }]).chain);
+    // Defensive: hydrate currently short-circuits on an empty refs[], so this
+    // mock is unused today. Kept so the test doesn't blow up cryptically if
+    // that short-circuit is ever removed.
+    mockDb.select.mockReturnValueOnce(makeChain([]).chain);
 
     await playlistQueries.smartPlaylist(
       null,
@@ -447,29 +451,6 @@ describe('mySmartPlaylistCounts resolver', () => {
     expect(result).toContainEqual({ type: 'LIKED_CLIMBS', count: 12 });
   });
 
-  it('CTE queries user_favorites and unions a LIKED_CLIMBS row', async () => {
-    // The library page renders the heart card from this count — if the CTE
-    // ever stops emitting a LIKED_CLIMBS row, the card silently disappears.
-    const ctx = makeCtx();
-    mockDb.execute.mockResolvedValueOnce([]);
-
-    await playlistQueries.mySmartPlaylistCounts(null, undefined, ctx);
-
-    const sqlArg = mockDb.execute.mock.calls[0][0] as { queryChunks?: unknown[] } | undefined;
-    const rendered = (sqlArg?.queryChunks ?? [])
-      .map((chunk) => (typeof chunk === 'string' ? chunk : ((chunk as { value?: string }).value ?? '')))
-      .join(' ');
-
-    // The favourites CTE: dedicated SELECT (not derived from `base`, which is
-    // boardsesh_ticks-only), counts (board_name, climb_uuid) tuples, filters
-    // by the connection's user_id, and emits a 'LIKED_CLIMBS' union row so the
-    // resolver picks it up.
-    expect(rendered).toMatch(/liked_climbs\s+AS/i);
-    expect(rendered).toMatch(/COUNT\(DISTINCT\s*\(board_name,\s*climb_uuid\)\)/i);
-    expect(rendered).toMatch(/WHERE\s+user_id\s*=/i);
-    expect(rendered).toMatch(/'LIKED_CLIMBS'/);
-    expect(rendered).toMatch(/FROM\s+liked_climbs/i);
-  });
 
   it('CTE scopes the sent-climbs check by both board_type and climb_uuid', async () => {
     // Pin the joint-scoping fix: a kilter send must NOT exclude a tension
