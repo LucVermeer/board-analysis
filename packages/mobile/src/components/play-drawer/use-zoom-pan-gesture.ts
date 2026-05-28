@@ -27,7 +27,11 @@ type UseZoomPanGestureReturn = {
   animatedZoomStyle: AnimatedStyle;
 };
 
-export function clampTranslation(
+// Worklet-callable copy of clampTranslation from @boardsesh/play-view. The
+// shared version is the canonical spec / test target; reanimated can't
+// reliably call non-worklet functions across module boundaries so we keep a
+// 'worklet'-marked clone here. Keep in sync.
+function clampTranslation(
   translationX: number,
   translationY: number,
   currentScale: number,
@@ -62,14 +66,24 @@ export function useZoomPanGesture({
   const pinchFocalX = useSharedValue(0);
   const pinchFocalY = useSharedValue(0);
 
-  // Mirror JS isZoomed / enabled on the UI thread so worklets can gate without
-  // putting those values in gesture useMemo deps — recomposing gestures
-  // mid-session left RNGH in a bad state on iOS (swipe.onEnd stopped firing).
+  // Mirror JS values onto the UI thread so worklets can gate without putting
+  // them in gesture useMemo deps — recomposing gestures mid-session left
+  // RNGH in a bad state on iOS (swipe.onEnd stopped firing). containerHeight
+  // also starts at 0 and updates after first onLayout; reading from a shared
+  // value keeps the gesture objects stable across that one-shot update.
   const isZoomedSV = useSharedValue(false);
   const enabledSV = useSharedValue(enabled);
+  const containerWidthSV = useSharedValue(containerWidth);
+  const containerHeightSV = useSharedValue(containerHeight);
   useEffect(() => {
     enabledSV.value = enabled;
   }, [enabled, enabledSV]);
+  useEffect(() => {
+    containerWidthSV.value = containerWidth;
+  }, [containerWidth, containerWidthSV]);
+  useEffect(() => {
+    containerHeightSV.value = containerHeight;
+  }, [containerHeight, containerHeightSV]);
 
   const [isZoomed, setIsZoomed] = useState(false);
 
@@ -114,8 +128,8 @@ export function useZoomPanGesture({
           if (!enabledSV.value) return;
           const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, savedScale.value * event.scale));
 
-          const focalOffsetX = pinchFocalX.value - containerWidth / 2;
-          const focalOffsetY = pinchFocalY.value - containerHeight / 2;
+          const focalOffsetX = pinchFocalX.value - containerWidthSV.value / 2;
+          const focalOffsetY = pinchFocalY.value - containerHeightSV.value / 2;
           const scaleDelta = newScale / savedScale.value;
           // Inlined from computeFocalPinchTranslation in @boardsesh/play-view
           // — keep in sync. Direct call from worklet across module boundaries
@@ -123,7 +137,7 @@ export function useZoomPanGesture({
           const newTranslateX = focalOffsetX * (1 - scaleDelta) + scaleDelta * savedTranslateX.value;
           const newTranslateY = focalOffsetY * (1 - scaleDelta) + scaleDelta * savedTranslateY.value;
 
-          const clamped = clampTranslation(newTranslateX, newTranslateY, newScale, containerWidth, containerHeight);
+          const clamped = clampTranslation(newTranslateX, newTranslateY, newScale, containerWidthSV.value, containerHeightSV.value);
           scale.value = newScale;
           translateX.value = clamped.x;
           translateY.value = clamped.y;
@@ -152,8 +166,6 @@ export function useZoomPanGesture({
           }
         }),
     [
-      containerWidth,
-      containerHeight,
       scale,
       translateX,
       translateY,
@@ -164,6 +176,8 @@ export function useZoomPanGesture({
       pinchFocalY,
       isZoomedSV,
       enabledSV,
+      containerWidthSV,
+      containerHeightSV,
       updateZoomState,
     ],
   );
@@ -185,7 +199,7 @@ export function useZoomPanGesture({
 
           const newX = savedTranslateX.value + event.translationX;
           const newY = savedTranslateY.value + event.translationY;
-          const clamped = clampTranslation(newX, newY, scale.value, containerWidth, containerHeight);
+          const clamped = clampTranslation(newX, newY, scale.value, containerWidthSV.value, containerHeightSV.value);
           translateX.value = clamped.x;
           translateY.value = clamped.y;
         })
@@ -195,7 +209,7 @@ export function useZoomPanGesture({
           savedTranslateX.value = translateX.value;
           savedTranslateY.value = translateY.value;
         }),
-    [containerWidth, containerHeight, scale, translateX, translateY, savedTranslateX, savedTranslateY, isZoomedSV, enabledSV],
+    [scale, translateX, translateY, savedTranslateX, savedTranslateY, isZoomedSV, enabledSV, containerWidthSV, containerHeightSV],
   );
 
   const animatedZoomStyle = useAnimatedStyle(() => ({

@@ -1,23 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
-import {
-  SWIPE_THRESHOLD,
-  EXIT_DURATION,
-  CLIP_EXIT_DURATION,
-  DISMISS_DRAG_THRESHOLD,
-  DISMISS_VELOCITY_THRESHOLD,
-} from '@boardsesh/play-view';
+import { SWIPE_THRESHOLD, EXIT_DURATION, CLIP_EXIT_DURATION } from '@boardsesh/play-view';
 import { springs } from '../../theme/animations';
 import { hapticMedium } from '../../lib/haptics';
 
 type UseCarouselGestureOptions = {
   onSwipeNext: () => void;
   onSwipePrevious: () => void;
-  // Fires on a meaningful downward swipe — used to close the drawer ourselves
-  // because the sheet's pan-to-close can't see touches while our gesture
-  // composition is active.
-  onDismiss?: () => void;
   canSwipeNext: boolean;
   canSwipePrevious: boolean;
   boardWidth: number;
@@ -36,7 +26,6 @@ type UseCarouselGestureReturn = {
 export function useCarouselGesture({
   onSwipeNext,
   onSwipePrevious,
-  onDismiss,
   canSwipeNext,
   canSwipePrevious,
   boardWidth,
@@ -55,8 +44,8 @@ export function useCarouselGesture({
     enabledSV.value = enabled;
   }, [enabled, enabledSV]);
 
-  const callbacksRef = useRef({ onSwipeNext, onSwipePrevious, onDismiss });
-  callbacksRef.current = { onSwipeNext, onSwipePrevious, onDismiss };
+  const callbacksRef = useRef({ onSwipeNext, onSwipePrevious });
+  callbacksRef.current = { onSwipeNext, onSwipePrevious };
 
   useEffect(
     () => () => {
@@ -84,17 +73,15 @@ export function useCarouselGesture({
     }, CLIP_EXIT_DURATION);
   };
 
-  const triggerDismiss = () => {
-    callbacksRef.current.onDismiss?.();
-  };
-
   const gesture = useMemo(
     () =>
       Gesture.Pan()
-        // Activate on either X (navigation) or Y (dismiss). No failOffsetY —
-        // we handle vertical dismiss in onEnd ourselves.
+        // Horizontal-only: activate on X motion, fail on Y. Vertical drags
+        // fall through to the BottomSheetScrollView so the user can scroll
+        // the drawer (and reach the sheet handle to dismiss). Cost: no
+        // swipe-to-dismiss directly on the climb image.
         .activeOffsetX([-15, 15])
-        .activeOffsetY([-15, 15])
+        .failOffsetY([-10, 10])
         .onStart(() => {
           'worklet';
           hasTriggeredHaptic.value = false;
@@ -104,11 +91,6 @@ export function useCarouselGesture({
           if (!enabledSV.value) return;
           if (isZoomedSV?.value) return;
           if (isAnimating.value) return;
-
-          // Only update carousel translateX for horizontal-dominant drags;
-          // vertical drags resolve at end (dismiss vs. spring back).
-          const horizontalDominant = Math.abs(event.translationX) > Math.abs(event.translationY);
-          if (!horizontalDominant) return;
 
           let offset = event.translationX;
 
@@ -122,7 +104,7 @@ export function useCarouselGesture({
             runOnJS(triggerHaptic)();
           }
         })
-        .onEnd((event) => {
+        .onEnd(() => {
           'worklet';
           if (!enabledSV.value) return;
           if (isZoomedSV?.value) {
@@ -130,16 +112,6 @@ export function useCarouselGesture({
             return;
           }
           if (isAnimating.value) return;
-
-          const dx = event.translationX;
-          const dy = event.translationY;
-          const horizontalDominant = Math.abs(dx) > Math.abs(dy);
-
-          if (!horizontalDominant && (dy > DISMISS_DRAG_THRESHOLD || event.velocityY > DISMISS_VELOCITY_THRESHOLD)) {
-            translateX.value = withSpring(0, springs.interactive);
-            runOnJS(triggerDismiss)();
-            return;
-          }
 
           const offset = translateX.value;
 

@@ -1,25 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { MIN_SCALE, MAX_SCALE, ZOOM_THRESHOLD, computeFocalPinchTranslation } from '@boardsesh/play-view';
-
-// clampTranslation is a worklet — importing it pulls in react-native-reanimated
-// which doesn't resolve in vitest. Re-declare the pure function here for testing.
-function clampTranslation(
-  translationX: number,
-  translationY: number,
-  currentScale: number,
-  containerWidth: number,
-  containerHeight: number,
-): { x: number; y: number } {
-  if (currentScale <= 1) return { x: 0, y: 0 };
-
-  const maxX = (containerWidth * (currentScale - 1)) / 2;
-  const maxY = (containerHeight * (currentScale - 1)) / 2;
-
-  return {
-    x: Math.max(-maxX, Math.min(maxX, translationX)),
-    y: Math.max(-maxY, Math.min(maxY, translationY)),
-  };
-}
+import {
+  MIN_SCALE,
+  MAX_SCALE,
+  ZOOM_THRESHOLD,
+  clampTranslation,
+  computeFocalPinchTranslation,
+} from '@boardsesh/play-view';
 
 describe('clampTranslation', () => {
   const containerWidth = 400;

@@ -38,7 +38,6 @@ type SwipeBoardCarouselProps = {
   canSwipePrevious: boolean;
   onSwipeNext: () => void;
   onSwipePrevious: () => void;
-  onDismiss?: () => void;
   // Fires whenever the local resetZoom callback identity is established or
   // changes — lets the parent stash it for the tick-FAB flow that needs to
   // reset zoom before opening the tick bar.
@@ -60,7 +59,6 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   canSwipePrevious,
   onSwipeNext,
   onSwipePrevious,
-  onDismiss,
   onResetZoomReady,
   enabled = true,
 }: SwipeBoardCarouselProps) {
@@ -104,7 +102,6 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   const { gesture: swipeGesture, translateX } = useCarouselGesture({
     onSwipeNext,
     onSwipePrevious,
-    onDismiss,
     canSwipeNext,
     canSwipePrevious,
     boardWidth: screenWidth,

@@ -231,10 +231,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     resetZoomRef.current = resetFn;
   }, []);
 
-  const handleDismiss = useCallback(() => {
-    sheetRef.current?.dismiss();
-  }, []);
-
   const handleSimilarClimbPress = useCallback(
     (similarClimb: Climb) => {
       setClimb(similarClimb);
@@ -278,7 +274,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         <BottomSheetScrollView
           style={styles.content}
           contentContainerStyle={{ paddingTop: spacing[2], paddingBottom: insets.bottom }}
-          scrollEnabled={true}
         >
           <Pressable
             onPress={() => sheetRef.current?.dismiss()}
@@ -317,7 +312,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     canSwipePrevious={navigationState.canPrevious}
                     onSwipeNext={handleNext}
                     onSwipePrevious={handlePrev}
-                    onDismiss={handleDismiss}
                     onResetZoomReady={handleResetZoomReady}
                     enabled={!isTickBarActive}
                   />
