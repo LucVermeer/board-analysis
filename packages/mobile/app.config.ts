@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const DEFAULT_EAS_PROJECT_ID = '87499648-655e-4fb8-9856-65da37e55fb1';
@@ -19,9 +20,49 @@ function resolveDevMetadata(): {
   return { branchName, qaNotes, qaNotesFilePath };
 }
 
+function resolveTailscaleHosts(): string[] {
+  // Explicit override — accepted as comma-separated hosts. Honoured even when
+  // empty so cloud builds (EAS, CI) can short-circuit the tailscale probe by
+  // setting TAILSCALE_HOSTS= without paying the 2s subprocess timeout.
+  const envHosts = process.env.TAILSCALE_HOSTS;
+  if (envHosts !== undefined) {
+    return envHosts
+      .split(',')
+      .map((host) => host.trim())
+      .filter((host) => host.length > 0);
+  }
+
+  // Skip the subprocess on known cloud build environments — tailscale CLI
+  // never exists there, and the failing exec still costs the 2s timeout.
+  if (process.env.CI || process.env.EAS_BUILD || process.env.EAS_BUILD_RUNNER) {
+    return [];
+  }
+
+  try {
+    const raw = execSync('tailscale status --json', {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
+    }).toString();
+    const status = JSON.parse(raw) as {
+      Self?: { DNSName?: string; Online?: boolean };
+      Peer?: Record<string, { DNSName?: string; Online?: boolean }>;
+    };
+    const stripDot = (name: string) => name.replace(/\.$/, '');
+    const hosts: string[] = [];
+    if (status.Self?.DNSName) hosts.push(stripDot(status.Self.DNSName));
+    for (const peer of Object.values(status.Peer ?? {})) {
+      if (peer.Online && peer.DNSName) hosts.push(stripDot(peer.DNSName));
+    }
+    return Array.from(new Set(hosts.filter((host) => host.length > 0)));
+  } catch {
+    return [];
+  }
+}
+
 export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: boolean } => {
   const devMetadata = resolveDevMetadata();
   const hasDevMetadata = devMetadata.branchName || devMetadata.qaNotes || devMetadata.qaNotesFilePath;
+  const tailscaleHosts = resolveTailscaleHosts();
 
   return {
     ...config,
@@ -34,6 +75,9 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    // Mobile-only; opting out of web keeps `expo export --platform=all` from
+    // failing on missing `react-native-web` during EAS Update publishes.
+    platforms: ['ios', 'android'],
     // Board backgrounds are bundled via explicit require() in
     // src/lib/board-backgrounds-manifest.ts (canonical files live in
     // packages/web/public/images, no duplication), so they're picked up
@@ -117,6 +161,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
             },
           }
         : {}),
+      ...(tailscaleHosts.length > 0 ? { tailscaleHosts } : {}),
     },
   };
 };

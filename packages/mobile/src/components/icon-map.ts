@@ -104,6 +104,10 @@ export const iconMap = {
   // closest neutral "short-form video clip" cue and matches our visual
   // placement (small badge on a video thumbnail).
   tiktok: { ios: 'play.rectangle.fill', android: 'play-box' },
+
+  // Dev tools
+  branch: { ios: 'arrow.triangle.branch', android: 'source-branch' },
+  server: { ios: 'server.rack', android: 'server-network' },
 } as const satisfies Record<string, IconMapping>;
 
 export type IconName = keyof typeof iconMap;

@@ -1,16 +1,55 @@
-import { Text, ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
+import { SectionHeader } from '../../../src/components/SectionHeader';
+import { ListRow } from '../../../src/components/ListRow';
+import { Icon } from '../../../src/components/Icon';
+import { isPreviewBuild } from '../../../src/lib/eas-api';
 
 export default function MoreScreen() {
   const { systemColors } = useTheme();
   const { t } = useTranslation('common');
+  const router = useRouter();
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <DevMetadataPanel />
-      <Text style={[styles.text, { color: systemColors.secondaryLabel }]}>{t('mobile.more.title')}</Text>
+
+      {__DEV__ ? (
+        <>
+          {/* i18n-ignore-next-line — dev-only section */}
+          <SectionHeader title="Development Build" />
+          <ListRow
+            // i18n-ignore-next-line
+            title="Metro Bundler"
+            // i18n-ignore-next-line
+            subtitle="Switch Metro dev server"
+            leading={<Icon name="server" size={22} color={systemColors.label} />}
+            showChevron
+            showSeparator={false}
+            onPress={() => router.push('/(tabs)/more/dev-server-switcher')}
+          />
+        </>
+      ) : null}
+
+      {isPreviewBuild() ? (
+        <>
+          {/* i18n-ignore-next-line — preview-only section */}
+          <SectionHeader title="Preview Build" />
+          <ListRow
+            // i18n-ignore-next-line
+            title="Branch Switcher"
+            // i18n-ignore-next-line
+            subtitle="Switch EAS Update branch"
+            leading={<Icon name="branch" size={22} color={systemColors.label} />}
+            showChevron
+            showSeparator={false}
+            onPress={() => router.push('/(tabs)/more/branch-switcher')}
+          />
+        </>
+      ) : null}
     </ScrollView>
   );
 }
@@ -18,10 +57,5 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  text: {
-    fontSize: 17,
   },
 });
