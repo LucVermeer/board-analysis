@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MIN_SCALE, MAX_SCALE, ZOOM_THRESHOLD } from '@boardsesh/play-view';
+import { MIN_SCALE, MAX_SCALE, ZOOM_THRESHOLD, computeFocalPinchTranslation } from '@boardsesh/play-view';
 
 // clampTranslation is a worklet — importing it pulls in react-native-reanimated
 // which doesn't resolve in vitest. Re-declare the pure function here for testing.
@@ -96,58 +96,57 @@ describe('zoom constants', () => {
   });
 });
 
-describe('focal point zoom math', () => {
+describe('computeFocalPinchTranslation', () => {
+  // First three tests cover the savedTranslate=0 case (initial pinch from
+  // rest). They pass under both the correct formula and the historical
+  // buggy `savedTranslate + focalOffset*(1-scaleDelta)` formula, since the
+  // savedTranslate term vanishes either way.
+
   it('zooming at center produces no translation shift', () => {
-    const containerW = 400;
-    const containerH = 600;
-    const focalX = containerW / 2;
-    const focalY = containerH / 2;
-    const savedScale = 1;
-    const newScale = 2;
-
-    const focalOffsetX = focalX - containerW / 2;
-    const focalOffsetY = focalY - containerH / 2;
-    const scaleDelta = newScale / savedScale;
-    const newTranslateX = 0 + focalOffsetX * (1 - scaleDelta);
-    const newTranslateY = 0 + focalOffsetY * (1 - scaleDelta);
-
-    expect(newTranslateX).toBe(0);
-    expect(newTranslateY).toBe(0);
+    expect(
+      computeFocalPinchTranslation({ focalOffset: 0, scaleDelta: 2, savedTranslate: 0 }),
+    ).toBe(0);
   });
 
-  it('zooming at top-left corner shifts content toward center', () => {
-    const containerW = 400;
-    const containerH = 600;
-    const focalX = 0;
-    const focalY = 0;
-    const savedScale = 1;
-    const newScale = 2;
-
-    const focalOffsetX = focalX - containerW / 2; // -200
-    const focalOffsetY = focalY - containerH / 2; // -300
-    const scaleDelta = newScale / savedScale; // 2
-    const newTranslateX = 0 + focalOffsetX * (1 - scaleDelta); // -200 * -1 = 200
-    const newTranslateY = 0 + focalOffsetY * (1 - scaleDelta); // -300 * -1 = 300
-
-    expect(newTranslateX).toBe(200);
-    expect(newTranslateY).toBe(300);
+  it('zooming at offset shifts content toward center', () => {
+    // Focal point 200 left of center, zooming to 2x: content should shift
+    // 200px to the right to keep that point under the focal.
+    expect(
+      computeFocalPinchTranslation({ focalOffset: -200, scaleDelta: 2, savedTranslate: 0 }),
+    ).toBe(200);
   });
 
-  it('zooming at bottom-right corner shifts opposite direction', () => {
-    const containerW = 400;
-    const containerH = 600;
-    const focalX = 400;
-    const focalY = 600;
-    const savedScale = 1;
-    const newScale = 2;
+  it('zooming at opposite offset shifts content opposite direction', () => {
+    expect(
+      computeFocalPinchTranslation({ focalOffset: 200, scaleDelta: 2, savedTranslate: 0 }),
+    ).toBe(-200);
+  });
 
-    const focalOffsetX = focalX - containerW / 2; // 200
-    const focalOffsetY = focalY - containerH / 2; // 300
-    const scaleDelta = newScale / savedScale;
-    const newTranslateX = 0 + focalOffsetX * (1 - scaleDelta); // 200 * -1 = -200
-    const newTranslateY = 0 + focalOffsetY * (1 - scaleDelta); // 300 * -1 = -300
+  // These tests exercise the savedTranslate != 0 case — pinching while
+  // already zoomed. They would fail under the buggy formula, which used
+  // `savedTranslate + focalOffset*(1-scaleDelta)`.
 
-    expect(newTranslateX).toBe(-200);
-    expect(newTranslateY).toBe(-300);
+  it('continuing a pinch with no scale change preserves the existing translation', () => {
+    // scaleDelta = 1 means no scale change. Translation must stay put.
+    expect(
+      computeFocalPinchTranslation({ focalOffset: 50, scaleDelta: 1, savedTranslate: 30 }),
+    ).toBe(30);
+  });
+
+  it('pinching at a focal point with existing translation applies scaleDelta to savedTranslate', () => {
+    // Buggy formula gives: 30 + 50*(1-2) = -20
+    // Correct formula gives: 50*(1-2) + 2*30 = -50 + 60 = 10
+    expect(
+      computeFocalPinchTranslation({ focalOffset: 50, scaleDelta: 2, savedTranslate: 30 }),
+    ).toBe(10);
+  });
+
+  it('pinching in (scaleDelta < 1) from a translated state shrinks the translation', () => {
+    // Going from 2x to 1x (scaleDelta = 0.5), with existing 100px translate.
+    // Buggy formula: 100 + 0*(1-0.5) = 100 — keeps full translation
+    // Correct formula: 0*(1-0.5) + 0.5*100 = 50 — translation halves with scale
+    expect(
+      computeFocalPinchTranslation({ focalOffset: 0, scaleDelta: 0.5, savedTranslate: 100 }),
+    ).toBe(50);
   });
 });

@@ -1,24 +1,27 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSpring, runOnJS, type SharedValue } from 'react-native-reanimated';
-import { SWIPE_THRESHOLD, EXIT_DURATION, CLIP_EXIT_DURATION } from '@boardsesh/play-view';
+import {
+  SWIPE_THRESHOLD,
+  EXIT_DURATION,
+  CLIP_EXIT_DURATION,
+  DISMISS_DRAG_THRESHOLD,
+  DISMISS_VELOCITY_THRESHOLD,
+} from '@boardsesh/play-view';
 import { springs } from '../../theme/animations';
 import { hapticMedium } from '../../lib/haptics';
 
 type UseCarouselGestureOptions = {
   onSwipeNext: () => void;
   onSwipePrevious: () => void;
-  // Called when the user swipes down meaningfully (drag distance or velocity
-  // crosses the dismiss threshold) — used to close the drawer when our
-  // gesture is capturing the touch and the sheet's own pan-to-close can't.
-  onSwipeDownDismiss?: () => void;
+  // Fires on a meaningful downward swipe — used to close the drawer ourselves
+  // because the sheet's pan-to-close can't see touches while our gesture
+  // composition is active.
+  onDismiss?: () => void;
   canSwipeNext: boolean;
   canSwipePrevious: boolean;
   boardWidth: number;
   enabled?: boolean;
-  // Optional shared-value gate. Checked on the UI thread so the swipe gesture
-  // object stays stable when zoom toggles, avoiding GestureDetector re-registration
-  // that can interfere with the just-ended pinch.
   isZoomedSV?: SharedValue<boolean>;
 };
 
@@ -33,7 +36,7 @@ type UseCarouselGestureReturn = {
 export function useCarouselGesture({
   onSwipeNext,
   onSwipePrevious,
-  onSwipeDownDismiss,
+  onDismiss,
   canSwipeNext,
   canSwipePrevious,
   boardWidth,
@@ -45,8 +48,15 @@ export function useCarouselGesture({
   const hasTriggeredHaptic = useSharedValue(false);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const callbacksRef = useRef({ onSwipeNext, onSwipePrevious, onSwipeDownDismiss });
-  callbacksRef.current = { onSwipeNext, onSwipePrevious, onSwipeDownDismiss };
+  // Mirror enabled into a shared value so the gesture useMemo doesn't rebuild
+  // when it flips — recomposing mid-session left RNGH stuck on iOS.
+  const enabledSV = useSharedValue(enabled);
+  useEffect(() => {
+    enabledSV.value = enabled;
+  }, [enabled, enabledSV]);
+
+  const callbacksRef = useRef({ onSwipeNext, onSwipePrevious, onDismiss });
+  callbacksRef.current = { onSwipeNext, onSwipePrevious, onDismiss };
 
   useEffect(
     () => () => {
@@ -75,30 +85,28 @@ export function useCarouselGesture({
   };
 
   const triggerDismiss = () => {
-    callbacksRef.current.onSwipeDownDismiss?.();
+    callbacksRef.current.onDismiss?.();
   };
 
   const gesture = useMemo(
     () =>
       Gesture.Pan()
-        // Activate on either X (navigation) or Y (dismiss) motion. No failOffsetY
-        // — we handle vertical dismiss ourselves in onEnd because the sheet's
-        // built-in pan-to-close can't claim the touch while our gesture
-        // composition is active.
+        // Activate on either X (navigation) or Y (dismiss). No failOffsetY —
+        // we handle vertical dismiss in onEnd ourselves.
         .activeOffsetX([-15, 15])
         .activeOffsetY([-15, 15])
-        .enabled(enabled)
         .onStart(() => {
           'worklet';
           hasTriggeredHaptic.value = false;
         })
         .onUpdate((event) => {
           'worklet';
+          if (!enabledSV.value) return;
           if (isZoomedSV?.value) return;
           if (isAnimating.value) return;
 
           // Only update carousel translateX for horizontal-dominant drags;
-          // vertical drags are handled at end (dismiss vs. spring back).
+          // vertical drags resolve at end (dismiss vs. spring back).
           const horizontalDominant = Math.abs(event.translationX) > Math.abs(event.translationY);
           if (!horizontalDominant) return;
 
@@ -116,6 +124,7 @@ export function useCarouselGesture({
         })
         .onEnd((event) => {
           'worklet';
+          if (!enabledSV.value) return;
           if (isZoomedSV?.value) {
             translateX.value = withSpring(0, springs.interactive);
             return;
@@ -124,12 +133,9 @@ export function useCarouselGesture({
 
           const dx = event.translationX;
           const dy = event.translationY;
-          const vy = event.velocityY;
           const horizontalDominant = Math.abs(dx) > Math.abs(dy);
 
-          // Dismiss on a clear downward fling or drag — matches sheet UX even
-          // though the sheet's own pan can't see this touch.
-          if (!horizontalDominant && (dy > 80 || vy > 800)) {
+          if (!horizontalDominant && (dy > DISMISS_DRAG_THRESHOLD || event.velocityY > DISMISS_VELOCITY_THRESHOLD)) {
             translateX.value = withSpring(0, springs.interactive);
             runOnJS(triggerDismiss)();
             return;
@@ -149,7 +155,7 @@ export function useCarouselGesture({
             translateX.value = withSpring(0, springs.interactive);
           }
         }),
-    [enabled, canSwipeNext, canSwipePrevious, boardWidth, translateX, isAnimating, hasTriggeredHaptic, isZoomedSV],
+    [canSwipeNext, canSwipePrevious, boardWidth, translateX, isAnimating, hasTriggeredHaptic, isZoomedSV, enabledSV],
   );
 
   return { gesture, translateX, isAnimating };

@@ -89,7 +89,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
-  const [isBoardZoomed, setIsBoardZoomed] = useState(false);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
@@ -228,9 +227,12 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
   }, []);
 
-  const handleZoomChange = useCallback((zoomed: boolean, resetFn: () => void) => {
-    setIsBoardZoomed(zoomed);
+  const handleResetZoomReady = useCallback((resetFn: () => void) => {
     resetZoomRef.current = resetFn;
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    sheetRef.current?.dismiss();
   }, []);
 
   const handleSimilarClimbPress = useCallback(
@@ -315,8 +317,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     canSwipePrevious={navigationState.canPrevious}
                     onSwipeNext={handleNext}
                     onSwipePrevious={handlePrev}
-                    onSwipeDownDismiss={() => sheetRef.current?.dismiss()}
-                    onZoomChange={handleZoomChange}
+                    onDismiss={handleDismiss}
+                    onResetZoomReady={handleResetZoomReady}
                     enabled={!isTickBarActive}
                   />
                 )}

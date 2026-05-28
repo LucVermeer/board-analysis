@@ -37,8 +37,11 @@ type SwipeBoardCarouselProps = {
   canSwipePrevious: boolean;
   onSwipeNext: () => void;
   onSwipePrevious: () => void;
-  onSwipeDownDismiss?: () => void;
-  onZoomChange?: (isZoomed: boolean, resetZoom: () => void) => void;
+  onDismiss?: () => void;
+  // Fires whenever the local resetZoom callback identity is established or
+  // changes — lets the parent stash it for the tick-FAB flow that needs to
+  // reset zoom before opening the tick bar.
+  onResetZoomReady?: (resetZoom: () => void) => void;
   enabled?: boolean;
 };
 
@@ -56,8 +59,8 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   canSwipePrevious,
   onSwipeNext,
   onSwipePrevious,
-  onSwipeDownDismiss,
-  onZoomChange,
+  onDismiss,
+  onResetZoomReady,
   enabled = true,
 }: SwipeBoardCarouselProps) {
   const { t } = useTranslation('session');
@@ -77,26 +80,27 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     containerHeight,
   });
 
-  const onZoomChangeRef = useRef(onZoomChange);
-  onZoomChangeRef.current = onZoomChange;
+  const onResetZoomReadyRef = useRef(onResetZoomReady);
+  onResetZoomReadyRef.current = onResetZoomReady;
 
   useEffect(() => {
-    onZoomChangeRef.current?.(isZoomed, resetZoom);
-  }, [isZoomed, resetZoom]);
+    onResetZoomReadyRef.current?.(resetZoom);
+  }, [resetZoom]);
 
-  // Reset zoom when climb changes
+  // Reset zoom on climb change, but only if actually zoomed — otherwise it's
+  // just a no-op withTiming(1→1) and a setState(false→false).
   const prevFramesRef = useRef(currentFrames);
   useEffect(() => {
     if (prevFramesRef.current !== currentFrames) {
       prevFramesRef.current = currentFrames;
-      resetZoom();
+      if (isZoomed) resetZoom();
     }
-  }, [currentFrames, resetZoom]);
+  }, [currentFrames, isZoomed, resetZoom]);
 
   const { gesture: swipeGesture, translateX } = useCarouselGesture({
     onSwipeNext,
     onSwipePrevious,
-    onSwipeDownDismiss,
+    onDismiss,
     canSwipeNext,
     canSwipePrevious,
     boardWidth: screenWidth,
@@ -104,8 +108,6 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     isZoomedSV,
   });
 
-  // Reset-button visibility tracks isZoomed via animated opacity so the
-  // button can fade in/out smoothly without affecting layout.
   const resetButtonOpacity = useSharedValue(0);
   useEffect(() => {
     resetButtonOpacity.value = withTiming(isZoomed ? 1 : 0, { duration: timing.fast });
@@ -145,13 +147,9 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   const { boardWidth, boardHeight } = boardRenderData;
   const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
 
-  // Stable composition — never swap based on isZoomed state. Swapping the
-  // composedGesture causes RNGH to detach/reattach handlers, and after a
-  // couple of cycles the swipe gesture stopped firing onEnd reliably on iOS.
-  // Each gesture instead gates its own behaviour on isZoomedSV inside the
-  // worklet: zoomPan only pans when isZoomedSV is true, swipe only
-  // navigates/dismisses when isZoomedSV is false. With minPointers(1)/
-  // maxPointers(1), zoomPan fails harmlessly during 2-finger pinches.
+  // Stable composition: never swap based on state. Each gesture gates itself
+  // on shared values in its worklets, so the composition can be built once and
+  // RNGH never re-registers handlers mid-session.
   const composedGesture = React.useMemo(
     () => Gesture.Simultaneous(pinchGesture, zoomPanGesture, swipeGesture),
     [pinchGesture, zoomPanGesture, swipeGesture],

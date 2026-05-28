@@ -14,6 +14,29 @@ export const MIN_SCALE = 1;
 export const MAX_SCALE = 4;
 export const ZOOM_THRESHOLD = 1.02;
 
+// Swipe-down-to-dismiss thresholds. Mobile detects these in the carousel's
+// onEnd because the bottom sheet's own pan-to-close can't see touches while
+// our gesture composition is active.
+export const DISMISS_DRAG_THRESHOLD = 80;
+export const DISMISS_VELOCITY_THRESHOLD = 800;
+
+// Pinch-zoom focal-point math: keep the point under the focal stationary
+// across a scale change. The savedTranslate term must be multiplied by
+// scaleDelta — pinching from an already-zoomed state with the wrong formula
+// drifts the focal point off the user's fingers.
+export function computeFocalPinchTranslation({
+  focalOffset,
+  scaleDelta,
+  savedTranslate,
+}: {
+  focalOffset: number;
+  scaleDelta: number;
+  savedTranslate: number;
+}): number {
+  'worklet';
+  return focalOffset * (1 - scaleDelta) + scaleDelta * savedTranslate;
+}
+
 export type SwipeDirection = 'left' | 'right';
 export type AnimationDirection = SwipeDirection | null;
 export type EnterDirection = 'from-left' | 'from-right';
