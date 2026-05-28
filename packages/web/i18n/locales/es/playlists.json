@@ -42,6 +42,10 @@
         "title": "Proyectos",
         "description": "Bloques en los que más has trabajado sin encadenar."
       },
+      "likedClimbs": {
+        "title": "Bloques favoritos",
+        "description": "Todos los bloques que has marcado con corazón."
+      },
       "notFound": {
         "title": "Playlist inteligente no encontrada",
         "description": "Esta playlist inteligente no existe."

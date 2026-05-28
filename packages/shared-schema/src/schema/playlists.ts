@@ -390,15 +390,17 @@ export const playlistsTypeDefs = /* GraphQL */ `
   # ============================================
 
   """
-  A computed playlist generated from a user's logbook.
+  A computed playlist generated from a user's logbook or favourites.
   - FIVE_STARS: climbs the user has rated 5/5
   - MOST_REPEATED: climbs the user has logged the most attempts on
   - PROJECTS: climbs with the most attempts that have never been sent
+  - LIKED_CLIMBS: climbs the user has favourited
   """
   enum SmartPlaylistType {
     FIVE_STARS
     MOST_REPEATED
     PROJECTS
+    LIKED_CLIMBS
   }
 
   """

@@ -620,7 +620,7 @@ export type UnfollowPlaylistMutationResponse = {
 // Smart (computed) Playlist Types and Operations
 // ============================================
 
-export type SmartPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS';
+export type SmartPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS' | 'LIKED_CLIMBS';
 
 export type SmartPlaylistMeta = {
   type: SmartPlaylistType;

@@ -1,7 +1,7 @@
 import type { SmartPlaylistType } from '@boardsesh/graphql/operations/playlists';
 import { themeTokens } from '@/app/theme/theme-config';
 
-export type SmartPlaylistSlug = 'five-stars' | 'most-repeated' | 'projects';
+export type SmartPlaylistSlug = 'five-stars' | 'most-repeated' | 'projects' | 'liked-climbs';
 
 export type SmartPlaylistPresentation = {
   type: SmartPlaylistType;
@@ -38,6 +38,14 @@ export const SMART_PLAYLISTS: SmartPlaylistPresentation[] = [
     color: themeTokens.colors.accentRose,
     titleI18nKey: 'library.smart.projects.title',
     descriptionI18nKey: 'library.smart.projects.description',
+  },
+  {
+    type: 'LIKED_CLIMBS',
+    slug: 'liked-climbs',
+    icon: '❤️',
+    color: themeTokens.colors.pink,
+    titleI18nKey: 'library.smart.likedClimbs.title',
+    descriptionI18nKey: 'library.smart.likedClimbs.description',
   },
 ];
 

@@ -264,6 +264,78 @@ describe('smartPlaylist resolver', () => {
     expect(notInArraySpy).not.toHaveBeenCalled();
   });
 
+  it('LIKED_CLIMBS reads user_favorites, applies board filter, dedups across angles, orders by latest like', async () => {
+    const ctx = makeCtx();
+
+    // user lookup
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+    // page query — favorites have an angle column, so we dedupe via GROUP BY
+    // (board_name, climb_uuid) to avoid returning the same climb twice when a
+    // user has favourited it at multiple angles.
+    const { chain: pageChain, calls: pageCalls } = makeChain([
+      { climbUuid: 'fav1', boardType: 'kilter' },
+      { climbUuid: 'fav2', boardType: 'kilter' },
+    ]);
+    mockDb.select.mockReturnValueOnce(pageChain);
+    // count query
+    mockDb.select.mockReturnValueOnce(makeChain([{ count: 7 }]).chain);
+    // hydrate (called with refs array)
+    mockDb.select.mockReturnValueOnce(makeChain([]).chain);
+
+    const result = await playlistQueries.smartPlaylist(
+      null,
+      {
+        input: { type: 'LIKED_CLIMBS', userId: 'user-123', boardName: 'kilter', page: 1, pageSize: 5 },
+      },
+      ctx,
+    );
+
+    expect(result.totalCount).toBe(7);
+    expect(result.hasMore).toBe(false); // (1+1)*5 = 10 >= 7
+    expect(pageCalls.limit[0]).toEqual([5]);
+    expect(pageCalls.offset[0]).toEqual([5]);
+
+    // Dedup: GROUP BY (climbUuid, boardName)
+    expect(pageCalls.groupBy.length).toBe(1);
+    expect(pageCalls.groupBy[0]).toEqual([dbSchema.userFavorites.climbUuid, dbSchema.userFavorites.boardName]);
+    // Ordered (by max(createdAt) DESC); we just assert orderBy was called
+    expect(pageCalls.orderBy.length).toBe(1);
+
+    // Both page and count must filter by both userId and boardName — a missing
+    // boardName filter on either side would make the count card show all-boards
+    // while the detail page is board-scoped (or vice versa).
+    const userIdFilters = eqSpy.mock.calls.filter(
+      ([col, val]) => col === dbSchema.userFavorites.userId && val === 'user-123',
+    );
+    expect(userIdFilters.length).toBeGreaterThanOrEqual(2);
+    const boardFilters = eqSpy.mock.calls.filter(
+      ([col, val]) => col === dbSchema.userFavorites.boardName && val === 'kilter',
+    );
+    expect(boardFilters.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('LIKED_CLIMBS without boardName does not filter by board (cross-board view)', async () => {
+    const ctx = makeCtx();
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+    mockDb.select.mockReturnValueOnce(makeChain([]).chain);
+    mockDb.select.mockReturnValueOnce(makeChain([{ count: 0 }]).chain);
+    // Defensive: hydrate currently short-circuits on an empty refs[], so this
+    // mock is unused today. Kept so the test doesn't blow up cryptically if
+    // that short-circuit is ever removed.
+    mockDb.select.mockReturnValueOnce(makeChain([]).chain);
+
+    await playlistQueries.smartPlaylist(
+      null,
+      {
+        input: { type: 'LIKED_CLIMBS', userId: 'user-123' },
+      },
+      ctx,
+    );
+
+    const boardFilters = eqSpy.mock.calls.filter(([col]) => col === dbSchema.userFavorites.boardName);
+    expect(boardFilters.length).toBe(0);
+  });
+
   it('throws when user does not exist', async () => {
     const ctx = makeCtx();
     mockDb.select.mockReturnValueOnce(makeChain([]).chain);
@@ -326,6 +398,7 @@ describe('mySmartPlaylistCounts resolver', () => {
       { type: 'FIVE_STARS', count: 7 },
       { type: 'MOST_REPEATED', count: 3 },
       { type: 'PROJECTS', count: 5 },
+      { type: 'LIKED_CLIMBS', count: 0 },
     ]);
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
   });
@@ -346,6 +419,7 @@ describe('mySmartPlaylistCounts resolver', () => {
       { type: 'FIVE_STARS', count: 1 },
       { type: 'MOST_REPEATED', count: 2 },
       { type: 'PROJECTS', count: 3 },
+      { type: 'LIKED_CLIMBS', count: 0 },
     ]);
   });
 
@@ -359,8 +433,24 @@ describe('mySmartPlaylistCounts resolver', () => {
       { type: 'FIVE_STARS', count: 9 },
       { type: 'MOST_REPEATED', count: 0 },
       { type: 'PROJECTS', count: 0 },
+      { type: 'LIKED_CLIMBS', count: 0 },
     ]);
   });
+
+  it('surfaces a non-zero LIKED_CLIMBS count from the CTE', async () => {
+    const ctx = makeCtx();
+
+    mockDb.execute.mockResolvedValueOnce([
+      { type: 'FIVE_STARS', count: 7 },
+      { type: 'MOST_REPEATED', count: 3 },
+      { type: 'PROJECTS', count: 5 },
+      { type: 'LIKED_CLIMBS', count: 12 },
+    ]);
+
+    const result = await playlistQueries.mySmartPlaylistCounts(null, undefined, ctx);
+    expect(result).toContainEqual({ type: 'LIKED_CLIMBS', count: 12 });
+  });
+
 
   it('CTE scopes the sent-climbs check by both board_type and climb_uuid', async () => {
     // Pin the joint-scoping fix: a kilter send must NOT exclude a tension
