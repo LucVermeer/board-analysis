@@ -148,12 +148,13 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   const { boardWidth, boardHeight } = boardRenderData;
   const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
 
-  // Stable composition: never swap based on state. Each gesture gates itself
-  // on shared values in its worklets, so the composition can be built once and
-  // RNGH never re-registers handlers mid-session.
+  // Outer composition: pinch + swipe always. zoomPan is rendered separately
+  // as a conditional overlay when zoomed (see below) so it doesn't claim
+  // 1-finger touches in the idle state. That keeps swipe navigation working
+  // and lets vertical drags fall through to BottomSheetScrollView.
   const composedGesture = React.useMemo(
-    () => Gesture.Simultaneous(pinchGesture, zoomPanGesture, swipeGesture),
-    [pinchGesture, zoomPanGesture, swipeGesture],
+    () => Gesture.Simultaneous(pinchGesture, swipeGesture),
+    [pinchGesture, swipeGesture],
   );
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -193,6 +194,16 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
           )}
         </Animated.View>
 
+        {/* Pan-while-zoomed overlay: only mounted when zoomed so it doesn't
+            claim 1-finger touches in the idle state (which would block
+            BottomSheetScrollView scroll on the climb image). 2-finger pinches
+            fall through to the outer GestureDetector via maxPointers(1). */}
+        {isZoomed && (
+          <GestureDetector gesture={zoomPanGesture}>
+            <View style={styles.zoomPanOverlay} />
+          </GestureDetector>
+        )}
+
         <Animated.View
           style={[styles.resetZoomWrapper, resetButtonStyle]}
           pointerEvents={isZoomed ? 'auto' : 'none'}
@@ -223,6 +234,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   peekWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  zoomPanOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,

@@ -182,6 +182,12 @@ export function useZoomPanGesture({
     ],
   );
 
+  // zoomPanGesture is rendered into a separate GestureDetector that only
+  // mounts while zoomed (see SwipeBoardCarousel). That way it doesn't claim
+  // 1-finger touches in the idle state — which would otherwise block the
+  // parent BottomSheetScrollView from scrolling. With maxPointers(1) it
+  // also fails harmlessly during 2-finger pinches, so the outer pinch
+  // gesture stays responsive even with this overlay above the board.
   const zoomPanGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -189,14 +195,12 @@ export function useZoomPanGesture({
         .maxPointers(1)
         .onStart(() => {
           'worklet';
-          if (!enabledSV.value) return;
           savedTranslateX.value = translateX.value;
           savedTranslateY.value = translateY.value;
         })
         .onUpdate((event) => {
           'worklet';
-          if (!enabledSV.value || !isZoomedSV.value || scale.value <= MIN_SCALE) return;
-
+          if (scale.value <= MIN_SCALE) return;
           const newX = savedTranslateX.value + event.translationX;
           const newY = savedTranslateY.value + event.translationY;
           const clamped = clampTranslation(newX, newY, scale.value, containerWidthSV.value, containerHeightSV.value);
@@ -205,11 +209,10 @@ export function useZoomPanGesture({
         })
         .onEnd(() => {
           'worklet';
-          if (!enabledSV.value) return;
           savedTranslateX.value = translateX.value;
           savedTranslateY.value = translateY.value;
         }),
-    [scale, translateX, translateY, savedTranslateX, savedTranslateY, isZoomedSV, enabledSV, containerWidthSV, containerHeightSV],
+    [scale, translateX, translateY, savedTranslateX, savedTranslateY, containerWidthSV, containerHeightSV],
   );
 
   const animatedZoomStyle = useAnimatedStyle(() => ({
