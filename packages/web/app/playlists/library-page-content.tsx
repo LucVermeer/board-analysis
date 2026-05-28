@@ -14,12 +14,6 @@ import {
   type GetMySmartPlaylistCountsQueryResponse,
   type Playlist,
   type DiscoverablePlaylist,
-  type PinPlaylistMutationResponse,
-  type PinPlaylistMutationVariables,
-  type UnpinPlaylistMutationResponse,
-  type UnpinPlaylistMutationVariables,
-  PIN_PLAYLIST,
-  UNPIN_PLAYLIST,
   GET_MY_SMART_PLAYLIST_COUNTS,
 } from '@boardsesh/graphql/operations/playlists';
 import { useUserPlaylists } from '@/app/hooks/use-user-playlists';
@@ -35,7 +29,6 @@ import { deriveIsAuthenticated } from '@/app/lib/derive-auth-status';
 import type { UserBoard, PopularBoardConfig } from '@boardsesh/shared-schema';
 import { useAuthModal } from '@/app/components/providers/auth-modal-provider';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
-import PlaylistCardGrid from '@/app/components/library/playlist-card-grid';
 import PlaylistScrollSection from '@/app/components/library/playlist-scroll-section';
 import PlaylistCard from '@/app/components/library/playlist-card';
 import CreatePlaylistDrawer from '@/app/components/library/create-playlist-drawer';
@@ -175,20 +168,13 @@ export default function LibraryPageContent({
   // every playlists/board/recents change.
   const {
     pinned: pinnedPlaylists,
-    source: pinnedSource,
     isLoading: pinnedLoading,
-    refetch: refetchPinned,
   } = usePinnedPlaylists({
     token: isAuthenticated ? token : null,
     boardType: selectedBoard?.boardType,
     layoutId: selectedBoard?.layoutId,
     candidatePlaylists: playlists,
   });
-
-  const pinnedUuids = useMemo(
-    () => new Set(pinnedSource === 'pinned' ? pinnedPlaylists.map((p) => p.uuid) : []),
-    [pinnedPlaylists, pinnedSource],
-  );
 
   // Discover playlists — paginated horizontal scroll. Reset on board filter
   // change. Two parallel cursors (popular + recent) live inside the hook;
@@ -211,36 +197,6 @@ export default function LibraryPageContent({
     initialRecentHasMore: hasInitialDiscoverData ? initialDiscoverPlaylists.recentHasMore : undefined,
   });
   const error = playlistsHasError;
-
-  // Pin / unpin a playlist. Optimistic refetch — wait for the mutation, then
-  // re-pull both the pinned list (server source of truth) and the page-1 of
-  // owned playlists (so the "Jump Back In" ordering reflects any server-side
-  // touches). Rate-limit handling is upstream in executeGraphQL.
-  const handleTogglePin = useCallback(
-    async (uuid: string, nextPinned: boolean) => {
-      if (!token) return;
-      try {
-        if (nextPinned) {
-          await executeGraphQL<PinPlaylistMutationResponse, PinPlaylistMutationVariables>(
-            PIN_PLAYLIST,
-            { input: { playlistUuid: uuid } },
-            token,
-          );
-        } else {
-          await executeGraphQL<UnpinPlaylistMutationResponse, UnpinPlaylistMutationVariables>(
-            UNPIN_PLAYLIST,
-            { input: { playlistUuid: uuid } },
-            token,
-          );
-        }
-        refetchPinned();
-      } catch (err) {
-        console.error('Failed to toggle pin:', err);
-        showMessage(t(nextPinned ? 'library.pin.pinFailed' : 'library.pin.unpinFailed'), 'error');
-      }
-    },
-    [token, refetchPinned, showMessage, t],
-  );
 
   // Smart playlist counts — react-query handles caching across the session and
   // dedupes if the page remounts. The token is part of the key so we refetch
@@ -441,9 +397,13 @@ export default function LibraryPageContent({
   const isLoading = playlistsLoading || tokenLoading || (!hasServerUserData && sessionStatus === 'loading');
   const discoverItems = getDiscoverPlaylists();
 
-  // Server query already filters by boardType + layoutId; no client-side filter needed
-  const filteredPlaylists = playlists;
-  const showPinnedSection = isAuthenticated && (pinnedLoading || pinnedPlaylists.length > 0);
+  // Jump Back In list — pinned playlists lead, then the rest of the owned
+  // playlists with pinned items removed so they don't appear twice. Server
+  // query already filters by boardType + layoutId; no client-side filter needed.
+  const jumpBackInPlaylists = useMemo(() => {
+    const pinnedUuidSet = new Set(pinnedPlaylists.map((p) => p.uuid));
+    return [...pinnedPlaylists, ...playlists.filter((p) => !pinnedUuidSet.has(p.uuid))];
+  }, [pinnedPlaylists, playlists]);
 
   // Smart playlists prepended to the playlist card grid for the signed-in user.
   // Skip entries with count === 0 so the grid only shows non-empty smart playlists.
@@ -528,25 +488,6 @@ export default function LibraryPageContent({
         </>
       )}
 
-      {/* Pinned grid (top, small). Filled with server-side pins when present;
-          falls back to per-device IndexedDB recents so the grid isn't empty
-          for users who haven't pinned anything yet. */}
-      {showPinnedSection && (
-        <>
-          <div className={styles.sectionTitle}>{t('library.sections.pinned')}</div>
-          <PlaylistCardGrid
-            playlists={pinnedPlaylists}
-            getPlaylistUrl={getPlaylistUrl}
-            loading={pinnedLoading && pinnedPlaylists.length === 0}
-            // Only show the pin button on rows that came from server pins —
-            // recents fallback rows aren't "pinned" yet, but tapping the pin
-            // pins them. Both cases use handleTogglePin.
-            onTogglePin={handleTogglePin}
-            pinnedUuids={pinnedUuids}
-          />
-        </>
-      )}
-
       {/* Empty state if no playlists at all (authenticated, no pinned + no owned) */}
       {isAuthenticated && !isLoading && !pinnedLoading && playlists.length === 0 && pinnedPlaylists.length === 0 && (
         <div className={styles.emptyContainer}>
@@ -560,10 +501,11 @@ export default function LibraryPageContent({
         </div>
       )}
 
-      {/* Jump Back In — paginated horizontal scroll of all owned playlists.
-          IntersectionObserver in PlaylistScrollSection fires loadMore when the
-          right-edge sentinel comes into view. */}
-      {isAuthenticated && (isLoading || filteredPlaylists.length > 0) && (
+      {/* Jump Back In — paginated horizontal scroll. Pinned playlists lead;
+          the rest of the user's owned playlists follow. IntersectionObserver
+          in PlaylistScrollSection fires loadMore when the right-edge sentinel
+          comes into view. */}
+      {isAuthenticated && (isLoading || jumpBackInPlaylists.length > 0) && (
         <PlaylistScrollSection
           title={t('library.sections.jumpBackIn')}
           loading={isLoading}
@@ -571,7 +513,7 @@ export default function LibraryPageContent({
           hasMore={playlistsHasMore}
           isLoadingMore={playlistsLoadingMore}
         >
-          {filteredPlaylists.map((p, i) => (
+          {jumpBackInPlaylists.map((p, i) => (
             <PlaylistCard
               key={p.uuid}
               name={p.name}
