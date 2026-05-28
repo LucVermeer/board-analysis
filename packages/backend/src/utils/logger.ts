@@ -1,6 +1,10 @@
 import util from 'node:util';
 import { createLogger, format, transports, type Logger, type LoggerOptions } from 'winston';
 
+// Explicit annotation prevents TS2742 from inferring a path through bun's
+// isolated `node_modules/.bun/logform@x.y/...` install layout.
+type FormatFactory = ReturnType<typeof format>;
+
 type InstanceIdProvider = () => string | null;
 
 let instanceIdProvider: InstanceIdProvider | null = null;
@@ -34,7 +38,7 @@ function errorDetails(error: Error): ErrorDetails {
 // them when the message has `%s`-style tokens. The old console patch we're
 // replacing always emitted every trailing arg, so this format renders leftover
 // splat entries while preserving trailing Error details as structured fields.
-export const appendSplatFormat = format((info) => {
+export const appendSplatFormat: FormatFactory = format((info) => {
   const infoRecord = info as LoggerInfoRecord;
   const splatValue = infoRecord[SPLAT];
   if (!Array.isArray(splatValue)) return info;
@@ -58,7 +62,7 @@ export const appendSplatFormat = format((info) => {
   return info;
 });
 
-export const instanceIdFormat = format((info) => {
+export const instanceIdFormat: FormatFactory = format((info) => {
   const instanceId = instanceIdProvider?.();
   if (instanceId) info.instanceId = instanceId.slice(0, 8);
   return info;

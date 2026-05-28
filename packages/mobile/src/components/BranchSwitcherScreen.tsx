@@ -5,7 +5,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   StyleSheet,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { Text } from './Text';
 import { SectionHeader } from './SectionHeader';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
+import { InfoRow } from './InfoRow';
 import { useTheme } from '../providers/theme-provider';
 import { hapticLight, hapticError } from '../lib/haptics';
 import {
@@ -22,7 +22,7 @@ import {
   getEASConfig,
   fetchBranches,
   fetchChannels,
-  findPreviewChannelId,
+  findChannelIdByName,
   updateChannelBranchMapping,
   type EASBranch,
 } from '../lib/eas-api';
@@ -89,10 +89,17 @@ export function BranchSwitcherScreen() {
 
       const channelsData = channelsQuery.data;
       if (!channelsData) throw new Error('Channels not loaded');
-      const previewChannelId = findPreviewChannelId(channelsData);
-      if (!previewChannelId) throw new Error('Preview channel not found');
+      const currentChannelName = Updates.channel ?? '';
+      const currentChannelId = findChannelIdByName(channelsData, currentChannelName);
+      if (!currentChannelId) {
+        throw new Error(
+          currentChannelName
+            ? `Channel "${currentChannelName}" not found in EAS`
+            : 'Current build has no channel — cannot switch branches',
+        );
+      }
 
-      await updateChannelBranchMapping(previewChannelId, branch.id, token);
+      await updateChannelBranchMapping(currentChannelId, branch.id, token);
 
       const checkResult = await Updates.checkForUpdateAsync();
       if (!checkResult.isAvailable) {
@@ -149,22 +156,6 @@ export function BranchSwitcherScreen() {
   const isEmbedded = Updates.isEmbeddedLaunch;
 
 
-  const renderInfoRow = (label: string, value: string, isLast: boolean) => (
-    <View key={label}>
-      <View style={styles.infoRow}>
-        {/* i18n-ignore-next-line */}
-        <Text variant="footnote" color={systemColors.secondaryLabel}>
-          {label}
-        </Text>
-        <Text variant="footnote" color={systemColors.label} style={styles.monospace} selectable>
-          {value}
-        </Text>
-      </View>
-      {!isLast && (
-        <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
-      )}
-    </View>
-  );
   const isSwitching = switchingBranchId !== null;
 
   return (
@@ -188,40 +179,24 @@ export function BranchSwitcherScreen() {
         ]}
       >
         {isEmbedded ? (
-          <View style={styles.infoRow}>
-            {/* i18n-ignore-next-line */}
-            <Text variant="footnote" color={systemColors.secondaryLabel}>
-              Status
-            </Text>
-            {/* i18n-ignore-next-line */}
-            <Text variant="footnote" color={systemColors.label}>
-              No OTA update applied
-            </Text>
-          </View>
+          // i18n-ignore-next-line
+          <InfoRow label="Status" value="No OTA update applied" showSeparator={false} />
         ) : (
           <>
             {/* i18n-ignore-next-line */}
-            {renderInfoRow('Channel', currentChannel, false)}
+            <InfoRow label="Channel" value={currentChannel} />
             {/* i18n-ignore-next-line */}
-            {renderInfoRow('Branch', currentBranch, false)}
-            {currentUpdateId
-              ? renderInfoRow(
-                  // i18n-ignore-next-line
-                  'Update ID',
-                  currentUpdateId.slice(0, 8),
-                  false,
-                )
-              : null}
-            {currentCreatedAt
-              ? renderInfoRow(
-                  // i18n-ignore-next-line
-                  'Updated',
-                  formatRelativeTime(currentCreatedAt),
-                  false,
-                )
-              : null}
+            <InfoRow label="Branch" value={currentBranch} />
+            {currentUpdateId ? (
+              // i18n-ignore-next-line
+              <InfoRow label="Update ID" value={currentUpdateId.slice(0, 8)} />
+            ) : null}
+            {currentCreatedAt ? (
+              // i18n-ignore-next-line
+              <InfoRow label="Updated" value={formatRelativeTime(currentCreatedAt)} />
+            ) : null}
             {/* i18n-ignore-next-line */}
-            {renderInfoRow('Runtime Version', currentRuntimeVersion, true)}
+            <InfoRow label="Runtime Version" value={currentRuntimeVersion} showSeparator={false} />
           </>
         )}
       </View>
@@ -323,22 +298,6 @@ const styles = StyleSheet.create({
   card: {
     padding: 12,
     overflow: 'hidden',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  monospace: {
-    ...Platform.select({
-      ios: { fontFamily: 'Menlo' },
-      android: { fontFamily: 'monospace' },
-    }),
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: 4,
   },
   centered: {
     paddingVertical: 32,

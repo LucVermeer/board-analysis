@@ -21,6 +21,23 @@ function resolveDevMetadata(): {
 }
 
 function resolveTailscaleHosts(): string[] {
+  // Explicit override — accepted as comma-separated hosts. Honoured even when
+  // empty so cloud builds (EAS, CI) can short-circuit the tailscale probe by
+  // setting TAILSCALE_HOSTS= without paying the 2s subprocess timeout.
+  const envHosts = process.env.TAILSCALE_HOSTS;
+  if (envHosts !== undefined) {
+    return envHosts
+      .split(',')
+      .map((host) => host.trim())
+      .filter((host) => host.length > 0);
+  }
+
+  // Skip the subprocess on known cloud build environments — tailscale CLI
+  // never exists there, and the failing exec still costs the 2s timeout.
+  if (process.env.CI || process.env.EAS_BUILD || process.env.EAS_BUILD_RUNNER) {
+    return [];
+  }
+
   try {
     const raw = execSync('tailscale status --json', {
       stdio: ['ignore', 'pipe', 'ignore'],

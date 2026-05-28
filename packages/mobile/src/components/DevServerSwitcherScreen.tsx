@@ -5,7 +5,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   StyleSheet,
 } from 'react-native';
@@ -16,6 +15,7 @@ import { Text } from './Text';
 import { SectionHeader } from './SectionHeader';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
+import { InfoRow } from './InfoRow';
 import { useTheme } from '../providers/theme-provider';
 import { hapticLight, hapticError } from '../lib/haptics';
 import { discoverBundlers, type DiscoveredBundler } from '../lib/metro-discovery';
@@ -90,23 +90,6 @@ export function DevServerSwitcherScreen() {
     [switchMutation],
   );
 
-  const renderInfoRow = (label: string, value: string, isLast: boolean) => (
-    <View key={label}>
-      <View style={styles.infoRow}>
-        {/* i18n-ignore-next-line */}
-        <Text variant="footnote" color={systemColors.secondaryLabel}>
-          {label}
-        </Text>
-        <Text variant="footnote" color={systemColors.label} style={styles.monospace} selectable>
-          {value}
-        </Text>
-      </View>
-      {!isLast && (
-        <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
-      )}
-    </View>
-  );
-
   const isSwitching = switchingUrl !== null;
   const bundlers = bundlersQuery.data ?? [];
   const bundlersByHost = useMemo(() => {
@@ -138,13 +121,13 @@ export function DevServerSwitcherScreen() {
         ]}
       >
         {/* i18n-ignore-next-line */}
-        {renderInfoRow('Hosts embedded', String(tailscaleHosts.length), false)}
-        {renderInfoRow(
+        <InfoRow label="Hosts embedded" value={String(tailscaleHosts.length)} />
+        <InfoRow
           // i18n-ignore-next-line
-          'Bundlers live',
-          bundlersQuery.isLoading ? '…' : String(bundlers.length),
-          true,
-        )}
+          label="Bundlers live"
+          value={bundlersQuery.isLoading ? '…' : String(bundlers.length)}
+          showSeparator={false}
+        />
       </View>
 
       {/* ---- Available Bundlers ---- */}
@@ -243,22 +226,6 @@ const styles = StyleSheet.create({
   card: {
     padding: 12,
     overflow: 'hidden',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  monospace: {
-    ...Platform.select({
-      ios: { fontFamily: 'Menlo' },
-      android: { fontFamily: 'monospace' },
-    }),
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: 4,
   },
   centered: {
     paddingVertical: 32,

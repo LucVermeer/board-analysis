@@ -109,6 +109,10 @@ export async function updateChannelBranchMapping(
     }),
   });
 
+  if (!response.ok) {
+    throw new Error(`Failed to update channel: ${response.status} ${response.statusText}`);
+  }
+
   type GraphQLResponse = {
     errors?: Array<{ message: string }>;
   };
@@ -120,7 +124,7 @@ export async function updateChannelBranchMapping(
   }
 }
 
-export function findPreviewChannelId(channels: EASChannel[]): string | null {
-  const previewChannel = channels.find((channel) => channel.name === 'preview-1');
-  return previewChannel?.id ?? null;
+export function findChannelIdByName(channels: EASChannel[], name: string): string | null {
+  if (!name) return null;
+  return channels.find((channel) => channel.name === name)?.id ?? null;
 }
