@@ -264,6 +264,74 @@ describe('smartPlaylist resolver', () => {
     expect(notInArraySpy).not.toHaveBeenCalled();
   });
 
+  it('LIKED_CLIMBS reads user_favorites, applies board filter, dedups across angles, orders by latest like', async () => {
+    const ctx = makeCtx();
+
+    // user lookup
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+    // page query — favorites have an angle column, so we dedupe via GROUP BY
+    // (board_name, climb_uuid) to avoid returning the same climb twice when a
+    // user has favourited it at multiple angles.
+    const { chain: pageChain, calls: pageCalls } = makeChain([
+      { climbUuid: 'fav1', boardType: 'kilter' },
+      { climbUuid: 'fav2', boardType: 'kilter' },
+    ]);
+    mockDb.select.mockReturnValueOnce(pageChain);
+    // count query
+    mockDb.select.mockReturnValueOnce(makeChain([{ count: 7 }]).chain);
+    // hydrate (called with refs array)
+    mockDb.select.mockReturnValueOnce(makeChain([]).chain);
+
+    const result = await playlistQueries.smartPlaylist(
+      null,
+      {
+        input: { type: 'LIKED_CLIMBS', userId: 'user-123', boardName: 'kilter', page: 1, pageSize: 5 },
+      },
+      ctx,
+    );
+
+    expect(result.totalCount).toBe(7);
+    expect(result.hasMore).toBe(false); // (1+1)*5 = 10 >= 7
+    expect(pageCalls.limit[0]).toEqual([5]);
+    expect(pageCalls.offset[0]).toEqual([5]);
+
+    // Dedup: GROUP BY (climbUuid, boardName)
+    expect(pageCalls.groupBy.length).toBe(1);
+    expect(pageCalls.groupBy[0]).toEqual([dbSchema.userFavorites.climbUuid, dbSchema.userFavorites.boardName]);
+    // Ordered (by max(createdAt) DESC); we just assert orderBy was called
+    expect(pageCalls.orderBy.length).toBe(1);
+
+    // Both page and count must filter by both userId and boardName — a missing
+    // boardName filter on either side would make the count card show all-boards
+    // while the detail page is board-scoped (or vice versa).
+    const userIdFilters = eqSpy.mock.calls.filter(
+      ([col, val]) => col === dbSchema.userFavorites.userId && val === 'user-123',
+    );
+    expect(userIdFilters.length).toBeGreaterThanOrEqual(2);
+    const boardFilters = eqSpy.mock.calls.filter(
+      ([col, val]) => col === dbSchema.userFavorites.boardName && val === 'kilter',
+    );
+    expect(boardFilters.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('LIKED_CLIMBS without boardName does not filter by board (cross-board view)', async () => {
+    const ctx = makeCtx();
+    mockDb.select.mockReturnValueOnce(makeChain([USER_ROW]).chain);
+    mockDb.select.mockReturnValueOnce(makeChain([]).chain);
+    mockDb.select.mockReturnValueOnce(makeChain([{ count: 0 }]).chain);
+
+    await playlistQueries.smartPlaylist(
+      null,
+      {
+        input: { type: 'LIKED_CLIMBS', userId: 'user-123' },
+      },
+      ctx,
+    );
+
+    const boardFilters = eqSpy.mock.calls.filter(([col]) => col === dbSchema.userFavorites.boardName);
+    expect(boardFilters.length).toBe(0);
+  });
+
   it('throws when user does not exist', async () => {
     const ctx = makeCtx();
     mockDb.select.mockReturnValueOnce(makeChain([]).chain);
@@ -363,6 +431,44 @@ describe('mySmartPlaylistCounts resolver', () => {
       { type: 'PROJECTS', count: 0 },
       { type: 'LIKED_CLIMBS', count: 0 },
     ]);
+  });
+
+  it('surfaces a non-zero LIKED_CLIMBS count from the CTE', async () => {
+    const ctx = makeCtx();
+
+    mockDb.execute.mockResolvedValueOnce([
+      { type: 'FIVE_STARS', count: 7 },
+      { type: 'MOST_REPEATED', count: 3 },
+      { type: 'PROJECTS', count: 5 },
+      { type: 'LIKED_CLIMBS', count: 12 },
+    ]);
+
+    const result = await playlistQueries.mySmartPlaylistCounts(null, undefined, ctx);
+    expect(result).toContainEqual({ type: 'LIKED_CLIMBS', count: 12 });
+  });
+
+  it('CTE queries user_favorites and unions a LIKED_CLIMBS row', async () => {
+    // The library page renders the heart card from this count — if the CTE
+    // ever stops emitting a LIKED_CLIMBS row, the card silently disappears.
+    const ctx = makeCtx();
+    mockDb.execute.mockResolvedValueOnce([]);
+
+    await playlistQueries.mySmartPlaylistCounts(null, undefined, ctx);
+
+    const sqlArg = mockDb.execute.mock.calls[0][0] as { queryChunks?: unknown[] } | undefined;
+    const rendered = (sqlArg?.queryChunks ?? [])
+      .map((chunk) => (typeof chunk === 'string' ? chunk : ((chunk as { value?: string }).value ?? '')))
+      .join(' ');
+
+    // The favourites CTE: dedicated SELECT (not derived from `base`, which is
+    // boardsesh_ticks-only), counts (board_name, climb_uuid) tuples, filters
+    // by the connection's user_id, and emits a 'LIKED_CLIMBS' union row so the
+    // resolver picks it up.
+    expect(rendered).toMatch(/liked_climbs\s+AS/i);
+    expect(rendered).toMatch(/COUNT\(DISTINCT\s*\(board_name,\s*climb_uuid\)\)/i);
+    expect(rendered).toMatch(/WHERE\s+user_id\s*=/i);
+    expect(rendered).toMatch(/'LIKED_CLIMBS'/);
+    expect(rendered).toMatch(/FROM\s+liked_climbs/i);
   });
 
   it('CTE scopes the sent-climbs check by both board_type and climb_uuid', async () => {

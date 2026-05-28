@@ -376,6 +376,16 @@ export default function LibraryPageContent({
     [refetchPlaylists, router, getPlaylistUrl],
   );
 
+  // Jump Back In list — pinned playlists lead, then the rest of the owned
+  // playlists with pinned items removed so they don't appear twice. Server
+  // query already filters by boardType + layoutId; no client-side filter needed.
+  // Computed before the error-state early return so the hook order stays
+  // stable across renders that switch into/out of the error UI.
+  const jumpBackInPlaylists = useMemo(() => {
+    const pinnedUuidSet = new Set(pinnedPlaylists.map((p) => p.uuid));
+    return [...pinnedPlaylists, ...playlists.filter((p) => !pinnedUuidSet.has(p.uuid))];
+  }, [pinnedPlaylists, playlists]);
+
   // Error state (only for authenticated users with fetch errors)
   if (isAuthenticated && error) {
     return (
@@ -396,14 +406,6 @@ export default function LibraryPageContent({
 
   const isLoading = playlistsLoading || tokenLoading || (!hasServerUserData && sessionStatus === 'loading');
   const discoverItems = getDiscoverPlaylists();
-
-  // Jump Back In list — pinned playlists lead, then the rest of the owned
-  // playlists with pinned items removed so they don't appear twice. Server
-  // query already filters by boardType + layoutId; no client-side filter needed.
-  const jumpBackInPlaylists = useMemo(() => {
-    const pinnedUuidSet = new Set(pinnedPlaylists.map((p) => p.uuid));
-    return [...pinnedPlaylists, ...playlists.filter((p) => !pinnedUuidSet.has(p.uuid))];
-  }, [pinnedPlaylists, playlists]);
 
   // Smart playlists prepended to the playlist card grid for the signed-in user.
   // Skip entries with count === 0 so the grid only shows non-empty smart playlists.
