@@ -30,6 +30,7 @@
     "build:wasm": "cd packages/board-renderer/wasm && bash build.sh"
   },
   "dependencies": {
+    "@expo/cli": "^56.1.12",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
