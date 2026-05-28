@@ -1,17 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { View, Pressable, Text, StyleSheet, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   useAnimatedReaction,
+  useSharedValue,
+  withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useTranslation } from 'react-i18next';
 import { computePeekOffset, type PeekDirection } from '@boardsesh/play-view';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { BoardImageNative } from '../BoardImageNative';
+import { Icon } from '../Icon';
 import { useCarouselGesture } from './use-carousel-gesture';
 import { useZoomPanGesture } from './use-zoom-pan-gesture';
+import { timing } from '../../theme/animations';
 
 type BoardRenderData = {
   boardWidth: number;
@@ -32,6 +37,7 @@ type SwipeBoardCarouselProps = {
   canSwipePrevious: boolean;
   onSwipeNext: () => void;
   onSwipePrevious: () => void;
+  onSwipeDownDismiss?: () => void;
   onZoomChange?: (isZoomed: boolean, resetZoom: () => void) => void;
   enabled?: boolean;
 };
@@ -50,9 +56,11 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   canSwipePrevious,
   onSwipeNext,
   onSwipePrevious,
+  onSwipeDownDismiss,
   onZoomChange,
   enabled = true,
 }: SwipeBoardCarouselProps) {
+  const { t } = useTranslation('session');
   const { width: screenWidth } = useWindowDimensions();
   const [containerHeight, setContainerHeight] = useState(0);
 
@@ -60,6 +68,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
     pinchGesture,
     zoomPanGesture,
     isZoomed,
+    isZoomedSV,
     resetZoom,
     animatedZoomStyle,
   } = useZoomPanGesture({
@@ -87,11 +96,24 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   const { gesture: swipeGesture, translateX } = useCarouselGesture({
     onSwipeNext,
     onSwipePrevious,
+    onSwipeDownDismiss,
     canSwipeNext,
     canSwipePrevious,
     boardWidth: screenWidth,
-    enabled: enabled && !isZoomed,
+    enabled,
+    isZoomedSV,
   });
+
+  // Reset-button visibility tracks isZoomed via animated opacity so the
+  // button can fade in/out smoothly without affecting layout.
+  const resetButtonOpacity = useSharedValue(0);
+  useEffect(() => {
+    resetButtonOpacity.value = withTiming(isZoomed ? 1 : 0, { duration: timing.fast });
+  }, [isZoomed, resetButtonOpacity]);
+
+  const resetButtonStyle = useAnimatedStyle(() => ({
+    opacity: resetButtonOpacity.value,
+  }));
 
   const currentStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -123,8 +145,15 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   const { boardWidth, boardHeight } = boardRenderData;
   const peekFrames = jsDirection === 'next' ? nextFrames : prevFrames;
 
+  // Stable composition — never swap based on isZoomed state. Swapping the
+  // composedGesture causes RNGH to detach/reattach handlers, and after a
+  // couple of cycles the swipe gesture stopped firing onEnd reliably on iOS.
+  // Each gesture instead gates its own behaviour on isZoomedSV inside the
+  // worklet: zoomPan only pans when isZoomedSV is true, swipe only
+  // navigates/dismisses when isZoomedSV is false. With minPointers(1)/
+  // maxPointers(1), zoomPan fails harmlessly during 2-finger pinches.
   const composedGesture = React.useMemo(
-    () => Gesture.Simultaneous(pinchGesture, Gesture.Race(zoomPanGesture, swipeGesture)),
+    () => Gesture.Simultaneous(pinchGesture, zoomPanGesture, swipeGesture),
     [pinchGesture, zoomPanGesture, swipeGesture],
   );
 
@@ -164,6 +193,22 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
             />
           )}
         </Animated.View>
+
+        <Animated.View
+          style={[styles.resetZoomWrapper, resetButtonStyle]}
+          pointerEvents={isZoomed ? 'auto' : 'none'}
+        >
+          <Pressable
+            onPress={resetZoom}
+            style={styles.resetZoomButton}
+            accessibilityRole="button"
+            accessibilityLabel={t('playView.resetZoom')}
+            hitSlop={8}
+          >
+            <Icon name="crop.free" size={14} color="#FFFFFF" />
+            <Text style={styles.resetZoomLabel}>{t('playView.resetZoom')}</Text>
+          </Pressable>
+        </Animated.View>
       </View>
     </GestureDetector>
   );
@@ -184,5 +229,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  resetZoomWrapper: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 10,
+  },
+  resetZoomButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  resetZoomLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

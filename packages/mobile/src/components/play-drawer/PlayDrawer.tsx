@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet, Text } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -138,17 +138,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     opacity: fabOpacity.value,
   }));
 
-  // Zoom reset button animation
-  const zoomResetOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    zoomResetOpacity.value = withTiming(isBoardZoomed ? 1 : 0, { duration: timing.fast });
-  }, [isBoardZoomed, zoomResetOpacity]);
-
-  const zoomResetAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: zoomResetOpacity.value,
-  }));
-
   useImperativeHandle(ref, () => ({
     open: (selectedClimb: Climb) => {
       setClimb(selectedClimb);
@@ -244,10 +233,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     resetZoomRef.current = resetFn;
   }, []);
 
-  const handleResetZoom = useCallback(() => {
-    resetZoomRef.current?.();
-  }, []);
-
   const handleSimilarClimbPress = useCallback(
     (similarClimb: Climb) => {
       setClimb(similarClimb);
@@ -281,8 +266,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         snapPoints={snapPoints}
         topInset={insets.top}
         enablePanDownToClose
-        enableContentPanningGesture={!subDrawerOpen && !isBoardZoomed}
-        enableHandlePanningGesture={!subDrawerOpen && !isBoardZoomed}
+        enableContentPanningGesture={!subDrawerOpen}
+        enableHandlePanningGesture={!subDrawerOpen}
         backdropComponent={renderBackdrop}
         onDismiss={handleClose}
         handleIndicatorStyle={sheetStyles.indicator}
@@ -291,7 +276,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         <BottomSheetScrollView
           style={styles.content}
           contentContainerStyle={{ paddingTop: spacing[2], paddingBottom: insets.bottom }}
-          scrollEnabled={!isBoardZoomed}
+          scrollEnabled={true}
         >
           <Pressable
             onPress={() => sheetRef.current?.dismiss()}
@@ -330,6 +315,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     canSwipePrevious={navigationState.canPrevious}
                     onSwipeNext={handleNext}
                     onSwipePrevious={handlePrev}
+                    onSwipeDownDismiss={() => sheetRef.current?.dismiss()}
                     onZoomChange={handleZoomChange}
                     enabled={!isTickBarActive}
                   />
@@ -345,22 +331,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     onPress={handleTickFabPress}
                     onLongPress={handleTickFabLongPress}
                   />
-                </Animated.View>
-
-                {/* Zoom reset button */}
-                <Animated.View
-                  style={[styles.zoomResetWrapper, zoomResetAnimatedStyle]}
-                  pointerEvents={isBoardZoomed ? 'auto' : 'none'}
-                >
-                  <Pressable
-                    onPress={handleResetZoom}
-                    style={styles.zoomResetButton}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('playView.resetZoom')}
-                  >
-                    <Icon name="crop.free" size={16} color="#FFFFFF" />
-                    <Text style={styles.zoomResetLabel}>{t('playView.resetZoom')}</Text>
-                  </Pressable>
                 </Animated.View>
 
                 {/* Quick Tick Bar (expanded mode) */}
@@ -513,27 +483,5 @@ const styles = StyleSheet.create({
     bottom: 12,
     right: 16,
     zIndex: 10,
-  },
-  zoomResetWrapper: {
-    position: 'absolute',
-    bottom: 62,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 5,
-  },
-  zoomResetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  zoomResetLabel: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '500',
   },
 });

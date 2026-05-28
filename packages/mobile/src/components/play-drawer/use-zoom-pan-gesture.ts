@@ -22,6 +22,7 @@ type UseZoomPanGestureReturn = {
   pinchGesture: GestureType;
   zoomPanGesture: GestureType;
   isZoomed: boolean;
+  isZoomedSV: SharedValue<boolean>;
   resetZoom: () => void;
   animatedZoomStyle: AnimatedStyle;
   scale: SharedValue<number>;
@@ -62,6 +63,12 @@ export function useZoomPanGesture({
   const pinchFocalX = useSharedValue(0);
   const pinchFocalY = useSharedValue(0);
 
+  // Peak scale reached during the current pinch. Used to decide whether the
+  // user really meant to zoom — event.scale can momentarily drop on finger-lift
+  // and clamp scale.value back to MIN_SCALE, which would otherwise cause the
+  // threshold check in onEnd to trigger a reset right after a real zoom.
+  const pinchPeakScale = useSharedValue(MIN_SCALE);
+
   // Shared value mirrors JS isZoomed so gesture worklets can read it without
   // triggering gesture object recreation on zoom state transitions.
   const isZoomedSV = useSharedValue(false);
@@ -71,6 +78,9 @@ export function useZoomPanGesture({
 
   const updateZoomState = useCallback((zoomed: boolean) => {
     isZoomedRef.current = zoomed;
+    // isZoomedSV is also written from the pinch worklet for synchronous UI-thread
+    // visibility (so the swipe gesture's onEnd reads the new value in the same
+    // frame). Setting it here too keeps JS-initiated resets in sync.
     isZoomedSV.value = zoomed;
     setIsZoomed(zoomed);
   }, [isZoomedSV]);
@@ -109,6 +119,7 @@ export function useZoomPanGesture({
           savedScale.value = scale.value;
           savedTranslateX.value = translateX.value;
           savedTranslateY.value = translateY.value;
+          pinchPeakScale.value = scale.value;
 
           pinchFocalX.value = event.focalX;
           pinchFocalY.value = event.focalY;
@@ -120,30 +131,41 @@ export function useZoomPanGesture({
           const focalOffsetX = pinchFocalX.value - containerWidth / 2;
           const focalOffsetY = pinchFocalY.value - containerHeight / 2;
           const scaleDelta = newScale / savedScale.value;
-          const newTranslateX = savedTranslateX.value + focalOffsetX * (1 - scaleDelta);
-          const newTranslateY = savedTranslateY.value + focalOffsetY * (1 - scaleDelta);
+          // Keep the point under the focal stationary across the zoom:
+          //   tx = focalOffset * (1 - scaleDelta) + scaleDelta * tx0
+          // The savedTranslate factor is `scaleDelta`, not 1 — when zooming
+          // from an already-zoomed state, the existing translation must scale
+          // along with the rest of the content.
+          const newTranslateX = focalOffsetX * (1 - scaleDelta) + scaleDelta * savedTranslateX.value;
+          const newTranslateY = focalOffsetY * (1 - scaleDelta) + scaleDelta * savedTranslateY.value;
 
           const clamped = clampTranslation(newTranslateX, newTranslateY, newScale, containerWidth, containerHeight);
           scale.value = newScale;
           translateX.value = clamped.x;
           translateY.value = clamped.y;
+          if (newScale > pinchPeakScale.value) {
+            pinchPeakScale.value = newScale;
+          }
         })
         .onEnd(() => {
           'worklet';
-          if (scale.value < ZOOM_THRESHOLD) {
-            scale.value = withTiming(MIN_SCALE, { duration: timing.fast });
-            translateX.value = withTiming(0, { duration: timing.fast });
-            translateY.value = withTiming(0, { duration: timing.fast });
-            savedScale.value = MIN_SCALE;
-            savedTranslateX.value = 0;
-            savedTranslateY.value = 0;
-            runOnJS(updateZoomState)(false);
-          } else {
-            savedScale.value = scale.value;
-            savedTranslateX.value = translateX.value;
-            savedTranslateY.value = translateY.value;
-            runOnJS(updateZoomState)(true);
-          }
+          // Use peak scale: event.scale can momentarily dip on finger-lift and
+          // clamp scale.value back to MIN_SCALE, which would otherwise reset a
+          // real zoom. Always preserve whatever the peak was (or current value
+          // if the user pinched-out further than peak, which is impossible but
+          // defensive).
+          const finalScale = Math.max(scale.value, pinchPeakScale.value);
+          scale.value = finalScale;
+          savedScale.value = finalScale;
+          savedTranslateX.value = translateX.value;
+          savedTranslateY.value = translateY.value;
+          const nowZoomed = finalScale > ZOOM_THRESHOLD;
+          // Set the shared value synchronously on the UI thread so that
+          // sibling gestures (notably the swipe gesture's onEnd, which fires
+          // in the same frame) see the zoomed state immediately and skip
+          // navigation. runOnJS only propagates after the next JS tick.
+          isZoomedSV.value = nowZoomed;
+          runOnJS(updateZoomState)(nowZoomed);
         }),
     [
       enabled,
@@ -157,6 +179,8 @@ export function useZoomPanGesture({
       savedTranslateY,
       pinchFocalX,
       pinchFocalY,
+      pinchPeakScale,
+      isZoomedSV,
       updateZoomState,
     ],
   );
@@ -196,13 +220,20 @@ export function useZoomPanGesture({
   );
 
   const animatedZoomStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }, { translateX: translateX.value }, { translateY: translateY.value }],
+    // Order matters: translate then scale. RN composes matrix left-to-right
+    // (M1 * M2 * ... * v), so the last op is applied to the point first.
+    // [translate, scale] = T*S applied to point: S first scales the point,
+    // then T adds translation in screen-pixel units. The reverse order
+    // [scale, translate] would put translation in pre-scale units, making
+    // it visually multiplied by scale (pan would feel "too fast" at high zoom).
+    transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
   }));
 
   return {
     pinchGesture,
     zoomPanGesture,
     isZoomed,
+    isZoomedSV,
     resetZoom,
     animatedZoomStyle,
     scale,
