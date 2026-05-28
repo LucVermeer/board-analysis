@@ -58,6 +58,9 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
+    // Mobile-only; opting out of web keeps `expo export --platform=all` from
+    // failing on missing `react-native-web` during EAS Update publishes.
+    platforms: ['ios', 'android'],
     // Board backgrounds are bundled via explicit require() in
     // src/lib/board-backgrounds-manifest.ts (canonical files live in
     // packages/web/public/images, no duplication), so they're picked up
