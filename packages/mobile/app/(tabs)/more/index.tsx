@@ -17,6 +17,23 @@ export default function MoreScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <DevMetadataPanel />
 
+      {__DEV__ ? (
+        <>
+          {/* i18n-ignore-next-line — dev-only section */}
+          <SectionHeader title="Development Build" />
+          <ListRow
+            // i18n-ignore-next-line
+            title="Metro Bundler"
+            // i18n-ignore-next-line
+            subtitle="Switch Metro dev server"
+            leading={<Icon name="server" size={22} color={systemColors.label} />}
+            showChevron
+            showSeparator={false}
+            onPress={() => router.push('/(tabs)/more/dev-server-switcher')}
+          />
+        </>
+      ) : null}
+
       {isPreviewBuild() ? (
         <>
           {/* i18n-ignore-next-line — preview-only section */}

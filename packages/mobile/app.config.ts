@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const DEFAULT_EAS_PROJECT_ID = '87499648-655e-4fb8-9856-65da37e55fb1';
@@ -19,9 +20,32 @@ function resolveDevMetadata(): {
   return { branchName, qaNotes, qaNotesFilePath };
 }
 
+function resolveTailscaleHosts(): string[] {
+  try {
+    const raw = execSync('tailscale status --json', {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
+    }).toString();
+    const status = JSON.parse(raw) as {
+      Self?: { DNSName?: string; Online?: boolean };
+      Peer?: Record<string, { DNSName?: string; Online?: boolean }>;
+    };
+    const stripDot = (name: string) => name.replace(/\.$/, '');
+    const hosts: string[] = [];
+    if (status.Self?.DNSName) hosts.push(stripDot(status.Self.DNSName));
+    for (const peer of Object.values(status.Peer ?? {})) {
+      if (peer.Online && peer.DNSName) hosts.push(stripDot(peer.DNSName));
+    }
+    return Array.from(new Set(hosts.filter((host) => host.length > 0)));
+  } catch {
+    return [];
+  }
+}
+
 export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: boolean } => {
   const devMetadata = resolveDevMetadata();
   const hasDevMetadata = devMetadata.branchName || devMetadata.qaNotes || devMetadata.qaNotesFilePath;
+  const tailscaleHosts = resolveTailscaleHosts();
 
   return {
     ...config,
@@ -117,6 +141,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
             },
           }
         : {}),
+      ...(tailscaleHosts.length > 0 ? { tailscaleHosts } : {}),
     },
   };
 };
