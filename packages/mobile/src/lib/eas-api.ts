@@ -46,12 +46,18 @@ function authHeaders(token: string): Record<string, string> {
   };
 }
 
-export async function fetchBranches(projectId: string, token: string): Promise<EASBranch[]> {
+export type EASPlatform = 'ios' | 'android';
+
+export async function fetchBranches(
+  projectId: string,
+  token: string,
+  platform: EASPlatform,
+): Promise<EASBranch[]> {
   const url = `${EAS_API_BASE}/${projectId}/updates/branches?limit=50`;
   const response = await fetch(url, {
     headers: {
       ...authHeaders(token),
-      'expo-platform': 'ios',
+      'expo-platform': platform,
     },
   });
 

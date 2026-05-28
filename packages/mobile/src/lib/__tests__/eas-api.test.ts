@@ -43,19 +43,39 @@ describe('fetchBranches', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('returns the data array on success', async () => {
+  it('returns the data array on success and forwards the platform header', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: [{ id: 'b1', name: 'main', updates: [] }] }),
     } as Response);
 
-    const result = await fetchBranches('proj-1', 'token-x');
+    const result = await fetchBranches('proj-1', 'token-x', 'ios');
 
     expect(result).toEqual([{ id: 'b1', name: 'main', updates: [] }]);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://api.expo.dev/v2/projects/proj-1/updates/branches?limit=50',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer token-x' }),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-x',
+          'expo-platform': 'ios',
+        }),
+      }),
+    );
+  });
+
+  it('sends expo-platform: android when called with android', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as Response);
+    globalThis.fetch = fetchMock;
+
+    await fetchBranches('proj-1', 'token-x', 'android');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'expo-platform': 'android' }),
       }),
     );
   });
@@ -66,7 +86,7 @@ describe('fetchBranches', () => {
       statusText: 'Unauthorized',
     } as Response);
 
-    await expect(fetchBranches('proj-1', 'bad-token')).rejects.toThrow('Unauthorized');
+    await expect(fetchBranches('proj-1', 'bad-token', 'ios')).rejects.toThrow('Unauthorized');
   });
 });
 

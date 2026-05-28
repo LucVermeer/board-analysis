@@ -5,6 +5,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
 } from 'react-native';
@@ -25,7 +26,12 @@ import {
   findChannelIdByName,
   updateChannelBranchMapping,
   type EASBranch,
+  type EASPlatform,
 } from '../lib/eas-api';
+
+function getEASPlatform(): EASPlatform {
+  return Platform.OS === 'android' ? 'android' : 'ios';
+}
 
 function formatRelativeTime(dateStr: string): string {
   const now = Date.now();
@@ -70,9 +76,10 @@ export function BranchSwitcherScreen() {
   const easConfig = preview ? getEASConfig() : null;
   const token = easConfig?.token ?? '';
   const projectId = easConfig?.projectId ?? '';
+  const easPlatform = getEASPlatform();
   const branchesQuery = useQuery({
-    queryKey: ['eas-branches', projectId],
-    queryFn: () => fetchBranches(projectId, token),
+    queryKey: ['eas-branches', projectId, easPlatform],
+    queryFn: () => fetchBranches(projectId, token, easPlatform),
     staleTime: 60_000,
     enabled: preview,
   });
