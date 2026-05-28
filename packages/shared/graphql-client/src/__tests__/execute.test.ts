@@ -81,11 +81,12 @@ describe('execute', () => {
     await expect(promise).rejects.toThrow(/completed without data/);
   });
 
-  it('rejects after timeout if neither complete nor error fires', async () => {
+  it('rejects after timeout if neither complete nor error fires, unsubscribing the stream', async () => {
     const client = makeFakeClient();
     const promise = execute(client, { query: 'mutation Foo { ok }' }, 100);
     vi.advanceTimersByTime(150);
     await expect(promise).rejects.toThrow(/timed out after 100ms/);
+    expect(client.unsubscribe).toHaveBeenCalled();
   });
 
   it('clears the timeout once the operation settles so timers do not pile up', async () => {

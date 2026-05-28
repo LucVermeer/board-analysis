@@ -22,6 +22,7 @@ export function execute<TData = unknown, TVariables = Record<string, unknown>>(
   return new Promise<TData>((resolve, reject) => {
     let result: TData | undefined;
     let hasResolved = false;
+    let unsubscribe: (() => void) | undefined;
 
     const timer = setTimeout(() => {
       settle(() => reject(new Error(`GraphQL mutation '${opName}' timed out after ${timeoutMs}ms`)));
@@ -31,11 +32,11 @@ export function execute<TData = unknown, TVariables = Record<string, unknown>>(
       if (hasResolved) return;
       hasResolved = true;
       clearTimeout(timer);
-      unsubscribe();
+      unsubscribe?.();
       fn();
     }
 
-    const unsubscribe = client.subscribe<TData>(
+    unsubscribe = client.subscribe<TData>(
       { query: operation.query, variables: operation.variables as Record<string, unknown> },
       {
         next: (data) => {
