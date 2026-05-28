@@ -6,7 +6,7 @@ import { applyRateLimit, requireAuthenticated, validateInput } from '../../share
 import { GetSmartPlaylistInputSchema } from '../../../../validation/schemas';
 import { hydrateClimbsByRefs, type ClimbRef } from '../helpers/hydrate-climbs';
 
-type SmartPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS';
+type SmartPlaylistType = 'FIVE_STARS' | 'MOST_REPEATED' | 'PROJECTS' | 'LIKED_CLIMBS';
 
 type SmartPlaylistInput = {
   type: SmartPlaylistType;
@@ -104,6 +104,25 @@ async function selectSmartClimbRefs(
     return rows.map((row) => ({ climbUuid: row.climbUuid, boardType: row.boardType }));
   }
 
+  if (type === 'LIKED_CLIMBS') {
+    const favConditions: SQL[] = [eq(dbSchema.userFavorites.userId, userId)];
+    if (boardName) {
+      favConditions.push(eq(dbSchema.userFavorites.boardName, boardName));
+    }
+    const rows = await db
+      .select({
+        climbUuid: dbSchema.userFavorites.climbUuid,
+        boardType: dbSchema.userFavorites.boardName,
+      })
+      .from(dbSchema.userFavorites)
+      .where(and(...favConditions))
+      .groupBy(dbSchema.userFavorites.climbUuid, dbSchema.userFavorites.boardName)
+      .orderBy(desc(max(dbSchema.userFavorites.createdAt)))
+      .limit(pageSize)
+      .offset(offset);
+    return rows.map((row) => ({ climbUuid: row.climbUuid, boardType: row.boardType }));
+  }
+
   // PROJECTS — climbs the user has logged but never sent on this (board, climb).
   // The NOT EXISTS check matches on both board_type and climb_uuid, so a sent
   // Kilter climb doesn't accidentally exclude a Tension climb with the same
@@ -157,6 +176,20 @@ async function countSmartClimbRefs(
       .having(sql`SUM(${dbSchema.boardseshTicks.attemptCount}) > 1`)
       .as('repeated');
     const [row] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(subquery);
+    return row?.count ?? 0;
+  }
+
+  if (type === 'LIKED_CLIMBS') {
+    const favConditions: SQL[] = [eq(dbSchema.userFavorites.userId, userId)];
+    if (boardName) {
+      favConditions.push(eq(dbSchema.userFavorites.boardName, boardName));
+    }
+    const [row] = await db
+      .select({
+        count: sql<number>`COUNT(DISTINCT (${dbSchema.userFavorites.boardName}, ${dbSchema.userFavorites.climbUuid}))::int`,
+      })
+      .from(dbSchema.userFavorites)
+      .where(and(...favConditions));
     return row?.count ?? 0;
   }
 
@@ -291,12 +324,19 @@ export const mySmartPlaylistCounts = async (
         WHERE sent.climb_uuid = base.climb_uuid
           AND sent.board_type = base.board_type
       )
+    ),
+    liked_climbs AS (
+      SELECT COUNT(DISTINCT (board_name, climb_uuid))::int AS count
+      FROM ${dbSchema.userFavorites}
+      WHERE user_id = ${userId}
     )
     SELECT 'FIVE_STARS'::text AS type, count FROM five_stars
     UNION ALL
     SELECT 'MOST_REPEATED'::text, count FROM most_repeated
     UNION ALL
     SELECT 'PROJECTS'::text, count FROM projects
+    UNION ALL
+    SELECT 'LIKED_CLIMBS'::text, count FROM liked_climbs
   `);
 
   // db.execute returns either an iterable of rows directly or `{ rows }`
@@ -315,5 +355,6 @@ export const mySmartPlaylistCounts = async (
     { type: 'FIVE_STARS', count: byType.get('FIVE_STARS') ?? 0 },
     { type: 'MOST_REPEATED', count: byType.get('MOST_REPEATED') ?? 0 },
     { type: 'PROJECTS', count: byType.get('PROJECTS') ?? 0 },
+    { type: 'LIKED_CLIMBS', count: byType.get('LIKED_CLIMBS') ?? 0 },
   ];
 };

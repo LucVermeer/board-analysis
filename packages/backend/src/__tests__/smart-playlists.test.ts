@@ -326,6 +326,7 @@ describe('mySmartPlaylistCounts resolver', () => {
       { type: 'FIVE_STARS', count: 7 },
       { type: 'MOST_REPEATED', count: 3 },
       { type: 'PROJECTS', count: 5 },
+      { type: 'LIKED_CLIMBS', count: 0 },
     ]);
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
   });
@@ -346,6 +347,7 @@ describe('mySmartPlaylistCounts resolver', () => {
       { type: 'FIVE_STARS', count: 1 },
       { type: 'MOST_REPEATED', count: 2 },
       { type: 'PROJECTS', count: 3 },
+      { type: 'LIKED_CLIMBS', count: 0 },
     ]);
   });
 
@@ -359,6 +361,7 @@ describe('mySmartPlaylistCounts resolver', () => {
       { type: 'FIVE_STARS', count: 9 },
       { type: 'MOST_REPEATED', count: 0 },
       { type: 'PROJECTS', count: 0 },
+      { type: 'LIKED_CLIMBS', count: 0 },
     ]);
   });
 

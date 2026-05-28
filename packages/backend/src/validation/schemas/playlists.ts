@@ -111,7 +111,7 @@ export const SearchPlaylistsInputSchema = z.object({
   offset: z.number().int().min(0).optional().default(0),
 });
 
-export const SmartPlaylistTypeSchema = z.enum(['FIVE_STARS', 'MOST_REPEATED', 'PROJECTS']);
+export const SmartPlaylistTypeSchema = z.enum(['FIVE_STARS', 'MOST_REPEATED', 'PROJECTS', 'LIKED_CLIMBS']);
 
 export const GetSmartPlaylistInputSchema = z.object({
   type: SmartPlaylistTypeSchema,

@@ -42,6 +42,10 @@
         "title": "Projects",
         "description": "Climbs you've worked the most without sending."
       },
+      "likedClimbs": {
+        "title": "Liked Climbs",
+        "description": "All climbs you've hearted."
+      },
       "notFound": {
         "title": "Smart playlist not found",
         "description": "This smart playlist doesn't exist."

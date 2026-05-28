@@ -42,6 +42,10 @@
         "title": "Projets",
         "description": "Les voies que vous avez le plus travaillées sans les enchaîner."
       },
+      "likedClimbs": {
+        "title": "Voies aimées",
+        "description": "Toutes les voies que vous avez aimées."
+      },
       "notFound": {
         "title": "Playlist intelligente introuvable",
         "description": "Cette playlist intelligente n'existe pas."
