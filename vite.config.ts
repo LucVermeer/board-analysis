@@ -247,6 +247,10 @@ export default defineConfig({
         command: 'tsx scripts/mobile-preview-build.ts',
         cache: false,
       },
+      'mobile:dev-client-build': {
+        command: 'tsx scripts/mobile-dev-client-build.ts',
+        cache: false,
+      },
 
       // --- Dev servers ---
       'dev:mobile': {
