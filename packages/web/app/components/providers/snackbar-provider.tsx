@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import Snackbar from '@mui/material/Snackbar';
 import Alert, { type AlertColor } from '@mui/material/Alert';
 import Button from '@mui/material/Button';
@@ -31,9 +31,15 @@ export const useSnackbar = () => useContext(SnackbarContext);
 
 export function SnackbarProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<SnackbarMessage[]>([]);
+  // Monotonic key — `Date.now()` collides when two messages are queued within
+  // the same millisecond, which corrupts React reconciliation (a duplicate-key
+  // snackbar won't dismiss correctly).
+  const keyCounterRef = useRef(0);
 
   const showMessage = useCallback((text: string, severity: AlertColor, action?: SnackbarAction, duration?: number) => {
-    setMessages((prev) => [...prev, { key: Date.now(), text, severity, action, duration }]);
+    keyCounterRef.current += 1;
+    const key = keyCounterRef.current;
+    setMessages((prev) => [...prev, { key, text, severity, action, duration }]);
   }, []);
 
   const handleClose = useCallback((key: number) => {

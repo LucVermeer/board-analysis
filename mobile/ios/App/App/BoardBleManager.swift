@@ -533,6 +533,10 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
         connectedPeripheral = nil
         writeCharacteristic = nil
+        // Drop the generation marker for this peripheral — previously
+        // scheduleReconnect re-set it, but with auto-reconnect gone an unremoved
+        // entry would linger as a stale generation until the next connect.
+        peripheralGenerations.removeValue(forKey: peripheral.identifier)
         failQueuedWrites(error ?? BoardBleError.notConnected)
         onDisconnect?(deviceId)
         // Intentionally no automatic reconnect — see didFailToConnect above.

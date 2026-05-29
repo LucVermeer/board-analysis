@@ -39,6 +39,11 @@ describe('classifyBleFailure', () => {
       error: new Error('Write characteristic was not found'),
       expected: 'service_missing',
     },
+    {
+      name: 'web adapter UART characteristic',
+      error: new Error('Failed to get UART characteristic'),
+      expected: 'service_missing',
+    },
 
     // connect failed
     { name: 'swift connect timeout', error: new Error('Bluetooth connection timed out'), expected: 'connect_failed' },

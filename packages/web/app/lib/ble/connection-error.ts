@@ -55,15 +55,20 @@ export function classifyBleFailure(error: unknown, pairingStage?: string): BleFa
     return 'user_cancelled';
   }
 
-  // Connected at the GATT layer but the board didn't expose the UART service.
-  // Checked before board_not_found so "UART service was not found" isn't
-  // swallowed by the broad "not found" below.
-  if (/UART service|write characteristic|characteristic.*not found|service.*not found/i.test(message)) {
+  // Connected at the GATT layer but the board didn't expose the UART service or
+  // its write characteristic. Checked before board_not_found so a "...not found"
+  // UART message isn't swallowed by the board-not-found patterns below. Covers
+  // the web adapter's "Failed to get UART characteristic" and the Swift
+  // "UART service was not found" / "Write characteristic was not found".
+  if (
+    /UART (service|characteristic)|write characteristic|characteristic.*not found|service.*not found/i.test(message)
+  ) {
     return 'service_missing';
   }
 
-  // Scan found nothing / the target board's serial never showed up.
-  if (/Target board not found during scan|device was not found|not found|deviceNotFound/i.test(message)) {
+  // Scan found nothing / the target board's serial never showed up. Anchored to
+  // device/board so a future unrelated "X not found" doesn't land here by accident.
+  if (/Target board not found during scan|device.*not found|board.*not found|deviceNotFound/i.test(message)) {
     return 'board_not_found';
   }
 

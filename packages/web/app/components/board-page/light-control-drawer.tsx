@@ -123,15 +123,26 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
 
     let letterIndex = 0;
     let consecutiveFailures = 0;
+    let cancelled = false;
+    let inFlight = false;
     let intervalId: number | undefined;
     const stop = () => {
+      cancelled = true;
       if (intervalId !== undefined) window.clearInterval(intervalId);
     };
     const sendCurrentLetter = async () => {
+      // Skip if cleanup already ran, or a slow write from the previous tick is
+      // still in flight (avoids overlapping writes racing the failure counter).
+      if (cancelled || inFlight) return;
+      inFlight = true;
       const letter = PARTY_LETTERS[letterIndex % PARTY_LETTERS.length];
       const holdIds = lettersToHoldIds.get(letter) ?? [];
       const stateCode = stateCodes[letterIndex % stateCodes.length];
       const result = await sendFramesToBoard(buildPartyFrames(holdIds, stateCode));
+      inFlight = false;
+      // The effect may have been torn down while the write was in flight — don't
+      // touch state (setPartyMode/showMessage) after cleanup.
+      if (cancelled) return;
       // `false` is a real write failure; `true`/`undefined` are success/no-op.
       if (result === false) {
         consecutiveFailures++;
@@ -195,15 +206,26 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
     const baseFrames = baseSegments.join('');
 
     let consecutiveFailures = 0;
+    let cancelled = false;
+    let inFlight = false;
     let intervalId: number | undefined;
     const stop = () => {
+      cancelled = true;
       if (intervalId !== undefined) window.clearInterval(intervalId);
     };
     const sendDiscoFrame = async () => {
+      // Skip if cleanup already ran, or a slow write from the previous tick is
+      // still in flight (avoids overlapping writes racing the failure counter).
+      if (cancelled || inFlight) return;
+      inFlight = true;
       const handFrames = handPlacementIds
         .map((id) => `p${id}r${stateCodes[Math.floor(Math.random() * stateCodes.length)]}`)
         .join('');
       const result = await sendFramesToBoard(`${baseFrames}${handFrames}`, climbMirrored);
+      inFlight = false;
+      // The effect may have been torn down while the write was in flight — don't
+      // touch state (setPartyMode/showMessage) after cleanup.
+      if (cancelled) return;
       // `false` is a real write failure; `true`/`undefined` are success/no-op.
       if (result === false) {
         consecutiveFailures++;

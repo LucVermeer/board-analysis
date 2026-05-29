@@ -154,6 +154,10 @@ export function useBoardBluetooth({
   const connectRef = useRef<
     ((initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>) | null
   >(null);
+  // Guards against stacking duplicate "take it back" prompts — a flapping
+  // connection can fire several disconnects in a row. Reset once we reconnect
+  // (or the user explicitly disconnects) so the next genuine drop prompts again.
+  const boardTakenPromptShownRef = useRef(false);
 
   // Device picker state for custom Capacitor scanning.
   // pickerRejectRef holds the pending promise's reject so unmount cleanup
@@ -211,12 +215,22 @@ export function useBoardBluetooth({
     setIsConnected(false);
     onConnectionChange?.(false);
 
+    // The connection is gone, so drop the dead adapter now. The take-back
+    // reconnect builds a fresh adapter, so leaving the dead one in place would
+    // only make connect() call disconnect() on an already-torn-down peripheral
+    // (which can reject and surface a spurious error toast).
+    unsubDisconnectRef.current?.();
+    unsubDisconnectRef.current = null;
+    adapterRef.current = null;
+
     // These boards are last-connection-wins and always advertise, so an
     // unexpected drop usually means another phone grabbed the board. Tell the
     // user instead of going silent, and offer a one-tap take-back: reconnect to
     // the same board by serial (or the picker when we never learned one). We
     // deliberately don't auto-reconnect — that would ping-pong with the other
-    // app and flicker the wall.
+    // app and flicker the wall. Dedup so a flapping link doesn't stack prompts.
+    if (boardTakenPromptShownRef.current) return;
+    boardTakenPromptShownRef.current = true;
     showMessage(
       t('bluetooth.boardTaken'),
       'warning',
@@ -506,6 +520,8 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
+        // Reconnected — allow a fresh prompt on the next genuine drop.
+        boardTakenPromptShownRef.current = false;
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
@@ -597,6 +613,7 @@ export function useBoardBluetooth({
     // The user chose to disconnect, so forget the board — a later unexpected
     // drop shouldn't offer to "take back" a board they intentionally left.
     lastSerialRef.current = null;
+    boardTakenPromptShownRef.current = false;
     setIsConnected(false);
     onConnectionChange?.(false);
     if (connectedAt !== null) {

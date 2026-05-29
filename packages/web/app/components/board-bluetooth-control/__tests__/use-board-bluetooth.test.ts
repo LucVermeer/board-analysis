@@ -546,6 +546,31 @@ describe('useBoardBluetooth', () => {
       expect(mockAdapter.requestAndConnect).toHaveBeenCalledWith(undefined);
     });
 
+    it('does not stack prompts when the connection flaps (several drops in a row)', async () => {
+      let capturedHandler: (() => void) | null = null;
+      mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
+        capturedHandler = handler;
+        return vi.fn();
+      });
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockShowMessage.mockClear();
+
+      // Three drops before any reconnect — only the first should prompt.
+      act(() => {
+        capturedHandler?.();
+        capturedHandler?.();
+        capturedHandler?.();
+      });
+
+      const promptCalls = mockShowMessage.mock.calls.filter(([text]) => text === 'bluetooth.boardTaken');
+      expect(promptCalls).toHaveLength(1);
+    });
+
     it('does not prompt after a user-initiated disconnect', async () => {
       const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
       await act(async () => {
