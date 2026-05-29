@@ -75,7 +75,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var scanRequested = false
     private var scanServices: [CBUUID] = []
     private var intentionalDisconnectGenerations: [UUID: UInt64] = [:]
-    private var automaticReconnectGenerations: [UUID: UInt64] = [:]
     private var peripheralGenerations: [UUID: UInt64] = [:]
     private var connectionGeneration: UInt64 = 0
     private var writeQueue: [WriteRequest] = []
@@ -279,7 +278,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         failQueuedWrites(BoardBleError.writeCancelled)
         connectionGeneration += 1
         let generation = connectionGeneration
-        automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
         intentionalDisconnectGenerations.removeValue(forKey: peripheral.identifier)
         pendingConnectCompletion = completion
         connectedPeripheral = peripheral
@@ -292,7 +290,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             guard self.pendingConnectCompletion != nil else { return }
             guard self.peripheralGenerations[peripheral.identifier] == generation else { return }
             self.peripheralGenerations.removeValue(forKey: peripheral.identifier)
-            self.automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
             if self.connectedPeripheral?.identifier == peripheral.identifier {
                 self.connectedPeripheral = nil
                 self.writeCharacteristic = nil
@@ -320,7 +317,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
         intentionalDisconnectGenerations[peripheral.identifier] = connectionGeneration
         peripheralGenerations[peripheral.identifier] = connectionGeneration
         centralManager.cancelPeripheralConnection(peripheral)
@@ -494,14 +490,12 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             central.cancelPeripheralConnection(peripheral)
             return
         }
-        automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
         peripheral.delegate = self
         peripheral.discoverServices([uartServiceUuid])
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         guard peripheralGenerations[peripheral.identifier] == connectionGeneration else { return }
-        let reconnectGeneration = automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
 
         if pendingConnectCompletion != nil {
             peripheralGenerations.removeValue(forKey: peripheral.identifier)
@@ -513,17 +507,11 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
 
-        guard reconnectGeneration == connectionGeneration else { return }
-        guard connectedPeripheral?.identifier == peripheral.identifier else {
-            peripheralGenerations.removeValue(forKey: peripheral.identifier)
-            return
-        }
-
-        writeCharacteristic = nil
-        failQueuedWrites(error ?? BoardBleError.notConnected)
-        // No automatic reconnect: these boards are last-connection-wins, so
-        // silently retrying would ping-pong with whatever app grabbed the
-        // board. The JS layer surfaces a "take it back" prompt instead.
+        // No pending connect and no automatic reconnect (removed): these boards
+        // are last-connection-wins, so silently retrying would ping-pong with
+        // whatever app grabbed the board. Drop the stale generation marker; the
+        // JS layer surfaces a "take it back" prompt off the disconnect event.
+        peripheralGenerations.removeValue(forKey: peripheral.identifier)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
@@ -535,13 +523,11 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             if peripheralGenerations[peripheral.identifier] == intentionalDisconnectGeneration {
                 peripheralGenerations.removeValue(forKey: peripheral.identifier)
             }
-            automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
             return
         }
 
         guard wasCurrentPeripheral else {
             peripheralGenerations.removeValue(forKey: peripheral.identifier)
-            automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
             return
         }
 

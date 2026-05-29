@@ -241,7 +241,7 @@
     }
   },
   "bluetooth": {
-    "boardTaken": "Otro dispositivo acaba de tomar tu tabla.",
+    "boardTaken": "Se perdió la tabla. Quizá otra app la tomó.",
     "takeItBack": "Recuperarla",
     "boardNotFound": "No se encontró tu tabla. Asegúrate de que esté encendida y cerca.",
     "connectFailed": "No se pudo conectar. Acércate a la tabla e inténtalo de nuevo.",

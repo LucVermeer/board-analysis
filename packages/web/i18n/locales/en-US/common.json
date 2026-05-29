@@ -43,7 +43,7 @@
     }
   },
   "bluetooth": {
-    "boardTaken": "Another device just took your board.",
+    "boardTaken": "Lost the board. Another app may have taken it.",
     "takeItBack": "Take it back",
     "boardNotFound": "Couldn't find your board. Make sure it's powered on and nearby.",
     "connectFailed": "Couldn't connect. Move closer to the board and try again.",

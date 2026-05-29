@@ -63,6 +63,10 @@ describe('classifyBleFailure', () => {
     // unknown
     { name: 'opaque error, no stage', error: new Error('something opaque'), expected: 'unknown' },
     { name: 'non-error value', error: 'a plain string', expected: 'unknown' },
+    // A real failure that merely contains the word "cancel" must NOT be treated
+    // as a user cancel (which would be silent) — it should surface.
+    { name: 'CoreBluetooth operation cancelled', error: new Error('The operation was cancelled'), expected: 'unknown' },
+    { name: 'connection cancelled by peer', error: new Error('Connection cancelled by peer'), expected: 'unknown' },
   ];
 
   for (const { name, error, stage, expected } of cases) {

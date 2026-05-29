@@ -47,8 +47,11 @@ export function classifyBleFailure(error: unknown, pairingStage?: string): BleFa
   const name = errorName(error);
   const message = errorMessage(error);
 
-  // User dismissed the picker. Mirrors the previous inline `isUserCancel` check.
-  if (name === 'NotFoundError' || /user cancelled|cancel|Device selection cancelled/i.test(message)) {
+  // User dismissed the picker. Match only explicit user-cancel signals — a bare
+  // "cancel" would also swallow real failures like CoreBluetooth's
+  // "operation cancelled" / "Connection cancelled by peer", silently showing
+  // the user nothing. NotFoundError is the Web Bluetooth chooser-dismissed name.
+  if (name === 'NotFoundError' || /user cancell?ed|Device selection cancelled/i.test(message)) {
     return 'user_cancelled';
   }
 
