@@ -29,6 +29,7 @@
     "stopDisco": "Stop disco",
     "discoNeedsClimb": "Load a climb to start the disco",
     "clearFailed": "Couldn't clear the board",
+    "lightShowFailed": "Lost the board mid-show. Reconnect and try again.",
     "customizeColors": "Customize LED colors",
     "customizeColorsUnsupported": "Custom colors aren't available on this board",
     "customizeColorsTitle": "LED colors",
@@ -40,6 +41,15 @@
       "FOOT": "Feet",
       "FINISH": "Finish"
     }
+  },
+  "bluetooth": {
+    "boardTaken": "Lost the board. Another app may have taken it.",
+    "takeItBack": "Take it back",
+    "boardNotFound": "Couldn't find your board. Make sure it's powered on and nearby.",
+    "connectFailed": "Couldn't connect. Move closer to the board and try again.",
+    "serviceMissing": "Connected, but the board didn't respond. Power-cycle it and try again.",
+    "unavailable": "Bluetooth is off. Turn it on to connect to your board.",
+    "unknownError": "Couldn't connect to your board. Try again."
   },
   "actions": {
     "yes": "Yes",

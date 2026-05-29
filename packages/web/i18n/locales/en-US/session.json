@@ -323,7 +323,6 @@
     "triesCount_other": "{{count}} tries",
     "tickError": "Couldn't save your tick — it's saved as a draft",
     "closeAria": "Close",
-    "resetZoom": "Reset",
     "noClimbSelected": "No climb selected",
     "browseClimbs": "Browse Climbs",
     "actionBar": {
