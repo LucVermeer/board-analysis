@@ -540,6 +540,47 @@ describe('useBoardBluetooth', () => {
       expect(promptCalls).toHaveLength(1);
     });
 
+    it('re-arms the prompt after a failed take-back so a later drop prompts again', async () => {
+      let capturedHandler: (() => void) | null = null;
+      mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
+        capturedHandler = handler;
+        return vi.fn();
+      });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      // First drop → prompt.
+      act(() => {
+        capturedHandler?.();
+      });
+      const firstPrompt = mockShowMessage.mock.calls.find(([text]) => text === 'bluetooth.boardTaken') as
+        | [string, string, { label: string; onClick: () => void }, number]
+        | undefined;
+      expect(firstPrompt).toBeDefined();
+
+      // Tap "take it back" but make the reconnect fail.
+      mockAdapter.requestAndConnect.mockRejectedValueOnce(new Error('Connection failed'));
+      await act(async () => {
+        firstPrompt![2].onClick();
+        await Promise.resolve();
+      });
+
+      mockShowMessage.mockClear();
+
+      // A subsequent genuine drop must prompt again — the guard re-armed despite
+      // the failed reconnect.
+      act(() => {
+        capturedHandler?.();
+      });
+      const reprompts = mockShowMessage.mock.calls.filter(([text]) => text === 'bluetooth.boardTaken');
+      expect(reprompts).toHaveLength(1);
+      errorSpy.mockRestore();
+    });
+
     it('does not prompt after a user-initiated disconnect', async () => {
       const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
       await act(async () => {

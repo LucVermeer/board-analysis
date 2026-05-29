@@ -513,8 +513,6 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
-        // Reconnected — allow a fresh prompt on the next genuine drop.
-        boardTakenPromptShownRef.current = false;
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
@@ -563,6 +561,12 @@ export function useBoardBluetooth({
         }
       } finally {
         setLoading(false);
+        // Re-arm the take-back prompt once a connect attempt finishes, whether
+        // it succeeded or failed. Resetting only on success would leave the
+        // guard stuck true after a failed take-back, so a later genuine drop
+        // would never prompt again. The dedup still holds between drops because
+        // no connect attempt runs (and thus no reset) until the user acts.
+        boardTakenPromptShownRef.current = false;
       }
 
       return false;
