@@ -97,6 +97,11 @@ vi.mock('@/app/components/providers/snackbar-provider', () => ({
   useSnackbar: () => ({ showMessage: mockShowMessage }),
 }));
 
+// Echo the i18n key so assertions can match on the key directly.
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en-US' } }),
+}));
+
 vi.mock('@/app/lib/analytics', () => ({
   track: mockTrack,
 }));
@@ -181,7 +186,7 @@ describe('useBoardBluetooth', () => {
     });
 
     expect(connectResult).toBe(false);
-    expect(mockShowMessage).toHaveBeenCalledWith('Bluetooth is not available on this device.', 'error');
+    expect(mockShowMessage).toHaveBeenCalledWith('bluetooth.unavailable', 'error');
   });
 
   it('returns false when no boardDetails', async () => {
@@ -428,6 +433,105 @@ describe('useBoardBluetooth', () => {
     expect(recordCall).toBeDefined();
     const body = JSON.parse((recordCall![1] as RequestInit).body as string);
     expect(body.boardUuid).toBe('board-uuid-xyz');
+  });
+
+  describe('connect failure messaging', () => {
+    it('surfaces an actionable message on a GATT connect failure', async () => {
+      mockAdapter.requestAndConnect.mockRejectedValue(new Error('GATT connect failed'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(mockShowMessage).toHaveBeenCalledWith('bluetooth.connectFailed', 'error');
+      errorSpy.mockRestore();
+    });
+
+    it('maps a scan-not-found failure to the board-not-found message', async () => {
+      mockAdapter.requestAndConnect.mockRejectedValue(new Error('Target board not found during scan'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(mockShowMessage).toHaveBeenCalledWith('bluetooth.boardNotFound', 'error');
+      errorSpy.mockRestore();
+    });
+
+    it('stays silent when the user cancels the picker', async () => {
+      mockAdapter.requestAndConnect.mockRejectedValue(new Error('Device selection cancelled'));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(mockShowMessage).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('unexpected disconnect take-back', () => {
+    it('prompts "take it back" and reconnects to the same board by serial', async () => {
+      let capturedHandler: (() => void) | null = null;
+      mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
+        capturedHandler = handler;
+        return vi.fn();
+      });
+      mockParseSerialNumber.mockReturnValue('AB1234');
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockShowMessage.mockClear();
+      mockAdapter.requestAndConnect.mockClear();
+
+      act(() => {
+        capturedHandler?.();
+      });
+
+      const promptCall = mockShowMessage.mock.calls.find(([text]) => text === 'bluetooth.boardTaken') as
+        | [string, string, { label: string; onClick: () => void }, number]
+        | undefined;
+      expect(promptCall).toBeDefined();
+      expect(promptCall![1]).toBe('warning');
+      expect(promptCall![2].label).toBe('bluetooth.takeItBack');
+
+      // Tapping "take it back" reconnects straight to the same board by serial.
+      await act(async () => {
+        promptCall![2].onClick();
+        await Promise.resolve();
+      });
+
+      expect(mockAdapter.requestAndConnect).toHaveBeenCalledWith('AB1234');
+    });
+
+    it('does not prompt after a user-initiated disconnect', async () => {
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockShowMessage.mockClear();
+
+      await act(async () => {
+        await result.current.disconnect();
+      });
+
+      expect(mockShowMessage).not.toHaveBeenCalledWith(
+        'bluetooth.boardTaken',
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
   });
 
   describe('Bluetooth Disconnected analytics', () => {

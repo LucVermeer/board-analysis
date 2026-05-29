@@ -227,6 +227,7 @@
     "stopDisco": "Parar disco",
     "discoNeedsClimb": "Carga un bloque para empezar el disco",
     "clearFailed": "No se pudo limpiar la tabla",
+    "lightShowFailed": "Se perdió la tabla a mitad del show. Reconéctate e inténtalo de nuevo.",
     "customizeColors": "Personalizar colores",
     "customizeColorsUnsupported": "Los colores personalizados no están disponibles en esta tabla",
     "customizeColorsTitle": "Colores de los LED",
@@ -238,6 +239,15 @@
       "FOOT": "Pies",
       "FINISH": "Final"
     }
+  },
+  "bluetooth": {
+    "boardTaken": "Otro dispositivo acaba de tomar tu tabla.",
+    "takeItBack": "Recuperarla",
+    "boardNotFound": "No se encontró tu tabla. Asegúrate de que esté encendida y cerca.",
+    "connectFailed": "No se pudo conectar. Acércate a la tabla e inténtalo de nuevo.",
+    "serviceMissing": "Conectado, pero la tabla no respondió. Reiníciala e inténtalo de nuevo.",
+    "unavailable": "El Bluetooth está apagado. Actívalo para conectar con tu tabla.",
+    "unknownError": "No se pudo conectar con tu tabla. Inténtalo de nuevo."
   },
   "ascents": {
     "deleteTitle": "Eliminar encadene",

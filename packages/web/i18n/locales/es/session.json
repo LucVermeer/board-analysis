@@ -323,7 +323,6 @@
     "triesCount_other": "{{count}} intentos",
     "tickError": "No se pudo guardar tu marca — guardada como borrador",
     "closeAria": "Cerrar",
-    "resetZoom": "Restablecer",
     "noClimbSelected": "Ningún bloque seleccionado",
     "browseClimbs": "Ver bloques",
     "actionBar": {

@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
+import { classifyBleFailure } from '@/app/lib/ble/connection-error';
 import { track } from '@/app/lib/analytics';
 import * as Sentry from '@sentry/nextjs';
 import type { BoardDetails } from '@/app/lib/types';
@@ -125,6 +127,7 @@ export function useBoardBluetooth({
   onConnectSuccess,
 }: UseBoardBluetoothOptions) {
   const { showMessage } = useSnackbar();
+  const { t } = useTranslation('common');
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -140,6 +143,17 @@ export function useBoardBluetooth({
   // Timestamp of the most recent successful BLE connect — drives the
   // duration_connected_ms property on Bluetooth Disconnected events.
   const connectedAtRef = useRef<number | null>(null);
+  // Serial of the board we last connected to. Survives an unexpected drop (only
+  // an explicit user disconnect clears it) so the "Take it back" action can
+  // reconnect to the same board without the picker. Null when the device name
+  // carried no serial (e.g. moonboard) — then take-back falls back to the picker.
+  const lastSerialRef = useRef<string | null>(null);
+  // Holds the latest `connect` so handleDisconnection can offer a one-tap
+  // reconnect without a declaration cycle (connect depends on
+  // handleDisconnection). Wired up by the effect below.
+  const connectRef = useRef<
+    ((initialFrames?: string, mirrored?: boolean, targetSerial?: string) => Promise<boolean>) | null
+  >(null);
 
   // Device picker state for custom Capacitor scanning.
   // pickerRejectRef holds the pending promise's reject so unmount cleanup
@@ -196,7 +210,25 @@ export function useBoardBluetooth({
     }
     setIsConnected(false);
     onConnectionChange?.(false);
-  }, [onConnectionChange]);
+
+    // These boards are last-connection-wins and always advertise, so an
+    // unexpected drop usually means another phone grabbed the board. Tell the
+    // user instead of going silent, and offer a one-tap take-back: reconnect to
+    // the same board by serial (or the picker when we never learned one). We
+    // deliberately don't auto-reconnect — that would ping-pong with the other
+    // app and flicker the wall.
+    showMessage(
+      t('bluetooth.boardTaken'),
+      'warning',
+      {
+        label: t('bluetooth.takeItBack'),
+        onClick: () => {
+          void connectRef.current?.(undefined, undefined, lastSerialRef.current ?? undefined);
+        },
+      },
+      10000,
+    );
+  }, [onConnectionChange, showMessage, t]);
 
   // Function to send frames string to the board.
   // An empty `frames` string is the "clear all LEDs" path: Aurora's packet
@@ -410,7 +442,7 @@ export function useBoardBluetooth({
 
         const available = await adapter.isAvailable();
         if (!available) {
-          showMessage('Bluetooth is not available on this device.', 'error');
+          showMessage(t('bluetooth.unavailable'), 'error');
           return false;
         }
 
@@ -460,6 +492,10 @@ export function useBoardBluetooth({
             recordBoardSerial(parsedSerial, boardDetails, boardUuid);
           }
         }
+        // Remember the board so a "Take it back" tap after an unexpected drop
+        // can reconnect straight to it. Survives the drop; cleared only on an
+        // explicit user disconnect.
+        lastSerialRef.current = parsedSerial;
 
         // Send initial frames if provided
         if (initialFrames) {
@@ -479,11 +515,12 @@ export function useBoardBluetooth({
         const domError = error instanceof DOMException ? error : null;
         const errorMessage = error instanceof Error ? error.message : String(error);
         const errorName = domError?.name ?? (error instanceof Error ? error.name : undefined);
-        const isUserCancel =
-          domError?.name === 'NotFoundError' ||
-          /user cancelled|cancel/i.test(errorMessage) ||
-          /Device selection cancelled/i.test(errorMessage);
-        const stage = isUserCancel ? 'user_cancelled' : pairingStage;
+
+        // Classify the failure into actionable user copy. Previously every
+        // failure except "Bluetooth off" was silent, so a failed (re)connect
+        // looked like a dead tap.
+        const category = classifyBleFailure(error, pairingStage);
+        const stage = category === 'user_cancelled' ? 'user_cancelled' : pairingStage;
 
         track('Bluetooth Connection Failed', {
           boardLayout: `${boardDetails.layout_name}`,
@@ -494,6 +531,27 @@ export function useBoardBluetooth({
           errorCode: errorName,
           errorMessage,
         });
+
+        // Literal-key switch (the i18n linter forbids `t(variable)`).
+        // `user_cancelled` stays silent — dismissing the picker isn't a failure.
+        switch (category) {
+          case 'board_not_found':
+            showMessage(t('bluetooth.boardNotFound'), 'error');
+            break;
+          case 'connect_failed':
+            showMessage(t('bluetooth.connectFailed'), 'error');
+            break;
+          case 'service_missing':
+            showMessage(t('bluetooth.serviceMissing'), 'error');
+            break;
+          case 'unavailable':
+            showMessage(t('bluetooth.unavailable'), 'error');
+            break;
+          case 'user_cancelled':
+            break;
+          default:
+            showMessage(t('bluetooth.unknownError'), 'error');
+        }
       } finally {
         setLoading(false);
       }
@@ -508,10 +566,17 @@ export function useBoardBluetooth({
       onConnectSuccess,
       sendFramesToBoard,
       showMessage,
+      t,
       devicePicker,
       configureConnectedBoard,
     ],
   );
+
+  // Keep the latest connect in a ref so handleDisconnection's "Take it back"
+  // action can reconnect without creating a declaration cycle.
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     if (!isConnected || !adapterRef.current) return;
@@ -529,6 +594,9 @@ export function useBoardBluetooth({
     adapterRef.current = null;
     deviceNameRef.current = undefined;
     configuredBoardKeyRef.current = null;
+    // The user chose to disconnect, so forget the board — a later unexpected
+    // drop shouldn't offer to "take back" a board they intentionally left.
+    lastSerialRef.current = null;
     setIsConnected(false);
     onConnectionChange?.(false);
     if (connectedAt !== null) {

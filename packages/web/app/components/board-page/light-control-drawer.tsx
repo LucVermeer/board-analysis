@@ -32,6 +32,11 @@ import type { BoardName } from '@boardsesh/shared-schema';
 const PARTY_TICK_MS = 600;
 const DISCO_TICK_MS = 450;
 
+// Stop a light show after this many consecutive failed BLE writes. One blip is
+// tolerated (transient write hiccup); a steady run of failures means the
+// connection is dead, so we bail out loudly instead of leaving the wall dark.
+const LIGHT_SHOW_MAX_CONSECUTIVE_FAILURES = 2;
+
 type LightControlDrawerProps = {
   open: boolean;
   onClose: () => void;
@@ -117,17 +122,44 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
     if (stateCodes.length === 0) return;
 
     let letterIndex = 0;
-    const sendCurrentLetter = () => {
+    let consecutiveFailures = 0;
+    let intervalId: number | undefined;
+    const stop = () => {
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+    const sendCurrentLetter = async () => {
       const letter = PARTY_LETTERS[letterIndex % PARTY_LETTERS.length];
       const holdIds = lettersToHoldIds.get(letter) ?? [];
       const stateCode = stateCodes[letterIndex % stateCodes.length];
-      void sendFramesToBoard(buildPartyFrames(holdIds, stateCode));
+      const result = await sendFramesToBoard(buildPartyFrames(holdIds, stateCode));
+      // `false` is a real write failure; `true`/`undefined` are success/no-op.
+      if (result === false) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= LIGHT_SHOW_MAX_CONSECUTIVE_FAILURES) {
+          stop();
+          setPartyMode('off');
+          showMessage(t('lightControl.lightShowFailed'), 'error');
+          return;
+        }
+      } else {
+        consecutiveFailures = 0;
+      }
       letterIndex++;
     };
-    sendCurrentLetter();
-    const intervalId = window.setInterval(sendCurrentLetter, PARTY_TICK_MS);
-    return () => window.clearInterval(intervalId);
-  }, [partyMode, isConnected, isMoonboard, boardDetails.board_name, lettersToHoldIds, sendFramesToBoard]);
+    void sendCurrentLetter();
+    intervalId = window.setInterval(() => void sendCurrentLetter(), PARTY_TICK_MS);
+    return () => stop();
+  }, [
+    partyMode,
+    isConnected,
+    isMoonboard,
+    boardDetails.board_name,
+    lettersToHoldIds,
+    sendFramesToBoard,
+    setPartyMode,
+    showMessage,
+    t,
+  ]);
 
   // Disco mode: keep the START/FOOT/FINISH holds at their canonical colours
   // (so the climb stays readable) and re-roll only the HAND holds' colours
@@ -162,16 +194,43 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
     }
     const baseFrames = baseSegments.join('');
 
-    const sendDiscoFrame = () => {
+    let consecutiveFailures = 0;
+    let intervalId: number | undefined;
+    const stop = () => {
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+    const sendDiscoFrame = async () => {
       const handFrames = handPlacementIds
         .map((id) => `p${id}r${stateCodes[Math.floor(Math.random() * stateCodes.length)]}`)
         .join('');
-      void sendFramesToBoard(`${baseFrames}${handFrames}`, climbMirrored);
+      const result = await sendFramesToBoard(`${baseFrames}${handFrames}`, climbMirrored);
+      // `false` is a real write failure; `true`/`undefined` are success/no-op.
+      if (result === false) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= LIGHT_SHOW_MAX_CONSECUTIVE_FAILURES) {
+          stop();
+          setPartyMode('off');
+          showMessage(t('lightControl.lightShowFailed'), 'error');
+          return;
+        }
+      } else {
+        consecutiveFailures = 0;
+      }
     };
-    sendDiscoFrame();
-    const intervalId = window.setInterval(sendDiscoFrame, DISCO_TICK_MS);
-    return () => window.clearInterval(intervalId);
-  }, [partyMode, isConnected, boardDetails.board_name, climbFrames, climbMirrored, sendFramesToBoard]);
+    void sendDiscoFrame();
+    intervalId = window.setInterval(() => void sendDiscoFrame(), DISCO_TICK_MS);
+    return () => stop();
+  }, [
+    partyMode,
+    isConnected,
+    boardDetails.board_name,
+    climbFrames,
+    climbMirrored,
+    sendFramesToBoard,
+    setPartyMode,
+    showMessage,
+    t,
+  ]);
 
   // When any light show stops, the wall would otherwise stay frozen on the
   // last frame — clear it once so the board returns to a blank state. The

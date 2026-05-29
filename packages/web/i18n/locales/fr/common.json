@@ -29,6 +29,7 @@
     "stopDisco": "Arrêter le disco",
     "discoNeedsClimb": "Chargez un bloc pour lancer le disco",
     "clearFailed": "Impossible d'éteindre le board",
+    "lightShowFailed": "Board perdu en plein show. Reconnectez-vous et réessayez.",
     "customizeColors": "Personnaliser les couleurs LED",
     "customizeColorsUnsupported": "Couleurs personnalisées indisponibles sur ce board",
     "customizeColorsTitle": "Couleurs des LED",
@@ -40,6 +41,15 @@
       "FOOT": "Pieds",
       "FINISH": "Arrivée"
     }
+  },
+  "bluetooth": {
+    "boardTaken": "Un autre appareil vient de prendre votre board.",
+    "takeItBack": "Le reprendre",
+    "boardNotFound": "Board introuvable. Vérifiez qu'il est allumé et à proximité.",
+    "connectFailed": "Connexion impossible. Rapprochez-vous du board et réessayez.",
+    "serviceMissing": "Connecté, mais le board n'a pas répondu. Redémarrez-le et réessayez.",
+    "unavailable": "Le Bluetooth est éteint. Activez-le pour vous connecter à votre board.",
+    "unknownError": "Connexion au board impossible. Réessayez."
   },
   "actions": {
     "yes": "Oui",

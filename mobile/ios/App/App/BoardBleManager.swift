@@ -59,7 +59,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private let chunkSize = 20
     private let chunkDelay: TimeInterval = 0.005
     private let connectTimeout: TimeInterval = 8
-    private let reconnectDelays: [TimeInterval] = [1, 2, 5, 10, 20, 30]
 
     private lazy var centralManager = CBCentralManager(
         delegate: self,
@@ -79,7 +78,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     private var automaticReconnectGenerations: [UUID: UInt64] = [:]
     private var peripheralGenerations: [UUID: UInt64] = [:]
     private var connectionGeneration: UInt64 = 0
-    private var reconnectAttempt = 0
     private var writeQueue: [WriteRequest] = []
     private var writeGeneration: UInt64 = 0
     private var isWriting = false
@@ -312,7 +310,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
     private func disconnectOnBleQueue(completion: (() -> Void)? = nil) {
         connectionGeneration += 1
-        reconnectAttempt = 0
         stopScanOnBleQueue()
         failQueuedWrites(BoardBleError.notConnected)
         completePendingConnect(.failure(BoardBleError.notConnected))
@@ -498,7 +495,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
             return
         }
         automaticReconnectGenerations.removeValue(forKey: peripheral.identifier)
-        reconnectAttempt = 0
         peripheral.delegate = self
         peripheral.discoverServices([uartServiceUuid])
     }
@@ -525,7 +521,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
 
         writeCharacteristic = nil
         failQueuedWrites(error ?? BoardBleError.notConnected)
-        scheduleReconnect(peripheral, generation: connectionGeneration)
+        // No automatic reconnect: these boards are last-connection-wins, so
+        // silently retrying would ping-pong with whatever app grabbed the
+        // board. The JS layer surfaces a "take it back" prompt instead.
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
@@ -551,8 +549,9 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         writeCharacteristic = nil
         failQueuedWrites(error ?? BoardBleError.notConnected)
         onDisconnect?(deviceId)
-
-        scheduleReconnect(peripheral, generation: connectionGeneration)
+        // Intentionally no automatic reconnect — see didFailToConnect above.
+        // onDisconnect drives the JS "another device took your board" prompt,
+        // and the user reclaims it with one tap.
     }
 
     // MARK: - CBPeripheralDelegate
@@ -669,22 +668,6 @@ final class BoardBleManager: NSObject, CBCentralManagerDelegate, CBPeripheralDel
         let completion = pendingConnectCompletion
         pendingConnectCompletion = nil
         completion?(result)
-    }
-
-    private func scheduleReconnect(_ peripheral: CBPeripheral, generation: UInt64) {
-        guard reconnectAttempt < reconnectDelays.count else { return }
-        let delay = reconnectDelays[reconnectAttempt]
-        reconnectAttempt += 1
-        bleQueue.asyncAfter(deadline: .now() + delay) { [weak self, weak peripheral] in
-            guard let self, let peripheral, self.connectionGeneration == generation else { return }
-            self.connectedPeripheral = peripheral
-            peripheral.delegate = self
-            self.peripheralGenerations[peripheral.identifier] = generation
-            self.automaticReconnectGenerations[peripheral.identifier] = generation
-            self.centralManager.connect(peripheral, options: [
-                CBConnectPeripheralOptionNotifyOnDisconnectionKey: true,
-            ])
-        }
     }
 
     private func processWriteQueue() {
