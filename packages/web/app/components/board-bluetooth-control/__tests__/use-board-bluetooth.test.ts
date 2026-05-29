@@ -477,12 +477,14 @@ describe('useBoardBluetooth', () => {
   });
 
   describe('unexpected disconnect take-back', () => {
-    it('prompts "take it back" and reconnects to the same board by serial', async () => {
+    it('prompts "take it back" and reopens the board picker (no auto-select)', async () => {
       let capturedHandler: (() => void) | null = null;
       mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
         capturedHandler = handler;
         return vi.fn();
       });
+      // Even when the board carried a serial, take-back must NOT auto-select it —
+      // the user should pick deliberately (gyms can have several boards in range).
       mockParseSerialNumber.mockReturnValue('AB1234');
 
       const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
@@ -504,45 +506,12 @@ describe('useBoardBluetooth', () => {
       expect(promptCall![1]).toBe('warning');
       expect(promptCall![2].label).toBe('bluetooth.takeItBack');
 
-      // Tapping "take it back" reconnects straight to the same board by serial.
+      // Tapping "take it back" reconnects via the picker — no targetSerial.
       await act(async () => {
         promptCall![2].onClick();
         await Promise.resolve();
       });
 
-      expect(mockAdapter.requestAndConnect).toHaveBeenCalledWith('AB1234');
-    });
-
-    it('falls back to the picker when the board carried no serial (e.g. moonboard)', async () => {
-      let capturedHandler: (() => void) | null = null;
-      mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
-        capturedHandler = handler;
-        return vi.fn();
-      });
-      // No serial on this board — parseSerialNumber stays undefined (beforeEach default).
-      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockMoonboardDetails }));
-      await act(async () => {
-        await result.current.connect();
-      });
-
-      mockShowMessage.mockClear();
-      mockAdapter.requestAndConnect.mockClear();
-
-      act(() => {
-        capturedHandler?.();
-      });
-
-      const promptCall = mockShowMessage.mock.calls.find(([text]) => text === 'bluetooth.boardTaken') as
-        | [string, string, { label: string; onClick: () => void }, number]
-        | undefined;
-      expect(promptCall).toBeDefined();
-
-      await act(async () => {
-        promptCall![2].onClick();
-        await Promise.resolve();
-      });
-
-      // No serial to target — reconnect goes through the picker (undefined serial).
       expect(mockAdapter.requestAndConnect).toHaveBeenCalledWith(undefined);
     });
 

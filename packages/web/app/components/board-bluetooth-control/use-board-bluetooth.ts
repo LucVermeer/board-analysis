@@ -143,11 +143,6 @@ export function useBoardBluetooth({
   // Timestamp of the most recent successful BLE connect — drives the
   // duration_connected_ms property on Bluetooth Disconnected events.
   const connectedAtRef = useRef<number | null>(null);
-  // Serial of the board we last connected to. Survives an unexpected drop (only
-  // an explicit user disconnect clears it) so the "Take it back" action can
-  // reconnect to the same board without the picker. Null when the device name
-  // carried no serial (e.g. moonboard) — then take-back falls back to the picker.
-  const lastSerialRef = useRef<string | null>(null);
   // Holds the latest `connect` so handleDisconnection can offer a one-tap
   // reconnect without a declaration cycle (connect depends on
   // handleDisconnection). Wired up by the effect below.
@@ -225,10 +220,11 @@ export function useBoardBluetooth({
 
     // These boards are last-connection-wins and always advertise, so an
     // unexpected drop usually means another phone grabbed the board. Tell the
-    // user instead of going silent, and offer a one-tap take-back: reconnect to
-    // the same board by serial (or the picker when we never learned one). We
-    // deliberately don't auto-reconnect — that would ping-pong with the other
-    // app and flicker the wall. Dedup so a flapping link doesn't stack prompts.
+    // user instead of going silent, and offer a take-back that reopens the board
+    // picker so they deliberately choose what to reconnect to — important in
+    // gyms with several boards in range. We deliberately don't auto-reconnect —
+    // that would ping-pong with the other app and flicker the wall. Dedup so a
+    // flapping link doesn't stack prompts.
     if (boardTakenPromptShownRef.current) return;
     boardTakenPromptShownRef.current = true;
     showMessage(
@@ -237,7 +233,8 @@ export function useBoardBluetooth({
       {
         label: t('bluetooth.takeItBack'),
         onClick: () => {
-          void connectRef.current?.(undefined, undefined, lastSerialRef.current ?? undefined);
+          // No targetSerial → the adapter shows the device picker.
+          void connectRef.current?.();
         },
       },
       10000,
@@ -506,10 +503,6 @@ export function useBoardBluetooth({
             recordBoardSerial(parsedSerial, boardDetails, boardUuid);
           }
         }
-        // Remember the board so a "Take it back" tap after an unexpected drop
-        // can reconnect straight to it. Survives the drop; cleared only on an
-        // explicit user disconnect.
-        lastSerialRef.current = parsedSerial;
 
         // Send initial frames if provided
         if (initialFrames) {
@@ -610,9 +603,8 @@ export function useBoardBluetooth({
     adapterRef.current = null;
     deviceNameRef.current = undefined;
     configuredBoardKeyRef.current = null;
-    // The user chose to disconnect, so forget the board — a later unexpected
-    // drop shouldn't offer to "take back" a board they intentionally left.
-    lastSerialRef.current = null;
+    // The user chose to disconnect — clear the take-back prompt guard so a
+    // later genuine drop can prompt again.
     boardTakenPromptShownRef.current = false;
     setIsConnected(false);
     onConnectionChange?.(false);
