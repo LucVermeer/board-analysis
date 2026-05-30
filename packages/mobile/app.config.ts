@@ -133,17 +133,6 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
         // build settings, not in Swift code). Must match the value in the
         // keychain-access-groups entitlement above.
         BoardseshKeychainAccessGroup: '$(AppIdentifierPrefix)group.com.boardsesh.app',
-        NSAppTransportSecurity: {
-          NSAllowsArbitraryLoads: false,
-          NSAllowsLocalNetworking: true,
-          NSExceptionDomains: {
-            'ts.net': {
-              NSIncludesSubdomains: true,
-              NSExceptionAllowsInsecureHTTPLoads: true,
-              NSExceptionMinimumTLSVersion: 'TLSv1.0',
-            },
-          },
-        },
       },
     },
     android: {
@@ -166,6 +155,10 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // Island) plus the Next/Previous AppIntents. Target sources live in
       // packages/mobile/targets/BoardseshWidgets/.
       '@bacons/apple-targets',
+      // Expo Dev Launcher owns the default local-network ATS keys. This keeps
+      // those defaults and adds an HTTP exception for Tailscale MagicDNS
+      // development bundlers such as marcosmbp-1.<tailnet>.ts.net.
+      './plugins/with-boardsesh-dev-networking',
     ],
     extra: {
       ...config.extra,
