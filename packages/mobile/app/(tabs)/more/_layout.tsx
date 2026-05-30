@@ -18,6 +18,7 @@ export default function MoreLayout() {
       <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />
       {/* i18n-ignore-next-line — dev-only screen */}
       <Stack.Screen name="dev-server-switcher" options={{ title: 'Metro Bundler' }} />
+      <Stack.Screen name="dev-servers" options={{ title: t('mobile.more.metroServersTitle') }} />
     </Stack>
   );
 }

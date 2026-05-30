@@ -14,6 +14,7 @@ export const iconMap = {
   more: { ios: 'ellipsis', android: 'dots-horizontal' },
   settings: { ios: 'gearshape', android: 'cog-outline' },
   'settings.fill': { ios: 'gearshape.fill', android: 'cog' },
+  server: { ios: 'server.rack', android: 'server-network' },
 
   // Navigation
   'chevron.right': { ios: 'chevron.right', android: 'chevron-right' },

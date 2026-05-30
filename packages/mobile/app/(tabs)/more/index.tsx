@@ -1,37 +1,43 @@
-import { ScrollView, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
+import { Text, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
-import { SectionHeader } from '../../../src/components/SectionHeader';
-import { ListRow } from '../../../src/components/ListRow';
 import { Icon } from '../../../src/components/Icon';
+import { ListRow } from '../../../src/components/ListRow';
+import { SectionHeader } from '../../../src/components/SectionHeader';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 
 export default function MoreScreen() {
-  const { systemColors } = useTheme();
+  const { systemColors, spacing, borderRadius } = useTheme();
   const { t } = useTranslation('common');
-  const router = useRouter();
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <DevMetadataPanel />
-
       {__DEV__ ? (
-        <>
-          {/* i18n-ignore-next-line — dev-only section */}
-          <SectionHeader title="Development Build" />
-          <ListRow
-            // i18n-ignore-next-line
-            title="Metro Bundler"
-            // i18n-ignore-next-line
-            subtitle="Switch Metro dev server"
-            leading={<Icon name="server" size={22} color={systemColors.label} />}
-            showChevron
-            showSeparator={false}
-            onPress={() => router.push('/(tabs)/more/dev-server-switcher')}
-          />
-        </>
+        <View style={styles.section}>
+          <SectionHeader title={t('mobile.more.development')} />
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: systemColors.secondaryBackground,
+                borderRadius: borderRadius.lg,
+                marginHorizontal: spacing[4],
+              },
+            ]}
+          >
+            <ListRow
+              title={t('mobile.more.metroServersTitle')}
+              subtitle={t('mobile.more.metroServersSubtitle')}
+              leading={<Icon name="server" size={22} color={systemColors.secondaryLabel} />}
+              showChevron
+              showSeparator={false}
+              onPress={() => router.push('/(tabs)/more/dev-servers')}
+            />
+          </View>
+        </View>
       ) : null}
 
       {isPreviewBuild() ? (
@@ -50,6 +56,8 @@ export default function MoreScreen() {
           />
         </>
       ) : null}
+
+      <Text style={[styles.text, { color: systemColors.secondaryLabel }]}>{t('mobile.more.title')}</Text>
     </ScrollView>
   );
 }
@@ -57,5 +65,18 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  section: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  card: {
+    overflow: 'hidden',
+  },
+  text: {
+    fontSize: 17,
+    textAlign: 'center',
   },
 });
