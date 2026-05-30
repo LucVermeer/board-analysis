@@ -19,9 +19,19 @@ import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function BoardSelection() {
-  const { data: boardConnection, isLoading, isError, refetch, isRefetching } = useMyBoards();
+  const { isAuthenticated, refreshAuthState } = useAuth();
+  // Don't fire myBoards while signed out — it would only 401. (Defensive: the
+  // app shell normally redirects signed-out users to login before this tab.)
+  const {
+    data: boardConnection,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+  } = useMyBoards(undefined, {
+    enabled: isAuthenticated,
+  });
   const boards = boardConnection?.boards ?? [];
-  const { isAuthenticated } = useAuth();
   const { systemColors } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -34,6 +44,17 @@ export default function BoardSelection() {
       if (config) setActiveBoardUuid(config.boardUuid);
     });
   }, []);
+
+  // A hard 401 makes the auth interceptor clear tokens via signOut(), but that
+  // doesn't flip the provider's isAuthenticated, so without this the user would
+  // be stranded on the error state with a retry that keeps failing. Re-validate
+  // on error: an expired session flips to signed-out (the shell then redirects
+  // to login), while a transient failure keeps the retryable error state.
+  useEffect(() => {
+    if (isError) {
+      void refreshAuthState();
+    }
+  }, [isError, refreshAuthState]);
 
   const handleBoardPress = async (board: UserBoard) => {
     hapticSelection();

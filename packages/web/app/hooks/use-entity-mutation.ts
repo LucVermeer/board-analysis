@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
@@ -22,15 +23,17 @@ type UseEntityMutationOptions = {
 
 export function useEntityMutation<TResponse, TVariables extends Variables = Variables>(
   mutation: TypedDocumentNode | string,
-  { successMessage, errorMessage, authRequiredMessage = 'You must be signed in', onError }: UseEntityMutationOptions,
+  { successMessage, errorMessage, authRequiredMessage, onError }: UseEntityMutationOptions,
 ) {
   const { token } = useWsAuthToken();
   const { showMessage } = useSnackbar();
+  const { t } = useTranslation('common');
+  const resolvedAuthRequiredMessage = authRequiredMessage ?? t('auth.mustBeSignedIn');
 
   const execute = useCallback(
     async (variables: TVariables): Promise<TResponse | null> => {
       if (!token) {
-        showMessage(authRequiredMessage, 'error');
+        showMessage(resolvedAuthRequiredMessage, 'error');
         return null;
       }
 
@@ -52,7 +55,7 @@ export function useEntityMutation<TResponse, TVariables extends Variables = Vari
         return null;
       }
     },
-    [token, mutation, successMessage, errorMessage, authRequiredMessage, onError, showMessage],
+    [token, mutation, successMessage, errorMessage, resolvedAuthRequiredMessage, onError, showMessage],
   );
 
   return { execute, token };

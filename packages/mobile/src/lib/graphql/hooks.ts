@@ -69,11 +69,12 @@ export function useProfile() {
 // Board Queries
 // ============================================
 
-export function useMyBoards(input?: MyBoardsInput) {
+export function useMyBoards(input?: MyBoardsInput, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['myBoards', input],
     queryFn: () => getHttpClient().request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, { input }),
     select: (data) => data.myBoards,
+    enabled: options?.enabled ?? true,
   });
 }
 

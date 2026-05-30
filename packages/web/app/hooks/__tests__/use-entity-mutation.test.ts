@@ -17,6 +17,12 @@ vi.mock('@/app/lib/graphql/client', () => ({
   createGraphQLHttpClient: () => ({ request: mockRequest }),
 }));
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => (key === 'auth.mustBeSignedIn' ? 'You must be signed in' : key),
+  }),
+}));
+
 const mockUseWsAuthToken = vi.mocked(useWsAuthToken);
 
 describe('useEntityMutation', () => {
