@@ -1,20 +1,17 @@
 import { type Dispatch, type RefObject, useEffect } from 'react';
 import type { SubscriptionQueueEvent } from '@boardsesh/shared-schema';
-import { mapQueueEventToAction, type SyncQueueEvent } from '@boardsesh/queue';
+import type { ClimbQueueItem } from '@boardsesh/queue';
+import { mapSubscriptionEnvelopeToAction, type SubscriptionWireEnvelope } from '@boardsesh/queue-runtime';
 import type { QueueAction } from '../../queue-control/types';
 import { track } from '@/app/lib/analytics';
 
 /**
- * Adapt a wire-format `SubscriptionQueueEvent` (from `@boardsesh/shared-schema`)
- * to the coordinator's `SyncQueueEvent` (from `@boardsesh/queue`). Both unions
- * share the same `__typename` set and the same aliased item field names, but
- * each declares its own `ClimbQueueItem` type so direct assignment isn't
- * possible without help. We do an explicit per-variant rebuild rather than an
- * `as unknown as` cast so the TypeScript compiler — not runtime — surfaces any
- * schema drift between the two unions (new variant, renamed field, narrowed
- * field type, etc.). Mirrors the mobile mapper in `queue-provider.tsx`.
+ * Adapt the wire-format `SubscriptionQueueEvent` from `@boardsesh/shared-schema`
+ * to the runtime's structural wire envelope. We do an explicit per-variant
+ * rebuild rather than an `as unknown as` cast so the TypeScript compiler
+ * surfaces schema drift between the unions.
  */
-export function toSyncQueueEvent(event: SubscriptionQueueEvent): SyncQueueEvent {
+export function toSyncQueueEvent(event: SubscriptionQueueEvent): SubscriptionWireEnvelope<ClimbQueueItem> {
   switch (event.__typename) {
     case 'FullSync':
       return {
@@ -57,8 +54,8 @@ export function toSyncQueueEvent(event: SubscriptionQueueEvent): SyncQueueEvent 
   }
 }
 
-function assertNever(value: never): never {
-  throw new Error(`Unhandled SubscriptionQueueEvent variant: ${JSON.stringify(value)}`);
+function assertNever(unhandledEvent: never): never {
+  throw new Error(`Unhandled SubscriptionQueueEvent variant: ${JSON.stringify(unhandledEvent)}`);
 }
 
 type UseQueueEventSubscriptionParams = {
@@ -98,11 +95,11 @@ export function useQueueEventSubscription({
     if (!isPersistentSessionActive) return;
 
     const unsubscribe = persistentSession.subscribeToQueueEvents((event: SubscriptionQueueEvent) => {
-      // Wire-format → reducer-action mapping lives in @boardsesh/queue so web and
-      // mobile share one source of truth (incl. the echo-suppression hints on
-      // DELTA_UPDATE_CURRENT_CLIMB). Analytics + side effects stay here.
-      const result = mapQueueEventToAction(toSyncQueueEvent(event), {
-        myClientId: persistentSession.clientId ?? undefined,
+      // Wire-format → reducer-action mapping lives in @boardsesh/queue-runtime
+      // so web and mobile share one source of truth (incl. the echo-suppression
+      // hints on DELTA_UPDATE_CURRENT_CLIMB). Analytics + side effects stay here.
+      const result = mapSubscriptionEnvelopeToAction(toSyncQueueEvent(event), {
+        context: { myClientId: persistentSession.clientId ?? undefined },
       });
       if (result.kind !== 'dispatch') return;
       dispatch(result.action as QueueAction);
