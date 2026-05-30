@@ -444,6 +444,10 @@ export type Climb = {
   difficulty_error: Scalars['String']['output'];
   /** Encoded hold positions and colors for lighting up the board */
   frames: Scalars['String']['output'];
+  /** Number of animation frames encoded in the frames string. 1 for static climbs; >1 for variable-speed Aurora routes/circuits. */
+  framesCount?: Maybe<Scalars['Int']['output']>;
+  /** Animation pace between frames, in Aurora's native unit (treated as milliseconds). 0 when not set. */
+  framesPace?: Maybe<Scalars['Int']['output']>;
   /** Whether this climb is a draft (unpublished) */
   is_draft?: Maybe<Scalars['Boolean']['output']>;
   /** Whether this climb disallows matching (both hands on the same hold) */
@@ -1874,6 +1878,13 @@ export type Mutation = {
    */
   pinPlaylist: Scalars['Boolean']['output'];
   /**
+   * Broadcast the current playback state for a variable-speed climb so
+   * other party members converge to the same frame/playing/speed. The
+   * server stamps `anchorTimestamp` so peers can extrapolate elapsed
+   * frames since the broadcast. Echo-suppressed by `clientId`.
+   */
+  publishPlaybackState: Scalars['Boolean']['output'];
+  /**
    * Register an APNs device token for Live Activity push updates in a session.
    * Caller must be authenticated and be a participant in the session.
    * Upserts: if the token already exists, updates the associated session.
@@ -2247,6 +2258,11 @@ export type MutationNavigateQueueArgs = {
 /** Root mutation type for all write operations. */
 export type MutationPinPlaylistArgs = {
   input: PinPlaylistInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationPublishPlaybackStateArgs = {
+  input: PlaybackStateInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -2644,6 +2660,48 @@ export type OutlierAnalysis = {
 export type PinPlaylistInput = {
   /** The playlist UUID */
   playlistUuid: Scalars['ID']['input'];
+};
+
+/**
+ * Event when a peer's playback engine state changes (play/pause/seek/speed)
+ * for a variable-speed climb. Peers converge by extrapolating frames since
+ * `anchorTimestamp`. The publisher's own clients echo-suppress by `clientId`.
+ */
+export type PlaybackStateChanged = {
+  __typename?: 'PlaybackStateChanged';
+  /** Server wall-clock (epoch ms) when the broadcast was emitted; peers extrapolate elapsed frames from this */
+  anchorTimestamp: Scalars['String']['output'];
+  /** Client ID of the publisher, used for echo suppression */
+  clientId?: Maybe<Scalars['ID']['output']>;
+  /** UUID of the climb whose playback changed */
+  climbUuid: Scalars['ID']['output'];
+  /** Frame index that was current at `anchorTimestamp` */
+  frameIndex: Scalars['Int']['output'];
+  /** Whether the engine is auto-advancing */
+  isPlaying: Scalars['Boolean']['output'];
+  /** Climb's native pace, in milliseconds per frame */
+  paceMs: Scalars['Int']['output'];
+  /** Sequence number of this event */
+  sequence: Scalars['Int']['output'];
+  /** Playback multiplier (1.0 = native pace) */
+  speed: Scalars['Float']['output'];
+};
+
+/**
+ * Input shape for `publishPlaybackState`. Carries everything peers need to
+ * extrapolate the current frame without round-tripping back to the publisher.
+ */
+export type PlaybackStateInput = {
+  /** Climb the playback applies to. Peers ignore the event if it's for a different climb than they're showing. */
+  climbUuid: Scalars['ID']['input'];
+  /** Frame index that became current at `anchorTimestamp`. */
+  frameIndex: Scalars['Int']['input'];
+  /** Whether the engine is auto-advancing. */
+  isPlaying: Scalars['Boolean']['input'];
+  /** Climb's native pace, in milliseconds per frame. */
+  paceMs: Scalars['Int']['input'];
+  /** Playback multiplier (1.0 = native pace). */
+  speed: Scalars['Float']['input'];
 };
 
 /** A user-created collection of climbs. */
@@ -3632,6 +3690,7 @@ export type QueueEvent =
   | ClimbMirrored
   | CurrentClimbChanged
   | FullSync
+  | PlaybackStateChanged
   | QueueItemAdded
   | QueueItemRemoved
   | QueueReordered;

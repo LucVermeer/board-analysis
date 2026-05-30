@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import MuiButton from '@mui/material/Button';
 import { useSearchParams } from 'next/navigation';
 import { track } from '@/app/lib/analytics';
@@ -9,12 +9,17 @@ import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import type { Climb, BoardDetails, Angle } from '@/app/lib/types';
 import { useQueueActions, useCurrentClimb, useQueueList } from '@/app/components/graphql-queue';
 import SwipeBoardCarousel from '@/app/components/board-renderer/swipe-board-carousel';
+import { useClimbFrames } from '@/app/components/board-renderer/util';
 import ClimbTitle from '@/app/components/climb-card/climb-title';
 import { AscentStatus } from '@/app/components/climb-card/ascent-status';
 import { constructClimbListWithSlugs, constructPlayUrlWithSlugs, extractUuidFromSlug } from '@/app/lib/url-utils';
 import { themeTokens } from '@/app/theme/theme-config';
 import { EmptyState } from '@/app/components/ui/empty-state';
 import PlayViewComments from '@/app/components/play-view/play-view-comments';
+import { usePlaybackEngine, type ExternalPlaybackState } from '@/app/components/playback/use-playback-engine';
+import { PlaybackControls } from '@/app/components/playback/playback-controls';
+import { BluetoothContext } from '@/app/components/board-bluetooth-control/bluetooth-context';
+import { usePersistentSessionActions } from '@/app/components/persistent-session';
 import styles from './play-view.module.css';
 
 type PlayViewClientProps = {
@@ -133,6 +138,83 @@ const PlayViewClient: React.FC<PlayViewClientProps> = ({ boardDetails, initialCl
   const nextItem = getNextClimbQueueItem();
   const prevItem = getPreviousClimbQueueItem();
 
+  // Decode multi-frame climbs once per `frames` text so the engine doesn't
+  // rebuild on every render. Single-frame climbs produce frameStrings of
+  // length 1 and the engine short-circuits.
+  const climbFrames = useClimbFrames(displayClimb, boardDetails.board_name);
+  const playbackClientId = useId();
+  const bluetooth = useContext(BluetoothContext);
+  const sendFramesToBoard = bluetooth?.sendFramesToBoard;
+  const isBleConnected = bluetooth?.isConnected ?? false;
+  const isMirroredRef = useRef(isMirrored);
+  isMirroredRef.current = isMirrored;
+
+  const { publishPlaybackState, subscribeToQueueEvents } = usePersistentSessionActions();
+
+  // Inbound peer playback events for the active climb. The engine watches
+  // this state and converges; events for other climbs are ignored.
+  const [externalPlayback, setExternalPlayback] = useState<ExternalPlaybackState | null>(null);
+  const activeClimbUuid = displayClimb?.uuid;
+  useEffect(() => {
+    setExternalPlayback(null);
+  }, [activeClimbUuid]);
+  useEffect(() => {
+    if (!activeClimbUuid) return;
+    const unsubscribe = subscribeToQueueEvents((event) => {
+      if (event.__typename !== 'PlaybackStateChanged') return;
+      if (event.climbUuid !== activeClimbUuid) return;
+      setExternalPlayback({
+        frameIndex: event.frameIndex,
+        isPlaying: event.isPlaying,
+        speed: event.speed,
+        paceMs: event.paceMs,
+        anchorTimestamp: Number(event.anchorTimestamp),
+        clientId: event.clientId,
+      });
+    });
+    return unsubscribe;
+  }, [activeClimbUuid, subscribeToQueueEvents]);
+
+  const handleLocalPlaybackChange = useCallback(
+    (state: ExternalPlaybackState) => {
+      if (!activeClimbUuid) return;
+      void publishPlaybackState({
+        climbUuid: activeClimbUuid,
+        frameIndex: state.frameIndex,
+        isPlaying: state.isPlaying,
+        speed: state.speed,
+        paceMs: state.paceMs,
+      });
+    },
+    [activeClimbUuid, publishPlaybackState],
+  );
+
+  const playback = usePlaybackEngine({
+    frames: climbFrames.frames,
+    frameStrings: climbFrames.frameStrings,
+    paceMs: climbFrames.paceMs,
+    clientId: playbackClientId,
+    externalState: externalPlayback,
+    onLocalStateChange: handleLocalPlaybackChange,
+  });
+
+  // Mirror engine ticks to the connected board. AutoSender only writes the
+  // first frame for multi-frame climbs (see bluetooth-context.tsx); the
+  // engine takes over from frame 1 onward and after every seek.
+  const lastSentFrameRef = useRef<string | null>(null);
+  useEffect(() => {
+    lastSentFrameRef.current = null;
+  }, [displayClimb?.uuid]);
+  useEffect(() => {
+    if (!isBleConnected || !sendFramesToBoard) return;
+    if (!playback.isAnimatable) return;
+    const frame = playback.currentFrameString;
+    if (!frame) return;
+    if (lastSentFrameRef.current === frame) return;
+    lastSentFrameRef.current = frame;
+    void sendFramesToBoard(frame, isMirroredRef.current, undefined, displayClimb?.uuid);
+  }, [isBleConnected, sendFramesToBoard, playback.isAnimatable, playback.currentFrameString, displayClimb?.uuid]);
+
   if (!displayClimb) {
     return (
       <div className={styles.pageContainer} style={{ backgroundColor: 'var(--semantic-background)' }}>
@@ -176,7 +258,15 @@ const PlayViewClient: React.FC<PlayViewClientProps> = ({ boardDetails, initialCl
         </div>
         <SwipeBoardCarousel
           boardDetails={boardDetails}
-          currentClimb={{ frames: displayClimb.frames, mirrored: isMirrored }}
+          currentClimb={{
+            // For multi-frame climbs render the active snapshot so the
+            // on-screen board tracks the playback engine; single-frame
+            // climbs fall back to the original full frames string and
+            // behave exactly as before.
+            frames: playback.isAnimatable ? playback.currentFrameString : displayClimb.frames,
+            mirrored: isMirrored,
+          }}
+          zoomResetKey={displayClimb.uuid}
           nextClimb={nextItem?.climb}
           previousClimb={prevItem?.climb}
           onSwipeNext={handleNext}
@@ -186,6 +276,18 @@ const PlayViewClient: React.FC<PlayViewClientProps> = ({ boardDetails, initialCl
           className={styles.swipeContainer}
           boardContainerClassName={styles.boardContainer}
         />
+        {playback.isAnimatable && (
+          <PlaybackControls
+            frameIndex={playback.frameIndex}
+            frameCount={climbFrames.frameStrings.length}
+            isPlaying={playback.isPlaying}
+            speed={playback.speed}
+            onPlay={playback.play}
+            onPause={playback.pause}
+            onSeek={playback.seek}
+            onSpeedChange={playback.setSpeed}
+          />
+        )}
       </div>
 
       {/* Comments */}

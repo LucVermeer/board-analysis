@@ -94,6 +94,15 @@ export type PersistentSessionActionsType = {
     correlationId?: string,
   ) => Promise<void>;
   mirrorCurrentClimb: (mirrored: boolean) => Promise<void>;
+  // Broadcast multi-frame climb playback state to party peers. No-op in solo
+  // — the engine runs locally and there's no one to sync with.
+  publishPlaybackState: (input: {
+    climbUuid: string;
+    frameIndex: number;
+    isPlaying: boolean;
+    speed: number;
+    paceMs: number;
+  }) => Promise<void>;
   setQueue: (queue: LocalClimbQueueItem[], currentClimbQueueItem?: LocalClimbQueueItem | null) => Promise<void>;
   replaceQueueItem: (uuid: string, item: LocalClimbQueueItem) => Promise<void>;
 

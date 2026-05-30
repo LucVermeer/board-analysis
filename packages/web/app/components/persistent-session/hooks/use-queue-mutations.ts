@@ -5,6 +5,7 @@ import {
   REMOVE_QUEUE_ITEM,
   SET_CURRENT_CLIMB,
   MIRROR_CURRENT_CLIMB,
+  PUBLISH_PLAYBACK_STATE,
   SET_QUEUE,
   REPLACE_QUEUE_ITEM,
   TAKE_CONTROL,
@@ -21,6 +22,14 @@ type UseQueueMutationsArgs = {
   session: Session | null;
 };
 
+export type PublishPlaybackStateInput = {
+  climbUuid: string;
+  frameIndex: number;
+  isPlaying: boolean;
+  speed: number;
+  paceMs: number;
+};
+
 export type QueueMutationsActions = {
   addQueueItem: (item: LocalClimbQueueItem, position?: number) => Promise<void>;
   removeQueueItem: (uuid: string) => Promise<void>;
@@ -30,6 +39,12 @@ export type QueueMutationsActions = {
     correlationId?: string,
   ) => Promise<void>;
   mirrorCurrentClimb: (mirrored: boolean) => Promise<void>;
+  /**
+   * Broadcast a playback engine state change for a multi-frame climb so
+   * party peers stay in sync. No-op in solo (no session) — the engine
+   * runs entirely locally.
+   */
+  publishPlaybackState: (input: PublishPlaybackStateInput) => Promise<void>;
   setQueue: (queue: LocalClimbQueueItem[], currentClimbQueueItem?: LocalClimbQueueItem | null) => Promise<void>;
   replaceQueueItem: (uuid: string, item: LocalClimbQueueItem) => Promise<void>;
   /**
@@ -166,6 +181,23 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     });
   }, []);
 
+  const publishPlaybackState = useCallback(async (input: PublishPlaybackStateInput) => {
+    // Solo (no party session): playback runs entirely on the local client,
+    // so there's nothing to broadcast. Silently no-op so the engine can call
+    // this unconditionally on every state change.
+    if (!clientRef.current || !sessionRef.current?.id) return;
+    try {
+      await execute(clientRef.current, {
+        query: PUBLISH_PLAYBACK_STATE,
+        variables: { input },
+      });
+    } catch (error) {
+      // Playback broadcasts are best-effort — losing one just means peers
+      // briefly run out of sync until the next event. Don't surface to user.
+      console.error('Failed to publish playback state:', error);
+    }
+  }, []);
+
   const setQueue = useCallback(
     async (newQueue: LocalClimbQueueItem[], newCurrentClimbQueueItem?: LocalClimbQueueItem | null) => {
       if (!clientRef.current || !sessionRef.current?.id) throw new Error('Not connected to session');
@@ -268,6 +300,7 @@ export function useQueueMutations({ client, session }: UseQueueMutationsArgs): Q
     removeQueueItem,
     setCurrentClimb,
     mirrorCurrentClimb,
+    publishPlaybackState,
     setQueue,
     replaceQueueItem,
     takeControl,

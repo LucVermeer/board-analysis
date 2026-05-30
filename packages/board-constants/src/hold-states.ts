@@ -125,6 +125,21 @@ export const STATE_TO_PRIMARY_CODE: Record<BoardName, Partial<Record<HoldState, 
 const warnedHoldStates = new Set<string>();
 
 /**
+ * Split a comma-separated frames string into one snapshot per index.
+ * The Aurora frames format encodes multi-frame animations as
+ * `p<hold>r<role>p<hold>r<role>,p<hold>r<role>,...`. Each comma-separated
+ * segment is a self-contained snapshot suitable for the BLE encoder
+ * (`getAuroraBluetoothPacket`), which itself never splits on commas.
+ *
+ * Returns an empty array for the empty string. Strips empty segments so
+ * trailing commas don't produce phantom frames.
+ */
+export function splitFramesString(frames: string): string[] {
+  if (!frames) return [];
+  return frames.split(',').filter((segment) => segment.length > 0);
+}
+
+/**
  * Convert lit up holds string to a map of frames.
  * Each frame maps hold IDs to their state, color, and display color.
  */

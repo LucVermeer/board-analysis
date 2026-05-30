@@ -189,7 +189,12 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
           break;
       }
 
-      if (event.__typename !== 'FullSync') {
+      if (event.__typename !== 'FullSync' && event.__typename !== 'PlaybackStateChanged') {
+        // PlaybackStateChanged is ephemeral — it doesn't carry a stateHash
+        // because it doesn't mutate the queue. The room manager reuses the
+        // current sequence number for ordering, so skip both updates here
+        // to avoid clobbering the watchdog's drift detection with a stale
+        // sequence repeat.
         updateLastReceivedSequence(event.sequence);
         setLastReceivedStateHash(event.stateHash);
       }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vite-plus/test';
-import { HOLD_STATE_MAP, STATE_TO_PRIMARY_CODE, convertLitUpHoldsStringToMap } from '../hold-states';
+import { HOLD_STATE_MAP, STATE_TO_PRIMARY_CODE, convertLitUpHoldsStringToMap, splitFramesString } from '../hold-states';
 import type { BoardName } from '@boardsesh/shared-schema';
 
 describe('HOLD_STATE_MAP', () => {
@@ -101,6 +101,35 @@ describe('convertLitUpHoldsStringToMap', () => {
       state: 'STARTING',
       color: '#00FF00',
       displayColor: '#00DD00',
+    });
+  });
+});
+
+describe('splitFramesString', () => {
+  it('returns an empty array for the empty string', () => {
+    expect(splitFramesString('')).toEqual([]);
+  });
+
+  it('returns a single segment for a single-frame string', () => {
+    expect(splitFramesString('p100r42p200r43')).toEqual(['p100r42p200r43']);
+  });
+
+  it('splits multi-frame strings on commas', () => {
+    expect(splitFramesString('p100r42,p200r43,p300r44')).toEqual(['p100r42', 'p200r43', 'p300r44']);
+  });
+
+  it('drops empty segments from trailing or doubled commas', () => {
+    expect(splitFramesString('p100r42,,p200r43,')).toEqual(['p100r42', 'p200r43']);
+  });
+
+  it('round-trips with convertLitUpHoldsStringToMap frame indices', () => {
+    const frames = 'p100r1,p200r2,p300r3';
+    const split = splitFramesString(frames);
+    const map = convertLitUpHoldsStringToMap(frames, 'tension');
+    expect(split).toHaveLength(Object.keys(map).length);
+    split.forEach((segment, index) => {
+      const perSegment = convertLitUpHoldsStringToMap(segment, 'tension');
+      expect(perSegment[0]).toEqual(map[index]);
     });
   });
 });

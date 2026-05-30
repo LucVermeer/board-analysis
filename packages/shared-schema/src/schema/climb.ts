@@ -48,6 +48,10 @@ export const climbTypeDefs = /* GraphQL */ `
     published_at: String
     "ISO timestamp of when this climb row was created"
     created_at: String
+    "Number of animation frames encoded in the frames string. 1 for static climbs; >1 for variable-speed Aurora routes/circuits."
+    framesCount: Int
+    "Animation pace between frames, in Aurora's native unit (treated as milliseconds). 0 when not set."
+    framesPace: Int
   }
 
   """

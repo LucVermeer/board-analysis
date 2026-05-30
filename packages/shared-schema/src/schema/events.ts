@@ -146,7 +146,14 @@ export const eventsTypeDefs = /* GraphQL */ `
   """
   Union of possible queue events.
   """
-  union QueueEvent = FullSync | QueueItemAdded | QueueItemRemoved | QueueReordered | CurrentClimbChanged | ClimbMirrored
+  union QueueEvent =
+    | FullSync
+    | QueueItemAdded
+    | QueueItemRemoved
+    | QueueReordered
+    | CurrentClimbChanged
+    | ClimbMirrored
+    | PlaybackStateChanged
 
   """
   Full queue state sync event.
@@ -229,5 +236,46 @@ export const eventsTypeDefs = /* GraphQL */ `
     uuid: ID
     "New mirror state"
     mirrored: Boolean!
+  }
+
+  """
+  Input shape for \`publishPlaybackState\`. Carries everything peers need to
+  extrapolate the current frame without round-tripping back to the publisher.
+  """
+  input PlaybackStateInput {
+    "Climb the playback applies to. Peers ignore the event if it's for a different climb than they're showing."
+    climbUuid: ID!
+    "Frame index that became current at \`anchorTimestamp\`."
+    frameIndex: Int!
+    "Whether the engine is auto-advancing."
+    isPlaying: Boolean!
+    "Playback multiplier (1.0 = native pace)."
+    speed: Float!
+    "Climb's native pace, in milliseconds per frame."
+    paceMs: Int!
+  }
+
+  """
+  Event when a peer's playback engine state changes (play/pause/seek/speed)
+  for a variable-speed climb. Peers converge by extrapolating frames since
+  \`anchorTimestamp\`. The publisher's own clients echo-suppress by \`clientId\`.
+  """
+  type PlaybackStateChanged {
+    "Sequence number of this event"
+    sequence: Int!
+    "UUID of the climb whose playback changed"
+    climbUuid: ID!
+    "Frame index that was current at \`anchorTimestamp\`"
+    frameIndex: Int!
+    "Whether the engine is auto-advancing"
+    isPlaying: Boolean!
+    "Playback multiplier (1.0 = native pace)"
+    speed: Float!
+    "Climb's native pace, in milliseconds per frame"
+    paceMs: Int!
+    "Server wall-clock (epoch ms) when the broadcast was emitted; peers extrapolate elapsed frames from this"
+    anchorTimestamp: String!
+    "Client ID of the publisher, used for echo suppression"
+    clientId: ID
   }
 `;

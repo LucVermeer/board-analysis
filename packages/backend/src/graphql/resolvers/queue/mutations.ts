@@ -404,4 +404,50 @@ export const queueMutations = {
     });
     return state;
   },
+
+  /**
+   * Broadcast the current playback state for a variable-speed climb so other
+   * party members converge to the same frame/playing/speed without round
+   * trips. The server stamps `anchorTimestamp` so peers can extrapolate
+   * elapsed frames. Echo-suppressed by `clientId` on receipt.
+   *
+   * Playback events are intentionally not buffered for delta replay — they're
+   * superseded by the next broadcast and have no value when a peer reconnects
+   * mid-playback. Sequence numbers are taken from the room manager's monotonic
+   * counter for ordering consistency with other queue events.
+   */
+  publishPlaybackState: async (
+    _: unknown,
+    {
+      input,
+    }: {
+      input: {
+        climbUuid: string;
+        frameIndex: number;
+        isPlaying: boolean;
+        speed: number;
+        paceMs: number;
+      };
+    },
+    ctx: ConnectionContext,
+  ) => {
+    await applyRateLimit(ctx);
+    const sessionId = requireSession(ctx);
+
+    const currentState = await roomManager.getQueueState(sessionId);
+
+    pubsub.publishQueueEvent(sessionId, {
+      __typename: 'PlaybackStateChanged',
+      sequence: currentState.sequence,
+      climbUuid: input.climbUuid,
+      frameIndex: input.frameIndex,
+      isPlaying: input.isPlaying,
+      speed: input.speed,
+      paceMs: input.paceMs,
+      anchorTimestamp: String(Date.now()),
+      clientId: ctx.connectionId || null,
+    });
+
+    return true;
+  },
 };

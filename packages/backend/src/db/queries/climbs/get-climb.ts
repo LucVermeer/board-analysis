@@ -17,6 +17,9 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
   const tables = UNIFIED_TABLES;
 
   try {
+    // Direct-by-UUID lookups intentionally do NOT filter `framesCount = 1`.
+    // Search/dedupe still skip multi-frame climbs, but the player needs to
+    // be able to render variable-speed Aurora routes when navigated to by URL.
     const result = await db
       .select({
         uuid: tables.climbs.uuid,
@@ -25,6 +28,8 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
         name: tables.climbs.name,
         description: tables.climbs.description,
         frames: tables.climbs.frames,
+        frames_count: tables.climbs.framesCount,
+        frames_pace: tables.climbs.framesPace,
         angle: sql<number>`COALESCE(${tables.climbStats.angle}, ${params.angle})`,
         ascensionist_count: sql<number>`COALESCE(${tables.climbStats.ascensionistCount}, 0)`,
         difficulty_id: sql<number | null>`ROUND(${tables.climbStats.displayDifficulty}::numeric, 0)`,
@@ -45,8 +50,7 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
       .where(
         sql`${tables.climbs.boardType} = ${params.board_name}
         AND ${tables.climbs.layoutId} = ${params.layout_id}
-        AND ${tables.climbs.uuid} = ${params.climb_uuid}
-        AND ${tables.climbs.framesCount} = 1`,
+        AND ${tables.climbs.uuid} = ${params.climb_uuid}`,
       )
       .limit(1);
 
@@ -74,6 +78,8 @@ export const getClimbByUuid = async (params: GetClimbParams): Promise<Climb | nu
       is_draft: row.is_draft ?? false,
       created_at: row.created_at ?? null,
       published_at: row.published_at ?? null,
+      framesCount: row.frames_count ?? null,
+      framesPace: row.frames_pace ?? null,
     };
 
     return climb;

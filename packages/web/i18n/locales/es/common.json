@@ -261,5 +261,15 @@
     "sent_other": "{{count}} encadenes",
     "attempts_one": "1 intento",
     "attempts_other": "{{count}} intentos"
+  },
+  "playback": {
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "speed": "Velocidad",
+    "frameOfTotal": "Cuadro {{index}} de {{total}}",
+    "seek": "Desplazar cuadros",
+    "speedHalf": "0.5×",
+    "speedNormal": "1×",
+    "speedDouble": "2×"
   }
 }

@@ -30,6 +30,7 @@ import type { UserBoard } from '@boardsesh/shared-schema';
 import type { DiscoveredDevice } from '@/app/lib/ble/types';
 import type { PickerState } from './use-board-bluetooth';
 import { useLedColorOverrides, type LedColorOverrides } from '@/app/lib/led-color-overrides-db';
+import { splitFramesString } from '@boardsesh/board-constants/hold-states';
 
 type BluetoothContextValue = {
   isConnected: boolean;
@@ -173,9 +174,15 @@ function BluetoothAutoSender({
             pendingClimbRef.current = null;
             continue;
           }
-          const climbHoldCount = countClimbHolds(item.climb.frames);
+          // For variable-speed climbs (`frames` is comma-separated multiple
+          // snapshots) the BLE encoder would treat the whole string as one
+          // snapshot and split on `p` only — producing a garbage packet
+          // with NaN role codes. Send only the first frame here; the
+          // playback engine on /play handles subsequent ticks.
+          const firstFrame = splitFramesString(item.climb.frames)[0] ?? '';
+          const climbHoldCount = countClimbHolds(firstFrame);
           try {
-            const result = await sendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal, item.climb.uuid);
+            const result = await sendFramesToBoard(firstFrame, !!item.climb.mirrored, signal, item.climb.uuid);
             // After the await, the AutoSender may have unmounted — skip the
             // post-send side effects so a navigated-away climb doesn't fire
             // analytics or confirmClimbOnWall for a session the user has left.

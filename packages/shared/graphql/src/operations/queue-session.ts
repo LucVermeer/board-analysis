@@ -149,6 +149,12 @@ export const MIRROR_CURRENT_CLIMB = `
   }
 `;
 
+export const PUBLISH_PLAYBACK_STATE = `
+  mutation PublishPlaybackState($input: PlaybackStateInput!) {
+    publishPlaybackState(input: $input)
+  }
+`;
+
 export const REPLACE_QUEUE_ITEM = `
   mutation ReplaceQueueItem($uuid: ID!, $item: ClimbQueueItemInput!) {
     replaceQueueItem(uuid: $uuid, item: $item) {
@@ -448,6 +454,16 @@ export const EVENTS_REPLAY = `
           mirroredUuid: uuid
           mirrored
         }
+        ... on PlaybackStateChanged {
+          sequence
+          climbUuid
+          frameIndex
+          isPlaying
+          speed
+          paceMs
+          anchorTimestamp
+          clientId
+        }
       }
     }
   }
@@ -504,6 +520,16 @@ export const QUEUE_UPDATES = `
         stateHash
         mirroredUuid: uuid
         mirrored
+      }
+      ... on PlaybackStateChanged {
+        sequence
+        climbUuid
+        frameIndex
+        isPlaying
+        speed
+        paceMs
+        anchorTimestamp
+        clientId
       }
     }
   }

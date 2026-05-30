@@ -15,10 +15,14 @@ import { getSizesForLayoutId, getAllLayouts, getSetsForLayoutAndSize } from '@/a
 import { isNoMatchClimb } from '@/app/lib/no-match-climb';
 
 async function fetchClimbFromDb(params: ParsedBoardRouteParametersWithUuid): Promise<Climb> {
+  // Direct-by-UUID lookups intentionally do NOT filter `frames_count = 1`.
+  // Search/dedupe still skip multi-frame climbs (see queries/climbs/*),
+  // but the player needs to be able to render them when a URL points at one.
   const result = rowsFromResult<Climb & { difficulty_id: number | null }>(
     await sql`
         SELECT climbs.uuid, climbs.setter_username, climbs.user_id as "userId", climbs.name, climbs.description,
-        climbs.frames, COALESCE(climb_stats.angle, ${params.angle}) as angle, COALESCE(climb_stats.ascensionist_count, 0) as ascensionist_count,
+        climbs.frames, climbs.frames_count as "framesCount", climbs.frames_pace as "framesPace",
+        COALESCE(climb_stats.angle, ${params.angle}) as angle, COALESCE(climb_stats.ascensionist_count, 0) as ascensionist_count,
         ROUND(climb_stats.display_difficulty::numeric, 0) as difficulty_id,
         ROUND(climb_stats.quality_average::numeric, 2) as quality_average,
         ROUND(climb_stats.difficulty_average::numeric - climb_stats.display_difficulty::numeric, 2) AS difficulty_error,
@@ -32,7 +36,6 @@ async function fetchClimbFromDb(params: ParsedBoardRouteParametersWithUuid): Pro
         WHERE climbs.board_type = ${params.board_name}
         AND climbs.layout_id = ${params.layout_id}
         AND climbs.uuid = ${params.climb_uuid}
-        AND climbs.frames_count = 1
         limit 1
       `,
   );
