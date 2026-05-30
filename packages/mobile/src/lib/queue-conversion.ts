@@ -4,11 +4,26 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
  * Subscription event types matching the QUEUE_UPDATES_SUBSCRIPTION shape.
  * Defined here (rather than in the provider) so pure tests can import them
  * without pulling in React Native.
+ *
+ * Keep these fields in sync with `SUBSCRIPTION_CLIMB_FIELDS` in
+ * `src/lib/graphql/operations.ts` and with `climbToQueueItem` in
+ * `src/components/play-drawer/PlayDrawer.tsx`. If the subscription drops a
+ * field, the queue UI loses it on every server-driven update (FullSync on
+ * connect, peer mutations), so the queue row's grade pill and the
+ * re-opened play drawer end up blank.
  */
 export type SubscriptionClimb = {
   uuid: string;
   name: string;
   frames: string;
+  setter_username: string;
+  angle: number;
+  ascensionist_count: number;
+  difficulty: string;
+  quality_average: string;
+  stars: number;
+  difficulty_error: string;
+  benchmark_difficulty: string | null;
 };
 
 export type SubscriptionQueueItem = {
@@ -18,12 +33,9 @@ export type SubscriptionQueueItem = {
 
 /**
  * Convert a subscription queue item to a ClimbQueueItem compatible with the
- * shared reducer. The subscription only sends a subset of climb fields
- * (uuid, name, frames), so we fill in defaults for the rest.
- *
- * The Climb type requires these fields as non-nullable primitives, so we use
- * zero/empty defaults. The UI should prefer optional chaining (e.g.
- * `difficulty || null`) when distinguishing "no data" from a real value.
+ * shared reducer. `userAscents` / `userAttempts` are user-specific and not
+ * carried on subscription payloads — null is correct (mirrors what the
+ * search query returns for unauthenticated lookups).
  */
 export function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): ClimbQueueItem {
   return {
@@ -32,16 +44,14 @@ export function toClimbQueueItem(subscriptionItem: SubscriptionQueueItem): Climb
       uuid: subscriptionItem.climb.uuid,
       name: subscriptionItem.climb.name,
       frames: subscriptionItem.climb.frames,
-      // Subscription-only stubs: the WS payload doesn't include these fields.
-      // Non-nullable in the Climb type, so we use zero/empty defaults.
-      setter_username: '',
-      angle: 0,
-      ascensionist_count: 0,
-      difficulty: '',
-      quality_average: '',
-      stars: 0,
-      difficulty_error: '',
-      benchmark_difficulty: null,
+      setter_username: subscriptionItem.climb.setter_username,
+      angle: subscriptionItem.climb.angle,
+      ascensionist_count: subscriptionItem.climb.ascensionist_count,
+      difficulty: subscriptionItem.climb.difficulty,
+      quality_average: subscriptionItem.climb.quality_average,
+      stars: subscriptionItem.climb.stars,
+      difficulty_error: subscriptionItem.climb.difficulty_error,
+      benchmark_difficulty: subscriptionItem.climb.benchmark_difficulty,
     },
   };
 }

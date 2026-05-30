@@ -1,5 +1,5 @@
 import { DevServerSwitcherScreen } from '../../../src/components/DevServerSwitcherScreen';
 
-export default function DevServerSwitcherRoute() {
+export default function DevServersScreen() {
   return <DevServerSwitcherScreen />;
 }

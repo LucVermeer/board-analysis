@@ -128,7 +128,9 @@ export function PersistentQueueBar() {
 
   const handleOpenPlay = useCallback(() => {
     if (!currentClimbQueueItem?.climb) return;
-    openPlayDrawer(currentClimbQueueItem.climb);
+    // The bar is opening the drawer for the already-current climb; opting
+    // out of setAsCurrent avoids duplicating it at the end of the queue.
+    openPlayDrawer(currentClimbQueueItem.climb, { setAsCurrent: false });
   }, [openPlayDrawer, currentClimbQueueItem]);
 
   const tapGesture = useMemo(

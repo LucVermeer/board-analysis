@@ -195,7 +195,7 @@ sequenceDiagram
 ### Key Points
 
 1. **Origin Validation**: WebSocket connections are validated against allowed origins
-2. **Authentication**: Optional auth token passed in `connectionParams`
+2. **Authentication**: Auth token passed in `connectionParams` — web supplies a static `authToken` string; mobile supplies an async `connectionParams` provider (re-reads the token from secure storage on every reconnect). Both paths and the `shouldRetry` predicate (mobile rejects 4401 auth-error close codes) are handled by the shared `createGraphQLClient` factory in `@boardsesh/graphql-client`.
 3. **Eager Subscription**: Queue subscription starts BEFORE fetching state to prevent race conditions
 4. **Session Restoration**: Sessions can be restored from Redis (warm cache) or PostgreSQL (dormant durable state)
 5. **Stable Participant Identity (authenticated only)**: Authenticated clients bind `participantId` to their verified `userId`, so reconnects across socket drops update the same participant row (peers see `UserPresenceChanged`, not `UserLeft` + `UserJoined`). Anonymous clients bind `participantId` to their `connectionId` instead — a client-supplied participantId is intentionally rejected on the server (it would let any session member impersonate any other participant, since `SessionUser.id` is broadcast to peers). Each anonymous WebSocket drop therefore appears as a fresh participant.
@@ -1780,7 +1780,8 @@ A GraphQL mutation would require either the JS GraphQL client (not available in 
 ### Frontend
 
 - `packages/web/app/lib/backend-url.ts` - Runtime backend URL resolver (preview deploys, dev overrides)
-- `packages/web/app/components/graphql-queue/graphql-client.ts` - Browser-based `graphql-ws` client used on web, Android, and iOS Capacitor
+- `packages/shared/graphql-client/` - Platform-agnostic `graphql-ws` helpers (`execute`, `subscribe`, `createGraphQLClient`, `GraphQLOperationError`). Web and the React Native mobile app both consume this; web passes its `SafeWebSocket` wrapper + `connectionManager` registration via the `webSocketImpl` / `onClientCreated` hooks.
+- `packages/web/app/components/graphql-queue/graphql-client.ts` - Thin web wrapper around `@boardsesh/graphql-client` that adds the `SafeWebSocket` DOM-error suppression and `connectionManager` registration. Also re-exports the shared primitives for legacy relative imports.
 - `packages/web/app/components/connection-manager/websocket-connection-manager.ts` - Connection state tracking
 - `packages/web/app/components/persistent-session/hooks/use-session-lifecycle.ts` - Session lifecycle
 - `packages/web/app/components/persistent-session/hooks/use-queue-mutations.ts` - Queue mutations

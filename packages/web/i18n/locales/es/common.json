@@ -202,7 +202,10 @@
   },
   "mobile": {
     "more": {
-      "title": "Más"
+      "title": "Más",
+      "development": "Desarrollo",
+      "metroServersTitle": "Servidores Metro",
+      "metroServersSubtitle": "Cambia entre bundlers de Tailnet"
     },
     "nav": {
       "boards": "Tablas",

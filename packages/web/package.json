@@ -36,6 +36,7 @@
     "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",
     "@boardsesh/graphql": "*",
+    "@boardsesh/graphql-client": "*",
     "@boardsesh/moonboard-ocr": "*",
     "@boardsesh/play-view": "*",
     "@boardsesh/queue": "*",
@@ -127,7 +128,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "typescript": "~6.0.3",
     "vitest": "^4.1.5"
   },
   "optionalDependencies": {

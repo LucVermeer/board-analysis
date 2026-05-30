@@ -1,4 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
+import { createTimeoutSignal } from './abort-timeout';
 import { storeTokens, clearTokens, getRefreshToken } from './auth-store';
 import { BACKEND_URL, WEB_BASE_URL } from './env';
 
@@ -18,7 +19,7 @@ export async function exchangeTransferToken(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transferToken }),
-      signal: AbortSignal.timeout(15_000),
+      signal: createTimeoutSignal(15_000),
     });
 
     if (!response.ok) {
@@ -43,7 +44,7 @@ export async function signInWithCredentials(email: string, password: string): Pr
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
-      signal: AbortSignal.timeout(15_000),
+      signal: createTimeoutSignal(15_000),
     });
   } catch {
     // Network failure / timeout. The caller maps this to a translated message.

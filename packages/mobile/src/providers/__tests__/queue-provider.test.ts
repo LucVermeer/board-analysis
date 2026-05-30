@@ -42,6 +42,14 @@ function makeSubscriptionItem(uuid: string, climbUuid: string, name: string): Su
       uuid: climbUuid,
       name,
       frames: 'p1r12',
+      setter_username: 'setter',
+      angle: 40,
+      ascensionist_count: 5,
+      difficulty: '21',
+      quality_average: '3.0',
+      stars: 3,
+      difficulty_error: '0.5',
+      benchmark_difficulty: null,
     },
   };
 }
@@ -60,18 +68,18 @@ describe('toClimbQueueItem', () => {
     expect(result.climb.frames).toBe('p1r12');
   });
 
-  it('fills in default values for fields not sent by subscription', () => {
+  it('carries through grade and metadata fields from the subscription payload', () => {
     const subscriptionItem = makeSubscriptionItem('qi-2', 'climb-xyz', 'Hard Problem');
 
     const result = toClimbQueueItem(subscriptionItem);
 
-    expect(result.climb.setter_username).toBe('');
-    expect(result.climb.angle).toBe(0);
-    expect(result.climb.ascensionist_count).toBe(0);
-    expect(result.climb.difficulty).toBe('');
-    expect(result.climb.quality_average).toBe('');
-    expect(result.climb.stars).toBe(0);
-    expect(result.climb.difficulty_error).toBe('');
+    expect(result.climb.setter_username).toBe('setter');
+    expect(result.climb.angle).toBe(40);
+    expect(result.climb.ascensionist_count).toBe(5);
+    expect(result.climb.difficulty).toBe('21');
+    expect(result.climb.quality_average).toBe('3.0');
+    expect(result.climb.stars).toBe(3);
+    expect(result.climb.difficulty_error).toBe('0.5');
     expect(result.climb.benchmark_difficulty).toBeNull();
   });
 

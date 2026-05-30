@@ -4,7 +4,10 @@
   },
   "mobile": {
     "more": {
-      "title": "Plus"
+      "title": "Plus",
+      "development": "Développement",
+      "metroServersTitle": "Serveurs Metro",
+      "metroServersSubtitle": "Basculer entre les bundlers Tailnet"
     },
     "nav": {
       "boards": "Boards",
