@@ -20,16 +20,22 @@ function resolveDevMetadata(): {
   return { branchName, qaNotes, qaNotesFilePath };
 }
 
+function normalizeHost(host: string): string {
+  return host.trim().replace(/\.$/, '');
+}
+
+function normalizeHostValues(hostValues: readonly string[]): string[] {
+  return hostValues.map(normalizeHost).filter((host) => host.length > 0 && !host.includes(':'));
+}
+
 function resolveTailscaleHosts(): string[] {
   // Explicit override — accepted as comma-separated hosts. Honoured even when
   // empty so cloud builds (EAS, CI) can short-circuit the tailscale probe by
   // setting TAILSCALE_HOSTS= without paying the 2s subprocess timeout.
   const envHosts = process.env.TAILSCALE_HOSTS;
+
   if (envHosts !== undefined) {
-    return envHosts
-      .split(',')
-      .map((host) => host.trim())
-      .filter((host) => host.length > 0);
+    return normalizeHostValues(envHosts.split(','));
   }
 
   // Skip the subprocess on known cloud build environments — tailscale CLI
@@ -39,21 +45,24 @@ function resolveTailscaleHosts(): string[] {
   }
 
   try {
-    const raw = execSync('tailscale status --json', {
+    const rawStatus = execSync('tailscale status --json', {
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 2000,
     }).toString();
-    const status = JSON.parse(raw) as {
-      Self?: { DNSName?: string; Online?: boolean };
-      Peer?: Record<string, { DNSName?: string; Online?: boolean }>;
+
+    const status = JSON.parse(rawStatus) as {
+      Self?: { DNSName?: string; TailscaleIPs?: string[] };
+      Peer?: Record<string, { DNSName?: string; Online?: boolean; TailscaleIPs?: string[] }>;
     };
-    const stripDot = (name: string) => name.replace(/\.$/, '');
-    const hosts: string[] = [];
-    if (status.Self?.DNSName) hosts.push(stripDot(status.Self.DNSName));
-    for (const peer of Object.values(status.Peer ?? {})) {
-      if (peer.Online && peer.DNSName) hosts.push(stripDot(peer.DNSName));
-    }
-    return Array.from(new Set(hosts.filter((host) => host.length > 0)));
+    const onlinePeers = Object.values(status.Peer ?? {}).filter((peer) => peer.Online);
+    const hosts = [
+      ...(status.Self?.DNSName ? [status.Self.DNSName] : []),
+      ...(status.Self?.TailscaleIPs ?? []),
+      ...onlinePeers.flatMap((peer) => (peer.DNSName ? [peer.DNSName] : [])),
+      ...onlinePeers.flatMap((peer) => peer.TailscaleIPs ?? []),
+    ];
+
+    return Array.from(new Set(normalizeHostValues(hosts)));
   } catch {
     return [];
   }
