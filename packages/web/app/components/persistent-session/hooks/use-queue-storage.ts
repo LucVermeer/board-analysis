@@ -5,6 +5,7 @@ import type { BoardDetails } from '@/app/lib/types';
 import { getPreference, removePreference } from '@/app/lib/user-preferences-db';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import { GET_SESSION_SUMMARY, type GetSessionSummaryResponse } from '@boardsesh/graphql/operations/sessions';
+import { getClimbSessionCookie } from '@/app/lib/climb-session-cookie';
 import { type ActiveSessionInfo, ACTIVE_SESSION_KEY, DEBUG } from '../types';
 
 type UseQueueStorageArgs = {
@@ -90,6 +91,28 @@ export function useQueueStorage({
       try {
         const persisted = await getPreference<ActiveSessionInfo>(ACTIVE_SESSION_KEY);
         if (persisted && persisted.sessionId && persisted.boardPath && persisted.boardDetails) {
+          // Stale-vs-fresh-/join guard: if a cookie session ID is present and
+          // disagrees with what's in IndexedDB, the cookie wins. Cookie writes
+          // are always explicit (start-sesh-drawer, joinSession, the
+          // /api/internal/join route handler, or the legacy ?session=
+          // migration), so a mismatch means the user just joined a new session
+          // and the IndexedDB entry is left over from before. Without this
+          // check the restore can race BoardSessionBridge's cookie-driven
+          // activation and silently join the old session — and on a malformed-
+          // boardPath redirect to `/` the bridge never mounts to correct it.
+          const cookieSessionId = getClimbSessionCookie();
+          if (cookieSessionId && cookieSessionId !== persisted.sessionId) {
+            if (DEBUG)
+              console.info(
+                '[PersistentSession] Cookie session differs from persisted; discarding stale IndexedDB entry.',
+                { cookieSessionId, persistedSessionId: persisted.sessionId },
+              );
+            await removePreference(ACTIVE_SESSION_KEY);
+            hasRunPreflightRef.current = true;
+            setIsLocalQueueLoaded(true);
+            return;
+          }
+
           if (DEBUG) console.info('[PersistentSession] Restoring persisted session:', persisted.sessionId);
 
           if (!wsAuthToken) {

@@ -140,6 +140,13 @@ beforeEach(async () => {
   mockWsAuth.token = 'test-token';
   mockWsAuth.isLoading = false;
 
+  // Reset the climb-session cookie so cookie state from a prior test doesn't
+  // leak into the next (the stale-vs-fresh-/join guard in useQueueStorage
+  // reads document.cookie).
+  if (typeof document !== 'undefined') {
+    document.cookie = 'boardsesh-climb-session-id=; path=/; SameSite=Lax; max-age=0';
+  }
+
   // Clear preferences DB
   try {
     const prefsDb = await openDB(PREFS_DB_NAME, 1, {
@@ -511,5 +518,105 @@ describe('PersistentSessionProvider auto-restore on mount', () => {
       const stored = await getPreference(ACTIVE_SESSION_KEY);
       expect(stored).toBeNull();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: Stale IndexedDB session vs. fresh /join cookie
+// ---------------------------------------------------------------------------
+
+describe('Stale IndexedDB vs fresh /join cookie', () => {
+  function setClimbCookie(sessionId: string) {
+    document.cookie = `boardsesh-climb-session-id=${encodeURIComponent(sessionId)}; path=/; SameSite=Lax; max-age=86400`;
+  }
+
+  it('discards the IndexedDB entry when the cookie has a different sessionId', async () => {
+    // Simulate the bug scenario: IndexedDB still has the user's previous
+    // session A, but they just clicked /join/B which set the cookie to B.
+    const stale = {
+      sessionId: 'session-A-old',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, stale);
+    setClimbCookie('session-B-fresh');
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(result.current.isLocalQueueLoaded).toBe(true);
+    });
+
+    // The stale session must not be activated — BoardSessionBridge will
+    // activate B from the cookie on the board route.
+    expect(result.current.activeSession).toBeNull();
+
+    // IndexedDB should be cleared so a later restore can't replay the stale
+    // entry.
+    const stored = await getPreference(ACTIVE_SESSION_KEY);
+    expect(stored).toBeNull();
+
+    // The auto-finished pre-flight should never have run for the stale entry.
+    expect(mockHttpRequest).not.toHaveBeenCalled();
+  });
+
+  it('restores normally when the cookie matches the persisted sessionId', async () => {
+    const sessionInfo = {
+      sessionId: 'session-match',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+    setClimbCookie('session-match');
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expectSession(result.current.activeSession, sessionInfo);
+    });
+
+    const stored = await getPreference(ACTIVE_SESSION_KEY);
+    expectSession(stored, sessionInfo);
+  });
+
+  it('restores normally when no cookie is set (legacy reload path)', async () => {
+    // No cookie — fresh page reload with no /join interaction. The persisted
+    // session is the only signal we have, so it should be restored.
+    const sessionInfo = {
+      sessionId: 'session-no-cookie',
+      boardPath: '/kilter/1/10/1,2/40/list',
+      boardDetails: createTestBoardDetails(),
+      parsedParams: {
+        board_name: 'kilter' as const,
+        layout_id: 1,
+        size_id: 10,
+        set_ids: [1, 2],
+        angle: 40,
+      },
+    };
+    await setPreference(ACTIVE_SESSION_KEY, sessionInfo);
+
+    const { result } = renderHook(() => usePersistentSession(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expectSession(result.current.activeSession, sessionInfo);
+    });
+
+    const stored = await getPreference(ACTIVE_SESSION_KEY);
+    expectSession(stored, sessionInfo);
   });
 });
