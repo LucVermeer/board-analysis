@@ -404,7 +404,12 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
                 <MuiAlert severity="warning" className={styles.unsyncedAlert}>
                   <AlertTitle>{t('aurora.import.results.partialTitle')}</AlertTitle>
                   <Typography variant="body2">{t('aurora.import.results.partialBody')}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    component="div"
+                    sx={{ mt: 1, whiteSpace: 'pre-line' }}
+                  >
                     {importResult.partialError}
                   </Typography>
                 </MuiAlert>

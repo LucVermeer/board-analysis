@@ -446,6 +446,35 @@ describe('streamImport', () => {
       }
     });
 
+    it('joins partialError from a server-returned result with a later chunk error', async () => {
+      // First chunk returns a complete result that already carries a
+      // partialError (e.g. the server-side flash-correction step failed).
+      // Second chunk fails outright. Both messages must survive the merge so
+      // we don't lose diagnostics in Sentry or the UI banner.
+      const ascents = Array.from({ length: 1000 }, (_, i) => ({ id: i }));
+
+      const firstResult = makeResult({
+        ascents: { imported: 500, skipped: 0, failed: 0 },
+        partialError: 'Flash status correction failed',
+      });
+      const errorEvent: ImportProgressEvent = { type: 'error', error: 'Server overloaded' };
+      const errorStream = createMockReadableStream([JSON.stringify(errorEvent) + '\n']);
+
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mockFetchResponse(makeCompleteStream(firstResult)))
+        .mockResolvedValueOnce(mockFetchResponse(errorStream));
+
+      const received: ImportProgressEvent[] = [];
+      await streamImport('kilter', { user: { username: 'test' }, ascents }, (e) => received.push(e));
+
+      const complete = received.find((e) => e.type === 'complete');
+      expect(complete).toBeDefined();
+      if (complete?.type === 'complete') {
+        expect(complete.results.partialError).toContain('Flash status correction failed');
+        expect(complete.results.partialError).toContain('Server overloaded');
+      }
+    });
+
     it('merges per-source unresolved arrays across chunks with Set-dedup', async () => {
       const ascents = Array.from({ length: 600 }, (_, i) => ({ id: i }));
       const result1 = makeResult({

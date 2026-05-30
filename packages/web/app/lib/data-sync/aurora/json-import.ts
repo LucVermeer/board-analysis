@@ -395,35 +395,42 @@ export async function correctFlashStatusForUser(
   db: PgDatabase<PgQueryResultHKT, Record<string, unknown>>,
   userId: string,
 ): Promise<void> {
-  // Promote: attempt_count=1, no earlier tick for same (climb_uuid, angle) → flash
+  // Materialize per-(climb_uuid, angle) MIN(climbed_at) once, then drive both
+  // updates off it. Cheaper than the correlated NOT EXISTS / EXISTS variant on
+  // users with thousands of ticks. Same shape as migration 0108.
   await db.execute(sql`
+    WITH first_ticks AS (
+      SELECT climb_uuid, angle, MIN(climbed_at) AS first_climbed_at
+      FROM boardsesh_ticks
+      WHERE user_id = ${userId}
+      GROUP BY climb_uuid, angle
+    )
     UPDATE boardsesh_ticks t
     SET status = 'flash'
+    FROM first_ticks f
     WHERE t.user_id = ${userId}
-      AND t.status = 'send'
+      AND t.climb_uuid = f.climb_uuid
+      AND t.angle = f.angle
+      AND t.climbed_at = f.first_climbed_at
       AND t.attempt_count = 1
-      AND NOT EXISTS (
-        SELECT 1 FROM boardsesh_ticks earlier
-        WHERE earlier.user_id = t.user_id
-          AND earlier.climb_uuid = t.climb_uuid
-          AND earlier.angle = t.angle
-          AND earlier.climbed_at < t.climbed_at
-      )
+      AND t.status = 'send'
   `);
 
-  // Demote: any 'flash' that turns out to have a prior tick is a send
   await db.execute(sql`
+    WITH first_ticks AS (
+      SELECT climb_uuid, angle, MIN(climbed_at) AS first_climbed_at
+      FROM boardsesh_ticks
+      WHERE user_id = ${userId}
+      GROUP BY climb_uuid, angle
+    )
     UPDATE boardsesh_ticks t
     SET status = 'send'
+    FROM first_ticks f
     WHERE t.user_id = ${userId}
+      AND t.climb_uuid = f.climb_uuid
+      AND t.angle = f.angle
+      AND t.climbed_at > f.first_climbed_at
       AND t.status = 'flash'
-      AND EXISTS (
-        SELECT 1 FROM boardsesh_ticks earlier
-        WHERE earlier.user_id = t.user_id
-          AND earlier.climb_uuid = t.climb_uuid
-          AND earlier.angle = t.angle
-          AND earlier.climbed_at < t.climbed_at
-      )
   `);
 }
 
@@ -921,6 +928,10 @@ export async function importJsonExportData(
 
   // Step 9: Final-chunk-only steps. Earlier chunks may have imported ticks
   // even if this chunk only contains circuits — always run when not skipped.
+  // Both steps are best-effort: the user's ticks are already committed and
+  // we don't want to fail the whole import on a post-pass blip. But we do
+  // surface the failure on `partialError` so the UI can warn them their
+  // flashes or sessions may need a re-run.
   if (!options?.skipSessionBuild) {
     // 9a: Correct flash/send status across the user's full tick history.
     // Runs before session-build so per-session flash counts come out right.
@@ -928,6 +939,8 @@ export async function importJsonExportData(
       await correctFlashStatusForUser(db, userId);
     } catch (error) {
       console.error('Error correcting flash status after JSON import:', error);
+      const msg = error instanceof Error ? error.message : 'Flash status correction failed';
+      result.partialError = result.partialError ? `${result.partialError}\n${msg}` : msg;
     }
 
     // 9b: Build inferred sessions for all unassigned ticks
@@ -939,6 +952,8 @@ export async function importJsonExportData(
       }
     } catch (error) {
       console.error('Error building inferred sessions after JSON import:', error);
+      const msg = error instanceof Error ? error.message : 'Session build failed';
+      result.partialError = result.partialError ? `${result.partialError}\n${msg}` : msg;
     }
   }
 

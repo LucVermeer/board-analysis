@@ -57,9 +57,11 @@ function mergeResults(a: ImportResult, b: ImportResult): ImportResult {
     unresolvedAttemptClimbs: [...new Set([...a.unresolvedAttemptClimbs, ...b.unresolvedAttemptClimbs])].sort(),
     unresolvedCircuitClimbs: [...new Set([...a.unresolvedCircuitClimbs, ...b.unresolvedCircuitClimbs])].sort(),
   };
-  // partialError from either side wins (b's is more recent, prefer it)
-  if (b.partialError ?? a.partialError) {
-    merged.partialError = b.partialError ?? a.partialError;
+  // Preserve every chunk's error — if multiple chunks fail, dropping earlier
+  // messages would hide diagnostics. Join with a separator the UI can split on.
+  const errors = [a.partialError, b.partialError].filter((m): m is string => !!m);
+  if (errors.length > 0) {
+    merged.partialError = errors.join('\n');
   }
   return merged;
 }
@@ -276,7 +278,10 @@ export async function streamImport(
           mergedSoFar: merged,
         },
       });
-      merged = { ...merged, partialError: message };
+      merged = {
+        ...merged,
+        partialError: merged.partialError ? `${merged.partialError}\n${message}` : message,
+      };
       break;
     }
   }

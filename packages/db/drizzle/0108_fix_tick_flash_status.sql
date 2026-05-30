@@ -10,30 +10,56 @@
 --   correctFlashStatusForUser. This migration applies the same correction to
 --   every existing row across all users in a single pass.
 --
+-- Expected impact (estimated from production at PR-cut time):
+--   boardsesh_ticks total rows:               ~285,328
+--   status='flash' before migration:          ~194,121  (inflated — bug)
+--   status='send'  before migration:          ~46,525
+--   send + attempt_count=1 (promotion pool):  ~27,873
+--   Bulk of the work is the demotion: most "flashes" of repeat climbs become sends.
+--   We expect 'flash' rows to drop sharply (to the true-first-ever count) and
+--   'send' rows to rise correspondingly. No deletes, no schema changes.
+--
+-- Performance approach:
+--   We materialize per-(user_id, climb_uuid, angle) MIN(climbed_at) in a CTE
+--   once, then drive both UPDATEs off the CTE via equi-join. This is one full
+--   sequential scan + one hash aggregate, not a correlated NOT EXISTS that
+--   probes the table once per candidate row. On the existing indexes
+--   (boardsesh_ticks_user_climb_lookup_idx covers user_id, board_type, angle,
+--   climb_uuid; climbed_at lives in boardsesh_ticks_climbed_at_idx) the
+--   aggregate is cheap and the joins use the lookup index.
+--
 -- Idempotent: re-running it is a no-op once both statements have settled.
 
--- Promote: attempt_count = 1, no earlier tick for same (climb_uuid, angle) → flash
+-- Promote first-evers: the single tick at MIN(climbed_at) for each
+-- (user_id, climb_uuid, angle), if attempt_count=1, becomes a flash.
+WITH first_ticks AS (
+  SELECT user_id, climb_uuid, angle, MIN(climbed_at) AS first_climbed_at
+  FROM boardsesh_ticks
+  GROUP BY user_id, climb_uuid, angle
+)
 UPDATE boardsesh_ticks t
 SET status = 'flash'
-WHERE t.status = 'send'
+FROM first_ticks f
+WHERE t.user_id = f.user_id
+  AND t.climb_uuid = f.climb_uuid
+  AND t.angle = f.angle
+  AND t.climbed_at = f.first_climbed_at
   AND t.attempt_count = 1
-  AND NOT EXISTS (
-    SELECT 1 FROM boardsesh_ticks earlier
-    WHERE earlier.user_id = t.user_id
-      AND earlier.climb_uuid = t.climb_uuid
-      AND earlier.angle = t.angle
-      AND earlier.climbed_at < t.climbed_at
-  );
+  AND t.status = 'send';
 --> statement-breakpoint
 
--- Demote: any 'flash' with a prior tick is actually a send
+-- Demote everything else labeled 'flash' — anything past the first tick of
+-- a given (user_id, climb_uuid, angle) is a send, not a flash.
+WITH first_ticks AS (
+  SELECT user_id, climb_uuid, angle, MIN(climbed_at) AS first_climbed_at
+  FROM boardsesh_ticks
+  GROUP BY user_id, climb_uuid, angle
+)
 UPDATE boardsesh_ticks t
 SET status = 'send'
-WHERE t.status = 'flash'
-  AND EXISTS (
-    SELECT 1 FROM boardsesh_ticks earlier
-    WHERE earlier.user_id = t.user_id
-      AND earlier.climb_uuid = t.climb_uuid
-      AND earlier.angle = t.angle
-      AND earlier.climbed_at < t.climbed_at
-  );
+FROM first_ticks f
+WHERE t.user_id = f.user_id
+  AND t.climb_uuid = f.climb_uuid
+  AND t.angle = f.angle
+  AND t.climbed_at > f.first_climbed_at
+  AND t.status = 'flash';
