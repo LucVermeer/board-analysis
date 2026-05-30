@@ -91,23 +91,14 @@ export function useQueueStorage({
       try {
         const persisted = await getPreference<ActiveSessionInfo>(ACTIVE_SESSION_KEY);
         if (persisted && persisted.sessionId && persisted.boardPath && persisted.boardDetails) {
-          // Stale-vs-fresh-/join guard: if a cookie session ID is present and
-          // disagrees with what's in IndexedDB, the cookie wins. Cookie writes
-          // are always explicit (start-sesh-drawer, joinSession, the
-          // /api/internal/join route handler, or the legacy ?session=
-          // migration), so a mismatch means the user just joined a new session
-          // and the IndexedDB entry is left over from before. Without this
-          // check the restore can race BoardSessionBridge's cookie-driven
-          // activation and silently join the old session — and on a malformed-
-          // boardPath redirect to `/` the bridge never mounts to correct it.
+          // Cookie wins over stale IndexedDB — skip activation and let BoardSessionBridge activate the cookie's session. Leave IndexedDB intact so an unvalidated cookie (e.g. legacy ?session= migration) can't wipe a recoverable entry.
           const cookieSessionId = getClimbSessionCookie();
           if (cookieSessionId && cookieSessionId !== persisted.sessionId) {
             if (DEBUG)
-              console.info(
-                '[PersistentSession] Cookie session differs from persisted; discarding stale IndexedDB entry.',
-                { cookieSessionId, persistedSessionId: persisted.sessionId },
-              );
-            await removePreference(ACTIVE_SESSION_KEY);
+              console.info('[PersistentSession] Cookie session differs from persisted; skipping restore.', {
+                cookieSessionId,
+                persistedSessionId: persisted.sessionId,
+              });
             hasRunPreflightRef.current = true;
             setIsLocalQueueLoaded(true);
             return;

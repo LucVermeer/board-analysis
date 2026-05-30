@@ -140,12 +140,8 @@ beforeEach(async () => {
   mockWsAuth.token = 'test-token';
   mockWsAuth.isLoading = false;
 
-  // Reset the climb-session cookie so cookie state from a prior test doesn't
-  // leak into the next (the stale-vs-fresh-/join guard in useQueueStorage
-  // reads document.cookie).
-  if (typeof document !== 'undefined') {
-    document.cookie = 'boardsesh-climb-session-id=; path=/; SameSite=Lax; max-age=0';
-  }
+  // Reset the climb-session cookie so cookie state doesn't leak between tests.
+  document.cookie = 'boardsesh-climb-session-id=; path=/; SameSite=Lax; max-age=0';
 
   // Clear preferences DB
   try {
@@ -530,9 +526,7 @@ describe('Stale IndexedDB vs fresh /join cookie', () => {
     document.cookie = `boardsesh-climb-session-id=${encodeURIComponent(sessionId)}; path=/; SameSite=Lax; max-age=86400`;
   }
 
-  it('discards the IndexedDB entry when the cookie has a different sessionId', async () => {
-    // Simulate the bug scenario: IndexedDB still has the user's previous
-    // session A, but they just clicked /join/B which set the cookie to B.
+  it('skips activation when the cookie has a different sessionId and leaves IndexedDB intact', async () => {
     const stale = {
       sessionId: 'session-A-old',
       boardPath: '/kilter/1/10/1,2/40/list',
@@ -554,16 +548,12 @@ describe('Stale IndexedDB vs fresh /join cookie', () => {
       expect(result.current.isLocalQueueLoaded).toBe(true);
     });
 
-    // The stale session must not be activated — BoardSessionBridge will
-    // activate B from the cookie on the board route.
     expect(result.current.activeSession).toBeNull();
 
-    // IndexedDB should be cleared so a later restore can't replay the stale
-    // entry.
+    // IndexedDB is preserved — BoardSessionBridge overwrites on a successful join, and an unvalidated cookie (e.g. legacy ?session= migration) can still fall back to the persisted entry.
     const stored = await getPreference(ACTIVE_SESSION_KEY);
-    expect(stored).toBeNull();
+    expectSession(stored, stale);
 
-    // The auto-finished pre-flight should never have run for the stale entry.
     expect(mockHttpRequest).not.toHaveBeenCalled();
   });
 
