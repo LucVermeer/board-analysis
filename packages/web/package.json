@@ -132,5 +132,8 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-arm64-gnu": "^4.59.0"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
