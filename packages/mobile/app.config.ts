@@ -25,7 +25,7 @@ function normalizeHost(host: string): string {
 }
 
 function normalizeHostValues(hostValues: readonly string[]): string[] {
-  return hostValues.map(normalizeHost).filter((host) => host.length > 0 && !host.includes(':'));
+  return hostValues.map(normalizeHost).filter((host) => host.length > 0);
 }
 
 function resolveTailscaleHosts(): string[] {
@@ -51,15 +51,13 @@ function resolveTailscaleHosts(): string[] {
     }).toString();
 
     const status = JSON.parse(rawStatus) as {
-      Self?: { DNSName?: string; TailscaleIPs?: string[] };
-      Peer?: Record<string, { DNSName?: string; Online?: boolean; TailscaleIPs?: string[] }>;
+      Self?: { DNSName?: string };
+      Peer?: Record<string, { DNSName?: string; Online?: boolean }>;
     };
     const onlinePeers = Object.values(status.Peer ?? {}).filter((peer) => peer.Online);
     const hosts = [
       ...(status.Self?.DNSName ? [status.Self.DNSName] : []),
-      ...(status.Self?.TailscaleIPs ?? []),
       ...onlinePeers.flatMap((peer) => (peer.DNSName ? [peer.DNSName] : [])),
-      ...onlinePeers.flatMap((peer) => peer.TailscaleIPs ?? []),
     ];
 
     return Array.from(new Set(normalizeHostValues(hosts)));
@@ -135,6 +133,17 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
         // build settings, not in Swift code). Must match the value in the
         // keychain-access-groups entitlement above.
         BoardseshKeychainAccessGroup: '$(AppIdentifierPrefix)group.com.boardsesh.app',
+        NSAppTransportSecurity: {
+          NSAllowsArbitraryLoads: false,
+          NSAllowsLocalNetworking: true,
+          NSExceptionDomains: {
+            'ts.net': {
+              NSIncludesSubdomains: true,
+              NSExceptionAllowsInsecureHTTPLoads: true,
+              NSExceptionMinimumTLSVersion: 'TLSv1.0',
+            },
+          },
+        },
       },
     },
     android: {
