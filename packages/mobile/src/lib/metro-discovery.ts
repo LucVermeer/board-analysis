@@ -1,4 +1,9 @@
-import { createTimeoutSignal } from './abort-timeout';
+import { combineAbortSignals, createTimeoutSignal, mapWithConcurrency } from './abort-timeout';
+
+// Cap on simultaneous probe fetches. Without this, a multi-host tailnet
+// (e.g. 3 peers × 19 default ports = 57 simultaneous requests) saturates the
+// mobile network stack and slows pull-to-refresh.
+const MAX_PROBE_CONCURRENCY = 12;
 
 export const DEFAULT_METRO_PORTS = [
   8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 8090, 8091, 8092, 8093, 8094, 8095, 8096, 8097, 8098, 8099,
@@ -35,6 +40,10 @@ type DiscoverBundlersOptions = {
   savedTargets?: readonly string[];
   ports?: readonly number[];
   timeoutMs?: number;
+  // Caller-supplied cancellation — propagated to each probe so React Query
+  // invalidations (or pull-to-refresh) actually cancel in-flight fetches
+  // instead of leaking them to completion.
+  signal?: AbortSignal;
 };
 
 type Candidate = {
@@ -129,10 +138,15 @@ function parseMetroInfo(value: unknown): MetroInfo | null {
   };
 }
 
-export async function probeMetro(host: string, port: number, timeoutMs: number = PROBE_TIMEOUT_MS): Promise<boolean> {
+export async function probeMetro(
+  host: string,
+  port: number,
+  timeoutMs: number = PROBE_TIMEOUT_MS,
+  signal?: AbortSignal,
+): Promise<boolean> {
   try {
     const response = await fetch(`http://${host}:${port}/status`, {
-      signal: createTimeoutSignal(timeoutMs),
+      signal: combineAbortSignals(createTimeoutSignal(timeoutMs), signal),
     });
     if (!response.ok) return false;
     const body = await response.text();
@@ -146,10 +160,11 @@ export async function fetchMetroInfo(
   host: string,
   port: number,
   timeoutMs: number = PROBE_TIMEOUT_MS,
+  signal?: AbortSignal,
 ): Promise<MetroInfo | null> {
   try {
     const response = await fetch(`http://${host}:${port}/_boardsesh/metro-info`, {
-      signal: createTimeoutSignal(timeoutMs),
+      signal: combineAbortSignals(createTimeoutSignal(timeoutMs), signal),
     });
     if (!response.ok) return null;
     const json: unknown = await response.json();
@@ -204,26 +219,24 @@ export async function discoverBundlers({
   savedTargets = [],
   ports = DEFAULT_METRO_PORTS,
   timeoutMs = PROBE_TIMEOUT_MS,
+  signal,
 }: DiscoverBundlersOptions): Promise<DiscoveredBundler[]> {
   const candidates = buildCandidates(hosts, savedTargets, ports);
-  const probes = candidates.map(async (candidate) => ({
+  const results = await mapWithConcurrency(candidates, MAX_PROBE_CONCURRENCY, async (candidate) => ({
     ...candidate,
-    live: await probeMetro(candidate.host, candidate.port, timeoutMs),
+    live: await probeMetro(candidate.host, candidate.port, timeoutMs, signal),
   }));
-  const results = await Promise.all(probes);
   const liveCandidates = results.filter((result) => result.live);
 
-  return await Promise.all(
-    liveCandidates.map(async ({ host, port, source }) => {
-      const metadata = await fetchMetroInfo(host, port, timeoutMs);
-      return {
-        host,
-        port,
-        source,
-        url: `http://${host}:${port}`,
-        metadata,
-        metadataStatus: metadata ? 'loaded' : 'unavailable',
-      };
-    }),
-  );
+  return await mapWithConcurrency(liveCandidates, MAX_PROBE_CONCURRENCY, async ({ host, port, source }) => {
+    const metadata = await fetchMetroInfo(host, port, timeoutMs, signal);
+    return {
+      host,
+      port,
+      source,
+      url: `http://${host}:${port}`,
+      metadata,
+      metadataStatus: metadata ? 'loaded' : 'unavailable',
+    };
+  });
 }

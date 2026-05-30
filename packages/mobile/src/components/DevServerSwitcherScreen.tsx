@@ -77,7 +77,10 @@ export function DevServerSwitcherScreen() {
 
   const bundlersQuery = useQuery({
     queryKey: ['dev-bundlers', tailscaleHosts, savedTargets],
-    queryFn: () => discoverBundlers({ hosts: tailscaleHosts, savedTargets }),
+    // React Query passes its own AbortSignal — propagate so invalidations
+    // (pull-to-refresh, savedTargets change) cancel in-flight port probes
+    // instead of leaving them running to completion.
+    queryFn: ({ signal }) => discoverBundlers({ hosts: tailscaleHosts, savedTargets, signal }),
     staleTime: 30_000,
     enabled: savedTargetsQuery.isSuccess,
   });
@@ -131,11 +134,16 @@ export function DevServerSwitcherScreen() {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['saved-metro-targets'] }),
-      queryClient.invalidateQueries({ queryKey: ['dev-bundlers'] }),
-    ]);
-    setIsRefreshing(false);
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['saved-metro-targets'] }),
+        queryClient.invalidateQueries({ queryKey: ['dev-bundlers'] }),
+      ]);
+    } finally {
+      // try/finally so a query rejection (or unmount mid-refresh) doesn't
+      // strand the pull-to-refresh spinner.
+      setIsRefreshing(false);
+    }
   }, [queryClient]);
 
   const handleSwitchBundler = useCallback(
