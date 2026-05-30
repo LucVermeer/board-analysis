@@ -137,7 +137,13 @@ export function useZoomPanGesture({
           const newTranslateX = focalOffsetX * (1 - scaleDelta) + scaleDelta * savedTranslateX.value;
           const newTranslateY = focalOffsetY * (1 - scaleDelta) + scaleDelta * savedTranslateY.value;
 
-          const clamped = clampTranslation(newTranslateX, newTranslateY, newScale, containerWidthSV.value, containerHeightSV.value);
+          const clamped = clampTranslation(
+            newTranslateX,
+            newTranslateY,
+            newScale,
+            containerWidthSV.value,
+            containerHeightSV.value,
+          );
           scale.value = newScale;
           translateX.value = clamped.x;
           translateY.value = clamped.y;

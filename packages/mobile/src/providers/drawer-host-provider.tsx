@@ -13,7 +13,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Climb } from '@boardsesh/shared-schema';
-import { PlayDrawer, type PlayDrawerHandle } from '../components/play-drawer';
+import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { useDefaultBoard } from '../lib/graphql/hooks';
 
@@ -38,11 +38,19 @@ export type LogAscentInput = {
   sessionId?: string | null;
 };
 
+export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
+  /** Switch the drawer to a different board config before opening (e.g. the
+   *  caller is opening a climb that belongs to a board other than the user's
+   *  default). The override is applied via state, so the actual open happens
+   *  after the new boardConfig has propagated to PlayDrawer's props. */
+  boardConfig?: BoardConfig;
+};
+
 type DrawerHostValue = {
   /** Currently resolved board config (override OR default board). Null while
    *  the default board is still loading and no override is set. */
   boardConfig: BoardConfig | null;
-  openPlayDrawer: (climb: Climb, boardConfig?: BoardConfig) => void;
+  openPlayDrawer: (climb: Climb, options?: OpenPlayDrawerOptions) => void;
   openLogAscent: (input: LogAscentInput) => void;
 };
 
@@ -64,9 +72,10 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // open synchronously inside openPlayDrawer when an override is supplied
   // because the new override hasn't propagated to PlayDrawer's `boardConfig`
   // prop yet — a single requestAnimationFrame is unreliable on low-end
-  // Android. Stash the climb here and let the useEffect below open the
-  // drawer when activeBoardConfig actually matches the override.
-  const pendingOverrideClimbRef = useRef<Climb | null>(null);
+  // Android. Stash the climb (plus the caller's open options) here and let
+  // the useEffect below open the drawer when activeBoardConfig actually
+  // matches the override.
+  const pendingOverrideOpenRef = useRef<{ climb: Climb; options: PlayDrawerOpenOptions } | null>(null);
 
   const activeBoardConfig: BoardConfig | null = useMemo(() => {
     if (boardConfigOverride) return boardConfigOverride;
@@ -80,25 +89,26 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     };
   }, [boardConfigOverride, defaultBoard]);
 
-  const openPlayDrawer = useCallback((climb: Climb, override?: BoardConfig) => {
+  const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
+    const { boardConfig: override, ...openOptions } = options ?? {};
     if (override) {
-      pendingOverrideClimbRef.current = climb;
+      pendingOverrideOpenRef.current = { climb, options: openOptions };
       setBoardConfigOverride(override);
       return;
     }
     setBoardConfigOverride(null);
-    pendingOverrideClimbRef.current = null;
-    playDrawerRef.current?.open(climb);
+    pendingOverrideOpenRef.current = null;
+    playDrawerRef.current?.open(climb, openOptions);
   }, []);
 
   // Open after the override has flowed through `activeBoardConfig` into
   // PlayDrawer's props.
   useEffect(() => {
-    if (!pendingOverrideClimbRef.current) return;
+    if (!pendingOverrideOpenRef.current) return;
     if (!activeBoardConfig) return;
-    const climb = pendingOverrideClimbRef.current;
-    pendingOverrideClimbRef.current = null;
-    playDrawerRef.current?.open(climb);
+    const { climb, options } = pendingOverrideOpenRef.current;
+    pendingOverrideOpenRef.current = null;
+    playDrawerRef.current?.open(climb, options);
   }, [activeBoardConfig]);
 
   const openLogAscent = useCallback((input: LogAscentInput) => {

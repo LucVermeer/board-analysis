@@ -1,10 +1,14 @@
 const { createRunOncePlugin, withInfoPlist } = require('expo/config-plugins');
 
 const TAILSCALE_DOMAIN = 'ts.net';
+// Metro serves over plain HTTP, so the insecure-loads exception is what
+// actually unlocks the connection. TLS minimum version is intentionally
+// omitted — Tailscale itself encrypts at the WireGuard layer, iOS never
+// negotiates TLS to `*.ts.net`, and shipping an explicit `TLSv1.0` floor
+// is the kind of value App Store reviewers flag.
 const TAILSCALE_ATS_EXCEPTION = {
   NSIncludesSubdomains: true,
   NSExceptionAllowsInsecureHTTPLoads: true,
-  NSExceptionMinimumTLSVersion: 'TLSv1.0',
 };
 
 function isRecord(value) {
@@ -19,8 +23,10 @@ function applyBoardseshDevNetworkingInfoPlist(infoPlist) {
 
   infoPlist.NSAppTransportSecurity = {
     ...appTransportSecurity,
-    NSAllowsArbitraryLoads: false,
-    NSAllowsLocalNetworking: true,
+    // Non-clobbering: preserve any upstream value (Expo defaults, other
+    // plugins) and only fall back to our defaults when unset.
+    NSAllowsArbitraryLoads: appTransportSecurity.NSAllowsArbitraryLoads ?? false,
+    NSAllowsLocalNetworking: appTransportSecurity.NSAllowsLocalNetworking ?? true,
     NSExceptionDomains: {
       ...exceptionDomains,
       [TAILSCALE_DOMAIN]: {

@@ -89,23 +89,17 @@ describe('computeFocalPinchTranslation', () => {
   // savedTranslate term vanishes either way.
 
   it('zooming at center produces no translation shift', () => {
-    expect(
-      computeFocalPinchTranslation({ focalOffset: 0, scaleDelta: 2, savedTranslate: 0 }),
-    ).toBe(0);
+    expect(computeFocalPinchTranslation({ focalOffset: 0, scaleDelta: 2, savedTranslate: 0 })).toBe(0);
   });
 
   it('zooming at offset shifts content toward center', () => {
     // Focal point 200 left of center, zooming to 2x: content should shift
     // 200px to the right to keep that point under the focal.
-    expect(
-      computeFocalPinchTranslation({ focalOffset: -200, scaleDelta: 2, savedTranslate: 0 }),
-    ).toBe(200);
+    expect(computeFocalPinchTranslation({ focalOffset: -200, scaleDelta: 2, savedTranslate: 0 })).toBe(200);
   });
 
   it('zooming at opposite offset shifts content opposite direction', () => {
-    expect(
-      computeFocalPinchTranslation({ focalOffset: 200, scaleDelta: 2, savedTranslate: 0 }),
-    ).toBe(-200);
+    expect(computeFocalPinchTranslation({ focalOffset: 200, scaleDelta: 2, savedTranslate: 0 })).toBe(-200);
   });
 
   // These tests exercise the savedTranslate != 0 case — pinching while
@@ -114,25 +108,19 @@ describe('computeFocalPinchTranslation', () => {
 
   it('continuing a pinch with no scale change preserves the existing translation', () => {
     // scaleDelta = 1 means no scale change. Translation must stay put.
-    expect(
-      computeFocalPinchTranslation({ focalOffset: 50, scaleDelta: 1, savedTranslate: 30 }),
-    ).toBe(30);
+    expect(computeFocalPinchTranslation({ focalOffset: 50, scaleDelta: 1, savedTranslate: 30 })).toBe(30);
   });
 
   it('pinching at a focal point with existing translation applies scaleDelta to savedTranslate', () => {
     // Buggy formula gives: 30 + 50*(1-2) = -20
     // Correct formula gives: 50*(1-2) + 2*30 = -50 + 60 = 10
-    expect(
-      computeFocalPinchTranslation({ focalOffset: 50, scaleDelta: 2, savedTranslate: 30 }),
-    ).toBe(10);
+    expect(computeFocalPinchTranslation({ focalOffset: 50, scaleDelta: 2, savedTranslate: 30 })).toBe(10);
   });
 
   it('pinching in (scaleDelta < 1) from a translated state shrinks the translation', () => {
     // Going from 2x to 1x (scaleDelta = 0.5), with existing 100px translate.
     // Buggy formula: 100 + 0*(1-0.5) = 100 — keeps full translation
     // Correct formula: 0*(1-0.5) + 0.5*100 = 50 — translation halves with scale
-    expect(
-      computeFocalPinchTranslation({ focalOffset: 0, scaleDelta: 0.5, savedTranslate: 100 }),
-    ).toBe(50);
+    expect(computeFocalPinchTranslation({ focalOffset: 0, scaleDelta: 0.5, savedTranslate: 100 })).toBe(50);
   });
 });

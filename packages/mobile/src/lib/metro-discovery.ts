@@ -1,3 +1,5 @@
+import { createTimeoutSignal } from './abort-timeout';
+
 export const DEFAULT_METRO_PORTS = [
   8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 8090, 8091, 8092, 8093, 8094, 8095, 8096, 8097, 8098, 8099,
 ] as const;
@@ -130,7 +132,7 @@ function parseMetroInfo(value: unknown): MetroInfo | null {
 export async function probeMetro(host: string, port: number, timeoutMs: number = PROBE_TIMEOUT_MS): Promise<boolean> {
   try {
     const response = await fetch(`http://${host}:${port}/status`, {
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: createTimeoutSignal(timeoutMs),
     });
     if (!response.ok) return false;
     const body = await response.text();
@@ -147,7 +149,7 @@ export async function fetchMetroInfo(
 ): Promise<MetroInfo | null> {
   try {
     const response = await fetch(`http://${host}:${port}/_boardsesh/metro-info`, {
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: createTimeoutSignal(timeoutMs),
     });
     if (!response.ok) return null;
     const json: unknown = await response.json();

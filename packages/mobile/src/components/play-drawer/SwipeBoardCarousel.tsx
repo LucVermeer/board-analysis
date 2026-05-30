@@ -69,14 +69,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   // pre-layout. The pinch hook re-reads this value, no remount needed.
   const [containerHeight, setContainerHeight] = useState(0);
 
-  const {
-    pinchGesture,
-    zoomPanGesture,
-    isZoomed,
-    isZoomedSV,
-    resetZoom,
-    animatedZoomStyle,
-  } = useZoomPanGesture({
+  const { pinchGesture, zoomPanGesture, isZoomed, isZoomedSV, resetZoom, animatedZoomStyle } = useZoomPanGesture({
     enabled,
     containerWidth: screenWidth,
     containerHeight,
@@ -204,10 +197,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
           </GestureDetector>
         )}
 
-        <Animated.View
-          style={[styles.resetZoomWrapper, resetButtonStyle]}
-          pointerEvents={isZoomed ? 'auto' : 'none'}
-        >
+        <Animated.View style={[styles.resetZoomWrapper, resetButtonStyle]} pointerEvents={isZoomed ? 'auto' : 'none'}>
           <Pressable
             onPress={resetZoom}
             style={styles.resetZoomButton}

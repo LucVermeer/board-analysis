@@ -65,8 +65,21 @@ type BoardConfig = {
   angle: number;
 };
 
+export type PlayDrawerOpenOptions = {
+  /**
+   * When `true` (default), the opened climb is dispatched through
+   * `setCurrentClimb`, which both makes it the active climb and appends
+   * it to the queue. Pass `false` when the drawer is being opened for a
+   * climb that's already current (e.g. from the persistent queue bar),
+   * to avoid duplicating that climb at the end of the queue — the queue
+   * item wrapper carries a fresh uuid, so the reducer's idempotency
+   * guards key off uuid and don't catch the duplicate.
+   */
+  setAsCurrent?: boolean;
+};
+
 export type PlayDrawerHandle = {
-  open: (climb: Climb) => void;
+  open: (climb: Climb, options?: PlayDrawerOpenOptions) => void;
   close: () => void;
 };
 
@@ -138,14 +151,16 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }));
 
   useImperativeHandle(ref, () => ({
-    open: (selectedClimb: Climb) => {
+    open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
       setClimb(selectedClimb);
       setIsMirrored(false);
       setIsFavorited(false);
       setIsTickBarActive(false);
       setIsSheetOpen(true);
       setActiveSubDrawer('none');
-      setCurrentClimb(climbToQueueItem(selectedClimb));
+      if (options?.setAsCurrent ?? true) {
+        setCurrentClimb(climbToQueueItem(selectedClimb));
+      }
       sheetRef.current?.present();
     },
     close: () => {

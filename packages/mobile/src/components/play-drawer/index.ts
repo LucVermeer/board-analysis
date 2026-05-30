@@ -1,4 +1,4 @@
-export { PlayDrawer, type PlayDrawerHandle } from './PlayDrawer';
+export { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from './PlayDrawer';
 export { PlayDrawerHeader } from './PlayDrawerHeader';
 export { PlayDrawerActionBar } from './PlayDrawerActionBar';
 export { PlayDrawerTickFab } from './PlayDrawerTickFab';

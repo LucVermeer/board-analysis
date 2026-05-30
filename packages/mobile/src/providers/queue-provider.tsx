@@ -92,7 +92,10 @@ type QueueItemAddedEvent = {
   __typename: 'QueueItemAdded';
   sequence: number;
   stateHash: string;
-  item: SubscriptionQueueItem;
+  // Aliased from `item` in the subscription query to disambiguate the
+  // overlapping `item` selection on CurrentClimbChanged, which returns
+  // a nullable ClimbQueueItem (the server rejects the query otherwise).
+  addedItem: SubscriptionQueueItem;
   position: number | null;
 };
 
@@ -116,7 +119,7 @@ type CurrentClimbChangedEvent = {
   __typename: 'CurrentClimbChanged';
   sequence: number;
   stateHash: string;
-  item: SubscriptionQueueItem | null;
+  currentItem: SubscriptionQueueItem | null;
   clientId: string | null;
   correlationId: string | null;
 };
@@ -125,7 +128,9 @@ type ClimbMirroredEvent = {
   __typename: 'ClimbMirrored';
   sequence: number;
   stateHash: string;
-  uuid: string | null;
+  // Aliased from `uuid` in the subscription query so it doesn't conflict
+  // with QueueItemRemoved.uuid (ID!) which is non-null.
+  mirroredUuid: string | null;
   mirrored: boolean;
 };
 
@@ -153,7 +158,7 @@ function toSyncQueueEvent(event: QueueUpdateEvent): SyncQueueEvent {
     case 'QueueItemAdded':
       return {
         __typename: 'QueueItemAdded',
-        item: toClimbQueueItem(event.item),
+        item: toClimbQueueItem(event.addedItem),
         position: event.position,
       };
     case 'QueueItemRemoved':
@@ -168,7 +173,7 @@ function toSyncQueueEvent(event: QueueUpdateEvent): SyncQueueEvent {
     case 'CurrentClimbChanged':
       return {
         __typename: 'CurrentClimbChanged',
-        item: event.item ? toClimbQueueItem(event.item) : null,
+        item: event.currentItem ? toClimbQueueItem(event.currentItem) : null,
         clientId: event.clientId,
         correlationId: event.correlationId,
       };
@@ -176,10 +181,9 @@ function toSyncQueueEvent(event: QueueUpdateEvent): SyncQueueEvent {
       return {
         __typename: 'ClimbMirrored',
         mirrored: event.mirrored,
-        // Server emits the canonical queue-item uuid under `uuid`; the
-        // coordinator forwards it as `mirroredUuid` for the reducer's
-        // race-guard against driver navigating mid-mirror.
-        mirroredUuid: event.uuid,
+        // The coordinator forwards mirroredUuid for the reducer's race-guard
+        // against the driver navigating mid-mirror.
+        mirroredUuid: event.mirroredUuid,
       };
   }
 }
@@ -195,9 +199,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // Tracks the in-flight (or completed) joinSession mutation for the current
   // WS connection. Queue mutations gate on this so a swipe issued right after
   // CREATE_SESSION still goes out *after* the WS-side joinSession has bound
-  // sessionId into the backend's per-connection context. Stored alongside the
-  // sessionId it was issued for so a session-switch invalidates it.
-  const joinPromiseRef = useRef<{ sessionId: string; promise: Promise<unknown> } | null>(null);
+  // sessionId into the backend's per-connection context. Keyed by
+  // (sessionId, connectionEpoch) so reconnects force a fresh join — without
+  // the epoch, a mutation racing between `closed` and `connected` could await
+  // a stale-resolved promise and fire over the new socket before its own
+  // JOIN_SESSION lands on the backend's per-connection ConnectionContext.
+  const connectionEpochRef = useRef(0);
+  const joinPromiseRef = useRef<{ sessionId: string; epoch: number; promise: Promise<unknown> } | null>(null);
   const { showToast } = useToast();
   const { t } = useTranslation('session');
 
@@ -224,6 +232,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     getStoredSessionId().then((storedId) => {
+      if (__DEV__) {
+        console.info(`[session] restored from store: ${storedId ?? '(none)'}`);
+      }
       if (storedId) setSessionId(storedId);
     });
   }, []);
@@ -246,13 +257,21 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // no-op for the room manager); we cache the in-flight promise so concurrent
   // callers share one mutation per (sessionId, connection) pair.
   const ensureJoined = useCallback(async (sessionIdToJoin: string): Promise<void> => {
+    const epoch = connectionEpochRef.current;
     const current = joinPromiseRef.current;
-    if (current && current.sessionId === sessionIdToJoin) {
+    if (current && current.sessionId === sessionIdToJoin && current.epoch === epoch) {
       await current.promise;
       return;
     }
     const boardConfig = await getStoredBoardConfig();
-    if (!boardConfig) return;
+    if (!boardConfig) {
+      // Fail loud: a queue mutation can't succeed without a bound board
+      // config on the backend session. The caller's catch will surface the
+      // toast, which is the correct UX — silently no-op'ing would let the
+      // subsequent execute() fire with no sessionId in ctx and trip the
+      // backend's requireSession() check.
+      throw new Error('Board config missing — cannot join session');
+    }
     const boardPath = buildBoardPath(
       boardConfig.boardName,
       boardConfig.layoutId,
@@ -269,7 +288,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       query: JOIN_SESSION,
       variables: { sessionId: sessionIdToJoin, boardPath },
     });
-    const entry = { sessionId: sessionIdToJoin, promise };
+    const entry = { sessionId: sessionIdToJoin, epoch, promise };
     joinPromiseRef.current = entry;
     try {
       await promise;
@@ -292,23 +311,29 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     const wsClient = getWsClient();
 
     // graphql-ws auto-reconnects, and every reconnect gives us a fresh
-    // per-connection ConnectionContext on the backend. The first `connected`
-    // event matches the initial connection — we fire joinSession explicitly
-    // below to set up `joinPromiseRef`. Subsequent `connected` events are
-    // reconnects: invalidate the stale join and refire over the new connection.
-    let isFirstConnect = true;
-    const unsubConnected = wsClient.on('connected', () => {
-      if (isFirstConnect) {
-        isFirstConnect = false;
-        return;
-      }
+    // per-connection ConnectionContext on the backend. Invalidate the join
+    // cache on `closed` (not on `connected`) — invalidating on `connected`
+    // races mutations issued while the socket is down: they read the
+    // resolved-but-stale ref from the dead connection, then graphql-ws sends
+    // them over the new socket before the re-issued JOIN_SESSION lands.
+    // Bumping the epoch on `closed` makes any cached entry stale by key.
+    const unsubClosed = wsClient.on('closed', () => {
+      connectionEpochRef.current += 1;
       joinPromiseRef.current = null;
-      void ensureJoined(sessionId);
+    });
+    const logJoinFailure = (err: unknown) => {
+      if (__DEV__) console.warn('[queue] joinSession failed', err);
+    };
+    const unsubConnected = wsClient.on('connected', () => {
+      // On initial connect this is a no-op (eager fire below cached the
+      // entry at the same epoch); on reconnect `closed` already cleared
+      // the ref so this re-fires JOIN_SESSION on the new socket.
+      ensureJoined(sessionId).catch(logJoinFailure);
     });
 
     // Fire the initial join eagerly so mutations issued before the first user
     // interaction still find a resolved promise in joinPromiseRef.
-    void ensureJoined(sessionId);
+    ensureJoined(sessionId).catch(logJoinFailure);
 
     const cleanup = wsClient.subscribe<{ queueUpdates: QueueUpdateEvent }>(
       {
@@ -337,6 +362,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     return () => {
       cleanup();
       unsubConnected();
+      unsubClosed();
       unsubscribeRef.current = null;
       joinPromiseRef.current = null;
     };

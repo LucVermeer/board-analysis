@@ -1,6 +1,18 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { View, ScrollView, RefreshControl, ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
-import type BottomSheet from '@gorhom/bottom-sheet';
+import {
+  View,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Constants from 'expo-constants';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -52,6 +64,8 @@ export function DevServerSwitcherScreen() {
   const [switchingUrl, setSwitchingUrl] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedBundler, setSelectedBundler] = useState<DiscoveredBundler | null>(null);
+  const [isAddPromptOpen, setIsAddPromptOpen] = useState(false);
+  const [addInputValue, setAddInputValue] = useState('');
 
   const tailscaleHosts = useMemo(getTailscaleHosts, []);
   const savedTargetsQuery = useQuery({
@@ -77,10 +91,15 @@ export function DevServerSwitcherScreen() {
       await ExpoDevLauncher.loadApp(bundler.url);
     },
     onError: (mutationError: unknown) => {
-      setSwitchingUrl(null);
       hapticError();
       // i18n-ignore-next-line
       Alert.alert('Switch Failed', mutationError instanceof Error ? mutationError.message : 'Unknown error');
+    },
+    // onSettled fires on both success and failure — covers the silent-success
+    // edge case where loadApp resolves without unmounting (same bundle, bridge
+    // hot-reload) and leaves the spinner stuck otherwise.
+    onSettled: () => {
+      setSwitchingUrl(null);
     },
   });
 
@@ -141,22 +160,22 @@ export function DevServerSwitcherScreen() {
 
   const handleAddTarget = useCallback(() => {
     hapticLight();
-    // i18n-ignore-next-line
-    Alert.prompt(
-      'Add Metro Server',
-      'Enter a Tailnet/LAN host or an http://host:port URL.',
-      [
-        // i18n-ignore-next-line
-        { text: 'Cancel', style: 'cancel' },
-        {
-          // i18n-ignore-next-line
-          text: 'Save',
-          onPress: (value?: string) => addTargetMutation.mutate(value ?? ''),
-        },
-      ],
-      'plain-text',
-    );
-  }, [addTargetMutation]);
+    // Alert.prompt is iOS-only — a controlled Modal + TextInput works on both
+    // platforms. Inputs are dev-only and only seen by developers.
+    setAddInputValue('');
+    setIsAddPromptOpen(true);
+  }, []);
+
+  const handleAddPromptSave = useCallback(() => {
+    const value = addInputValue.trim();
+    setIsAddPromptOpen(false);
+    if (value.length === 0) return;
+    addTargetMutation.mutate(value);
+  }, [addInputValue, addTargetMutation]);
+
+  const handleAddPromptCancel = useCallback(() => {
+    setIsAddPromptOpen(false);
+  }, []);
 
   const handleRemoveTarget = useCallback(
     (target: string) => {
@@ -390,7 +409,7 @@ export function DevServerSwitcherScreen() {
 
       <Sheet ref={infoSheetRef} snapPoints={['55%', '90%']}>
         {selectedBundler ? (
-          <ScrollView contentContainerStyle={styles.sheetContent}>
+          <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
             {/* i18n-ignore-next-line */}
             <SectionHeader title="Metro Server" />
             <View
@@ -449,9 +468,66 @@ export function DevServerSwitcherScreen() {
               disabled={isSwitching && switchingUrl !== selectedBundler.url}
               style={styles.sheetButton}
             />
-          </ScrollView>
+          </BottomSheetScrollView>
         ) : null}
       </Sheet>
+
+      <Modal animationType="fade" transparent visible={isAddPromptOpen} onRequestClose={handleAddPromptCancel}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: systemColors.secondaryBackground, borderRadius: borderRadius.lg },
+            ]}
+          >
+            {/* i18n-ignore-next-line */}
+            <Text variant="headline" color={systemColors.label}>
+              Add Metro Server
+            </Text>
+            {/* i18n-ignore-next-line */}
+            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.modalSubtitle}>
+              Enter a Tailnet/LAN host or an http://host:port URL.
+            </Text>
+            <TextInput
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              value={addInputValue}
+              onChangeText={setAddInputValue}
+              onSubmitEditing={handleAddPromptSave}
+              // i18n-ignore-next-line
+              placeholder="host or http://host:port"
+              placeholderTextColor={systemColors.tertiaryLabel}
+              style={[
+                styles.modalInput,
+                {
+                  color: systemColors.label,
+                  backgroundColor: systemColors.tertiaryBackground,
+                  borderRadius: borderRadius.md,
+                },
+              ]}
+            />
+            <View style={styles.modalActions}>
+              <Button
+                // i18n-ignore-next-line
+                title="Cancel"
+                variant="text"
+                size="small"
+                onPress={handleAddPromptCancel}
+              />
+              <Button
+                // i18n-ignore-next-line
+                title="Save"
+                variant="filled"
+                size="small"
+                onPress={handleAddPromptSave}
+                disabled={addInputValue.trim().length === 0}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </>
   );
 }
@@ -515,5 +591,29 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 40,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    padding: 20,
+    gap: 12,
+  },
+  modalSubtitle: {
+    marginBottom: 4,
+  },
+  modalInput: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 4,
   },
 });

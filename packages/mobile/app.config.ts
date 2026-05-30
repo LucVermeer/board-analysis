@@ -66,10 +66,18 @@ function resolveTailscaleHosts(): string[] {
   }
 }
 
+function isDevBuildProfile(): boolean {
+  // EAS_BUILD_PROFILE is set by `eas build` per the profile in eas.json.
+  // Treat unset (local `expo prebuild` / dev runs) as a dev build too.
+  const profile = process.env.EAS_BUILD_PROFILE;
+  return profile === undefined || profile === 'development' || profile === 'development-device';
+}
+
 export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: boolean } => {
   const devMetadata = resolveDevMetadata();
   const hasDevMetadata = devMetadata.branchName || devMetadata.qaNotes || devMetadata.qaNotesFilePath;
   const tailscaleHosts = resolveTailscaleHosts();
+  const isDevBuild = isDevBuildProfile();
 
   return {
     ...config,
@@ -155,10 +163,11 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // Island) plus the Next/Previous AppIntents. Target sources live in
       // packages/mobile/targets/BoardseshWidgets/.
       '@bacons/apple-targets',
-      // Expo Dev Launcher owns the default local-network ATS keys. This keeps
-      // those defaults and adds an HTTP exception for Tailscale MagicDNS
-      // development bundlers such as marcosmbp-1.<tailnet>.ts.net.
-      './plugins/with-boardsesh-dev-networking',
+      // Adds an HTTP exception for Tailscale MagicDNS development bundlers
+      // (e.g. marcosmbp-1.<tailnet>.ts.net). Only registered for development
+      // builds — preview/production keep stock Expo ATS so we don't ship an
+      // arbitrary-loads relaxation through App Store review.
+      ...(isDevBuild ? ['./plugins/with-boardsesh-dev-networking'] : []),
     ],
     extra: {
       ...config.extra,

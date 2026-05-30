@@ -792,6 +792,33 @@ export const SESSION_UPDATES_SUBSCRIPTION = `
   }
 `;
 
+// Fields the queue UI needs from each climb in a subscription payload.
+// Must stay in sync with `climbToQueueItem` in PlayDrawer.tsx and with
+// `SubscriptionClimb` in queue-conversion.ts — when these drift, queue
+// items received from the server (FullSync on connect, peer mutations)
+// arrive with empty grade / quality / rating, so the queue row and the
+// re-opened drawer can't render the grade.
+const SUBSCRIPTION_CLIMB_FIELDS = `
+  uuid
+  name
+  frames
+  setter_username
+  angle
+  ascensionist_count
+  difficulty
+  quality_average
+  stars
+  difficulty_error
+  benchmark_difficulty
+`;
+
+// QueueItemAdded.item is ClimbQueueItem! and CurrentClimbChanged.item is
+// ClimbQueueItem — GraphQL rejects overlapping field selections with
+// differing nullability across union members ('Fields "item" conflict ...
+// return conflicting types ClimbQueueItem! and ClimbQueueItem'). Alias
+// per-variant to disambiguate, matching the shared @boardsesh/graphql
+// QUEUE_UPDATES selection set. toSyncQueueEvent in queue-provider reads
+// these aliased fields.
 export const QUEUE_UPDATES_SUBSCRIPTION = `
   subscription QueueUpdates($sessionId: ID!) {
     queueUpdates(sessionId: $sessionId) {
@@ -801,14 +828,14 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
         state {
           sequence
           stateHash
-          queue { uuid climb { uuid name frames } }
-          currentClimbQueueItem { uuid climb { uuid name frames } }
+          queue { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
+          currentClimbQueueItem { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
         }
       }
       ... on QueueItemAdded {
         sequence
         stateHash
-        item { uuid climb { uuid name frames } }
+        addedItem: item { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
         position
       }
       ... on QueueItemRemoved {
@@ -826,14 +853,14 @@ export const QUEUE_UPDATES_SUBSCRIPTION = `
       ... on CurrentClimbChanged {
         sequence
         stateHash
-        item { uuid climb { uuid name frames } }
+        currentItem: item { uuid climb { ${SUBSCRIPTION_CLIMB_FIELDS} } }
         clientId
         correlationId
       }
       ... on ClimbMirrored {
         sequence
         stateHash
-        uuid
+        mirroredUuid: uuid
         mirrored
       }
     }
