@@ -37,6 +37,9 @@ COPY packages/board-constants/src ./packages/board-constants/src
 COPY packages/crypto/src ./packages/crypto/src
 COPY packages/db/src ./packages/db/src
 COPY packages/aurora-sync/src ./packages/aurora-sync/src
+COPY packages/shared/board-config/src ./packages/shared/board-config/src
+COPY packages/shared/graphql/src ./packages/shared/graphql/src
+COPY packages/shared/queue/src ./packages/shared/queue/src
 COPY packages/backend/src ./packages/backend/src
 
 # Install dependencies (--production is incompatible with --frozen-lockfile in Bun)
