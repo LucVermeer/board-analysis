@@ -371,6 +371,9 @@ describe('BoardImportPrompt', () => {
             circuits: { imported: 0, skipped: 0, failed: 0 },
             climbs: { imported: 0, skipped: 0, failed: 0 },
             unresolvedClimbs: [],
+            unresolvedAscentClimbs: [],
+            unresolvedAttemptClimbs: [],
+            unresolvedCircuitClimbs: [],
           },
         });
       });

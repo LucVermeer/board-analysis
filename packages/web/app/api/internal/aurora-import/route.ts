@@ -1,5 +1,6 @@
 import { getServerSession } from 'next-auth/next';
 import { type NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
 import { authOptions } from '@/app/lib/auth/auth-options';
 import {
@@ -56,6 +57,20 @@ export async function POST(request: NextRequest) {
           send({ type: 'complete', results });
         } catch (error) {
           console.error('Aurora JSON import error:', error);
+          Sentry.captureException(error, {
+            tags: { area: 'aurora-import', phase: 'server-stream' },
+            extra: {
+              boardType,
+              userId: session.user.id,
+              skipSessionBuild,
+              dataCounts: {
+                ascents: data.ascents.length,
+                attempts: data.attempts.length,
+                circuits: data.circuits.length,
+                climbs: data.climbs.length,
+              },
+            },
+          });
           send({ type: 'error', error: error instanceof Error ? error.message : 'Import failed' });
         } finally {
           controller.close();
@@ -72,6 +87,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Aurora JSON import error:', error);
+    Sentry.captureException(error, { tags: { area: 'aurora-import', phase: 'server-route' } });
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Import failed' }, { status: 500 });
   }
 }

@@ -98,6 +98,12 @@ export type ImportResult = {
   circuits: ImportCounts;
   climbs: ImportCounts;
   unresolvedClimbs: string[];
+  unresolvedAscentClimbs: string[];
+  unresolvedAttemptClimbs: string[];
+  unresolvedCircuitClimbs: string[];
+  // Set by the streaming client when an earlier chunk committed but a later
+  // chunk failed — keeps the user from being told the whole import failed.
+  partialError?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -370,6 +376,58 @@ async function getExistingTickKeys(
 }
 
 // ---------------------------------------------------------------------------
+// Flash-status correction
+// ---------------------------------------------------------------------------
+
+/**
+ * Correct flash/send labels for one user across all their ticks.
+ *
+ * A "flash" is the first-ever tick of a (climb_uuid, angle) pair, sent in a
+ * single attempt. The Aurora export only gives us per-session attempt counts,
+ * not first-ever-ness, so the importer writes everything as 'send' and we
+ * fix things here once all their history is in the DB.
+ *
+ * Two statements because PostgreSQL's UPDATE doesn't see its own mid-statement
+ * changes — the promotion must commit before the demotion's prior-tick check
+ * can rely on it.
+ */
+export async function correctFlashStatusForUser(
+  db: PgDatabase<PgQueryResultHKT, Record<string, unknown>>,
+  userId: string,
+): Promise<void> {
+  // Promote: attempt_count=1, no earlier tick for same (climb_uuid, angle) → flash
+  await db.execute(sql`
+    UPDATE boardsesh_ticks t
+    SET status = 'flash'
+    WHERE t.user_id = ${userId}
+      AND t.status = 'send'
+      AND t.attempt_count = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM boardsesh_ticks earlier
+        WHERE earlier.user_id = t.user_id
+          AND earlier.climb_uuid = t.climb_uuid
+          AND earlier.angle = t.angle
+          AND earlier.climbed_at < t.climbed_at
+      )
+  `);
+
+  // Demote: any 'flash' that turns out to have a prior tick is a send
+  await db.execute(sql`
+    UPDATE boardsesh_ticks t
+    SET status = 'send'
+    WHERE t.user_id = ${userId}
+      AND t.status = 'flash'
+      AND EXISTS (
+        SELECT 1 FROM boardsesh_ticks earlier
+        WHERE earlier.user_id = t.user_id
+          AND earlier.climb_uuid = t.climb_uuid
+          AND earlier.angle = t.angle
+          AND earlier.climbed_at < t.climbed_at
+      )
+  `);
+}
+
+// ---------------------------------------------------------------------------
 // Batch insert helper
 // ---------------------------------------------------------------------------
 
@@ -424,6 +482,9 @@ export async function importJsonExportData(
     circuits: { imported: 0, skipped: 0, failed: 0 },
     climbs: { imported: 0, skipped: 0, failed: 0 },
     unresolvedClimbs: [],
+    unresolvedAscentClimbs: [],
+    unresolvedAttemptClimbs: [],
+    unresolvedCircuitClimbs: [],
   };
 
   // Capture a single "now" for all timestamps in this import
@@ -619,7 +680,26 @@ export async function importJsonExportData(
   });
   const nameToUuid = await resolveClimbNames(db, boardType, [...allClimbNames], userId);
 
-  // Track unresolved names
+  // Track unresolved names, split per-source so the UI can show each section
+  // separately (an ascent with an unmatched climb is a different user story
+  // from a circuit referencing an unmatched climb).
+  const unresolvedAscentSet = new Set<string>();
+  const unresolvedAttemptSet = new Set<string>();
+  const unresolvedCircuitSet = new Set<string>();
+  for (const ascent of data.ascents) {
+    if (!nameToUuid.has(ascent.climb)) unresolvedAscentSet.add(ascent.climb);
+  }
+  for (const attempt of data.attempts) {
+    if (!nameToUuid.has(attempt.climb)) unresolvedAttemptSet.add(attempt.climb);
+  }
+  for (const circuit of data.circuits) {
+    for (const climbName of circuit.climbs) {
+      if (!nameToUuid.has(climbName)) unresolvedCircuitSet.add(climbName);
+    }
+  }
+  result.unresolvedAscentClimbs = [...unresolvedAscentSet].sort();
+  result.unresolvedAttemptClimbs = [...unresolvedAttemptSet].sort();
+  result.unresolvedCircuitClimbs = [...unresolvedCircuitSet].sort();
   result.unresolvedClimbs = [...allClimbNames].filter((name) => !nameToUuid.has(name));
 
   // Step 4: Get existing tick keys for cross-source dedup
@@ -651,7 +731,11 @@ export async function importJsonExportData(
       climbUuid,
       angle: ascent.angle,
       isMirror: false,
-      status: ascent.count === 1 ? 'flash' : 'send',
+      // Conservative initial value. Aurora's `count` is attempts within a
+      // single climbed_at session, not "no prior attempts ever" — so we can't
+      // call this a flash here. correctFlashStatusForUser runs on the final
+      // chunk and promotes true first-evers across the user's full history.
+      status: 'send',
       attemptCount: ascent.count,
       // The JSON export 'stars' field is already on a 1-5 scale (user-facing),
       // unlike the Aurora API 'quality' field which is 0-3.
@@ -835,11 +919,18 @@ export async function importJsonExportData(
     });
   }
 
-  // Step 9: Build inferred sessions for imported ticks (skipped during chunked imports
-  // until the final chunk to avoid rebuilding sessions on every batch).
-  // Always run on the final chunk — earlier chunks may have imported ticks even if
-  // this chunk only contains circuits.
+  // Step 9: Final-chunk-only steps. Earlier chunks may have imported ticks
+  // even if this chunk only contains circuits — always run when not skipped.
   if (!options?.skipSessionBuild) {
+    // 9a: Correct flash/send status across the user's full tick history.
+    // Runs before session-build so per-session flash counts come out right.
+    try {
+      await correctFlashStatusForUser(db, userId);
+    } catch (error) {
+      console.error('Error correcting flash status after JSON import:', error);
+    }
+
+    // 9b: Build inferred sessions for all unassigned ticks
     onProgress?.({ type: 'progress', step: 'sessions', message: 'Building sessions...' });
     try {
       const assigned = await buildInferredSessionsForUser(userId);

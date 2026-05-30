@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import type { ImportProgressEvent, ImportResult } from './json-import';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 
@@ -30,7 +31,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * Merges two ImportResult objects by summing their counts.
  */
 function mergeResults(a: ImportResult, b: ImportResult): ImportResult {
-  return {
+  const merged: ImportResult = {
     ascents: {
       imported: a.ascents.imported + b.ascents.imported,
       skipped: a.ascents.skipped + b.ascents.skipped,
@@ -52,7 +53,15 @@ function mergeResults(a: ImportResult, b: ImportResult): ImportResult {
       failed: a.climbs.failed + b.climbs.failed,
     },
     unresolvedClimbs: [...new Set([...a.unresolvedClimbs, ...b.unresolvedClimbs])],
+    unresolvedAscentClimbs: [...new Set([...a.unresolvedAscentClimbs, ...b.unresolvedAscentClimbs])].sort(),
+    unresolvedAttemptClimbs: [...new Set([...a.unresolvedAttemptClimbs, ...b.unresolvedAttemptClimbs])].sort(),
+    unresolvedCircuitClimbs: [...new Set([...a.unresolvedCircuitClimbs, ...b.unresolvedCircuitClimbs])].sort(),
   };
+  // partialError from either side wins (b's is more recent, prefer it)
+  if (b.partialError ?? a.partialError) {
+    merged.partialError = b.partialError ?? a.partialError;
+  }
+  return merged;
 }
 
 /**
@@ -228,6 +237,9 @@ export async function streamImport(
     circuits: { imported: 0, skipped: 0, failed: 0 },
     climbs: { imported: 0, skipped: 0, failed: 0 },
     unresolvedClimbs: [],
+    unresolvedAscentClimbs: [],
+    unresolvedAttemptClimbs: [],
+    unresolvedCircuitClimbs: [],
   };
 
   let merged = emptyResult;
@@ -240,8 +252,33 @@ export async function streamImport(
       message: `Processing batch ${i + 1} of ${totalChunks}...`,
     });
 
-    const chunkResult = await sendChunk(allChunks[i], onEvent);
-    merged = mergeResults(merged, chunkResult);
+    const chunk = allChunks[i];
+    try {
+      const chunkResult = await sendChunk(chunk, onEvent);
+      merged = mergeResults(merged, chunkResult);
+    } catch (error) {
+      // Earlier chunks may have already committed server-side. Capture the
+      // failure with rich context, attach a partialError to the merged result,
+      // and let the UI render the summary panel as a partial success.
+      const message = error instanceof Error ? error.message : 'Import failed';
+      Sentry.captureException(error, {
+        tags: { area: 'aurora-import', phase: 'client-chunk' },
+        extra: {
+          boardType,
+          chunkIndex: i,
+          totalChunks,
+          chunkSummary: {
+            ascents: chunk.data.ascents.length,
+            attempts: chunk.data.attempts.length,
+            circuits: chunk.data.circuits.length,
+            climbs: chunk.data.climbs.length,
+          },
+          mergedSoFar: merged,
+        },
+      });
+      merged = { ...merged, partialError: message };
+      break;
+    }
   }
 
   onEvent({ type: 'complete', results: merged });
