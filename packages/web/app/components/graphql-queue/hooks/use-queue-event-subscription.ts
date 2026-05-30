@@ -6,12 +6,20 @@ import type { QueueAction } from '../../queue-control/types';
 import { track } from '@/app/lib/analytics';
 
 /**
- * Adapt the wire-format `SubscriptionQueueEvent` from `@boardsesh/shared-schema`
- * to the runtime's structural wire envelope. We do an explicit per-variant
- * rebuild rather than an `as unknown as` cast so the TypeScript compiler
- * surfaces schema drift between the unions.
+ * Adapt the wire-format `SubscriptionQueueEvent` (from `@boardsesh/shared-schema`)
+ * to the runtime's structural `SubscriptionWireEnvelope<ClimbQueueItem>` (from
+ * `@boardsesh/queue-runtime`). Both unions share the same `__typename` set and
+ * the same aliased field names, but their `ClimbQueueItem` declarations come
+ * from different packages so direct assignment isn't possible.
+ *
+ * Explicit per-variant rebuild + `assertNever` default rather than an
+ * `as unknown as` cast: TypeScript — not runtime — surfaces drift between the
+ * two unions (new variant, renamed field, narrowed field type). A silent cast
+ * would let an unrecognized __typename fall through to
+ * `mapSubscriptionEnvelopeToAction`'s switch which has no `default` clause and
+ * would silently drop the event.
  */
-export function toSyncQueueEvent(event: SubscriptionQueueEvent): SubscriptionWireEnvelope<ClimbQueueItem> {
+export function toWireEnvelope(event: SubscriptionQueueEvent): SubscriptionWireEnvelope<ClimbQueueItem> {
   switch (event.__typename) {
     case 'FullSync':
       return {
@@ -58,6 +66,8 @@ function assertNever(unhandledEvent: never): never {
   throw new Error(`Unhandled SubscriptionQueueEvent variant: ${JSON.stringify(unhandledEvent)}`);
 }
 
+export const toSyncQueueEvent = toWireEnvelope;
+
 type UseQueueEventSubscriptionParams = {
   isPersistentSessionActive: boolean;
   dispatch: Dispatch<QueueAction>;
@@ -98,7 +108,7 @@ export function useQueueEventSubscription({
       // Wire-format → reducer-action mapping lives in @boardsesh/queue-runtime
       // so web and mobile share one source of truth (incl. the echo-suppression
       // hints on DELTA_UPDATE_CURRENT_CLIMB). Analytics + side effects stay here.
-      const result = mapSubscriptionEnvelopeToAction(toSyncQueueEvent(event), {
+      const result = mapSubscriptionEnvelopeToAction(toWireEnvelope(event), {
         context: { myClientId: persistentSession.clientId ?? undefined },
       });
       if (result.kind !== 'dispatch') return;
