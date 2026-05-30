@@ -10,6 +10,7 @@ import {
   type CreateBoardMutationResponse,
 } from '@boardsesh/graphql/operations';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
+import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { constructBoardSlugListUrl } from '@/app/lib/url-utils';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { BoardName } from '@/app/lib/types';
@@ -38,12 +39,42 @@ export default function CreateBoardForm({
   const { t } = useTranslation('boards');
   const { showMessage } = useSnackbar();
   const router = useLocaleRouter();
+  // Loaded so a duplicate-config failure can name the existing board and offer
+  // a jump to it, instead of the user guessing why creation keeps failing.
+  const { boards } = useMyBoards(true);
 
   const availableAngles = ANGLES[boardType as BoardName] ?? [];
+
+  const handleCreateError = useCallback(
+    (_error: unknown, serverMessage: string | null) => {
+      const existing = boards.find(
+        (board) =>
+          board.boardType === boardType &&
+          board.layoutId === layoutId &&
+          board.sizeId === sizeId &&
+          board.setIds === setIds,
+      );
+      if (existing) {
+        showMessage(
+          t('boardForm.create.duplicateNamed', { name: existing.name }),
+          'error',
+          {
+            label: t('boardForm.create.goToExisting'),
+            onClick: () => router.push(constructBoardSlugListUrl(existing.slug, existing.angle)),
+          },
+          8000,
+        );
+        return;
+      }
+      showMessage(serverMessage ?? t('boardForm.create.errorMessage'), 'error');
+    },
+    [boards, boardType, layoutId, sizeId, setIds, showMessage, router, t],
+  );
 
   const { execute } = useEntityMutation<CreateBoardMutationResponse, CreateBoardMutationVariables>(CREATE_BOARD, {
     errorMessage: t('boardForm.create.errorMessage'),
     authRequiredMessage: t('boardForm.create.authRequired'),
+    onError: handleCreateError,
   });
 
   const handleSubmit = useCallback(

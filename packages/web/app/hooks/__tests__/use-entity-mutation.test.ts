@@ -170,6 +170,90 @@ describe('useEntityMutation', () => {
     expect(mockShowMessage).not.toHaveBeenCalled();
   });
 
+  it('surfaces the server error message over the generic one', async () => {
+    mockUseWsAuthToken.mockReturnValue({
+      token: 'test-token',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+
+    const clientError = Object.assign(new Error('GraphQL Error'), {
+      response: { errors: [{ message: 'You already have a board with this configuration' }] },
+    });
+    mockRequest.mockRejectedValue(clientError);
+
+    const { result } = renderHook(() =>
+      useEntityMutation('SOME_MUTATION', {
+        errorMessage: 'Generic failure',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.execute({ input: 'test' });
+    });
+
+    expect(mockShowMessage).toHaveBeenCalledWith('You already have a board with this configuration', 'error');
+  });
+
+  it('delegates to onError instead of showing a toast when provided', async () => {
+    mockUseWsAuthToken.mockReturnValue({
+      token: 'test-token',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+
+    const clientError = Object.assign(new Error('GraphQL Error'), {
+      response: { errors: [{ message: 'You already have a board with this configuration' }] },
+    });
+    mockRequest.mockRejectedValue(clientError);
+
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useEntityMutation('SOME_MUTATION', {
+        errorMessage: 'Generic failure',
+        onError,
+      }),
+    );
+
+    let returnValue: unknown;
+    await act(async () => {
+      returnValue = await result.current.execute({ input: 'test' });
+    });
+
+    expect(returnValue).toBeNull();
+    expect(onError).toHaveBeenCalledWith(clientError, 'You already have a board with this configuration');
+    expect(mockShowMessage).not.toHaveBeenCalled();
+  });
+
+  it('passes a null server message to onError for non-GraphQL failures', async () => {
+    mockUseWsAuthToken.mockReturnValue({
+      token: 'test-token',
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+
+    const error = new Error('Network down');
+    mockRequest.mockRejectedValue(error);
+
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useEntityMutation('SOME_MUTATION', {
+        errorMessage: 'Generic failure',
+        onError,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.execute({ input: 'test' });
+    });
+
+    expect(onError).toHaveBeenCalledWith(error, null);
+    expect(mockShowMessage).not.toHaveBeenCalled();
+  });
+
   it('returns token from useWsAuthToken', () => {
     mockUseWsAuthToken.mockReturnValue({
       token: 'my-token-abc',
