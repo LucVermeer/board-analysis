@@ -12,6 +12,15 @@ Boardsesh is a monorepo with three deployable services:
 | **Backend** (`packages/backend`) | Railway (Node.js)   | Docker container at `{PRID}.ws.preview.boardsesh.com` |
 | **Database** (`packages/db`)     | Neon PostgreSQL     | `boardsesh-dev-db` Docker image (per PR)              |
 
+### Vercel project settings (production)
+
+The web project deploys from `packages/web`, not the repo root. Two dashboard settings under **Settings → Build & Deployment** are hard prerequisites — `packages/web/vercel.json` does nothing without them (and `vercel.json` is strict JSON, so this can't be a comment in the file):
+
+1. **Root Directory = `packages/web`.** This is how Vercel finds `next` (it lives only in `packages/web/package.json`, not the root). Without it the build fails with `No Next.js version detected`.
+2. **"Include source files outside of the Root Directory in the Build Step" = on.** The build reaches outside `packages/web`: `bun.lock` lives at the repo root (so `bun install --frozen-lockfile` walks up to find it), Next transpiles sibling workspace packages from source, and `outputFileTracingIncludes` pulls the board-renderer WASM from the hoisted root `node_modules`. With the toggle off, Vercel clones only `packages/web` and the install regenerates or rejects the lockfile.
+
+Keep the larger build machine — `bun install` builds `sharp` plus the Expo/React Native native tree and OOMs on the default size.
+
 ### What Broke
 
 Branch deploys stopped working after migrating from Vercel Postgres (which was a managed Neon account under Vercel) to a direct Neon paid account. Specifically:
@@ -1487,7 +1496,7 @@ Backend-affecting paths are defined in two places that must stay in sync:
 | `packages/backend/src/server.ts`              | All backend HTTP routes, session cleanup                                      |
 | `packages/backend/Dockerfile`                 | Backend container build                                                       |
 | `packages/aurora-sync/`                       | Shared sync library used by both web and backend                              |
-| `packages/web/vercel.json`                                 | Build command (migration skip), cron definitions                              |
+| `packages/web/vercel.json`                    | Build command (migration skip), cron definitions                              |
 | `.github/workflows/branch-deploy.yml`         | Build images + trigger Ansible deploy on PR open/sync                         |
 | `.github/workflows/branch-deploy-cleanup.yml` | Trigger Ansible cleanup + GHCR delete on PR close                             |
 | `.github/workflows/branch-deploy-sweep.yml`   | Trigger Ansible sweep on push to main / daily                                 |
