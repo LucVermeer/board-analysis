@@ -1,15 +1,6 @@
 'use client';
 
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useMemo,
-  useDeferredValue,
-} from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, useDeferredValue } from 'react';
 import { useTranslation } from 'react-i18next';
 import { track } from '@/app/lib/analytics';
 import Box from '@mui/material/Box';
@@ -28,13 +19,11 @@ import DrawerClimbHeader from '../climb-card/drawer-climb-header';
 import { LightControlDrawer } from '../board-page/light-control-drawer';
 import { useBoardProvider } from '../board-provider/board-provider-context';
 import SwipeBoardCarousel from '../board-renderer/swipe-board-carousel';
-import { useClimbFrames } from '../board-renderer/util';
-import { usePlaybackEngine, type ExternalPlaybackState } from '../playback/use-playback-engine';
 import { PlaybackControls } from '../playback/playback-controls';
-import { usePersistentSessionActions } from '../persistent-session';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
 import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
 import { useWallConfirmFallback } from './use-wall-confirm-fallback';
+import { useDrawerPlayback } from './use-drawer-playback';
 import { themeTokens } from '@/app/theme/theme-config';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import AngleSelector from '../board-page/angle-selector';
@@ -194,12 +183,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     takeControl,
     releaseControl,
   } = useQueueActions();
-  const {
-    isConnected: isBluetoothConnected,
-    isBluetoothSupported,
-    connect: bluetoothConnect,
-    sendFramesToBoard,
-  } = useBluetoothContext();
+  const { isConnected: isBluetoothConnected, isBluetoothSupported, connect: bluetoothConnect } = useBluetoothContext();
 
   // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
   // callers via the open-drawer event payload) takes precedence over the wall
@@ -213,137 +197,26 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     climbUuid: currentClimb?.uuid ?? '',
   });
 
-  // Multi-frame ("route") playback — wired in the drawer because /play is gone
-  // and this is the only climb surface left. Single-frame climbs short-circuit:
-  // `useClimbFrames` returns a 1-length `frameStrings`, the engine reports
-  // `isAnimatable: false`, the BLE loop never fires, and we don't render
-  // `<PlaybackControls />`.
-  const playbackClientId = useId();
-  const climbFrames = useClimbFrames(currentClimb, boardDetails.board_name);
+  // Multi-frame ("route") playback. Single-frame climbs short-circuit: the
+  // engine reports `isAnimatable: false`, the BLE loop never fires, and we
+  // skip rendering `<PlaybackControls />` below.
   const isMirrored = !!currentClimb?.mirrored;
-  const isMirroredRef = useRef(isMirrored);
-  isMirroredRef.current = isMirrored;
+  const playback = useDrawerPlayback({ currentClimb, boardDetails, isOpen });
 
-  const { publishPlaybackState, subscribeToQueueEvents } = usePersistentSessionActions();
-
-  // Inbound peer playback state for the active climb. Reset on climb change so
-  // a stale event from a previous climb can't bleed into the new engine's
-  // convergence pass.
-  const [externalPlayback, setExternalPlayback] = useState<ExternalPlaybackState | null>(null);
-  const activeClimbUuid = currentClimb?.uuid;
-  useEffect(() => {
-    setExternalPlayback(null);
-  }, [activeClimbUuid]);
-  useEffect(() => {
-    if (!isOpen || !activeClimbUuid) return;
-    const unsubscribe = subscribeToQueueEvents((event) => {
-      if (event.__typename !== 'PlaybackStateChanged') return;
-      if (event.climbUuid !== activeClimbUuid) return;
-      setExternalPlayback({
-        frameIndex: event.frameIndex,
-        isPlaying: event.isPlaying,
-        speed: event.speed,
-        paceMs: event.paceMs,
-        anchorTimestamp: Number(event.anchorTimestamp),
-        clientId: event.clientId,
-      });
-    });
-    return unsubscribe;
-  }, [isOpen, activeClimbUuid, subscribeToQueueEvents]);
-
-  const handleLocalPlaybackChange = useCallback(
-    (state: ExternalPlaybackState) => {
-      if (!activeClimbUuid) return;
-      void publishPlaybackState({
-        climbUuid: activeClimbUuid,
-        frameIndex: state.frameIndex,
-        isPlaying: state.isPlaying,
-        speed: state.speed,
-        paceMs: state.paceMs,
-        // Forward the engine's own clientId so the server echoes it back on
-        // `PlaybackStateChanged`; without this the publisher's other tabs/
-        // sessions can't suppress echoes of their own state.
-        clientId: playbackClientId,
-      });
-    },
-    [activeClimbUuid, publishPlaybackState, playbackClientId],
+  // Multi-frame climbs render the engine's current snapshot so the on-screen
+  // board tracks playback; static climbs pass through. Memoised so the
+  // carousel's `currentClimb` prop stays referentially stable between ticks
+  // that don't actually change the displayed frame.
+  const carouselCurrentClimb = useMemo(
+    () =>
+      currentClimb
+        ? {
+            frames: playback.isAnimatable ? playback.currentFrameString : currentClimb.frames,
+            mirrored: currentClimb.mirrored,
+          }
+        : null,
+    [currentClimb, playback.isAnimatable, playback.currentFrameString],
   );
-
-  const playback = usePlaybackEngine({
-    frames: climbFrames.frames,
-    frameStrings: climbFrames.frameStrings,
-    paceMs: climbFrames.paceMs,
-    clientId: playbackClientId,
-    externalState: externalPlayback,
-    onLocalStateChange: handleLocalPlaybackChange,
-  });
-
-  // Mirror engine ticks to the connected board. The AutoSender only writes
-  // the first frame on climb change (see bluetooth-context.tsx); the engine
-  // takes over from frame 1 onward and after every seek. Gated on `isOpen`
-  // so the engine doesn't keep streaming frames to the wall when the user
-  // closes the drawer.
-  //
-  // Latest-wins serialization: Web Bluetooth on Android can't cancel an
-  // in-flight GATT operation, so a second `sendFramesToBoard` started before
-  // the previous one resolves throws "GATT operation already in progress."
-  // Mirror the BluetoothAutoSender pattern: while a write is in flight,
-  // store the most recent pending frame; drain on completion.
-  const isWritingFrameRef = useRef(false);
-  const pendingFrameRef = useRef<string | null>(null);
-  const lastSentFrameRef = useRef<string | null>(null);
-  useEffect(() => {
-    lastSentFrameRef.current = null;
-    pendingFrameRef.current = null;
-  }, [activeClimbUuid]);
-  useEffect(() => {
-    if (!isOpen) return;
-    if (!isBluetoothConnected) return;
-    if (!playback.isAnimatable) return;
-    const frame = playback.currentFrameString;
-    if (!frame) return;
-    if (frame === lastSentFrameRef.current) return;
-    if (isWritingFrameRef.current) {
-      pendingFrameRef.current = frame;
-      return;
-    }
-    isWritingFrameRef.current = true;
-    const drain = async () => {
-      let toSend: string | null = frame;
-      try {
-        while (toSend !== null) {
-          const next = toSend;
-          if (next === lastSentFrameRef.current) {
-            toSend = pendingFrameRef.current;
-            pendingFrameRef.current = null;
-            continue;
-          }
-          lastSentFrameRef.current = next;
-          try {
-            await sendFramesToBoard(next, isMirroredRef.current, undefined, activeClimbUuid);
-          } catch (error) {
-            console.error('[PlayViewDrawer] BLE frame send failed:', error);
-            track('BLE Frame Send Failed', {
-              error: String(error),
-              climbUuid: activeClimbUuid,
-            });
-          }
-          toSend = pendingFrameRef.current;
-          pendingFrameRef.current = null;
-        }
-      } finally {
-        isWritingFrameRef.current = false;
-      }
-    };
-    void drain();
-  }, [
-    isOpen,
-    isBluetoothConnected,
-    sendFramesToBoard,
-    playback.isAnimatable,
-    playback.currentFrameString,
-    activeClimbUuid,
-  ]);
 
   // currentQueueIndex / remainingQueueCount stay anchored on the wall climb
   // (currentClimbQueueItem). The drawer-local preview doesn't represent
@@ -985,15 +858,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
         {/* Board renderer with card-swipe and floating Tick FAB */}
         <div className={styles.boardSectionWrapper}>
-          {currentClimb && (
+          {currentClimb && carouselCurrentClimb && (
             <SwipeBoardCarousel
               boardDetails={boardDetails}
-              currentClimb={{
-                // Multi-frame climbs render the engine's current snapshot so the
-                // on-screen board tracks playback; static climbs pass through.
-                frames: playback.isAnimatable ? playback.currentFrameString : currentClimb.frames,
-                mirrored: currentClimb.mirrored,
-              }}
+              currentClimb={carouselCurrentClimb}
               // Bind zoom to the climb UUID, not the frames string — without
               // this, every animation tick changes `frames` and ZoomableBoard
               // resets the pinch zoom.
@@ -1102,10 +970,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
         {isOpen && playback.isAnimatable && (
           <PlaybackControls
             frameIndex={playback.frameIndex}
-            frameCount={climbFrames.frameStrings.length}
+            frameCount={playback.frameCount}
             isPlaying={playback.isPlaying}
             speed={playback.speed}
-            paceMs={climbFrames.paceMs}
+            paceMs={playback.paceMs}
             onPlay={playback.play}
             onPause={playback.pause}
             onSeek={playback.seek}
@@ -1161,8 +1029,7 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     handleReturnToWallClimb,
     lightbulbCoachmarkText,
     playback,
-    climbFrames.frameStrings.length,
-    climbFrames.paceMs,
+    carouselCurrentClimb,
   ]);
 
   return (

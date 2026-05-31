@@ -776,7 +776,6 @@ export const tryConstructSlugListUrl = (
 /**
  * Extracts the base board configuration path from a full pathname.
  * This removes dynamic segments that can change during a session:
- * - /play/[climb_uuid] - viewing different climbs
  * - /view/[climb_slug] - viewing climb details
  * - /list, /create - different views
  * - /{angle} - the board angle is adjustable during a session
@@ -786,6 +785,11 @@ export const tryConstructSlugListUrl = (
  * This is used to determine session continuity - the WebSocket connection
  * should persist when navigating between climbs, views, or angles on the
  * same physical board configuration.
+ *
+ * The standalone `/play/[climb_uuid]` route was removed and replaced by the
+ * play-view drawer; the `/play/` strip below is defensive cleanup for any
+ * stale pathname that might still flow through here (e.g. persisted session
+ * board paths) and otherwise wouldn't match.
  *
  * @example
  * getBaseBoardPath('/kilter/original/12x12/default/45/view/abc-123')

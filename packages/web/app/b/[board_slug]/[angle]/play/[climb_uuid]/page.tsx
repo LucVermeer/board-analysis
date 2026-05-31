@@ -1,7 +1,8 @@
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { resolveBoardBySlug, boardToRouteParams } from '@/app/lib/board-slug-utils';
 import { getClimb } from '@/app/lib/data/queries';
 import { constructBoardSlugViewUrl, extractUuidFromSlug, isUuidOnly } from '@/app/lib/url-utils';
+import { redirectWithQuery } from '@/app/lib/url-utils.server';
 
 /**
  * Old `/b/{board_slug}/{angle}/play/[climb_uuid]` URLs 301-redirect to the
@@ -39,12 +40,5 @@ export default async function BoardSlugPlayRedirectPage(props: {
   }
 
   const viewUrl = constructBoardSlugViewUrl(params.board_slug, angle, climbUuid, climbName);
-
-  const queryString = new URLSearchParams(
-    Object.entries(searchParams).flatMap(([key, value]) =>
-      Array.isArray(value) ? value.map((v) => [key, v] as [string, string]) : [[key, value] as [string, string]],
-    ),
-  ).toString();
-
-  permanentRedirect(queryString ? `${viewUrl}?${queryString}` : viewUrl);
+  redirectWithQuery(viewUrl, searchParams);
 }

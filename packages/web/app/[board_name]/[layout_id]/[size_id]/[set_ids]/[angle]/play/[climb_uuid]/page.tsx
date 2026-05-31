@@ -1,6 +1,6 @@
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import type { BoardRouteParametersWithUuid } from '@/app/lib/types';
-import { parseRouteParams } from '@/app/lib/url-utils.server';
+import { parseRouteParams, redirectWithQuery } from '@/app/lib/url-utils.server';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getClimb } from '@/app/lib/data/queries';
 import { constructClimbViewUrl, constructClimbViewUrlWithSlugs, isUuidOnly } from '@/app/lib/url-utils';
@@ -54,11 +54,5 @@ export default async function PlayRedirectPage(props: {
         )
       : constructClimbViewUrl(parsedParams, parsedParams.climb_uuid, climbName);
 
-  const queryString = new URLSearchParams(
-    Object.entries(searchParams).flatMap(([key, value]) =>
-      Array.isArray(value) ? value.map((v) => [key, v] as [string, string]) : [[key, value] as [string, string]],
-    ),
-  ).toString();
-
-  permanentRedirect(queryString ? `${viewUrl}?${queryString}` : viewUrl);
+  redirectWithQuery(viewUrl, searchParams);
 }

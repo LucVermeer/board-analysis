@@ -214,16 +214,23 @@ export function usePlaybackEngine({
     [frameStrings, frameIndex],
   );
 
-  return {
-    frameIndex,
-    isPlaying,
-    speed,
-    currentLitUpHoldsMap,
-    currentFrameString,
-    isAnimatable,
-    play,
-    pause,
-    seek,
-    setSpeed,
-  };
+  // Returning a memoised object keeps the engine's reference stable across
+  // renders that don't change any of its observable state. Callers can then
+  // safely pass the engine into `React.memo`'d children or `useMemo` dep
+  // arrays without busting on every render.
+  return useMemo(
+    () => ({
+      frameIndex,
+      isPlaying,
+      speed,
+      currentLitUpHoldsMap,
+      currentFrameString,
+      isAnimatable,
+      play,
+      pause,
+      seek,
+      setSpeed,
+    }),
+    [frameIndex, isPlaying, speed, currentLitUpHoldsMap, currentFrameString, isAnimatable, play, pause, seek, setSpeed],
+  );
 }
