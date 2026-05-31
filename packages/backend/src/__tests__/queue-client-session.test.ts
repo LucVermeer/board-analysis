@@ -280,8 +280,12 @@ describe('Queue client ↔ real backend (4-participant party session)', () => {
       await alice.mutations.setSessionBoardSerial('SN-TEST-1234');
       await waitFor(() => party.every((p) => p.boardSerial === 'SN-TEST-1234'), { label: 'board serial synced' });
 
+      // Assert across the WHOLE party, sender included: the server broadcasts
+      // SessionBoardPathChanged to every member (no echo suppression), so Alice's
+      // own boardPath must update too. Slicing her off would mask a regression
+      // where the server stops echoing the change back to the sender.
       await alice.mutations.setSessionBoardPath('/kilter/1/2/3/50');
-      await waitFor(() => party.slice(1).every((p) => p.boardPath === '/kilter/1/2/3/50'), {
+      await waitFor(() => party.every((p) => p.boardPath === '/kilter/1/2/3/50'), {
         label: 'board path synced',
       });
     });

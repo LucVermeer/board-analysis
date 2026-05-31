@@ -290,6 +290,14 @@ export class HeadlessParticipant {
   gapDetected = 0;
   private dropInbound = 0;
   private disposed = false;
+  private connected = false;
+
+  /** Whether this participant currently holds a live, joined socket. False
+   *  between disconnect()/dispose() and the next reconnect() — lets convergence
+   *  helpers avoid querying server state over a disposed client. */
+  get isConnected(): boolean {
+    return this.connected;
+  }
 
   readonly mutations: QueueMutationsActions<ClimbQueueItem>;
 
@@ -364,12 +372,18 @@ export class HeadlessParticipant {
     this.driverParticipantId = joined.driverParticipantId;
     this.boardSerial = joined.lastConnectedBoardSerial;
     // Re-key the coordinator to the backend-assigned clientId (echo suppression
-    // matches the server's CurrentClimbChanged.clientId against this).
+    // matches the server's CurrentClimbChanged.clientId against this). Dispose
+    // the old one first — both the constructor's coordinator (on the first join)
+    // and the previous connection's (on reconnect) hold live pending-cleanup
+    // timers that would otherwise fire CLEANUP_PENDING_UPDATE into dispatch
+    // after we've replaced it, mutating reducer state out-of-band.
+    this.coordinator.dispose();
     this.coordinator = createQueueSyncCoordinator({
       dispatch: (action) => this.dispatch(action),
       clientId: this.clientId,
     });
     await fullSyncReady;
+    this.connected = true;
   }
 
   private openSubscriptions(): Promise<void> {
@@ -403,6 +417,7 @@ export class HeadlessParticipant {
 
   /** Drop the socket without forgetting local state (simulates going offline). */
   async disconnect(): Promise<void> {
+    this.connected = false;
     this.unsubQueue?.();
     this.unsubSession?.();
     this.unsubQueue = undefined;
@@ -423,6 +438,7 @@ export class HeadlessParticipant {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.connected = false;
     this.unsubQueue?.();
     this.unsubSession?.();
     this.coordinator.dispose();
@@ -712,7 +728,15 @@ export async function waitForConvergence(
 ): Promise<ServerSessionView> {
   const start = Date.now();
   for (;;) {
-    const server = await participants[0].serverState();
+    // Query the authoritative state over any currently-connected participant —
+    // not a hardcoded participants[0], which may have been disconnect()ed by the
+    // test before convergence is checked (its disposed client would throw a
+    // confusing internal error rather than this clear one).
+    const source = participants.find((participant) => participant.isConnected);
+    if (!source) {
+      throw new Error('waitForConvergence: no connected participant to query server state from');
+    }
+    const server = await source.serverState();
     const targetSeq = server.queueState.sequence;
     const targetHash = server.queueState.stateHash;
     const converged = participants.every(
