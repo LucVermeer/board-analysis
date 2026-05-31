@@ -280,6 +280,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        # vercel deploy --prebuilt validates the prebuilt output's file traces
+        # against the filesystem; those traces reference the hoisted
+        # node_modules/.bun tree, so the workspace must be installed even though
+        # the build itself is already baked into .vercel/output.
+        run: bun install --frozen-lockfile
+
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
