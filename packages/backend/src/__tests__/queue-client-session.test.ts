@@ -14,7 +14,7 @@
 //   2. client↔server: each participant's locally-computed FNV hash equals the
 //      server's authoritative hash — the same drift check that ships in prod.
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vite-plus/test';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vite-plus/test';
 import {
   HeadlessParticipant,
   startTestBackend,
@@ -23,6 +23,12 @@ import {
   waitFor,
   type TestBackend,
 } from './helpers/headless-queue-client';
+
+// The heavier scenarios chain several joins + mutations, each waiting on
+// cross-client convergence (assertConverged polls up to 5s per call). Give this
+// file generous headroom over the backend's 10s default so CI load can't flake
+// the multi-step tests, without loosening the timeout for every other suite.
+vi.setConfig({ testTimeout: 30000 });
 
 describe('Queue client ↔ real backend (4-participant party session)', () => {
   let backend: TestBackend;

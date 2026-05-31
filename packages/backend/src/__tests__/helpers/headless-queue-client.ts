@@ -173,8 +173,10 @@ export async function startTestBackend(): Promise<TestBackend> {
     teardown: async () => {
       server.cleanupIntervals();
       await server.shutdownServices();
-      server.wss.close();
-      server.httpServer.close();
+      // Await both closes (each drains in-flight connections) so the next test
+      // file's server can rebind cleanly and no teardown work leaks past the hook.
+      await new Promise<void>((resolve) => server.wss.close(() => resolve()));
+      await new Promise<void>((resolve) => server.httpServer.close(() => resolve()));
     },
   };
 }
@@ -287,6 +289,7 @@ export class HeadlessParticipant {
   // Resilience instrumentation
   gapDetected = 0;
   private dropInbound = 0;
+  private disposed = false;
 
   readonly mutations: QueueMutationsActions<ClimbQueueItem>;
 
@@ -419,6 +422,7 @@ export class HeadlessParticipant {
   }
 
   async dispose(): Promise<void> {
+    this.disposed = true;
     this.unsubQueue?.();
     this.unsubSession?.();
     this.coordinator.dispose();
@@ -495,6 +499,7 @@ export class HeadlessParticipant {
    *  client's behavior. CI (Redis on) drives the replay path; local (no Redis)
    *  drives the FullSync fallback. Both reconcile to the same converged state. */
   async triggerResync(): Promise<void> {
+    if (this.disposed) return;
     try {
       const data = await execute<{ eventsReplay: { currentSequence: number; events: RawQueueEvent[] } }>(this.client, {
         query: EVENTS_REPLAY,
@@ -504,7 +509,15 @@ export class HeadlessParticipant {
         this.handleQueueEvent(event);
       }
     } catch {
-      await this.resyncFromFullState();
+      // EVENTS_REPLAY needs the Redis event buffer; fall back to a full re-query.
+      // This is also reached fire-and-forget from the gap handler, so swallow
+      // failures from a client disposed mid-flight (parallel test teardown) —
+      // otherwise they surface as unhandled rejections.
+      try {
+        if (!this.disposed) await this.resyncFromFullState();
+      } catch {
+        // Disconnected/disposed before the re-query landed — nothing to recover.
+      }
     }
   }
 
@@ -553,10 +566,11 @@ export class HeadlessParticipant {
     await this.mutations.takeControl(item);
   }
 
-  /** Reorder a queue item. The shared `createQueueMutations` factory doesn't
-   *  wrap reorder (web fires it from its drag handler), so this issues the raw
-   *  mutation directly — the reducer still applies the resulting QueueReordered
-   *  event like any other delta. */
+  /** Reorder a queue item via the raw `reorderQueueItem` mutation. The shared
+   *  `createQueueMutations` factory doesn't wrap reorder, and web reorders by
+   *  re-sending the whole queue (`setQueue` → FullSync) rather than this mutation;
+   *  issuing it directly exercises the reducer's `DELTA_REORDER_QUEUE_ITEM`
+   *  handling of the `QueueReordered` wire event. */
   async reorder(uuid: string, oldIndex: number, newIndex: number): Promise<void> {
     await execute(this.client, { query: REORDER_QUEUE_ITEM, variables: { uuid, oldIndex, newIndex } });
   }
