@@ -17,12 +17,6 @@
       "seoSetterSuffix": " creado por {{setter}}",
       "seoAscentsSuffix": ". {{ascents}} encadenes registrados"
     },
-    "play": {
-      "title": "{{climbName}} - {{grade}} | Modo Jugar",
-      "description": "{{climbName}} - {{grade}} de {{setter}}. Calidad: {{quality}}/5. Encadenes: {{ascents}}",
-      "fallbackTitle": "Jugar",
-      "fallbackDescription": "Juega un bloque en tu tabla de escalada"
-    },
     "create": {
       "title": "Crear un bloque",
       "description": "Apertura un nuevo bloque en tu tabla de escalada"
@@ -62,7 +56,6 @@
     }
   },
   "header": {
-    "backToList": "Volver a la lista de bloques",
     "createNewClimb": "Crear un nuevo bloque"
   },
   "share": {

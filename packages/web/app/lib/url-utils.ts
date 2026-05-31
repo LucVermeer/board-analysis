@@ -670,30 +670,6 @@ export const hasOnlyNumericBoardRouteSegments = (
   );
 };
 
-export const constructPlayUrlWithSlugs = (
-  board_name: string,
-  layoutName: string,
-  sizeName: string,
-  sizeDescription: string | undefined,
-  setNames: string[],
-  angle: number,
-  climb_uuid: ClimbUuid,
-  climbName?: string,
-) => {
-  const layoutSlug = generateLayoutSlug(layoutName);
-  const sizeSlug = generateSizeSlug(sizeName, sizeDescription);
-  const setSlug = generateSetSlug(setNames);
-
-  const baseUrl = `/${board_name}/${layoutSlug}/${sizeSlug}/${setSlug}/${angle}/play/`;
-  if (climbName && climbName.trim()) {
-    const climbSlug = generateSlugFromText(climbName.trim());
-    if (climbSlug) {
-      return `${baseUrl}${climbSlug}-${climb_uuid}`;
-    }
-  }
-  return `${baseUrl}${climb_uuid}`;
-};
-
 export const constructCreateClimbUrl = (
   board_name: string,
   layoutName: string,
@@ -743,31 +719,6 @@ const tryResolveBoardSlugs = (
     // Static data lookup failed for this board config
   }
   return null;
-};
-
-/** Try to construct a slug-based play URL. Returns null if resolution fails. */
-export const tryConstructSlugPlayUrl = (
-  board_name: string,
-  layout_id: number,
-  size_id: number,
-  set_ids: number[],
-  angle: number,
-  climb_uuid: string,
-  climbName?: string,
-): string | null => {
-  const d = tryResolveBoardSlugs(board_name, layout_id, size_id, set_ids);
-  return d
-    ? constructPlayUrlWithSlugs(
-        d.board_name,
-        d.layout_name,
-        d.size_name,
-        d.size_description,
-        d.set_names,
-        angle,
-        climb_uuid,
-        climbName,
-      )
-    : null;
 };
 
 /** Try to construct a slug-based view URL. Returns null if resolution fails. */
@@ -824,7 +775,7 @@ export const tryConstructSlugListUrl = (
  * same physical board configuration.
  *
  * @example
- * getBaseBoardPath('/kilter/original/12x12/default/45/play/abc-123')
+ * getBaseBoardPath('/kilter/original/12x12/default/45/view/abc-123')
  * // => '/kilter/original/12x12/default'
  *
  * @example
@@ -842,13 +793,15 @@ export function getBaseBoardPath(pathname: string): string {
     return boardSlugMatch[1];
   }
 
-  // URL structure: /{board}/{layout}/{size}/{sets}/{angle}[/play/uuid|/view/slug|/list|/create]
+  // URL structure: /{board}/{layout}/{size}/{sets}/{angle}[/view/slug|/list|/create]
+  // (/play/ is gone — its redirect routes catch any in-flight URLs.)
   // We want to extract: /{board}/{layout}/{size}/{sets}
 
   // First, strip off trailing view segments if present
   let path = pathname;
 
-  // Match /play/[uuid] or /play/[slug-uuid]
+  // Defensive: strip /play/[uuid] in case a stale URL slipped through
+  // (e.g. persisted in session board path before the rename).
   const playMatch = path.match(/^(.+?)\/play\/[^/]+$/);
   if (playMatch) {
     path = playMatch[1];
@@ -970,13 +923,6 @@ export const constructBoardSlugUrl = (slug: string, angle: number, path?: string
  * /b/{board-slug}/{angle}/list
  */
 export const constructBoardSlugListUrl = (slug: string, angle: number) => constructBoardSlugUrl(slug, angle, 'list');
-
-/**
- * Construct a board slug URL for the play view.
- * /b/{board-slug}/{angle}/play/{climb_uuid}
- */
-export const constructBoardSlugPlayUrl = (slug: string, angle: number, climbUuid: string) =>
-  constructBoardSlugUrl(slug, angle, `play/${climbUuid}`);
 
 /**
  * Construct a board slug URL for the climb view.

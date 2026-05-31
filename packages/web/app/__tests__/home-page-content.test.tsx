@@ -156,7 +156,7 @@ describe('HomePageContent', () => {
 
     it('extracts slug correctly regardless of trailing path segments', () => {
       mockActiveSession = makeActiveSession({
-        boardPath: '/b/tension-tb2-original/25/play/some-uuid',
+        boardPath: '/b/tension-tb2-original/25/view/some-uuid',
         parsedParams: {
           board_name: 'tension',
           layout_id: 2,

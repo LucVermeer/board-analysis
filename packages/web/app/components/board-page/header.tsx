@@ -2,8 +2,7 @@
 import React, { useState, useCallback } from 'react';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
+import { usePathname } from 'next/navigation';
 import CircularProgress from '@mui/material/CircularProgress';
 import MuiButton from '@mui/material/Button';
 import SearchOutlined from '@mui/icons-material/SearchOutlined';
@@ -11,12 +10,7 @@ import UnifiedSearchDrawer from '../search-drawer/unified-search-drawer';
 import AccordionSearchForm from '../search-drawer/accordion-search-form';
 import { SearchDrawerBridgeInjector } from '../search-drawer/search-drawer-bridge-context';
 import type { BoardDetails } from '@/app/lib/types';
-import {
-  constructClimbListWithSlugs,
-  generateLayoutSlug,
-  generateSizeSlug,
-  generateSetSlug,
-} from '@/app/lib/url-utils';
+import { generateLayoutSlug, generateSizeSlug, generateSetSlug } from '@/app/lib/url-utils';
 import { useCurrentClimb, useSearchData } from '../graphql-queue';
 import { useUISearchParams } from '../queue-control/ui-searchparams-provider';
 import {
@@ -27,7 +21,6 @@ import {
 } from '../search-drawer/search-summary-utils';
 import { addRecentSearch } from '../search-drawer/recent-searches-storage';
 import AddOutlined from '@mui/icons-material/AddOutlined';
-import ChevronLeftOutlined from '@mui/icons-material/ChevronLeftOutlined';
 import AngleSelector from './angle-selector';
 import styles from './header.module.css';
 import LocaleLink from '@/app/components/i18n/locale-link';
@@ -45,14 +38,11 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
   const { currentClimb } = useCurrentClimb();
   const { totalSearchResultCount, isFetchingClimbs } = useSearchData();
   const { uiSearchParams, clearClimbSearchParams, updateFilters } = useUISearchParams();
-  const searchParams = useSearchParams();
-  const router = useLocaleRouter();
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const isCreatePage = pathname.includes('/create');
   const isListPage = pathname.includes('/list');
   const isPlaylistPage = pathname.includes('/playlists');
   const isLogbookPage = pathname.includes('/logbook');
-  const isPlayPage = pathname.includes('/play/');
   const isViewPage = pathname.includes('/view/');
 
   // Stable callback for the bridge injector
@@ -78,34 +68,13 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
     return null;
   }
 
-  // Build back to list URL for play/view pages
-  const getBackToListUrl = () => {
-    const { board_name, layout_name, size_name, size_description, set_names } = boardDetails;
-
-    let baseUrl: string;
-    if (layout_name && size_name && set_names && angle !== undefined) {
-      baseUrl = constructClimbListWithSlugs(board_name, layout_name, size_name, size_description, set_names, angle);
-    } else {
-      baseUrl = `/${board_name}/${boardDetails.layout_id}/${boardDetails.size_id}/${boardDetails.set_ids.join(',')}/${angle}/list`;
-    }
-
-    // Preserve search params when going back
-    const queryString = searchParams.toString();
-    if (queryString) {
-      return `${baseUrl}?${queryString}`;
-    }
-    return baseUrl;
-  };
-
   const createClimbUrl =
     angle !== undefined && boardDetails.layout_name && boardDetails.size_name && boardDetails.set_names
       ? `/${boardDetails.board_name}/${generateLayoutSlug(boardDetails.layout_name)}/${generateSizeSlug(boardDetails.size_name, boardDetails.size_description)}/${generateSetSlug(boardDetails.set_names)}/${angle}/create`
       : null;
 
-  // Check if we have any content to show — if not, don't render the toolbar
-  const hasBackButton = isPlayPage;
-  // Angle selector is only needed on play/view pages
-  const hasAngleSelector = angle !== undefined && (isPlayPage || isViewPage);
+  // Angle selector is only needed on the climb-view drawer surface
+  const hasAngleSelector = angle !== undefined && isViewPage;
   // Create button is only shown on desktop; skip on list, playlist, and logbook pages
   const hasCreateButton = !!createClimbUrl && !isListPage && !isPlaylistPage && !isLogbookPage;
 
@@ -122,7 +91,7 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
         hasActiveNonNameFilters={nonNameFiltersActive}
       />
 
-      {(hasBackButton || hasAngleSelector || hasCreateButton) && (
+      {(hasAngleSelector || hasCreateButton) && (
         <Box
           component="div"
           className={styles.header}
@@ -136,17 +105,6 @@ export default function BoardSeshHeader({ boardDetails, angle, isAngleAdjustable
             gap: '8px',
           }}
         >
-          {/* Left section: Back button */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-            {hasBackButton && (
-              <div className={styles.mobileOnly}>
-                <IconButton aria-label={t('header.backToList')} onClick={() => router.push(getBackToListUrl())}>
-                  <ChevronLeftOutlined />
-                </IconButton>
-              </div>
-            )}
-          </Box>
-
           {/* Center Section (spacer) */}
           <Box sx={{ flex: 1 }} />
 

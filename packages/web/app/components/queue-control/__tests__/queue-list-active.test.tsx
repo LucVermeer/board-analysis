@@ -96,7 +96,7 @@ vi.mock('../../graphql-queue', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/kilter/original/12x12/default/40/play/some-climb',
+  usePathname: () => '/kilter/original/12x12/default/40/view/some-climb',
   useRouter: () => ({
     push: vi.fn(),
     replace: vi.fn(),

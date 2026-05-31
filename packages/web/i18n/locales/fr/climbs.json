@@ -17,12 +17,6 @@
       "seoSetterSuffix": " ouvert par {{setter}}",
       "seoAscentsSuffix": ". {{ascents}} enchaînements enregistrés"
     },
-    "play": {
-      "title": "{{climbName}} - {{grade}} | Mode Play",
-      "description": "{{climbName}} - {{grade}} par {{setter}}. Qualité : {{quality}}/5. Enchaînements : {{ascents}}",
-      "fallbackTitle": "Play",
-      "fallbackDescription": "Grimpez un bloc sur votre board"
-    },
     "create": {
       "title": "Créer un bloc",
       "description": "Ouvrez un nouveau bloc sur votre board"
@@ -62,7 +56,6 @@
     }
   },
   "header": {
-    "backToList": "Retour à la liste des blocs",
     "createNewClimb": "Créer un nouveau bloc"
   },
   "share": {

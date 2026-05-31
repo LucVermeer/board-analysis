@@ -191,7 +191,6 @@
       "dismissOfflineNotice": "Descartar aviso sin conexión",
       "shareSessionLink": "Compartir enlace de sesión",
       "closeTickBar": "Cerrar barra de marca",
-      "enterPlayMode": "Entrar en modo juego",
       "logAttempt": "Registrar intento",
       "showParticipants": "Mostrar participantes",
       "hideParticipants": "Ocultar participantes",
@@ -323,8 +322,6 @@
     "triesCount_other": "{{count}} intentos",
     "tickError": "No se pudo guardar tu marca — guardada como borrador",
     "closeAria": "Cerrar",
-    "noClimbSelected": "Ningún bloque seleccionado",
-    "browseClimbs": "Ver bloques",
     "actionBar": {
       "previousAria": "Bloque anterior",
       "nextAria": "Siguiente bloque",

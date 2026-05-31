@@ -17,12 +17,6 @@
       "seoSetterSuffix": " set by {{setter}}",
       "seoAscentsSuffix": ". {{ascents}} ascents logged"
     },
-    "play": {
-      "title": "{{climbName}} - {{grade}} | Play Mode",
-      "description": "{{climbName}} - {{grade}} by {{setter}}. Quality: {{quality}}/5. Ascents: {{ascents}}",
-      "fallbackTitle": "Play",
-      "fallbackDescription": "Play a climb on your board"
-    },
     "create": {
       "title": "Create a climb",
       "description": "Set a new climb on your board"
@@ -62,7 +56,6 @@
     }
   },
   "header": {
-    "backToList": "Back to climb list",
     "createNewClimb": "Create new climb"
   },
   "share": {

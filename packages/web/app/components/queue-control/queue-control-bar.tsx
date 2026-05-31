@@ -12,20 +12,12 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import SyncOutlined from '@mui/icons-material/SyncOutlined';
 import CloudOffOutlined from '@mui/icons-material/CloudOffOutlined';
-import OpenInFullOutlined from '@mui/icons-material/OpenInFullOutlined';
 import FormatListBulletedOutlined from '@mui/icons-material/FormatListBulletedOutlined';
 import { track } from '@/app/lib/analytics';
 import { useQueueActions, useCurrentClimb, useQueueList, useSessionData } from '../graphql-queue';
 import QueueNavButton from './queue-nav-button';
-import { usePathname, useParams, useSearchParams } from 'next/navigation';
-import LocaleLink from '@/app/components/i18n/locale-link';
-import {
-  constructPlayUrlWithSlugs,
-  getContextAwareClimbViewUrl,
-  isNumericId,
-  tryConstructSlugPlayUrl,
-} from '@/app/lib/url-utils';
-import type { BoardRouteParameters, BoardDetails, Angle, Climb } from '@/app/lib/types';
+import { usePathname } from 'next/navigation';
+import type { BoardDetails, Angle, Climb } from '@/app/lib/types';
 import type { ClimbQueueItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { readPlayDrawerEventDetail } from './play-drawer-event';
@@ -90,8 +82,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   const initialPathnameRef = useRef(pathname);
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(() => (pathname.includes('/view/') ? 'play' : 'none'));
   const [startSeshOpen, setStartSeshOpen] = useState(false);
-  const params = useParams<BoardRouteParameters>();
-  const searchParams = useSearchParams();
 
   // Reset activeDrawer on navigation. Skip the very first run — when we just
   // seeded the drawer open from the URL, this would slam it shut before paint.
@@ -120,7 +110,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
   }, []);
 
   const isViewPage = pathname.includes('/view/');
-  const isPlayPage = pathname.includes('/play/');
   const { currentClimb } = useCurrentClimb();
   const { queue } = useQueueList();
   const {
@@ -300,61 +289,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     ),
     [openQueueDrawer, queue.length, t],
   );
-  const shouldNavigate = isViewPage || isPlayPage;
-
-  // Build URL for a climb item (for navigation on view/play pages)
-  const buildClimbUrl = useCallback(
-    (climb: { uuid: string; name: string }) => {
-      let climbUrl: string | null = null;
-
-      if (isPlayPage) {
-        if (boardDetails?.layout_name && boardDetails?.size_name && boardDetails?.set_names) {
-          climbUrl = constructPlayUrlWithSlugs(
-            boardDetails.board_name,
-            boardDetails.layout_name,
-            boardDetails.size_name,
-            boardDetails.size_description,
-            boardDetails.set_names,
-            angle,
-            climb.uuid,
-            climb.name,
-          );
-        } else if (params.board_name) {
-          const numericFallback = `/${params.board_name}/${params.layout_id}/${params.size_id}/${params.set_ids}/${params.angle}/play/${climb.uuid}`;
-          climbUrl = isNumericId(params.layout_id)
-            ? (tryConstructSlugPlayUrl(
-                params.board_name,
-                Number(params.layout_id),
-                Number(params.size_id),
-                decodeURIComponent(params.set_ids).split(',').map(Number),
-                angle,
-                climb.uuid,
-                climb.name,
-              ) ?? numericFallback)
-            : numericFallback;
-        } else {
-          climbUrl = null;
-        }
-      } else {
-        climbUrl = getContextAwareClimbViewUrl(pathname, boardDetails, angle, climb.uuid, climb.name);
-      }
-
-      if (!climbUrl) return null;
-
-      // Preserve search params in play mode
-      if (isPlayPage) {
-        const queryString = searchParams.toString();
-        if (queryString) {
-          climbUrl = `${climbUrl}?${queryString}`;
-        }
-      }
-      return climbUrl;
-    },
-    [pathname, boardDetails, angle, params, searchParams, isPlayPage],
-  );
-
-  // Handle swipe navigation. On /play/ the URL is the source of truth — push
-  // the new climb's play URL. On /view/ useDrawerUrlSync owns URL state via
+  // Handle swipe navigation. On /view/ useDrawerUrlSync owns URL state via
   // the drawer's open lifecycle; navigating here would race its cleanup and
   // close the drawer mid-swipe. Other pages (e.g. /list) get queue-only
   // updates as before.
@@ -378,21 +313,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       mode: isPersistentSessionActive ? 'party' : 'solo',
       boardLayout,
     });
-
-    if (isPlayPage) {
-      const url = buildClimbUrl(nextClimb.climb);
-      if (url) window.history.pushState(null, '', url);
-    }
-  }, [
-    nextClimb,
-    viewOnlyMode,
-    setCurrentClimbQueueItem,
-    buildClimbUrl,
-    boardDetails,
-    isPlayPage,
-    isPersistentSessionActive,
-    isDriver,
-  ]);
+  }, [nextClimb, viewOnlyMode, setCurrentClimbQueueItem, boardDetails, isPersistentSessionActive, isDriver]);
 
   const handleSwipePrevious = useCallback(() => {
     if (!previousClimb || viewOnlyMode) return;
@@ -411,21 +332,7 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
       mode: isPersistentSessionActive ? 'party' : 'solo',
       boardLayout,
     });
-
-    if (isPlayPage) {
-      const url = buildClimbUrl(previousClimb.climb);
-      if (url) window.history.pushState(null, '', url);
-    }
-  }, [
-    previousClimb,
-    viewOnlyMode,
-    setCurrentClimbQueueItem,
-    buildClimbUrl,
-    boardDetails,
-    isPlayPage,
-    isPersistentSessionActive,
-    isDriver,
-  ]);
+  }, [previousClimb, viewOnlyMode, setCurrentClimbQueueItem, boardDetails, isPersistentSessionActive, isDriver]);
 
   const tickBarActive = activeDrawer === 'tick';
   const canSwipeNext = !viewOnlyMode && !!nextClimb && !tickBarActive;
@@ -691,47 +598,6 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
     threshold: 80,
     delayNavigation: true,
   });
-
-  const playUrl = useMemo(() => {
-    if (!currentClimb) return null;
-
-    const { layout_name, size_name, size_description, set_names, board_name } = boardDetails;
-
-    let baseUrl: string | null;
-    if (layout_name && size_name && set_names) {
-      baseUrl = constructPlayUrlWithSlugs(
-        board_name,
-        layout_name,
-        size_name,
-        size_description,
-        set_names,
-        angle,
-        currentClimb.uuid,
-        currentClimb.name,
-      );
-    } else if (params.board_name) {
-      const numericFallback = `/${params.board_name}/${params.layout_id}/${params.size_id}/${params.set_ids}/${params.angle}/play/${currentClimb.uuid}`;
-      baseUrl = isNumericId(params.layout_id)
-        ? (tryConstructSlugPlayUrl(
-            params.board_name,
-            Number(params.layout_id),
-            Number(params.size_id),
-            decodeURIComponent(params.set_ids).split(',').map(Number),
-            angle,
-            currentClimb.uuid,
-            currentClimb.name,
-          ) ?? numericFallback)
-        : numericFallback;
-    } else {
-      return null;
-    }
-
-    const queryString = searchParams.toString();
-    if (queryString) {
-      return `${baseUrl}?${queryString}`;
-    }
-    return baseUrl;
-  }, [currentClimb, boardDetails, angle, params, searchParams]);
 
   const handleClimbInfoClick = useCallback(() => {
     if (!currentClimb || viewOnlyMode) return;
@@ -1309,28 +1175,11 @@ const QueueControlBar: React.FC<QueueControlBarProps> = ({ boardDetails, angle }
                         </IconButton>
                       </span>
                     ) : null}
-                    {/* Play link - desktop only */}
-                    {!isPlayPage && playUrl && (
-                      <span className={styles.desktopOnly}>
-                        <LocaleLink
-                          href={playUrl}
-                          onClick={() => {
-                            track('Play Mode Entered', {
-                              boardLayout: boardDetails.layout_name || '',
-                            });
-                          }}
-                        >
-                          <IconButton aria-label={t('queueBar.ariaLabels.enterPlayMode')}>
-                            <OpenInFullOutlined />
-                          </IconButton>
-                        </LocaleLink>
-                      </span>
-                    )}
                     {/* Navigation buttons - desktop only */}
                     <span className={styles.navButtons}>
                       <Stack direction="row" spacing={0.5}>
-                        <QueueNavButton direction="previous" navigate={shouldNavigate} boardDetails={boardDetails} />
-                        <QueueNavButton direction="next" navigate={shouldNavigate} boardDetails={boardDetails} />
+                        <QueueNavButton direction="previous" boardDetails={boardDetails} />
+                        <QueueNavButton direction="next" boardDetails={boardDetails} />
                       </Stack>
                     </span>
                     {/* Attempt button — visible whenever tick mode is active */}

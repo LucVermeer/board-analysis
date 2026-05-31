@@ -91,7 +91,7 @@ describe('QueueNavButton Wall Advance event', () => {
   });
 
   it('fires Wall Advance with bar_button source + driver role in solo mode', () => {
-    render(<QueueNavButton direction="next" navigate={false} boardDetails={boardDetails} />);
+    render(<QueueNavButton direction="next" boardDetails={boardDetails} />);
 
     fireEvent.click(screen.getByRole('button'));
 
@@ -108,7 +108,7 @@ describe('QueueNavButton Wall Advance event', () => {
 
   it('reports pressedByRole=non_driver when a non-driver presses in a party session', () => {
     sessionDataMock = { viewOnlyMode: false, isPersistentSessionActive: true, isDriver: false };
-    render(<QueueNavButton direction="previous" navigate={false} boardDetails={boardDetails} />);
+    render(<QueueNavButton direction="previous" boardDetails={boardDetails} />);
 
     fireEvent.click(screen.getByRole('button'));
 
@@ -124,7 +124,7 @@ describe('QueueNavButton Wall Advance event', () => {
   });
 
   it('still fires Queue Navigation alongside Wall Advance (analytics continuity)', () => {
-    render(<QueueNavButton direction="next" navigate={false} boardDetails={boardDetails} />);
+    render(<QueueNavButton direction="next" boardDetails={boardDetails} />);
 
     fireEvent.click(screen.getByRole('button'));
 
@@ -136,7 +136,7 @@ describe('QueueNavButton Wall Advance event', () => {
 
   it('disables the button when there is no advance target', () => {
     mockGetNextClimbQueueItem.mockReturnValue(null);
-    render(<QueueNavButton direction="next" navigate={false} boardDetails={boardDetails} />);
+    render(<QueueNavButton direction="next" boardDetails={boardDetails} />);
 
     const button = screen.getByRole('button') as HTMLButtonElement;
     expect(button.disabled).toBe(true);

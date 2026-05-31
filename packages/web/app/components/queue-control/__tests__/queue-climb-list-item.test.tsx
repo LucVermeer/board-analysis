@@ -19,7 +19,7 @@ let capturedSwipeOptions: Record<string, unknown> | null = null;
 
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/kilter/original/12x12/default/40/play/some-climb',
+  usePathname: () => '/kilter/original/12x12/default/40/view/some-climb',
   useRouter: () => ({ push: mockPush }),
 }));
 
@@ -176,7 +176,7 @@ const defaultProps = () => ({
   isCurrent: false,
   isHistory: false,
   boardDetails: makeBoardDetails(),
-  pathname: '/kilter/original/12x12/default/40/play/some-climb',
+  pathname: '/kilter/original/12x12/default/40/view/some-climb',
   isDark: false,
   setCurrentClimbQueueItem: vi.fn(),
   onTickClick: vi.fn(),
