@@ -126,14 +126,37 @@ jobs:
             exit 1
           fi
 
-          # lastRollbackTarget is null when no rollback is pinned, an object otherwise.
-          if [ "$(jq -r '.lastRollbackTarget // empty' response.json)" != "" ]; then
+          # Two signals — fire on either:
+          #   autoAssignCustomDomains=false: durable. Vercel flips this off when a
+          #     rollback is pinned and back on when the rollback is undone (or a
+          #     deployment is manually promoted). This is what we rely on.
+          #   lastRollbackTarget non-null: transient (only populated mid-transition
+          #     in our experience). Kept as a secondary OR'd signal in case Vercel
+          #     starts persisting it again.
+          AUTO_ASSIGN=$(jq -r '.autoAssignCustomDomains' response.json)
+          ROLLBACK_TARGET=$(jq -r '.lastRollbackTarget // empty' response.json)
+
+          # Guard against Vercel changing the project payload shape — silently
+          # treating a missing flag as "no rollback" is how we promoted over one.
+          case "$AUTO_ASSIGN" in
+            true|false) ;;
+            *)
+              echo "::error::autoAssignCustomDomains is '$AUTO_ASSIGN' (expected true/false) — cannot confirm rollback state, blocking deploy."
+              cat response.json
+              exit 1
+              ;;
+          esac
+
+          if [ "$AUTO_ASSIGN" = "false" ] || [ -n "$ROLLBACK_TARGET" ]; then
             echo "active=true" >> "$GITHUB_OUTPUT"
             echo "::warning::A Vercel Instant Rollback is active — this run will deploy but NOT promote (production stays pinned)."
-            jq '.lastRollbackTarget' response.json
+            echo "Signals: autoAssignCustomDomains=$AUTO_ASSIGN, lastRollbackTarget present=$([ -n "$ROLLBACK_TARGET" ] && echo yes || echo no)"
+            if [ -n "$ROLLBACK_TARGET" ]; then
+              jq '.lastRollbackTarget' response.json
+            fi
           else
             echo "active=false" >> "$GITHUB_OUTPUT"
-            echo "No active Vercel instant rollback — deploy will promote to production."
+            echo "No rollback signal detected (autoAssignCustomDomains=true, lastRollbackTarget=null) — deploy will promote to production."
           fi
 
   build-web:
