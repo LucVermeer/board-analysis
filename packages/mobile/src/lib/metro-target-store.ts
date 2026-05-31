@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { normalizeMetroTarget } from './metro-discovery';
 
@@ -10,8 +11,52 @@ function isStringArray(value: unknown): value is string[] {
 
 type StoredTargets = { ok: true; targets: string[] } | { ok: false };
 
+// One-time migration: prior versions stored Metro hosts in SecureStore.
+// Non-secret data shouldn't live in the Keychain/Keystore, so on first read
+// we hoist any legacy value into AsyncStorage and delete the SecureStore
+// copy. Idempotent — running on a device that already migrated is a no-op.
+//
+// On transient failure (storage error, native module not ready) we DON'T
+// cache the failed attempt — a subsequent read retries. Caching only on
+// success means a flaky first read can't permanently strand a user's
+// legacy SecureStore value.
+let migrationCompleted = false;
+let migrationInFlight: Promise<void> | null = null;
+async function migrateFromSecureStore(): Promise<void> {
+  if (migrationCompleted) return;
+  if (migrationInFlight !== null) return migrationInFlight;
+  migrationInFlight = (async () => {
+    try {
+      const asyncValue = await AsyncStorage.getItem(METRO_TARGETS_KEY);
+      if (asyncValue !== null) {
+        migrationCompleted = true;
+        return;
+      }
+
+      const legacyValue = await SecureStore.getItemAsync(METRO_TARGETS_KEY);
+      if (legacyValue === null) {
+        migrationCompleted = true;
+        return;
+      }
+
+      await AsyncStorage.setItem(METRO_TARGETS_KEY, legacyValue);
+      await SecureStore.deleteItemAsync(METRO_TARGETS_KEY);
+      migrationCompleted = true;
+    } catch (err) {
+      if (__DEV__) {
+        console.warn('[metro-target-store] migration from SecureStore failed; will retry on next read', err);
+      }
+      // Leave migrationCompleted=false so a future call retries.
+    } finally {
+      migrationInFlight = null;
+    }
+  })();
+  return migrationInFlight;
+}
+
 async function readStoredTargets(): Promise<StoredTargets> {
-  const value = await SecureStore.getItemAsync(METRO_TARGETS_KEY);
+  await migrateFromSecureStore();
+  const value = await AsyncStorage.getItem(METRO_TARGETS_KEY);
   if (!value) return { ok: true, targets: [] };
   try {
     const parsed: unknown = JSON.parse(value);
@@ -34,7 +79,7 @@ async function readStoredTargets(): Promise<StoredTargets> {
 }
 
 // Serializes read-modify-write paths so two parallel add/remove calls don't
-// race on SecureStore. Reads also go through the queue so a write's
+// race on AsyncStorage. Reads also go through the queue so a write's
 // pre-read sees the post-state of a prior write.
 let writeQueue: Promise<unknown> = Promise.resolve();
 
@@ -75,7 +120,7 @@ export async function addSavedMetroTarget(value: string): Promise<string> {
       MAX_TARGETS,
     );
 
-    await SecureStore.setItemAsync(METRO_TARGETS_KEY, JSON.stringify(updatedTargets));
+    await AsyncStorage.setItem(METRO_TARGETS_KEY, JSON.stringify(updatedTargets));
     return normalizedTarget;
   });
 }
@@ -93,6 +138,6 @@ export async function removeSavedMetroTarget(value: string): Promise<void> {
       throw new Error('Saved Metro server list is corrupted — clear it from app data and retry');
     }
     const updatedTargets = stored.targets.filter((target) => target !== normalizedValue);
-    await SecureStore.setItemAsync(METRO_TARGETS_KEY, JSON.stringify(updatedTargets));
+    await AsyncStorage.setItem(METRO_TARGETS_KEY, JSON.stringify(updatedTargets));
   });
 }

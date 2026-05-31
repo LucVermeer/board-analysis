@@ -153,14 +153,18 @@
         "@boardsesh/ble-protocol": "*",
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
+        "@boardsesh/climb-actions": "*",
         "@boardsesh/climb-filters": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
+        "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
+        "@boardsesh/queue-runtime": "*",
         "@boardsesh/shared-schema": "*",
         "@expo/vector-icons": "^15.1.1",
         "@gorhom/bottom-sheet": "^5.2.14",
+        "@react-native-async-storage/async-storage": "^3.1.0",
         "@react-native-community/blur": "^4.4.1",
         "@shopify/flash-list": "2.0.2",
         "@tanstack/react-query": "^5.0.0",
@@ -203,7 +207,10 @@
       },
       "devDependencies": {
         "@bacons/apple-targets": "^4.0.7",
+        "@testing-library/react": "^16.3.2",
         "@types/react": "^19.0.0",
+        "jsdom": "^28.1.0",
+        "react-dom": "19.2.3",
         "typescript": "~6.0.3",
         "vitest": "^4.1.5",
       },
@@ -261,6 +268,13 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/climb-actions": {
+      "name": "@boardsesh/climb-actions",
+      "version": "1.0.0",
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared/climb-filters": {
       "name": "@boardsesh/climb-filters",
       "version": "1.0.0",
@@ -294,6 +308,13 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/party-profile": {
+      "name": "@boardsesh/party-profile",
+      "version": "1.0.0",
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared/play-view": {
       "name": "@boardsesh/play-view",
       "version": "1.0.0",
@@ -313,6 +334,16 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/queue-runtime": {
+      "name": "@boardsesh/queue-runtime",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/queue": "*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/web": {
       "name": "@boardsesh/web",
       "version": "0.1.0",
@@ -328,14 +359,17 @@
         "@boardsesh/board-config": "*",
         "@boardsesh/board-constants": "*",
         "@boardsesh/board-renderer-wasm": "*",
+        "@boardsesh/climb-actions": "*",
         "@boardsesh/climb-filters": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
         "@boardsesh/moonboard-ocr": "*",
+        "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
+        "@boardsesh/queue-runtime": "*",
         "@boardsesh/shared-schema": "*",
         "@emoji-mart/data": "^1.2.1",
         "@emoji-mart/react": "^1.1.1",
@@ -721,6 +755,8 @@
 
     "@boardsesh/board-renderer-wasm": ["@boardsesh/board-renderer-wasm@workspace:packages/board-renderer/wasm"],
 
+    "@boardsesh/climb-actions": ["@boardsesh/climb-actions@workspace:packages/shared/climb-actions"],
+
     "@boardsesh/climb-filters": ["@boardsesh/climb-filters@workspace:packages/shared/climb-filters"],
 
     "@boardsesh/crypto": ["@boardsesh/crypto@workspace:packages/crypto"],
@@ -735,9 +771,13 @@
 
     "@boardsesh/moonboard-ocr": ["@boardsesh/moonboard-ocr@workspace:packages/moonboard-ocr"],
 
+    "@boardsesh/party-profile": ["@boardsesh/party-profile@workspace:packages/shared/party-profile"],
+
     "@boardsesh/play-view": ["@boardsesh/play-view@workspace:packages/shared/play-view"],
 
     "@boardsesh/queue": ["@boardsesh/queue@workspace:packages/shared/queue"],
+
+    "@boardsesh/queue-runtime": ["@boardsesh/queue-runtime@workspace:packages/shared/queue-runtime"],
 
     "@boardsesh/shared-schema": ["@boardsesh/shared-schema@workspace:packages/shared-schema"],
 
@@ -1354,6 +1394,8 @@
     "@radix-ui/react-use-layout-effect": ["@radix-ui/react-use-layout-effect@1.1.1", "", { "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-RbJRS4UWQFkzHTTwVymMTUv8EqYhOp8dOOviLj2ugtTiXRaRQS7GLGxZTLL1jWhMeoSCf5zmcZkqTl9IiYfXcQ=="],
 
     "@react-leaflet/core": ["@react-leaflet/core@3.0.0", "", { "peerDependencies": { "leaflet": "^1.9.0", "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-3EWmekh4Nz+pGcr+xjf0KNyYfC3U2JjnkWsh0zcqaexYqmmB5ZhH37kz41JXGmKzpaMZCnPofBBm64i+YrEvGQ=="],
+
+    "@react-native-async-storage/async-storage": ["@react-native-async-storage/async-storage@3.1.1", "", { "dependencies": { "idb": "8.0.3" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-z+PnLz1n6ECKhgoHZHkfc+dijXZEyZnNFSajbtE0NEbsJhmX8x9GlOeiMQIKX2E4DUqPSgfIh4FYBv1M49KgPQ=="],
 
     "@react-native-community/blur": ["@react-native-community/blur@4.4.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-XBSsRiYxE/MOEln2ayunShfJtWztHwUxLFcSL20o+HNNRnuUDv+GXkF6FmM2zE8ZUfrnhQ/zeTqvnuDPGw6O8A=="],
 
@@ -4132,6 +4174,8 @@
     "@boardsesh/graphql-client/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/mobile/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
+
+    "@boardsesh/mobile/react-dom": ["react-dom@19.2.3", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.3" } }, "sha512-yELu4WmLPw5Mr/lmeEpox5rw3RETacE++JgHqQzd2dg+YbJuat3jH4ingc+WPZhxaoFzdv9y33G+F7Nl5O0GBg=="],
 
     "@boardsesh/mobile/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
