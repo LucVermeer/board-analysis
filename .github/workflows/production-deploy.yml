@@ -429,7 +429,9 @@ jobs:
           # (otherwise the workflow link dominates the message).
           CONTENT=$(printf '⚠️ **Deployed but NOT promoted** on `%s`\nA Vercel Instant Rollback is active, so production stays pinned to the rolled-back deployment.\n• web: %s\n• backend: %s\nClear the rollback (revert the offending commit and re-promote), then promote the staged web deployment and redeploy the backend.\n<%s>' \
             "${COMMIT_SHA:0:7}" "$WEB_LINE" "$BACKEND_LINE" "$RUN_URL")
-          jq -n --arg content "$CONTENT" '{content: $content}' \
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings from
+          # any text we splice in (commit messages, PR titles, etc.).
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
 
@@ -469,7 +471,8 @@ jobs:
           # --fail-with-body surfaces Discord's status + error body (e.g. 429,
           # rotated webhook) in the log instead of failing silently. Don't let a
           # webhook hiccup fail the job — the alert is best-effort.
-          jq -n --arg content "$CONTENT" '{content: $content}' \
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings.
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
 
@@ -488,6 +491,13 @@ jobs:
       && (needs.deploy-web.result == 'success' || needs.deploy-production-backend.result == 'success')
     runs-on: ubuntu-latest
     environment: Production
+    permissions:
+      # Need contents:read to fetch full history and pull-requests:read so
+      # `gh api repos/.../pulls/N` can read titles. Default GITHUB_TOKEN on
+      # push events already includes these, but pinning the job to the
+      # minimum scope keeps it least-privileged.
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v6
         with:
@@ -548,6 +558,8 @@ jobs:
           # RUN_URL wrapped in <…> so Discord suppresses the inline preview embed.
           CONTENT=$(printf '✅ **Production deployed** on `%s`\n• web: %s\n• backend: %s%s\n<%s>' \
             "${COMMIT_SHA:0:7}" "$WEB_LINE" "$BACKEND_LINE" "$SHIPPED_SECTION" "$RUN_URL")
-          jq -n --arg content "$CONTENT" '{content: $content}' \
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings —
+          # critical here because PR titles flow straight into $content.
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
