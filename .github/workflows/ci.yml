@@ -137,7 +137,8 @@ jobs:
         run: vp check
 
   typecheck:
-    needs: [setup]
+    needs: [changes, setup]
+    if: needs.changes.outputs.anyJs == 'true' || needs.changes.outputs.rootCi == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -232,23 +233,22 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: built-packages
-      # Run every vitest project except the two with infra needs (`backend`
-      # needs postgres+redis services, `moonboard-ocr` needs canvas system
-      # libs) — those run in their own jobs below.
+      # Exclude the two projects with infra needs (`backend` needs
+      # postgres+redis services, `moonboard-ocr` needs canvas system libs) —
+      # those run in their own jobs below. Vitest's `--project '!name'`
+      # negation lets new packages get picked up automatically as they're
+      # added to root vite.config.ts's `test.projects` list.
       - name: Run tests
         run: |
-          PROJECTS="web mobile board-constants aurora-sync crypto ble-protocol board-config queue queue-runtime party-profile climb-actions play-view climb-filters graphql graphql-client shared-schema"
-          PROJECT_ARGS=""
-          for project in $PROJECTS; do
-            PROJECT_ARGS="$PROJECT_ARGS --project $project"
-          done
           mkdir -p test-results
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            vp test run --changed "origin/${{ github.base_ref }}" $PROJECT_ARGS \
+            vp test run --changed "origin/${{ github.base_ref }}" \
+              --project '!backend' --project '!moonboard-ocr' \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./test-results/junit-default.xml
           else
-            vp test run $PROJECT_ARGS \
+            vp test run \
+              --project '!backend' --project '!moonboard-ocr' \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./test-results/junit-default.xml
           fi
@@ -423,7 +423,16 @@ jobs:
 
   test-report:
     needs: [test-default, test-backend, test-ocr]
-    if: always() && github.event_name == 'pull_request'
+    # Only post a report when at least one test job actually ran. If all three
+    # were skipped (e.g. an i18n-catalog-only PR), there's nothing to
+    # download — actions/download-artifact errors on missing artifacts, so we
+    # skip the whole job instead of swallowing the failure.
+    if: |
+      always() && github.event_name == 'pull_request' && (
+        needs.test-default.result != 'skipped' ||
+        needs.test-backend.result != 'skipped' ||
+        needs.test-ocr.result != 'skipped'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
