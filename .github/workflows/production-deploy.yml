@@ -163,6 +163,13 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          # Next's "Collecting page data" phase evaluates route modules (e.g.
+          # /api/auth/[...nextauth]), which instantiate the db client and throw
+          # if DATABASE_URL is unset. Native Vercel builds got this from the
+          # project env; in Actions we pass it explicitly (process.env wins over
+          # any .env file in Next). Same Production-environment secret the
+          # migrate job uses.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: vercel build --prod
 
       - name: Upload prebuilt output
