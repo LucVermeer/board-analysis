@@ -21,6 +21,27 @@ The web project deploys from `packages/web`, not the repo root. Two dashboard se
 
 Keep the larger build machine — `bun install` builds `sharp` plus the Expo/React Native native tree and OOMs on the default size.
 
+## Production deploys (GitHub Actions)
+
+Production deploys run through a single workflow, `.github/workflows/production-deploy.yml`, on push to `main` (or `workflow_dispatch`). Vercel's native git auto-deploy is off (`git.deploymentEnabled: false` in `packages/web/vercel.json`), so Actions is the only production deployer.
+
+Flow:
+
+1. `detect-changes` decides `web_changed` / `backend_changed` from the push diff (backend uses the same path list as `branch-deploy.yml`; web deploys on anything that isn't docs- or mobile-only).
+2. `build-web` runs `vercel pull --environment=production` + `vercel build --prod` and uploads `.vercel` (prebuilt output + project link) as an artifact. `build-backend` builds `Dockerfile.backend` and pushes it to `ghcr.io/boardsesh/boardsesh-daemon` with `:production` / `:staging` / `:sha-<short>` / `:latest` tags.
+3. **The gate:** `migrate` runs `@boardsesh/db db:migrate` only once every *attempted* build passed. A build that ran and failed blocks the gate, which skips both production deploys — nothing reaches prod half-built. (Migrations used to run inside the Vercel build; they moved here so they only run behind the gate.)
+4. `deploy-web` (`vercel deploy --prebuilt --prod`) and `deploy-production-backend` (`railway redeploy`) run after the gate.
+5. `notify-failure` posts to the Discord deploy webhook if any job failed.
+
+Required GitHub config:
+
+- **Secrets:** `VERCEL_TOKEN`, `DATABASE_URL` (production Neon — used by the gated migrate job), `RAILWAY_TOKEN`, `DISCORD_DEPLOY_WEBHOOK`.
+- **Variables:** `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `RAILWAY_BACKEND_SERVICE_ID`.
+
+Railway runs from the prebuilt image, not its own build — keep `railway.toml` free of a `[build]` block and point the service Source at `ghcr.io/boardsesh/boardsesh-daemon:production`.
+
+The homelab staging-backend deploy job is commented out in the workflow until the self-hosted runner is healthy.
+
 ### What Broke
 
 Branch deploys stopped working after migrating from Vercel Postgres (which was a managed Neon account under Vercel) to a direct Neon paid account. Specifically:
