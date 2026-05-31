@@ -27,7 +27,7 @@ Production deploys run through a single workflow, `.github/workflows/production-
 
 Flow:
 
-1. `detect-changes` decides `web_changed` / `backend_changed` from the push diff (backend uses the same path list as `branch-deploy.yml`; web deploys on anything that isn't docs- or mobile-only). `check-rollback` runs in parallel and fails the whole run if a Vercel Instant Rollback is active (see below).
+1. `detect-changes` decides `web_changed` / `backend_changed` from the push diff (backend uses the same path list as `branch-deploy.yml`; web deploys on anything that isn't docs- or mobile-only). `check-rollback` runs in parallel and flags whether a Vercel Instant Rollback is active (see below).
 2. `build-web` runs `vercel pull --environment=production` + `vercel build --prod` and uploads `.vercel` (prebuilt output + project link) as an artifact. `build-backend` builds `Dockerfile.backend` and pushes it to `ghcr.io/boardsesh/boardsesh-daemon` with `:production` / `:staging` / `:sha-<short>` / `:latest` tags.
 3. **The gate:** `migrate` runs `@boardsesh/db db:migrate` only once every *attempted* build passed. A build that ran and failed blocks the gate, which skips both production deploys — nothing reaches prod half-built. (Migrations used to run inside the Vercel build; they moved here so they only run behind the gate.)
 4. `deploy-web` (`vercel deploy --prebuilt --prod`) and `deploy-production-backend` (`railway redeploy`) run after the gate.
@@ -44,10 +44,14 @@ The homelab staging-backend deploy job is commented out in the workflow until th
 
 ### Instant Rollback interaction
 
-When someone uses Vercel **Instant Rollback**, production is pinned to a previous deployment and Vercel disables production-domain auto-assignment. Two things to know:
+When someone uses Vercel **Instant Rollback**, production is pinned to a previous deployment and Vercel disables production-domain auto-assignment. The pipeline handles this by **deploying without promoting** rather than failing:
 
-- **`check-rollback` blocks the pipeline while a rollback is pinned.** It reads `lastRollbackTarget` on the Vercel project (`GET /v9/projects/{id}`); if non-null, the run fails before anything builds or deploys, so a merge to `main` can't silently overwrite an incident mitigation. Clear the rollback (revert the offending commit and re-promote) before the next deploy. The check fails closed — if the project API can't be read, the deploy is blocked.
-- **Migrations only move forward; Instant Rollback never reverts the DB.** The `migrate` job runs `db:migrate` forward and Instant Rollback rolls back *only the web deployment*. A rolled-back web build therefore runs against the already-migrated schema, so **production migrations must stay backward-compatible (expand/contract)** — never drop or rename a column in the same release that depends on it gone.
+- **`check-rollback`** reads `lastRollbackTarget` on the Vercel project (`GET /v9/projects/{id}`) and outputs `active=true/false`. It fails closed — if the project API can't be read at all, the run is blocked.
+- **When a rollback is active**, the run still builds and migrates, but:
+  - `deploy-web` runs `vercel deploy --prebuilt --prod --skip-domain` — the production deployment is created and uploaded but *not* assigned to the production domain, so the rolled-back deployment keeps serving traffic.
+  - `deploy-production-backend` pushes the image to GHCR (`:production`, `:sha-<short>`) but **skips the Railway redeploy** (Railway has no "deploy without promote"). The image is ready to redeploy once the rollback is cleared.
+  - `notify-no-promote` posts to Discord with the staged web URL and the GHCR image, plus instructions: clear the rollback (revert the offending commit and re-promote), then promote the staged web deployment and redeploy the backend.
+- **Migrations only move forward; Instant Rollback never reverts the DB.** The `migrate` job runs `db:migrate` forward and Instant Rollback rolls back *only the web deployment*. A rolled-back web build therefore runs against the already-migrated schema, so **production migrations must stay backward-compatible (expand/contract)** — never drop or rename a column in the same release that depends on it gone. (This also keeps the staged-but-not-promoted release DB-ready for a clean promotion later.)
 
 ### What Broke
 
