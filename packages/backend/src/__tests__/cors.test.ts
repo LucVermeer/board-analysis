@@ -4,7 +4,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vite-plus/test';
-import { initCors, isOriginAllowed, applyCorsHeaders, getAllowedOrigins } from '../handlers/cors';
+import { initCors, isOriginAllowed, isSameOriginUpgrade, applyCorsHeaders, getAllowedOrigins } from '../handlers/cors';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
@@ -208,12 +208,66 @@ describe('CORS Handler', () => {
     });
   });
 
+  describe('isSameOriginUpgrade', () => {
+    it('allows a genuine same-origin upgrade even in production', () => {
+      // The same-origin allowance is NOT gated behind the dev-only branches —
+      // this is what unblocks the React Native Android app (Origin derived from
+      // wss://ws.boardsesh.com) and preview WS hosts against the prod backend.
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        expect(isSameOriginUpgrade('https://ws.boardsesh.com', 'ws.boardsesh.com')).toBe(true);
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    it('allows preview WS hosts without per-environment config', () => {
+      expect(isSameOriginUpgrade('https://42.ws.preview.boardsesh.com', '42.ws.preview.boardsesh.com')).toBe(true);
+    });
+
+    it('ignores a port on the Host header (compares hostname only)', () => {
+      expect(isSameOriginUpgrade('https://ws.boardsesh.com', 'ws.boardsesh.com:443')).toBe(true);
+    });
+
+    it('is case-insensitive', () => {
+      expect(isSameOriginUpgrade('https://WS.Boardsesh.com', 'ws.boardsesh.com')).toBe(true);
+    });
+
+    it('ignores a trailing dot on the Origin hostname', () => {
+      expect(isSameOriginUpgrade('https://ws.boardsesh.com.', 'ws.boardsesh.com')).toBe(true);
+    });
+
+    it('ignores userinfo in the Origin', () => {
+      expect(isSameOriginUpgrade('https://user:pass@ws.boardsesh.com', 'ws.boardsesh.com')).toBe(true);
+    });
+
+    it('rejects a cross-origin upgrade', () => {
+      expect(isSameOriginUpgrade('https://evil.com', 'ws.boardsesh.com')).toBe(false);
+    });
+
+    it('rejects a look-alike host that is not an exact hostname match', () => {
+      expect(isSameOriginUpgrade('https://ws.boardsesh.com.evil.com', 'ws.boardsesh.com')).toBe(false);
+    });
+
+    it('fails closed on a malformed Origin (does not throw)', () => {
+      expect(isSameOriginUpgrade('http://[not-a-url', 'ws.boardsesh.com')).toBe(false);
+    });
+
+    it('fails closed when the Host header is missing', () => {
+      expect(isSameOriginUpgrade('https://ws.boardsesh.com', undefined)).toBe(false);
+    });
+  });
+
   /* eslint-disable @typescript-eslint/unbound-method -- all assertions target vi.fn() mocks, no `this` concern */
   describe('applyCorsHeaders', () => {
-    function createMockReq(method: string, origin?: string) {
+    function createMockReq(method: string, origin?: string, host?: string) {
+      const headers: Record<string, string> = {};
+      if (origin) headers.origin = origin;
+      if (host) headers.host = host;
       return {
         method,
-        headers: origin ? { origin } : {},
+        headers,
       } as unknown as IncomingMessage;
     }
 
@@ -247,6 +301,26 @@ describe('CORS Handler', () => {
 
     it('does NOT set origin-specific headers when origin is not allowed', () => {
       const req = createMockReq('GET', 'https://evil.com');
+      const res = createMockRes();
+      applyCorsHeaders(req, res);
+
+      expect(res.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', expect.anything());
+      expect(res.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Credentials', expect.anything());
+    });
+
+    it('echoes the origin for a same-origin request not on the allow-list', () => {
+      // ws.boardsesh.com is the backend's own host, never on the website
+      // allow-list, but a request whose Origin matches its Host is same-origin.
+      const req = createMockReq('GET', 'https://ws.boardsesh.com', 'ws.boardsesh.com');
+      const res = createMockRes();
+      applyCorsHeaders(req, res);
+
+      expect(res.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'https://ws.boardsesh.com');
+      expect(res.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Credentials', 'true');
+    });
+
+    it('does NOT echo the origin when Origin and Host differ and origin is not allowed', () => {
+      const req = createMockReq('GET', 'https://evil.com', 'ws.boardsesh.com');
       const res = createMockRes();
       applyCorsHeaders(req, res);
 

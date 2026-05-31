@@ -194,7 +194,7 @@ sequenceDiagram
 
 ### Key Points
 
-1. **Origin Validation**: WebSocket connections are validated against allowed origins
+1. **Origin Validation**: WebSocket upgrades are validated against the allowed-origins list (`BOARDSESH_URL` + `www.` variant, Vercel/homelab preview patterns, dev origins). Two additional paths are accepted: connections with **no** `Origin` header (native/direct clients), and genuine **same-origin** upgrades where the `Origin`'s hostname equals the request's `Host` header (`isSameOriginUpgrade` in `handlers/cors.ts`). The same-origin path is why the React Native **Android** app connects — RN derives `Origin` from the `wss://` URL (`https://ws.boardsesh.com`, the backend's own host, never on the website allow-list) — and why preview WS hosts (`{N}.ws.preview.boardsesh.com`) work without per-PR config. It's safe against cross-site WebSocket hijacking because a cross-site attacker's `Origin` is its own domain, and WS auth is token-based (`connectionParams`), not cookie-based. Rejected upgrades log `{ origin, host, userAgent, forwardedFor, remoteAddress }` for attribution.
 2. **Authentication**: Auth token passed in `connectionParams` — web supplies a static `authToken` string; mobile supplies an async `connectionParams` provider (re-reads the token from secure storage on every reconnect). Both paths and the `shouldRetry` predicate (mobile rejects 4401 auth-error close codes) are handled by the shared `createGraphQLClient` factory in `@boardsesh/graphql-client`.
 3. **Eager Subscription**: Queue subscription starts BEFORE fetching state to prevent race conditions
 4. **Session Restoration**: Sessions can be restored from Redis (warm cache) or PostgreSQL (dormant durable state)
