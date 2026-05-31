@@ -84,6 +84,10 @@ input ClimbInput {
   published_at: String
   userAscents: Int
   userAttempts: Int
+  "Number of animation frames encoded in `frames`. 1 for static climbs."
+  framesCount: Int
+  "Native per-frame pace, in milliseconds. 0 when unset."
+  framesPace: Int
 }
 
 # ============================================
@@ -175,6 +179,10 @@ input ClimbSearchInput {
   onlyDrafts: Boolean
   "Show only unclimbed projects (climbs with 0 ascents)"
   projectsOnly: Boolean
+  "Include single-frame climbs (boulders). Default true. Set to false (paired with routes=true) to filter to routes only."
+  boulders: Boolean
+  "Include multi-frame climbs (routes). Default false. Set to true to include or filter to routes."
+  routes: Boolean
   "Restrict results using this drawn zone"
   zoneBox: ZoneBoxInput
   "How the zone should match climb holds. Defaults to allHolds when omitted."
@@ -4920,6 +4928,13 @@ input PlaybackStateInput {
   speed: Float!
   "Climb's native pace, in milliseconds per frame."
   paceMs: Int!
+  """
+  Stable identifier for the publisher's playback engine instance. Peers use
+  it to suppress echoes of their own events when the broadcast reflects back.
+  Falls back to the WebSocket connection id when omitted, which is safe but
+  coarser (a single connection driving multiple engines can't disambiguate).
+  """
+  clientId: ID
 }
 
 """

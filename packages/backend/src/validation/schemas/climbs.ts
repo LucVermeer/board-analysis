@@ -145,6 +145,8 @@ export const ClimbSearchInputSchema = z.object({
   showOnlyCompleted: z.boolean().optional(),
   onlyDrafts: z.boolean().optional(),
   projectsOnly: z.boolean().optional(),
+  boulders: z.boolean().optional(),
+  routes: z.boolean().optional(),
   zoneBox: z
     .object({
       edgeLeft: z.number().int(),

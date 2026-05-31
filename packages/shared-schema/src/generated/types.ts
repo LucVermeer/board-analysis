@@ -513,6 +513,10 @@ export type ClimbInput = {
   difficulty: Scalars['String']['input'];
   difficulty_error: Scalars['String']['input'];
   frames: Scalars['String']['input'];
+  /** Number of animation frames encoded in `frames`. 1 for static climbs. */
+  framesCount?: InputMaybe<Scalars['Int']['input']>;
+  /** Native per-frame pace, in milliseconds. 0 when unset. */
+  framesPace?: InputMaybe<Scalars['Int']['input']>;
   /** Whether this climb is still a draft. */
   is_draft?: InputMaybe<Scalars['Boolean']['input']>;
   is_no_match?: InputMaybe<Scalars['Boolean']['input']>;
@@ -595,6 +599,8 @@ export type ClimbSearchInput = {
   angle: Scalars['Int']['input'];
   /** Board type (e.g., 'kilter', 'tension') */
   boardName: Scalars['String']['input'];
+  /** Include single-frame climbs (boulders). Default true. Set to false (paired with routes=true) to filter to routes only. */
+  boulders?: InputMaybe<Scalars['Boolean']['input']>;
   /** Grade accuracy filter ('tight', 'moderate', 'loose') */
   gradeAccuracy?: InputMaybe<Scalars['String']['input']>;
   /** Hide climbs the user has attempted (requires auth) */
@@ -629,6 +635,8 @@ export type ClimbSearchInput = {
   pageSize?: InputMaybe<Scalars['Int']['input']>;
   /** Show only unclimbed projects (climbs with 0 ascents) */
   projectsOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Include multi-frame climbs (routes). Default false. Set to true to include or filter to routes. */
+  routes?: InputMaybe<Scalars['Boolean']['input']>;
   /** Comma-separated set IDs */
   setIds: Scalars['String']['input'];
   /** Filter by setter usernames */
@@ -2695,6 +2703,13 @@ export type PlaybackStateChanged = {
  * extrapolate the current frame without round-tripping back to the publisher.
  */
 export type PlaybackStateInput = {
+  /**
+   * Stable identifier for the publisher's playback engine instance. Peers use
+   * it to suppress echoes of their own events when the broadcast reflects back.
+   * Falls back to the WebSocket connection id when omitted, which is safe but
+   * coarser (a single connection driving multiple engines can't disambiguate).
+   */
+  clientId?: InputMaybe<Scalars['ID']['input']>;
   /** Climb the playback applies to. Peers ignore the event if it's for a different climb than they're showing. */
   climbUuid: Scalars['ID']['input'];
   /** Frame index that became current at `anchorTimestamp`. */

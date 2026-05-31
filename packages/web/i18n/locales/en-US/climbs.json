@@ -143,6 +143,8 @@
       "only": "Only {{filters}}",
       "holds_one": "{{count}} hold",
       "holds_other": "{{count}} holds",
+      "routesOnly": "Routes only",
+      "bouldersAndRoutes": "Boulders & routes",
       "more": "+{{count}} more"
     },
     "status": {

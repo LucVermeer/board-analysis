@@ -143,6 +143,8 @@
       "only": "Seulement {{filters}}",
       "holds_one": "{{count}} prise",
       "holds_other": "{{count}} prises",
+      "routesOnly": "Voies uniquement",
+      "bouldersAndRoutes": "Blocs et voies",
       "more": "+{{count}} de plus"
     },
     "status": {

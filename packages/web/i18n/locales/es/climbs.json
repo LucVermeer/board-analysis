@@ -143,6 +143,8 @@
       "only": "Solo {{filters}}",
       "holds_one": "{{count}} presa",
       "holds_other": "{{count}} presas",
+      "routesOnly": "Solo rutas",
+      "bouldersAndRoutes": "Bloques y rutas",
       "more": "+{{count}} más"
     },
     "status": {
