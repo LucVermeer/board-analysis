@@ -94,6 +94,8 @@
       "gradeRangeAndUp": "{{grade}} and up",
       "gradeRangeUpTo": "Up to {{grade}}",
       "setter": "Setter",
+      "boulder": "Boulder",
+      "route": "Route",
       "minAscents": "Min Ascents",
       "minRating": "Min Rating",
       "any": "Any",

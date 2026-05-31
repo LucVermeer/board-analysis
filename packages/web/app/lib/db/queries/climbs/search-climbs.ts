@@ -66,6 +66,8 @@ async function _executeClimbSearch(
       showOnlyCompleted: searchParams.showOnlyCompleted || undefined,
       onlyDrafts: searchParams.onlyDrafts || undefined,
       projectsOnly: searchParams.projectsOnly || undefined,
+      boulders: searchParams.boulders ?? undefined,
+      routes: searchParams.routes ?? undefined,
       zoneBox: searchParams.zoneBox || undefined,
       zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,
     },
@@ -140,6 +142,8 @@ export function buildClimbSearchParamsJson(searchParams: SearchRequestPagination
       showOnlyCompleted: searchParams.showOnlyCompleted,
       onlyDrafts: searchParams.onlyDrafts,
       projectsOnly: searchParams.projectsOnly,
+      boulders: searchParams.boulders,
+      routes: searchParams.routes,
     }),
   );
 }

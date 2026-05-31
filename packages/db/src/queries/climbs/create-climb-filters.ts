@@ -1,4 +1,4 @@
-import { type SQL, eq, gte, sql, like, notLike, inArray, or, and } from 'drizzle-orm';
+import { type SQL, eq, gt, gte, sql, like, notLike, inArray, or, and } from 'drizzle-orm';
 import {
   getHolePlacements,
   getProductSize,
@@ -142,13 +142,25 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
   // When showing only drafts, skip the isListed filter (drafts are never listed)
   const isListedCondition: SQL | null = isOnlyDrafts ? null : eq(boardClimbs.isListed, true);
 
+  // Boulders / routes filter. Both selected (or both falsy — treated as "no
+  // preference") → omit the frames_count constraint entirely. Boulders only →
+  // `frames_count = 1`. Routes only → `frames_count > 1`.
+  const wantsBoulders = !!searchParams.boulders;
+  const wantsRoutes = !!searchParams.routes;
+  const climbTypeCondition: SQL | null =
+    wantsBoulders && !wantsRoutes
+      ? eq(boardClimbs.framesCount, 1)
+      : wantsRoutes && !wantsBoulders
+        ? gt(boardClimbs.framesCount, 1)
+        : null;
+
   // Base conditions for filtering climbs
   const baseConditions: SQL[] = [
     eq(boardClimbs.boardType, params.board_name),
     eq(boardClimbs.layoutId, params.layout_id),
     ...(isListedCondition ? [isListedCondition] : []),
     isDraftCondition,
-    eq(boardClimbs.framesCount, 1),
+    ...(climbTypeCondition ? [climbTypeCondition] : []),
   ];
 
   // Size filter: check if this climb fits on the selected board size.

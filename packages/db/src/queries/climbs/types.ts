@@ -58,6 +58,12 @@ export type ClimbSearchParams = {
   showOnlyCompleted?: boolean;
   onlyDrafts?: boolean;
   projectsOnly?: boolean;
+  // Climb-type toggles. Default to undefined (treated as both selected → no
+  // SQL filter on frames_count). Set boulders=true to constrain to single-
+  // frame climbs, routes=true to constrain to multi-frame climbs. Both true
+  // (or both undefined) returns everything.
+  boulders?: boolean;
+  routes?: boolean;
   // Zone filter — restrict climbs using a user-drawn bounding box.
   zoneBox?: ZoneBox | null;
   zoneMode?: ZoneMatchMode | null;

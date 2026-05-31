@@ -129,6 +129,11 @@ export type SearchRequest = {
   showOnlyCompleted: boolean;
   onlyDrafts: boolean;
   projectsOnly: boolean;
+  // Climb-type filter (defaults: boulders=true, routes=false). Both true → no
+  // SQL filter (return everything). Boulders only → `frames_count = 1`. Routes
+  // only → `frames_count > 1`. Both false is treated as "no filter" too.
+  boulders: boolean;
+  routes: boolean;
   zoneBox: ZoneBox | null;
   zoneMode: ZoneMatchMode;
 };

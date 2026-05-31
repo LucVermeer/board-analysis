@@ -94,6 +94,8 @@
       "gradeRangeAndUp": "{{grade}} et plus",
       "gradeRangeUpTo": "Jusqu'à {{grade}}",
       "setter": "Ouvreur",
+      "boulder": "Bloc",
+      "route": "Voie",
       "minAscents": "Enchaînements min",
       "minRating": "Note min",
       "any": "Tous",

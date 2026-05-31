@@ -103,6 +103,8 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const showOnlyCompleted = safeInput.showOnlyCompleted ?? DEFAULT_SEARCH_PARAMS.showOnlyCompleted;
   const onlyDrafts = safeInput.onlyDrafts ?? DEFAULT_SEARCH_PARAMS.onlyDrafts;
   const projectsOnly = safeInput.projectsOnly ?? DEFAULT_SEARCH_PARAMS.projectsOnly;
+  const boulders = safeInput.boulders ?? DEFAULT_SEARCH_PARAMS.boulders;
+  const routes = safeInput.routes ?? DEFAULT_SEARCH_PARAMS.routes;
   const zoneBox = safeInput.zoneBox ?? DEFAULT_SEARCH_PARAMS.zoneBox;
   const zoneMode = safeInput.zoneMode === 'anyHold' ? 'anyHold' : DEFAULT_SEARCH_PARAMS.zoneMode;
   const page = safeInput.page ?? DEFAULT_SEARCH_PARAMS.page;
@@ -175,6 +177,12 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   if (projectsOnly !== DEFAULT_SEARCH_PARAMS.projectsOnly) {
     params.projectsOnly = projectsOnly.toString();
   }
+  if (boulders !== DEFAULT_SEARCH_PARAMS.boulders) {
+    params.boulders = boulders.toString();
+  }
+  if (routes !== DEFAULT_SEARCH_PARAMS.routes) {
+    params.routes = routes.toString();
+  }
   if (
     zoneBox &&
     zoneBox.edgeLeft != null &&
@@ -228,6 +236,8 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   showOnlyCompleted: false,
   onlyDrafts: false,
   projectsOnly: false,
+  boulders: true,
+  routes: false,
   zoneBox: null,
   zoneMode: DEFAULT_ZONE_MODE,
   page: 0,
@@ -323,6 +333,9 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     showOnlyCompleted: urlParams.get('showOnlyCompleted') === 'true',
     onlyDrafts: urlParams.get('onlyDrafts') === 'true',
     projectsOnly: urlParams.get('projectsOnly') === 'true',
+    // boulders defaults to true; only the explicit "false" string flips it.
+    boulders: urlParams.get('boulders') !== 'false',
+    routes: urlParams.get('routes') === 'true',
     zoneBox,
     zoneMode: zoneBox ? parseZoneMode(urlParams.get('zoneMode')) : DEFAULT_SEARCH_PARAMS.zoneMode,
     page: Number(urlParams.get('page') ?? DEFAULT_SEARCH_PARAMS.page),

@@ -170,6 +170,8 @@ describe('hasUserSpecificFilters', () => {
     showOnlyCompleted: false,
     onlyDrafts: false,
     projectsOnly: false,
+    boulders: true,
+    routes: false,
     zoneBox: null,
     zoneMode: 'allHolds' as const,
     page: 0,

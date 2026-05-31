@@ -147,6 +147,54 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         />
       </div>
 
+      <div className={styles.switchGroup}>
+        <FormControlLabel
+          className={styles.switchRow}
+          labelPlacement="start"
+          control={
+            <MuiSwitch
+              size="small"
+              color="primary"
+              checked={uiSearchParams.boulders}
+              onChange={(_, checked) => {
+                // At least one of boulders/routes must remain on so the user
+                // never lands in an empty-selection state. If both would go
+                // off, force the other one on.
+                const next = { boulders: checked, routes: uiSearchParams.routes };
+                if (!next.boulders && !next.routes) next.routes = true;
+                updateFilters(next);
+              }}
+            />
+          }
+          label={
+            <MuiTypography variant="body2" component="span">
+              {t('search.fields.boulder')}
+            </MuiTypography>
+          }
+        />
+        <FormControlLabel
+          className={styles.switchRow}
+          labelPlacement="start"
+          control={
+            <MuiSwitch
+              size="small"
+              color="primary"
+              checked={uiSearchParams.routes}
+              onChange={(_, checked) => {
+                const next = { boulders: uiSearchParams.boulders, routes: checked };
+                if (!next.boulders && !next.routes) next.boulders = true;
+                updateFilters(next);
+              }}
+            />
+          }
+          label={
+            <MuiTypography variant="body2" component="span">
+              {t('search.fields.route')}
+            </MuiTypography>
+          }
+        />
+      </div>
+
       {(showTallClimbsFilter || showWideClimbsFilter) && (
         <div className={styles.switchGroup}>
           {showTallClimbsFilter && (

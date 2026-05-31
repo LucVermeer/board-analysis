@@ -94,6 +94,8 @@
       "gradeRangeAndUp": "{{grade}} en adelante",
       "gradeRangeUpTo": "Hasta {{grade}}",
       "setter": "Aperturista",
+      "boulder": "Bloque",
+      "route": "Ruta",
       "minAscents": "Encadenes mín.",
       "minRating": "Valoración mín.",
       "any": "Cualquiera",
