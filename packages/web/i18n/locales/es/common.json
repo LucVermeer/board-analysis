@@ -2,6 +2,9 @@
   "languageSwitcher": {
     "ariaLabelWithCurrent": "Idioma: {{language}}"
   },
+  "auth": {
+    "mustBeSignedIn": "Debes iniciar sesión"
+  },
   "actions": {
     "yes": "Sí",
     "no": "No",

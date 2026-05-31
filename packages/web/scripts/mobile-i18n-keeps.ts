@@ -108,6 +108,11 @@
 // i18n-keep boards.mobile.activeBoard
 // i18n-keep boards.mobile.emptyTitle
 // i18n-keep boards.mobile.emptySubtitle
+// i18n-keep boards.mobile.signInTitle
+// i18n-keep boards.mobile.signInSubtitle
+// i18n-keep boards.mobile.signInCta
+// i18n-keep boards.mobile.errorTitle
+// i18n-keep boards.mobile.errorRetry
 // i18n-keep common.mobile.more.title
 // i18n-keep common.mobile.more.development
 // i18n-keep common.mobile.more.metroServersTitle

@@ -32,7 +32,12 @@
   "mobile": {
     "emptyTitle": "No boards yet",
     "emptySubtitle": "Search for a board to get started",
-    "activeBoard": "Active board"
+    "activeBoard": "Active board",
+    "signInTitle": "Sign in to see your boards",
+    "signInSubtitle": "Your boards are tied to your account.",
+    "signInCta": "Sign in",
+    "errorTitle": "Couldn't load your boards",
+    "errorRetry": "Try again"
   },
   "boardEntity": {
     "notFound": "Board not found",
@@ -80,6 +85,8 @@
       "submit": "Create Board",
       "authRequired": "You must be signed in to create a board",
       "errorMessage": "Failed to create board. It may already exist for this configuration.",
+      "duplicateNamed": "You already have a board called \"{{name}}\" with this setup.",
+      "goToExisting": "Go to your board",
       "nameRequired": "Board name is required",
       "createdNamed": "Board \"{{name}}\" created!",
       "namePlaceholder": "e.g., Home Board, Gym Name",

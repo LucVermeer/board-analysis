@@ -32,7 +32,12 @@
   "mobile": {
     "emptyTitle": "Aucun board pour le moment",
     "emptySubtitle": "Cherche un board pour commencer",
-    "activeBoard": "Board actif"
+    "activeBoard": "Board actif",
+    "signInTitle": "Connecte-toi pour voir tes boards",
+    "signInSubtitle": "Tes boards sont liés à ton compte.",
+    "signInCta": "Se connecter",
+    "errorTitle": "Impossible de charger tes boards",
+    "errorRetry": "Réessayer"
   },
   "boardEntity": {
     "notFound": "Board introuvable",
@@ -80,6 +85,8 @@
       "submit": "Créer le board",
       "authRequired": "Vous devez être connecté pour créer un board",
       "errorMessage": "Impossible de créer le board. Il existe peut-être déjà pour cette configuration.",
+      "duplicateNamed": "Vous avez déjà un board nommé « {{name}} » avec cette configuration.",
+      "goToExisting": "Aller à votre board",
       "nameRequired": "Le nom du board est obligatoire",
       "createdNamed": "Board « {{name}} » créé !",
       "namePlaceholder": "ex. Home Board, nom de la salle",

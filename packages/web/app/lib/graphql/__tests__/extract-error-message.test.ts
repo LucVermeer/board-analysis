@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { extractGraphQLErrorMessage } from '../attach-beta-link-form';
+import { extractGraphQLErrorMessage } from '../extract-error-message';
 
 describe('extractGraphQLErrorMessage', () => {
   it('returns the first error message from a graphql-request ClientError shape', () => {

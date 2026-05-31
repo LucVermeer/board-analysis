@@ -2,6 +2,9 @@
   "languageSwitcher": {
     "ariaLabelWithCurrent": "Language: {{language}}"
   },
+  "auth": {
+    "mustBeSignedIn": "You must be signed in"
+  },
   "mobile": {
     "more": {
       "title": "More",
