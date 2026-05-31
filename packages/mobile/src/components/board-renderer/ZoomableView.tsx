@@ -122,6 +122,10 @@ const ZoomableView = React.memo(function ZoomableView({
     })
     .onEnd((event) => {
       'worklet';
+      // Pinch-out-to-1x mid-pan can leave us here at minZoom; bail before
+      // running withDecay against a zero-width clamp.
+      if (scale.value <= minZoom) return;
+
       // Apply momentum with decay, clamped to bounds
       const maxTx = Math.max(0, ((scale.value - 1) * containerWidth.value) / 2);
       const maxTy = Math.max(0, ((scale.value - 1) * containerHeight.value) / 2);
