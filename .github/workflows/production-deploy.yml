@@ -286,10 +286,15 @@ jobs:
           # The CLI reads VERCEL_TOKEN from the env (set above) — no --token flag.
           if [ "$ROLLBACK_ACTIVE" = "true" ]; then
             echo "Instant Rollback active — deploying WITHOUT promoting (--skip-domain)."
-            URL=$(vercel deploy --prebuilt --prod --skip-domain | tail -n1)
+            DEPLOY_OUTPUT=$(vercel deploy --prebuilt --prod --skip-domain)
           else
-            URL=$(vercel deploy --prebuilt --prod | tail -n1)
+            DEPLOY_OUTPUT=$(vercel deploy --prebuilt --prod)
           fi
+          echo "$DEPLOY_OUTPUT"
+          # Extract the deployment URL token rather than the last line, so a
+          # trailing warning on the final stdout line can't corrupt the URL we
+          # report to Discord. Empty is fine — the notify step handles it.
+          URL=$(printf '%s\n' "$DEPLOY_OUTPUT" | grep -oE 'https://[^[:space:]]+' | tail -n1 || true)
           echo "Deployment URL: $URL"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
