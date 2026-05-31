@@ -1,0 +1,481 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  packages: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      anyJs: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.anyJs }}
+      web: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.web }}
+      backend: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.backend }}
+      mobile: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.mobile }}
+      ocr: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.ocr }}
+      sharedDeps: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.sharedDeps }}
+      sharedSchema: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.sharedSchema }}
+      i18nCatalogs: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.i18nCatalogs }}
+      rootCi: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.rootCi }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            anyJs:
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.js'
+              - '**/*.mjs'
+              - '**/*.cjs'
+              - '!packages/board-controller/**'
+              - '!embedded/**'
+            web:
+              - 'packages/web/**'
+            backend:
+              - 'packages/backend/**'
+            mobile:
+              - 'packages/mobile/**'
+            ocr:
+              - 'packages/moonboard-ocr/**'
+            sharedDeps:
+              - 'packages/shared/**'
+              - 'packages/shared-schema/**'
+              - 'packages/db/**'
+              - 'packages/board-constants/**'
+              - 'packages/crypto/**'
+              - 'packages/aurora-sync/**'
+            sharedSchema:
+              - 'packages/shared-schema/**'
+              - 'packages/shared/graphql/**'
+            i18nCatalogs:
+              - 'packages/web/i18n/locales/**'
+            rootCi:
+              - '.github/workflows/ci.yml'
+              - 'vite.config.ts'
+              - 'package.json'
+              - 'bun.lock'
+
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build shared packages
+        run: vp run build:db
+      - name: Upload built packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-packages
+          path: |
+            packages/shared-schema/dist
+            packages/db/dist
+          retention-days: 1
+
+  lint:
+    needs: [changes, setup]
+    if: needs.changes.outputs.anyJs == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 50
+      - name: Fetch base ref
+        if: github.event_name == 'pull_request'
+        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      - name: Lint changed files (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Match the staged-hook scope in root vite.config.ts: TS/JS files,
+          # excluding generated/, mobile (excluded from vp lint by config), and
+          # embedded firmware sources. xargs -r ensures no-op on empty input.
+          git diff --name-only --diff-filter=ACMR \
+            "origin/${{ github.base_ref }}...HEAD" \
+            -- '*.ts' '*.tsx' '*.js' '*.mjs' '*.cjs' \
+            | grep -vE '(/node_modules/|/generated/|^packages/mobile/|^packages/board-controller/|^embedded/)' \
+            > changed-lintable.txt || true
+          if [ -s changed-lintable.txt ]; then
+            xargs -r vp check < changed-lintable.txt
+          else
+            echo "No lintable files changed."
+          fi
+      - name: Lint full repo (main)
+        if: github.event_name == 'push'
+        run: vp check
+
+  typecheck:
+    needs: [setup]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      # `vp run typecheck` walks the dependsOn graph defined in root
+      # vite.config.ts and uses vp's task cache — unchanged packages skip via
+      # cache hits, so this is fast on small PRs even though it expresses the
+      # full set.
+      - name: Typecheck (cache-driven affected)
+        run: vp run typecheck
+
+  codegen-drift:
+    needs: [changes, setup]
+    if: needs.changes.outputs.sharedSchema == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      - name: Regenerate GraphQL types
+        run: vp run codegen
+      - name: Verify committed output matches
+        run: |
+          if ! git diff --exit-code -- \
+              packages/shared-schema/src/generated \
+              packages/shared/graphql/src/generated \
+              packages/web/app/lib/graphql/generated; then
+            echo "::error::Generated GraphQL files are out of date. Run 'vp run codegen' locally and commit the result."
+            exit 1
+          fi
+
+  i18n:
+    needs: [changes, setup]
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.i18nCatalogs == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Check hardcoded user-facing strings
+        run: vp run check:i18n
+      - name: Check orphaned i18n keys
+        run: vp run check:i18n:orphans
+
+  test-default:
+    needs: [changes, setup]
+    if: needs.changes.outputs.anyJs == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 50
+      - name: Fetch base ref
+        if: github.event_name == 'pull_request'
+        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      # Run every vitest project except the two with infra needs (`backend`
+      # needs postgres+redis services, `moonboard-ocr` needs canvas system
+      # libs) — those run in their own jobs below.
+      - name: Run tests
+        run: |
+          PROJECTS="web mobile board-constants aurora-sync crypto ble-protocol board-config queue queue-runtime party-profile climb-actions play-view climb-filters graphql graphql-client shared-schema"
+          PROJECT_ARGS=""
+          for project in $PROJECTS; do
+            PROJECT_ARGS="$PROJECT_ARGS --project $project"
+          done
+          mkdir -p test-results
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            vp test run --changed "origin/${{ github.base_ref }}" $PROJECT_ARGS \
+              --reporter=verbose --reporter=github-actions \
+              --reporter=junit --outputFile.junit=./test-results/junit-default.xml
+          else
+            vp test run $PROJECT_ARGS \
+              --reporter=verbose --reporter=github-actions \
+              --reporter=junit --outputFile.junit=./test-results/junit-default.xml
+          fi
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-default
+          path: test-results/junit-default.xml
+          retention-days: 7
+
+  test-backend:
+    needs: [changes, setup]
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      # On main, split into 2 shards; on PR, run as a single shard (the
+      # affected subset is usually small enough that sharding adds overhead).
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"shard":1,"total":2},{"shard":2,"total":2}]' || '[{"shard":1,"total":1}]') }}
+    services:
+      postgres:
+        image: ghcr.io/boardsesh/boardsesh-postgres-postgis:latest
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: boardsesh_backend_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 50
+      # Warn (don't fail) when shared Drizzle schema changed without a matching
+      # edit to the hand-maintained test DDL. Mirrors backend-tests.yml.
+      - name: Check for test schema drift
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          git fetch --no-tags --depth=50 origin "$BASE" || true
+          changed=$(git diff --name-only "$BASE" "$HEAD" || true)
+          if echo "$changed" | grep -qE '^packages/db/src/schema/'; then
+            if ! echo "$changed" | grep -qE '^packages/backend/src/__tests__/schema-sql\.ts$'; then
+              echo "::warning title=Test schema may be stale::packages/db/src/schema/ changed but packages/backend/src/__tests__/schema-sql.ts was not. If your change added/removed columns the backend tests care about, mirror it there too."
+            fi
+          fi
+      - name: Fetch base ref
+        if: github.event_name == 'pull_request'
+        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      - name: Run backend tests (shard ${{ matrix.shard }}/${{ matrix.total }})
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/boardsesh_backend_test
+          REDIS_URL: redis://localhost:6380
+        run: |
+          mkdir -p packages/backend/test-results
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            vp test run --project backend --changed "origin/${{ github.base_ref }}" \
+              --shard=${{ matrix.shard }}/${{ matrix.total }} \
+              --reporter=verbose --reporter=github-actions \
+              --reporter=junit --outputFile.junit=./packages/backend/test-results/junit-backend-${{ matrix.shard }}.xml
+          else
+            vp test run --project backend \
+              --shard=${{ matrix.shard }}/${{ matrix.total }} \
+              --reporter=verbose --reporter=github-actions \
+              --reporter=junit --outputFile.junit=./packages/backend/test-results/junit-backend-${{ matrix.shard }}.xml
+          fi
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-backend-${{ matrix.shard }}
+          path: packages/backend/test-results/junit-backend-${{ matrix.shard }}.xml
+          retention-days: 7
+
+  test-ocr:
+    needs: [changes, setup]
+    if: needs.changes.outputs.ocr == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 50
+      - name: Fetch base ref
+        if: github.event_name == 'pull_request'
+        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+      - name: Install canvas system libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      - name: Run OCR tests
+        run: |
+          mkdir -p packages/moonboard-ocr/test-results
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            vp test run --project moonboard-ocr --changed "origin/${{ github.base_ref }}" \
+              --reporter=verbose --reporter=github-actions \
+              --reporter=junit --outputFile.junit=./packages/moonboard-ocr/test-results/junit-ocr.xml
+          else
+            vp test run --project moonboard-ocr \
+              --reporter=verbose --reporter=github-actions \
+              --reporter=junit --outputFile.junit=./packages/moonboard-ocr/test-results/junit-ocr.xml
+          fi
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-ocr
+          path: packages/moonboard-ocr/test-results/junit-ocr.xml
+          retention-days: 7
+
+  mobile-bundle:
+    needs: [changes, setup]
+    if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.rootCi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
+      - name: Metro bundle check
+        run: vp run check:mobile-bundle
+
+  test-report:
+    needs: [test-default, test-backend, test-ocr]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          path: test-results
+          merge-multiple: true
+      - name: Publish test report
+        uses: turing85/publish-report@v2
+        with:
+          comment-header: ci-tests
+          comment-enabled: 'true'
+          report-name: CI Tests
+          report-path: 'test-results/**/*.xml'
+          report-reporter: java-junit
+          report-fail-on-error: false
+
+  ci-status:
+    needs:
+      - changes
+      - setup
+      - lint
+      - typecheck
+      - codegen-drift
+      - i18n
+      - test-default
+      - test-backend
+      - test-ocr
+      - mobile-bundle
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify all required jobs passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          # Pass when every needed job is either `success` or `skipped` (skipped
+          # means a gated job correctly opted out for this change set). Fail on
+          # `failure` or `cancelled`.
+          bad=$(echo "$RESULTS" | jq -r '
+            to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | "\(.key): \(.value.result)"
+          ')
+          if [ -n "$bad" ]; then
+            while IFS= read -r line; do
+              echo "::error::$line"
+            done <<< "$bad"
+            exit 1
+          fi
+          echo "All required jobs passed (or were correctly skipped)."
