@@ -48,7 +48,7 @@ jobs:
           CHANGED_FILES=$(gh pr diff ${{ env.PR_NUMBER }} --name-only --repo ${{ github.repository }}) || \
             CHANGED_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD)
 
-          # Backend-affecting paths — keep in sync with paths: filter in staging-backend-deploy.yml
+          # Backend-affecting paths — keep in sync with detect-changes in production-deploy.yml
           BACKEND_CHANGED=false
           for file in $CHANGED_FILES; do
             case "$file" in

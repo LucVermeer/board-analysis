@@ -1489,7 +1489,7 @@ Everything else is treated as FE-only. `workflow_dispatch` always does a full bu
 
 The staging backend runs as part of the shared docker-compose infrastructure (managed by Ansible):
 
-- **Image:** `ghcr.io/boardsesh/boardsesh-daemon:staging` (auto-rebuilt on main push via `staging-backend-deploy.yml`)
+- **Image:** `ghcr.io/boardsesh/boardsesh-daemon:staging` (auto-rebuilt on main push by the `build-backend` job in `production-deploy.yml`; the homelab `deploy-staging-backend` job is currently commented out until the runner is healthy)
 - **Database:** Real Neon DB (same `DATABASE_URL` as per-PR deploys)
 - **Redis:** Shared Redis container on the `branch-deploys` network
 - **NEXTAUTH_SECRET:** Shared fixed value stored in 1Password (Homelab vault, "Branch Deploy Host" item) and as GitHub Actions secret `BRANCH_DEPLOY_STAGING_NEXTAUTH_SECRET`
@@ -1499,7 +1499,7 @@ The staging backend runs as part of the shared docker-compose infrastructure (ma
 
 Backend-affecting paths are defined in two places that must stay in sync:
 
-1. `staging-backend-deploy.yml` lines 7-14 — YAML `paths:` filter (triggers staging rebuild on main push)
+1. `production-deploy.yml` `detect-changes` job — shell `case` patterns (decides web/backend builds + deploys on main push)
 2. `branch-deploy.yml` `detect-changes` job — shell `case` patterns (decides per-PR vs staging for PRs)
 
 ### Workflows
@@ -1507,7 +1507,7 @@ Backend-affecting paths are defined in two places that must stay in sync:
 | Workflow                     | Trigger                      | Purpose                                                             |
 | ---------------------------- | ---------------------------- | ------------------------------------------------------------------- |
 | `branch-deploy.yml`          | PR open/sync                 | Detects changes, builds web (always) + backend (if needed), deploys |
-| `staging-backend-deploy.yml` | Push to main (backend paths) | Rebuilds staging backend image, restarts container on VM            |
+| `production-deploy.yml`      | Push to main / dispatch      | Builds web + backend, gated migrate, deploys prod web (Vercel) + backend (Railway) |
 | `branch-deploy-cleanup.yml`  | PR close                     | Removes per-PR containers (backend may not exist for FE-only)       |
 | `branch-deploy-sweep.yml`    | Daily 3am UTC + main push    | Cleans stale containers, prunes images (7-day TTL)                  |
 

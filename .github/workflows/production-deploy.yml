@@ -149,15 +149,19 @@ jobs:
 
       - name: Pull Vercel project settings (production)
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        # The CLI reads VERCEL_TOKEN from the env — don't pass --token as a flag
+        # (it would show up in the runner's process list).
+        run: vercel pull --yes --environment=production
 
       - name: Build with Vercel (prebuilt output)
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --prod
 
       - name: Upload prebuilt output
         uses: actions/upload-artifact@v4
@@ -279,18 +283,19 @@ jobs:
           # When a rollback is pinned, --skip-domain builds + uploads the
           # production deployment without assigning it to the production domain,
           # so the pinned (rolled-back) deployment keeps serving traffic.
+          # The CLI reads VERCEL_TOKEN from the env (set above) — no --token flag.
           if [ "$ROLLBACK_ACTIVE" = "true" ]; then
             echo "Instant Rollback active — deploying WITHOUT promoting (--skip-domain)."
-            URL=$(vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN" | tail -n1)
+            URL=$(vercel deploy --prebuilt --prod --skip-domain | tail -n1)
           else
-            URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" | tail -n1)
+            URL=$(vercel deploy --prebuilt --prod | tail -n1)
           fi
           echo "Deployment URL: $URL"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
   deploy-production-backend:
     needs: [detect-changes, check-rollback, build-backend, migrate]
-    if: always() && needs.detect-changes.outputs.backend_changed == 'true' && needs.migrate.result == 'success'
+    if: always() && needs.detect-changes.outputs.backend_changed == 'true' && needs.build-backend.result == 'success' && needs.migrate.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Show image being deployed
@@ -311,6 +316,10 @@ jobs:
         if: needs.check-rollback.outputs.active != 'true'
         run: npm install -g @railway/cli
 
+      # The Railway service Source is the moving GHCR tag :production, which this
+      # run just repointed to the freshly built digest. `railway redeploy`
+      # re-pulls the service's image source, so it picks up the new digest rather
+      # than serving a cached layer.
       - name: Trigger Railway redeploy
         if: needs.check-rollback.outputs.active != 'true'
         env:
