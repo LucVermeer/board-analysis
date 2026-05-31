@@ -1,4 +1,4 @@
-import { type SQL, eq, gt, gte, sql, like, notLike, inArray, or, and } from 'drizzle-orm';
+import { type SQL, eq, gt, gte, sql, like, notLike, inArray, isNull, or, and } from 'drizzle-orm';
 import {
   getHolePlacements,
   getProductSize,
@@ -145,11 +145,17 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
   // Boulders / routes filter. Both selected (or both falsy — treated as "no
   // preference") → omit the frames_count constraint entirely. Boulders only →
   // `frames_count = 1`. Routes only → `frames_count > 1`.
+  //
+  // frames_count is currently NULLABLE in the schema; NULL is legacy
+  // pre-migration data and should be treated as single-frame (boulder). The
+  // boulders-only branch therefore OR-includes NULL. Follow-up migration
+  // (tracked separately) will backfill NULLs to 1 and add NOT NULL, after
+  // which the isNull() branch can be dropped.
   const wantsBoulders = !!searchParams.boulders;
   const wantsRoutes = !!searchParams.routes;
   const climbTypeCondition: SQL | null =
     wantsBoulders && !wantsRoutes
-      ? eq(boardClimbs.framesCount, 1)
+      ? or(eq(boardClimbs.framesCount, 1), isNull(boardClimbs.framesCount))!
       : wantsRoutes && !wantsBoulders
         ? gt(boardClimbs.framesCount, 1)
         : null;
