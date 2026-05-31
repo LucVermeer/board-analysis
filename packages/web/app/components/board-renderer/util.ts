@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
-import { convertLitUpHoldsStringToMap as decodeFrames } from '@boardsesh/board-constants/hold-states';
-import { splitFramesString } from '@boardsesh/board-constants/hold-states';
+import { accumulateFramesToMaps, accumulatedMapsToFrameStrings } from '@boardsesh/board-constants/hold-states';
 import type { Climb, LitUpHoldsMap } from '@boardsesh/shared-schema';
 import type { BoardDetails, BoardName } from '@/app/lib/types';
 import { BOARD_IMAGE_DIMENSIONS } from '../../lib/board-data';
@@ -36,6 +35,12 @@ export type ClimbFrames = {
  * Decode a climb's `frames` string into per-snapshot maps + BLE strings,
  * memoised by the underlying frames text so the playback engine doesn't
  * rebuild on every render.
+ *
+ * The Aurora frames string is a sequence of *delta* frames — holds stay
+ * lit across frames unless an `x<holdId>` token explicitly turns them
+ * off. We accumulate the deltas into per-frame snapshots up front, then
+ * re-emit each snapshot as a flat BLE-friendly string for the LED
+ * driver. Single-frame climbs round-trip identically.
  */
 export function useClimbFrames(
   climb: Pick<Climb, 'frames' | 'framesCount' | 'framesPace'> | null | undefined,
@@ -43,13 +48,12 @@ export function useClimbFrames(
 ): ClimbFrames {
   return useMemo(() => {
     const framesText = climb?.frames ?? '';
-    const frameStrings = splitFramesString(framesText);
-    const framesMap = decodeFrames(framesText, boardName);
-    const orderedFrames: LitUpHoldsMap[] = frameStrings.map((_segment, index) => framesMap[index] ?? {});
+    const frames = accumulateFramesToMaps(framesText, boardName);
+    const frameStrings = accumulatedMapsToFrameStrings(frames, boardName);
     const reportedPace = climb?.framesPace ?? 0;
     const paceMs = reportedPace > 0 ? Math.max(MIN_PACE_MS, reportedPace) : DEFAULT_PACE_MS;
-    const count = Math.max(climb?.framesCount ?? frameStrings.length, frameStrings.length, 1);
-    return { frames: orderedFrames, frameStrings, paceMs, count };
+    const count = Math.max(climb?.framesCount ?? frames.length, frames.length, 1);
+    return { frames, frameStrings, paceMs, count };
   }, [climb?.frames, climb?.framesCount, climb?.framesPace, boardName]);
 }
 

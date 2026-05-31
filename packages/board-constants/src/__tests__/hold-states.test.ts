@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vite-plus/test';
-import { HOLD_STATE_MAP, STATE_TO_PRIMARY_CODE, convertLitUpHoldsStringToMap, splitFramesString } from '../hold-states';
+import {
+  HOLD_STATE_MAP,
+  STATE_TO_PRIMARY_CODE,
+  convertLitUpHoldsStringToMap,
+  splitFramesString,
+  accumulateFramesToMaps,
+  accumulatedMapsToFrameStrings,
+} from '../hold-states';
 import type { BoardName } from '@boardsesh/shared-schema';
 
 describe('HOLD_STATE_MAP', () => {
@@ -122,14 +129,76 @@ describe('splitFramesString', () => {
     expect(splitFramesString('p100r42,,p200r43,')).toEqual(['p100r42', 'p200r43']);
   });
 
-  it('round-trips with convertLitUpHoldsStringToMap frame indices', () => {
-    const frames = 'p100r1,p200r2,p300r3';
-    const split = splitFramesString(frames);
-    const map = convertLitUpHoldsStringToMap(frames, 'tension');
-    expect(split).toHaveLength(Object.keys(map).length);
-    split.forEach((segment, index) => {
-      const perSegment = convertLitUpHoldsStringToMap(segment, 'tension');
-      expect(perSegment[0]).toEqual(map[index]);
-    });
+  it('strips the leading double-quote Aurora prefixes on later frames', () => {
+    // Real Aurora frames look like: `frame0,"frame1,"frame2` — the quote
+    // sits at the start of every frame after the first and must be stripped
+    // before downstream parsers see it.
+    expect(splitFramesString('p100r42,"x100p200r43,"x200p300r44')).toEqual(['p100r42', 'x100p200r43', 'x200p300r44']);
+  });
+});
+
+describe('accumulateFramesToMaps', () => {
+  it('returns an empty array for the empty string', () => {
+    expect(accumulateFramesToMaps('', 'tension')).toEqual([]);
+  });
+
+  it('returns one snapshot for a single-frame climb', () => {
+    const result = accumulateFramesToMaps('p100r1p200r2', 'tension');
+    expect(result).toHaveLength(1);
+    expect(result[0][100].state).toBe('STARTING');
+    expect(result[0][200].state).toBe('HAND');
+  });
+
+  it('carries lit holds forward across frames', () => {
+    // Frame 0 lights hold 100 (STARTING). Frame 1 adds hold 200 (HAND).
+    // After frame 1, both holds should still be lit.
+    const result = accumulateFramesToMaps('p100r1,"p200r2', 'tension');
+    expect(result).toHaveLength(2);
+    expect(Object.keys(result[1]).sort()).toEqual(['100', '200']);
+    expect(result[1][100].state).toBe('STARTING');
+    expect(result[1][200].state).toBe('HAND');
+  });
+
+  it('turns a hold OFF via x<id> tokens without removing other lit holds', () => {
+    // Frame 0: 100 STARTING + 200 HAND. Frame 1: x100 (off) + p300 HAND.
+    const result = accumulateFramesToMaps('p100r1p200r2,"x100p300r2', 'tension');
+    expect(result).toHaveLength(2);
+    expect(Object.keys(result[0]).sort()).toEqual(['100', '200']);
+    expect(Object.keys(result[1]).sort()).toEqual(['200', '300']);
+  });
+
+  it('lets a later frame change a hold to a different role', () => {
+    // Frame 0 lights 100 STARTING; frame 1 re-sets 100 to HAND.
+    const result = accumulateFramesToMaps('p100r1,"p100r2', 'tension');
+    expect(result[0][100].state).toBe('STARTING');
+    expect(result[1][100].state).toBe('HAND');
+  });
+
+  it('handles a set-then-off within the same frame (off wins)', () => {
+    const result = accumulateFramesToMaps('p100r1x100', 'tension');
+    expect(result).toHaveLength(1);
+    expect(result[0][100]).toBeUndefined();
+  });
+});
+
+describe('accumulatedMapsToFrameStrings', () => {
+  it('emits BLE-friendly snapshots using the board canonical role code', () => {
+    const maps = accumulateFramesToMaps('p100r1,"p200r2,"x100p300r3', 'tension');
+    const strings = accumulatedMapsToFrameStrings(maps, 'tension');
+    // Tension canonical codes: STARTING=1, HAND=2, FINISH=3, FOOT=4.
+    expect(strings).toEqual(['p100r1', 'p100r1p200r2', 'p200r2p300r3']);
+  });
+
+  it('skips holds whose state has no canonical code on this board', () => {
+    // MoonBoard has no FOOT canonical code — a FOOT-state hold should
+    // drop out of the BLE string rather than emit `pXrundefined`.
+    const maps = [
+      {
+        100: { state: 'STARTING' as const, color: '#00FF00', displayColor: '#00FF00' },
+        200: { state: 'FOOT' as const, color: '#FFAA00', displayColor: '#FFAA00' },
+      },
+    ];
+    const [string0] = accumulatedMapsToFrameStrings(maps, 'moonboard');
+    expect(string0).toBe('p100r42');
   });
 });

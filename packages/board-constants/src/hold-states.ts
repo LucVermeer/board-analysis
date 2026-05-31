@@ -125,18 +125,114 @@ export const STATE_TO_PRIMARY_CODE: Record<BoardName, Partial<Record<HoldState, 
 const warnedHoldStates = new Set<string>();
 
 /**
- * Split a comma-separated frames string into one snapshot per index.
- * The Aurora frames format encodes multi-frame animations as
- * `p<hold>r<role>p<hold>r<role>,p<hold>r<role>,...`. Each comma-separated
- * segment is a self-contained snapshot suitable for the BLE encoder
- * (`getAuroraBluetoothPacket`), which itself never splits on commas.
+ * Split a comma-separated frames string into one delta per index.
+ *
+ * The Aurora frames format encodes multi-frame routes as a sequence of
+ * delta frames separated by commas. Each delta contains:
+ *   `p<hold>r<role>` — set a hold to a role
+ *   `x<hold>` — turn a hold off (removed from the accumulated lit state)
+ *
+ * Aurora prefixes every frame after the first with a literal `"`
+ * character (e.g. `p1r43,"x1p2r43,"x2p3r43`); strip it so consumers see a
+ * clean delta. Frames are NOT self-contained snapshots — call
+ * `accumulateFramesToMaps` to fold the deltas into per-frame lit-state
+ * snapshots suitable for rendering or BLE.
  *
  * Returns an empty array for the empty string. Strips empty segments so
  * trailing commas don't produce phantom frames.
  */
 export function splitFramesString(frames: string): string[] {
   if (!frames) return [];
-  return frames.split(',').filter((segment) => segment.length > 0);
+  return frames
+    .split(',')
+    .map((segment) => (segment.startsWith('"') ? segment.slice(1) : segment))
+    .filter((segment) => segment.length > 0);
+}
+
+/**
+ * Tokenise a single frame-delta into `{ sets, offs }`. Order within the
+ * frame is preserved so a `p1r43x1` sequence (set then off) behaves
+ * predictably: the off wins.
+ */
+function tokeniseFrameDelta(
+  frame: string,
+): Array<{ kind: 'set'; holdId: number; roleCode: number } | { kind: 'off'; holdId: number }> {
+  const tokens: Array<{ kind: 'set'; holdId: number; roleCode: number } | { kind: 'off'; holdId: number }> = [];
+  // Matches either `p<digits>r<digits>` or `x<digits>` greedily across the frame.
+  const re = /p(\d+)r(\d+)|x(\d+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(frame)) !== null) {
+    if (match[1] !== undefined && match[2] !== undefined) {
+      tokens.push({ kind: 'set', holdId: Number(match[1]), roleCode: Number(match[2]) });
+    } else if (match[3] !== undefined) {
+      tokens.push({ kind: 'off', holdId: Number(match[3]) });
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Fold a multi-frame Aurora route into per-frame accumulated snapshots.
+ *
+ * Each output map at index N is the cumulative lit-state after applying
+ * deltas 0..N — holds stay lit across frames unless explicitly turned
+ * off via an `x<holdId>` token. The first map (index 0) starts from an
+ * empty board and applies frame 0's sets. For single-frame climbs this
+ * is equivalent to `convertLitUpHoldsStringToMap(frames, board)[0]`.
+ */
+export function accumulateFramesToMaps(frames: string, board: BoardName): LitUpHoldsMap[] {
+  const deltas = splitFramesString(frames);
+  const result: LitUpHoldsMap[] = [];
+  const accumulator: LitUpHoldsMap = {};
+  for (const frame of deltas) {
+    for (const token of tokeniseFrameDelta(frame)) {
+      if (token.kind === 'off') {
+        delete accumulator[token.holdId];
+        continue;
+      }
+      const stateInfo = HOLD_STATE_MAP[board]?.[token.roleCode];
+      if (!stateInfo) {
+        const warnKey = `${board}:${token.roleCode}`;
+        if (!warnedHoldStates.has(warnKey)) {
+          warnedHoldStates.add(warnKey);
+          console.warn(
+            `HOLD_STATE_MAP is missing values for ${board} status code: ${token.roleCode} (this warning is only shown once per status code)`,
+          );
+        }
+        accumulator[token.holdId] = {
+          state: `${token.holdId}=${token.roleCode}` as HoldState,
+          color: '#FFF',
+          displayColor: '#FFF',
+        };
+        continue;
+      }
+      const { name, color, displayColor } = stateInfo;
+      accumulator[token.holdId] = { state: name, color, displayColor: displayColor || color };
+    }
+    // Snapshot the accumulator — a shallow copy is enough since the inner
+    // `LitupHold` objects are never mutated after creation.
+    result.push({ ...accumulator });
+  }
+  return result;
+}
+
+/**
+ * Build BLE-ready single-frame strings from accumulated lit-state maps.
+ * The BLE encoder (`getAuroraBluetoothPacket`) doesn't understand `x`
+ * tokens or commas, so we re-emit the snapshot as a flat sequence of
+ * `p<id>r<role>` pairs using each board's canonical role code per state.
+ */
+export function accumulatedMapsToFrameStrings(maps: LitUpHoldsMap[], board: BoardName): string[] {
+  const stateToCode = STATE_TO_PRIMARY_CODE[board];
+  return maps.map((map) => {
+    let out = '';
+    for (const [holdIdKey, hold] of Object.entries(map)) {
+      const code = stateToCode?.[hold.state];
+      if (code === undefined) continue;
+      out += `p${holdIdKey}r${code}`;
+    }
+    return out;
+  });
 }
 
 /**

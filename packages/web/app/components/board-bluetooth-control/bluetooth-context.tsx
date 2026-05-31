@@ -30,7 +30,8 @@ import type { UserBoard } from '@boardsesh/shared-schema';
 import type { DiscoveredDevice } from '@/app/lib/ble/types';
 import type { PickerState } from './use-board-bluetooth';
 import { useLedColorOverrides, type LedColorOverrides } from '@/app/lib/led-color-overrides-db';
-import { splitFramesString } from '@boardsesh/board-constants/hold-states';
+import { accumulateFramesToMaps, accumulatedMapsToFrameStrings } from '@boardsesh/board-constants/hold-states';
+import type { BoardName } from '@boardsesh/shared-schema';
 
 type BluetoothContextValue = {
   isConnected: boolean;
@@ -88,6 +89,7 @@ function countClimbHolds(frames: string | undefined | null): number {
 function BluetoothAutoSender({
   sendFramesToBoard,
   layoutName,
+  boardName,
   onWallConfirmed,
 }: {
   sendFramesToBoard: (
@@ -97,6 +99,7 @@ function BluetoothAutoSender({
     climbUuid?: string,
   ) => Promise<boolean | undefined>;
   layoutName: string;
+  boardName: BoardName;
   /**
    * Fires after a successful BLE write. Always emits onto the local
    * wall-confirm bus (so the same phone's drawer timer dismisses); in party
@@ -174,12 +177,16 @@ function BluetoothAutoSender({
             pendingClimbRef.current = null;
             continue;
           }
-          // For variable-speed climbs (`frames` is comma-separated multiple
-          // snapshots) the BLE encoder would treat the whole string as one
-          // snapshot and split on `p` only — producing a garbage packet
-          // with NaN role codes. Send only the first frame here; the
-          // playback engine on /play handles subsequent ticks.
-          const firstFrame = splitFramesString(item.climb.frames)[0] ?? '';
+          // For variable-speed climbs (`frames` is a sequence of comma-
+          // separated delta frames using `p<id>r<role>` for sets and
+          // `x<id>` for offs) the BLE encoder doesn't understand commas
+          // or x-tokens and would emit a garbage packet. Accumulate the
+          // deltas, take the first frame's snapshot, and re-emit it as a
+          // flat sequence of `p<id>r<role>` pairs the encoder can parse.
+          // Single-frame climbs round-trip identically. The playback
+          // engine on /play handles subsequent ticks.
+          const firstFrame =
+            accumulatedMapsToFrameStrings(accumulateFramesToMaps(item.climb.frames, boardName), boardName)[0] ?? '';
           const climbHoldCount = countClimbHolds(firstFrame);
           try {
             const result = await sendFramesToBoard(firstFrame, !!item.climb.mirrored, signal, item.climb.uuid);
@@ -223,7 +230,7 @@ function BluetoothAutoSender({
       }
     };
     void drain();
-  }, [currentClimbQueueItem, sendFramesToBoard, layoutName]);
+  }, [currentClimbQueueItem, sendFramesToBoard, layoutName, boardName]);
 
   return null;
 }
@@ -616,6 +623,7 @@ export function BluetoothProvider({
         <BluetoothAutoSender
           sendFramesToBoard={sendFramesToBoard}
           layoutName={boardDetails.layout_name ?? ''}
+          boardName={boardDetails.board_name}
           onWallConfirmed={handleWallConfirmed}
         />
       )}
