@@ -460,6 +460,12 @@ jobs:
           cache: true
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      # Catches iOS bundle-phase dep-resolution breaks (e.g. a transitive-only
+      # @sentry/cli unresolvable from packages/mobile under Bun's isolated
+      # linker) here on Linux, instead of in the macOS TestFlight archive on
+      # push-to-main. Runs before the heavier Metro bundle so it fails fast.
+      - name: Check native build-phase deps resolve
+        run: vp run check:mobile-native-deps
       - name: Download built packages
         uses: actions/download-artifact@v4
         with:
