@@ -98,6 +98,7 @@ jobs:
   # Fails closed (blocks the run) only if it can't read rollback state at all.
   check-rollback:
     runs-on: ubuntu-latest
+    environment: Production
     outputs:
       active: ${{ steps.check.outputs.active }}
     steps:
@@ -139,6 +140,7 @@ jobs:
     needs: [detect-changes, check-rollback]
     if: needs.detect-changes.outputs.web_changed == 'true'
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       - uses: actions/checkout@v6
 
@@ -247,6 +249,7 @@ jobs:
       && (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped')
       && !(needs.build-web.result == 'skipped' && needs.build-backend.result == 'skipped')
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       - uses: actions/checkout@v6
 
@@ -264,6 +267,7 @@ jobs:
     needs: [detect-changes, check-rollback, build-web, migrate]
     if: always() && needs.detect-changes.outputs.web_changed == 'true' && needs.build-web.result == 'success' && needs.migrate.result == 'success'
     runs-on: ubuntu-latest
+    environment: Production
     outputs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
@@ -306,6 +310,7 @@ jobs:
     needs: [detect-changes, check-rollback, build-backend, migrate]
     if: always() && needs.detect-changes.outputs.backend_changed == 'true' && needs.build-backend.result == 'success' && needs.migrate.result == 'success'
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       - name: Show image being deployed
         run: |
@@ -366,6 +371,7 @@ jobs:
       && needs.check-rollback.outputs.active == 'true'
       && (needs.deploy-web.result == 'success' || needs.deploy-production-backend.result == 'success')
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       - name: Notify Discord (deployed, not promoted)
         env:
@@ -406,6 +412,7 @@ jobs:
       always()
       && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       - name: Notify Discord
         env:
