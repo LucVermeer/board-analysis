@@ -163,7 +163,10 @@ jobs:
 
   codegen-drift:
     needs: [changes, setup]
-    if: needs.changes.outputs.sharedSchema == 'true' || needs.changes.outputs.rootCi == 'true'
+    # codegen.ts pulls GraphQL documents from packages/web/app/**/*.{ts,tsx}
+    # in addition to the schema + shared/graphql, so a web-only PR that edits
+    # a gql tag can drift the generated client. Include `web` in the gate.
+    if: needs.changes.outputs.sharedSchema == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.rootCi == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
