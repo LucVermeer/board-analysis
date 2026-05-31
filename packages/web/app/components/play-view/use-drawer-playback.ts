@@ -6,6 +6,7 @@ import { useClimbFrames } from '../board-renderer/util';
 import { usePlaybackEngine, type ExternalPlaybackState } from '../playback/use-playback-engine';
 import { usePersistentSessionActions } from '../persistent-session';
 import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
+import { renderBoard } from '@/app/lib/board-render-worker/worker-manager';
 import { track } from '@/app/lib/analytics';
 
 type UseDrawerPlaybackInput = {
@@ -169,6 +170,44 @@ export function useDrawerPlayback({
     playback.currentFrameString,
     activeClimbUuid,
   ]);
+
+  // Pre-warm every snapshot through the Rust/WASM canvas renderer the moment
+  // the drawer opens on a route. The renderer caches by (frames, mirrored)
+  // bitmap key, so the engine's first pass through the frames hits warm cache
+  // and the on-screen board crossfades cleanly instead of flickering while
+  // each snapshot decodes for the first time. The single-frame pre-warm in
+  // the drawer (keyed on `currentClimb.frames`) already handles static
+  // climbs and the multi-frame source string; this is purely for the
+  // per-snapshot strings produced by `useClimbFrames`.
+  //
+  // Sequential, not parallel: the worker pool serialises anyway and queuing
+  // a 40-frame Driftwood as 40 concurrent requests starves the first-frame
+  // render the user is actually staring at. Aborts on close, climb-change,
+  // and mirror flip.
+  const frameStringsKey = climbFrames.frameStrings.join('|');
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!playback.isAnimatable) return;
+    if (climbFrames.frameStrings.length <= 1) return;
+    let cancelled = false;
+    const warm = async () => {
+      for (const frame of climbFrames.frameStrings) {
+        if (cancelled) return;
+        try {
+          await renderBoard({ boardDetails, frames: frame, mirrored: isMirrored });
+        } catch (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.info('[useDrawerPlayback] frame pre-warm failed:', error);
+          }
+        }
+      }
+    };
+    void warm();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- climbFrames.frameStrings is captured via frameStringsKey
+  }, [isOpen, playback.isAnimatable, frameStringsKey, isMirrored, boardDetails]);
 
   // Stable reference so the drawer's `aboveFold` memo and the
   // `SwipeBoardCarousel` props don't bust on every render that doesn't
