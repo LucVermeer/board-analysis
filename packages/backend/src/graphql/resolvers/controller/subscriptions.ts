@@ -17,6 +17,7 @@ import { roomManager } from '../../../services/room-manager';
 import { createAsyncIterator } from '../shared/async-iterators';
 import { getLedPlacements } from '@boardsesh/board-constants/led-placements';
 import { convertLitUpHoldsStringToMap } from '../../../db/queries/util/hold-state';
+import { accumulateFramesToMaps } from '@boardsesh/board-constants/hold-states';
 import { requireControllerAuth } from '../shared/helpers';
 import { getGradeColor } from './grade-colors';
 import { buildNavigationContext, findClimbIndex } from './navigation-helpers';
@@ -59,13 +60,26 @@ function buildControllerQueueSync(queue: ClimbQueueItem[], currentItemUuid: stri
 /**
  * Convert a climb's frames string to LED commands using LED placements data.
  * Derives the litUpHoldsMap from the compact frames string on-the-fly.
+ *
+ * Multi-frame Aurora climbs (variable-speed routes/circuits) encode their
+ * lit state as comma-separated `p<id>r<role>` / `x<id>` deltas. The naive
+ * `convertLitUpHoldsStringToMap(...)[0]` path would only ever return frame
+ * zero — so the ESP32 would light the start of the route and never play
+ * any subsequent frames. Accumulating to the cumulative final snapshot
+ * lights the entire route on the controller; single-frame climbs collapse
+ * to the same single-frame map they used to produce, so the ESP32
+ * behaviour for the 99% case is unchanged.
  */
 function climbToLedCommands(
   climb: { frames: string },
   boardName: BoardName,
   ledPlacements: Record<number, number>,
 ): LedCommand[] {
-  const litUpHoldsMap = convertLitUpHoldsStringToMap(climb.frames || '', boardName)[0] || {};
+  const framesText = climb.frames || '';
+  const isSingleFrame = framesText.length > 0 && !framesText.includes(',') && !framesText.includes('x');
+  const litUpHoldsMap = isSingleFrame
+    ? convertLitUpHoldsStringToMap(framesText, boardName)[0] || {}
+    : (accumulateFramesToMaps(framesText, boardName).at(-1) ?? {});
   const commands: LedCommand[] = [];
 
   for (const [placementIdStr, holdInfo] of Object.entries(litUpHoldsMap)) {

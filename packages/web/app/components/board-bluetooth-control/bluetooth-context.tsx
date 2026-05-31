@@ -183,10 +183,19 @@ function BluetoothAutoSender({
           // or x-tokens and would emit a garbage packet. Accumulate the
           // deltas, take the first frame's snapshot, and re-emit it as a
           // flat sequence of `p<id>r<role>` pairs the encoder can parse.
-          // Single-frame climbs round-trip identically. The playback
-          // engine on /play handles subsequent ticks.
-          const firstFrame =
-            accumulatedMapsToFrameStrings(accumulateFramesToMaps(item.climb.frames, boardName), boardName)[0] ?? '';
+          //
+          // Single-frame climbs (no commas, no `x` tokens) are passed
+          // through verbatim — round-tripping rewrites their role codes
+          // to STATE_TO_PRIMARY_CODE['kilter'] (Product 7: 42/43/44/45),
+          // which would silently break climbs encoded for any other
+          // Kilter product (Product 1: 12/13/14/15, Product 2: 20-23, …)
+          // by lighting the wrong colours. The playback engine on /play
+          // handles subsequent ticks for multi-frame climbs.
+          const rawFrames = item.climb.frames ?? '';
+          const isSingleFrame = rawFrames.length > 0 && !rawFrames.includes(',') && !rawFrames.includes('x');
+          const firstFrame = isSingleFrame
+            ? rawFrames
+            : (accumulatedMapsToFrameStrings(accumulateFramesToMaps(rawFrames, boardName), boardName)[0] ?? '');
           const climbHoldCount = countClimbHolds(firstFrame);
           try {
             const result = await sendFramesToBoard(firstFrame, !!item.climb.mirrored, signal, item.climb.uuid);

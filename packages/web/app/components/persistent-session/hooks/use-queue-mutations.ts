@@ -28,6 +28,12 @@ export type PublishPlaybackStateInput = {
   isPlaying: boolean;
   speed: number;
   paceMs: number;
+  /**
+   * Stable identifier for the publishing playback engine. Used by peers to
+   * suppress echoes of their own publish broadcasts (the server stamps it
+   * onto `PlaybackStateChanged.clientId`).
+   */
+  clientId: string;
 };
 
 export type QueueMutationsActions = {

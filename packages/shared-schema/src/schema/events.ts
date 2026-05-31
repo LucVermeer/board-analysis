@@ -253,6 +253,13 @@ export const eventsTypeDefs = /* GraphQL */ `
     speed: Float!
     "Climb's native pace, in milliseconds per frame."
     paceMs: Int!
+    """
+    Stable identifier for the publisher's playback engine instance. Peers use
+    it to suppress echoes of their own events when the broadcast reflects back.
+    Falls back to the WebSocket connection id when omitted, which is safe but
+    coarser (a single connection driving multiple engines can't disambiguate).
+    """
+    clientId: ID
   }
 
   """

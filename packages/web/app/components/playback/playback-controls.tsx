@@ -44,6 +44,13 @@ export function PlaybackControls({
   // drive it with rAF so the animation is local to this component and
   // doesn't trigger engine re-renders.
   const [smoothValue, setSmoothValue] = useState<number>(frameIndex);
+  // While the user is dragging the slider, override the rAF-driven crawl
+  // with the local drag position. `null` outside drags. Splitting the
+  // visual update from the engine seek keeps `onChange` fully local
+  // (60 events/sec from per-pixel drag) and only fires the broadcast
+  // on `onChangeCommitted` — without this, a single 2-second drag
+  // exhausts the queue mutation rate-limit bucket (default 60/min).
+  const [scrubValue, setScrubValue] = useState<number | null>(null);
   const lastFrameRef = useRef(frameIndex);
   useEffect(() => {
     lastFrameRef.current = frameIndex;
@@ -122,17 +129,34 @@ export function PlaybackControls({
       </IconButton>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ flex: 1, minWidth: 0 }}>
         <Slider
-          value={smoothValue}
+          value={scrubValue ?? smoothValue}
           min={0}
           max={Math.max(0, frameCount - 1)}
-          // Allow fractional values so the rAF-driven `smoothValue` can
-          // crawl the thumb between frames. Marks at integer positions
-          // still anchor each frame visually.
-          step={null}
+          // MUI Slider snapping: `step={null}` requires `marks` to define
+          // the valid stops. For short routes we render an integer mark per
+          // frame so the thumb snaps cleanly to each frame. For long routes
+          // (Driftwood is 43 frames; rendering 43 mark dots looks like a
+          // dashed line and there's no room for them visually) we drop the
+          // marks — but then `step={null} + marks={false}` leaves the
+          // slider with no valid stops at all and it stops responding to
+          // input. Branch on count: step={1} when marks are off so the
+          // thumb still snaps to integer positions.
+          step={frameCount <= 16 ? null : 1}
           marks={frameCount <= 16 ? Array.from({ length: frameCount }, (_, index) => ({ value: index })) : false}
           aria-label={t('playback.seek')}
           onChange={(_, value) => {
+            // Drag feedback only: do NOT call onSeek here. MUI fires
+            // onChange per pointer-pixel (~60 events/sec); calling onSeek
+            // would broadcast a publishPlaybackState mutation for each one
+            // and exhaust the per-minute rate-limit bucket within a
+            // single 2-second drag.
+            if (typeof value === 'number') setScrubValue(value);
+          }}
+          onChangeCommitted={(_, value) => {
+            // Commit on release / keyboard step — this is what actually
+            // moves the engine and broadcasts to peers.
             if (typeof value === 'number') onSeek(Math.round(value));
+            setScrubValue(null);
           }}
           size="small"
           sx={{
@@ -145,7 +169,10 @@ export function PlaybackControls({
           }}
         />
         <Typography variant="caption" sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>
-          {t('playback.frameOfTotal', { index: frameIndex + 1, total: frameCount })}
+          {t('playback.frameOfTotal', {
+            index: (scrubValue !== null ? Math.round(scrubValue) : frameIndex) + 1,
+            total: frameCount,
+          })}
         </Typography>
       </Stack>
       <ToggleButtonGroup

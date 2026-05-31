@@ -55,25 +55,26 @@ describe('usePlaybackEngine', () => {
 
   it('wraps to frame 0 after the last frame', () => {
     const { frames, frameStrings } = decode(TENSION_FRAMES);
-    const { result } = renderHook(() => usePlaybackEngine({ frames, frameStrings, paceMs: 100, clientId: 'a' }));
+    const { result } = renderHook(() => usePlaybackEngine({ frames, frameStrings, paceMs: 300, clientId: 'a' }));
     act(() => {
       result.current.play();
     });
     act(() => {
-      vi.advanceTimersByTime(100 * frameStrings.length);
+      vi.advanceTimersByTime(300 * frameStrings.length);
     });
     expect(result.current.frameIndex).toBe(0);
   });
 
   it('halves tick interval at speed=2', () => {
     const { frames, frameStrings } = decode(TENSION_FRAMES);
-    const { result } = renderHook(() => usePlaybackEngine({ frames, frameStrings, paceMs: 200, clientId: 'a' }));
+    // paceMs / speed = 800 / 2 = 400ms, comfortably above the 200ms MIN_PACE_MS floor.
+    const { result } = renderHook(() => usePlaybackEngine({ frames, frameStrings, paceMs: 800, clientId: 'a' }));
     act(() => {
       result.current.setSpeed(2);
       result.current.play();
     });
     act(() => {
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(400);
     });
     expect(result.current.frameIndex).toBe(1);
   });

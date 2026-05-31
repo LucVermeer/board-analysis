@@ -130,4 +130,23 @@ describe('publishPlaybackState mutation', () => {
     const event = pubsubMock.publishQueueEvent.mock.calls[0]?.[1] as { clientId: string | null };
     expect(event.clientId).toBeNull();
   });
+
+  it('prefers the publisher-supplied clientId over the connection id', async () => {
+    await queueMutations.publishPlaybackState(
+      undefined,
+      {
+        input: {
+          climbUuid,
+          frameIndex: 2,
+          isPlaying: true,
+          speed: 1,
+          paceMs: 400,
+          clientId: 'engine-:r3:',
+        },
+      },
+      makeCtx({ connectionId: 'conn-xyz' }),
+    );
+    const event = pubsubMock.publishQueueEvent.mock.calls[0]?.[1] as { clientId: string | null };
+    expect(event.clientId).toBe('engine-:r3:');
+  });
 });

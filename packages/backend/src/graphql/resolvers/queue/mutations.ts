@@ -427,6 +427,7 @@ export const queueMutations = {
         isPlaying: boolean;
         speed: number;
         paceMs: number;
+        clientId?: string | null;
       };
     },
     ctx: ConnectionContext,
@@ -445,7 +446,14 @@ export const queueMutations = {
       speed: input.speed,
       paceMs: input.paceMs,
       anchorTimestamp: String(Date.now()),
-      clientId: ctx.connectionId || null,
+      // Prefer the publisher-supplied client identifier (the playback engine's
+      // stable id) so echo suppression on the publisher's own clients works
+      // even when a single WebSocket connection drives multiple engines. Fall
+      // back to the connection id when the client doesn't send one. Coerce
+      // empty strings (from contexts with no connectionId yet) to null —
+      // peers compare to null defensively and would otherwise echo-suppress
+      // each other's events.
+      clientId: input.clientId || ctx.connectionId || null,
     });
 
     return true;

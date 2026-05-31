@@ -184,9 +184,14 @@ const PlayViewClient: React.FC<PlayViewClientProps> = ({ boardDetails, initialCl
         isPlaying: state.isPlaying,
         speed: state.speed,
         paceMs: state.paceMs,
+        // Forward the engine's own clientId so the server can echo it back on
+        // `PlaybackStateChanged`. Without this the server falls back to the
+        // WebSocket connection id, which lives in a different namespace from
+        // useId() and breaks echo suppression for the publisher's own clients.
+        clientId: playbackClientId,
       });
     },
-    [activeClimbUuid, publishPlaybackState],
+    [activeClimbUuid, publishPlaybackState, playbackClientId],
   );
 
   const playback = usePlaybackEngine({
@@ -201,18 +206,57 @@ const PlayViewClient: React.FC<PlayViewClientProps> = ({ boardDetails, initialCl
   // Mirror engine ticks to the connected board. AutoSender only writes the
   // first frame for multi-frame climbs (see bluetooth-context.tsx); the
   // engine takes over from frame 1 onward and after every seek.
+  //
+  // Latest-wins serialization: Web Bluetooth on Android can't actually
+  // cancel an in-flight GATT operation, so a second `sendFramesToBoard`
+  // call started before the previous one resolves throws "GATT operation
+  // already in progress." If the engine advances faster than BLE flushes
+  // (short paceMs + a slow link), naively writing on every effect run
+  // would cascade into failures. Same pattern as BluetoothAutoSender:
+  // while a write is in flight, store the most recent pending frame; when
+  // the current write resolves, drain whatever's latest and repeat.
+  const isWritingFrameRef = useRef(false);
+  const pendingFrameRef = useRef<string | null>(null);
   const lastSentFrameRef = useRef<string | null>(null);
   useEffect(() => {
     lastSentFrameRef.current = null;
+    pendingFrameRef.current = null;
   }, [displayClimb?.uuid]);
   useEffect(() => {
     if (!isBleConnected || !sendFramesToBoard) return;
     if (!playback.isAnimatable) return;
     const frame = playback.currentFrameString;
     if (!frame) return;
-    if (lastSentFrameRef.current === frame) return;
-    lastSentFrameRef.current = frame;
-    void sendFramesToBoard(frame, isMirroredRef.current, undefined, displayClimb?.uuid);
+    if (frame === lastSentFrameRef.current) return;
+    if (isWritingFrameRef.current) {
+      pendingFrameRef.current = frame;
+      return;
+    }
+    isWritingFrameRef.current = true;
+    const drain = async () => {
+      let toSend: string | null = frame;
+      try {
+        while (toSend !== null) {
+          const next = toSend;
+          if (next === lastSentFrameRef.current) {
+            toSend = pendingFrameRef.current;
+            pendingFrameRef.current = null;
+            continue;
+          }
+          lastSentFrameRef.current = next;
+          try {
+            await sendFramesToBoard(next, isMirroredRef.current, undefined, displayClimb?.uuid);
+          } catch (error) {
+            console.error('[PlayView] BLE frame send failed:', error);
+          }
+          toSend = pendingFrameRef.current;
+          pendingFrameRef.current = null;
+        }
+      } finally {
+        isWritingFrameRef.current = false;
+      }
+    };
+    void drain();
   }, [isBleConnected, sendFramesToBoard, playback.isAnimatable, playback.currentFrameString, displayClimb?.uuid]);
 
   if (!displayClimb) {

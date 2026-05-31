@@ -14,11 +14,15 @@ export { convertLitUpHoldsStringToMap } from './types';
 const DEFAULT_PACE_MS = 750;
 
 /**
- * Lower bound on per-frame pace. The BLE transport chunks at 20 bytes with
- * a 5 ms inter-chunk delay; writing faster than ~50 ms queues UART faster
- * than it can flush and causes visible LED tearing.
+ * Lower bound on per-frame pace. The BLE transport chunks payloads at 20
+ * bytes with a 5 ms inter-chunk delay, so the worst-case packet (13
+ * chunks, ~260-byte climb) spends ~65 ms in inter-chunk gaps alone before
+ * the GATT round-trip on top. A 50 ms floor was below physical throughput
+ * and produced "GATT operation already in progress" errors on Android.
+ * 200 ms gives every realistic packet headroom to flush while still
+ * looking fast on a route.
  */
-export const MIN_PACE_MS = 50;
+export const MIN_PACE_MS = 200;
 
 export type ClimbFrames = {
   /** One decoded `LitUpHoldsMap` per snapshot, in display order. */
@@ -99,14 +103,37 @@ export const buildBoardRenderUrl = (
   return url;
 };
 
+/**
+ * Collapse a (possibly multi-frame) Aurora frames string into the flat
+ * final-snapshot form that the Rust/WASM board renderer and the ESP32
+ * controller can parse — a sequence of `p<id>r<role>` pairs with no commas
+ * and no `x<id>` off tokens.
+ *
+ * Single-frame climbs round-trip identically (the input already has no
+ * commas or `x` tokens). Multi-frame climbs collapse to the cumulative
+ * final lit state — what a viewer wants to see in a social card or
+ * overlay thumbnail, and what the ESP32 needs to light a full circuit.
+ *
+ * Passing a raw multi-frame string into the renderer / controller would
+ * either render only frame 0 (commas as delimiters) or emit garbage —
+ * always run user-facing frames through this before crossing that
+ * boundary. The empty string is preserved unchanged.
+ */
+export const toFlatFrames = (frames: string | null | undefined, boardName: BoardName): string => {
+  if (!frames) return '';
+  if (!frames.includes(',') && !frames.includes('x')) return frames;
+  const maps = accumulateFramesToMaps(frames, boardName);
+  return accumulatedMapsToFrameStrings(maps, boardName).at(-1) ?? '';
+};
+
 export const buildOverlayUrl = (boardDetails: BoardDetails, frames: string, thumbnail?: boolean) =>
-  buildBoardRenderUrl(boardDetails, frames, {
+  buildBoardRenderUrl(boardDetails, toFlatFrames(frames, boardDetails.board_name), {
     thumbnail,
     includeBackground: true,
   });
 
 export const buildOgBoardRenderUrl = (boardDetails: BoardDetails, frames: string) =>
-  buildBoardRenderUrl(boardDetails, frames, {
+  buildBoardRenderUrl(boardDetails, toFlatFrames(frames, boardDetails.board_name), {
     includeBackground: true,
     variant: 'og',
     format: 'png',

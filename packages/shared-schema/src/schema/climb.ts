@@ -80,6 +80,10 @@ export const climbTypeDefs = /* GraphQL */ `
     published_at: String
     userAscents: Int
     userAttempts: Int
+    "Number of animation frames encoded in \`frames\`. 1 for static climbs."
+    framesCount: Int
+    "Native per-frame pace, in milliseconds. 0 when unset."
+    framesPace: Int
   }
 
   # ============================================
