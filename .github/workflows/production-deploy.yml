@@ -1,0 +1,441 @@
+name: Production Deploy
+
+# Single source of truth for production deploys.
+#
+# Builds the web (Vercel prebuilt) and backend (GHCR image) artifacts in
+# parallel, then gates: the production Railway + Vercel deploys only run once
+# EVERY build that was attempted has passed. A failed build skips both prod
+# deploys, so we never ship a half-deployed release. db:migrate runs in its own
+# gated job after both builds pass (it used to run inside the Vercel build).
+#
+# Vercel native git auto-deploy is disabled (packages/web/vercel.json
+# git.deploymentEnabled=false) so this workflow is the only production deployer.
+#
+# check-rollback detects whether a Vercel Instant Rollback is currently pinning
+# production to an older deployment. If so, this run still builds and deploys,
+# but does NOT promote: web ships with --skip-domain (staged, not assigned to
+# the production domain) and the backend image is pushed to GHCR without a
+# Railway redeploy. That way an incident mitigation isn't silently overwritten,
+# the release is staged and ready to promote once the rollback is cleared, and
+# Discord is notified. (Migrations must stay backward-compatible — see docs —
+# because Instant Rollback reverts only the web deployment, never the DB.)
+
+on:
+  push:
+    branches: [main]
+    # No paths filter — detect-changes decides per-side. Web deploys on
+    # essentially any app change; backend only on backend-affecting paths.
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false # never cancel an in-flight production deploy
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: boardsesh-daemon
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web_changed: ${{ steps.changes.outputs.web }}
+      backend_changed: ${{ steps.changes.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changes
+        run: |
+          # Manual runs build everything.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "Manual trigger: building web + backend"
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          # First push / missing parent / force-push to a new ref -> full build.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "No usable before-sha ($BEFORE): building web + backend"
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Backend-affecting paths — keep in sync with detect-changes in branch-deploy.yml.
+          BACKEND_CHANGED=false
+          # Web deploys broadly: any change that isn't purely docs or mobile.
+          WEB_CHANGED=false
+          for file in $CHANGED_FILES; do
+            case "$file" in
+              packages/backend/*|packages/shared-schema/*|packages/shared/*|packages/db/*|packages/crypto/*|packages/aurora-sync/*|Dockerfile.backend|bun.lock|package.json)
+                BACKEND_CHANGED=true
+                ;;
+            esac
+            case "$file" in
+              mobile/*|packages/mobile/*|docs/*|*.md)
+                ;;
+              *)
+                WEB_CHANGED=true
+                ;;
+            esac
+          done
+
+          echo "backend=${BACKEND_CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "web=${WEB_CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "Backend changed: ${BACKEND_CHANGED}; Web changed: ${WEB_CHANGED}"
+
+  # Detects whether a Vercel Instant Rollback is pinning production. Outputs
+  # active=true/false; the deploy jobs read it to decide promote vs. stage-only.
+  # Fails closed (blocks the run) only if it can't read rollback state at all.
+  check-rollback:
+    runs-on: ubuntu-latest
+    environment: Production
+    outputs:
+      active: ${{ steps.check.outputs.active }}
+    steps:
+      - name: Detect active Vercel instant rollback
+        id: check
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          # Team projects need ?teamId=; personal (user_*) ids must not pass it.
+          TEAM_QS=""
+          case "$VERCEL_ORG_ID" in
+            team_*) TEAM_QS="?teamId=$VERCEL_ORG_ID" ;;
+          esac
+
+          HTTP_CODE=$(curl -sS -o response.json -w '%{http_code}' \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}${TEAM_QS}")
+
+          # Fail closed: if we can't read rollback state, don't risk promoting over one.
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Vercel project API returned HTTP $HTTP_CODE — cannot confirm rollback state, blocking deploy."
+            cat response.json || true
+            exit 1
+          fi
+
+          # lastRollbackTarget is null when no rollback is pinned, an object otherwise.
+          if [ "$(jq -r '.lastRollbackTarget // empty' response.json)" != "" ]; then
+            echo "active=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::A Vercel Instant Rollback is active — this run will deploy but NOT promote (production stays pinned)."
+            jq '.lastRollbackTarget' response.json
+          else
+            echo "active=false" >> "$GITHUB_OUTPUT"
+            echo "No active Vercel instant rollback — deploy will promote to production."
+          fi
+
+  build-web:
+    needs: [detect-changes, check-rollback]
+    if: needs.detect-changes.outputs.web_changed == 'true'
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings (production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        # The CLI reads VERCEL_TOKEN from the env — don't pass --token as a flag
+        # (it would show up in the runner's process list).
+        run: vercel pull --yes --environment=production
+
+      - name: Build with Vercel (prebuilt output)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: vercel build --prod
+
+      - name: Upload prebuilt output
+        uses: actions/upload-artifact@v4
+        with:
+          name: vercel-output
+          # Allowlist only what `vercel deploy --prebuilt` needs: the Build
+          # Output API result and the project link. Do NOT upload all of
+          # .vercel — `vercel pull` writes .vercel/.env.production.local with the
+          # project's production secrets, and shipping that in an artifact would
+          # leak prod credentials to anyone with artifact access.
+          path: |
+            .vercel/output
+            .vercel/project.json
+          include-hidden-files: true
+          retention-days: 1
+
+  build-backend:
+    needs: [detect-changes, check-rollback]
+    if: needs.detect-changes.outputs.backend_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          # Same digest gets all of these tags. Homelab consumes :staging,
+          # Railway consumes :production, humans use :sha-<short> for rollback.
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=staging,enable={{is_default_branch}}
+            type=raw,value=production,enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=backend-main
+          cache-to: type=gha,mode=max,scope=backend-main
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # The GATE. Runs migrations only once every attempted build has passed. A
+  # build that ran and FAILED is 'failure' (not 'skipped') and fails this check,
+  # which in turn skips both production deploy jobs below.
+  migrate:
+    needs: [detect-changes, build-web, build-backend]
+    if: >-
+      always()
+      && (needs.build-web.result == 'success' || needs.build-web.result == 'skipped')
+      && (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped')
+      && !(needs.build-web.result == 'skipped' && needs.build-backend.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: bun run --filter=@boardsesh/db db:migrate
+
+  deploy-web:
+    needs: [detect-changes, check-rollback, build-web, migrate]
+    if: always() && needs.detect-changes.outputs.web_changed == 'true' && needs.build-web.result == 'success' && needs.migrate.result == 'success'
+    runs-on: ubuntu-latest
+    environment: Production
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Download prebuilt output
+        uses: actions/download-artifact@v4
+        with:
+          name: vercel-output
+          path: .vercel
+
+      - name: Deploy prebuilt output to production
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          ROLLBACK_ACTIVE: ${{ needs.check-rollback.outputs.active }}
+        run: |
+          # When a rollback is pinned, --skip-domain builds + uploads the
+          # production deployment without assigning it to the production domain,
+          # so the pinned (rolled-back) deployment keeps serving traffic.
+          # The CLI reads VERCEL_TOKEN from the env (set above) — no --token flag.
+          if [ "$ROLLBACK_ACTIVE" = "true" ]; then
+            echo "Instant Rollback active — deploying WITHOUT promoting (--skip-domain)."
+            DEPLOY_OUTPUT=$(vercel deploy --prebuilt --prod --skip-domain)
+          else
+            DEPLOY_OUTPUT=$(vercel deploy --prebuilt --prod)
+          fi
+          echo "$DEPLOY_OUTPUT"
+          # Extract the deployment URL token rather than the last line, so a
+          # trailing warning on the final stdout line can't corrupt the URL we
+          # report to Discord. Empty is fine — the notify step handles it.
+          URL=$(printf '%s\n' "$DEPLOY_OUTPUT" | grep -oE 'https://[^[:space:]]+' | tail -n1 || true)
+          echo "Deployment URL: $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+  deploy-production-backend:
+    needs: [detect-changes, check-rollback, build-backend, migrate]
+    if: always() && needs.detect-changes.outputs.backend_changed == 'true' && needs.build-backend.result == 'success' && needs.migrate.result == 'success'
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Show image being deployed
+        run: |
+          echo "Image: ${{ needs.build-backend.outputs.image }}:production"
+          echo "Digest: ${{ needs.build-backend.outputs.digest }}"
+
+      # Railway has no "deploy without promoting", so during a rollback we just
+      # don't redeploy: the image is already pushed to GHCR (:production, :sha-)
+      # and is ready to redeploy once the rollback is cleared.
+      - name: Skip Railway redeploy (instant rollback active)
+        if: needs.check-rollback.outputs.active == 'true'
+        run: |
+          echo "Instant Rollback active — backend image pushed to GHCR but NOT redeployed to Railway."
+          echo "Promote by redeploying ${{ needs.build-backend.outputs.image }}:production once the rollback is cleared."
+
+      - name: Install Railway CLI
+        if: needs.check-rollback.outputs.active != 'true'
+        run: npm install -g @railway/cli
+
+      # The Railway service Source is the moving GHCR tag :production, which this
+      # run just repointed to the freshly built digest. `railway redeploy`
+      # re-pulls the service's image source, so it picks up the new digest rather
+      # than serving a cached layer.
+      - name: Trigger Railway redeploy
+        if: needs.check-rollback.outputs.active != 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway redeploy \
+            --service "${{ vars.RAILWAY_BACKEND_SERVICE_ID }}" \
+            --yes
+
+  # Homelab staging-backend deploy is currently broken — re-enable once the
+  # self-hosted runner is healthy. It deploys the same :staging image and is
+  # intentionally independent of the web build / prod migrate gate (it targets
+  # the staging DB, not prod), so it only needs build-backend to succeed.
+  #
+  # deploy-staging-backend:
+  #   needs: [detect-changes, build-backend]
+  #   if: always() && needs.detect-changes.outputs.backend_changed == 'true' && needs.build-backend.result == 'success'
+  #   runs-on: [self-hosted, homelab, ephemeral]
+  #   steps:
+  #     - name: Pull and restart staging backend
+  #       run: |
+  #         docker pull ghcr.io/boardsesh/boardsesh-daemon:staging
+  #         cd /opt/branch-deploys && docker compose up -d --no-deps staging-backend
+  #         echo "Waiting for staging backend to be healthy..."
+  #         sleep 5
+  #         docker ps --filter "name=staging-backend" --format "table {{.Names}}\t{{.Status}}"
+
+  # Pings Discord when a deploy ran during an active rollback: the release was
+  # built and staged but NOT promoted, so production is still on the pinned
+  # (rolled-back) deployment. No-ops if DISCORD_DEPLOY_WEBHOOK is unset.
+  notify-no-promote:
+    needs: [check-rollback, build-backend, deploy-web, deploy-production-backend]
+    if: >-
+      always()
+      && needs.check-rollback.outputs.active == 'true'
+      && (needs.deploy-web.result == 'success' || needs.deploy-production-backend.result == 'success')
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Notify Discord (deployed, not promoted)
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          WEB_URL: ${{ needs.deploy-web.outputs.url }}
+          WEB_RESULT: ${{ needs.deploy-web.result }}
+          BACKEND_RESULT: ${{ needs.deploy-production-backend.result }}
+          IMAGE: ${{ needs.build-backend.outputs.image }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+          WEB_LINE="not built this run"
+          if [ "$WEB_RESULT" = "success" ]; then
+            WEB_LINE="staged, not on the production domain: ${WEB_URL:-see run log}"
+          fi
+          BACKEND_LINE="not built this run"
+          if [ "$BACKEND_RESULT" = "success" ]; then
+            BACKEND_LINE="image at ${IMAGE}:production in GHCR, Railway NOT redeployed"
+          fi
+          CONTENT=$(printf '⚠️ **Deployed but NOT promoted** on `%s`\nA Vercel Instant Rollback is active, so production stays pinned to the rolled-back deployment.\n• web: %s\n• backend: %s\nClear the rollback (revert the offending commit and re-promote), then promote the staged web deployment and redeploy the backend.\n%s' \
+            "${COMMIT_SHA:0:7}" "$WEB_LINE" "$BACKEND_LINE" "$RUN_URL")
+          jq -n --arg content "$CONTENT" '{content: $content}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
+
+  # Pings the Discord deploy channel when any job fails OR is cancelled. The
+  # contains(needs.*.result, ...) form covers every job in `needs` automatically
+  # — including check-rollback and detect-changes — so a silent no-op (e.g.
+  # detect-changes erroring, or a cancelled mid-deploy) still alerts. No-ops if
+  # the DISCORD_DEPLOY_WEBHOOK secret is unset.
+  notify-failure:
+    needs: [detect-changes, check-rollback, build-web, build-backend, migrate, deploy-web, deploy-production-backend]
+    if: >-
+      always()
+      && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Notify Discord
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          CHECK_ROLLBACK: ${{ needs.check-rollback.result }}
+          DETECT_CHANGES: ${{ needs.detect-changes.result }}
+          BUILD_WEB: ${{ needs.build-web.result }}
+          BUILD_BACKEND: ${{ needs.build-backend.result }}
+          MIGRATE: ${{ needs.migrate.result }}
+          DEPLOY_WEB: ${{ needs.deploy-web.result }}
+          DEPLOY_BACKEND: ${{ needs.deploy-production-backend.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+          CONTENT=$(printf '🚨 **Production deploy failed** on \`%s\`\n• detect-changes: %s\n• check-rollback: %s\n• build-web: %s\n• build-backend: %s\n• migrate: %s\n• deploy-web: %s\n• deploy-production-backend: %s\n%s' \
+            "${COMMIT_SHA:0:7}" "$DETECT_CHANGES" "$CHECK_ROLLBACK" "$BUILD_WEB" "$BUILD_BACKEND" "$MIGRATE" "$DEPLOY_WEB" "$DEPLOY_BACKEND" "$RUN_URL")
+          # --fail-with-body surfaces Discord's status + error body (e.g. 429,
+          # rotated webhook) in the log instead of failing silently. Don't let a
+          # webhook hiccup fail the job — the alert is best-effort.
+          jq -n --arg content "$CONTENT" '{content: $content}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
