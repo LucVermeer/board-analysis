@@ -248,6 +248,10 @@ export default defineConfig({
       },
 
       // --- Mobile validation ---
+      'check:mobile-native-deps': {
+        command: 'tsx scripts/mobile-native-deps-check.ts',
+        cache: false,
+      },
       'check:mobile-bundle': {
         command: 'bash scripts/mobile-bundle-check.sh',
         cache: false,
