@@ -272,7 +272,6 @@
     "attempts_other": "{{count}} attempts"
   },
   "board": {
-    "resetZoom": "Reset zoom",
-    "imageUnavailable": "Board image unavailable"
+    "resetZoom": "Reset zoom"
   }
 }

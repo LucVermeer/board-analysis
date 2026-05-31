@@ -201,8 +201,7 @@
     "removeConfirmTitle": "¿Quitar este bloque?"
   },
   "board": {
-    "resetZoom": "Restablecer zoom",
-    "imageUnavailable": "Imagen del muro no disponible"
+    "resetZoom": "Restablecer zoom"
   },
   "mobile": {
     "more": {
