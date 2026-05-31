@@ -2,6 +2,10 @@ import TransportStream from 'winston-transport';
 import * as Sentry from '@sentry/node';
 
 const SPLAT = Symbol.for('splat');
+// Mirrors the `ERROR_INSTANCE` symbol set by `appendSplatFormat` in logger.ts.
+// Defined via the global Symbol registry so the two modules agree on the key
+// without an import cycle.
+const ERROR_INSTANCE = Symbol.for('boardsesh.errorInstance');
 
 type CaptureExceptionFn = (exception: unknown, hint?: Parameters<typeof Sentry.captureException>[1]) => unknown;
 
@@ -21,6 +25,13 @@ type LogInfo = {
 };
 
 function extractError(info: LogInfo): Error | null {
+  // Primary path: appendSplatFormat in logger.ts stashes the live Error here.
+  const preserved = (info as Record<symbol, unknown>)[ERROR_INSTANCE];
+  if (preserved instanceof Error) return preserved;
+
+  // Fallback paths for callers that construct a transport outside the
+  // default createBackendLogger pipeline (e.g. unit tests, or a future
+  // logger that doesn't use appendSplatFormat).
   const splatValue = (info as Record<symbol, unknown>)[SPLAT];
   if (Array.isArray(splatValue)) {
     for (const arg of splatValue) {
@@ -32,21 +43,23 @@ function extractError(info: LogInfo): Error | null {
 }
 
 /**
- * Winston transport that forwards `error`-level logs carrying an Error instance
- * to Sentry via `captureException`. Other levels and message-only error logs
- * are ignored.
+ * Winston transport that forwards `error`-level logs carrying an Error
+ * instance to Sentry via `captureException`. Other levels and message-only
+ * error logs are ignored.
  *
  * Gated to NODE_ENV === 'production' to mirror the `Sentry.init({ enabled })`
  * gate in `instrument.ts` — keeps dev/test runs from emitting events.
  */
 export class SentryWinstonTransport extends TransportStream {
-  private readonly enabled: boolean;
-  private readonly capture: CaptureExceptionFn;
+  // Public so callers (and tests) can verify the production gate without
+  // mutating process.env or reaching into private state.
+  public readonly enabled: boolean;
+  private readonly capture?: CaptureExceptionFn;
 
   constructor(options: SentryWinstonTransportOptions = {}) {
     super({ ...options, level: 'error' });
     this.enabled = (options.nodeEnv ?? process.env.NODE_ENV) === 'production';
-    this.capture = options.capture ?? Sentry.captureException;
+    this.capture = options.capture;
   }
 
   log(info: unknown, next: () => void): void {
@@ -67,8 +80,13 @@ export class SentryWinstonTransport extends TransportStream {
       return;
     }
 
+    // Read `Sentry.captureException` at call time (rather than caching it in
+    // the constructor) so test suites can replace it with `vi.spyOn` after the
+    // transport has been instantiated by `createBackendLogger`.
+    const captureFn = this.capture ?? Sentry.captureException;
+
     try {
-      this.capture(errorInstance, {
+      captureFn(errorInstance, {
         tags: { source: 'winston-logger' },
         extra: {
           logMessage: String(typedInfo.message),
