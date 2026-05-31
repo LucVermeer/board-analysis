@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Image as RNImage, type ViewStyle } from 'react-native';
+import { Image as RNImage, View, type ViewStyle } from 'react-native';
 import Svg, { Image as SvgImage, Rect, Text as SvgText } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import type { BoardRendererProps } from './types';
 import { useParseFrames } from './use-parse-frames';
 import { BoardHoldOverlay } from './BoardHoldOverlay';
-import { ZoomableView } from './ZoomableView';
 import { useTheme } from '../../providers/theme-provider';
 
 /**
@@ -48,8 +47,11 @@ function useImagePrefetch(imageUrls: string[]): boolean {
  * 1. Displays the board background image(s) at full resolution in SVG coordinates
  * 2. Overlays colored circles at each active hold position based on the frames string
  * 3. Scales to fit the container width while maintaining the board's native aspect ratio
- * 4. Supports pinch-to-zoom and pan gestures for inspecting dense hold layouts
- * 5. Optionally mirrors hold positions (without flipping the board image)
+ * 4. Optionally mirrors hold positions (without flipping the board image)
+ *
+ * This is the JS/SVG renderer used for thumbnails. The interactive
+ * climb-detail board uses BoardImageNative + SwipeBoardCarousel, which
+ * handles zoom/pan via useZoomPanGesture.
  *
  * Usage:
  * ```tsx
@@ -93,18 +95,12 @@ const BoardRenderer = React.memo(function BoardRenderer({
   };
 
   return (
-    <ZoomableView style={containerStyle}>
+    <View style={containerStyle}>
       <Svg width="100%" height="100%" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
         {/* Background board image(s) or fallback rectangle */}
         {imageError ? (
           <>
-            <Rect
-              x={0}
-              y={0}
-              width={boardWidth}
-              height={boardHeight}
-              fill={String(systemColors.tertiaryBackground)}
-            />
+            <Rect x={0} y={0} width={boardWidth} height={boardHeight} fill={String(systemColors.tertiaryBackground)} />
             <SvgText
               x={boardWidth / 2}
               y={boardHeight / 2}
@@ -132,7 +128,7 @@ const BoardRenderer = React.memo(function BoardRenderer({
         {/* Active hold circles overlaid on the board */}
         <BoardHoldOverlay holds={activeHolds} />
       </Svg>
-    </ZoomableView>
+    </View>
   );
 });
 
