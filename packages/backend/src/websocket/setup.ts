@@ -10,7 +10,7 @@ import { validateQueryDepth } from '../graphql/query-depth';
 import { roomManager } from '../services/room-manager';
 import { pubsub } from '../pubsub/index';
 import { validateToken, extractAuthToken, extractControllerApiKey, validateControllerApiKey } from '../middleware/auth';
-import { isOriginAllowed } from '../handlers/cors';
+import { isOriginAllowed, isSameOriginUpgrade } from '../handlers/cors';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { logger } from '../utils/logger';
 
@@ -59,13 +59,27 @@ export function setupWebSocketServer(httpServer: HttpServer): {
         return;
       }
 
-      // Check if origin is in allowed list or matches Vercel preview pattern
-      if (isOriginAllowed(origin)) {
+      // Allow if the origin is on the website allow-list / a preview pattern, OR
+      // if it's a genuine same-origin upgrade (Origin host === the host being
+      // connected to). The latter unblocks the React Native Android app, whose
+      // WebSocket sets Origin from the wss:// URL (https://ws.boardsesh.com),
+      // and preview WS hosts — without weakening CSWSH protection. See
+      // isSameOriginUpgrade for the security rationale.
+      if (isOriginAllowed(origin) || isSameOriginUpgrade(origin, info.req.headers.host)) {
         callback(true);
         return;
       }
 
-      logger.warn(`[WebSocket] Rejected connection from unauthorized origin: ${origin}`);
+      // Remaining rejections are genuinely unauthorized origins. Log attribution
+      // (User-Agent + IP) so they can be traced. forwardedFor is forensic only —
+      // it is user-controlled and never used for an allow/deny decision.
+      logger.warn('[WebSocket] Rejected connection from unauthorized origin', {
+        origin,
+        host: info.req.headers.host,
+        userAgent: info.req.headers['user-agent'],
+        forwardedFor: info.req.headers['x-forwarded-for'],
+        remoteAddress: info.req.socket.remoteAddress,
+      });
       callback(false, 403, 'Origin not allowed');
     },
   });
