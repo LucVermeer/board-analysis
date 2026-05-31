@@ -68,6 +68,14 @@ jobs:
             ocr:
               - 'packages/moonboard-ocr/**'
             sharedDeps:
+              # packages/shared/** gates test-backend (and mobile-bundle). The
+              # backend test project includes the queue-client integration suite
+              # (packages/backend/src/__tests__/queue-client-session.test.ts),
+              # which drives the real @boardsesh/queue, queue-react, queue-runtime
+              # and graphql-client code against a live server. A change to any of
+              # those must run the backend suite — keep this glob at
+              # packages/shared/**; if you narrow it, re-home that coverage onto
+              # an explicit per-package gate for test-backend.
               - 'packages/shared/**'
               - 'packages/shared-schema/**'
               - 'packages/db/**'
@@ -295,6 +303,10 @@ jobs:
 
   test-backend:
     needs: [changes, setup]
+    # Gated on `sharedDeps` (packages/shared/**) as well as `backend`: the backend
+    # test project drives the queue-client integration suite against the real
+    # @boardsesh/queue* packages, so a change to those must run it. See the
+    # sharedDeps filter note in the `changes` job before narrowing that gate.
     if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.rootCi == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
