@@ -173,12 +173,13 @@ jobs:
         run: vercel build --prod
 
       - name: Package prebuilt output
-        # vercel deploy --prebuilt needs .vercel/output AND the build dir it
-        # references (packages/web/.next). actions/upload-artifact dereferences
-        # symlinks (the Build Output API uses them), so we tar with symlinks
-        # preserved instead. Allowlist only these paths — never .vercel, which
-        # holds the pulled .env.production.local production secrets.
-        run: tar -czf vercel-output.tar.gz .vercel/output .vercel/project.json packages/web/.next
+        # vercel deploy --prebuilt needs .vercel/output AND the trees its Build
+        # Output API symlinks point at: packages/web/.next and
+        # packages/web/public (which holds the build-generated openapi.json, not
+        # committed). actions/upload-artifact dereferences symlinks, so we tar
+        # with symlinks preserved instead. Allowlist only these paths — never
+        # .vercel itself, which holds the pulled .env.production.local secrets.
+        run: tar -czf vercel-output.tar.gz .vercel/output .vercel/project.json packages/web/.next packages/web/public
 
       - name: Upload prebuilt output
         uses: actions/upload-artifact@v4
@@ -299,8 +300,8 @@ jobs:
           path: .
 
       - name: Extract prebuilt output
-        # Restores .vercel/output, .vercel/project.json and packages/web/.next
-        # with symlinks intact (into the checked-out tree from above).
+        # Restores .vercel/output, .vercel/project.json, packages/web/.next and
+        # packages/web/public with symlinks intact (into the checked-out tree).
         run: tar -xzf vercel-output.tar.gz && rm vercel-output.tar.gz
 
       - name: Deploy prebuilt output to production
