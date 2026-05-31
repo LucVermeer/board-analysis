@@ -75,13 +75,17 @@ export class RNBleAdapter implements BluetoothAdapter {
       (scanError, scannedDevice) => {
         if (scanError) {
           bleManager.stopDeviceScan();
+          const error = new Error(`BLE scan failed: ${scanError.message}`);
           if (autoSelectReject) {
-            autoSelectReject(new Error(`BLE scan failed: ${scanError.message}`));
+            autoSelectReject(error);
             autoSelectReject = null;
           }
-          // For picker-based selection, reject via the pickerReject if the
-          // picker provided one; otherwise the scan timeout will eventually
-          // fire. The error is logged so the user sees feedback.
+          if (pickerTimeoutReject) {
+            // Surface the failure to the picker UI immediately so the user
+            // sees feedback instead of waiting out the 30s scan window.
+            pickerTimeoutReject(error);
+            pickerTimeoutReject = null;
+          }
           return;
         }
 

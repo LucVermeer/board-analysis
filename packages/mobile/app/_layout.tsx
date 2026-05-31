@@ -4,7 +4,6 @@ import { Stack, SplashScreen, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { useTranslation } from 'react-i18next';
 import { QueryProvider } from '../src/providers/query-provider';
 import { ThemeProvider } from '../src/providers/theme-provider';
 import { AuthProvider } from '../src/providers/auth-provider';
@@ -66,7 +65,10 @@ type ErrorBoundaryProps = {
 };
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
-  const { t } = useTranslation('common');
+  // No useTranslation here: Expo Router renders this before any of our
+  // providers mount, so i18next isn't initialized. Calling the hook would
+  // return raw key strings exactly when the user most needs readable copy.
+  // Hardcode English as the last-resort safe fallback.
   const reportedRef = useRef<Error | null>(null);
 
   useEffect(() => {
@@ -86,14 +88,14 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         <Icon name="warning" size={48} color={brandColors.warning} />
       </View>
       <Text variant="title2" style={errorStyles.title}>
-        {t('mobile.errorBoundary.title')}
+        Something went wrong
       </Text>
       <Text variant="body" style={errorStyles.message}>
-        {t('mobile.errorBoundary.message')}
+        The app hit an unexpected error. You can try again or head back to your boards.
       </Text>
       <View style={errorStyles.buttonRow}>
-        <Button title={t('mobile.errorBoundary.tryAgain')} onPress={retry} variant="filled" size="large" />
-        <Button title={t('mobile.errorBoundary.goHome')} onPress={handleGoHome} variant="outlined" size="large" />
+        <Button title="Try again" onPress={retry} variant="filled" size="large" />
+        <Button title="Go to boards" onPress={handleGoHome} variant="outlined" size="large" />
       </View>
     </View>
   );
@@ -143,10 +145,7 @@ function RootLayout() {
                                 <DrawerHostProvider>
                                   <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
                                     <Stack.Screen name="(tabs)" />
-                                    <Stack.Screen
-                                      name="auth"
-                                      options={{ headerShown: false, gestureEnabled: false }}
-                                    />
+                                    <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
                                   </Stack>
                                   <PersistentQueueBar />
                                 </DrawerHostProvider>

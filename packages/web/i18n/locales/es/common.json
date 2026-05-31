@@ -221,12 +221,6 @@
     "play": {
       "sendCount_one": "{{count}} envío",
       "sendCount_other": "{{count}} envíos"
-    },
-    "errorBoundary": {
-      "title": "Algo salió mal",
-      "message": "La app tuvo un error inesperado. Puedes intentar de nuevo o volver a tus tablas.",
-      "tryAgain": "Intentar de nuevo",
-      "goHome": "Ir a tablas"
     }
   },
   "lightControl": {

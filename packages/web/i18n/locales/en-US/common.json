@@ -23,12 +23,6 @@
     "play": {
       "sendCount_one": "{{count}} send",
       "sendCount_other": "{{count}} sends"
-    },
-    "errorBoundary": {
-      "title": "Something went wrong",
-      "message": "The app hit an unexpected error. You can try again or head back to your boards.",
-      "tryAgain": "Try again",
-      "goHome": "Go to boards"
     }
   },
   "lightControl": {
