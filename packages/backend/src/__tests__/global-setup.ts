@@ -85,5 +85,14 @@ async function dropStaleWorkerDatabases(): Promise<void> {
 export default async function globalSetup() {
   await ensureInfra();
   if (process.env.SKIP_TEST_INFRA === '1') return;
+  // vp test loads every workspace project's globalSetup even when the
+  // project itself is filtered out via `--project '!backend'`. The
+  // `test-default` CI job runs without postgres, so probe the port first
+  // and skip the cleanup when nothing is listening — backend tests still
+  // run their `dropStaleWorkerDatabases` step in the dedicated
+  // `test-backend` job where postgres IS started.
+  if (!(await isPortOpen('127.0.0.1', PG_PORT))) {
+    return;
+  }
   await dropStaleWorkerDatabases();
 }

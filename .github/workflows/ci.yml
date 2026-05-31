@@ -282,14 +282,40 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           mkdir -p test-results
+          # Explicit positive include list rather than `--project '!backend' --project '!moonboard-ocr'`.
+          # In this vp test version the negation form doesn't actually skip
+          # the project (its globalSetup + tests still load), and the
+          # backend tests then crash without postgres. New projects added
+          # to root vite.config.ts must be appended here when they should
+          # run in this job.
+          PROJECTS=(
+            --project web
+            --project mobile
+            --project aurora-sync
+            --project board-constants
+            --project crypto
+            --project shared-schema
+            --project ble-protocol
+            --project board-config
+            --project board-react
+            --project climb-actions
+            --project climb-filters
+            --project graphql
+            --project graphql-client
+            --project party-profile
+            --project play-view
+            --project queue
+            --project queue-runtime
+            --project queue-react
+          )
           if [ "$EVENT_NAME" = "pull_request" ]; then
             vp test run --changed "origin/$BASE_REF" \
-              --project '!backend' --project '!moonboard-ocr' \
+              "${PROJECTS[@]}" \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./test-results/junit-default.xml
           else
             vp test run \
-              --project '!backend' --project '!moonboard-ocr' \
+              "${PROJECTS[@]}" \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./test-results/junit-default.xml
           fi

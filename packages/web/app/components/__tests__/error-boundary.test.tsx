@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vite-plus/test';
 import ErrorBoundary from '../error-boundary';
 
@@ -113,12 +113,16 @@ describe('ErrorBoundary', () => {
         });
       }
 
-      // Fix the error and let the 3rd retry succeed
+      // Fix the error and let the 3rd retry succeed. `waitFor` gives React's
+      // commit phase room to flush even when the rAF advance lands on a tick
+      // that doesn't drain microtasks in one pass — locally this resolves
+      // immediately; CI occasionally needs a second pass before the
+      // child re-renders.
       shouldThrow = false;
       await act(async () => {
         vi.advanceTimersByTime(16);
       });
-      expect(screen.getByText('recovered')).toBeTruthy();
+      await waitFor(() => expect(screen.getByText('recovered')).toBeTruthy());
 
       // Wait for the 30 s reset timer to fire
       await act(async () => {

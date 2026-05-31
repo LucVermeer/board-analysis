@@ -32,6 +32,7 @@
     "@boardsesh/board-config": "*",
     "@boardsesh/board-constants": "*",
     "@boardsesh/board-renderer-wasm": "*",
+    "@boardsesh/board-react": "*",
     "@boardsesh/climb-actions": "*",
     "@boardsesh/climb-filters": "*",
     "@boardsesh/crypto": "*",

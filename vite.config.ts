@@ -41,6 +41,7 @@ export default defineConfig({
       './packages/crypto/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
       './packages/shared/board-config/vite.config.ts',
+      './packages/shared/board-react/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
       './packages/shared/queue-runtime/vite.config.ts',
       './packages/shared/queue-react/vite.config.ts',
@@ -200,6 +201,9 @@ export default defineConfig({
       'typecheck:queue-react': {
         command: 'bun run --filter=@boardsesh/queue-react typecheck',
       },
+      'typecheck:board-react': {
+        command: 'bun run --filter=@boardsesh/board-react typecheck',
+      },
       'typecheck:party-profile': {
         command: 'bun run --filter=@boardsesh/party-profile typecheck',
       },
@@ -237,6 +241,7 @@ export default defineConfig({
           'typecheck:queue',
           'typecheck:queue-runtime',
           'typecheck:queue-react',
+          'typecheck:board-react',
           'typecheck:party-profile',
           'typecheck:climb-actions',
           'typecheck:board-config',
