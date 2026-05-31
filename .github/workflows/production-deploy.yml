@@ -278,6 +278,8 @@ jobs:
     outputs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
+      - uses: actions/checkout@v6
+
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
@@ -295,6 +297,9 @@ jobs:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           ROLLBACK_ACTIVE: ${{ needs.check-rollback.outputs.active }}
         run: |
+          # vercel deploy --prebuilt still resolves the project's Root Directory
+          # (packages/web), so the repo must be checked out even though the build
+          # is already baked into the downloaded .vercel/output.
           # When a rollback is pinned, --skip-domain builds + uploads the
           # production deployment without assigning it to the production domain,
           # so the pinned (rolled-back) deployment keeps serving traffic.
