@@ -34,8 +34,12 @@ jobs:
       rootCi: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.rootCi }}
       # True if any downstream job's gate would fire. setup gates on this so
       # docs-only / firmware-only PRs skip the bun-install + build:db pass
-      # nothing downstream would consume.
-      runAny: ${{ github.event_name == 'push' || steps.filter.outputs.anyJs == 'true' || steps.filter.outputs.web == 'true' || steps.filter.outputs.i18nCatalogs == 'true' || steps.filter.outputs.rootCi == 'true' }}
+      # nothing downstream would consume. Must mirror the union of every
+      # downstream `if:` — sharedDeps/sharedSchema in particular cover
+      # non-JS files (SQL migrations under packages/db, .graphql under
+      # shared-schema) that wouldn't trigger anyJs but still need setup so
+      # test-backend / mobile-bundle / codegen-drift can run.
+      runAny: ${{ github.event_name == 'push' || steps.filter.outputs.anyJs == 'true' || steps.filter.outputs.web == 'true' || steps.filter.outputs.i18nCatalogs == 'true' || steps.filter.outputs.sharedSchema == 'true' || steps.filter.outputs.sharedDeps == 'true' || steps.filter.outputs.backend == 'true' || steps.filter.outputs.mobile == 'true' || steps.filter.outputs.ocr == 'true' || steps.filter.outputs.rootCi == 'true' }}
     steps:
       - uses: actions/checkout@v6
       - id: filter
@@ -113,7 +117,9 @@ jobs:
           fetch-depth: 50
       - name: Fetch base ref
         if: github.event_name == 'pull_request'
-        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --depth=50 origin "$BASE_REF":"refs/remotes/origin/$BASE_REF"
       - uses: oven-sh/setup-bun@v2
       - uses: voidzero-dev/setup-vp@v1
         with:
@@ -127,12 +133,14 @@ jobs:
           name: built-packages
       - name: Lint changed files (PR)
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # Match the staged-hook scope in root vite.config.ts: TS/JS files,
           # excluding generated/, mobile (excluded from vp lint by config), and
           # embedded firmware sources. xargs -r ensures no-op on empty input.
           git diff --name-only --diff-filter=ACMR \
-            "origin/${{ github.base_ref }}...HEAD" \
+            "origin/$BASE_REF...HEAD" \
             -- '*.ts' '*.tsx' '*.js' '*.mjs' '*.cjs' \
             | grep -vE '(/node_modules/|/generated/|^packages/mobile/|^packages/board-controller/|^embedded/)' \
             > changed-lintable.txt || true
@@ -237,7 +245,9 @@ jobs:
           fetch-depth: 50
       - name: Fetch base ref
         if: github.event_name == 'pull_request'
-        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --depth=50 origin "$BASE_REF":"refs/remotes/origin/$BASE_REF"
       - uses: oven-sh/setup-bun@v2
       - uses: voidzero-dev/setup-vp@v1
         with:
@@ -255,10 +265,13 @@ jobs:
       # negation lets new packages get picked up automatically as they're
       # added to root vite.config.ts's `test.projects` list.
       - name: Run tests
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           mkdir -p test-results
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            vp test run --changed "origin/${{ github.base_ref }}" \
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            vp test run --changed "origin/$BASE_REF" \
               --project '!backend' --project '!moonboard-ocr' \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./test-results/junit-default.xml
@@ -320,11 +333,12 @@ jobs:
       # edit to the hand-maintained test DDL. Mirrors backend-tests.yml.
       - name: Check for test schema drift
         if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BASE=${{ github.event.pull_request.base.sha }}
-          HEAD=${{ github.event.pull_request.head.sha }}
-          git fetch --no-tags --depth=50 origin "$BASE" || true
-          changed=$(git diff --name-only "$BASE" "$HEAD" || true)
+          git fetch --no-tags --depth=50 origin "$BASE_SHA" || true
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
           if echo "$changed" | grep -qE '^packages/db/src/schema/'; then
             if ! echo "$changed" | grep -qE '^packages/backend/src/__tests__/schema-sql\.ts$'; then
               echo "::warning title=Test schema may be stale::packages/db/src/schema/ changed but packages/backend/src/__tests__/schema-sql.ts was not. If your change added/removed columns the backend tests care about, mirror it there too."
@@ -332,7 +346,9 @@ jobs:
           fi
       - name: Fetch base ref
         if: github.event_name == 'pull_request'
-        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --depth=50 origin "$BASE_REF":"refs/remotes/origin/$BASE_REF"
       - uses: oven-sh/setup-bun@v2
       - uses: voidzero-dev/setup-vp@v1
         with:
@@ -348,10 +364,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5433/boardsesh_backend_test
           REDIS_URL: redis://localhost:6380
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           mkdir -p packages/backend/test-results
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            vp test run --project backend --changed "origin/${{ github.base_ref }}" \
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            vp test run --project backend --changed "origin/$BASE_REF" \
               --shard=${{ matrix.shard }}/${{ matrix.total }} \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./packages/backend/test-results/junit-backend-${{ matrix.shard }}.xml
@@ -380,7 +398,9 @@ jobs:
           fetch-depth: 50
       - name: Fetch base ref
         if: github.event_name == 'pull_request'
-        run: git fetch --depth=50 origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --depth=50 origin "$BASE_REF":"refs/remotes/origin/$BASE_REF"
       - name: Install canvas system libs
         run: |
           sudo apt-get update
@@ -397,10 +417,13 @@ jobs:
         with:
           name: built-packages
       - name: Run OCR tests
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           mkdir -p packages/moonboard-ocr/test-results
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            vp test run --project moonboard-ocr --changed "origin/${{ github.base_ref }}" \
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            vp test run --project moonboard-ocr --changed "origin/$BASE_REF" \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./packages/moonboard-ocr/test-results/junit-ocr.xml
           else
