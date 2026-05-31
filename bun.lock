@@ -161,6 +161,7 @@
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
+        "@boardsesh/queue-react": "*",
         "@boardsesh/queue-runtime": "*",
         "@boardsesh/shared-schema": "*",
         "@expo/vector-icons": "^15.1.1",
@@ -336,6 +337,28 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/queue-react": {
+      "name": "@boardsesh/queue-react",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/graphql": "*",
+        "@boardsesh/graphql-client": "*",
+        "@boardsesh/queue": "*",
+        "@boardsesh/queue-runtime": "*",
+        "@boardsesh/shared-schema": "*",
+      },
+      "devDependencies": {
+        "@testing-library/react": "^16.3.2",
+        "@types/react": "^19",
+        "jsdom": "^28.1.0",
+        "react": "^19.2.0",
+        "react-dom": "^19.2.0",
+        "typescript": "~6.0.3",
+      },
+      "peerDependencies": {
+        "react": "^19.2.0",
+      },
+    },
     "packages/shared/queue-runtime": {
       "name": "@boardsesh/queue-runtime",
       "version": "1.0.0",
@@ -371,6 +394,7 @@
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
+        "@boardsesh/queue-react": "*",
         "@boardsesh/queue-runtime": "*",
         "@boardsesh/shared-schema": "*",
         "@emoji-mart/data": "^1.2.1",
@@ -778,6 +802,8 @@
     "@boardsesh/play-view": ["@boardsesh/play-view@workspace:packages/shared/play-view"],
 
     "@boardsesh/queue": ["@boardsesh/queue@workspace:packages/shared/queue"],
+
+    "@boardsesh/queue-react": ["@boardsesh/queue-react@workspace:packages/shared/queue-react"],
 
     "@boardsesh/queue-runtime": ["@boardsesh/queue-runtime@workspace:packages/shared/queue-runtime"],
 
@@ -4190,6 +4216,8 @@
     "@boardsesh/play-view/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/queue/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "@boardsesh/queue-react/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/web/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 

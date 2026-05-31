@@ -6,6 +6,7 @@ import type {
   SessionEvent,
   SessionSummary,
   QueueState,
+  ClimbQueueItemInput,
 } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem as LocalClimbQueueItem } from '../queue-control/types';
 import type { BoardDetails, ParsedBoardRouteParameters } from '@/app/lib/types';
@@ -198,7 +199,10 @@ export type PendingInitialQueue = {
 };
 
 // Convert local ClimbQueueItem to GraphQL input format
-export function toClimbQueueItemInput(item: LocalClimbQueueItem) {
+// Explicit return type so the compiler catches any drift between the web's
+// local item shape and the shared wire input (rather than a cast at the call
+// site silently absorbing it).
+export function toClimbQueueItemInput(item: LocalClimbQueueItem): ClimbQueueItemInput {
   return {
     uuid: item.uuid,
     climb: {
@@ -233,7 +237,9 @@ export function toClimbQueueItemInput(item: LocalClimbQueueItem) {
           avatarUrl: item.addedByUser.avatarUrl,
         }
       : undefined,
-    tickedBy: item.tickedBy,
+    // The wire input is `[String!]` — drop any local nulls rather than send
+    // an invalid value the server would reject.
+    tickedBy: item.tickedBy?.filter((id): id is string => id !== null),
     suggested: item.suggested,
   };
 }

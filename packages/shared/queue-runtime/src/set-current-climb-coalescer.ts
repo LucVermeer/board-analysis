@@ -16,26 +16,30 @@
 
 import type { ClimbQueueItem } from '@boardsesh/queue';
 
-export type SetCurrentClimbArgs = {
-  item: ClimbQueueItem | null;
+// `TItem` is the queue-item type the caller deals in. It defaults to the shared
+// `ClimbQueueItem`, so existing callers (and the queue-runtime tests) need no
+// type args; web/mobile pass their own item type so the coalescer carries it
+// end-to-end without unsound casts at the call site.
+export type SetCurrentClimbArgs<TItem = ClimbQueueItem> = {
+  item: TItem | null;
   shouldAddToQueue?: boolean;
   correlationId?: string;
 };
 
-export type SetCurrentClimbCoalescerOptions<TContext = void> = {
+export type SetCurrentClimbCoalescerOptions<TContext = void, TItem = ClimbQueueItem> = {
   /** Send a single SET_CURRENT_CLIMB mutation with the given args. The
    *  `context` argument is whatever `getContext()` returned at enqueue time
    *  (default `undefined`). Use it to snapshot mutable state — session id,
    *  WS connection epoch — so a delayed drain dispatches against the same
    *  context the enqueue happened in, not whatever's current. */
-  sendArgs: (args: SetCurrentClimbArgs, context: TContext) => Promise<void>;
+  sendArgs: (args: SetCurrentClimbArgs<TItem>, context: TContext) => Promise<void>;
   /** Fire-and-forget ADD_QUEUE_ITEM for a superseded request whose
    *  shouldAddToQueue flag was true. Receives the context captured when
    *  the now-superseded args were enqueued (not the current context) — so
    *  a session that flipped between enqueue and supersede doesn't get a
    *  stray queue-add. If omitted, superseded queue-adds are silently
    *  dropped (matches the no-coalescing baseline mobile had before). */
-  sendSupersededQueueAdd?: (item: ClimbQueueItem, context: TContext) => Promise<void>;
+  sendSupersededQueueAdd?: (item: TItem, context: TContext) => Promise<void>;
   /** Snapshot caller state at enqueue time. Whatever this returns is
    *  captured into the pending entry and threaded through to sendArgs /
    *  sendSupersededQueueAdd. Defaults to `() => undefined`. */
@@ -47,17 +51,17 @@ export type SetCurrentClimbCoalescerOptions<TContext = void> = {
   onSupersededQueueAddError?: (error: unknown) => void;
 };
 
-export type SetCurrentClimbCoalescer = {
+export type SetCurrentClimbCoalescer<TItem = ClimbQueueItem> = {
   /** Enqueue a setCurrentClimb call. The returned promise resolves once this
    *  request *and* all coalesced followups have been drained (when called as
    *  the first-in-flight) or immediately (when superseding an earlier call). */
-  enqueue(args: SetCurrentClimbArgs): Promise<void>;
+  enqueue(args: SetCurrentClimbArgs<TItem>): Promise<void>;
 };
 
-export function createSetCurrentClimbCoalescer<TContext = void>(
-  options: SetCurrentClimbCoalescerOptions<TContext>,
-): SetCurrentClimbCoalescer {
-  type Pending = { args: SetCurrentClimbArgs; context: TContext };
+export function createSetCurrentClimbCoalescer<TContext = void, TItem = ClimbQueueItem>(
+  options: SetCurrentClimbCoalescerOptions<TContext, TItem>,
+): SetCurrentClimbCoalescer<TItem> {
+  type Pending = { args: SetCurrentClimbArgs<TItem>; context: TContext };
   const state: { inFlight: boolean; pending: Pending | null } = {
     inFlight: false,
     pending: null,
@@ -92,7 +96,9 @@ export function createSetCurrentClimbCoalescer<TContext = void>(
           state.pending.args.item !== null &&
           options.sendSupersededQueueAdd !== undefined
         ) {
-          options.sendSupersededQueueAdd(state.pending.args.item, state.pending.context).catch(onSupersededQueueAddError);
+          options
+            .sendSupersededQueueAdd(state.pending.args.item, state.pending.context)
+            .catch(onSupersededQueueAddError);
         }
         state.pending = { args, context };
         return;
