@@ -52,8 +52,21 @@ The `() => logger` return matches winston's method signature (each level method 
 - Winston was chosen over Pino for its mature format-combine API — the `instanceIdFormat` step uses a closure to read the provider at log time, which avoids the alternative of mutating `defaultMeta` from `server.ts` and depending on import-evaluation order.
 - The dev format intentionally mirrors the old console-patch output (`[i:abcd1234] ` prefix) so grep / tail workflows don't change.
 
+## Sentry forwarding
+
+`logger.error(message, err)` automatically forwards to `Sentry.captureException` via `SentryWinstonTransport` (`packages/backend/src/utils/sentry-transport.ts`), which is attached alongside the Console transport in `createBackendLogger`. The captured event carries `tags: { source: 'winston-logger' }`, the log message as `extra.logMessage`, and the current `instanceId` when present.
+
+Two rules to remember when adding an `error` log:
+
+- **Pass the underlying `Error` as the trailing arg.** `logger.error('Auth check failed:', err)` reaches Sentry. `logger.error('Auth check failed')` does not — message-only error logs are intentionally skipped to keep Sentry quiet, since most are operational status lines. Wrap raw strings in `new Error(...)` if you want them captured.
+- **`logger.warn` is never forwarded.** Use `logger.error` (with an `Error`) for events that should page; keep `logger.warn` for noisy operational lines (origin rejections, retry counters, etc.).
+
+The transport itself is gated to `NODE_ENV === 'production'`, matching the `Sentry.init({ enabled: isProduction })` gate in `instrument.ts`, so dev and test runs do not emit Sentry events even when an `Error` is attached.
+
+Specialised error paths still call `Sentry.captureException` directly (`graphql/yoga.ts`, `websocket/setup.ts`, `handlers/sync.ts`, `index.ts`) — those exist to attach finer-grained tags or filter out noisy client-input `GraphQLError`s before capture. The winston transport is the default; direct capture is the exception.
+
 ## Out of scope
 
 - A request-id propagation layer is a separate concern (separate issue).
 - Per-subsystem log-level matrices (e.g. promote `pubsub` to `debug` while leaving `events` at `info`) are not wired — set `LOG_LEVEL=debug` globally if you need that, or add a `child()` logger per subsystem when the need is real.
-- Sentry breadcrumbs auto-generated from `console.*` no longer fire for backend log calls (we routed off console). Backend events that need Sentry visibility should call `Sentry.captureException` / `Sentry.captureMessage` directly rather than relying on the breadcrumb fallback.
+- Sentry breadcrumbs auto-generated from `console.*` no longer fire for backend log calls (we routed off console) — irrelevant now that the winston transport handles forwarding directly.

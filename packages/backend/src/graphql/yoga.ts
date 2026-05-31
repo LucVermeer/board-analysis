@@ -74,7 +74,14 @@ export function createYogaInstance() {
       info: (...args: unknown[]) => logger.info('[Yoga]', ...args),
       warn: (...args: unknown[]) => logger.warn('[Yoga]', ...args),
       error: (...args: unknown[]) => {
-        logger.error('[Yoga]', ...args);
+        // Stringify any Error in the splat before handing to logger.error so
+        // the SentryWinstonTransport doesn't fire — this handler runs its own
+        // noise-filtered capture loop below for client-input GraphQLErrors,
+        // and we don't want the transport to bypass that filter.
+        const stringifiedArgs = args.map((arg) =>
+          arg instanceof Error ? (arg.stack ?? `${arg.name}: ${arg.message}`) : arg,
+        );
+        logger.error('[Yoga]', ...stringifiedArgs);
         // Skip GraphQLErrors triggered purely by client input (no originalError):
         // validation, parse, depth/cost limit, auth — high volume, low signal.
         for (const arg of args) {

@@ -75,8 +75,10 @@ async function main() {
 }
 
 main().catch(async (error) => {
+  // logger.error forwards to Sentry via SentryWinstonTransport; no need for
+  // an explicit captureException here. Keep the Sentry.flush so the event
+  // makes it out before the process exits.
   logger.error('Failed to start server:', error);
-  Sentry.captureException(error);
   await Sentry.flush(2000);
   process.exit(1);
 });
