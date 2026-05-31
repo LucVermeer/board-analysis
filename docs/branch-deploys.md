@@ -33,10 +33,12 @@ Flow:
 4. `deploy-web` (`vercel deploy --prebuilt --prod`) and `deploy-production-backend` (`railway redeploy`) run after the gate.
 5. `notify-failure` posts to the Discord deploy webhook if any job failed.
 
-Required GitHub config:
+Required GitHub config — these live in the **`Production` GitHub environment** (Settings → Environments), not as repo-level secrets. Every job that reads them declares `environment: Production`; jobs that don't (`detect-changes`, `build-backend`, which uses only the automatic `GITHUB_TOKEN`) are left out. Environment-scoped secrets only resolve for jobs that opt in via `environment:` — without it they expand to empty strings and the run fails (401 from Vercel, empty `DATABASE_URL`, etc.).
 
 - **Secrets:** `VERCEL_TOKEN`, `DATABASE_URL` (production Neon — used by the gated migrate job), `RAILWAY_TOKEN`, `DISCORD_DEPLOY_WEBHOOK`.
 - **Variables:** `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `RAILWAY_BACKEND_SERVICE_ID`.
+
+Because the `Production` environment is gated to `main`, a `workflow_dispatch` dry run from a feature branch can't resolve these secrets (the environment-scoped jobs are blocked by the deployment-branch rule). Dry-run from `main`, or temporarily add the branch to the environment's allowed deployment branches.
 
 Railway runs from the prebuilt image, not its own build — keep `railway.toml` free of a `[build]` block and point the service Source at `ghcr.io/boardsesh/boardsesh-daemon:production`.
 
