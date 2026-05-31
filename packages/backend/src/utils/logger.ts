@@ -1,5 +1,6 @@
 import util from 'node:util';
 import { createLogger, format, transports, type Logger, type LoggerOptions } from 'winston';
+import { SentryWinstonTransport } from './sentry-transport';
 
 // Explicit annotation prevents TS2742 from inferring a path through bun's
 // isolated `node_modules/.bun/logform@x.y/...` install layout.
@@ -110,7 +111,10 @@ export function createBackendLogger(options: BackendLoggerOptions = {}): Logger 
           format.json(),
         )
       : format.combine(instanceIdFormat(), appendSplatFormat(), format.colorize(), devPrintf),
-    transports: options.loggerTransports ?? [new transports.Console({ stderrLevels: ['error', 'warn'] })],
+    transports: options.loggerTransports ?? [
+      new transports.Console({ stderrLevels: ['error', 'warn'] }),
+      new SentryWinstonTransport(),
+    ],
   });
 }
 
