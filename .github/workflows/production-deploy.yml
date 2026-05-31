@@ -240,7 +240,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           # Same digest gets all of these tags. Homelab consumes :staging,
@@ -265,7 +265,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend-main
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -448,9 +448,13 @@ jobs:
           if [ "$BACKEND_RESULT" = "success" ]; then
             BACKEND_LINE="image at ${IMAGE}:production in GHCR, Railway NOT redeployed"
           fi
-          CONTENT=$(printf '⚠️ **Deployed but NOT promoted** on `%s`\nA Vercel Instant Rollback is active, so production stays pinned to the rolled-back deployment.\n• web: %s\n• backend: %s\nClear the rollback (revert the offending commit and re-promote), then promote the staged web deployment and redeploy the backend.\n%s' \
+          # URL is wrapped in <…> so Discord suppresses the inline preview embed
+          # (otherwise the workflow link dominates the message).
+          CONTENT=$(printf '⚠️ **Deployed but NOT promoted** on `%s`\nA Vercel Instant Rollback is active, so production stays pinned to the rolled-back deployment.\n• web: %s\n• backend: %s\nClear the rollback (revert the offending commit and re-promote), then promote the staged web deployment and redeploy the backend.\n<%s>' \
             "${COMMIT_SHA:0:7}" "$WEB_LINE" "$BACKEND_LINE" "$RUN_URL")
-          jq -n --arg content "$CONTENT" '{content: $content}' \
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings from
+          # any text we splice in (commit messages, PR titles, etc.).
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
 
@@ -484,11 +488,106 @@ jobs:
             echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
             exit 0
           fi
-          CONTENT=$(printf '🚨 **Production deploy failed** on \`%s\`\n• detect-changes: %s\n• check-rollback: %s\n• build-web: %s\n• build-backend: %s\n• migrate: %s\n• deploy-web: %s\n• deploy-production-backend: %s\n%s' \
+          # URL wrapped in <…> so Discord suppresses the inline preview embed.
+          CONTENT=$(printf '🚨 **Production deploy failed** on \`%s\`\n• detect-changes: %s\n• check-rollback: %s\n• build-web: %s\n• build-backend: %s\n• migrate: %s\n• deploy-web: %s\n• deploy-production-backend: %s\n<%s>' \
             "${COMMIT_SHA:0:7}" "$DETECT_CHANGES" "$CHECK_ROLLBACK" "$BUILD_WEB" "$BUILD_BACKEND" "$MIGRATE" "$DEPLOY_WEB" "$DEPLOY_BACKEND" "$RUN_URL")
           # --fail-with-body surfaces Discord's status + error body (e.g. 429,
           # rotated webhook) in the log instead of failing silently. Don't let a
           # webhook hiccup fail the job — the alert is best-effort.
-          jq -n --arg content "$CONTENT" '{content: $content}' \
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings.
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
+
+  # Pings the Discord deploy channel after a successful, PROMOTED production
+  # deploy. Lists the PRs that just shipped (parsed from merge-commit subjects
+  # between github.event.before and github.sha). Fires only when no rollback
+  # is pinning prod, nothing failed or got cancelled, and at least one
+  # component actually deployed. No-ops if DISCORD_DEPLOY_WEBHOOK is unset.
+  notify-success:
+    needs: [check-rollback, detect-changes, build-web, build-backend, migrate, deploy-web, deploy-production-backend]
+    if: >-
+      always()
+      && needs.check-rollback.outputs.active != 'true'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
+      && (needs.deploy-web.result == 'success' || needs.deploy-production-backend.result == 'success')
+    runs-on: ubuntu-latest
+    environment: Production
+    permissions:
+      # Need contents:read to fetch full history and pull-requests:read so
+      # `gh api repos/.../pulls/N` can read titles. Default GITHUB_TOKEN on
+      # push events already includes these, but pinning the job to the
+      # minimum scope keeps it least-privileged.
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Need enough history to walk github.event.before..github.sha for the
+          # PR list. A single push to main is normally 1–5 commits (merge +
+          # squashed PR commits); 50 is a generous buffer for batched-merge
+          # days without paying for a full-history clone. If BEFORE isn't
+          # reachable in the shallow clone, the PR-list step short-circuits
+          # via the `git cat-file -e` check and the notification still posts
+          # (just without the Shipped section).
+          fetch-depth: 50
+
+      - name: Notify Discord (deployed + promoted)
+        env:
+          DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEB_RESULT: ${{ needs.deploy-web.result }}
+          BACKEND_RESULT: ${{ needs.deploy-production-backend.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_URL: ${{ github.server_url }}/${{ github.repository }}/pull
+        run: |
+          if [ -z "$DISCORD_DEPLOY_WEBHOOK" ]; then
+            echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
+            exit 0
+          fi
+
+          WEB_LINE="unchanged"
+          if [ "$WEB_RESULT" = "success" ]; then WEB_LINE="deployed"; fi
+          BACKEND_LINE="unchanged"
+          if [ "$BACKEND_RESULT" = "success" ]; then BACKEND_LINE="deployed"; fi
+
+          # Pull PR numbers from merge-commit subjects in BEFORE..SHA. Skip the
+          # section entirely if BEFORE is missing/zero (workflow_dispatch, first
+          # push, force push) rather than guessing.
+          PR_LIST=""
+          if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            PR_NUMS=$(git log --format='%s' "${BEFORE_SHA}..${COMMIT_SHA}" | grep -oE 'Merge pull request #[0-9]+' | grep -oE '[0-9]+' | sort -un || true)
+            while IFS= read -r PR; do
+              # `|| continue` form is safe under `set -e`; `&& continue` can trip it.
+              [ -n "$PR" ] || continue
+              TITLE=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq '.title' 2>/dev/null || true)
+              PR_URL="${PR_BASE_URL}/${PR}"
+              if [ -n "$TITLE" ]; then
+                LINE="• #${PR} — ${TITLE} <${PR_URL}>"
+              else
+                LINE="• #${PR} <${PR_URL}>"
+              fi
+              if [ -z "$PR_LIST" ]; then
+                PR_LIST="$LINE"
+              else
+                PR_LIST="${PR_LIST}"$'\n'"${LINE}"
+              fi
+            done <<< "$PR_NUMS"
+          fi
+
+          SHIPPED_SECTION=""
+          if [ -n "$PR_LIST" ]; then
+            SHIPPED_SECTION=$(printf '\nShipped:\n%s' "$PR_LIST")
+          fi
+
+          # RUN_URL wrapped in <…> so Discord suppresses the inline preview embed.
+          CONTENT=$(printf '✅ **Production deployed** on `%s`\n• web: %s\n• backend: %s%s\n<%s>' \
+            "${COMMIT_SHA:0:7}" "$WEB_LINE" "$BACKEND_LINE" "$SHIPPED_SECTION" "$RUN_URL")
+          # allowed_mentions.parse=[] blocks @everyone/@here/role/user pings —
+          # critical here because PR titles flow straight into $content.
+          jq -n --arg content "$CONTENT" '{content: $content, allowed_mentions: {parse: []}}' \
             | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
               echo "::warning::Failed to post Discord notification (see status above)"
