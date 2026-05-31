@@ -68,6 +68,12 @@ export function PlaybackControls({
         borderTop: 1,
         borderColor: 'divider',
         width: '100%',
+        // Parent `.contentWrapper` has overflow:hidden and the carousel is
+        // flex:1 — without an explicit shrink:0 the carousel pushes us
+        // below the visible bottom edge and the controls vanish.
+        flexShrink: 0,
+        position: 'relative',
+        zIndex: 1,
       }}
     >
       <IconButton
