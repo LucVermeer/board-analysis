@@ -163,6 +163,61 @@ describe('usePlaybackEngine', () => {
     expect(result.current.frameIndex).toBe(2);
   });
 
+  it('clamps NaN speed in external state to 1', () => {
+    const { frames, frameStrings } = decode(TENSION_FRAMES);
+    const external: ExternalPlaybackState = {
+      frameIndex: 1,
+      isPlaying: false,
+      speed: Number.NaN,
+      paceMs: 200,
+      anchorTimestamp: Date.now(),
+      clientId: 'peer',
+    };
+    const { result } = renderHook(() =>
+      usePlaybackEngine({ frames, frameStrings, paceMs: 200, clientId: 'self', externalState: external }),
+    );
+    // NaN speed is rejected → default to 1; frame 1 is preserved (paused so no extrapolation).
+    expect(result.current.speed).toBe(1);
+    expect(result.current.frameIndex).toBe(1);
+  });
+
+  it('clamps negative frameIndex in external state to 0', () => {
+    const { frames, frameStrings } = decode(TENSION_FRAMES);
+    const external: ExternalPlaybackState = {
+      frameIndex: -5,
+      isPlaying: false,
+      speed: 1,
+      paceMs: 200,
+      anchorTimestamp: Date.now(),
+      clientId: 'peer',
+    };
+    const { result } = renderHook(() =>
+      usePlaybackEngine({ frames, frameStrings, paceMs: 200, clientId: 'self', externalState: external }),
+    );
+    expect(result.current.frameIndex).toBe(0);
+  });
+
+  it('clamps paceMs=0 in external state so extrapolation does not divide by zero', () => {
+    const { frames, frameStrings } = decode(TENSION_FRAMES);
+    const now = Date.now();
+    vi.setSystemTime(now);
+    const external: ExternalPlaybackState = {
+      frameIndex: 0,
+      isPlaying: true,
+      speed: 1,
+      paceMs: 0,
+      anchorTimestamp: now - 1000,
+      clientId: 'peer',
+    };
+    const { result } = renderHook(() =>
+      usePlaybackEngine({ frames, frameStrings, paceMs: 200, clientId: 'self', externalState: external }),
+    );
+    // paceMs=0 clamped to MIN_PACE_MS (200) → 1000ms / 200ms = 5 steps,
+    // (0 + 5) % 4 frames = frame 1. No divide-by-zero, no Infinity.
+    expect(Number.isFinite(result.current.frameIndex)).toBe(true);
+    expect(result.current.frameIndex).toBe(1);
+  });
+
   it('emits onLocalStateChange on user actions but not on auto ticks', () => {
     const { frames, frameStrings } = decode(TENSION_FRAMES);
     const onLocalStateChange = vi.fn();

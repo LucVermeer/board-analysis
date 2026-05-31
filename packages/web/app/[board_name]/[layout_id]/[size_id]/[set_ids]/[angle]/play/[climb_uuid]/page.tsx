@@ -1,9 +1,9 @@
-import { permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import type { BoardRouteParametersWithUuid } from '@/app/lib/types';
 import { parseRouteParams } from '@/app/lib/url-utils.server';
 import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getClimb } from '@/app/lib/data/queries';
-import { constructClimbViewUrl, constructClimbViewUrlWithSlugs } from '@/app/lib/url-utils';
+import { constructClimbViewUrl, constructClimbViewUrlWithSlugs, isUuidOnly } from '@/app/lib/url-utils';
 
 /**
  * Old `/play/[climb_uuid]` URLs 301-redirect to the equivalent `/view/[climb_uuid]`.
@@ -19,6 +19,15 @@ export default async function PlayRedirectPage(props: {
   const searchParams = await props.searchParams;
 
   const { parsedParams } = await parseRouteParams(params);
+
+  // `parseRouteParams` runs the climb_uuid through `extractUuidFromSlug`,
+  // which passes garbage through verbatim when no embedded UUID is found.
+  // Redirecting that to /view/<garbage> would 301-cache a junk URL forever
+  // and pollute search indexes — 404 instead.
+  if (!isUuidOnly(parsedParams.climb_uuid)) {
+    notFound();
+  }
+
   const boardDetails = getBoardDetailsForBoard(parsedParams);
 
   // Look up the climb name so the slug-prefixed view URL is preserved.

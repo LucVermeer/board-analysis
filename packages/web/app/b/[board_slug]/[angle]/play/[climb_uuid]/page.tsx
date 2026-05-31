@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect } from 'next/navigation';
 import { resolveBoardBySlug, boardToRouteParams } from '@/app/lib/board-slug-utils';
 import { getClimb } from '@/app/lib/data/queries';
-import { constructBoardSlugViewUrl, extractUuidFromSlug } from '@/app/lib/url-utils';
+import { constructBoardSlugViewUrl, extractUuidFromSlug, isUuidOnly } from '@/app/lib/url-utils';
 
 /**
  * Old `/b/{board_slug}/{angle}/play/[climb_uuid]` URLs 301-redirect to the
@@ -20,6 +20,13 @@ export default async function BoardSlugPlayRedirectPage(props: {
 
   const angle = Number(params.angle);
   const climbUuid = extractUuidFromSlug(params.climb_uuid);
+
+  // `extractUuidFromSlug` returns its input verbatim when no 32-hex-char UUID
+  // is embedded. Redirecting /view/<garbage> would 301-cache the junk URL —
+  // 404 instead so search indexes drop it.
+  if (!isUuidOnly(climbUuid)) {
+    notFound();
+  }
 
   // Look up the climb name so the slug-prefixed view URL is preserved.
   let climbName: string | undefined;

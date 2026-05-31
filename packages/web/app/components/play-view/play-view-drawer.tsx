@@ -323,6 +323,10 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             await sendFramesToBoard(next, isMirroredRef.current, undefined, activeClimbUuid);
           } catch (error) {
             console.error('[PlayViewDrawer] BLE frame send failed:', error);
+            track('BLE Frame Send Failed', {
+              error: String(error),
+              climbUuid: activeClimbUuid,
+            });
           }
           toSend = pendingFrameRef.current;
           pendingFrameRef.current = null;

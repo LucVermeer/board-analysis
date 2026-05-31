@@ -150,17 +150,28 @@ export function usePlaybackEngine({
   }, [isPlaying, frameStrings.length, paceMs]);
 
   // Converge to external (peer) state when its clientId differs from ours.
+  // Peer state arrives over the wire — clamp every numeric field before we
+  // trust it. A hostile or buggy peer sending NaN, Infinity, negatives, or
+  // out-of-range values would otherwise poison local state and get re-broadcast
+  // on the next user action.
   useEffect(() => {
     if (!externalState) return;
     if (externalState.clientId && externalState.clientId === clientId) return;
     if (frameStrings.length === 0) return;
-    const elapsed = Math.max(0, Date.now() - externalState.anchorTimestamp);
-    const effectivePace = Math.max(MIN_PACE_MS, externalState.paceMs / Math.max(externalState.speed, 0.01));
+    const safeSpeed = Number.isFinite(externalState.speed) ? Math.max(0.1, externalState.speed) : 1;
+    const safePaceMs = Number.isFinite(externalState.paceMs)
+      ? Math.max(MIN_PACE_MS, externalState.paceMs)
+      : MIN_PACE_MS;
+    const rawFrameIndex = Number.isFinite(externalState.frameIndex) ? externalState.frameIndex : 0;
+    const safeFrameIndex = Math.max(0, Math.min(frameStrings.length - 1, Math.floor(rawFrameIndex)));
+    const safeAnchor = Number.isFinite(externalState.anchorTimestamp) ? externalState.anchorTimestamp : Date.now();
+    const elapsed = Math.max(0, Date.now() - safeAnchor);
+    const effectivePace = Math.max(MIN_PACE_MS, safePaceMs / safeSpeed);
     const stepsAdvanced = externalState.isPlaying && effectivePace > 0 ? Math.floor(elapsed / effectivePace) : 0;
-    const projected = (externalState.frameIndex + stepsAdvanced) % frameStrings.length;
+    const projected = (safeFrameIndex + stepsAdvanced) % frameStrings.length;
     setFrameIndex(projected);
     setIsPlaying(externalState.isPlaying);
-    setSpeedState(externalState.speed);
+    setSpeedState(safeSpeed);
   }, [externalState, clientId, frameStrings.length]);
 
   const play = useCallback(() => {
