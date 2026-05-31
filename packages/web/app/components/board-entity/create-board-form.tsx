@@ -30,10 +30,10 @@ async function findBoardForConfig(token: string, config: BoardConfig): Promise<U
   try {
     const client = createGraphQLHttpClient(token);
     const pageSize = 50;
-    let offset = 0;
-    for (;;) {
+    const maxPages = 20;
+    for (let page = 0; page < maxPages; page++) {
       const data = await client.request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, {
-        input: { limit: pageSize, offset },
+        input: { limit: pageSize, offset: page * pageSize },
       });
       const match = data.myBoards.boards.find(
         (board) =>
@@ -44,8 +44,8 @@ async function findBoardForConfig(token: string, config: BoardConfig): Promise<U
       );
       if (match) return match;
       if (!data.myBoards.hasMore) return null;
-      offset += pageSize;
     }
+    return null;
   } catch {
     return null;
   }

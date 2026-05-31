@@ -17,6 +17,7 @@ import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import { BoardDetailContent } from '../board-entity/board-detail';
 import BoardSearchResults from '../social/board-search-results';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
+import { useInfiniteScroll } from '@/app/hooks/use-infinite-scroll';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
@@ -36,7 +37,8 @@ type MyBoardsDrawerProps = {
 
 export default function MyBoardsDrawer({ open, onClose, onCreateBoard, onTransitionEnd }: MyBoardsDrawerProps) {
   const { t } = useTranslation('common');
-  const { boards, isLoading, error } = useMyBoards(open);
+  const { boards, isLoading, isFetchingMore, hasMore, loadMore, error } = useMyBoards(open);
+  const { sentinelRef } = useInfiniteScroll({ onLoadMore: loadMore, hasMore, isFetching: isFetchingMore });
   const { token } = useWsAuthToken();
   const [view, setView] = useState<DrawerView>({ type: 'list' });
   const [searchQuery, setSearchQuery] = useState('');
@@ -159,6 +161,12 @@ export default function MyBoardsDrawer({ open, onClose, onCreateBoard, onTransit
             <ChevronRightOutlined className={styles.boardItemAction} />
           </button>
         ))}
+        <div ref={sentinelRef} />
+        {isFetchingMore && (
+          <div className={styles.loadingMore}>
+            <CircularProgress size={20} />
+          </div>
+        )}
       </div>
     );
   };

@@ -82,6 +82,12 @@
   padding: 32px 0;
 }
 
+.loadingMore {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+}
+
 .editFormContainer {
   padding: 8px 0;
 }

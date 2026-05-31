@@ -3,6 +3,7 @@ import { render, act } from "@testing-library/react";
 import React from "react";
 import { tFromCatalog } from "@/app/__test-helpers__/i18n-mock";
 import { useWsAuthToken } from "@/app/hooks/use-ws-auth-token";
+import CreateBoardForm from "../create-board-form";
 
 vi.mock("react-i18next", () => ({
   useTranslation: (ns?: string) => ({
@@ -66,8 +67,7 @@ const matchingBoard = {
   angle: 40,
 };
 
-async function renderAndGetOnError(props = defaultProps) {
-  const CreateBoardForm = (await import("../create-board-form")).default;
+function renderAndGetOnError(props = defaultProps) {
   render(React.createElement(CreateBoardForm, props));
   return capturedOnError!;
 }
@@ -83,12 +83,10 @@ describe("CreateBoardForm — handleCreateError", () => {
       isLoading: false,
       error: null,
     });
-    // Reset module so capturedOnError is re-captured on each render
-    vi.resetModules();
   });
 
   it("shows duplicate snackbar with Go to your board action when match found", async () => {
-    const onError = await renderAndGetOnError();
+    const onError = renderAndGetOnError();
     mockRequest.mockResolvedValueOnce({
       myBoards: { boards: [matchingBoard], hasMore: false, totalCount: 1 },
     });
@@ -106,7 +104,7 @@ describe("CreateBoardForm — handleCreateError", () => {
   });
 
   it("falls back to serverMessage when no matching board found", async () => {
-    const onError = await renderAndGetOnError();
+    const onError = renderAndGetOnError();
     mockRequest.mockResolvedValueOnce({
       myBoards: { boards: [], hasMore: false, totalCount: 0 },
     });
@@ -119,7 +117,7 @@ describe("CreateBoardForm — handleCreateError", () => {
   });
 
   it("falls back to i18n error key when no match and no serverMessage", async () => {
-    const onError = await renderAndGetOnError();
+    const onError = renderAndGetOnError();
     mockRequest.mockResolvedValueOnce({
       myBoards: { boards: [], hasMore: false, totalCount: 0 },
     });
@@ -135,7 +133,7 @@ describe("CreateBoardForm — handleCreateError", () => {
   });
 
   it("falls back to serverMessage when findBoardForConfig throws", async () => {
-    const onError = await renderAndGetOnError();
+    const onError = renderAndGetOnError();
     mockRequest.mockRejectedValueOnce(new Error("network failure"));
 
     await act(async () => {
@@ -152,7 +150,7 @@ describe("CreateBoardForm — handleCreateError", () => {
       isLoading: false,
       error: null,
     });
-    const onError = await renderAndGetOnError();
+    const onError = renderAndGetOnError();
 
     await act(async () => {
       await onError(new Error("error"), "server error message");
@@ -163,7 +161,7 @@ describe("CreateBoardForm — handleCreateError", () => {
   });
 
   it("paginates until a match is found across multiple pages", async () => {
-    const onError = await renderAndGetOnError();
+    const onError = renderAndGetOnError();
     // First page: no match, hasMore true
     mockRequest.mockResolvedValueOnce({
       myBoards: {
