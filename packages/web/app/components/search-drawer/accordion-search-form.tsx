@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import MuiAlert from '@mui/material/Alert';
 import MuiTooltip from '@mui/material/Tooltip';
 import MuiTypography from '@mui/material/Typography';
@@ -130,6 +130,26 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
     });
   };
 
+  // Boulder/route switches share one invariant: at least one of the two must
+  // be effectively "on", otherwise no climbs would ever match. If a tap would
+  // turn both off, widen to "show everything" (both true) — that maps to the
+  // same SQL as no filter and avoids silently flipping the other switch on
+  // (which a user perceives as two state changes from one tap).
+  const handleClimbTypeToggle = useCallback(
+    (kind: 'boulder' | 'route', checked: boolean) => {
+      const next = {
+        boulders: kind === 'boulder' ? checked : uiSearchParams.boulders,
+        routes: kind === 'route' ? checked : uiSearchParams.routes,
+      };
+      if (!next.boulders && !next.routes) {
+        next.boulders = true;
+        next.routes = true;
+      }
+      updateFilters(next);
+    },
+    [uiSearchParams.boulders, uiSearchParams.routes, updateFilters],
+  );
+
   const climbContent = (
     <div className={styles.panelContent}>
       <div className={styles.inputGroup}>
@@ -156,14 +176,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               size="small"
               color="primary"
               checked={uiSearchParams.boulders}
-              onChange={(_, checked) => {
-                // At least one of boulders/routes must remain on so the user
-                // never lands in an empty-selection state. If both would go
-                // off, force the other one on.
-                const next = { boulders: checked, routes: uiSearchParams.routes };
-                if (!next.boulders && !next.routes) next.routes = true;
-                updateFilters(next);
-              }}
+              onChange={(_, checked) => handleClimbTypeToggle('boulder', checked)}
             />
           }
           label={
@@ -180,11 +193,7 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
               size="small"
               color="primary"
               checked={uiSearchParams.routes}
-              onChange={(_, checked) => {
-                const next = { boulders: uiSearchParams.boulders, routes: checked };
-                if (!next.boulders && !next.routes) next.boulders = true;
-                updateFilters(next);
-              }}
+              onChange={(_, checked) => handleClimbTypeToggle('route', checked)}
             />
           }
           label={

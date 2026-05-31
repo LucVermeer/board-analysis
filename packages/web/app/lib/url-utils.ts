@@ -236,6 +236,9 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   showOnlyCompleted: false,
   onlyDrafts: false,
   projectsOnly: false,
+  // Boulders inverts the usual "default false, serialise on true" convention:
+  // boulders defaults to true so the dominant case (search for boulders only)
+  // produces a clean URL with no `boulders=` param. See parse logic below.
   boulders: true,
   routes: false,
   zoneBox: null,
@@ -333,7 +336,9 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     showOnlyCompleted: urlParams.get('showOnlyCompleted') === 'true',
     onlyDrafts: urlParams.get('onlyDrafts') === 'true',
     projectsOnly: urlParams.get('projectsOnly') === 'true',
-    // boulders defaults to true; only the explicit "false" string flips it.
+    // boulders inverts the "default false, serialise on true" convention used
+    // by every other switch here — only the explicit "false" string flips it
+    // off. See DEFAULT_SEARCH_PARAMS for the rationale.
     boulders: urlParams.get('boulders') !== 'false',
     routes: urlParams.get('routes') === 'true',
     zoneBox,
