@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { createBackendLogger } from '../logger';
 import { SentryWinstonTransport } from '../sentry-transport';
 
 const SPLAT = Symbol.for('splat');
 
 function makeTransport(nodeEnv: string, capture: ReturnType<typeof vi.fn>): SentryWinstonTransport {
-  return new SentryWinstonTransport({ nodeEnv, capture });
+  return new SentryWinstonTransport({ nodeEnv, capture: capture as unknown as (e: unknown, h?: unknown) => unknown });
 }
 
 function runTransport(
@@ -69,18 +70,6 @@ describe('SentryWinstonTransport', () => {
     expect(captureExceptionMock).not.toHaveBeenCalled();
   });
 
-  it('skips warn-level logs even when an Error is attached', async () => {
-    const transport = makeTransport('production', captureExceptionMock);
-
-    await runTransport(transport, {
-      level: 'warn',
-      message: '[APNs] refresh failed',
-      [SPLAT]: [new Error('warn-error')],
-    });
-
-    expect(captureExceptionMock).not.toHaveBeenCalled();
-  });
-
   it('no-ops outside production', async () => {
     const transport = makeTransport('development', captureExceptionMock);
 
@@ -108,5 +97,33 @@ describe('SentryWinstonTransport', () => {
     ).resolves.toBeUndefined();
 
     expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createBackendLogger default transports', () => {
+  it('includes a SentryWinstonTransport scoped to error level', () => {
+    const backendLogger = createBackendLogger({ nodeEnv: 'production' });
+    try {
+      const sentryTransport = backendLogger.transports.find(
+        (transport): transport is SentryWinstonTransport => transport instanceof SentryWinstonTransport,
+      );
+
+      expect(sentryTransport).toBeDefined();
+      expect(sentryTransport?.level).toBe('error');
+    } finally {
+      backendLogger.close();
+    }
+  });
+
+  it('omits the SentryWinstonTransport when the caller provides custom transports', () => {
+    const backendLogger = createBackendLogger({ nodeEnv: 'production', loggerTransports: [] });
+    try {
+      const sentryTransport = backendLogger.transports.find(
+        (transport) => transport instanceof SentryWinstonTransport,
+      );
+      expect(sentryTransport).toBeUndefined();
+    } finally {
+      backendLogger.close();
+    }
   });
 });

@@ -57,12 +57,10 @@ export class SentryWinstonTransport extends TransportStream {
       return;
     }
 
+    // No level guard here — the parent TransportStream is constructed with
+    // `level: 'error'`, so winston's pipeline filters non-error events
+    // before this method is called.
     const typedInfo = info as LogInfo;
-    if (typedInfo.level !== 'error') {
-      next();
-      return;
-    }
-
     const errorInstance = extractError(typedInfo);
     if (!errorInstance) {
       next();
