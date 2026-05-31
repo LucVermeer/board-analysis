@@ -286,6 +286,7 @@ const PlayViewClient: React.FC<PlayViewClientProps> = ({ boardDetails, initialCl
           frameCount={climbFrames.frameStrings.length}
           isPlaying={playback.isPlaying}
           speed={playback.speed}
+          paceMs={climbFrames.paceMs}
           onPlay={playback.play}
           onPause={playback.pause}
           onSeek={playback.seek}
