@@ -1,0 +1,181 @@
+name: Android Release Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-release.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: 'lts'
+          cache: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('mobile/android/**/*.gradle*', 'mobile/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Accept licenses and install SDK components
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install Node.js dependencies
+        working-directory: mobile
+        run: bun install --frozen-lockfile
+
+      - name: Sync Capacitor Android project
+        working-directory: mobile
+        run: bunx cap sync android
+
+      - name: Set version code
+        working-directory: mobile/android
+        run: |
+          sed -Ei "s/^([[:space:]]*)versionCode[[:space:]]*=.*$/\\1versionCode = ${{ github.run_number }}/" app/build.gradle
+          echo "Version code set to ${{ github.run_number }}"
+
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Decode keystore
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > mobile/android/app/release.keystore
+
+      - name: Build signed APK
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/mobile/android/app/release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Build signed AAB (Play Store)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/mobile/android/app/release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: boardsesh-android-debug-${{ github.run_number }}
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+      - name: Upload release APK
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: boardsesh-android-release-${{ github.run_number }}
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Upload release AAB
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: boardsesh-android-aab-${{ github.run_number }}
+          path: mobile/android/app/build/outputs/bundle/release/*.aab
+          retention-days: 30
+
+      - name: Check for Play Store credentials
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        id: play-store-check
+        run: |
+          if [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON secret not set, skipping Play Store upload"
+          fi
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+
+      - name: Upload to Google Play (internal track)
+        if: steps.play-store-check.outputs.has_key == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.boardsesh.app
+          releaseFiles: mobile/android/app/build/outputs/bundle/release/*.aab
+          track: internal
+          status: completed
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-build-${{ github.run_number }}
+          name: Android Build ${{ github.run_number }}
+          body: |
+            Android build from commit ${{ github.sha }}.
+
+            **Build number:** ${{ github.run_number }}
+            **Minimum Android version:** 13 (API 33)
+
+            The AAB has been uploaded to Google Play internal testing track.
+            Sideload options:
+            - `app-release.apk` — signed production build (`com.boardsesh.app`).
+            - `app-debug.apk` — debug build (`com.boardsesh.app.debug`,
+              labelled "Boardsesh debug") with the in-app Dev URL switcher
+              unlocked (user drawer → Dev URL). Installs alongside the
+              release build; both packages are App-Links-verified, so on a
+              dev device pin deep-link routing to the debug package with
+              `scripts/android-debug-install.sh` or:
+              `adb shell pm set-app-links-user-selection --user 0 --package com.boardsesh.app.debug true boardsesh.com www.boardsesh.com`.
+          files: |
+            mobile/android/app/build/outputs/apk/release/*.apk
+            mobile/android/app/build/outputs/apk/debug/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f mobile/android/app/release.keystore

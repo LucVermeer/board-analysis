@@ -87,9 +87,22 @@ const ZoomableView = React.memo(function ZoomableView({
       }
     });
 
+  // Pan uses manualActivation so a single-finger drag on the board at 1x
+  // doesn't capture the gesture from the parent ScrollView. We only activate
+  // once the user has zoomed in; otherwise we fail the gesture so the parent
+  // keeps handling vertical scroll.
   const panGesture = Gesture.Pan()
     .minPointers(1)
     .maxPointers(2)
+    .manualActivation(true)
+    .onTouchesMove((_event, stateManager) => {
+      'worklet';
+      if (scale.value > minZoom) {
+        stateManager.activate();
+      } else {
+        stateManager.fail();
+      }
+    })
     .onStart(() => {
       'worklet';
       savedTranslateX.value = translateX.value;
@@ -97,8 +110,6 @@ const ZoomableView = React.memo(function ZoomableView({
     })
     .onUpdate((event) => {
       'worklet';
-      if (scale.value <= minZoom) return; // No panning at default zoom
-
       const clamped = clampTranslation(
         savedTranslateX.value + event.translationX,
         savedTranslateY.value + event.translationY,
@@ -111,8 +122,6 @@ const ZoomableView = React.memo(function ZoomableView({
     })
     .onEnd((event) => {
       'worklet';
-      if (scale.value <= minZoom) return;
-
       // Apply momentum with decay, clamped to bounds
       const maxTx = Math.max(0, ((scale.value - 1) * containerWidth.value) / 2);
       const maxTy = Math.max(0, ((scale.value - 1) * containerHeight.value) / 2);
