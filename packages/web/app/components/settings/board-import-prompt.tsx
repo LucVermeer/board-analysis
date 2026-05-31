@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import * as Sentry from '@sentry/nextjs';
 import Box from '@mui/material/Box';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -60,7 +61,6 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
-  const receivedCompleteRef = useRef(false);
 
   const fetchCredential = async () => {
     try {
@@ -202,7 +202,6 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
     setImportPhase('importing');
     setImportProgress(null);
     setImportPreview(null);
-    receivedCompleteRef.current = false;
 
     try {
       await streamImport(boardType, importRawData, (event) => {
@@ -216,7 +215,6 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
             });
             break;
           case 'complete':
-            receivedCompleteRef.current = true;
             setImportResult(event.results);
             setImportPhase('complete');
             onImportComplete?.();
@@ -226,24 +224,28 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
                 event.results.ascents.imported +
                 event.results.attempts.imported +
                 event.results.circuits.imported;
-              showMessage(t('aurora.import.successCount', { count: totalImported }), 'success');
+              if (event.results.partialError) {
+                showMessage(t('aurora.import.partialWarning'), 'warning');
+              } else {
+                showMessage(t('aurora.import.successCount', { count: totalImported }), 'success');
+              }
             }
             break;
           case 'error':
-            receivedCompleteRef.current = true;
             setImportError(event.error);
             setImportPhase('error');
             showMessage(event.error, 'error');
             break;
         }
       });
-
-      if (!receivedCompleteRef.current) {
-        setImportError(t('aurora.import.interrupted'));
-        setImportPhase('error');
-        showMessage(t('aurora.import.interruptedShort'), 'error');
-      }
     } catch (error) {
+      // streamImport now captures chunk failures itself; reaching here means
+      // a setup-level failure (no body, network unreachable, etc.) — worth
+      // sending to Sentry so we can spot patterns.
+      Sentry.captureException(error, {
+        tags: { area: 'aurora-import', phase: 'client-setup' },
+        extra: { boardType },
+      });
       const msg = error instanceof Error ? error.message : t('aurora.import.failed');
       setImportError(msg);
       setImportPhase('error');
@@ -398,6 +400,20 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
 
           {importPhase === 'complete' && importResult && (
             <>
+              {importResult.partialError && (
+                <MuiAlert severity="warning" className={styles.unsyncedAlert}>
+                  <AlertTitle>{t('aurora.import.results.partialTitle')}</AlertTitle>
+                  <Typography variant="body2">{t('aurora.import.results.partialBody')}</Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    component="div"
+                    sx={{ mt: 1, whiteSpace: 'pre-line' }}
+                  >
+                    {importResult.partialError}
+                  </Typography>
+                </MuiAlert>
+              )}
               <List dense>
                 {(importResult.climbs.imported > 0 || importResult.climbs.failed > 0) && (
                   <ListItem>
@@ -442,21 +458,69 @@ export default function BoardImportPrompt({ boardType, onImportComplete }: Board
                   />
                 </ListItem>
               </List>
-              {importResult.unresolvedClimbs.length > 0 && (
+              {importResult.unresolvedAscentClimbs.length > 0 && (
                 <MuiAlert severity="warning" className={styles.unsyncedAlert}>
                   <AlertTitle>
-                    {t('aurora.import.results.unresolvedTitle', { count: importResult.unresolvedClimbs.length })}
+                    {t('aurora.import.results.unresolvedAscentsTitle', {
+                      count: importResult.unresolvedAscentClimbs.length,
+                    })}
                   </AlertTitle>
                   <div className={styles.unresolvedList}>
-                    {importResult.unresolvedClimbs.slice(0, 20).map((name) => (
+                    {importResult.unresolvedAscentClimbs.slice(0, 20).map((name) => (
                       <Typography key={name} variant="body2">
                         {name}
                       </Typography>
                     ))}
-                    {importResult.unresolvedClimbs.length > 20 && (
+                    {importResult.unresolvedAscentClimbs.length > 20 && (
                       <Typography variant="body2" color="text.secondary">
                         {t('aurora.import.results.unresolvedMore', {
-                          count: importResult.unresolvedClimbs.length - 20,
+                          count: importResult.unresolvedAscentClimbs.length - 20,
+                        })}
+                      </Typography>
+                    )}
+                  </div>
+                </MuiAlert>
+              )}
+              {importResult.unresolvedAttemptClimbs.length > 0 && (
+                <MuiAlert severity="warning" className={styles.unsyncedAlert}>
+                  <AlertTitle>
+                    {t('aurora.import.results.unresolvedAttemptsTitle', {
+                      count: importResult.unresolvedAttemptClimbs.length,
+                    })}
+                  </AlertTitle>
+                  <div className={styles.unresolvedList}>
+                    {importResult.unresolvedAttemptClimbs.slice(0, 20).map((name) => (
+                      <Typography key={name} variant="body2">
+                        {name}
+                      </Typography>
+                    ))}
+                    {importResult.unresolvedAttemptClimbs.length > 20 && (
+                      <Typography variant="body2" color="text.secondary">
+                        {t('aurora.import.results.unresolvedMore', {
+                          count: importResult.unresolvedAttemptClimbs.length - 20,
+                        })}
+                      </Typography>
+                    )}
+                  </div>
+                </MuiAlert>
+              )}
+              {importResult.unresolvedCircuitClimbs.length > 0 && (
+                <MuiAlert severity="warning" className={styles.unsyncedAlert}>
+                  <AlertTitle>
+                    {t('aurora.import.results.unresolvedCircuitsTitle', {
+                      count: importResult.unresolvedCircuitClimbs.length,
+                    })}
+                  </AlertTitle>
+                  <div className={styles.unresolvedList}>
+                    {importResult.unresolvedCircuitClimbs.slice(0, 20).map((name) => (
+                      <Typography key={name} variant="body2">
+                        {name}
+                      </Typography>
+                    ))}
+                    {importResult.unresolvedCircuitClimbs.length > 20 && (
+                      <Typography variant="body2" color="text.secondary">
+                        {t('aurora.import.results.unresolvedMore', {
+                          count: importResult.unresolvedCircuitClimbs.length - 20,
                         })}
                       </Typography>
                     )}
