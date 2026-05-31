@@ -276,19 +276,22 @@ const PlayViewClient: React.FC<PlayViewClientProps> = ({ boardDetails, initialCl
           className={styles.swipeContainer}
           boardContainerClassName={styles.boardContainer}
         />
-        {playback.isAnimatable && (
-          <PlaybackControls
-            frameIndex={playback.frameIndex}
-            frameCount={climbFrames.frameStrings.length}
-            isPlaying={playback.isPlaying}
-            speed={playback.speed}
-            onPlay={playback.play}
-            onPause={playback.pause}
-            onSeek={playback.seek}
-            onSpeedChange={playback.setSpeed}
-          />
-        )}
       </div>
+
+      {/* Playback controls sit OUTSIDE contentWrapper so the swipe carousel
+          (flex:1 inside an overflow:hidden parent) can never clip them. */}
+      {playback.isAnimatable && (
+        <PlaybackControls
+          frameIndex={playback.frameIndex}
+          frameCount={climbFrames.frameStrings.length}
+          isPlaying={playback.isPlaying}
+          speed={playback.speed}
+          onPlay={playback.play}
+          onPause={playback.pause}
+          onSeek={playback.seek}
+          onSpeedChange={playback.setSpeed}
+        />
+      )}
 
       {/* Comments */}
       <div className={styles.extrasSection}>
