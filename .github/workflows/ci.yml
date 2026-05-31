@@ -7,7 +7,10 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded PR runs (we don't care about results for an older
+  # commit on the same branch). On main, never cancel — every commit needs
+  # its own CI record so regressions can be bisected.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -29,6 +32,10 @@ jobs:
       sharedSchema: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.sharedSchema }}
       i18nCatalogs: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.i18nCatalogs }}
       rootCi: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.rootCi }}
+      # True if any downstream job's gate would fire. setup gates on this so
+      # docs-only / firmware-only PRs skip the bun-install + build:db pass
+      # nothing downstream would consume.
+      runAny: ${{ github.event_name == 'push' || steps.filter.outputs.anyJs == 'true' || steps.filter.outputs.web == 'true' || steps.filter.outputs.i18nCatalogs == 'true' || steps.filter.outputs.rootCi == 'true' }}
     steps:
       - uses: actions/checkout@v6
       - id: filter
@@ -71,6 +78,8 @@ jobs:
               - 'bun.lock'
 
   setup:
+    needs: [changes]
+    if: needs.changes.outputs.runAny == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -208,6 +217,10 @@ jobs:
           cache: true
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Download built packages
+        uses: actions/download-artifact@v4
+        with:
+          name: built-packages
       - name: Check hardcoded user-facing strings
         run: vp run check:i18n
       - name: Check orphaned i18n keys
