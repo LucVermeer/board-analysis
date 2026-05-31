@@ -169,7 +169,11 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // builds — preview/production keep stock Expo ATS so we don't ship an
       // arbitrary-loads relaxation through App Store review.
       ...(isDevBuild ? ['./plugins/with-boardsesh-dev-networking'] : []),
-      '@sentry/react-native/expo',
+      // org/project make `expo prebuild` write a valid ios/sentry.properties so
+      // the build-phase source-map + dSYM upload can find the Sentry project.
+      // The auth token is supplied via the SENTRY_AUTH_TOKEN env var in CI
+      // (never committed); url defaults to https://sentry.io/ (US region).
+      ['@sentry/react-native/expo', { organization: 'boardsesh', project: 'boardsesh' }],
     ],
     extra: {
       ...config.extra,
