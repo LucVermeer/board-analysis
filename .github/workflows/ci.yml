@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Allow manual re-runs from the Actions tab. Every workflow this one
+  # replaced (test.yml, backend-*, mobile-*, moonboard-ocr-*) had
+  # workflow_dispatch; preserve that on-demand capability.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -23,15 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      anyJs: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.anyJs }}
-      web: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.web }}
-      backend: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.backend }}
-      mobile: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.mobile }}
-      ocr: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.ocr }}
-      sharedDeps: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.sharedDeps }}
-      sharedSchema: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.sharedSchema }}
-      i18nCatalogs: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.i18nCatalogs }}
-      rootCi: ${{ github.event_name == 'push' && 'true' || steps.filter.outputs.rootCi }}
+      anyJs: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.anyJs }}
+      web: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.web }}
+      backend: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.backend }}
+      mobile: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.mobile }}
+      ocr: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.ocr }}
+      sharedDeps: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.sharedDeps }}
+      sharedSchema: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.sharedSchema }}
+      i18nCatalogs: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.i18nCatalogs }}
+      rootCi: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.rootCi }}
       # True if any downstream job's gate would fire. setup gates on this so
       # docs-only / firmware-only PRs skip the bun-install + build:db pass
       # nothing downstream would consume. Must mirror the union of every
@@ -39,7 +43,7 @@ jobs:
       # non-JS files (SQL migrations under packages/db, .graphql under
       # shared-schema) that wouldn't trigger anyJs but still need setup so
       # test-backend / mobile-bundle / codegen-drift can run.
-      runAny: ${{ github.event_name == 'push' || steps.filter.outputs.anyJs == 'true' || steps.filter.outputs.web == 'true' || steps.filter.outputs.i18nCatalogs == 'true' || steps.filter.outputs.sharedSchema == 'true' || steps.filter.outputs.sharedDeps == 'true' || steps.filter.outputs.backend == 'true' || steps.filter.outputs.mobile == 'true' || steps.filter.outputs.ocr == 'true' || steps.filter.outputs.rootCi == 'true' }}
+      runAny: ${{ github.event_name != 'pull_request' || steps.filter.outputs.anyJs == 'true' || steps.filter.outputs.web == 'true' || steps.filter.outputs.i18nCatalogs == 'true' || steps.filter.outputs.sharedSchema == 'true' || steps.filter.outputs.sharedDeps == 'true' || steps.filter.outputs.backend == 'true' || steps.filter.outputs.mobile == 'true' || steps.filter.outputs.ocr == 'true' || steps.filter.outputs.rootCi == 'true' }}
     steps:
       - uses: actions/checkout@v6
       - id: filter
@@ -150,7 +154,7 @@ jobs:
             echo "No lintable files changed."
           fi
       - name: Lint full repo (main)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: vp check
 
   typecheck:
@@ -299,7 +303,7 @@ jobs:
       # On main, split into 2 shards; on PR, run as a single shard (the
       # affected subset is usually small enough that sharding adds overhead).
       matrix:
-        include: ${{ fromJSON(github.event_name == 'push' && '[{"shard":1,"total":2},{"shard":2,"total":2}]' || '[{"shard":1,"total":1}]') }}
+        include: ${{ fromJSON(github.event_name != 'pull_request' && '[{"shard":1,"total":2},{"shard":2,"total":2}]' || '[{"shard":1,"total":1}]') }}
     services:
       postgres:
         image: ghcr.io/boardsesh/boardsesh-postgres-postgis:latest
@@ -389,7 +393,10 @@ jobs:
 
   test-ocr:
     needs: [changes, setup]
-    if: needs.changes.outputs.ocr == 'true' || needs.changes.outputs.rootCi == 'true'
+    # Include sharedDeps so OCR tests rerun when a shared package they
+    # depend on changes (e.g. shared-schema, board-constants). Mirrors how
+    # test-backend and mobile-bundle already gate on sharedDeps.
+    if: needs.changes.outputs.ocr == 'true' || needs.changes.outputs.sharedDeps == 'true' || needs.changes.outputs.rootCi == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
