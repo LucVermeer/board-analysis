@@ -10,6 +10,12 @@ name: Production Deploy
 #
 # Vercel native git auto-deploy is disabled (packages/web/vercel.json
 # git.deploymentEnabled=false) so this workflow is the only production deployer.
+#
+# check-rollback fails the whole run if a Vercel Instant Rollback is currently
+# pinning production to an older deployment — deploying latest main over it
+# would silently undo an incident mitigation, and since migrate only moves the
+# schema forward it could leave the pinned web app on a schema it no longer
+# matches. Clear the rollback (revert the bad commit, re-promote) before merging.
 
 on:
   push:
@@ -84,8 +90,47 @@ jobs:
           echo "web=${WEB_CHANGED}" >> "$GITHUB_OUTPUT"
           echo "Backend changed: ${BACKEND_CHANGED}; Web changed: ${WEB_CHANGED}"
 
+  # Fails the run if a Vercel Instant Rollback is active (production pinned to a
+  # previous deployment). Gates the build jobs so nothing builds or deploys over
+  # a deliberate rollback. Runs first and cheaply (one API call).
+  check-rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block deploy while a Vercel instant rollback is active
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+        run: |
+          # Team projects need ?teamId=; personal (user_*) ids must not pass it.
+          TEAM_QS=""
+          case "$VERCEL_ORG_ID" in
+            team_*) TEAM_QS="?teamId=$VERCEL_ORG_ID" ;;
+          esac
+
+          HTTP_CODE=$(curl -sS -o response.json -w '%{http_code}' \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}${TEAM_QS}")
+
+          # Fail closed: if we can't read rollback state, don't risk deploying over one.
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Vercel project API returned HTTP $HTTP_CODE — cannot confirm rollback state, blocking deploy."
+            cat response.json || true
+            exit 1
+          fi
+
+          # lastRollbackTarget is null when no rollback is pinned, an object otherwise.
+          if [ "$(jq -r '.lastRollbackTarget // empty' response.json)" != "" ]; then
+            echo "::error::A Vercel Instant Rollback is active — production is pinned to a previous deployment."
+            echo "Clear the rollback in the Vercel dashboard (revert the offending commit and re-promote) before deploying."
+            jq '.lastRollbackTarget' response.json
+            exit 1
+          fi
+
+          echo "No active Vercel instant rollback — safe to deploy."
+
   build-web:
-    needs: detect-changes
+    needs: [detect-changes, check-rollback]
     if: needs.detect-changes.outputs.web_changed == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -120,7 +165,7 @@ jobs:
           retention-days: 1
 
   build-backend:
-    needs: detect-changes
+    needs: [detect-changes, check-rollback]
     if: needs.detect-changes.outputs.backend_changed == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -202,8 +247,8 @@ jobs:
         run: bun run --filter=@boardsesh/db db:migrate
 
   deploy-web:
-    needs: [detect-changes, migrate]
-    if: always() && needs.detect-changes.outputs.web_changed == 'true' && needs.migrate.result == 'success'
+    needs: [detect-changes, build-web, migrate]
+    if: always() && needs.detect-changes.outputs.web_changed == 'true' && needs.build-web.result == 'success' && needs.migrate.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Install Vercel CLI
@@ -260,22 +305,23 @@ jobs:
   #         sleep 5
   #         docker ps --filter "name=staging-backend" --format "table {{.Names}}\t{{.Status}}"
 
-  # Pings the Discord deploy channel when any build/deploy job fails. No-ops if
+  # Pings the Discord deploy channel when any job fails OR is cancelled. The
+  # contains(needs.*.result, ...) form covers every job in `needs` automatically
+  # — including check-rollback and detect-changes — so a silent no-op (e.g.
+  # detect-changes erroring, or a cancelled mid-deploy) still alerts. No-ops if
   # the DISCORD_DEPLOY_WEBHOOK secret is unset.
   notify-failure:
-    needs: [detect-changes, build-web, build-backend, migrate, deploy-web, deploy-production-backend]
+    needs: [detect-changes, check-rollback, build-web, build-backend, migrate, deploy-web, deploy-production-backend]
     if: >-
       always()
-      && (needs.build-web.result == 'failure'
-        || needs.build-backend.result == 'failure'
-        || needs.migrate.result == 'failure'
-        || needs.deploy-web.result == 'failure'
-        || needs.deploy-production-backend.result == 'failure')
+      && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubuntu-latest
     steps:
       - name: Notify Discord
         env:
           DISCORD_DEPLOY_WEBHOOK: ${{ secrets.DISCORD_DEPLOY_WEBHOOK }}
+          CHECK_ROLLBACK: ${{ needs.check-rollback.result }}
+          DETECT_CHANGES: ${{ needs.detect-changes.result }}
           BUILD_WEB: ${{ needs.build-web.result }}
           BUILD_BACKEND: ${{ needs.build-backend.result }}
           MIGRATE: ${{ needs.migrate.result }}
@@ -288,7 +334,11 @@ jobs:
             echo "DISCORD_DEPLOY_WEBHOOK not set — skipping notification"
             exit 0
           fi
-          CONTENT=$(printf '🚨 **Production deploy failed** on \`%s\`\n• build-web: %s\n• build-backend: %s\n• migrate: %s\n• deploy-web: %s\n• deploy-production-backend: %s\n%s' \
-            "${COMMIT_SHA:0:7}" "$BUILD_WEB" "$BUILD_BACKEND" "$MIGRATE" "$DEPLOY_WEB" "$DEPLOY_BACKEND" "$RUN_URL")
+          CONTENT=$(printf '🚨 **Production deploy failed** on \`%s\`\n• detect-changes: %s\n• check-rollback: %s\n• build-web: %s\n• build-backend: %s\n• migrate: %s\n• deploy-web: %s\n• deploy-production-backend: %s\n%s' \
+            "${COMMIT_SHA:0:7}" "$DETECT_CHANGES" "$CHECK_ROLLBACK" "$BUILD_WEB" "$BUILD_BACKEND" "$MIGRATE" "$DEPLOY_WEB" "$DEPLOY_BACKEND" "$RUN_URL")
+          # --fail-with-body surfaces Discord's status + error body (e.g. 429,
+          # rotated webhook) in the log instead of failing silently. Don't let a
+          # webhook hiccup fail the job — the alert is best-effort.
           jq -n --arg content "$CONTENT" '{content: $content}' \
-            | curl -sf -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK"
+            | curl -sS --fail-with-body -X POST -H "Content-Type: application/json" -d @- "$DISCORD_DEPLOY_WEBHOOK" || \
+              echo "::warning::Failed to post Discord notification (see status above)"
