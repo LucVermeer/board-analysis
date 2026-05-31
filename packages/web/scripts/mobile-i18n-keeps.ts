@@ -125,8 +125,3 @@
 // i18n-keep auth.nativeStart.tagline
 // i18n-keep auth.nativeStart.signInApple
 // i18n-keep auth.nativeStart.signInGoogle
-// i18n-keep common.board.imageUnavailable
-// i18n-keep common.mobile.errorBoundary.title
-// i18n-keep common.mobile.errorBoundary.message
-// i18n-keep common.mobile.errorBoundary.tryAgain
-// i18n-keep common.mobile.errorBoundary.goHome

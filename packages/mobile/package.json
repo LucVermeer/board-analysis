@@ -23,6 +23,7 @@
     "@boardsesh/climb-actions": "*",
     "@boardsesh/shared-schema": "*",
     "@expo/vector-icons": "^15.1.1",
+    "@sentry/react-native": "^6.14.0",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@react-native-async-storage/async-storage": "^3.1.0",
     "@react-native-community/blur": "^4.4.1",

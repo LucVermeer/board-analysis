@@ -219,6 +219,7 @@ export default defineConfig({
       },
       'typecheck:mobile': {
         command: 'bun run --filter=@boardsesh/mobile typecheck',
+        dependsOn: ['build:shared', 'build:constants'],
       },
       typecheck: {
         command: 'true',

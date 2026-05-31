@@ -350,6 +350,70 @@ describe('RNBleAdapter', () => {
     });
   });
 
+  describe('requestAndConnect — failure modes', () => {
+    it('times out and rejects if connectToDevice hangs past CONNECTION_TIMEOUT_MS', async () => {
+      vi.useFakeTimers();
+      try {
+        mockBleManager.cancelDeviceConnection.mockResolvedValue(undefined);
+        mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+        // connectToDevice hangs forever — simulates board powered off after scan
+        mockBleManager.connectToDevice.mockImplementation(() => new Promise(() => {}));
+        mockBleManager.startDeviceScan.mockImplementation(
+          (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+            callback(null, { id: 'hang-device', localName: 'Board', name: 'Board', rssi: -40 });
+          },
+        );
+
+        const devicePicker: DevicePickerFn = () => Promise.resolve('hang-device');
+        const adapter = new RNBleAdapter(devicePicker);
+        const connectPromise = adapter.requestAndConnect();
+        // Surface the rejection so vitest doesn't flag an unhandled promise
+        // when we await timers below.
+        const settled = connectPromise.catch((reason) => reason);
+
+        await vi.advanceTimersByTimeAsync(12_500);
+        const error = await settled;
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(/timed out/i);
+        expect(mockBleManager.cancelDeviceConnection).toHaveBeenCalledWith('hang-device');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('surfaces scan errors to the picker immediately instead of waiting for scan timeout', async () => {
+      mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+
+      // Capture the scan callback so the test can fire scanError after the picker is open.
+      // Use an array to defeat TS's narrowing — it can't see the reassignment inside the
+      // mock implementation closure and would otherwise narrow the variable to `null`.
+      type ScanCallback = (error: unknown, device: unknown) => void;
+      const captured: ScanCallback[] = [];
+      mockBleManager.startDeviceScan.mockImplementation((_uuids: unknown, _opts: unknown, callback: ScanCallback) => {
+        captured.push(callback);
+      });
+
+      // Picker stays open until externally rejected — mirrors how the real DevicePickerSheet behaves
+      const devicePicker: DevicePickerFn = () => new Promise(() => {});
+      const adapter = new RNBleAdapter(devicePicker);
+      const connectPromise = adapter.requestAndConnect();
+      const settled = connectPromise.catch((reason) => reason);
+
+      // Wait a microtask for startDeviceScan to register the callback
+      await Promise.resolve();
+      expect(captured.length).toBe(1);
+
+      // Fire scan error — Android permission-revoked-mid-scan is the canonical case
+      captured[0]({ message: 'permission revoked' }, null);
+
+      const error = await settled;
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toMatch(/scan failed/i);
+      expect(mockBleManager.stopDeviceScan).toHaveBeenCalled();
+    });
+  });
+
   describe('onDisconnect', () => {
     it('returns an unsubscribe function', () => {
       const adapter = new RNBleAdapter(createMockDevicePicker());

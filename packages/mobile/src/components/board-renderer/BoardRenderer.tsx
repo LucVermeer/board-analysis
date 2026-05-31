@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, type ViewStyle } from 'react-native';
-import Svg, { Image as SvgImage, G } from 'react-native-svg';
+import Svg, { Image as SvgImage } from 'react-native-svg';
 import type { BoardRendererProps } from './types';
 import { useParseFrames } from './use-parse-frames';
 import { BoardHoldOverlay } from './BoardHoldOverlay';
@@ -12,7 +12,11 @@ import { BoardHoldOverlay } from './BoardHoldOverlay';
  * 1. Displays the board background image(s) at full resolution in SVG coordinates
  * 2. Overlays colored circles at each active hold position based on the frames string
  * 3. Scales to fit the container width while maintaining the board's native aspect ratio
- * 4. Optionally mirrors the board horizontally
+ * 4. Optionally mirrors hold positions (without flipping the board image)
+ *
+ * This is the JS/SVG renderer used for thumbnails. The interactive
+ * climb-detail board uses BoardImageNative + SwipeBoardCarousel, which
+ * handles zoom/pan via useZoomPanGesture.
  *
  * Usage:
  * ```tsx
@@ -36,7 +40,9 @@ const BoardRenderer = React.memo(function BoardRenderer({
   mirrored = false,
   style,
 }: BoardRendererProps) {
-  const activeHolds = useParseFrames(frames, boardName, holdsData);
+  // Pass mirrored flag so individual hold positions are swapped
+  // instead of flipping the entire SVG group (which would mirror the image).
+  const activeHolds = useParseFrames(frames, boardName, holdsData, mirrored);
 
   // The SVG viewBox uses the board's native coordinate system.
   // react-native-svg will scale the content to fit the View, preserving aspect ratio.
@@ -49,29 +55,21 @@ const BoardRenderer = React.memo(function BoardRenderer({
     ...style,
   };
 
-  // Mirror transform: flip horizontally around the center
-  const mirrorTransform = mirrored ? `translate(${boardWidth}, 0) scale(-1, 1)` : undefined;
-
   return (
     <View style={containerStyle}>
       <Svg width="100%" height="100%" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
-        <G transform={mirrorTransform}>
-          {/* Background board image(s) — layered in order */}
-          {imageUrls.map((url) => (
-            <SvgImage
-              key={url}
-              href={url}
-              x={0}
-              y={0}
-              width={boardWidth}
-              height={boardHeight}
-              preserveAspectRatio="xMidYMid slice"
-            />
-          ))}
-
-          {/* Active hold circles overlaid on the board */}
-          <BoardHoldOverlay holds={activeHolds} />
-        </G>
+        {imageUrls.map((url) => (
+          <SvgImage
+            key={url}
+            href={url}
+            x={0}
+            y={0}
+            width={boardWidth}
+            height={boardHeight}
+            preserveAspectRatio="xMidYMid slice"
+          />
+        ))}
+        <BoardHoldOverlay holds={activeHolds} />
       </Svg>
     </View>
   );

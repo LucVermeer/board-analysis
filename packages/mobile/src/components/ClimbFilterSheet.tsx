@@ -79,7 +79,7 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
     paddingVertical: spacing[2],
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: selected ? brandColors.primary : 'rgba(60, 60, 67, 0.18)',
+    borderColor: selected ? brandColors.primary : iosSystemColors.separator,
     backgroundColor: selected ? brandColors.primary : 'transparent',
   };
 
@@ -123,7 +123,7 @@ function GradeSelector({
     paddingVertical: spacing[1],
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: selected ? brandColors.primary : 'rgba(60, 60, 67, 0.18)',
+    borderColor: selected ? brandColors.primary : iosSystemColors.separator,
     backgroundColor: selected ? brandColors.primary : 'transparent',
   });
 
@@ -650,7 +650,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
 
 const styles = StyleSheet.create({
   indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
+    backgroundColor: iosSystemColors.separator,
     width: 36,
     height: 5,
     borderRadius: 3,

@@ -146,6 +146,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
     android: {
       package: 'com.boardsesh.app',
       permissions: ['BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'ACCESS_FINE_LOCATION'],
+      blockedPermissions: ['android.permission.BLUETOOTH_ADVERTISE'],
     },
     plugins: [
       'expo-router',
@@ -168,6 +169,7 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // builds — preview/production keep stock Expo ATS so we don't ship an
       // arbitrary-loads relaxation through App Store review.
       ...(isDevBuild ? ['./plugins/with-boardsesh-dev-networking'] : []),
+      '@sentry/react-native/expo',
     ],
     extra: {
       ...config.extra,

@@ -132,7 +132,7 @@ export function QueueItemRow({
             runOnJS(setIsOpen)(false);
           }
         }),
-    [swipeEnabled],
+    [swipeEnabled, translateX, isSwipeOpen, handleRemove],
   );
 
   const rowAnimatedStyle = useAnimatedStyle(() => ({
