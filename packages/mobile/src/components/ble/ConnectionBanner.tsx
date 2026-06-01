@@ -106,12 +106,12 @@ export function ConnectionBanner({ visible, onReconnect, onDismiss }: Connection
         <Icon name="bluetooth.off" size={18} color={brandColors.warning} />
 
         <Text variant="subheadline" color={systemColors.label} style={styles.messageText} numberOfLines={1}>
-          {t('settings.ble.disconnected')}
+          {t('ble.disconnected')}
         </Text>
 
         <Pressable onPress={handleReconnect} accessibilityRole="button" style={styles.reconnectButton}>
           <Text variant="subheadline" color={brandColors.primary} style={styles.reconnectLabel}>
-            {t('settings.ble.reconnect')}
+            {t('ble.reconnect')}
           </Text>
         </Pressable>
 

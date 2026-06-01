@@ -66,7 +66,7 @@ export function DeviceCard({ device, onSelect, boardType }: DeviceCardProps) {
     onSelect(device.deviceId);
   }, [device.deviceId, onSelect]);
 
-  const displayName = device.name ?? t('settings.ble.unknownBoard');
+  const displayName = device.name ?? t('ble.unknownBoard');
 
   return (
     <Pressable

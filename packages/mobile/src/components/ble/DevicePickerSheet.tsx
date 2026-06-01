@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet, type ViewStyle } from 'react-native';
-import BottomSheet, {
+import { useCallback, useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
+import { View, ActivityIndicator, Platform, StyleSheet, type ViewStyle } from 'react-native';
+import {
+  BottomSheetModal,
   BottomSheetBackdrop,
   BottomSheetView,
   BottomSheetFlatList,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import { FullWindowOverlay } from 'react-native-screens';
 import { useTranslation } from 'react-i18next';
 import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
@@ -24,29 +26,28 @@ type DevicePickerSheetProps = {
   isScanning: boolean;
 };
 
+function DevicePickerModalContainer({ children }: PropsWithChildren) {
+  return <FullWindowOverlay>{children}</FullWindowOverlay>;
+}
+
+const modalContainerComponent = Platform.OS === 'ios' ? DevicePickerModalContainer : undefined;
+
 export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isScanning }: DevicePickerSheetProps) {
   const { t } = useTranslation('settings');
   const theme = useTheme();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
 
-  const snapPoints = useMemo(() => ['55%'], []);
+  const snapPoints = useMemo(() => ['72%'], []);
 
   useEffect(() => {
     if (visible) {
-      sheetRef.current?.expand();
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
     }
   }, [visible]);
 
   const sortedDevices = useMemo(() => [...devices].sort((deviceA, deviceB) => deviceB.rssi - deviceA.rssi), [devices]);
-
-  const handleSheetChange = useCallback(
-    (index: number) => {
-      if (index === -1) {
-        onDismiss();
-      }
-    },
-    [onDismiss],
-  );
 
   const renderBackdrop = useCallback(
     (backdropProps: BottomSheetBackdropProps) => (
@@ -81,23 +82,26 @@ export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isSca
   const showEmptyState = !isScanning && devices.length === 0;
 
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={sheetRef}
+      name="ble-device-picker"
       index={0}
+      stackBehavior="push"
       snapPoints={snapPoints}
+      containerComponent={modalContainerComponent}
       enablePanDownToClose
       backdropComponent={renderBackdrop}
-      onChange={handleSheetChange}
+      onDismiss={onDismiss}
       handleIndicatorStyle={styles.indicator}
       backgroundStyle={backgroundStyle}
     >
       <BottomSheetView style={styles.header}>
         <Text variant="title3" color={systemColors.label}>
-          {t('settings.ble.selectBoard')}
+          {t('ble.selectBoard')}
         </Text>
         {devices.length > 0 && (
           <Text variant="footnote" color={systemColors.secondaryLabel}>
-            {t('settings.ble.devicesFound', { count: devices.length })}
+            {t('ble.devicesFound', { count: devices.length })}
           </Text>
         )}
       </BottomSheetView>
@@ -106,7 +110,7 @@ export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isSca
         <View style={styles.scanningContainer}>
           <ActivityIndicator size="small" color={theme.brandColors.primary} />
           <Text variant="subheadline" color={systemColors.secondaryLabel}>
-            {t('settings.ble.scanning')}
+            {t('ble.scanning')}
           </Text>
         </View>
       )}
@@ -114,7 +118,7 @@ export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isSca
       {showEmptyState && (
         <View style={styles.scanningContainer}>
           <Text variant="subheadline" color={systemColors.secondaryLabel}>
-            {t('settings.ble.noDevicesFound')}
+            {t('ble.noDevicesFound')}
           </Text>
         </View>
       )}
@@ -130,9 +134,9 @@ export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isSca
       )}
 
       <View style={styles.footer}>
-        <Button title={t('settings.ble.cancel')} onPress={onDismiss} variant="text" size="medium" />
+        <Button title={t('ble.cancel')} onPress={onDismiss} variant="text" size="medium" />
       </View>
-    </BottomSheet>
+    </BottomSheetModal>
   );
 }
 
