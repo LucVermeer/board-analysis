@@ -383,7 +383,9 @@ export class HeadlessParticipant {
       clientId: this.clientId,
     });
     await fullSyncReady;
-    this.connected = true;
+    // Guard against a dispose() that landed while fullSyncReady was pending —
+    // it already set connected=false/disposed=true, so don't resurrect it here.
+    if (!this.disposed) this.connected = true;
   }
 
   private openSubscriptions(): Promise<void> {
