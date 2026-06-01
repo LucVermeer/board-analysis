@@ -271,51 +271,33 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: built-packages
-      # Exclude the two projects with infra needs (`backend` needs
-      # postgres+redis services, `moonboard-ocr` needs canvas system libs) —
-      # those run in their own jobs below. Vitest's `--project '!name'`
-      # negation lets new packages get picked up automatically as they're
-      # added to root vite.config.ts's `test.projects` list.
+      # Run every project EXCEPT the two with dedicated infra-bearing jobs
+      # (`backend`: postgres+redis; `moonboard-ocr`: canvas libs) as an explicit
+      # POSITIVE `--project` list. Negation (`--project '!backend'`) does NOT
+      # hold up under `--changed`: Vitest collects test files from the diff and
+      # that spec set drives project init / globalSetup BEFORE the negation
+      # applies, so a diff touching anything `backend` imports pulls its
+      # Postgres-connecting tests into this infra-less job and they fail. A
+      # project absent from a positive list is never loaded. The list is derived
+      # from root vite.config.ts's `test.projects` (see the script) so new
+      # packages are picked up automatically and can't be silently skipped.
       - name: Run tests
         env:
           BASE_REF: ${{ github.base_ref }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           mkdir -p test-results
-          # Explicit positive include list rather than `--project '!backend' --project '!moonboard-ocr'`.
-          # In this vp test version the negation form doesn't actually skip
-          # the project (its globalSetup + tests still load), and the
-          # backend tests then crash without postgres. New projects added
-          # to root vite.config.ts must be appended here when they should
-          # run in this job.
-          PROJECTS=(
-            --project web
-            --project mobile
-            --project aurora-sync
-            --project board-constants
-            --project crypto
-            --project shared-schema
-            --project ble-protocol
-            --project board-config
-            --project board-react
-            --project climb-actions
-            --project climb-filters
-            --project graphql
-            --project graphql-client
-            --project party-profile
-            --project play-view
-            --project queue
-            --project queue-runtime
-            --project queue-react
-          )
+          # $PROJECTS is intentionally UNQUOTED in the two `vp test run` calls
+          # below so the shell word-splits it into separate `--project=<name>`
+          # flags. Do NOT quote it. (Safe: project names are bare identifiers.)
+          PROJECTS="$(node --import tsx scripts/ci-test-default-projects.ts)"
+          echo "test-default projects: $PROJECTS"
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            vp test run --changed "origin/$BASE_REF" \
-              "${PROJECTS[@]}" \
+            vp test run --changed "origin/$BASE_REF" $PROJECTS \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./test-results/junit-default.xml
           else
-            vp test run \
-              "${PROJECTS[@]}" \
+            vp test run $PROJECTS \
               --reporter=verbose --reporter=github-actions \
               --reporter=junit --outputFile.junit=./test-results/junit-default.xml
           fi
