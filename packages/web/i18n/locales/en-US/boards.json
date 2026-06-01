@@ -38,7 +38,33 @@
     "signInCta": "Sign in",
     "errorTitle": "Couldn't load your boards",
     "errorRetry": "Try again",
-    "boardSwitchError": "Couldn't save that board. Try again."
+    "boardSwitchError": "Couldn't save that board. Try again.",
+    "discovery": {
+      "findNearby": "Find nearby",
+      "bluetooth": "Bluetooth",
+      "custom": "Custom",
+      "locationDenied": "Allow location",
+      "nearbyTitle": "Near you",
+      "yourBoardsTitle": "Your boards",
+      "popularTitle": "Popular setups"
+    },
+    "custom": {
+      "title": "Build a board",
+      "board": "Board",
+      "layout": "Layout",
+      "size": "Size",
+      "sets": "Sets",
+      "angle": "Angle",
+      "start": "Start climbing",
+      "createError": "Couldn't create that board. Try again."
+    },
+    "bluetooth": {
+      "title": "Boards near you",
+      "scanning": "Scanning for boards…",
+      "resolving": "Loading boards…",
+      "noResults": "No boards in range",
+      "unavailable": "Turn on Bluetooth to scan"
+    }
   },
   "boardEntity": {
     "notFound": "Board not found",

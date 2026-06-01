@@ -11,6 +11,9 @@ import type {
   Angle,
   MyBoardsInput,
   SearchBoardsInput,
+  PopularBoardConfig,
+  PopularBoardConfigsInput,
+  CreateBoardInput,
   SessionSummary,
   PublicUserProfile,
   FollowConnection,
@@ -253,6 +256,57 @@ export type GetBoardsBySerialNumbersQueryVariables = {
 
 export type GetBoardsBySerialNumbersQueryResponse = {
   boardsBySerialNumbers: UserBoard[];
+};
+
+export const GET_POPULAR_BOARD_CONFIGS = gql`
+  query GetPopularBoardConfigs($input: PopularBoardConfigsInput) {
+    popularBoardConfigs(input: $input) {
+      configs {
+        boardType
+        layoutId
+        layoutName
+        sizeId
+        sizeName
+        sizeDescription
+        setIds
+        setNames
+        climbCount
+        totalAscents
+        boardCount
+        displayName
+      }
+      totalCount
+      hasMore
+    }
+  }
+`;
+
+export type GetPopularBoardConfigsQueryVariables = {
+  input?: PopularBoardConfigsInput;
+};
+
+export type GetPopularBoardConfigsQueryResponse = {
+  popularBoardConfigs: {
+    configs: PopularBoardConfig[];
+    totalCount: number;
+    hasMore: boolean;
+  };
+};
+
+export const CREATE_BOARD = gql`
+  mutation CreateBoard($input: CreateBoardInput!) {
+    createBoard(input: $input) {
+      ${BOARD_FIELDS}
+    }
+  }
+`;
+
+export type CreateBoardMutationVariables = {
+  input: CreateBoardInput;
+};
+
+export type CreateBoardMutationResponse = {
+  createBoard: UserBoard;
 };
 
 // ============================================

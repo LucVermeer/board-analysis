@@ -152,6 +152,13 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       'expo-router',
       'expo-secure-store',
       'expo-localization',
+      [
+        'expo-location',
+        {
+          locationWhenInUsePermission:
+            'Boardsesh uses your location to find nearby boards to climb on and to discover nearby climbing sessions in Party Mode.',
+        },
+      ],
       'expo-status-bar',
       'expo-updates',
       'expo-web-browser',

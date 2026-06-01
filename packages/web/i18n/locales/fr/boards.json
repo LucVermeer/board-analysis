@@ -38,7 +38,33 @@
     "signInCta": "Se connecter",
     "errorTitle": "Impossible de charger tes boards",
     "errorRetry": "Réessayer",
-    "boardSwitchError": "Impossible d'enregistrer ce board. Réessaie."
+    "boardSwitchError": "Impossible d'enregistrer ce board. Réessaie.",
+    "discovery": {
+      "findNearby": "À proximité",
+      "bluetooth": "Bluetooth",
+      "custom": "Personnalisé",
+      "locationDenied": "Autoriser la localisation",
+      "nearbyTitle": "Près de toi",
+      "yourBoardsTitle": "Tes boards",
+      "popularTitle": "Configurations populaires"
+    },
+    "custom": {
+      "title": "Crée un board",
+      "board": "Board",
+      "layout": "Layout",
+      "size": "Taille",
+      "sets": "Sets",
+      "angle": "Angle",
+      "start": "Commencer à grimper",
+      "createError": "Impossible de créer ce board. Réessaie."
+    },
+    "bluetooth": {
+      "title": "Boards près de toi",
+      "scanning": "Recherche de boards…",
+      "resolving": "Chargement des boards…",
+      "noResults": "Aucun board à portée",
+      "unavailable": "Active le Bluetooth pour rechercher"
+    }
   },
   "boardEntity": {
     "notFound": "Board introuvable",

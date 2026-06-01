@@ -1,74 +1,143 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import type BottomSheet from '@gorhom/bottom-sheet';
 import type { UserBoard } from '@boardsesh/shared-schema';
-import { useMyBoards } from '../../../src/lib/graphql/hooks';
+import { useMyBoards, usePopularBoardConfigs, useNearbyBoards } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { useDeviceLocation } from '../../../src/lib/use-device-location';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useToast } from '../../../src/providers/toast-provider';
-import { useTheme, type ResolvedSystemColors } from '../../../src/providers/theme-provider';
+import { useTheme } from '../../../src/providers/theme-provider';
 import { hapticSelection } from '../../../src/lib/haptics';
 import { Text } from '../../../src/components/Text';
-import { Card } from '../../../src/components/Card';
 import { Icon } from '../../../src/components/Icon';
 import { Button } from '../../../src/components/Button';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
-import { brandColors } from '../../../src/theme/colors';
+import { BoardCarousel } from '../../../src/components/board-discovery/BoardCarousel';
+import { BoardModeCard, type ModeCardState } from '../../../src/components/board-discovery/BoardModeCard';
+import { CustomBoardSheet } from '../../../src/components/board-discovery/CustomBoardSheet';
+import { BluetoothQuickstartSheet } from '../../../src/components/board-discovery/BluetoothQuickstartSheet';
+import { userBoardToItem, popularConfigToItem } from '../../../src/components/board-discovery/board-items';
+import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
-  // Don't fire myBoards while signed out — it would only 401. (Defensive: the
-  // app shell normally redirects signed-out users to login before this tab.)
+  const { systemColors } = useTheme();
+  const router = useRouter();
+  const { t } = useTranslation('boards');
+  const { showToast } = useToast();
+
+  const setActiveBoard = useSetActiveBoard();
+  const { data: activeBoard } = useActiveBoard();
+
   const {
     data: boardConnection,
-    isLoading,
+    isLoading: isMyBoardsLoading,
     isError,
     refetch,
     isRefetching,
-  } = useMyBoards(undefined, {
-    enabled: isAuthenticated,
-  });
-  const boards = boardConnection?.boards ?? [];
-  const { systemColors } = useTheme();
-  const router = useRouter();
-  const setActiveBoard = useSetActiveBoard();
-  const { showToast } = useToast();
-  const { t } = useTranslation('boards');
+  } = useMyBoards(undefined, { enabled: isAuthenticated });
+  const myBoards = boardConnection?.boards ?? [];
 
-  // The active board is the source of truth for which row is highlighted; read
-  // it straight from the shared cache rather than mirroring it into local state.
-  const { data: activeBoard } = useActiveBoard();
+  const { data: popular } = usePopularBoardConfigs({ limit: 12 });
 
-  // A hard 401 makes the auth interceptor clear tokens via signOut(), but that
-  // doesn't flip the provider's isAuthenticated, so without this the user would
-  // be stranded on the error state with a retry that keeps failing. Re-validate
-  // on error: an expired session flips to signed-out (the shell then redirects
-  // to login), while a transient failure keeps the retryable error state.
+  const location = useDeviceLocation();
+  const { data: nearby } = useNearbyBoards(location.coords);
+
+  const customSheetRef = useRef<BottomSheet>(null);
+  const bluetoothSheetRef = useRef<BottomSheet>(null);
+  // State (not a ref) so the quickstart sheet re-renders and kicks off its scan
+  // when opened, and tears it down when closed.
+  const [bluetoothActive, setBluetoothActive] = useState(false);
+
+  // See the boards index error path: a hard 401 clears tokens but doesn't flip
+  // isAuthenticated, so re-validate on error to escape a stuck retry loop.
   useEffect(() => {
-    if (isError) {
-      void refreshAuthState();
-    }
+    if (isError) void refreshAuthState();
   }, [isError, refreshAuthState]);
 
-  const handleBoardPress = async (board: UserBoard) => {
-    hapticSelection();
-    try {
-      // Persists to AsyncStorage AND writes the ['activeBoard'] cache, so the
-      // climb list / BLE wrapper / play drawer all switch to this board
-      // instantly. Only navigate once the choice is actually saved — otherwise
-      // a failed write would leave the app showing the new board this session
-      // but reverting to the old one on the next cold start.
-      await setActiveBoard(board);
-      router.navigate('/(tabs)/climbs');
-    } catch {
-      showToast(t('mobile.boardSwitchError'), 'error');
-    }
-  };
+  const activateBoard = useCallback(
+    async (board: UserBoard) => {
+      hapticSelection();
+      try {
+        // Persists to AsyncStorage + the ['activeBoard'] cache, then navigates
+        // only once the write succeeds (a failed write must not strand the user
+        // on a board that won't survive the next cold start).
+        await setActiveBoard(board);
+        router.navigate('/(tabs)/climbs');
+      } catch {
+        showToast(t('mobile.boardSwitchError'), 'error');
+      }
+    },
+    [setActiveBoard, router, showToast, t],
+  );
 
-  if (isLoading) {
+  const myBoardItems = useMemo(
+    () => myBoards.map((board) => userBoardToItem(board, activeBoard?.uuid)).filter((item): item is DiscoveryBoardItem => item !== null),
+    [myBoards, activeBoard?.uuid],
+  );
+  const nearbyItems = useMemo(
+    () => (nearby?.boards ?? []).map((board) => userBoardToItem(board, activeBoard?.uuid)).filter((item): item is DiscoveryBoardItem => item !== null),
+    [nearby?.boards, activeBoard?.uuid],
+  );
+  const popularItems = useMemo(
+    () => (popular?.configs ?? []).map(popularConfigToItem).filter((item): item is DiscoveryBoardItem => item !== null),
+    [popular?.configs],
+  );
+
+  // myBoards / nearby items carry the original UserBoard via uuid; look it up to
+  // activate. Popular/custom items have no UserBoard, so they go through the
+  // custom sheet (CREATE_BOARD) — see onSelectPopular.
+  const onSelectMyBoard = useCallback(
+    (item: DiscoveryBoardItem) => {
+      const board = myBoards.find((b) => b.uuid === item.key) ?? (nearby?.boards ?? []).find((b) => b.uuid === item.key);
+      if (board) void activateBoard(board);
+    },
+    [myBoards, nearby?.boards, activateBoard],
+  );
+
+  const onModeFindNearby = useCallback(() => {
+    void location.request();
+  }, [location]);
+
+  const onModeBluetooth = useCallback(() => {
+    setBluetoothActive(true);
+    bluetoothSheetRef.current?.expand();
+  }, []);
+
+  const onModeCustom = useCallback(() => {
+    customSheetRef.current?.expand();
+  }, []);
+
+  const onBoardCreated = useCallback(
+    (board: UserBoard) => {
+      customSheetRef.current?.close();
+      void activateBoard(board);
+    },
+    [activateBoard],
+  );
+
+  // Popular/custom configs become a real board via the custom builder. For now,
+  // popular selection opens the custom sheet pre-seeded is a follow-up; selecting
+  // a popular config routes through the same CREATE path by opening the builder.
+  const onSelectPopular = useCallback(() => {
+    customSheetRef.current?.expand();
+  }, []);
+
+  const nearbyState: ModeCardState =
+    location.status === 'loading'
+      ? 'loading'
+      : location.status === 'denied'
+        ? 'denied'
+        : location.status === 'unavailable'
+          ? 'unavailable'
+          : 'idle';
+
+  if (isMyBoardsLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
@@ -76,9 +145,6 @@ export default function BoardSelection() {
     );
   }
 
-  // Boards live on the account, so a signed-out user has none to show. Prompt a
-  // sign-in instead of implying they have no boards. (Defensive: the app shell
-  // normally redirects signed-out users to the login screen before this tab.)
   if (!isAuthenticated) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.centered}>
@@ -94,8 +160,6 @@ export default function BoardSelection() {
     );
   }
 
-  // The query failed (network, or a token that no longer resolves to a user).
-  // Surface it with a retry instead of the misleading "no boards" state.
   if (isError) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.centered}>
@@ -107,57 +171,95 @@ export default function BoardSelection() {
           title={t('mobile.errorRetry')}
           variant="outlined"
           loading={isRefetching}
-          onPress={() => {
-            void refetch();
-          }}
+          onPress={() => void refetch()}
           style={styles.stateButton}
         />
       </ScrollView>
     );
   }
 
-  if (boards.length === 0) {
-    return (
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.centered}>
-        <Text variant="headline" style={styles.emptyTitle}>
-          {t('mobile.emptyTitle')}
-        </Text>
-        <Text variant="subheadline" style={styles.emptySubtitle}>
-          {t('mobile.emptySubtitle')}
-        </Text>
-      </ScrollView>
-    );
-  }
-
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.flex} contentContainerStyle={styles.container}>
-      {boards.map((board) => {
-        const isActive = board.uuid === activeBoard?.uuid;
+    <>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        style={styles.flex}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Mode cards */}
+        <View style={styles.modeRow}>
+          <BoardModeCard
+            icon="location"
+            label={t('mobile.discovery.findNearby')}
+            sublabel={nearbyState === 'denied' ? t('mobile.discovery.locationDenied') : undefined}
+            state={nearbyState}
+            onPress={onModeFindNearby}
+          />
+          <BoardModeCard
+            icon="bluetooth"
+            label={t('mobile.discovery.bluetooth')}
+            onPress={onModeBluetooth}
+          />
+          <BoardModeCard icon="plus" label={t('mobile.discovery.custom')} onPress={onModeCustom} />
+        </View>
 
-        return (
-          <Card key={board.uuid} onPress={() => handleBoardPress(board)} style={cardStyle(systemColors, isActive)}>
-            <View style={styles.cardContent}>
-              <View style={styles.cardTextContent}>
-                <Text variant="headline">{board.name}</Text>
-                <Text variant="subheadline" style={styles.cardSubtitle}>
-                  {board.boardType} · {board.sizeName ?? ''}
-                </Text>
-              </View>
-              {isActive && <Icon name="tick" size={22} color={brandColors.primary} />}
-            </View>
-          </Card>
-        );
-      })}
-    </ScrollView>
+        {nearbyItems.length > 0 ? (
+          <Section title={t('mobile.discovery.nearbyTitle')}>
+            <BoardCarousel items={nearbyItems} onSelect={onSelectMyBoard} />
+          </Section>
+        ) : null}
+
+        {myBoardItems.length > 0 ? (
+          <Section title={t('mobile.discovery.yourBoardsTitle')}>
+            <BoardCarousel items={myBoardItems} onSelect={onSelectMyBoard} />
+          </Section>
+        ) : null}
+
+        {popularItems.length > 0 ? (
+          <Section title={t('mobile.discovery.popularTitle')}>
+            <BoardCarousel items={popularItems} onSelect={onSelectPopular} />
+          </Section>
+        ) : null}
+
+        {myBoardItems.length === 0 && popularItems.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text variant="headline" style={styles.emptyTitle}>
+              {t('mobile.emptyTitle')}
+            </Text>
+            <Text variant="subheadline" style={styles.emptySubtitle}>
+              {t('mobile.emptySubtitle')}
+            </Text>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <CustomBoardSheet
+        ref={customSheetRef}
+        onCreated={onBoardCreated}
+        onError={() => showToast(t('mobile.custom.createError'), 'error')}
+      />
+      <BluetoothQuickstartSheet
+        ref={bluetoothSheetRef}
+        active={bluetoothActive}
+        onClose={() => setBluetoothActive(false)}
+        onSelect={(board) => {
+          bluetoothSheetRef.current?.close();
+          void activateBoard(board);
+        }}
+      />
+    </>
   );
 }
 
-function cardStyle(systemColors: ResolvedSystemColors, isActive: boolean) {
-  return {
-    backgroundColor: systemColors.secondaryBackground,
-    borderWidth: isActive ? 2 : StyleSheet.hairlineWidth,
-    borderColor: isActive ? brandColors.primary : systemColors.separator,
-  } as const;
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <Text variant="title3" style={styles.sectionTitle}>
+        {title}
+      </Text>
+      {children}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -165,20 +267,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
-    padding: spacing[4],
+    paddingVertical: spacing[4],
+    gap: spacing[5],
+  },
+  modeRow: {
+    flexDirection: 'row',
     gap: spacing[3],
+    paddingHorizontal: spacing[4],
+  },
+  section: {
+    gap: spacing[3],
+  },
+  sectionTitle: {
+    paddingHorizontal: spacing[4],
   },
   centered: {
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  emptyTitle: {
-    opacity: 0.6,
-  },
-  emptySubtitle: {
-    marginTop: spacing[2],
-    opacity: 0.4,
   },
   stateTitle: {
     marginTop: spacing[3],
@@ -192,16 +298,17 @@ const styles = StyleSheet.create({
   stateButton: {
     marginTop: spacing[4],
   },
-  cardContent: {
-    flexDirection: 'row',
+  emptyState: {
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[8],
   },
-  cardTextContent: {
-    flex: 1,
-  },
-  cardSubtitle: {
-    marginTop: spacing[1],
+  emptyTitle: {
     opacity: 0.6,
+  },
+  emptySubtitle: {
+    marginTop: spacing[2],
+    opacity: 0.4,
+    textAlign: 'center',
   },
 });
