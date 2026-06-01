@@ -271,11 +271,15 @@
   "playback": {
     "play": "Lire",
     "pause": "Pause",
+    "replay": "Rejouer",
+    "controls": "Commandes de lecture",
     "speed": "Vitesse",
     "frameOfTotal": "Image {{index}} sur {{total}}",
-    "seek": "Parcourir les images",
+    "prevFrame": "Image précédente",
+    "nextFrame": "Image suivante",
     "speedHalf": "0.5×",
     "speedNormal": "1×",
-    "speedDouble": "2×"
+    "speedCustom": "{{value}}×",
+    "speedCustomLabel": "Vitesse personnalisée"
   }
 }

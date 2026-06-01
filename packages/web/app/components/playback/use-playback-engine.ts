@@ -134,7 +134,16 @@ export function usePlaybackEngine({
     const tick = () => {
       timerRef.current = null;
       if (!isPlayingRef.current) return;
-      const nextIndex = (frameIndexRef.current + 1) % frameStrings.length;
+      const lastIndex = frameStrings.length - 1;
+      // Stop at the end instead of looping. Broadcast the stop (unlike the
+      // mid-sequence ticks below) so peers also halt on the last frame.
+      if (frameIndexRef.current >= lastIndex) {
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        emitLocalState(lastIndex, false, speedRef.current);
+        return;
+      }
+      const nextIndex = frameIndexRef.current + 1;
       // Update the ref synchronously so back-to-back ticks (e.g. fake timers
       // firing several callbacks inside one `act`) see the advanced index
       // instead of reading the stale value through the next render.
@@ -147,7 +156,7 @@ export function usePlaybackEngine({
     };
     scheduleNext();
     return clearTimer;
-  }, [isPlaying, frameStrings.length, paceMs]);
+  }, [isPlaying, frameStrings.length, paceMs, emitLocalState]);
 
   // Converge to external (peer) state when its clientId differs from ours.
   // Peer state arrives over the wire — clamp every numeric field before we
@@ -168,17 +177,29 @@ export function usePlaybackEngine({
     const elapsed = Math.max(0, Date.now() - safeAnchor);
     const effectivePace = Math.max(MIN_PACE_MS, safePaceMs / safeSpeed);
     const stepsAdvanced = externalState.isPlaying && effectivePace > 0 ? Math.floor(elapsed / effectivePace) : 0;
-    const projected = (safeFrameIndex + stepsAdvanced) % frameStrings.length;
+    // Clamp to the last frame instead of wrapping — playback no longer loops,
+    // so a peer that extrapolated past the end has stopped on the last frame.
+    const lastIndex = frameStrings.length - 1;
+    const reachedEnd = externalState.isPlaying && safeFrameIndex + stepsAdvanced >= lastIndex;
+    const projected = Math.min(lastIndex, safeFrameIndex + stepsAdvanced);
     setFrameIndex(projected);
-    setIsPlaying(externalState.isPlaying);
+    setIsPlaying(externalState.isPlaying && !reachedEnd);
     setSpeedState(safeSpeed);
   }, [externalState, clientId, frameStrings.length]);
 
   const play = useCallback(() => {
     if (!isAnimatable) return;
+    // Pressing play on the last frame replays from the start — without this
+    // the engine would immediately stop again (no looping).
+    let startIndex = frameIndexRef.current;
+    if (startIndex >= frameStrings.length - 1) {
+      startIndex = 0;
+      frameIndexRef.current = 0;
+      setFrameIndex(0);
+    }
     setIsPlaying(true);
-    emitLocalState(frameIndexRef.current, true, speedRef.current);
-  }, [isAnimatable, emitLocalState]);
+    emitLocalState(startIndex, true, speedRef.current);
+  }, [isAnimatable, emitLocalState, frameStrings.length]);
 
   const pause = useCallback(() => {
     if (!isAnimatable) return;

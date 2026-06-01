@@ -271,11 +271,15 @@
   "playback": {
     "play": "Play",
     "pause": "Pause",
+    "replay": "Replay",
+    "controls": "Playback controls",
     "speed": "Speed",
     "frameOfTotal": "Frame {{index}} of {{total}}",
-    "seek": "Scrub frames",
+    "prevFrame": "Previous frame",
+    "nextFrame": "Next frame",
     "speedHalf": "0.5×",
     "speedNormal": "1×",
-    "speedDouble": "2×"
+    "speedCustom": "{{value}}×",
+    "speedCustomLabel": "Custom speed"
   }
 }
