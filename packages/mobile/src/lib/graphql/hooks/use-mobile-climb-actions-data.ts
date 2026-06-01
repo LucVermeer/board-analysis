@@ -19,15 +19,8 @@
 // per-climb favorited state, fetch with `GET_FAVORITES` for the visible
 // UUIDs and write the result into `favoritesStore` directly so subscribers
 // re-render — the toggle path here doesn't touch that store.
-//
-// Favorites Set is left empty: the current `GET_FAVORITES` query takes a
-// `climbUuids` list (web batches it as the user scrolls a climb list), and
-// mobile has no equivalent batched fetcher today. When a mobile screen needs
-// per-climb favorited state, fetch with `GET_FAVORITES` for the visible
-// UUIDs and write the result into `favoritesStore` directly so subscribers
-// re-render — the toggle path here doesn't touch that store.
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TOGGLE_FAVORITE, type ToggleFavoriteMutationResponse } from '@boardsesh/graphql/operations/favorites';
 import {
@@ -47,6 +40,7 @@ import { useActiveBoard } from '../use-active-board';
 const EMPTY_FAVORITES: ReadonlySet<string> = new Set();
 const EMPTY_PLAYLISTS: ReadonlyArray<Playlist> = [];
 const EMPTY_MEMBERSHIPS: ReadonlyMap<string, Set<string>> = new Map();
+const PLAYLISTS_QUERY_KEY = ['userPlaylists'] as const;
 
 type MobileClimbActionsData = {
   favoritesProviderProps: {
@@ -74,10 +68,8 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
 
   // === Playlists ===
 
-  const playlistsQueryKey = useMemo(() => ['userPlaylists'] as const, []);
-
   const { data: playlists = EMPTY_PLAYLISTS as Playlist[], isLoading: playlistsLoading } = useQuery({
-    queryKey: playlistsQueryKey,
+    queryKey: PLAYLISTS_QUERY_KEY,
     queryFn: async (): Promise<Playlist[]> => {
       const response = await getHttpClient().request<GetAllUserPlaylistsQueryResponse>(GET_ALL_USER_PLAYLISTS, {
         input: { pageSize: 200 },
@@ -96,10 +88,9 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
   const mutationDepsRef = useRef({
     activeBoard,
     queryClient,
-    playlistsQueryKey,
     isAuthenticated,
   });
-  mutationDepsRef.current = { activeBoard, queryClient, playlistsQueryKey, isAuthenticated };
+  mutationDepsRef.current = { activeBoard, queryClient, isAuthenticated };
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async (climbUuid: string): Promise<{ uuid: string; favorited: boolean }> => {
@@ -177,16 +168,16 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
       const created = await createPlaylistMutateRef.current({ name, description, color, icon });
       // Optimistically prepend to the cached list so the picker shows the new
       // playlist immediately, without waiting for a refetch round-trip.
-      const { queryClient: client, playlistsQueryKey: key } = mutationDepsRef.current;
-      client.setQueryData<Playlist[]>(key, (prev) => (prev ? [created, ...prev] : [created]));
+      const { queryClient: client } = mutationDepsRef.current;
+      client.setQueryData<Playlist[]>(PLAYLISTS_QUERY_KEY, (prev) => (prev ? [created, ...prev] : [created]));
       return created;
     },
     [],
   );
 
   const refreshPlaylists = useCallback(async () => {
-    const { queryClient: client, playlistsQueryKey: key } = mutationDepsRef.current;
-    await client.invalidateQueries({ queryKey: key });
+    const { queryClient: client } = mutationDepsRef.current;
+    await client.invalidateQueries({ queryKey: PLAYLISTS_QUERY_KEY });
   }, []);
 
   return {
