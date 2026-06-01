@@ -2,18 +2,23 @@
 // web's `useClimbActionsData`. Returns provider-shaped props the layout passes
 // straight in.
 //
-// Playlist mutations are board-scoped: `addToPlaylist` / `createPlaylist` are
-// bound to the user's *default* board (boardType + layoutId), because mobile
-// mounts these providers above QueueProvider and the default board is the
-// only stable signal here. That's fine for playlists — playlists genuinely
-// belong to a board + layout. The instant mobile gains multi-board UX, the
-// hook should accept the active board as an arg.
+// Playlist mutations bind to the user's currently *active* board via
+// `useActiveBoard` (boardType + layoutId). Playlists genuinely belong to a
+// board + layout, so this is correct — the moment the user switches boards
+// from the boards tab the cache invalidates and subsequent mutations land
+// against the new board.
 //
-// `toggleFavorite` deliberately ignores the active board context: even though
-// the current GraphQL schema requires `boardName` + `angle` on the input
-// (tracked in #2449 as a backend cleanup — favorites should be keyed by
-// climb UUID alone), we still send the default board because that's the
-// only signal we have. Once #2449 lands, drop those args from the mutation.
+// `toggleFavorite` is also wired against the active board today only because
+// the current GraphQL schema requires `boardName` + `angle` on the input.
+// Tracked in #2449 as a backend cleanup — favorites should be keyed by climb
+// UUID alone. Once #2449 lands, drop those args from the mutation.
+//
+// Favorites Set is left empty: the current `GET_FAVORITES` query takes a
+// `climbUuids` list (web batches it as the user scrolls a climb list), and
+// mobile has no equivalent batched fetcher today. When a mobile screen needs
+// per-climb favorited state, fetch with `GET_FAVORITES` for the visible
+// UUIDs and write the result into `favoritesStore` directly so subscribers
+// re-render — the toggle path here doesn't touch that store.
 //
 // Favorites Set is left empty: the current `GET_FAVORITES` query takes a
 // `climbUuids` list (web batches it as the user scrolls a climb list), and
@@ -37,7 +42,7 @@ import {
 } from '@boardsesh/graphql/operations/playlists';
 import { getHttpClient } from '../client';
 import { useAuth } from '../../../providers/auth-provider';
-import { useDefaultBoard } from '.';
+import { useActiveBoard } from '../use-active-board';
 
 const EMPTY_FAVORITES: ReadonlySet<string> = new Set();
 const EMPTY_PLAYLISTS: ReadonlyArray<Playlist> = [];
@@ -64,7 +69,7 @@ type MobileClimbActionsData = {
 
 export function useMobileClimbActionsData(): MobileClimbActionsData {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
-  const { data: defaultBoard } = useDefaultBoard();
+  const { data: activeBoard } = useActiveBoard();
   const queryClient = useQueryClient();
 
   // === Playlists ===
@@ -87,19 +92,19 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
 
   // Bag of mutation deps in a single ref so the public callbacks below stay
   // referentially stable across renders (avoids cascading the entire provider
-  // tree on every defaultBoard refresh).
+  // tree on every activeBoard refresh).
   const mutationDepsRef = useRef({
-    defaultBoard,
+    activeBoard,
     queryClient,
     playlistsQueryKey,
     isAuthenticated,
   });
-  mutationDepsRef.current = { defaultBoard, queryClient, playlistsQueryKey, isAuthenticated };
+  mutationDepsRef.current = { activeBoard, queryClient, playlistsQueryKey, isAuthenticated };
 
   const toggleFavoriteMutation = useMutation({
     mutationFn: async (climbUuid: string): Promise<{ uuid: string; favorited: boolean }> => {
-      const { defaultBoard: board } = mutationDepsRef.current;
-      if (!board) throw new Error('Cannot toggle favorite: no default board configured.');
+      const { activeBoard: board } = mutationDepsRef.current;
+      if (!board) throw new Error('Cannot toggle favorite: no active board selected.');
       const response = await getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, {
         input: { boardName: board.boardType, climbUuid, angle: board.angle ?? 0 },
       });
@@ -125,8 +130,8 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
 
   const createPlaylistMutation = useMutation({
     mutationFn: async (vars: { name: string; description?: string; color?: string; icon?: string }) => {
-      const { defaultBoard: board } = mutationDepsRef.current;
-      if (!board) throw new Error('Cannot create playlist: no default board configured.');
+      const { activeBoard: board } = mutationDepsRef.current;
+      if (!board) throw new Error('Cannot create playlist: no active board selected.');
       const response = await getHttpClient().request<CreatePlaylistMutationResponse>(CREATE_PLAYLIST, {
         input: {
           boardType: board.boardType,

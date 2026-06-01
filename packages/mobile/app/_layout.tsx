@@ -21,7 +21,8 @@ import { BoardAdapterWrapper } from '../src/providers/board-adapter';
 import { BoardProvider } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
-import { useDefaultBoard, useMobileClimbActionsData } from '../src/lib/graphql/hooks';
+import { useMobileClimbActionsData } from '../src/lib/graphql/hooks';
+import { useActiveBoard } from '../src/lib/graphql/use-active-board';
 import { LiveActivityBridge } from '../src/lib/live-activity/live-activity-bridge';
 import { Text } from '../src/components/Text';
 import { Button } from '../src/components/Button';
@@ -117,19 +118,19 @@ function ClimbActionsDataWrapper({ children }: { children: ReactNode }) {
 }
 
 function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
-  const { data: defaultBoard } = useDefaultBoard();
+  const { data: activeBoard } = useActiveBoard();
 
-  if (!defaultBoard) {
+  if (!activeBoard) {
     return <>{children}</>;
   }
 
   return (
-    <BluetoothProvider boardName={defaultBoard.boardType} layoutId={defaultBoard.layoutId} sizeId={defaultBoard.sizeId}>
+    <BluetoothProvider boardName={activeBoard.boardType} layoutId={activeBoard.layoutId} sizeId={activeBoard.sizeId}>
       <LiveActivityBridge
-        boardName={defaultBoard.boardType}
-        layoutId={defaultBoard.layoutId}
-        sizeId={defaultBoard.sizeId}
-        setIds={defaultBoard.setIds}
+        boardName={activeBoard.boardType}
+        layoutId={activeBoard.layoutId}
+        sizeId={activeBoard.sizeId}
+        setIds={activeBoard.setIds}
       />
       {children}
     </BluetoothProvider>
@@ -141,8 +142,8 @@ function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
 // A null board keeps logbook fetches idle and makes mutations throw rather
 // than send an empty `boardType`.
 function BoardProviderWrapper({ children }: { children: ReactNode }) {
-  const { data: defaultBoard } = useDefaultBoard();
-  return <BoardProvider boardName={toBoardName(defaultBoard?.boardType)}>{children}</BoardProvider>;
+  const { data: activeBoard } = useActiveBoard();
+  return <BoardProvider boardName={toBoardName(activeBoard?.boardType)}>{children}</BoardProvider>;
 }
 
 function RootLayout() {
@@ -161,12 +162,19 @@ function RootLayout() {
                 <PartyProfileProvider>
                   <ConnectionSettingsProvider>
                     <ToastProvider>
-                      <BottomSheetModalProvider>
-                        <ClimbActionsDataWrapper>
-                          <QueueProvider>
-                            <BoardAdapterWrapper>
-                              <BoardProviderWrapper>
-                                <BluetoothProviderWrapper>
+                      <ClimbActionsDataWrapper>
+                        <QueueProvider>
+                          <BoardAdapterWrapper>
+                            <BoardProviderWrapper>
+                              <BluetoothProviderWrapper>
+                                {/* BottomSheetModalProvider lives *inside* the
+                                    board providers: gorhom's BottomSheetModal
+                                    portals its content (PlayDrawer → QuickTickBar)
+                                    to this host, so the host must sit within
+                                    BoardAdapterProvider/BoardProvider or the
+                                    portaled hooks (useSaveTick → useBoardAdapter)
+                                    escape that context. */}
+                                <BottomSheetModalProvider>
                                   <DrawerHostProvider>
                                     <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
                                       <Stack.Screen name="(tabs)" />
@@ -177,12 +185,12 @@ function RootLayout() {
                                     </Stack>
                                     <PersistentQueueBar />
                                   </DrawerHostProvider>
-                                </BluetoothProviderWrapper>
-                              </BoardProviderWrapper>
-                            </BoardAdapterWrapper>
-                          </QueueProvider>
-                        </ClimbActionsDataWrapper>
-                      </BottomSheetModalProvider>
+                                </BottomSheetModalProvider>
+                              </BluetoothProviderWrapper>
+                            </BoardProviderWrapper>
+                          </BoardAdapterWrapper>
+                        </QueueProvider>
+                      </ClimbActionsDataWrapper>
                     </ToastProvider>
                   </ConnectionSettingsProvider>
                 </PartyProfileProvider>

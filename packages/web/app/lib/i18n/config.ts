@@ -122,6 +122,7 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep climbs:mobile.search.settersCount_other
 // i18n-keep climbs:mobile.search.climbsCount_one
 // i18n-keep climbs:mobile.search.climbsCount_other
+// i18n-keep boards:mobile.boardSwitchError
 // i18n-keep climbs:mobile.filter.cancel
 // i18n-keep climbs:mobile.filter.done
 // i18n-keep climbs:mobile.filter.clearAll

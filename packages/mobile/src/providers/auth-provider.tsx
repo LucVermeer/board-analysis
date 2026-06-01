@@ -13,7 +13,8 @@ import {
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
-import { clearStoredBoardConfig } from '../lib/board-store';
+import { clearStoredActiveBoard } from '../lib/active-board-store';
+import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 
 type AuthState = {
   isAuthenticated: boolean;
@@ -91,7 +92,11 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
 
   const signOut = useCallback(async () => {
     await authSignOut();
-    await Promise.all([clearStoredSessionId(), clearStoredBoardConfig()]);
+    await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
+    // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
+    // without this the next user to sign in on a shared device would inherit the
+    // previous user's board until a manual switch.
+    queryClient.removeQueries({ queryKey: ACTIVE_BOARD_QUERY_KEY });
     resetHttpClient();
     disposeWsClient();
     // Drop every cached query so the next signed-in user doesn't inherit the

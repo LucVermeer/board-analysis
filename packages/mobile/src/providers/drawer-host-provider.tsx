@@ -4,18 +4,18 @@
  * persistent queue control bar (and any screen) open them without each tab
  * having to instantiate its own copy.
  *
- * Default board comes from `useDefaultBoard()`; callers can override via the
- * second arg to `openPlayDrawer` if needed (e.g. opening a climb from a
- * different board context). The active boardConfig is exposed through the
- * context so consumers (like the persistent bar's log-ascent button) don't
- * have to call `useDefaultBoard()` independently.
+ * Default board comes from `useActiveBoard()` (the user's stored pick); callers
+ * can override via the second arg to `openPlayDrawer` if needed (e.g. opening a
+ * climb from a different board context). The active boardConfig is exposed
+ * through the context so consumers (like the persistent bar's log-ascent
+ * button) don't have to resolve the active board independently.
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Climb } from '@boardsesh/shared-schema';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
-import { useDefaultBoard } from '../lib/graphql/hooks';
+import { useActiveBoard } from '../lib/graphql/use-active-board';
 
 export type BoardConfig = {
   boardName: string;
@@ -64,7 +64,7 @@ export function useDrawerHost(): DrawerHostValue {
 
 export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const playDrawerRef = useRef<PlayDrawerHandle>(null);
-  const { data: defaultBoard } = useDefaultBoard();
+  const { data: activeBoard } = useActiveBoard();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
 
@@ -79,15 +79,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const activeBoardConfig: BoardConfig | null = useMemo(() => {
     if (boardConfigOverride) return boardConfigOverride;
-    if (!defaultBoard) return null;
+    if (!activeBoard) return null;
     return {
-      boardName: defaultBoard.boardType,
-      layoutId: defaultBoard.layoutId,
-      sizeId: defaultBoard.sizeId,
-      setIds: defaultBoard.setIds,
-      angle: defaultBoard.angle,
+      boardName: activeBoard.boardType,
+      layoutId: activeBoard.layoutId,
+      sizeId: activeBoard.sizeId,
+      setIds: activeBoard.setIds,
+      angle: activeBoard.angle,
     };
-  }, [boardConfigOverride, defaultBoard]);
+  }, [boardConfigOverride, activeBoard]);
 
   const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
     const { boardConfig: override, ...openOptions } = options ?? {};

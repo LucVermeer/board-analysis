@@ -1,8 +1,9 @@
 // Mobile's KeyValueStorage adapter, backed by expo-secure-store. SecureStore
-// is the established convention for app preferences (see board-store,
-// recent-filter-store, party-profile storage); using it here keeps every
-// user-scoped preference in the same backing store rather than scattering
-// some across AsyncStorage.
+// is the established convention for app preferences (see recent-filter-store,
+// party-profile storage, auth-store); using it here keeps every user-scoped
+// preference in the same backing store rather than scattering some across
+// AsyncStorage. The exception is active-board-store, which uses AsyncStorage
+// because the stored UserBoard payload can exceed SecureStore's iOS 2 KB limit.
 
 import * as SecureStore from 'expo-secure-store';
 import type { KeyValueStorage } from '@boardsesh/key-value-storage';

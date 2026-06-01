@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { useMyBoards } from '../../../src/lib/graphql/hooks';
+import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
+import { useToast } from '../../../src/providers/toast-provider';
 import { useTheme, type ResolvedSystemColors } from '../../../src/providers/theme-provider';
-import { setStoredBoardConfig, getStoredBoardConfig } from '../../../src/lib/board-store';
 import { hapticSelection } from '../../../src/lib/haptics';
 import { Text } from '../../../src/components/Text';
 import { Card } from '../../../src/components/Card';
@@ -34,16 +34,13 @@ export default function BoardSelection() {
   const boards = boardConnection?.boards ?? [];
   const { systemColors } = useTheme();
   const router = useRouter();
-  const queryClient = useQueryClient();
+  const setActiveBoard = useSetActiveBoard();
+  const { showToast } = useToast();
   const { t } = useTranslation('boards');
 
-  const [activeBoardUuid, setActiveBoardUuid] = useState<string | null>(null);
-
-  useEffect(() => {
-    getStoredBoardConfig().then((config) => {
-      if (config) setActiveBoardUuid(config.boardUuid);
-    });
-  }, []);
+  // The active board is the source of truth for which row is highlighted; read
+  // it straight from the shared cache rather than mirroring it into local state.
+  const { data: activeBoard } = useActiveBoard();
 
   // A hard 401 makes the auth interceptor clear tokens via signOut(), but that
   // doesn't flip the provider's isAuthenticated, so without this the user would
@@ -58,17 +55,17 @@ export default function BoardSelection() {
 
   const handleBoardPress = async (board: UserBoard) => {
     hapticSelection();
-    await setStoredBoardConfig({
-      boardUuid: board.uuid,
-      boardName: board.boardType,
-      layoutId: board.layoutId,
-      sizeId: board.sizeId,
-      setIds: board.setIds,
-      angle: board.angle,
-    });
-    setActiveBoardUuid(board.uuid);
-    queryClient.setQueryData(['defaultBoard'], { defaultBoard: board });
-    router.navigate('/(tabs)/climbs');
+    try {
+      // Persists to AsyncStorage AND writes the ['activeBoard'] cache, so the
+      // climb list / BLE wrapper / play drawer all switch to this board
+      // instantly. Only navigate once the choice is actually saved — otherwise
+      // a failed write would leave the app showing the new board this session
+      // but reverting to the old one on the next cold start.
+      await setActiveBoard(board);
+      router.navigate('/(tabs)/climbs');
+    } catch {
+      showToast(t('mobile.boardSwitchError'), 'error');
+    }
   };
 
   if (isLoading) {
@@ -135,7 +132,7 @@ export default function BoardSelection() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.flex} contentContainerStyle={styles.container}>
       {boards.map((board) => {
-        const isActive = board.uuid === activeBoardUuid;
+        const isActive = board.uuid === activeBoard?.uuid;
 
         return (
           <Card key={board.uuid} onPress={() => handleBoardPress(board)} style={cardStyle(systemColors, isActive)}>

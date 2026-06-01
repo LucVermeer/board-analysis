@@ -13,6 +13,35 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+// Force a single instance of the React-context singletons. bun's isolated
+// linker can materialise more than one physical copy of these (e.g. a shared
+// package like @boardsesh/board-react resolves its own peer-dep copy of
+// react-query / react under packages/shared/board-react/node_modules). Two
+// copies = two React contexts, so the app's <QueryClientProvider> is invisible
+// to the shared hooks' useQueryClient() → "No QueryClient set". Redirecting the
+// bare specifier to the mobile app's copy guarantees one context across app +
+// shared packages, while leaving relative/absolute paths to Metro's resolver.
+const SINGLETON_MODULES = ['react', 'react-dom', '@tanstack/react-query'];
+const singletonRoots = Object.fromEntries(
+  SINGLETON_MODULES.map((name) => [name, path.resolve(projectRoot, 'node_modules', name)]),
+);
+
+const defaultResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Only rewrite bare specifiers for the singleton packages — `react`,
+  // `@tanstack/react-query`, and their subpaths (`react/jsx-runtime`, etc.).
+  // Relative ('./x') and absolute imports fall straight through untouched.
+  for (const name of SINGLETON_MODULES) {
+    if (moduleName === name || moduleName.startsWith(`${name}/`)) {
+      const redirected = path.join(singletonRoots[name], moduleName.slice(name.length));
+      return context.resolveRequest(context, redirected, platform);
+    }
+  }
+  return defaultResolveRequest
+    ? defaultResolveRequest(context, moduleName, platform)
+    : context.resolveRequest(context, moduleName, platform);
+};
+
 const existingEnhanceMiddleware = config.server?.enhanceMiddleware;
 
 function nullableEnv(name) {
