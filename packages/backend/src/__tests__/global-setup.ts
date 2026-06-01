@@ -12,7 +12,7 @@ const baseConnectionString = (
   process.env.DATABASE_URL || `postgresql://postgres:postgres@localhost:${PG_PORT}/${WORKER_DB_PREFIX}`
 ).replace(/\/[^/]+$/, '/postgres');
 
-export async function isPortOpen(host: string, port: number, timeoutMs = 500): Promise<boolean> {
+async function isPortOpen(host: string, port: number, timeoutMs = 500): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection({ host, port });
     const done = (result: boolean) => {
@@ -65,15 +65,6 @@ async function ensureInfra(): Promise<void> {
 // them against the current schema. Running tests always materialise their own
 // DB via worker-db, so there is nothing else to prepare here.
 async function dropStaleWorkerDatabases(): Promise<void> {
-  // Skip when no Postgres is reachable — jobs that exclude the backend project
-  // still init this globalSetup but have no DB (e.g. CI's test-default).
-  const { hostname, port } = new URL(baseConnectionString);
-  const dbPort = port ? Number(port) : 5432;
-  if (!(await isPortOpen(hostname, dbPort))) {
-    console.info(`[test-infra] no Postgres at ${hostname}:${dbPort} — skipping stale worker-db cleanup`);
-    return;
-  }
-
   const adminClient = postgres(baseConnectionString, { max: 1, onnotice: () => {} });
   try {
     const stale = await adminClient`

@@ -1,7 +1,6 @@
 // worker-db must be imported first: it rewrites DATABASE_URL at module-load
 // time, before any other import can materialise db/client against the template DB.
 import { getWorkerDatabaseUrl, setupWorkerDatabase } from './worker-db';
-import { isPortOpen } from './global-setup';
 import { beforeAll, beforeEach, afterAll } from 'vite-plus/test';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -57,14 +56,8 @@ beforeAll(async () => {
     );
     dbAvailable = true;
   } catch (error) {
-    // No Postgres reachable → this run executes no backend tests (e.g. CI's
-    // test-default loads backend setupFiles but skips the tests). Skip instead
-    // of failing; a reachable-but-broken Postgres still throws loudly. The
-    // backend job's Postgres is health-gated, so it never skips there.
-    const { hostname, port } = new URL(getWorkerDatabaseUrl());
-    const reachable = await isPortOpen(hostname, port ? Number(port) : 5432);
-    if (process.env.SKIP_TEST_INFRA === '1' || !reachable) {
-      console.warn('[setup] Test database unreachable — DB-dependent tests will be skipped.');
+    if (process.env.SKIP_TEST_INFRA === '1') {
+      console.warn('[setup] Test database unreachable (SKIP_TEST_INFRA=1) — DB-dependent tests will fail.');
       return;
     }
     throw new Error(

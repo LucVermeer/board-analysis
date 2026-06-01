@@ -723,6 +723,10 @@ export async function queryServerState(client: ExtendedClient, sessionId: string
  * leave the uuid set — and thus the hash — unchanged). The two together also
  * ride out the brief window where a client is mid-resync after a sequence gap.
  * Returns the authoritative server view once everyone is caught up.
+ *
+ * Pass only participants you expect to converge: the predicate checks ALL of
+ * them, and a disconnected one's local state is frozen, so it would never catch
+ * up and the call would time out.
  */
 export async function waitForConvergence(
   participants: HeadlessParticipant[],
