@@ -31,7 +31,7 @@ import {
   type CreateSessionMutationResponse,
   type EndSessionMutationResponse,
 } from '../lib/graphql/operations';
-import { getStoredBoardConfig } from '../lib/board-store';
+import { getStoredActiveBoard } from '../lib/active-board-store';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
 import { findNextQueueItem, findPreviousQueueItem } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
@@ -88,14 +88,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     () =>
       createJoinSessionTracker({
         getBoardPath: async () => {
-          const boardConfig = await getStoredBoardConfig();
-          if (!boardConfig) return null;
+          const activeBoard = await getStoredActiveBoard();
+          if (!activeBoard) return null;
           return buildBoardPath(
-            boardConfig.boardName,
-            boardConfig.layoutId,
-            boardConfig.sizeId,
-            boardConfig.setIds,
-            boardConfig.angle,
+            activeBoard.boardType,
+            activeBoard.layoutId,
+            activeBoard.sizeId,
+            activeBoard.setIds,
+            activeBoard.angle,
           );
         },
         execute: ({ sessionId: sid, boardPath }) =>
@@ -223,15 +223,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (sessionCreationRef.current) return sessionCreationRef.current;
 
     const createPromise = (async () => {
-      const boardConfig = await getStoredBoardConfig();
-      if (!boardConfig) return null;
+      const activeBoard = await getStoredActiveBoard();
+      if (!activeBoard) return null;
 
       const boardPath = buildBoardPath(
-        boardConfig.boardName,
-        boardConfig.layoutId,
-        boardConfig.sizeId,
-        boardConfig.setIds,
-        boardConfig.angle,
+        activeBoard.boardType,
+        activeBoard.layoutId,
+        activeBoard.sizeId,
+        activeBoard.setIds,
+        activeBoard.angle,
       );
 
       try {

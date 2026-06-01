@@ -203,18 +203,6 @@ export type GetMyBoardsQueryResponse = {
   myBoards: UserBoardConnection;
 };
 
-export const GET_DEFAULT_BOARD = gql`
-  query GetDefaultBoard {
-    defaultBoard {
-      ${BOARD_FIELDS}
-    }
-  }
-`;
-
-export type GetDefaultBoardQueryResponse = {
-  defaultBoard: UserBoard | null;
-};
-
 export const GET_BOARD = gql`
   query GetBoard($boardUuid: ID!) {
     board(boardUuid: $boardUuid) {

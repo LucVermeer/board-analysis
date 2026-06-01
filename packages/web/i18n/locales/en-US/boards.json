@@ -37,7 +37,8 @@
     "signInSubtitle": "Your boards are tied to your account.",
     "signInCta": "Sign in",
     "errorTitle": "Couldn't load your boards",
-    "errorRetry": "Try again"
+    "errorRetry": "Try again",
+    "boardSwitchError": "Couldn't save that board. Try again."
   },
   "boardEntity": {
     "notFound": "Board not found",
