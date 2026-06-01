@@ -149,13 +149,20 @@ function RootLayout() {
                 <PartyProfileProvider>
                   <ConnectionSettingsProvider>
                     <ToastProvider>
-                      <BottomSheetModalProvider>
-                        <FavoritesProvider>
-                          <PlaylistsProvider>
-                            <QueueProvider>
-                              <BoardAdapterWrapper>
-                                <BoardProviderWrapper>
-                                  <BluetoothProviderWrapper>
+                      <FavoritesProvider>
+                        <PlaylistsProvider>
+                          <QueueProvider>
+                            <BoardAdapterWrapper>
+                              <BoardProviderWrapper>
+                                <BluetoothProviderWrapper>
+                                  {/* BottomSheetModalProvider lives *inside* the
+                                      board providers: gorhom's BottomSheetModal
+                                      portals its content (PlayDrawer → QuickTickBar)
+                                      to this host, so the host must sit within
+                                      BoardAdapterProvider/BoardProvider or the
+                                      portaled hooks (useSaveTick → useBoardAdapter)
+                                      escape that context. */}
+                                  <BottomSheetModalProvider>
                                     <DrawerHostProvider>
                                       <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
                                         <Stack.Screen name="(tabs)" />
@@ -166,13 +173,13 @@ function RootLayout() {
                                       </Stack>
                                       <PersistentQueueBar />
                                     </DrawerHostProvider>
-                                  </BluetoothProviderWrapper>
-                                </BoardProviderWrapper>
-                              </BoardAdapterWrapper>
-                            </QueueProvider>
-                          </PlaylistsProvider>
-                        </FavoritesProvider>
-                      </BottomSheetModalProvider>
+                                  </BottomSheetModalProvider>
+                                </BluetoothProviderWrapper>
+                              </BoardProviderWrapper>
+                            </BoardAdapterWrapper>
+                          </QueueProvider>
+                        </PlaylistsProvider>
+                      </FavoritesProvider>
                     </ToastProvider>
                   </ConnectionSettingsProvider>
                 </PartyProfileProvider>
