@@ -228,16 +228,15 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
   return (
     <BluetoothContext.Provider value={value}>
       {isConnected && <BluetoothAutoSender sendFramesToBoard={sendFramesToBoard} />}
+      {children}
       {pickerState && (
         <DevicePickerSheet
-          visible
           devices={pickerState.devices}
           onSelect={pickerState.handleSelect}
           onDismiss={pickerState.handleCancel}
           isScanning={pickerState.isScanning}
         />
       )}
-      {children}
     </BluetoothContext.Provider>
   );
 }

@@ -206,7 +206,7 @@ export function useBoardBluetooth({
           console.error(
             `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
           );
-          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.errorLedMissing'));
+          Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
           return false;
         }
 
@@ -222,7 +222,7 @@ export function useBoardBluetooth({
 
         if (skippedCount > 0 && result.packet.length === 0) {
           console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
-          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.errorIncompatible'));
+          Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
           return false;
         }
 
@@ -258,7 +258,7 @@ export function useBoardBluetooth({
 
         const available = await adapter.isAvailable();
         if (!available) {
-          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.notAvailable'));
+          Alert.alert(t('ble.notAvailable'), t('ble.notAvailable'));
           return false;
         }
 
@@ -331,7 +331,7 @@ export function useBoardBluetooth({
           /user cancelled|cancel/i.test(errorMessage) || /Device selection cancelled/i.test(errorMessage);
 
         if (!isUserCancel) {
-          Alert.alert(t('settings.ble.notAvailable'), t('settings.ble.errorConnectionFailed'));
+          Alert.alert(t('ble.notAvailable'), t('ble.errorConnectionFailed'));
         }
 
         // TODO: analytics (Phase 6)
