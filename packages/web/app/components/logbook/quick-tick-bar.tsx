@@ -11,7 +11,7 @@ import { useBoardProvider } from '../board-provider/board-provider-context';
 import { getGradesForBoard } from '@/app/lib/board-data';
 import { loadTickDraft } from '@/app/lib/tick-draft-db';
 import { useTickSave, buildTickTarget, type TickTarget } from '@/app/hooks/use-tick-save';
-import type { TickStatus } from '@/app/hooks/use-logbook';
+import type { TickStatus } from '@boardsesh/board-react';
 import {
   TickControls,
   TickGradeButton,

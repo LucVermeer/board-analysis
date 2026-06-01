@@ -5,7 +5,7 @@ import { track } from '@/app/lib/analytics';
 import { hasPriorHistoryForClimb as _hasPriorHistoryForClimb } from '@boardsesh/play-view';
 import type { Climb, BoardDetails, Angle } from '@/app/lib/types';
 import { useBoardProvider } from '../components/board-provider/board-provider-context';
-import type { LogbookEntry, TickStatus } from '@/app/hooks/use-logbook';
+import type { LogbookEntry, TickStatus } from '@boardsesh/board-react';
 import { useConfetti } from './use-confetti';
 import { saveTickDraft, clearTickDraft } from '@/app/lib/tick-draft-db';
 

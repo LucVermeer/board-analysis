@@ -27,7 +27,7 @@ import BoardScrollCard from '../../board-scroll/board-scroll-card';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import type { BoardName, BoardDetails } from '@/app/lib/types';
 import { LogAscentDrawer } from '../../logbook/log-ascent-drawer';
-import type { LogbookEntry } from '@/app/hooks/use-logbook';
+import type { LogbookEntry } from '@boardsesh/board-react';
 import { useTranslation } from 'react-i18next';
 
 const VALID_BOARD_NAMES: ReadonlySet<string> = new Set<BoardName>(['kilter', 'tension', 'moonboard']);

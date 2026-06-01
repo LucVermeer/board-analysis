@@ -10,7 +10,7 @@ import {
   logbookQueryKey,
   accumulatedLogbookQueryKey,
   type LogbookEntry,
-} from '../use-logbook';
+} from '@boardsesh/board-react';
 
 vi.mock('../use-ws-auth-token', () => ({
   useWsAuthToken: vi.fn(),

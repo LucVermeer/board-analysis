@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test'
 import React from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import type { Angle, BoardDetails, BoardName, Climb } from '@/app/lib/types';
-import type { LogbookEntry } from '@/app/hooks/use-logbook';
+import type { LogbookEntry } from '@boardsesh/board-react';
 import { type QuickTickBarHandle, QuickTickBar } from '../quick-tick-bar';
 import { hasPriorHistoryForClimb } from '@/app/hooks/use-tick-save';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';

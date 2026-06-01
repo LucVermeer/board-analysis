@@ -4,7 +4,7 @@ import { createBoardAdapterWrapper } from '@/app/test-utils/test-providers';
 import type { ExecuteWs } from '@boardsesh/board-react';
 import { useWsAuthToken } from '../use-ws-auth-token';
 import { useSession } from 'next-auth/react';
-import { useSaveClimb } from '../use-save-climb';
+import { useSaveClimb } from '@boardsesh/board-react';
 
 vi.mock('../use-ws-auth-token', () => ({
   useWsAuthToken: vi.fn(),

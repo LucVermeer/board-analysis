@@ -4,8 +4,8 @@ import { createBoardAdapterWrapper, createTestQueryClient } from '@/app/test-uti
 import type { ExecuteHttp } from '@boardsesh/board-react';
 import { useWsAuthToken } from '../use-ws-auth-token';
 import { useSession } from 'next-auth/react';
-import { useSaveTick, type SaveTickOptions } from '../use-save-tick';
-import { accumulatedLogbookQueryKey, type LogbookEntry } from '../use-logbook';
+import { useSaveTick, type SaveTickOptions } from '@boardsesh/board-react';
+import { accumulatedLogbookQueryKey, type LogbookEntry } from '@boardsesh/board-react';
 
 vi.mock('../use-ws-auth-token', () => ({
   useWsAuthToken: vi.fn(),
