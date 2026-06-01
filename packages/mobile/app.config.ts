@@ -147,6 +147,13 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       package: 'com.boardsesh.app',
       permissions: ['BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'ACCESS_FINE_LOCATION'],
       blockedPermissions: ['android.permission.BLUETOOTH_ADVERTISE'],
+      // expo-maps on Android renders Google Maps, which needs an API key. iOS
+      // uses Apple Maps and needs none. Supplied via env so iOS works out of the
+      // box; the Android map stays blank until GOOGLE_MAPS_API_KEY is set + a
+      // rebuild. Only emit the block when the key exists to keep config clean.
+      ...(process.env.GOOGLE_MAPS_API_KEY
+        ? { config: { googleMaps: { apiKey: process.env.GOOGLE_MAPS_API_KEY } } }
+        : {}),
     },
     plugins: [
       'expo-router',
@@ -159,6 +166,10 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
             'Boardsesh uses your location to find nearby boards to climb on and to discover nearby climbing sessions in Party Mode.',
         },
       ],
+      // Board search map. Location permissions are already handled by
+      // expo-location above; the Android Google Maps key is set via
+      // android.config.googleMaps.apiKey (env-gated). iOS uses Apple Maps.
+      'expo-maps',
       'expo-status-bar',
       'expo-updates',
       'expo-web-browser',

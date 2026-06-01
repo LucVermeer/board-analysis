@@ -229,6 +229,11 @@ export default function BoardSelection() {
             onPress={onModeBluetooth}
           />
           <BoardModeCard icon="plus" label={t('mobile.discovery.custom')} onPress={onModeCustom} />
+          <BoardModeCard
+            icon="search"
+            label={t('mobile.discovery.search')}
+            onPress={() => router.push('/(tabs)/boards/search')}
+          />
         </View>
 
         {nearbyItems.length > 0 ? (

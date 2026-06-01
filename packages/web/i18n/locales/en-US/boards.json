@@ -47,7 +47,8 @@
       "nearbyTitle": "Near you",
       "nearbyShowing": "Showing nearby",
       "yourBoardsTitle": "Your boards",
-      "popularTitle": "Popular setups"
+      "popularTitle": "Popular setups",
+      "search": "Search"
     },
     "custom": {
       "title": "Build a board",
@@ -65,6 +66,10 @@
       "resolving": "Loading boards…",
       "noResults": "No boards in range",
       "unavailable": "Turn on Bluetooth to scan"
+    },
+    "search": {
+      "placeholder": "Search by name or place",
+      "mapUnavailable": "Update the app to see the map. You can still search by name."
     }
   },
   "boardEntity": {

@@ -120,6 +120,9 @@
 // i18n-keep boards.mobile.discovery.locationDenied
 // i18n-keep boards.mobile.discovery.nearbyTitle
 // i18n-keep boards.mobile.discovery.nearbyShowing
+// i18n-keep boards.mobile.discovery.search
+// i18n-keep boards.mobile.search.placeholder
+// i18n-keep boards.mobile.search.mapUnavailable
 // i18n-keep boards.mobile.discovery.yourBoardsTitle
 // i18n-keep boards.mobile.discovery.popularTitle
 // i18n-keep boards.mobile.custom.title

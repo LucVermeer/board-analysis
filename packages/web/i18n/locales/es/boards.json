@@ -47,7 +47,8 @@
       "nearbyTitle": "Cerca de ti",
       "nearbyShowing": "Mostrando cercanos",
       "yourBoardsTitle": "Tus boards",
-      "popularTitle": "Configuraciones populares"
+      "popularTitle": "Configuraciones populares",
+      "search": "Buscar"
     },
     "custom": {
       "title": "Crea un board",
@@ -65,6 +66,10 @@
       "resolving": "Cargando boards…",
       "noResults": "Ningún board al alcance",
       "unavailable": "Activa el Bluetooth para buscar"
+    },
+    "search": {
+      "placeholder": "Busca por nombre o lugar",
+      "mapUnavailable": "Actualiza la app para ver el mapa. Puedes buscar por nombre."
     }
   },
   "boardEntity": {
