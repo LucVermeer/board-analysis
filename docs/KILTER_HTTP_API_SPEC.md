@@ -46,13 +46,19 @@ Networking splits into four planes:
 | **Realtime sync** | `sync1.kiltergrips.com` | HTTPS streaming + WebSocket (PowerSync) | Bidirectional sync of the Postgres-backed catalog into a local SQLite mirror |
 | **Maps** | `places.googleapis.com` | HTTPS / JSON | Gym/wall location autocomplete |
 
-The bulk of the catalog (climbs, climb stats, walls, gyms, users, etc.) is **read from the local SQLite mirror**, not the REST API. The REST API is used for:
+Most reads go to a **local SQLite mirror**, but that mirror is filled by **two different mechanisms**, and the split matters for interop:
 
+- **PowerSync** fills the small reference catalog (holds, hold sets, grades, products, layouts, mounting holes), `gyms`/`walls`, and the signed-in user's own data (logs, attempts, ratings, circuits, settings, social). Confirmed working with a stock `@powersync/node` client — see [`KILTER_POWERSYNC_SPEC.md §6`](KILTER_POWERSYNC_SPEC.md#6-what-syncs-where).
+- **REST** fills the public **climb catalog** (`climbs` + `climb_stats`). The app pages `/api/climbs/climbdetails/{productName}/edges` by board region on first login (the "Downloading data…" screen) and caches the rows locally. This catalog is **not** a PowerSync bucket.
+
+The REST API is therefore used for:
+
+- the public climb catalog read path (`/api/climbs/...edges`, `/curated`, `/all/`, `/climb-stat/all/`, `/delteduuids`)
 - writes (logs, climbs, ratings, circuits)
 - operations PowerSync can't model (image upload, email verification, OAuth-mediated registration)
 - "transactional" endpoints that wrap multi-table writes the server promises to apply atomically
 
-This is the reason the app feels offline-tolerant: almost every read goes to local SQLite, with PowerSync streaming server-side changes back in the background.
+The app feels offline-tolerant because reads hit local SQLite — but populating the climb catalog there is an explicit REST download, not a background PowerSync stream.
 
 ---
 
@@ -84,6 +90,8 @@ Authentication is delegated to Keycloak, with Authorization Code + PKCE.
 | Logout | `https://idp.kiltergrips.com/realms/kilter/protocol/openid-connect/logout` |
 
 **Redirect URI scheme**: `com.kiltergrips:/oauthredirect`.
+
+**Client / scope** (confirmed): `client_id=kilter`, `scope=openid offline_access`. There is one realm (`kilter`) and one client; the access token's `aud` is `["kilter", "account"]`. A headless consumer can skip the browser flow entirely and use the Resource-Owner-Password grant (`grant_type=password`) against `/token` with the same `client_id` and `scope` — confirmed working for the PowerSync stream. (The other client-id strings in the app — `androidClientId`, `iosClientId`, `kilter-app-analytics` — are Firebase/Google, not Keycloak.)
 
 **Flow**:
 
@@ -488,7 +496,7 @@ Gym endpoints don't surface as `/api/gyms` paths — gym data appears to be **re
 
 ## 6. PowerSync realtime layer
 
-The Kilter app uses [PowerSync](https://www.powersync.com) to mirror the Postgres-backed catalog into a local SQLite database with bidirectional sync — this is what makes the app feel offline-first. The protocol details, table inventory, and Boardsesh implementation plan live in [`KILTER_POWERSYNC_SPEC.md`](KILTER_POWERSYNC_SPEC.md).
+The Kilter app uses [PowerSync](https://www.powersync.com) to mirror the **reference catalog, `gyms`/`walls`, and per-user data** from Postgres into local SQLite. (The public climb catalog is the exception — it's REST-fetched, see [§1](#1-architecture-overview).) The protocol details, table inventory, and the PowerSync-vs-REST split live in [`KILTER_POWERSYNC_SPEC.md`](KILTER_POWERSYNC_SPEC.md).
 
 Quick summary:
 
@@ -635,10 +643,10 @@ Local-only history table; not synced.
 Gaps that need traffic capture or direct confirmation from Kilter to close:
 
 1. **Exact `/v2/users/` semantics** — is it a versioning bump, an admin/internal namespace, or a paginated variant?
-2. **OAuth `client_id`** — Keycloak realm config is public via `.well-known/openid-configuration`, but the specific `client_id` the client uses is not externally visible. Easy to confirm by inspecting one round-trip.
-3. **Exact JSON casing on the wire** — the REST side is most likely camelCase but unverified. The PowerSync side uses snake_case (Postgres mirror).
+2. ~~**OAuth `client_id`**~~ — **Resolved**: `client_id=kilter`, `scope=openid offline_access` (see [§3](#3-authentication-keycloak--oidc)).
+3. **Exact JSON casing on the wire** — the REST side is most likely camelCase but unverified. The PowerSync side mirrors Postgres columns as-is (mostly snake_case, with some camelCase — the confirmed `gyms` schema has both).
 4. **PUT vs PATCH for updates** — `*/update-climb/transaction` endpoints accept POST, but for simple updates (rating, settings) PUT vs PATCH cannot be distinguished from the path list alone.
-5. **PowerSync sync rules YAML** — bucketing, partitioning by `user_uuid`, and the global-public-data buckets are inferred. The server-side rules would make the access model fully explicit.
+5. **Catalog REST pagination contract** — the `/api/climbs/climbdetails/{productName}/edges` params (`edge*`, `limit`, `offset`), page-size cap, and whether `/api/climbs/all/` is an unpaginated bulk pull. The single most useful capture for an interop consumer (this is the public-catalog read path — see [§1](#1-architecture-overview)).
 6. **Errors** — only `RegistrationError` is a typed model. Other endpoints probably return a generic shape (`{ "error": "...", "message": "..." }`) but this isn't established.
 7. **Rate limits / pagination defaults** — no headers or limits surfaced.
 8. **The two static pages at `app.kiltergrips.com`** — `/privacy` and `/terms` are the only routes seen.
