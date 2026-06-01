@@ -1,5 +1,5 @@
 import { createIndexedDBStore } from './idb-helper';
-import type { TickStatus } from '@/app/hooks/use-logbook';
+import type { TickStatus } from '@boardsesh/board-react';
 
 const STORE_NAME = 'tick-drafts';
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import type { LogbookEntry } from '@/app/hooks/use-logbook';
+import type { LogbookEntry } from '@boardsesh/board-react';
 import { AscentStatusIcon } from '@/app/components/ascent-status/ascent-status-icon';
 import {
   normalizeAscentStatus,

@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
 import type { Climb, Angle, BoardDetails, BoardName } from '@/app/lib/types';
-import type { LogbookEntry } from '@/app/hooks/use-logbook';
+import type { LogbookEntry } from '@boardsesh/board-react';
 import { hasPriorHistoryForClimb, buildTickTarget, useTickSave, type UseTickSaveOptions } from '../use-tick-save';
 import { saveTickDraft } from '@/app/lib/tick-draft-db';
 

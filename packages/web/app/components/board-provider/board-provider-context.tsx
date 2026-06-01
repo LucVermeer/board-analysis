@@ -22,14 +22,6 @@ import { BoardAdapterWrapper } from './board-adapter';
 // boardName without manual narrowing.
 export type BoardContextType = Omit<SharedBoardContextType, 'boardName'> & { boardName: BoardName };
 
-// Re-exports kept stable for existing import sites.
-export type {
-  SaveTickOptions,
-  SaveClimbResponse,
-  UpdateClimbResponse,
-  TickStatus,
-  LogbookEntry,
-} from '@boardsesh/board-react';
 export { BoardContext };
 
 export function BoardProvider({ boardName, children }: { boardName: BoardName; children: ReactNode }) {

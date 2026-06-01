@@ -7,7 +7,7 @@ import { createBoardAdapterWrapper, createTestQueryClient } from '@/app/test-uti
 import type { ExecuteHttp } from '@boardsesh/board-react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSession } from 'next-auth/react';
-import { useLogbook, accumulatedLogbookQueryKey, type LogbookEntry } from '@/app/hooks/use-logbook';
+import { useLogbook, accumulatedLogbookQueryKey, type LogbookEntry } from '@boardsesh/board-react';
 import { AscentStatus } from '../ascent-status';
 import { BoardContext, type BoardContextType } from '../../board-provider/board-provider-context';
 

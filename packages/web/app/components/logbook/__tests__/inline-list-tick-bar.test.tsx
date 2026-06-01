@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import React from 'react';
 import { render, screen, act } from '@testing-library/react';
 import type { Angle, BoardDetails, BoardName, Climb } from '@/app/lib/types';
-import type { LogbookEntry } from '@/app/hooks/use-logbook';
+import type { LogbookEntry } from '@boardsesh/board-react';
 import { InlineListTickBar } from '../inline-list-tick-bar';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 
