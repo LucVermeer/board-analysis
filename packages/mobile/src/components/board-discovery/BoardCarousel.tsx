@@ -29,6 +29,9 @@ export function BoardCarousel({ items, onSelect, onEndReached, contentStyle }: B
   );
 
   return (
+    // No `estimatedItemSize` — FlashList v2 (installed: 2.0.2) removed it in
+    // favour of automatic sizing; passing it is a no-op. Cards are fixed-width
+    // (DISCOVERY_CARD_WIDTH) so layout is stable regardless.
     <FlashList
       data={items}
       horizontal

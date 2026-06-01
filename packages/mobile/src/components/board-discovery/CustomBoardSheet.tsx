@@ -44,6 +44,16 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
   const [setIds, setSetIds] = useState<number[]>([]);
   const [angle, setAngle] = useState<number>(40);
 
+  // Start fresh on each open: dismissing a half-configured builder and
+  // reopening it should present a clean slate, not stale selections.
+  const resetForm = () => {
+    setBoardName(SUPPORTED_BOARDS[0]);
+    setLayoutId(null);
+    setSizeId(null);
+    setSetIds([]);
+    setAngle(40);
+  };
+
   // Cascading option lists — each derives from the selection above it.
   const layouts = useMemo(() => getAllLayouts(boardName), [boardName]);
   const sizes = useMemo(() => (layoutId != null ? getSizesForLayoutId(boardName, layoutId) : []), [boardName, layoutId]);
@@ -129,7 +139,7 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
   );
 
   return (
-    <Sheet ref={ref} snapPoints={['85%']}>
+    <Sheet ref={ref} snapPoints={['85%']} onClose={resetForm}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text variant="title3" style={styles.heading}>
           {t('mobile.custom.title')}

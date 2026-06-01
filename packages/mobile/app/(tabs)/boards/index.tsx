@@ -10,7 +10,6 @@ import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-
 import { useDeviceLocation } from '../../../src/lib/use-device-location';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useToast } from '../../../src/providers/toast-provider';
-import { useTheme } from '../../../src/providers/theme-provider';
 import { hapticSelection } from '../../../src/lib/haptics';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
@@ -31,7 +30,6 @@ import { spacing } from '../../../src/theme/tokens';
 
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
-  const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation('boards');
@@ -57,7 +55,7 @@ export default function BoardSelection() {
   const { data: popular } = usePopularBoardConfigs({ limit: 12 });
 
   const location = useDeviceLocation();
-  const { data: nearby } = useNearbyBoards(location.coords);
+  const { data: nearby, isLoading: isNearbyLoading } = useNearbyBoards(location.coords);
 
   const customSheetRef = useRef<BottomSheet>(null);
   const bluetoothSheetRef = useRef<BottomSheet>(null);
@@ -106,9 +104,16 @@ export default function BoardSelection() {
   const onSelectMyBoard = useCallback(
     (item: DiscoveryBoardItem) => {
       const board = myBoards.find((b) => b.uuid === item.key) ?? (nearby?.boards ?? []).find((b) => b.uuid === item.key);
-      if (board) void activateBoard(board);
+      if (board) {
+        void activateBoard(board);
+      } else {
+        // The item's UserBoard should always be in one of the lists it came
+        // from; if a refetch dropped it between render and tap, give feedback
+        // rather than a dead tap.
+        showToast(t('mobile.boardSwitchError'), 'error');
+      }
     },
-    [myBoards, nearby?.boards, activateBoard],
+    [myBoards, nearby?.boards, activateBoard, showToast, t],
   );
 
   const onModeFindNearby = useCallback(() => {
@@ -139,8 +144,11 @@ export default function BoardSelection() {
     customSheetRef.current?.expand();
   }, []);
 
+  // 'granted' means the fix is in and the nearby query is running — keep the
+  // card in its loading state until results arrive so it doesn't look like it's
+  // waiting on another tap.
   const nearbyState: ModeCardState =
-    location.status === 'loading'
+    location.status === 'loading' || (location.status === 'granted' && isNearbyLoading)
       ? 'loading'
       : location.status === 'denied'
         ? 'denied'

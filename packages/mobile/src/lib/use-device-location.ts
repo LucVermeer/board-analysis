@@ -25,12 +25,15 @@ export type DeviceLocation = {
 export function useDeviceLocation(): DeviceLocation {
   const [status, setStatus] = useState<LocationStatus>('idle');
   const [coords, setCoords] = useState<Coords | null>(null);
-  // Guard against double-taps / re-entrancy while a request is in flight.
-  const inFlightRef = useRef(false);
+  // Once a request reaches a terminal state (granted / denied / unavailable),
+  // or while one is in flight, further taps are no-ops — no redundant native
+  // permission/location calls. iOS only shows the permission prompt once
+  // anyway, so re-requesting after a denial would silently re-resolve denied.
+  const settledRef = useRef(false);
 
   const request = useCallback(async () => {
-    if (inFlightRef.current || coords) return;
-    inFlightRef.current = true;
+    if (settledRef.current) return;
+    settledRef.current = true;
     setStatus('loading');
 
     try {
@@ -49,11 +52,12 @@ export function useDeviceLocation(): DeviceLocation {
     } catch {
       // Module missing (pre-expo-location build) or a location error — either
       // way there's nothing to show; surface it as unavailable, not a crash.
+      // This can be transient (a one-off GPS error), so re-open the gate to
+      // allow a later retry — unlike a permission denial, which is sticky.
+      settledRef.current = false;
       setStatus('unavailable');
-    } finally {
-      inFlightRef.current = false;
     }
-  }, [coords]);
+  }, []);
 
   return { status, coords, request };
 }
