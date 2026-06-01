@@ -19,6 +19,7 @@ out/
 # production
 build
 dist
+.docker-context/
 
 # misc
 .DS_Store

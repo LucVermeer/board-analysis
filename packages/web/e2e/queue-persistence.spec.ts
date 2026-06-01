@@ -28,6 +28,13 @@ async function addClimbToQueue(page: Page): Promise<string> {
   await expect(queueToggle).toBeVisible({ timeout: 5000 });
   const climbName = ((await queueToggle.textContent()) ?? '').trim();
   expect(climbName).toBeTruthy();
+
+  const playDrawerCloseButton = page.getByRole('button', { name: 'Close' }).first();
+  if (await playDrawerCloseButton.isVisible({ timeout: 2_000 })) {
+    await playDrawerCloseButton.click();
+    await expect(playDrawerCloseButton).toBeHidden({ timeout: 10_000 });
+  }
+
   return climbName;
 }
 
@@ -143,21 +150,19 @@ test.describe('Queue Persistence - Local Mode', () => {
 });
 
 test.describe('Queue Persistence - Board Switch', () => {
-  test('queue should NOT persist across full page navigations (no IndexedDB persistence)', async ({ page }) => {
+  test('queue restores across full page navigations on the same board layout', async ({ page }) => {
     const boardUrl1 = '/kilter/original/12x12-square/screw_bolt/40/list';
     const boardUrl2 = '/kilter/original/12x12-square/screw_bolt/45/list'; // Different angle
 
     // Navigate to first board and add a climb
     await page.goto(boardUrl1);
     await waitForBoardPage(page);
-    await addClimbToQueue(page);
+    const climbName = await addClimbToQueue(page);
 
-    // Full page navigation destroys in-memory state; queue is not persisted to IndexedDB
+    // Full page navigation reloads the app, then the persisted local queue restores.
     await page.goto(boardUrl2);
     await waitForBoardPage(page);
 
-    // Queue bar should NOT be visible (queue lost on full page reload)
-    const bar = page.locator(queueControlBar);
-    await expect(bar).not.toBeVisible({ timeout: 3000 });
+    await verifyQueueShowsClimb(page, climbName, 15_000);
   });
 });
