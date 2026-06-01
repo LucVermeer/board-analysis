@@ -17,6 +17,7 @@ import {
   type ClimbSearchParams,
   type ParsedBoardRouteParameters,
   getClimbByUuid,
+  mapSearchInputToParams,
 } from '../../../db/queries/climbs/index';
 import { isValidBoardName } from '../../../db/queries/util/table-select';
 import { applyRateLimit, validateInput } from '../shared/helpers';
@@ -165,31 +166,9 @@ export const climbQueries = {
       angle: input.angle,
     };
 
-    // Build search parameters
-    const searchParams: ClimbSearchParams = {
-      page: input.page ?? 0,
-      pageSize: input.pageSize ?? 20,
-      gradeAccuracy: input.gradeAccuracy ? parseFloat(input.gradeAccuracy) : undefined,
-      minGrade: input.minGrade,
-      maxGrade: input.maxGrade,
-      minAscents: input.minAscents,
-      minRating: input.minRating,
-      sortBy: input.sortBy ?? 'ascents',
-      sortOrder: input.sortOrder ?? 'desc',
-      name: input.name,
-      settername: input.setter && input.setter.length > 0 ? input.setter : undefined,
-      onlyTallClimbs: input.onlyTallClimbs,
-      onlyWideClimbs: input.onlyWideClimbs,
-      holdsFilter: input.holdsFilter,
-      hideAttempted: input.hideAttempted,
-      hideCompleted: input.hideCompleted,
-      showOnlyAttempted: input.showOnlyAttempted,
-      showOnlyCompleted: input.showOnlyCompleted,
-      onlyDrafts: input.onlyDrafts,
-      projectsOnly: input.projectsOnly,
-      zoneBox: input.zoneBox,
-      zoneMode: input.zoneMode,
-    };
+    // Build search parameters via the shared mapper — same falsy-collapse
+    // rules as the web SSR path. Don't inline the field-by-field copy here.
+    const searchParams: ClimbSearchParams = mapSearchInputToParams(input);
 
     if (DEBUG) {
       logger.info(

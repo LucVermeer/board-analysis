@@ -13,6 +13,8 @@ export const defaultClimbSearchParameters: SearchRequestPagination = {
   onlyClassics: false,
   onlyTallClimbs: false,
   onlyWideClimbs: false,
+  boulders: true,
+  routes: false,
   gradeAccuracy: 1,
   settername: [],
   setternameSuggestion: '',

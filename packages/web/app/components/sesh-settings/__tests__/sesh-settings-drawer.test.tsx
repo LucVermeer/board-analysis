@@ -272,12 +272,12 @@ describe('SeshSettingsDrawer', () => {
     });
 
     it('replaces angle in slug-based route preserving trailing segments', () => {
-      mockPathname = '/b/my-board/40/play/some-uuid';
+      mockPathname = '/b/my-board/40/view/some-uuid';
       mockAngle = 40;
       render(<SeshSettingsDrawer open onClose={vi.fn()} />);
 
       fireEvent.click(screen.getByTestId('change-angle-45'));
-      expect(mockPush).toHaveBeenCalledWith('/b/my-board/45/play/some-uuid');
+      expect(mockPush).toHaveBeenCalledWith('/b/my-board/45/view/some-uuid');
     });
 
     it('replaces angle in slug-based route with /list suffix', () => {

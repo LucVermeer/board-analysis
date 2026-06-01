@@ -43,6 +43,13 @@ export type Climb = {
   published_at?: string | null;
   // ISO timestamp of when the climb row was created.
   created_at?: string | null;
+  // Number of animation frames encoded in `frames` (1 for static climbs;
+  // >1 for variable-speed routes/circuits synced from Aurora). Null falls
+  // back to "single frame" semantics on the playback engine.
+  framesCount?: number | null;
+  // Pace between frames, treated as milliseconds. Clamped on the engine
+  // side. 0/null disables auto-advance.
+  framesPace?: number | null;
 };
 
 // Input type for Climb (matches GraphQL ClimbInput)
@@ -69,6 +76,10 @@ export type ClimbInput = {
   published_at?: string | null;
   userAscents?: number | null;
   userAttempts?: number | null;
+  // Round-trip through the queue input so peers reconstruct multi-frame climb
+  // metadata without a /climb refetch — the playback engine reads these.
+  framesCount?: number | null;
+  framesPace?: number | null;
 };
 
 /**
@@ -117,6 +128,10 @@ export type ClimbSearchInput = {
   showOnlyCompleted?: boolean;
   onlyDrafts?: boolean;
   projectsOnly?: boolean;
+  // Climb-type toggles. Both undefined / both true → no frames_count filter.
+  // Boulders only → `frames_count = 1`. Routes only → `frames_count > 1`.
+  boulders?: boolean;
+  routes?: boolean;
   // Zone filter — restrict climbs based on a user-drawn bounding box.
   zoneBox?: ZoneBoxInput;
   zoneMode?: ZoneMatchMode;

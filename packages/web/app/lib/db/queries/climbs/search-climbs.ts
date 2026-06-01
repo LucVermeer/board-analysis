@@ -1,7 +1,7 @@
 import 'server-only';
 import { unstable_cache } from 'next/cache';
 import { getReadDb } from '@/app/lib/db/db';
-import { searchClimbs as sharedSearchClimbs } from '@boardsesh/db/queries';
+import { searchClimbs as sharedSearchClimbs, mapSearchInputToParams } from '@boardsesh/db/queries';
 import { getBoardClimbSearchTag } from '@/app/lib/climb-search-cache';
 import type { ParsedBoardRouteParameters, SearchRequestPagination, BoardName, Climb } from '@/app/lib/types';
 import { sortObjectKeys } from '@/app/lib/cache-utils';
@@ -37,40 +37,10 @@ async function _executeClimbSearch(
   const searchParams = JSON.parse(searchParamsJson) as SearchRequestPagination;
 
   const db = getReadDb();
-  const result = await sharedSearchClimbs(
-    db,
-    params,
-    {
-      page: searchParams.page,
-      pageSize: searchParams.pageSize,
-      gradeAccuracy: searchParams.gradeAccuracy ? Number(searchParams.gradeAccuracy) : undefined,
-      minGrade: searchParams.minGrade || undefined,
-      maxGrade: searchParams.maxGrade || undefined,
-      minAscents: searchParams.minAscents || undefined,
-      minRating: searchParams.minRating || undefined,
-      sortBy: searchParams.sortBy || 'ascents',
-      sortOrder: searchParams.sortOrder || 'desc',
-      name: searchParams.name || undefined,
-      settername: searchParams.settername && searchParams.settername.length > 0 ? searchParams.settername : undefined,
-      onlyTallClimbs: searchParams.onlyTallClimbs || undefined,
-      onlyWideClimbs: searchParams.onlyWideClimbs || undefined,
-      // Pass the holds filter straight through — `createClimbFilters` walks
-      // the new {holdId: {TYPE: 'include' | 'exclude'}} shape directly.
-      holdsFilter:
-        searchParams.holdsFilter && Object.keys(searchParams.holdsFilter).length > 0
-          ? searchParams.holdsFilter
-          : undefined,
-      hideAttempted: searchParams.hideAttempted || undefined,
-      hideCompleted: searchParams.hideCompleted || undefined,
-      showOnlyAttempted: searchParams.showOnlyAttempted || undefined,
-      showOnlyCompleted: searchParams.showOnlyCompleted || undefined,
-      onlyDrafts: searchParams.onlyDrafts || undefined,
-      projectsOnly: searchParams.projectsOnly || undefined,
-      zoneBox: searchParams.zoneBox || undefined,
-      zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,
-    },
-    userId,
-  );
+  // `mapSearchInputToParams` lives in `@boardsesh/db` so the SSR path and the
+  // GraphQL resolver share the same input → params shape. Don't duplicate the
+  // falsy-collapse rules here.
+  const result = await sharedSearchClimbs(db, params, mapSearchInputToParams(searchParams), userId);
 
   const climbs: Climb[] = result.climbs.map((row) => ({
     ...row,
@@ -140,6 +110,8 @@ export function buildClimbSearchParamsJson(searchParams: SearchRequestPagination
       showOnlyCompleted: searchParams.showOnlyCompleted,
       onlyDrafts: searchParams.onlyDrafts,
       projectsOnly: searchParams.projectsOnly,
+      boulders: searchParams.boulders,
+      routes: searchParams.routes,
     }),
   );
 }

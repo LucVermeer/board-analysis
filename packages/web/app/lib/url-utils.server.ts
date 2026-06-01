@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import type {
   BoardRouteParameters,
   ParsedBoardRouteParametersWithUuid,
@@ -220,3 +220,19 @@ async function parseRouteParamsImpl<T extends BoardRouteParameters>(
 }
 
 export const parseRouteParams = cache(parseRouteParamsImpl);
+
+/**
+ * 301-redirect to `viewUrl` with the original search params reserialised onto
+ * the new URL. Shared by the two `/play/[climb_uuid]` redirect pages so the
+ * URLSearchParams + permanentRedirect boilerplate lives in one place.
+ *
+ * Never returns — `permanentRedirect` throws.
+ */
+export function redirectWithQuery(viewUrl: string, searchParams: Record<string, string | string[]>): never {
+  const queryString = new URLSearchParams(
+    Object.entries(searchParams).flatMap(([key, value]) =>
+      Array.isArray(value) ? value.map((v) => [key, v] as [string, string]) : [[key, value] as [string, string]],
+    ),
+  ).toString();
+  permanentRedirect(queryString ? `${viewUrl}?${queryString}` : viewUrl);
+}

@@ -79,14 +79,24 @@ describe('buildOverlayUrl', () => {
   } as unknown as BoardDetails;
 
   it('builds a correctly structured URL', () => {
-    const url = buildOverlayUrl(boardDetails, 'p1r12,p2r13');
+    // Single-frame strings pass through verbatim (no commas, no `x` tokens).
+    const url = buildOverlayUrl(boardDetails, 'p1r12p2r13');
     expect(url).toContain('/api/internal/board-render');
     expect(url).toContain('board_name=kilter');
     expect(url).toContain('layout_id=1');
     expect(url).toContain('size_id=7');
     expect(url).toContain('set_ids=1,20');
-    expect(url).toContain('frames=p1r12%2Cp2r13');
+    expect(url).toContain('frames=p1r12p2r13');
     expect(url).not.toContain('thumbnail');
+  });
+
+  it('collapses multi-frame delta strings to the cumulative final snapshot', () => {
+    // Aurora delta format: `p1r12` then `,p2r13` adds hold 2 on frame 1.
+    // Renderer can't parse commas — toFlatFrames accumulates and re-emits
+    // using STATE_TO_PRIMARY_CODE['kilter'] (12 -> 42, 13 -> 43).
+    const url = buildOverlayUrl(boardDetails, 'p1r12,p2r13');
+    expect(url).toContain('frames=p1r42p2r43');
+    expect(url).not.toContain('%2C');
   });
 
   it('appends thumbnail=1 when thumbnail is true', () => {

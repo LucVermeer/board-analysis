@@ -1,98 +1,44 @@
-import React from 'react';
 import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
 import { resolveBoardBySlug, boardToRouteParams } from '@/app/lib/board-slug-utils';
-import { getBoardDetailsForBoard } from '@/app/lib/board-utils';
 import { getClimb } from '@/app/lib/data/queries';
+import { constructBoardSlugViewUrl, extractUuidFromSlug, isUuidOnly } from '@/app/lib/url-utils';
+import { redirectWithQuery } from '@/app/lib/url-utils.server';
 
-import PlayViewClient from '@/app/[board_name]/[layout_id]/[size_id]/[set_ids]/[angle]/play/[climb_uuid]/play-view-client';
-import { scheduleOverlayWarming } from '@/app/lib/warm-overlay-cache';
-import { extractUuidFromSlug } from '@/app/lib/url-utils';
-import { buildOgBoardRenderUrl } from '@/app/components/board-renderer/util';
-import { getServerTranslation } from '@/app/lib/i18n/server';
-import { createPageMetadata } from '@/app/lib/seo/metadata';
-
-type BoardSlugPlayPageProps = {
+/**
+ * Old `/b/{board_slug}/{angle}/play/[climb_uuid]` URLs 301-redirect to the
+ * equivalent `/b/{board_slug}/{angle}/view/[climb_uuid]`. See the canonical
+ * redirect page for context.
+ */
+export default async function BoardSlugPlayRedirectPage(props: {
   params: Promise<{ board_slug: string; angle: string; climb_uuid: string }>;
-};
-
-export async function generateMetadata(props: BoardSlugPlayPageProps): Promise<Metadata> {
+  searchParams: Promise<Record<string, string | string[]>>;
+}) {
   const params = await props.params;
-  const { t, locale } = await getServerTranslation('climbs');
-
-  try {
-    const board = await resolveBoardBySlug(params.board_slug);
-    if (!board) {
-      return createPageMetadata({
-        title: t('metadata.play.fallbackTitle'),
-        description: t('metadata.play.fallbackDescription'),
-        locale,
-        robots: { index: false, follow: true },
-      });
-    }
-
-    const parsedParams = {
-      ...boardToRouteParams(board, Number(params.angle)),
-      climb_uuid: extractUuidFromSlug(params.climb_uuid),
-    };
-
-    const boardDetails = getBoardDetailsForBoard(parsedParams);
-    const currentClimb = await getClimb(parsedParams);
-
-    const climbName = currentClimb.name || `${boardDetails.board_name} Climb`;
-    const climbGrade = currentClimb.difficulty || 'Unknown Grade';
-    const setter = currentClimb.setter_username || 'Unknown Setter';
-    const quality = currentClimb.quality_average || 0;
-    const ascents = currentClimb.ascensionist_count || 0;
-    const ogImagePath = buildOgBoardRenderUrl(boardDetails, currentClimb.frames);
-
-    return createPageMetadata({
-      title: t('metadata.play.title', { climbName, grade: climbGrade }),
-      description: t('metadata.play.description', { climbName, grade: climbGrade, setter, quality, ascents }),
-      path: `/b/${params.board_slug}/${params.angle}/play/${params.climb_uuid}`,
-      locale,
-      robots: { index: false, follow: true },
-      imagePath: ogImagePath,
-      imageAlt: t('metadata.view.imageAlt', { climbName, grade: climbGrade, boardName: boardDetails.board_name }),
-    });
-  } catch {
-    return createPageMetadata({
-      title: t('metadata.play.fallbackTitle'),
-      description: t('metadata.play.fallbackDescription'),
-      locale,
-      robots: { index: false, follow: true },
-    });
-  }
-}
-
-export default async function BoardSlugPlayPage(props: BoardSlugPlayPageProps) {
-  const params = await props.params;
+  const searchParams = await props.searchParams;
 
   const board = await resolveBoardBySlug(params.board_slug);
-  if (!board) {
-    return notFound();
+  if (!board) return notFound();
+
+  const angle = Number(params.angle);
+  const climbUuid = extractUuidFromSlug(params.climb_uuid);
+
+  // `extractUuidFromSlug` returns its input verbatim when no 32-hex-char UUID
+  // is embedded. Redirecting /view/<garbage> would 301-cache the junk URL —
+  // 404 instead so search indexes drop it.
+  if (!isUuidOnly(climbUuid)) {
+    notFound();
   }
 
-  const parsedParams = {
-    ...boardToRouteParams(board, Number(params.angle)),
-    climb_uuid: extractUuidFromSlug(params.climb_uuid),
-  };
-
-  const boardDetails = getBoardDetailsForBoard(parsedParams);
-
-  let initialClimb = null;
+  // Look up the climb name so the slug-prefixed view URL is preserved.
+  let climbName: string | undefined;
   try {
+    const parsedParams = { ...boardToRouteParams(board, angle), climb_uuid: climbUuid };
     const climb = await getClimb(parsedParams);
-    if (climb) {
-      initialClimb = climb;
-    }
+    climbName = climb?.name ?? undefined;
   } catch {
-    // Climb will be loaded from queue context on client
+    climbName = undefined;
   }
 
-  if (initialClimb) {
-    scheduleOverlayWarming({ boardDetails, climbs: [initialClimb], variant: 'full' });
-  }
-
-  return <PlayViewClient boardDetails={boardDetails} initialClimb={initialClimb} angle={parsedParams.angle} />;
+  const viewUrl = constructBoardSlugViewUrl(params.board_slug, angle, climbUuid, climbName);
+  redirectWithQuery(viewUrl, searchParams);
 }

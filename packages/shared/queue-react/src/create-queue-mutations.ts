@@ -30,6 +30,7 @@ import {
   REMOVE_QUEUE_ITEM,
   SET_CURRENT_CLIMB,
   MIRROR_CURRENT_CLIMB,
+  PUBLISH_PLAYBACK_STATE,
   SET_QUEUE,
   REPLACE_QUEUE_ITEM,
   TAKE_CONTROL,
@@ -38,6 +39,20 @@ import {
   SET_SESSION_BOARD_SERIAL,
   SET_SESSION_BOARD_PATH,
 } from '@boardsesh/graphql/operations/queue-session';
+
+export type PublishPlaybackStateInput = {
+  climbUuid: string;
+  frameIndex: number;
+  isPlaying: boolean;
+  speed: number;
+  paceMs: number;
+  /**
+   * Stable identifier for the publishing playback engine. Used by peers to
+   * suppress echoes of their own publish broadcasts (the server stamps it
+   * onto `PlaybackStateChanged.clientId`).
+   */
+  clientId: string;
+};
 
 const NOT_CONNECTED = 'Not connected to session';
 
@@ -65,6 +80,11 @@ export type QueueMutationsActions<TItem> = {
   removeQueueItem: (uuid: string) => Promise<void>;
   setCurrentClimb: (item: TItem | null, shouldAddToQueue?: boolean, correlationId?: string) => Promise<void>;
   mirrorCurrentClimb: (mirrored: boolean) => Promise<void>;
+  /**
+   * Broadcast a playback engine state change for a multi-frame climb so party
+   * peers stay in sync. Best-effort; no-op in solo (no active session).
+   */
+  publishPlaybackState: (input: PublishPlaybackStateInput) => Promise<void>;
   setQueue: (queue: TItem[], currentClimbQueueItem?: TItem | null) => Promise<void>;
   replaceQueueItem: (uuid: string, item: TItem) => Promise<void>;
   /**
@@ -220,6 +240,21 @@ export function createQueueMutations<TItem>(deps: QueueMutationsDeps<TItem>): Qu
       const ready = await resolveCore({ allowCreate: false });
       if (!ready) return;
       await execute(ready.client, { query: MIRROR_CURRENT_CLIMB, variables: { mirrored } });
+    },
+
+    publishPlaybackState: async (input) => {
+      // Solo (no active session): the playback engine runs entirely on the
+      // local client, so there's nothing to broadcast. Silently no-op so the
+      // engine can call this unconditionally on every state change.
+      const ready = await resolveCurrent();
+      if (!ready) return;
+      try {
+        await execute(ready.client, { query: PUBLISH_PLAYBACK_STATE, variables: { input } });
+      } catch (error) {
+        // Best-effort — losing one broadcast just means peers briefly run out
+        // of sync until the next event. Don't surface to user.
+        onBestEffortError?.('publishPlaybackState', error);
+      }
     },
 
     setQueue: async (queue, currentClimbQueueItem) => {

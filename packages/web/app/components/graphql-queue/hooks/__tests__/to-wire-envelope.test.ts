@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vite-plus/test';
 import type { Climb, ClimbQueueItem, SubscriptionQueueEvent } from '@boardsesh/shared-schema';
 import { mapSubscriptionEnvelopeToAction } from '@boardsesh/queue-runtime';
-import { toWireEnvelope } from '../use-queue-event-subscription';
+import { toWireEnvelope, type QueueStateEvent } from '../use-queue-event-subscription';
 
 const climb: Climb = {
   uuid: 'climb-1',
@@ -33,7 +33,7 @@ const climb: Climb = {
 
 const item: ClimbQueueItem = { uuid: 'q-1', climb };
 
-const dispatch = (event: SubscriptionQueueEvent, myClientId?: string) =>
+const dispatch = (event: QueueStateEvent, myClientId?: string) =>
   mapSubscriptionEnvelopeToAction(toWireEnvelope(event), { context: { myClientId } });
 
 describe('web wire envelope pipeline (toWireEnvelope → mapSubscriptionEnvelopeToAction)', () => {
@@ -157,7 +157,7 @@ describe('web wire envelope pipeline (toWireEnvelope → mapSubscriptionEnvelope
   });
 
   it('throws via assertNever for an unknown __typename (drift guard)', () => {
-    const bogus = { __typename: 'NotARealVariant' } as unknown as SubscriptionQueueEvent;
+    const bogus = { __typename: 'NotARealVariant' } as unknown as QueueStateEvent;
     expect(() => toWireEnvelope(bogus)).toThrow(/Unhandled SubscriptionQueueEvent variant/);
   });
 
@@ -180,7 +180,7 @@ describe('web wire envelope pipeline (toWireEnvelope → mapSubscriptionEnvelope
       currentItem: item,
       clientId: undefined as unknown as string,
       correlationId: undefined as unknown as string,
-    } as unknown as SubscriptionQueueEvent;
+    } as unknown as QueueStateEvent;
     const result = dispatch(envelope, 'self');
     if (result.kind !== 'dispatch' || result.action.type !== 'DELTA_UPDATE_CURRENT_CLIMB') {
       throw new Error('expected DELTA_UPDATE_CURRENT_CLIMB');

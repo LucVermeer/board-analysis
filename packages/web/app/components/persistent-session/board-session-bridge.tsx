@@ -28,7 +28,7 @@ const BoardSessionBridge: React.FC<BoardSessionBridgeProps> = ({ boardDetails, p
   const { activeSession, participantId } = usePersistentSessionState();
   const { activateSession, subscribeToSessionEvents } = usePersistentSessionActions();
 
-  // Compute the base board path (without /play/[uuid] or /list segments)
+  // Compute the base board path (without /view/[uuid] or /list segments)
   // This ensures navigation between climbs doesn't trigger session reconnection
   const baseBoardPath = useMemo(() => getBaseBoardPath(pathname), [pathname]);
 
@@ -49,7 +49,7 @@ const BoardSessionBridge: React.FC<BoardSessionBridgeProps> = ({ boardDetails, p
       // Activate session when URL has session param and either:
       // - Session ID changed
       // - Board configuration path changed (e.g., navigating to different board/layout/size/sets)
-      // Note: We compare baseBoardPaths to ignore changes to angle, /play/[uuid], /list segments
+      // Note: We compare baseBoardPaths to ignore changes to angle, /view/[uuid], /list segments
       // This ensures session continuity when navigating between climbs or changing angles
       const activeSessionBasePath = activeSession?.boardPath ? getBaseBoardPath(activeSession.boardPath) : '';
       if (activeSession?.sessionId !== sessionIdFromCookie || activeSessionBasePath !== baseBoardPath) {

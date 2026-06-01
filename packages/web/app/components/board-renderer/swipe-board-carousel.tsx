@@ -33,6 +33,12 @@ export type SwipeBoardCarouselProps = {
   isDrawerOpen?: boolean;
   overlay?: React.ReactNode;
   onZoomChange?: (zoomed: boolean) => void;
+  /**
+   * Key passed to ZoomableBoard's reset logic. Defaults to the current frames
+   * string, but variable-speed playback should pin this to the climb UUID so
+   * zoom doesn't reset on every animation tick.
+   */
+  zoomResetKey?: string;
 };
 
 const SwipeBoardCarousel = React.memo<SwipeBoardCarouselProps>(
@@ -53,6 +59,7 @@ const SwipeBoardCarousel = React.memo<SwipeBoardCarouselProps>(
     isDrawerOpen,
     overlay,
     onZoomChange: onZoomChangeProp,
+    zoomResetKey,
   }) => {
     const [isZoomed, setIsZoomed] = useState(false);
 
@@ -168,7 +175,7 @@ const SwipeBoardCarousel = React.memo<SwipeBoardCarouselProps>(
             transition,
           }}
         >
-          <ZoomableBoard onZoomChange={handleZoomChange} resetKey={currentClimb.frames}>
+          <ZoomableBoard onZoomChange={handleZoomChange} resetKey={zoomResetKey ?? currentClimb.frames}>
             {renderBoard(currentClimb)}
           </ZoomableBoard>
         </div>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vite-plus/test';
 import type { Climb, ClimbQueueItem, SubscriptionQueueEvent } from '@boardsesh/shared-schema';
-import { toSyncQueueEvent } from '../use-queue-event-subscription';
+import { toSyncQueueEvent, type QueueStateEvent } from '../use-queue-event-subscription';
 
 const climb: Climb = {
   uuid: 'climb-1',
@@ -137,7 +137,7 @@ describe('toSyncQueueEvent', () => {
   });
 
   it('throws via the assertNever default branch for an unknown __typename', () => {
-    const bogus = { __typename: 'NotARealVariant' } as unknown as SubscriptionQueueEvent;
+    const bogus = { __typename: 'NotARealVariant' } as unknown as QueueStateEvent;
     expect(() => toSyncQueueEvent(bogus)).toThrow(/Unhandled SubscriptionQueueEvent variant/);
   });
 });

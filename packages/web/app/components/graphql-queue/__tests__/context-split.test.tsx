@@ -140,6 +140,8 @@ function makeSearchParams(overrides: Partial<SearchRequestPagination> = {}): Sea
     showOnlyCompleted: false,
     onlyDrafts: false,
     projectsOnly: false,
+    boulders: true,
+    routes: false,
     zoneBox: null,
     zoneMode: 'allHolds',
     page: 0,

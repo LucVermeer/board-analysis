@@ -404,4 +404,58 @@ export const queueMutations = {
     });
     return state;
   },
+
+  /**
+   * Broadcast the current playback state for a variable-speed climb so other
+   * party members converge to the same frame/playing/speed without round
+   * trips. The server stamps `anchorTimestamp` so peers can extrapolate
+   * elapsed frames. Echo-suppressed by `clientId` on receipt.
+   *
+   * Playback events are intentionally not buffered for delta replay — they're
+   * superseded by the next broadcast and have no value when a peer reconnects
+   * mid-playback. Sequence numbers are taken from the room manager's monotonic
+   * counter for ordering consistency with other queue events.
+   */
+  publishPlaybackState: async (
+    _: unknown,
+    {
+      input,
+    }: {
+      input: {
+        climbUuid: string;
+        frameIndex: number;
+        isPlaying: boolean;
+        speed: number;
+        paceMs: number;
+        clientId?: string | null;
+      };
+    },
+    ctx: ConnectionContext,
+  ) => {
+    await applyRateLimit(ctx);
+    const sessionId = requireSession(ctx);
+
+    const currentState = await roomManager.getQueueState(sessionId);
+
+    pubsub.publishQueueEvent(sessionId, {
+      __typename: 'PlaybackStateChanged',
+      sequence: currentState.sequence,
+      climbUuid: input.climbUuid,
+      frameIndex: input.frameIndex,
+      isPlaying: input.isPlaying,
+      speed: input.speed,
+      paceMs: input.paceMs,
+      anchorTimestamp: String(Date.now()),
+      // Prefer the publisher-supplied client identifier (the playback engine's
+      // stable id) so echo suppression on the publisher's own clients works
+      // even when a single WebSocket connection drives multiple engines. Fall
+      // back to the connection id when the client doesn't send one. Coerce
+      // empty strings (from contexts with no connectionId yet) to null —
+      // peers compare to null defensively and would otherwise echo-suppress
+      // each other's events.
+      clientId: input.clientId || ctx.connectionId || null,
+    });
+
+    return true;
+  },
 };

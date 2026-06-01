@@ -44,6 +44,8 @@ const mockSearchParams: SearchRequestPagination = {
   showOnlyCompleted: false,
   onlyDrafts: false,
   projectsOnly: false,
+  boulders: true,
+  routes: false,
   zoneBox: null,
   zoneMode: 'allHolds',
 };

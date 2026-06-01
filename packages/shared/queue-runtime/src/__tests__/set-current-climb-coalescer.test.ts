@@ -1,9 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import {
-  createSetCurrentClimbCoalescer,
-  type SetCurrentClimbArgs,
-} from '../set-current-climb-coalescer';
+import { createSetCurrentClimbCoalescer, type SetCurrentClimbArgs } from '../set-current-climb-coalescer';
 
 const makeItem = (uuid: string): ClimbQueueItem => ({
   uuid,

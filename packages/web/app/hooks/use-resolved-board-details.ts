@@ -17,7 +17,6 @@ export function useResolvedBoardDetails(boardDetails?: BoardDetails) {
   const { board_name, layout_id, size_id, set_ids, angle } = parseBoardRouteParams(rawParams);
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isPlayPage = pathname.includes('/play/');
 
   let resolvedDetails: BoardRouteIdentity;
   if (boardDetails) {
@@ -42,7 +41,6 @@ export function useResolvedBoardDetails(boardDetails?: BoardDetails) {
     angle,
     pathname,
     searchParams,
-    isPlayPage,
     resolvedDetails,
   };
 }

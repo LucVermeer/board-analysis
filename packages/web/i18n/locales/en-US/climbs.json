@@ -17,12 +17,6 @@
       "seoSetterSuffix": " set by {{setter}}",
       "seoAscentsSuffix": ". {{ascents}} ascents logged"
     },
-    "play": {
-      "title": "{{climbName}} - {{grade}} | Play Mode",
-      "description": "{{climbName}} - {{grade}} by {{setter}}. Quality: {{quality}}/5. Ascents: {{ascents}}",
-      "fallbackTitle": "Play",
-      "fallbackDescription": "Play a climb on your board"
-    },
     "create": {
       "title": "Create a climb",
       "description": "Set a new climb on your board"
@@ -62,7 +56,6 @@
     }
   },
   "header": {
-    "backToList": "Back to climb list",
     "createNewClimb": "Create new climb"
   },
   "share": {
@@ -101,6 +94,8 @@
       "gradeRangeAndUp": "{{grade}} and up",
       "gradeRangeUpTo": "Up to {{grade}}",
       "setter": "Setter",
+      "boulder": "Boulder",
+      "route": "Route",
       "minAscents": "Min Ascents",
       "minRating": "Min Rating",
       "any": "Any",
@@ -148,6 +143,8 @@
       "only": "Only {{filters}}",
       "holds_one": "{{count}} hold",
       "holds_other": "{{count}} holds",
+      "routesOnly": "Routes only",
+      "bouldersAndRoutes": "Boulders & routes",
       "more": "+{{count}} more"
     },
     "status": {

@@ -447,6 +447,10 @@ export type Climb = {
   difficulty_error: Scalars['String']['output'];
   /** Encoded hold positions and colors for lighting up the board */
   frames: Scalars['String']['output'];
+  /** Number of animation frames encoded in the frames string. 1 for static climbs; >1 for variable-speed Aurora routes/circuits. */
+  framesCount?: Maybe<Scalars['Int']['output']>;
+  /** Animation pace between frames, in Aurora's native unit (treated as milliseconds). 0 when not set. */
+  framesPace?: Maybe<Scalars['Int']['output']>;
   /** Whether this climb is a draft (unpublished) */
   is_draft?: Maybe<Scalars['Boolean']['output']>;
   /** Whether this climb disallows matching (both hands on the same hold) */
@@ -509,6 +513,10 @@ export type ClimbInput = {
   difficulty: Scalars['String']['input'];
   difficulty_error: Scalars['String']['input'];
   frames: Scalars['String']['input'];
+  /** Number of animation frames encoded in `frames`. 1 for static climbs. */
+  framesCount?: InputMaybe<Scalars['Int']['input']>;
+  /** Native per-frame pace, in milliseconds. 0 when unset. */
+  framesPace?: InputMaybe<Scalars['Int']['input']>;
   /** Whether this climb is still a draft. */
   is_draft?: InputMaybe<Scalars['Boolean']['input']>;
   is_no_match?: InputMaybe<Scalars['Boolean']['input']>;
@@ -591,6 +599,8 @@ export type ClimbSearchInput = {
   angle: Scalars['Int']['input'];
   /** Board type (e.g., 'kilter', 'tension') */
   boardName: Scalars['String']['input'];
+  /** Include single-frame climbs (boulders). Default true. Set to false (paired with routes=true) to filter to routes only. */
+  boulders?: InputMaybe<Scalars['Boolean']['input']>;
   /** Grade accuracy filter ('tight', 'moderate', 'loose') */
   gradeAccuracy?: InputMaybe<Scalars['String']['input']>;
   /** Hide climbs the user has attempted (requires auth) */
@@ -625,6 +635,8 @@ export type ClimbSearchInput = {
   pageSize?: InputMaybe<Scalars['Int']['input']>;
   /** Show only unclimbed projects (climbs with 0 ascents) */
   projectsOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Include multi-frame climbs (routes). Default false. Set to true to include or filter to routes. */
+  routes?: InputMaybe<Scalars['Boolean']['input']>;
   /** Comma-separated set IDs */
   setIds: Scalars['String']['input'];
   /** Filter by setter usernames */
@@ -1877,6 +1889,13 @@ export type Mutation = {
    */
   pinPlaylist: Scalars['Boolean']['output'];
   /**
+   * Broadcast the current playback state for a variable-speed climb so
+   * other party members converge to the same frame/playing/speed. The
+   * server stamps `anchorTimestamp` so peers can extrapolate elapsed
+   * frames since the broadcast. Echo-suppressed by `clientId`.
+   */
+  publishPlaybackState: Scalars['Boolean']['output'];
+  /**
    * Register an APNs device token for Live Activity push updates in a session.
    * Caller must be authenticated and be a participant in the session.
    * Upserts: if the token already exists, updates the associated session.
@@ -2250,6 +2269,11 @@ export type MutationNavigateQueueArgs = {
 /** Root mutation type for all write operations. */
 export type MutationPinPlaylistArgs = {
   input: PinPlaylistInput;
+};
+
+/** Root mutation type for all write operations. */
+export type MutationPublishPlaybackStateArgs = {
+  input: PlaybackStateInput;
 };
 
 /** Root mutation type for all write operations. */
@@ -2647,6 +2671,55 @@ export type OutlierAnalysis = {
 export type PinPlaylistInput = {
   /** The playlist UUID */
   playlistUuid: Scalars['ID']['input'];
+};
+
+/**
+ * Event when a peer's playback engine state changes (play/pause/seek/speed)
+ * for a variable-speed climb. Peers converge by extrapolating frames since
+ * `anchorTimestamp`. The publisher's own clients echo-suppress by `clientId`.
+ */
+export type PlaybackStateChanged = {
+  __typename?: 'PlaybackStateChanged';
+  /** Server wall-clock (epoch ms) when the broadcast was emitted; peers extrapolate elapsed frames from this */
+  anchorTimestamp: Scalars['String']['output'];
+  /** Client ID of the publisher, used for echo suppression */
+  clientId?: Maybe<Scalars['ID']['output']>;
+  /** UUID of the climb whose playback changed */
+  climbUuid: Scalars['ID']['output'];
+  /** Frame index that was current at `anchorTimestamp` */
+  frameIndex: Scalars['Int']['output'];
+  /** Whether the engine is auto-advancing */
+  isPlaying: Scalars['Boolean']['output'];
+  /** Climb's native pace, in milliseconds per frame */
+  paceMs: Scalars['Int']['output'];
+  /** Sequence number of this event */
+  sequence: Scalars['Int']['output'];
+  /** Playback multiplier (1.0 = native pace) */
+  speed: Scalars['Float']['output'];
+};
+
+/**
+ * Input shape for `publishPlaybackState`. Carries everything peers need to
+ * extrapolate the current frame without round-tripping back to the publisher.
+ */
+export type PlaybackStateInput = {
+  /**
+   * Stable identifier for the publisher's playback engine instance. Peers use
+   * it to suppress echoes of their own events when the broadcast reflects back.
+   * Falls back to the WebSocket connection id when omitted, which is safe but
+   * coarser (a single connection driving multiple engines can't disambiguate).
+   */
+  clientId?: InputMaybe<Scalars['ID']['input']>;
+  /** Climb the playback applies to. Peers ignore the event if it's for a different climb than they're showing. */
+  climbUuid: Scalars['ID']['input'];
+  /** Frame index that became current at `anchorTimestamp`. */
+  frameIndex: Scalars['Int']['input'];
+  /** Whether the engine is auto-advancing. */
+  isPlaying: Scalars['Boolean']['input'];
+  /** Climb's native pace, in milliseconds per frame. */
+  paceMs: Scalars['Int']['input'];
+  /** Playback multiplier (1.0 = native pace). */
+  speed: Scalars['Float']['input'];
 };
 
 /** A user-created collection of climbs. */
@@ -3635,6 +3708,7 @@ export type QueueEvent =
   | ClimbMirrored
   | CurrentClimbChanged
   | FullSync
+  | PlaybackStateChanged
   | QueueItemAdded
   | QueueItemRemoved
   | QueueReordered;
@@ -5186,7 +5260,14 @@ export type DirectiveResolverFn<TResult = {}, TParent = {}, TContext = {}, TArgs
 export type ResolversUnionTypes<_RefType extends Record<string, unknown>> = ResolversObject<{
   CommentEvent: CommentAdded | CommentDeleted | CommentUpdated;
   ControllerEvent: ControllerPing | ControllerQueueSync | LedUpdate;
-  QueueEvent: ClimbMirrored | CurrentClimbChanged | FullSync | QueueItemAdded | QueueItemRemoved | QueueReordered;
+  QueueEvent:
+    | ClimbMirrored
+    | CurrentClimbChanged
+    | FullSync
+    | PlaybackStateChanged
+    | QueueItemAdded
+    | QueueItemRemoved
+    | QueueReordered;
   SessionEvent:
     | DriverChanged
     | LeaderChanged
@@ -5343,6 +5424,8 @@ export type ResolversTypes = ResolversObject<{
   NotificationType: NotificationType;
   OutlierAnalysis: ResolverTypeWrapper<OutlierAnalysis>;
   PinPlaylistInput: PinPlaylistInput;
+  PlaybackStateChanged: ResolverTypeWrapper<PlaybackStateChanged>;
+  PlaybackStateInput: PlaybackStateInput;
   Playlist: ResolverTypeWrapper<Playlist>;
   PlaylistClimb: ResolverTypeWrapper<PlaylistClimb>;
   PlaylistClimbsResult: ResolverTypeWrapper<PlaylistClimbsResult>;
@@ -5597,6 +5680,8 @@ export type ResolversParentTypes = ResolversObject<{
   NotificationEvent: NotificationEvent;
   OutlierAnalysis: OutlierAnalysis;
   PinPlaylistInput: PinPlaylistInput;
+  PlaybackStateChanged: PlaybackStateChanged;
+  PlaybackStateInput: PlaybackStateInput;
   Playlist: Playlist;
   PlaylistClimb: PlaylistClimb;
   PlaylistClimbsResult: PlaylistClimbsResult;
@@ -5900,6 +5985,8 @@ export type ClimbResolvers<
   difficulty?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   difficulty_error?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   frames?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  framesCount?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
+  framesPace?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
   is_draft?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
   is_no_match?: Resolver<Maybe<ResolversTypes['Boolean']>, ParentType, ContextType>;
   layoutId?: Resolver<Maybe<ResolversTypes['Int']>, ParentType, ContextType>;
@@ -6797,6 +6884,12 @@ export type MutationResolvers<
     ContextType,
     RequireFields<MutationPinPlaylistArgs, 'input'>
   >;
+  publishPlaybackState?: Resolver<
+    ResolversTypes['Boolean'],
+    ParentType,
+    ContextType,
+    RequireFields<MutationPublishPlaybackStateArgs, 'input'>
+  >;
   registerActivityPushToken?: Resolver<
     ResolversTypes['Boolean'],
     ParentType,
@@ -7158,6 +7251,21 @@ export type OutlierAnalysisResolvers<
   isOutlier?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   neighborAverage?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   neighborCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+}>;
+
+export type PlaybackStateChangedResolvers<
+  ContextType = ConnectionContext,
+  ParentType extends ResolversParentTypes['PlaybackStateChanged'] = ResolversParentTypes['PlaybackStateChanged'],
+> = ResolversObject<{
+  anchorTimestamp?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  clientId?: Resolver<Maybe<ResolversTypes['ID']>, ParentType, ContextType>;
+  climbUuid?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  frameIndex?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  isPlaying?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  paceMs?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  sequence?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  speed?: Resolver<ResolversTypes['Float'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 }>;
 
@@ -7804,7 +7912,13 @@ export type QueueEventResolvers<
   ParentType extends ResolversParentTypes['QueueEvent'] = ResolversParentTypes['QueueEvent'],
 > = ResolversObject<{
   __resolveType: TypeResolveFn<
-    'ClimbMirrored' | 'CurrentClimbChanged' | 'FullSync' | 'QueueItemAdded' | 'QueueItemRemoved' | 'QueueReordered',
+    | 'ClimbMirrored'
+    | 'CurrentClimbChanged'
+    | 'FullSync'
+    | 'PlaybackStateChanged'
+    | 'QueueItemAdded'
+    | 'QueueItemRemoved'
+    | 'QueueReordered',
     ParentType,
     ContextType
   >;
@@ -8644,6 +8758,7 @@ export type Resolvers<ContextType = ConnectionContext> = ResolversObject<{
   NotificationConnection?: NotificationConnectionResolvers<ContextType>;
   NotificationEvent?: NotificationEventResolvers<ContextType>;
   OutlierAnalysis?: OutlierAnalysisResolvers<ContextType>;
+  PlaybackStateChanged?: PlaybackStateChangedResolvers<ContextType>;
   Playlist?: PlaylistResolvers<ContextType>;
   PlaylistClimb?: PlaylistClimbResolvers<ContextType>;
   PlaylistClimbsResult?: PlaylistClimbsResultResolvers<ContextType>;

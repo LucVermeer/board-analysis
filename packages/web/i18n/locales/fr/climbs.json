@@ -17,12 +17,6 @@
       "seoSetterSuffix": " ouvert par {{setter}}",
       "seoAscentsSuffix": ". {{ascents}} enchaînements enregistrés"
     },
-    "play": {
-      "title": "{{climbName}} - {{grade}} | Mode Play",
-      "description": "{{climbName}} - {{grade}} par {{setter}}. Qualité : {{quality}}/5. Enchaînements : {{ascents}}",
-      "fallbackTitle": "Play",
-      "fallbackDescription": "Grimpez un bloc sur votre board"
-    },
     "create": {
       "title": "Créer un bloc",
       "description": "Ouvrez un nouveau bloc sur votre board"
@@ -62,7 +56,6 @@
     }
   },
   "header": {
-    "backToList": "Retour à la liste des blocs",
     "createNewClimb": "Créer un nouveau bloc"
   },
   "share": {
@@ -101,6 +94,8 @@
       "gradeRangeAndUp": "{{grade}} et plus",
       "gradeRangeUpTo": "Jusqu'à {{grade}}",
       "setter": "Ouvreur",
+      "boulder": "Bloc",
+      "route": "Voie",
       "minAscents": "Enchaînements min",
       "minRating": "Note min",
       "any": "Tous",
@@ -148,6 +143,8 @@
       "only": "Seulement {{filters}}",
       "holds_one": "{{count}} prise",
       "holds_other": "{{count}} prises",
+      "routesOnly": "Voies uniquement",
+      "bouldersAndRoutes": "Blocs et voies",
       "more": "+{{count}} de plus"
     },
     "status": {

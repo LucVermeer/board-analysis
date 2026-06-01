@@ -7,7 +7,6 @@ import {
   constructClimbViewUrl,
   constructClimbViewUrlWithSlugs,
   constructClimbListWithSlugs,
-  constructPlayUrlWithSlugs,
   constructClimbInfoUrl,
   generateLayoutSlug,
   getMoonBoardLayoutBySlug,
@@ -27,7 +26,6 @@ import {
   getContextAwareClimbViewUrl,
   constructBoardSlugViewUrl,
   constructBoardSlugPlaylistsUrl,
-  tryConstructSlugPlayUrl,
   tryConstructSlugViewUrl,
   tryConstructSlugListUrl,
   DEFAULT_SEARCH_PARAMS,
@@ -1541,35 +1539,6 @@ describe('constructClimbListWithSlugs', () => {
   });
 });
 
-describe('constructPlayUrlWithSlugs', () => {
-  it('should construct slug-based play URL with climb name', () => {
-    const result = constructPlayUrlWithSlugs(
-      'kilter',
-      'Kilter Board Original',
-      '12 x 14',
-      'Commerical',
-      ['Bolt Ons', 'Screw Ons'],
-      40,
-      'abc123',
-      'My Climb',
-    );
-    expect(result).toBe('/kilter/original/12x14-commerical/screw_bolt/40/play/my-climb-abc123');
-  });
-
-  it('should construct slug-based play URL without climb name', () => {
-    const result = constructPlayUrlWithSlugs(
-      'kilter',
-      'Kilter Board Original',
-      '12 x 14',
-      'Commerical',
-      ['Bolt Ons'],
-      40,
-      'abc123',
-    );
-    expect(result).toBe('/kilter/original/12x14-commerical/bolt/40/play/abc123');
-  });
-});
-
 describe('getContextAwareClimbViewUrl - static data fallback', () => {
   it('should try static data when boardDetails lacks slug fields', () => {
     const detailsWithoutNames = {
@@ -1611,27 +1580,6 @@ describe('getContextAwareClimbViewUrl - static data fallback', () => {
     );
     // Should fall back to numeric constructClimbViewUrl
     expect(result).toBe('/kilter/9999/9999/9999/40/view/test-climb-abc123');
-  });
-});
-
-describe('tryConstructSlugPlayUrl', () => {
-  it('should return a slug-based play URL when static data resolves', () => {
-    const result = tryConstructSlugPlayUrl('kilter', 1, 7, [1, 20], 40, 'abc123', 'Test Climb');
-    expect(result).not.toBeNull();
-    expect(result).toContain('/kilter/');
-    expect(result).toContain('/play/test-climb-abc123');
-    expect(result).not.toMatch(/\/\d+\/\d+\//); // No numeric segments
-  });
-
-  it('should return a slug-based play URL without climb name', () => {
-    const result = tryConstructSlugPlayUrl('kilter', 1, 7, [1, 20], 40, 'abc123');
-    expect(result).not.toBeNull();
-    expect(result).toContain('/play/abc123');
-  });
-
-  it('should return null when static data lookup fails', () => {
-    const result = tryConstructSlugPlayUrl('kilter', 9999, 9999, [9999], 40, 'abc123', 'Test');
-    expect(result).toBeNull();
   });
 });
 

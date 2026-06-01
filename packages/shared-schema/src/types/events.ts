@@ -60,7 +60,18 @@ export type QueueEvent =
       clientId: string | null;
       correlationId: string | null;
     }
-  | { __typename: 'ClimbMirrored'; sequence: number; stateHash: string; uuid?: string | null; mirrored: boolean };
+  | { __typename: 'ClimbMirrored'; sequence: number; stateHash: string; uuid?: string | null; mirrored: boolean }
+  | {
+      __typename: 'PlaybackStateChanged';
+      sequence: number;
+      climbUuid: string;
+      frameIndex: number;
+      isPlaying: boolean;
+      speed: number;
+      paceMs: number;
+      anchorTimestamp: string;
+      clientId: string | null;
+    };
 
 // Client-side subscription event type - uses aliased field names to avoid GraphQL union conflicts
 export type SubscriptionQueueEvent =
@@ -95,6 +106,17 @@ export type SubscriptionQueueEvent =
       stateHash: string;
       mirroredUuid?: string | null;
       mirrored: boolean;
+    }
+  | {
+      __typename: 'PlaybackStateChanged';
+      sequence: number;
+      climbUuid: string;
+      frameIndex: number;
+      isPlaying: boolean;
+      speed: number;
+      paceMs: number;
+      anchorTimestamp: string;
+      clientId: string | null;
     };
 
 export type ConnectionContext = {

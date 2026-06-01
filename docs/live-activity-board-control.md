@@ -152,6 +152,9 @@ Add more actions to the Lock Screen widget, including workout support.
 - Skip/remove current climb from queue
 - Tick/log the current climb as sent
 
+**Variable-speed playback (future, issue #2232 follow-up):**
+The web client now drives multi-frame Aurora climbs through a JS-side playback engine and broadcasts a `PlaybackStateChanged` WebSocket event so party peers stay in sync. The Live Activity does NOT yet consume those events — the widget will still show only the climb's first frame. When this lands on the widget, the native handler should: (a) decode the new event in `SessionWebSocketManager`, (b) drive `BoardBle` to send the active frame on each tick, and (c) optionally render a frame counter in the expanded layout. The pace clamp (50 ms minimum) lives on the engine side in `packages/web/app/components/board-renderer/util.ts` (`MIN_PACE_MS`) — mirror that constant when the native side schedules its own writes.
+
 **Workout controls (future):**
 When workouts land in Boardsesh, the Live Activity becomes the primary workout interface on the wall. The widget will need to display and control:
 

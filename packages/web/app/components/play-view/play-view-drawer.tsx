@@ -19,9 +19,11 @@ import DrawerClimbHeader from '../climb-card/drawer-climb-header';
 import { LightControlDrawer } from '../board-page/light-control-drawer';
 import { useBoardProvider } from '../board-provider/board-provider-context';
 import SwipeBoardCarousel from '../board-renderer/swipe-board-carousel';
+import { PlaybackControls } from '../playback/playback-controls';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
 import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
 import { useWallConfirmFallback } from './use-wall-confirm-fallback';
+import { useDrawerPlayback } from './use-drawer-playback';
 import { themeTokens } from '@/app/theme/theme-config';
 import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import AngleSelector from '../board-page/angle-selector';
@@ -194,6 +196,27 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
   const { handleDoubleTap, showHeart, dismissHeart, isFavorited, toggleFavorite } = useDoubleTapFavorite({
     climbUuid: currentClimb?.uuid ?? '',
   });
+
+  // Multi-frame ("route") playback. Single-frame climbs short-circuit: the
+  // engine reports `isAnimatable: false`, the BLE loop never fires, and we
+  // skip rendering `<PlaybackControls />` below.
+  const isMirrored = !!currentClimb?.mirrored;
+  const playback = useDrawerPlayback({ currentClimb, boardDetails, isOpen });
+
+  // Multi-frame climbs render the engine's current snapshot so the on-screen
+  // board tracks playback; static climbs pass through. Memoised so the
+  // carousel's `currentClimb` prop stays referentially stable between ticks
+  // that don't actually change the displayed frame.
+  const carouselCurrentClimb = useMemo(
+    () =>
+      currentClimb
+        ? {
+            frames: playback.isAnimatable ? playback.currentFrameString : currentClimb.frames,
+            mirrored: currentClimb.mirrored,
+          }
+        : null,
+    [currentClimb, playback.isAnimatable, playback.currentFrameString],
+  );
 
   // currentQueueIndex / remainingQueueCount stay anchored on the wall climb
   // (currentClimbQueueItem). The drawer-local preview doesn't represent
@@ -661,8 +684,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     setIsQueueOpen(true);
   }, []);
 
-  const isMirrored = !!currentClimb?.mirrored;
-
   // Go to queue from actions drawer
   const handleGoToQueueFromActions = useCallback(() => {
     handleCloseActions();
@@ -837,10 +858,14 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
 
         {/* Board renderer with card-swipe and floating Tick FAB */}
         <div className={styles.boardSectionWrapper}>
-          {currentClimb && (
+          {currentClimb && carouselCurrentClimb && (
             <SwipeBoardCarousel
               boardDetails={boardDetails}
-              currentClimb={currentClimb}
+              currentClimb={carouselCurrentClimb}
+              // Bind zoom to the climb UUID, not the frames string — without
+              // this, every animation tick changes `frames` and ZoomableBoard
+              // resets the pinch zoom.
+              zoomResetKey={currentClimb.uuid}
               nextClimb={nextItem?.climb}
               previousClimb={isDriftedFromWall ? (currentClimbQueueItem?.climb ?? prevItem?.climb) : prevItem?.climb}
               onSwipeNext={handleSwipeNext}
@@ -940,6 +965,21 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             }
           />
         )}
+
+        {/* Playback strip — only renders for multi-frame climbs ("routes"). */}
+        {isOpen && playback.isAnimatable && (
+          <PlaybackControls
+            frameIndex={playback.frameIndex}
+            frameCount={playback.frameCount}
+            isPlaying={playback.isPlaying}
+            speed={playback.speed}
+            paceMs={playback.paceMs}
+            onPlay={playback.play}
+            onPause={playback.pause}
+            onSeek={playback.seek}
+            onSpeedChange={playback.setSpeed}
+          />
+        )}
       </>
     );
   }, [
@@ -988,6 +1028,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     drawerDisplayedItem,
     handleReturnToWallClimb,
     lightbulbCoachmarkText,
+    playback,
+    carouselCurrentClimb,
   ]);
 
   return (

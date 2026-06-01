@@ -140,6 +140,15 @@ export function useBoardBluetooth({
   const deviceNameRef = useRef<string | undefined>(undefined);
   const configuredBoardKeyRef = useRef<string | null>(null);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
+  // Serialises every adapter.write across all callers of sendFramesToBoard.
+  // Web Bluetooth on Android can't cancel an in-flight GATT operation and
+  // throws "GATT operation already in progress" the moment a second write
+  // starts before the previous resolves. The AutoSender (first frame on climb
+  // change) and the play-view drawer drain (subsequent frames) both call
+  // sendFramesToBoard against the same characteristic, so without a mutex
+  // here their independent latest-wins loops can still collide at the GATT
+  // boundary. Cleared on disconnect so a fresh adapter starts unblocked.
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
   // Timestamp of the most recent successful BLE connect — drives the
   // duration_connected_ms property on Bluetooth Disconnected events.
   const connectedAtRef = useRef<number | null>(null);
@@ -217,6 +226,8 @@ export function useBoardBluetooth({
     unsubDisconnectRef.current?.();
     unsubDisconnectRef.current = null;
     adapterRef.current = null;
+    // Reset the GATT write chain so a fresh adapter starts unblocked.
+    writeChainRef.current = Promise.resolve();
 
     // These boards are last-connection-wins and always advertise, so an
     // unexpected drop usually means another phone grabbed the board. Tell the
@@ -240,6 +251,30 @@ export function useBoardBluetooth({
       10000,
     );
   }, [onConnectionChange, showMessage, t]);
+
+  // Serialise a GATT write behind the in-flight chain. The chain itself is
+  // never rejected — each link swallows the previous error so a failed write
+  // doesn't poison every subsequent caller — but `serialisedWrite` re-throws
+  // its own error to the caller so `sendFramesToBoard`'s catch block runs
+  // unchanged.
+  const serialisedWrite = useCallback(async (adapter: BluetoothAdapter, data: Uint8Array, signal?: AbortSignal) => {
+    const previous = writeChainRef.current;
+    let resolveLink!: () => void;
+    const link = new Promise<void>((resolve) => {
+      resolveLink = resolve;
+    });
+    writeChainRef.current = link;
+    try {
+      await previous;
+    } catch {
+      // Previous caller's failure is its own problem.
+    }
+    try {
+      await adapter.write(data, signal);
+    } finally {
+      resolveLink();
+    }
+  }, []);
 
   // Function to send frames string to the board.
   // An empty `frames` string is the "clear all LEDs" path: Aurora's packet
@@ -290,7 +325,7 @@ export function useBoardBluetooth({
             );
           }
 
-          await adapterRef.current.write(moonResult.packet, signal);
+          await serialisedWrite(adapterRef.current, moonResult.packet, signal);
           void incrementBluetoothSends().then(maybeFireFeedbackPromptEvent);
           return true;
         }
@@ -300,7 +335,7 @@ export function useBoardBluetooth({
         // standalone clear packet that doesn't depend on placement data.
         if (frames === '') {
           const clearResult = getAuroraBluetoothPacket('', {}, boardDetails.board_name, apiLevelRef.current);
-          await adapterRef.current.write(clearResult.packet, signal);
+          await serialisedWrite(adapterRef.current, clearResult.packet, signal);
           void incrementBluetoothSends().then(maybeFireFeedbackPromptEvent);
           return true;
         }
@@ -386,7 +421,7 @@ export function useBoardBluetooth({
           );
         }
 
-        await adapterRef.current.write(result.packet, signal);
+        await serialisedWrite(adapterRef.current, result.packet, signal);
         void incrementBluetoothSends().then(maybeFireFeedbackPromptEvent);
         return true;
       } catch (error) {
@@ -403,7 +438,7 @@ export function useBoardBluetooth({
         return false;
       }
     },
-    [boardDetails, showMessage, ledColorOverrides],
+    [boardDetails, showMessage, ledColorOverrides, serialisedWrite],
   );
 
   const configureConnectedBoard = useCallback(
@@ -607,6 +642,7 @@ export function useBoardBluetooth({
     adapterRef.current = null;
     deviceNameRef.current = undefined;
     configuredBoardKeyRef.current = null;
+    writeChainRef.current = Promise.resolve();
     // The user chose to disconnect — clear the take-back prompt guard so a
     // later genuine drop can prompt again.
     boardTakenPromptShownRef.current = false;

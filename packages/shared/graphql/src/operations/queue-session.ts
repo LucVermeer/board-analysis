@@ -7,6 +7,8 @@ const CLIMB_FIELDS = `
   setter_username
   name
   frames
+  framesCount
+  framesPace
   angle
   ascensionist_count
   difficulty
@@ -146,6 +148,12 @@ export const MIRROR_CURRENT_CLIMB = `
     mirrorCurrentClimb(mirrored: $mirrored) {
       ${QUEUE_ITEM_FIELDS}
     }
+  }
+`;
+
+export const PUBLISH_PLAYBACK_STATE = `
+  mutation PublishPlaybackState($input: PlaybackStateInput!) {
+    publishPlaybackState(input: $input)
   }
 `;
 
@@ -448,6 +456,16 @@ export const EVENTS_REPLAY = `
           mirroredUuid: uuid
           mirrored
         }
+        ... on PlaybackStateChanged {
+          sequence
+          climbUuid
+          frameIndex
+          isPlaying
+          speed
+          paceMs
+          anchorTimestamp
+          clientId
+        }
       }
     }
   }
@@ -505,6 +523,16 @@ export const QUEUE_UPDATES = `
         mirroredUuid: uuid
         mirrored
       }
+      ... on PlaybackStateChanged {
+        sequence
+        climbUuid
+        frameIndex
+        isPlaying
+        speed
+        paceMs
+        anchorTimestamp
+        clientId
+      }
     }
   }
 `;
@@ -523,13 +551,13 @@ export const NATIVE_IOS_QUEUE_UPDATES = `
           stateHash
           queue {
             uuid
-            climb { uuid setter_username name frames angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
+            climb { uuid setter_username name frames framesCount framesPace angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
             addedBy
             suggested
           }
           currentClimbQueueItem {
             uuid
-            climb { uuid setter_username name frames angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
+            climb { uuid setter_username name frames framesCount framesPace angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
             addedBy
             suggested
           }
@@ -539,7 +567,7 @@ export const NATIVE_IOS_QUEUE_UPDATES = `
         sequence
         currentItem: item {
           uuid
-          climb { uuid setter_username name frames angle difficulty mirrored }
+          climb { uuid setter_username name frames framesCount framesPace angle difficulty mirrored }
           addedBy
           suggested
         }
@@ -550,7 +578,7 @@ export const NATIVE_IOS_QUEUE_UPDATES = `
         sequence
         addedItem: item {
           uuid
-          climb { uuid setter_username name frames angle difficulty mirrored }
+          climb { uuid setter_username name frames framesCount framesPace angle difficulty mirrored }
           addedBy
           suggested
         }

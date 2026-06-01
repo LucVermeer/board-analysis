@@ -191,7 +191,6 @@
       "dismissOfflineNotice": "Dismiss offline notice",
       "shareSessionLink": "Share session link",
       "closeTickBar": "Close tick bar",
-      "enterPlayMode": "Enter play mode",
       "logAttempt": "Log attempt",
       "showParticipants": "Show participants",
       "hideParticipants": "Hide participants",
@@ -323,8 +322,6 @@
     "triesCount_other": "{{count}} tries",
     "tickError": "Couldn't save your tick — it's saved as a draft",
     "closeAria": "Close",
-    "noClimbSelected": "No climb selected",
-    "browseClimbs": "Browse Climbs",
     "actionBar": {
       "previousAria": "Previous climb",
       "nextAria": "Next climb",

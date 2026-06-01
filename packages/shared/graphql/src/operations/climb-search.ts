@@ -138,6 +138,8 @@ export type ClimbSearchInputVariables = {
     showOnlyCompleted?: boolean;
     onlyDrafts?: boolean;
     projectsOnly?: boolean;
+    boulders?: boolean;
+    routes?: boolean;
     zoneBox?: {
       edgeLeft: number;
       edgeRight: number;

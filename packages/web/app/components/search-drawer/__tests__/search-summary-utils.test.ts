@@ -20,6 +20,8 @@ const summaryLabels = {
     gradeFallback: (gradeId: number) => `Grade ${gradeId}`,
     upToGrade: (gradeName: string) => `Up to ${gradeName}`,
     setterCount: (count: number) => `${count} setters`,
+    routesOnly: 'Routes only',
+    bouldersAndRoutes: 'Boulders & routes',
   },
   quality: {
     ascents: (count: number) => `${count}+ ascents`,

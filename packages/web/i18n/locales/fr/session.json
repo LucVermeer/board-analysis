@@ -191,7 +191,6 @@
       "dismissOfflineNotice": "Fermer l'avis hors ligne",
       "shareSessionLink": "Partager le lien de la session",
       "closeTickBar": "Fermer la barre de tick",
-      "enterPlayMode": "Passer en mode jeu",
       "logAttempt": "Enregistrer un essai",
       "showParticipants": "Afficher les participants",
       "hideParticipants": "Masquer les participants",
@@ -323,8 +322,6 @@
     "triesCount_other": "{{count}} essais",
     "tickError": "Impossible d'enregistrer ton tick. Sauvegardé en brouillon.",
     "closeAria": "Fermer",
-    "noClimbSelected": "Aucun bloc sélectionné",
-    "browseClimbs": "Parcourir les blocs",
     "actionBar": {
       "previousAria": "Bloc précédent",
       "nextAria": "Bloc suivant",

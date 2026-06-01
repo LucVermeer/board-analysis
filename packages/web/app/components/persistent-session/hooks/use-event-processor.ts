@@ -81,7 +81,14 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
     (event: SubscriptionQueueEvent) => {
       // Sequence validation for stale/gap detection (use ref to avoid stale closure).
       // FullSync always resets local state and sequence tracking.
-      if (event.__typename !== 'FullSync') {
+      //
+      // PlaybackStateChanged is also exempt: the server stamps it with the
+      // *current* sequence number (it doesn't mutate the queue, so the room
+      // manager doesn't bump). Routing it through the dedup gate would mark
+      // every event after the first as stale and silently drop party-mode
+      // playback sync. The post-switch block below already skips updating
+      // `lastReceivedSequence`/`stateHash` for this event type.
+      if (event.__typename !== 'FullSync' && event.__typename !== 'PlaybackStateChanged') {
         const lastSeq = lastReceivedSequenceRef.current;
         const sequenceDecision = evaluateQueueEventSequence(lastSeq, event.sequence);
 
@@ -189,7 +196,12 @@ export function useEventProcessor({ refs }: UseEventProcessorArgs): EventProcess
           break;
       }
 
-      if (event.__typename !== 'FullSync') {
+      if (event.__typename !== 'FullSync' && event.__typename !== 'PlaybackStateChanged') {
+        // PlaybackStateChanged is ephemeral — it doesn't carry a stateHash
+        // because it doesn't mutate the queue. The room manager reuses the
+        // current sequence number for ordering, so skip both updates here
+        // to avoid clobbering the watchdog's drift detection with a stale
+        // sequence repeat.
         updateLastReceivedSequence(event.sequence);
         setLastReceivedStateHash(event.stateHash);
       }

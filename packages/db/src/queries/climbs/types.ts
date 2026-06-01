@@ -58,12 +58,104 @@ export type ClimbSearchParams = {
   showOnlyCompleted?: boolean;
   onlyDrafts?: boolean;
   projectsOnly?: boolean;
+  // Climb-type toggles. Default to undefined (treated as both selected → no
+  // SQL filter on frames_count). Set boulders=true to constrain to single-
+  // frame climbs, routes=true to constrain to multi-frame climbs. Both true
+  // (or both undefined) returns everything.
+  boulders?: boolean;
+  routes?: boolean;
   // Zone filter — restrict climbs using a user-drawn bounding box.
   zoneBox?: ZoneBox | null;
   zoneMode?: ZoneMatchMode | null;
   // Allow dynamic hold keys (e.g., hold_123)
   [key: `hold_${number}`]: unknown;
 };
+
+/**
+ * Structural shape accepted by `mapSearchInputToParams`. Loose enough that
+ * both the GraphQL `ClimbSearchInput` (camelCase, validated by Zod) and the
+ * web `SearchRequestPagination` (URL-derived) satisfy it. The mapper collapses
+ * falsy strings/arrays to `undefined` and passes booleans through unchanged.
+ */
+export type ClimbSearchInputLike = {
+  page?: number | null;
+  pageSize?: number | null;
+  gradeAccuracy?: string | number | null;
+  minGrade?: number | null;
+  maxGrade?: number | null;
+  minAscents?: number | null;
+  minRating?: number | null;
+  sortBy?: string | null;
+  sortOrder?: string | null;
+  name?: string | null;
+  // GraphQL field is `setter`; web field is `settername`. Accept both — the
+  // mapper picks `settername` if present, otherwise `setter`.
+  setter?: string[] | null;
+  settername?: string[] | null;
+  onlyTallClimbs?: boolean | null;
+  onlyWideClimbs?: boolean | null;
+  holdsFilter?: Record<string, unknown> | null;
+  hideAttempted?: boolean | null;
+  hideCompleted?: boolean | null;
+  showOnlyAttempted?: boolean | null;
+  showOnlyCompleted?: boolean | null;
+  onlyDrafts?: boolean | null;
+  projectsOnly?: boolean | null;
+  boulders?: boolean | null;
+  routes?: boolean | null;
+  zoneBox?: ZoneBox | null;
+  zoneMode?: ZoneMatchMode | null;
+};
+
+/**
+ * Map an input shape (GraphQL `ClimbSearchInput` or web
+ * `SearchRequestPagination`) onto the `ClimbSearchParams` shape consumed by
+ * `searchClimbs` / `createClimbFilters`. Centralises the "falsy → undefined"
+ * collapse for strings, arrays, and objects so the SSR path and the GraphQL
+ * resolver can't drift.
+ *
+ * Booleans pass through unchanged so explicit `false` from the caller (e.g.
+ * `routes: false`) reaches the SQL builder rather than being silently widened.
+ * Numeric defaults (page 0, pageSize 20, sortBy 'ascents', sortOrder 'desc')
+ * are applied here so both call sites agree.
+ */
+export function mapSearchInputToParams(input: ClimbSearchInputLike): ClimbSearchParams {
+  const setter = input.settername ?? input.setter ?? undefined;
+  const gradeAccuracyRaw = input.gradeAccuracy;
+  const gradeAccuracy =
+    typeof gradeAccuracyRaw === 'string'
+      ? gradeAccuracyRaw
+        ? parseFloat(gradeAccuracyRaw)
+        : undefined
+      : (gradeAccuracyRaw ?? undefined) || undefined;
+
+  return {
+    page: input.page ?? 0,
+    pageSize: input.pageSize ?? 20,
+    gradeAccuracy,
+    minGrade: input.minGrade || undefined,
+    maxGrade: input.maxGrade || undefined,
+    minAscents: input.minAscents || undefined,
+    minRating: input.minRating || undefined,
+    sortBy: input.sortBy || 'ascents',
+    sortOrder: input.sortOrder || 'desc',
+    name: input.name || undefined,
+    settername: setter && setter.length > 0 ? setter : undefined,
+    onlyTallClimbs: input.onlyTallClimbs ?? undefined,
+    onlyWideClimbs: input.onlyWideClimbs ?? undefined,
+    holdsFilter: input.holdsFilter && Object.keys(input.holdsFilter).length > 0 ? input.holdsFilter : undefined,
+    hideAttempted: input.hideAttempted ?? undefined,
+    hideCompleted: input.hideCompleted ?? undefined,
+    showOnlyAttempted: input.showOnlyAttempted ?? undefined,
+    showOnlyCompleted: input.showOnlyCompleted ?? undefined,
+    onlyDrafts: input.onlyDrafts ?? undefined,
+    projectsOnly: input.projectsOnly ?? undefined,
+    boulders: input.boulders ?? undefined,
+    routes: input.routes ?? undefined,
+    zoneBox: input.zoneBox || undefined,
+    zoneMode: input.zoneBox ? (input.zoneMode ?? undefined) : undefined,
+  };
+}
 
 /**
  * Result of a climb search query.

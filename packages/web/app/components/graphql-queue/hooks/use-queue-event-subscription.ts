@@ -6,6 +6,13 @@ import type { QueueAction } from '../../queue-control/types';
 import { track } from '@/app/lib/analytics';
 
 /**
+ * Queue-state events only — `PlaybackStateChanged` is ephemeral (consumed by
+ * `use-drawer-playback` for the engine; doesn't mutate queue state) and is
+ * filtered out at the subscription callback before reaching `toWireEnvelope`.
+ */
+export type QueueStateEvent = Exclude<SubscriptionQueueEvent, { __typename: 'PlaybackStateChanged' }>;
+
+/**
  * Adapt the wire-format `SubscriptionQueueEvent` (from `@boardsesh/shared-schema`)
  * to the runtime's structural `SubscriptionWireEnvelope<ClimbQueueItem>` (from
  * `@boardsesh/queue-runtime`). Both unions share the same `__typename` set and
@@ -19,7 +26,7 @@ import { track } from '@/app/lib/analytics';
  * `mapSubscriptionEnvelopeToAction`'s switch which has no `default` clause and
  * would silently drop the event.
  */
-export function toWireEnvelope(event: SubscriptionQueueEvent): SubscriptionWireEnvelope<ClimbQueueItem> {
+export function toWireEnvelope(event: QueueStateEvent): SubscriptionWireEnvelope<ClimbQueueItem> {
   switch (event.__typename) {
     case 'FullSync':
       return {
@@ -105,6 +112,10 @@ export function useQueueEventSubscription({
     if (!isPersistentSessionActive) return;
 
     const unsubscribe = persistentSession.subscribeToQueueEvents((event: SubscriptionQueueEvent) => {
+      // PlaybackStateChanged is ephemeral — `use-drawer-playback` subscribes
+      // to the same stream and handles it. The queue reducer has no concept
+      // of playback frames, so skip the runtime mapper entirely.
+      if (event.__typename === 'PlaybackStateChanged') return;
       // Wire-format → reducer-action mapping lives in @boardsesh/queue-runtime
       // so web and mobile share one source of truth (incl. the echo-suppression
       // hints on DELTA_UPDATE_CURRENT_CLIMB). Analytics + side effects stay here.

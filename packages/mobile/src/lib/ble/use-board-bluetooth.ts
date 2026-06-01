@@ -172,9 +172,7 @@ export function useBoardBluetooth({
       writeAbortRef.current = writeAbort;
 
       // Combine caller-provided signal with the internal abort controller
-      const combinedSignal = signal
-        ? mergeAbortSignals(signal, writeAbort.signal)
-        : writeAbort.signal;
+      const combinedSignal = signal ? mergeAbortSignals(signal, writeAbort.signal) : writeAbort.signal;
 
       try {
         if (boardName === 'moonboard') {

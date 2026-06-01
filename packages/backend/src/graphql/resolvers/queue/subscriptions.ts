@@ -44,8 +44,14 @@ export const queueSubscriptions = {
       // 1. Duplicate events (already included in FullSync state)
       // 2. Sequence gap detection on client (e.g., FullSync seq=7, then event seq=3)
       // Events queued between subscribing and fetching state will have lower sequences.
+      //
+      // PlaybackStateChanged is exempt: it doesn't mutate queue state, isn't
+      // buffered for replay, and reuses the room's current sequence number
+      // for ordering — which equals `fullSyncSequence` until the next queue
+      // mutation. Always forward it so peers receive playback updates issued
+      // immediately after subscribing.
       for await (const event of asyncIterator) {
-        if (event.sequence > fullSyncSequence) {
+        if (event.__typename === 'PlaybackStateChanged' || event.sequence > fullSyncSequence) {
           yield { queueUpdates: event };
         }
       }

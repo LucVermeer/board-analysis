@@ -11,13 +11,7 @@
 // mobile screen needs favorites, build `useMobileClimbActionsData` and
 // wire its output into this provider's props.
 
-import {
-  createContext,
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, type ReactNode } from 'react';
 import { favoritesStore } from '@boardsesh/climb-actions';
 
 type FavoritesContextValue = {

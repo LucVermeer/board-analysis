@@ -30,6 +30,10 @@ export type Climb = {
   created_at?: string | null;
   // ISO timestamp of when this climb was first published (null while still a draft)
   published_at?: string | null;
+  // Number of animation frames encoded in `frames`. 1 for static climbs.
+  framesCount?: number | null;
+  // Native per-frame pace in milliseconds. 0 when unset.
+  framesPace?: number | null;
 };
 
 export type ClimbQueryResult = {
@@ -125,6 +129,11 @@ export type SearchRequest = {
   showOnlyCompleted: boolean;
   onlyDrafts: boolean;
   projectsOnly: boolean;
+  // Climb-type filter (defaults: boulders=true, routes=false). Both true → no
+  // SQL filter (return everything). Boulders only → `frames_count = 1`. Routes
+  // only → `frames_count > 1`. Both false is treated as "no filter" too.
+  boulders: boolean;
+  routes: boolean;
   zoneBox: ZoneBox | null;
   zoneMode: ZoneMatchMode;
 };

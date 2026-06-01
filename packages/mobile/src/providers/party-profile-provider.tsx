@@ -12,15 +12,7 @@
 // currently mix the party-UUID identity and the authenticated user profile
 // in this single provider; the issue lays out the cleaner split.
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ensureProfile, type PartyProfile } from '@boardsesh/party-profile';
 import { partyProfileStorage } from '../lib/party-profile-store';
 import { useAuth } from './auth-provider';

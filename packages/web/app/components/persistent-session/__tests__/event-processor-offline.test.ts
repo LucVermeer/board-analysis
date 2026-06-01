@@ -203,6 +203,51 @@ describe('useEventProcessor - offline FullSync merge', () => {
     expect(result.current.lastReceivedStateHash).toBe('hash-2');
   });
 
+  it('PlaybackStateChanged is exempt from the sequence dedup gate', () => {
+    // Regression for #2232: the server stamps PlaybackStateChanged with the
+    // current room sequence (no bump), so two consecutive events share the
+    // same number. The dedup gate would otherwise mark the second as
+    // ignore-stale and silently drop party-mode playback sync.
+    const refs = createRefs([]);
+    const subscribers: SubscriptionQueueEvent[] = [];
+    refs.queueEventSubscribersRef.current.add((event) => subscribers.push(event));
+    const { result } = renderHook(() => useEventProcessor({ refs }), { wrapper: createWrapper() });
+
+    act(() => {
+      result.current.handleQueueEvent({
+        __typename: 'FullSync',
+        sequence: 5,
+        state: { queue: [], currentClimbQueueItem: null, stateHash: 'hash-1', sequence: 5 },
+      });
+      result.current.handleQueueEvent({
+        __typename: 'PlaybackStateChanged',
+        sequence: 5,
+        climbUuid: 'c-1',
+        frameIndex: 1,
+        isPlaying: true,
+        speed: 1,
+        paceMs: 400,
+        anchorTimestamp: '1700000000000',
+        clientId: 'engine-a',
+      } as unknown as SubscriptionQueueEvent);
+      result.current.handleQueueEvent({
+        __typename: 'PlaybackStateChanged',
+        sequence: 5,
+        climbUuid: 'c-1',
+        frameIndex: 2,
+        isPlaying: true,
+        speed: 1,
+        paceMs: 400,
+        anchorTimestamp: '1700000000400',
+        clientId: 'engine-a',
+      } as unknown as SubscriptionQueueEvent);
+    });
+
+    const playback = subscribers.filter((event) => event.__typename === 'PlaybackStateChanged');
+    expect(playback).toHaveLength(2);
+    expect((playback[1] as unknown as { frameIndex: number }).frameIndex).toBe(2);
+  });
+
   it('ClimbMirrored updates both queue item and current climb', () => {
     const refs = createRefs([]);
     const { result } = renderHook(() => useEventProcessor({ refs }), { wrapper: createWrapper() });

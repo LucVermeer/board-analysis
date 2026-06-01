@@ -267,5 +267,15 @@
   },
   "board": {
     "resetZoom": "Reset zoom"
+  },
+  "playback": {
+    "play": "Play",
+    "pause": "Pause",
+    "speed": "Speed",
+    "frameOfTotal": "Frame {{index}} of {{total}}",
+    "seek": "Scrub frames",
+    "speedHalf": "0.5×",
+    "speedNormal": "1×",
+    "speedDouble": "2×"
   }
 }

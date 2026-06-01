@@ -8,4 +8,4 @@
 
 export { useQueueMutations } from './use-queue-mutations';
 export { createQueueMutations } from './create-queue-mutations';
-export type { QueueMutationsActions, QueueMutationsDeps } from './create-queue-mutations';
+export type { QueueMutationsActions, QueueMutationsDeps, PublishPlaybackStateInput } from './create-queue-mutations';

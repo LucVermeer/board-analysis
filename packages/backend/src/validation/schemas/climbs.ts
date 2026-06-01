@@ -66,6 +66,9 @@ export const ClimbInputSchema = z.object({
   published_at: z.string().max(100).nullish(),
   userAscents: z.number().min(0).nullish(),
   userAttempts: z.number().min(0).nullish(),
+  // Round-trip multi-frame metadata so peers don't have to refetch /climb.
+  framesCount: z.number().int().min(1).nullish(),
+  framesPace: z.number().int().min(0).nullish(),
 });
 
 /**
@@ -145,6 +148,11 @@ export const ClimbSearchInputSchema = z.object({
   showOnlyCompleted: z.boolean().optional(),
   onlyDrafts: z.boolean().optional(),
   projectsOnly: z.boolean().optional(),
+  // Default to boulders-only so non-web GraphQL callers (mobile, scripts)
+  // get the same shape as the web UI when the field is omitted. Web sends
+  // explicit values from URL state, so its behaviour is unchanged.
+  boulders: z.boolean().optional().default(true),
+  routes: z.boolean().optional().default(false),
   zoneBox: z
     .object({
       edgeLeft: z.number().int(),

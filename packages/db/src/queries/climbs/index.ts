@@ -5,4 +5,5 @@ export { getGradeLabel } from './grade-lookup';
 export { populateDenormalizedColumns } from './populate-denormalized-columns';
 export { getSetterStats } from './setter-stats';
 export type { SetterStat } from './setter-stats';
-export type { BoardRouteParams, ClimbSearchParams, ClimbRow, ClimbSearchResult } from './types';
+export type { BoardRouteParams, ClimbSearchParams, ClimbSearchInputLike, ClimbRow, ClimbSearchResult } from './types';
+export { mapSearchInputToParams } from './types';

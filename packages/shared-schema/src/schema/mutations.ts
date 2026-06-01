@@ -66,6 +66,14 @@ export const mutationsTypeDefs = /* GraphQL */ `
     mirrorCurrentClimb(mirrored: Boolean!): ClimbQueueItem
 
     """
+    Broadcast the current playback state for a variable-speed climb so
+    other party members converge to the same frame/playing/speed. The
+    server stamps \`anchorTimestamp\` so peers can extrapolate elapsed
+    frames since the broadcast. Echo-suppressed by \`clientId\`.
+    """
+    publishPlaybackState(input: PlaybackStateInput!): Boolean!
+
+    """
     Replace a queue item with a new one (same UUID).
     """
     replaceQueueItem(uuid: ID!, item: ClimbQueueItemInput!): ClimbQueueItem!

@@ -103,6 +103,8 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const showOnlyCompleted = safeInput.showOnlyCompleted ?? DEFAULT_SEARCH_PARAMS.showOnlyCompleted;
   const onlyDrafts = safeInput.onlyDrafts ?? DEFAULT_SEARCH_PARAMS.onlyDrafts;
   const projectsOnly = safeInput.projectsOnly ?? DEFAULT_SEARCH_PARAMS.projectsOnly;
+  const boulders = safeInput.boulders ?? DEFAULT_SEARCH_PARAMS.boulders;
+  const routes = safeInput.routes ?? DEFAULT_SEARCH_PARAMS.routes;
   const zoneBox = safeInput.zoneBox ?? DEFAULT_SEARCH_PARAMS.zoneBox;
   const zoneMode = safeInput.zoneMode === 'anyHold' ? 'anyHold' : DEFAULT_SEARCH_PARAMS.zoneMode;
   const page = safeInput.page ?? DEFAULT_SEARCH_PARAMS.page;
@@ -175,6 +177,12 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   if (projectsOnly !== DEFAULT_SEARCH_PARAMS.projectsOnly) {
     params.projectsOnly = projectsOnly.toString();
   }
+  if (boulders !== DEFAULT_SEARCH_PARAMS.boulders) {
+    params.boulders = boulders.toString();
+  }
+  if (routes !== DEFAULT_SEARCH_PARAMS.routes) {
+    params.routes = routes.toString();
+  }
   if (
     zoneBox &&
     zoneBox.edgeLeft != null &&
@@ -228,6 +236,11 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   showOnlyCompleted: false,
   onlyDrafts: false,
   projectsOnly: false,
+  // Boulders inverts the usual "default false, serialise on true" convention:
+  // boulders defaults to true so the dominant case (search for boulders only)
+  // produces a clean URL with no `boulders=` param. See parse logic below.
+  boulders: true,
+  routes: false,
   zoneBox: null,
   zoneMode: DEFAULT_ZONE_MODE,
   page: 0,
@@ -323,6 +336,11 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     showOnlyCompleted: urlParams.get('showOnlyCompleted') === 'true',
     onlyDrafts: urlParams.get('onlyDrafts') === 'true',
     projectsOnly: urlParams.get('projectsOnly') === 'true',
+    // boulders inverts the "default false, serialise on true" convention used
+    // by every other switch here — only the explicit "false" string flips it
+    // off. See DEFAULT_SEARCH_PARAMS for the rationale.
+    boulders: urlParams.get('boulders') !== 'false',
+    routes: urlParams.get('routes') === 'true',
     zoneBox,
     zoneMode: zoneBox ? parseZoneMode(urlParams.get('zoneMode')) : DEFAULT_SEARCH_PARAMS.zoneMode,
     page: Number(urlParams.get('page') ?? DEFAULT_SEARCH_PARAMS.page),
@@ -670,30 +688,6 @@ export const hasOnlyNumericBoardRouteSegments = (
   );
 };
 
-export const constructPlayUrlWithSlugs = (
-  board_name: string,
-  layoutName: string,
-  sizeName: string,
-  sizeDescription: string | undefined,
-  setNames: string[],
-  angle: number,
-  climb_uuid: ClimbUuid,
-  climbName?: string,
-) => {
-  const layoutSlug = generateLayoutSlug(layoutName);
-  const sizeSlug = generateSizeSlug(sizeName, sizeDescription);
-  const setSlug = generateSetSlug(setNames);
-
-  const baseUrl = `/${board_name}/${layoutSlug}/${sizeSlug}/${setSlug}/${angle}/play/`;
-  if (climbName && climbName.trim()) {
-    const climbSlug = generateSlugFromText(climbName.trim());
-    if (climbSlug) {
-      return `${baseUrl}${climbSlug}-${climb_uuid}`;
-    }
-  }
-  return `${baseUrl}${climb_uuid}`;
-};
-
 export const constructCreateClimbUrl = (
   board_name: string,
   layoutName: string,
@@ -745,31 +739,6 @@ const tryResolveBoardSlugs = (
   return null;
 };
 
-/** Try to construct a slug-based play URL. Returns null if resolution fails. */
-export const tryConstructSlugPlayUrl = (
-  board_name: string,
-  layout_id: number,
-  size_id: number,
-  set_ids: number[],
-  angle: number,
-  climb_uuid: string,
-  climbName?: string,
-): string | null => {
-  const d = tryResolveBoardSlugs(board_name, layout_id, size_id, set_ids);
-  return d
-    ? constructPlayUrlWithSlugs(
-        d.board_name,
-        d.layout_name,
-        d.size_name,
-        d.size_description,
-        d.set_names,
-        angle,
-        climb_uuid,
-        climbName,
-      )
-    : null;
-};
-
 /** Try to construct a slug-based view URL. Returns null if resolution fails. */
 export const tryConstructSlugViewUrl = (
   board_name: string,
@@ -812,7 +781,6 @@ export const tryConstructSlugListUrl = (
 /**
  * Extracts the base board configuration path from a full pathname.
  * This removes dynamic segments that can change during a session:
- * - /play/[climb_uuid] - viewing different climbs
  * - /view/[climb_slug] - viewing climb details
  * - /list, /create - different views
  * - /{angle} - the board angle is adjustable during a session
@@ -823,8 +791,13 @@ export const tryConstructSlugListUrl = (
  * should persist when navigating between climbs, views, or angles on the
  * same physical board configuration.
  *
+ * The standalone `/play/[climb_uuid]` route was removed and replaced by the
+ * play-view drawer; the `/play/` strip below is defensive cleanup for any
+ * stale pathname that might still flow through here (e.g. persisted session
+ * board paths) and otherwise wouldn't match.
+ *
  * @example
- * getBaseBoardPath('/kilter/original/12x12/default/45/play/abc-123')
+ * getBaseBoardPath('/kilter/original/12x12/default/45/view/abc-123')
  * // => '/kilter/original/12x12/default'
  *
  * @example
@@ -842,13 +815,15 @@ export function getBaseBoardPath(pathname: string): string {
     return boardSlugMatch[1];
   }
 
-  // URL structure: /{board}/{layout}/{size}/{sets}/{angle}[/play/uuid|/view/slug|/list|/create]
+  // URL structure: /{board}/{layout}/{size}/{sets}/{angle}[/view/slug|/list|/create]
+  // (/play/ is gone — its redirect routes catch any in-flight URLs.)
   // We want to extract: /{board}/{layout}/{size}/{sets}
 
   // First, strip off trailing view segments if present
   let path = pathname;
 
-  // Match /play/[uuid] or /play/[slug-uuid]
+  // Defensive: strip /play/[uuid] in case a stale URL slipped through
+  // (e.g. persisted in session board path before the rename).
   const playMatch = path.match(/^(.+?)\/play\/[^/]+$/);
   if (playMatch) {
     path = playMatch[1];
@@ -970,13 +945,6 @@ export const constructBoardSlugUrl = (slug: string, angle: number, path?: string
  * /b/{board-slug}/{angle}/list
  */
 export const constructBoardSlugListUrl = (slug: string, angle: number) => constructBoardSlugUrl(slug, angle, 'list');
-
-/**
- * Construct a board slug URL for the play view.
- * /b/{board-slug}/{angle}/play/{climb_uuid}
- */
-export const constructBoardSlugPlayUrl = (slug: string, angle: number, climbUuid: string) =>
-  constructBoardSlugUrl(slug, angle, `play/${climbUuid}`);
 
 /**
  * Construct a board slug URL for the climb view.

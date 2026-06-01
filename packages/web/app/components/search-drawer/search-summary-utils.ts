@@ -46,6 +46,8 @@ export type ClimbSummaryLabels = {
   gradeFallback: (gradeId: number) => string;
   upToGrade: (gradeName: string) => string;
   setterCount: (count: number) => string;
+  routesOnly: string;
+  bouldersAndRoutes: string;
 };
 
 export function getClimbPanelSummary(params: SearchRequestPagination, labels: ClimbSummaryLabels): string[] {
@@ -65,6 +67,15 @@ export function getClimbPanelSummary(params: SearchRequestPagination, labels: Cl
 
   if (params.settername.length > 0) {
     parts.push(params.settername.length === 1 ? params.settername[0] : labels.setterCount(params.settername.length));
+  }
+
+  // Only chip the non-default climb-type selections. Default is
+  // boulders-only (matches the historical search behaviour), so don't add
+  // a chip for that. Routes-only and both-on get their own chips.
+  if (params.routes && !params.boulders) {
+    parts.push(labels.routesOnly);
+  } else if (params.routes && params.boulders) {
+    parts.push(labels.bouldersAndRoutes);
   }
 
   return parts;
@@ -190,6 +201,8 @@ export function createSearchSummaryLabels(t: SearchSummaryTranslate): SearchPill
       gradeFallback: (gradeId) => t('search.summary.gradeFallback', { gradeId }),
       upToGrade: (gradeName) => t('search.summary.upToGrade', { grade: gradeName }),
       setterCount: (count) => t('search.summary.setterCount', { count }),
+      routesOnly: t('search.summary.routesOnly'),
+      bouldersAndRoutes: t('search.summary.bouldersAndRoutes'),
     },
     quality: {
       ascents: (count) => t('search.summary.ascents', { count }),

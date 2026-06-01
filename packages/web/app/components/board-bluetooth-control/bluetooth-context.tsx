@@ -30,6 +30,8 @@ import type { UserBoard } from '@boardsesh/shared-schema';
 import type { DiscoveredDevice } from '@/app/lib/ble/types';
 import type { PickerState } from './use-board-bluetooth';
 import { useLedColorOverrides, type LedColorOverrides } from '@/app/lib/led-color-overrides-db';
+import { accumulateFramesToMaps, accumulatedMapsToFrameStrings } from '@boardsesh/board-constants/hold-states';
+import type { BoardName } from '@boardsesh/shared-schema';
 
 type BluetoothContextValue = {
   isConnected: boolean;
@@ -87,6 +89,7 @@ function countClimbHolds(frames: string | undefined | null): number {
 function BluetoothAutoSender({
   sendFramesToBoard,
   layoutName,
+  boardName,
   onWallConfirmed,
 }: {
   sendFramesToBoard: (
@@ -96,6 +99,7 @@ function BluetoothAutoSender({
     climbUuid?: string,
   ) => Promise<boolean | undefined>;
   layoutName: string;
+  boardName: BoardName;
   /**
    * Fires after a successful BLE write. Always emits onto the local
    * wall-confirm bus (so the same phone's drawer timer dismisses); in party
@@ -173,9 +177,28 @@ function BluetoothAutoSender({
             pendingClimbRef.current = null;
             continue;
           }
-          const climbHoldCount = countClimbHolds(item.climb.frames);
+          // For variable-speed climbs (`frames` is a sequence of comma-
+          // separated delta frames using `p<id>r<role>` for sets and
+          // `x<id>` for offs) the BLE encoder doesn't understand commas
+          // or x-tokens and would emit a garbage packet. Accumulate the
+          // deltas, take the first frame's snapshot, and re-emit it as a
+          // flat sequence of `p<id>r<role>` pairs the encoder can parse.
+          //
+          // Single-frame climbs (no commas, no `x` tokens) are passed
+          // through verbatim — round-tripping rewrites their role codes
+          // to STATE_TO_PRIMARY_CODE['kilter'] (Product 7: 42/43/44/45),
+          // which would silently break climbs encoded for any other
+          // Kilter product (Product 1: 12/13/14/15, Product 2: 20-23, …)
+          // by lighting the wrong colours. The playback engine on /play
+          // handles subsequent ticks for multi-frame climbs.
+          const rawFrames = item.climb.frames ?? '';
+          const isSingleFrame = rawFrames.length > 0 && !rawFrames.includes(',') && !rawFrames.includes('x');
+          const firstFrame = isSingleFrame
+            ? rawFrames
+            : (accumulatedMapsToFrameStrings(accumulateFramesToMaps(rawFrames, boardName), boardName)[0] ?? '');
+          const climbHoldCount = countClimbHolds(firstFrame);
           try {
-            const result = await sendFramesToBoard(item.climb.frames, !!item.climb.mirrored, signal, item.climb.uuid);
+            const result = await sendFramesToBoard(firstFrame, !!item.climb.mirrored, signal, item.climb.uuid);
             // After the await, the AutoSender may have unmounted — skip the
             // post-send side effects so a navigated-away climb doesn't fire
             // analytics or confirmClimbOnWall for a session the user has left.
@@ -216,7 +239,7 @@ function BluetoothAutoSender({
       }
     };
     void drain();
-  }, [currentClimbQueueItem, sendFramesToBoard, layoutName]);
+  }, [currentClimbQueueItem, sendFramesToBoard, layoutName, boardName]);
 
   return null;
 }
@@ -609,6 +632,7 @@ export function BluetoothProvider({
         <BluetoothAutoSender
           sendFramesToBoard={sendFramesToBoard}
           layoutName={boardDetails.layout_name ?? ''}
+          boardName={boardDetails.board_name}
           onWallConfirmed={handleWallConfirmed}
         />
       )}

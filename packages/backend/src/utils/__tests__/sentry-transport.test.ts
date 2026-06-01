@@ -155,9 +155,7 @@ describe('createBackendLogger default transports', () => {
   it('omits the SentryWinstonTransport when the caller provides custom transports', () => {
     const backendLogger = createBackendLogger({ nodeEnv: 'production', loggerTransports: [] });
     try {
-      const sentryTransport = backendLogger.transports.find(
-        (transport) => transport instanceof SentryWinstonTransport,
-      );
+      const sentryTransport = backendLogger.transports.find((transport) => transport instanceof SentryWinstonTransport);
       expect(sentryTransport).toBeUndefined();
     } finally {
       backendLogger.close();

@@ -48,6 +48,10 @@ export const climbTypeDefs = /* GraphQL */ `
     published_at: String
     "ISO timestamp of when this climb row was created"
     created_at: String
+    "Number of animation frames encoded in the frames string. 1 for static climbs; >1 for variable-speed Aurora routes/circuits."
+    framesCount: Int
+    "Animation pace between frames, in Aurora's native unit (treated as milliseconds). 0 when not set."
+    framesPace: Int
   }
 
   """
@@ -76,6 +80,10 @@ export const climbTypeDefs = /* GraphQL */ `
     published_at: String
     userAscents: Int
     userAttempts: Int
+    "Number of animation frames encoded in \`frames\`. 1 for static climbs."
+    framesCount: Int
+    "Native per-frame pace, in milliseconds. 0 when unset."
+    framesPace: Int
   }
 
   # ============================================
@@ -167,6 +175,10 @@ export const climbTypeDefs = /* GraphQL */ `
     onlyDrafts: Boolean
     "Show only unclimbed projects (climbs with 0 ascents)"
     projectsOnly: Boolean
+    "Include single-frame climbs (boulders). Default true. Set to false (paired with routes=true) to filter to routes only."
+    boulders: Boolean
+    "Include multi-frame climbs (routes). Default false. Set to true to include or filter to routes."
+    routes: Boolean
     "Restrict results using this drawn zone"
     zoneBox: ZoneBoxInput
     "How the zone should match climb holds. Defaults to allHolds when omitted."

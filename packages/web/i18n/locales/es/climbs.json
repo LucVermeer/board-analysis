@@ -17,12 +17,6 @@
       "seoSetterSuffix": " creado por {{setter}}",
       "seoAscentsSuffix": ". {{ascents}} encadenes registrados"
     },
-    "play": {
-      "title": "{{climbName}} - {{grade}} | Modo Jugar",
-      "description": "{{climbName}} - {{grade}} de {{setter}}. Calidad: {{quality}}/5. Encadenes: {{ascents}}",
-      "fallbackTitle": "Jugar",
-      "fallbackDescription": "Juega un bloque en tu tabla de escalada"
-    },
     "create": {
       "title": "Crear un bloque",
       "description": "Apertura un nuevo bloque en tu tabla de escalada"
@@ -62,7 +56,6 @@
     }
   },
   "header": {
-    "backToList": "Volver a la lista de bloques",
     "createNewClimb": "Crear un nuevo bloque"
   },
   "share": {
@@ -101,6 +94,8 @@
       "gradeRangeAndUp": "{{grade}} en adelante",
       "gradeRangeUpTo": "Hasta {{grade}}",
       "setter": "Aperturista",
+      "boulder": "Bloque",
+      "route": "Ruta",
       "minAscents": "Encadenes mín.",
       "minRating": "Valoración mín.",
       "any": "Cualquiera",
@@ -148,6 +143,8 @@
       "only": "Solo {{filters}}",
       "holds_one": "{{count}} presa",
       "holds_other": "{{count}} presas",
+      "routesOnly": "Solo rutas",
+      "bouldersAndRoutes": "Bloques y rutas",
       "more": "+{{count}} más"
     },
     "status": {

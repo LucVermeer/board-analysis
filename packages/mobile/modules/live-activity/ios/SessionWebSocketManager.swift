@@ -374,13 +374,13 @@ final class SessionWebSocketManager {
                 stateHash
                 queue {
                   uuid
-                  climb { uuid setter_username name frames angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
+                  climb { uuid setter_username name frames framesCount framesPace angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
                   addedBy
                   suggested
                 }
                 currentClimbQueueItem {
                   uuid
-                  climb { uuid setter_username name frames angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
+                  climb { uuid setter_username name frames framesCount framesPace angle ascensionist_count difficulty quality_average stars difficulty_error mirrored benchmark_difficulty }
                   addedBy
                   suggested
                 }
@@ -390,7 +390,7 @@ final class SessionWebSocketManager {
               sequence
               currentItem: item {
                 uuid
-                climb { uuid setter_username name frames angle difficulty mirrored }
+                climb { uuid setter_username name frames framesCount framesPace angle difficulty mirrored }
                 addedBy
                 suggested
               }
@@ -401,7 +401,7 @@ final class SessionWebSocketManager {
               sequence
               addedItem: item {
                 uuid
-                climb { uuid setter_username name frames angle difficulty mirrored }
+                climb { uuid setter_username name frames framesCount framesPace angle difficulty mirrored }
                 addedBy
                 suggested
               }

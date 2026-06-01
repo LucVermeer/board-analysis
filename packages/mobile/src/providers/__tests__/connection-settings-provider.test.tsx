@@ -8,11 +8,7 @@ vi.mock('../../lib/env', () => ({
   WEB_BASE_URL: 'https://www.boardsesh.com',
 }));
 
-import {
-  ConnectionSettingsProvider,
-  useConnectionSettings,
-  useBackendUrl,
-} from '../connection-settings-provider';
+import { ConnectionSettingsProvider, useConnectionSettings, useBackendUrl } from '../connection-settings-provider';
 
 describe('ConnectionSettingsProvider', () => {
   it('exposes the env-derived backendUrl through useConnectionSettings', () => {
@@ -32,9 +28,7 @@ describe('ConnectionSettingsProvider', () => {
   });
 
   it('useConnectionSettings throws when called outside a provider', () => {
-    expect(() => renderHook(() => useConnectionSettings())).toThrow(
-      /must be used within a ConnectionSettingsProvider/,
-    );
+    expect(() => renderHook(() => useConnectionSettings())).toThrow(/must be used within a ConnectionSettingsProvider/);
   });
 });
 

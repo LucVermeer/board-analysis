@@ -95,6 +95,21 @@ export type PersistentSessionActionsType = {
     correlationId?: string,
   ) => Promise<void>;
   mirrorCurrentClimb: (mirrored: boolean) => Promise<void>;
+  // Broadcast multi-frame climb playback state to party peers. No-op in solo
+  // — the engine runs locally and there's no one to sync with.
+  publishPlaybackState: (input: {
+    climbUuid: string;
+    frameIndex: number;
+    isPlaying: boolean;
+    speed: number;
+    paceMs: number;
+    /**
+     * Stable identifier for the publishing playback engine. Returned verbatim
+     * in `PlaybackStateChanged.clientId` so the publisher's own clients can
+     * suppress echoes of their own state.
+     */
+    clientId: string;
+  }) => Promise<void>;
   setQueue: (queue: LocalClimbQueueItem[], currentClimbQueueItem?: LocalClimbQueueItem | null) => Promise<void>;
   replaceQueueItem: (uuid: string, item: LocalClimbQueueItem) => Promise<void>;
 
@@ -228,6 +243,11 @@ export function toClimbQueueItemInput(item: LocalClimbQueueItem): ClimbQueueItem
       published_at: item.climb.published_at ?? null,
       userAscents: item.climb.userAscents,
       userAttempts: item.climb.userAttempts,
+      // Multi-frame metadata so a peer who receives this climb via queue
+      // broadcast plays back at the climb's native pace instead of falling
+      // through to the DEFAULT_PACE_MS (750 ms) heuristic.
+      framesCount: item.climb.framesCount ?? null,
+      framesPace: item.climb.framesPace ?? null,
     },
     addedBy: item.addedBy,
     addedByUser: item.addedByUser
