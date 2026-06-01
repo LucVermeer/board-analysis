@@ -19,7 +19,6 @@ import { spacing } from '../../theme/tokens';
 import { iosSystemColors } from '../../theme/ios-colors';
 
 type DevicePickerSheetProps = {
-  visible: boolean;
   devices: DiscoveredDevice[];
   onSelect: (deviceId: string) => void;
   onDismiss: () => void;
@@ -32,7 +31,7 @@ function DevicePickerModalContainer({ children }: PropsWithChildren) {
 
 const modalContainerComponent = Platform.OS === 'ios' ? DevicePickerModalContainer : undefined;
 
-export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isScanning }: DevicePickerSheetProps) {
+export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: DevicePickerSheetProps) {
   const { t } = useTranslation('settings');
   const theme = useTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -40,12 +39,8 @@ export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isSca
   const snapPoints = useMemo(() => ['72%'], []);
 
   useEffect(() => {
-    if (visible) {
-      sheetRef.current?.present();
-    } else {
-      sheetRef.current?.dismiss();
-    }
-  }, [visible]);
+    sheetRef.current?.present();
+  }, []);
 
   const sortedDevices = useMemo(() => [...devices].sort((deviceA, deviceB) => deviceB.rssi - deviceA.rssi), [devices]);
 
@@ -75,8 +70,6 @@ export function DevicePickerSheet({ visible, devices, onSelect, onDismiss, isSca
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };
-
-  if (!visible) return null;
 
   const showScanningState = isScanning && devices.length === 0;
   const showEmptyState = !isScanning && devices.length === 0;

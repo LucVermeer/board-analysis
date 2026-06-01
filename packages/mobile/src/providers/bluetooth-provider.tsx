@@ -231,7 +231,6 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
       {children}
       {pickerState && (
         <DevicePickerSheet
-          visible
           devices={pickerState.devices}
           onSelect={pickerState.handleSelect}
           onDismiss={pickerState.handleCancel}
