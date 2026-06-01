@@ -53,16 +53,35 @@ describe('usePlaybackEngine', () => {
     expect(result.current.frameIndex).toBe(2);
   });
 
-  it('wraps to frame 0 after the last frame', () => {
+  it('stops at the last frame instead of looping', () => {
     const { frames, frameStrings } = decode(TENSION_FRAMES);
     const { result } = renderHook(() => usePlaybackEngine({ frames, frameStrings, paceMs: 300, clientId: 'a' }));
     act(() => {
       result.current.play();
     });
     act(() => {
-      vi.advanceTimersByTime(300 * frameStrings.length);
+      // Advance well past the end; the engine should rest on the last frame.
+      vi.advanceTimersByTime(300 * (frameStrings.length + 2));
+    });
+    expect(result.current.frameIndex).toBe(frameStrings.length - 1);
+    expect(result.current.isPlaying).toBe(false);
+  });
+
+  it('restarts from frame 0 when play is pressed on the last frame', () => {
+    const { frames, frameStrings } = decode(TENSION_FRAMES);
+    const { result } = renderHook(() => usePlaybackEngine({ frames, frameStrings, paceMs: 300, clientId: 'a' }));
+    act(() => {
+      result.current.play();
+    });
+    act(() => {
+      vi.advanceTimersByTime(300 * (frameStrings.length + 2));
+    });
+    expect(result.current.frameIndex).toBe(frameStrings.length - 1);
+    act(() => {
+      result.current.play();
     });
     expect(result.current.frameIndex).toBe(0);
+    expect(result.current.isPlaying).toBe(true);
   });
 
   it('halves tick interval at speed=2', () => {
@@ -212,10 +231,12 @@ describe('usePlaybackEngine', () => {
     const { result } = renderHook(() =>
       usePlaybackEngine({ frames, frameStrings, paceMs: 200, clientId: 'self', externalState: external }),
     );
-    // paceMs=0 clamped to MIN_PACE_MS (200) → 1000ms / 200ms = 5 steps,
-    // (0 + 5) % 4 frames = frame 1. No divide-by-zero, no Infinity.
+    // paceMs=0 clamped to MIN_PACE_MS (200) → 1000ms / 200ms = 5 steps.
+    // Playback no longer loops, so the projection clamps to the last frame
+    // and the engine reports stopped. No divide-by-zero, no Infinity.
     expect(Number.isFinite(result.current.frameIndex)).toBe(true);
-    expect(result.current.frameIndex).toBe(1);
+    expect(result.current.frameIndex).toBe(frameStrings.length - 1);
+    expect(result.current.isPlaying).toBe(false);
   });
 
   it('emits onLocalStateChange on user actions but not on auto ticks', () => {

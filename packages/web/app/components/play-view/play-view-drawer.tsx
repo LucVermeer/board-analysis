@@ -973,7 +973,6 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
             frameCount={playback.frameCount}
             isPlaying={playback.isPlaying}
             speed={playback.speed}
-            paceMs={playback.paceMs}
             onPlay={playback.play}
             onPause={playback.pause}
             onSeek={playback.seek}
