@@ -275,4 +275,26 @@ describe('usePlaybackEngine', () => {
     });
     expect(onLocalStateChange).toHaveBeenCalledTimes(1);
   });
+
+  it('broadcasts the stop when playback reaches the last frame', () => {
+    const { frames, frameStrings } = decode(TENSION_FRAMES);
+    const onLocalStateChange = vi.fn();
+    const { result } = renderHook(() =>
+      usePlaybackEngine({ frames, frameStrings, paceMs: 200, clientId: 'self', onLocalStateChange }),
+    );
+    act(() => {
+      result.current.play();
+    });
+    onLocalStateChange.mockClear();
+    act(() => {
+      // Run through every frame; the terminal tick stops and broadcasts.
+      vi.advanceTimersByTime(200 * (frameStrings.length + 1));
+    });
+    expect(onLocalStateChange).toHaveBeenCalledTimes(1);
+    expect(onLocalStateChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isPlaying: false, frameIndex: frameStrings.length - 1 }),
+    );
+    expect(result.current.frameIndex).toBe(frameStrings.length - 1);
+    expect(result.current.isPlaying).toBe(false);
+  });
 });

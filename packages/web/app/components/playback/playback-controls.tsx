@@ -23,7 +23,10 @@ type PlaybackControlsProps = {
 
 /** Speeds with their own toggle button; anything else is a custom slider value. */
 const PRESET_SPEEDS = [0.5, 1];
-const MIN_CUSTOM_SPEED = 1;
+// Lower bound sits just above the 1× preset so the slider can never land on a
+// preset value — otherwise dragging to exactly 1.0 would re-activate the 1×
+// toggle while the popover is still open, leaving the custom button as "…".
+const MIN_CUSTOM_SPEED = 1.1;
 const MAX_CUSTOM_SPEED = 10;
 
 /** 1-decimal, trailing `.0` stripped: 7.0 → "7", 6.3 → "6.3". */
@@ -54,7 +57,7 @@ export function PlaybackControls({
   // the per-minute rate-limit bucket — so we only call `onSpeedChange` on
   // `onChangeCommitted` (release / keyboard step).
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const [draftSpeed, setDraftSpeed] = useState<number>(2);
+  const [draftSpeed, setDraftSpeed] = useState<number>(MIN_CUSTOM_SPEED);
 
   const isCustomSpeed = !PRESET_SPEEDS.includes(speed);
   // Stopped on the final frame: the primary button becomes a replay control
@@ -186,6 +189,7 @@ export function PlaybackControls({
             }}
             onChangeCommitted={(_, value) => {
               if (typeof value === 'number') onSpeedChange(value);
+              setAnchorEl(null);
             }}
             size="small"
           />
