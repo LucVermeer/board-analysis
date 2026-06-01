@@ -553,27 +553,15 @@ export type SaveTickMutationResponse = {
   };
 };
 
-export const TOGGLE_FAVORITE = gql`
-  mutation ToggleFavorite($input: ToggleFavoriteInput!) {
-    toggleFavorite(input: $input) {
-      favorited
-    }
-  }
-`;
-
-export type ToggleFavoriteMutationVariables = {
-  input: {
-    boardName: string;
-    climbUuid: string;
-    angle: number;
-  };
-};
-
-export type ToggleFavoriteMutationResponse = {
-  toggleFavorite: {
-    favorited: boolean;
-  };
-};
+// ToggleFavorite mutation + types live in @boardsesh/graphql/operations/favorites.
+// Re-exported here so existing mobile imports (`from './operations'`) keep
+// working without changing every call site at once. New code should import
+// from the shared package directly.
+export {
+  TOGGLE_FAVORITE,
+  type ToggleFavoriteMutationVariables,
+  type ToggleFavoriteMutationResponse,
+} from '@boardsesh/graphql/operations/favorites';
 
 // ============================================
 // Queue Mutations
