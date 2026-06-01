@@ -5,8 +5,9 @@ import type { BoardName } from '@boardsesh/shared-schema';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticLight } from '../../lib/haptics';
 import { springs } from '../../theme/animations';
-import { spacing, borderRadius } from '../../theme/tokens';
+import { spacing, borderRadius, overlays } from '../../theme/tokens';
 import { brandColors } from '../../theme/colors';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { useTheme } from '../../providers/theme-provider';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -105,8 +106,8 @@ export function BoardDiscoveryCard({ item, onPress }: BoardDiscoveryCardProps) {
 
         {item.distanceMeters != null ? (
           <View style={styles.distanceBadge}>
-            <Icon name="location" size={11} color="#fff" />
-            <Text variant="caption2" color="#fff">
+            <Icon name="location" size={11} color={overlays.onScrim} />
+            <Text variant="caption2" color={overlays.onScrim}>
               {formatDistance(item.distanceMeters)}
             </Text>
           </View>
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: borderRadius.full,
-    backgroundColor: '#fff',
+    backgroundColor: iosSystemColors.white,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
@@ -172,7 +173,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: borderRadius.full,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: overlays.scrim,
   },
   title: {
     fontWeight: '600',

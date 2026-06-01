@@ -11,6 +11,12 @@ import {
   type SearchBoardsQueryVariables,
 } from '@boardsesh/graphql/operations';
 import type { UserBoard, UserBoardConnection } from '@boardsesh/shared-schema';
+import { zoomToRadiusKm, roundCoord } from '@boardsesh/board-config';
+
+// Re-exported for existing importers (e.g. the hook's test). The implementation
+// now lives in the shared @boardsesh/board-config package so web and mobile
+// can't drift.
+export { zoomToRadiusKm };
 
 export type SearchBoardsMapInput = {
   query: string;
@@ -31,32 +37,6 @@ export type SearchBoardsMapResult = {
 };
 
 const PAGE_LIMIT = 30;
-
-/**
- * Map zoom level → search radius in km.
- * Roughly tracks the visible radius at common Leaflet zoom levels on a typical
- * mobile/desktop viewport. Capped at 300 km so a fully-zoomed-out view doesn't
- * fire a planet-wide query.
- */
-export function zoomToRadiusKm(zoom: number): number {
-  if (zoom >= 14) return 5;
-  if (zoom === 13) return 10;
-  if (zoom === 12) return 15;
-  if (zoom === 11) return 20;
-  if (zoom === 10) return 40;
-  if (zoom === 9) return 80;
-  if (zoom === 8) return 160;
-  return 300;
-}
-
-/**
- * Round coordinates to ~1km precision so small map pans don't refire the query.
- * 2 decimals ≈ 1.1 km at the equator.
- */
-function roundCoord(n: number | null): number | null {
-  if (n == null) return null;
-  return Math.round(n * 100) / 100;
-}
 
 export function useSearchBoardsMap({
   query,

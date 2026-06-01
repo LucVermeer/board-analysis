@@ -17,7 +17,7 @@ import { Button } from '../../../src/components/Button';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { BoardCarousel } from '../../../src/components/board-discovery/BoardCarousel';
 import { BoardModeCard, type ModeCardState } from '../../../src/components/board-discovery/BoardModeCard';
-import { CustomBoardSheet } from '../../../src/components/board-discovery/CustomBoardSheet';
+import { CustomBoardSheet, type BoardSeed } from '../../../src/components/board-discovery/CustomBoardSheet';
 import { BluetoothQuickstartSheet } from '../../../src/components/board-discovery/BluetoothQuickstartSheet';
 import { userBoardToItem, popularConfigToItem } from '../../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
@@ -64,6 +64,9 @@ export default function BoardSelection() {
   // State (not a ref) so the quickstart sheet re-renders and kicks off its scan
   // when opened, and tears it down when closed.
   const [bluetoothActive, setBluetoothActive] = useState(false);
+  // Pre-fill for the custom builder — set when opened from a Popular config,
+  // null when opened blank from the Custom mode card.
+  const [customSeed, setCustomSeed] = useState<BoardSeed | null>(null);
 
   // See the boards index error path: a hard 401 clears tokens but doesn't flip
   // isAuthenticated, so re-validate on error to escape a stuck retry loop.
@@ -129,10 +132,12 @@ export default function BoardSelection() {
   }, []);
 
   const onModeCustom = useCallback(() => {
+    setCustomSeed(null); // blank builder
     customSheetRef.current?.expand();
   }, []);
 
-  const onBoardCreated = useCallback(
+  // Both the created-board and already-owned paths close the sheet and activate.
+  const onCustomBoardResolved = useCallback(
     (board: UserBoard) => {
       customSheetRef.current?.close();
       void activateBoard(board);
@@ -140,21 +145,28 @@ export default function BoardSelection() {
     [activateBoard],
   );
 
-  // A popular config has no UserBoard yet, so it becomes one through the custom
-  // builder (which CREATEs it). For now this just opens an empty builder rather
-  // than pre-seeding it from the tapped config — see #2455.
-  const onSelectPopular = useCallback(() => {
+  // A popular config has no UserBoard, so it routes through the custom builder
+  // (pre-seeded with the tapped config) which CREATEs it — or, if the user
+  // already owns that exact config, activates the existing board.
+  const onSelectPopular = useCallback((item: DiscoveryBoardItem) => {
+    setCustomSeed({
+      boardName: item.boardName,
+      layoutId: item.layoutId,
+      sizeId: item.sizeId,
+      setIds: item.setIds,
+    });
     customSheetRef.current?.expand();
   }, []);
 
   // Drive the Find Nearby card off both the location permission and the nearby
   // query: loading while resolving the fix or fetching, 'done' once results are
-  // in (re-tapping would no-op, so show it as complete rather than tappable),
-  // denied/unavailable on failure.
+  // actually in (re-tapping would no-op, so show it complete), denied/unavailable
+  // on failure. A granted fix that returns *no* boards stays 'idle' rather than a
+  // ticked-but-empty 'done', which would look broken.
   const nearbyState: ModeCardState =
     location.status === 'loading' || (location.status === 'granted' && isNearbyLoading)
       ? 'loading'
-      : location.status === 'granted'
+      : location.status === 'granted' && nearbyItems.length > 0
         ? 'done'
         : location.status === 'denied'
           ? 'denied'
@@ -271,7 +283,10 @@ export default function BoardSelection() {
 
       <CustomBoardSheet
         ref={customSheetRef}
-        onCreated={onBoardCreated}
+        seed={customSeed}
+        existingBoards={myBoards}
+        onCreated={onCustomBoardResolved}
+        onSelectExisting={onCustomBoardResolved}
         onError={() => showToast(t('mobile.custom.createError'), 'error')}
       />
       <BluetoothQuickstartSheet

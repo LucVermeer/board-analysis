@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { UserBoard, PopularBoardConfig } from '@boardsesh/shared-schema';
-import { userBoardToItem, popularConfigToItem } from '../board-items';
+import { userBoardToItem, popularConfigToItem, findOwnedBoardForConfig } from '../board-items';
 
 const board = {
   uuid: 'b-1',
@@ -73,5 +73,28 @@ describe('popularConfigToItem', () => {
   it('drops a config whose board type is unsupported', () => {
     const bad = { ...config, boardType: 'xyz' } as unknown as PopularBoardConfig;
     expect(popularConfigToItem(bad)).toBeNull();
+  });
+});
+
+describe('findOwnedBoardForConfig', () => {
+  const owned = [
+    { uuid: 'a', boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3,4' },
+    { uuid: 'b', boardType: 'tension', layoutId: 9, sizeId: 8, setIds: '7,6' },
+  ] as unknown as UserBoard[];
+
+  it('returns the board that matches the full config tuple', () => {
+    const match = findOwnedBoardForConfig(owned, { boardType: 'tension', layoutId: 9, sizeId: 8, setIds: '7,6' });
+    expect(match?.uuid).toBe('b');
+  });
+
+  it('returns undefined when any field differs', () => {
+    // same board/layout/size but different sets
+    expect(findOwnedBoardForConfig(owned, { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3' })).toBeUndefined();
+    // different board type
+    expect(findOwnedBoardForConfig(owned, { boardType: 'decoy', layoutId: 1, sizeId: 2, setIds: '3,4' })).toBeUndefined();
+  });
+
+  it('returns undefined for an empty list', () => {
+    expect(findOwnedBoardForConfig([], { boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3,4' })).toBeUndefined();
   });
 });

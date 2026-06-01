@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -11,16 +11,35 @@ import {
   getDefaultSizeForLayout,
 } from '@boardsesh/board-constants/product-sizes';
 import { useCreateBoard } from '../../lib/graphql/hooks';
+import { findOwnedBoardForConfig } from './board-items';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { brandColors } from '../../theme/colors';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { useTheme } from '../../providers/theme-provider';
 import { Sheet } from '../Sheet';
 import { Text } from '../Text';
 import { Button } from '../Button';
 
+/** A board config to pre-fill the builder with (e.g. a tapped Popular setup). */
+export type BoardSeed = {
+  boardName: BoardName;
+  layoutId: number;
+  sizeId: number;
+  /** Comma-separated set ids. */
+  setIds: string;
+  angle?: number;
+};
+
 type CustomBoardSheetProps = {
+  /** When set, the builder opens pre-filled with this config (else a blank form). */
+  seed?: BoardSeed | null;
+  /** The user's existing boards, so an already-owned config activates instead
+   *  of erroring on the server's duplicate-config guard. */
+  existingBoards: UserBoard[];
   /** Resolves once the board is created server-side (CREATE_BOARD). */
   onCreated: (board: UserBoard) => void;
+  /** The picked config matches a board the user already owns — activate it. */
+  onSelectExisting: (board: UserBoard) => void;
   onError: () => void;
 };
 
@@ -28,10 +47,12 @@ type CustomBoardSheetProps = {
  * Custom-board builder: cascading board → layout → size → sets → angle, driven
  * entirely by static `@boardsesh/board-config` + `@boardsesh/board-constants`
  * data (no server query). Confirming persists the config via CREATE_BOARD —
- * the active board needs a real UserBoard (uuid/slug), matching the web flow.
+ * the active board needs a real UserBoard (uuid/slug), matching the web flow —
+ * unless the user already owns that exact config, in which case it activates
+ * the existing board.
  */
 export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(function CustomBoardSheet(
-  { onCreated, onError },
+  { seed, existingBoards, onCreated, onSelectExisting, onError },
   ref,
 ) {
   const { systemColors } = useTheme();
@@ -53,6 +74,17 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
     setSetIds([]);
     setAngle(40);
   };
+
+  // Pre-fill from a seed (e.g. a tapped Popular config). Applied whenever the
+  // seed changes so opening the builder from a different config re-fills it.
+  useEffect(() => {
+    if (!seed) return;
+    setBoardName(seed.boardName);
+    setLayoutId(seed.layoutId);
+    setSizeId(seed.sizeId);
+    setSetIds(seed.setIds.split(',').map(Number).filter(Number.isFinite));
+    setAngle(seed.angle ?? ((ANGLES[seed.boardName] ?? []).includes(40) ? 40 : (ANGLES[seed.boardName]?.[0] ?? 0)));
+  }, [seed]);
 
   // Cascading option lists — each derives from the selection above it.
   const layouts = useMemo(() => getAllLayouts(boardName), [boardName]);
@@ -90,13 +122,28 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
 
   const handleCreate = async () => {
     if (layoutId == null || sizeId == null || setIds.length === 0) return;
+    const wireSetIds = setIds.join(',');
+
+    // If the user already owns this exact config, the server would reject the
+    // create as a duplicate — activate the existing board instead of erroring.
+    const owned = findOwnedBoardForConfig(existingBoards, {
+      boardType: boardName,
+      layoutId,
+      sizeId,
+      setIds: wireSetIds,
+    });
+    if (owned) {
+      onSelectExisting(owned);
+      return;
+    }
+
     const layoutName = layouts.find((l) => l.id === layoutId)?.name ?? boardName;
     try {
       const board = await createBoard.mutateAsync({
         boardType: boardName,
         layoutId,
         sizeId,
-        setIds: setIds.join(','),
+        setIds: wireSetIds,
         name: layoutName,
         angle,
         isOwned: true,
@@ -129,7 +176,7 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
               },
             ]}
           >
-            <Text variant="footnote" color={selected ? '#fff' : systemColors.label}>
+            <Text variant="footnote" color={selected ? iosSystemColors.white : systemColors.label}>
               {getLabel(option)}
             </Text>
           </Pressable>

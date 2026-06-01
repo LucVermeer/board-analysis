@@ -28,6 +28,9 @@ export function useBoardScan(): BoardScan {
   const [serials, setSerials] = useState<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanningRef = useRef(false);
+  // A device event can land in the BLE callback just after unmount; gate the
+  // state writes so we don't setState on an unmounted component.
+  const mountedRef = useRef(true);
 
   const stop = useCallback(() => {
     if (timeoutRef.current) {
@@ -60,6 +63,7 @@ export function useBoardScan(): BoardScan {
     scanningRef.current = true;
 
     bleManager.startDeviceScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID], null, (error, device) => {
+      if (!mountedRef.current) return;
       if (error) {
         stop();
         setStatus('unavailable');
@@ -85,8 +89,14 @@ export function useBoardScan(): BoardScan {
     setStatus('idle');
   }, [stop]);
 
-  // Always stop scanning if the component unmounts mid-scan.
-  useEffect(() => stop, [stop]);
+  // Always stop scanning if the component unmounts mid-scan, and block any
+  // late device callback from writing state afterwards.
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      stop();
+    };
+  }, [stop]);
 
   return { status, serials, start, reset };
 }

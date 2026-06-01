@@ -1,15 +1,19 @@
 // Search hook for the board-search map. Adapts the web's useSearchBoardsMap to
 // mobile: derive the search radius from the map camera zoom, debounce the text
 // query and the camera so pans/keystrokes don't hammer the API, and call the
-// shared SEARCH_BOARDS op. Gating mirrors web exactly — fire only when enabled
-// and there are coords OR a 2+ char text query.
+// shared SEARCH_BOARDS op. The GATING mirrors web exactly — fire only when
+// enabled and there are coords OR a 2+ char text query — but, unlike web's
+// infinite-scroll list, this returns a single page (PAGE_LIMIT). The map shows
+// the boards in the current viewport; panning/zooming refetches, so there's no
+// "load more". If a result list ever needs pagination, switch to
+// useInfiniteQuery like the web hook.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { getHttpClient } from './client';
 import { SEARCH_BOARDS, type SearchBoardsQueryResponse } from './operations';
-import { zoomToRadiusKm, roundCoord } from '../board-search';
+import { zoomToRadiusKm, roundCoord } from '@boardsesh/board-config';
 
 const PAGE_LIMIT = 30;
 
