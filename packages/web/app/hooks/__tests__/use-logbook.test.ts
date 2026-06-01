@@ -1,8 +1,7 @@
-import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { createQueryWrapper, createTestQueryClient } from '@/app/test-utils/test-providers';
+import { createBoardAdapterWrapper, createTestQueryClient } from '@/app/test-utils/test-providers';
+import type { ExecuteHttp } from '@boardsesh/board-react';
 import { useWsAuthToken } from '../use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import {
@@ -33,6 +32,20 @@ vi.mock('@boardsesh/graphql/operations', () => ({
 const mockUseWsAuthToken = vi.mocked(useWsAuthToken);
 const mockUseSession = vi.mocked(useSession);
 
+// Reads current mock state at render time so tests that flip auth via
+// `mockUseSession.mockReturnValue(...)` + `rerender()` see the new state.
+function mkWrapper(queryClient?: ReturnType<typeof createTestQueryClient>) {
+  return createBoardAdapterWrapper(
+    () => ({
+      isAuthenticated: mockUseSession().status === 'authenticated',
+      isAuthLoading: mockUseSession().status === 'loading',
+      executeHttp: (async (query: string, variables?: object) =>
+        mockRequest(query, variables)) as unknown as ExecuteHttp,
+    }),
+    queryClient ? { queryClient } : {},
+  );
+}
+
 describe('useLogbook', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,7 +71,7 @@ describe('useLogbook', () => {
     });
 
     const { result } = renderHook(() => useLogbook('kilter', ['uuid-1']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     // Query should not execute
@@ -73,9 +86,14 @@ describe('useLogbook', () => {
       isLoading: false,
       error: null,
     });
+    mockUseSession.mockReturnValue({
+      status: 'unauthenticated',
+      data: null,
+      update: vi.fn(),
+    });
 
     const { result } = renderHook(() => useLogbook('kilter', ['uuid-1']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     expect(result.current.logbook).toEqual([]);
@@ -84,7 +102,7 @@ describe('useLogbook', () => {
 
   it('returns empty logbook when empty climbUuids', async () => {
     const { result } = renderHook(() => useLogbook('kilter', []), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     expect(result.current.logbook).toEqual([]);
@@ -95,10 +113,7 @@ describe('useLogbook', () => {
     mockRequest.mockResolvedValue({ ticks: [] });
 
     const queryClient = createTestQueryClient();
-    const wrapper = ({ children }: { children: React.ReactNode }) =>
-      React.createElement(QueryClientProvider, { client: queryClient }, children);
-
-    const { result } = renderHook(() => useLogbook('kilter', ['climb-1']), { wrapper });
+    const { result } = renderHook(() => useLogbook('kilter', ['climb-1']), { wrapper: mkWrapper(queryClient) });
 
     await waitFor(() => {
       expect(mockRequest).toHaveBeenCalledTimes(1);
@@ -128,7 +143,7 @@ describe('useLogbook', () => {
     });
 
     const { result } = renderHook(() => useLogbook('kilter', ['climb-1']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await waitFor(() => {
@@ -173,7 +188,7 @@ describe('useLogbook', () => {
     });
 
     const { result } = renderHook(() => useLogbook('tension', ['climb-2']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await waitFor(() => {
@@ -200,7 +215,7 @@ describe('useLogbook', () => {
     mockRequest.mockReturnValue(new Promise(() => {})); // never resolves
 
     const { result } = renderHook(() => useLogbook('kilter', ['climb-1']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     expect(result.current.isLoading).toBe(true);
@@ -259,7 +274,7 @@ describe('useLogbook', () => {
     });
 
     const { result } = renderHook(() => useLogbook('kilter', ['climb-1']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await waitFor(() => {
@@ -292,7 +307,7 @@ describe('useLogbook', () => {
     });
 
     const { result, rerender } = renderHook(({ uuids }: { uuids: string[] }) => useLogbook('kilter', uuids), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
       initialProps: { uuids: ['climb-1'] },
     });
 
@@ -357,7 +372,7 @@ describe('useLogbook', () => {
     });
 
     const { result, rerender } = renderHook(({ uuids }: { uuids: string[] }) => useLogbook('kilter', uuids), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
       initialProps: { uuids: ['climb-1'] },
     });
 
@@ -378,8 +393,6 @@ describe('useLogbook', () => {
 
   it('syncs external cache updates from useSaveTick', async () => {
     const queryClient = createTestQueryClient();
-    const wrapper = ({ children }: { children: React.ReactNode }) =>
-      React.createElement(QueryClientProvider, { client: queryClient }, children);
 
     mockRequest.mockResolvedValueOnce({
       ticks: [
@@ -399,7 +412,7 @@ describe('useLogbook', () => {
       ],
     });
 
-    const { result } = renderHook(() => useLogbook('kilter', ['climb-1']), { wrapper });
+    const { result } = renderHook(() => useLogbook('kilter', ['climb-1']), { wrapper: mkWrapper(queryClient) });
 
     await waitFor(() => {
       expect(result.current.logbook.length).toBe(1);
@@ -457,7 +470,7 @@ describe('useLogbook', () => {
     });
 
     const { result, rerender } = renderHook(() => useLogbook('kilter', ['climb-1']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await waitFor(() => {
@@ -498,7 +511,7 @@ describe('useLogbook', () => {
     });
 
     const { result, rerender } = renderHook(() => useLogbook('kilter', ['climb-1']), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await waitFor(() => {
@@ -555,7 +568,7 @@ describe('useInvalidateLogbook', () => {
 
   it('returns a function', () => {
     const { result } = renderHook(() => useInvalidateLogbook('kilter'), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     expect(typeof result.current).toBe('function');
@@ -581,8 +594,6 @@ describe('useInvalidateLogbook', () => {
     });
 
     const queryClient = createTestQueryClient();
-    const wrapper = ({ children }: { children: React.ReactNode }) =>
-      React.createElement(QueryClientProvider, { client: queryClient }, children);
 
     const { result } = renderHook(
       () => {
@@ -590,7 +601,7 @@ describe('useInvalidateLogbook', () => {
         const invalidate = useInvalidateLogbook('kilter');
         return { ...logbook, invalidate };
       },
-      { wrapper },
+      { wrapper: mkWrapper(queryClient) },
     );
 
     // Wait for initial fetch

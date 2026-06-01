@@ -3,8 +3,8 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { createTestQueryClient } from '@/app/test-utils/test-providers';
+import { createBoardAdapterWrapper, createTestQueryClient } from '@/app/test-utils/test-providers';
+import type { ExecuteHttp } from '@boardsesh/board-react';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import { useLogbook, accumulatedLogbookQueryKey, type LogbookEntry } from '@/app/hooks/use-logbook';
@@ -279,10 +279,19 @@ describe('AscentStatus', () => {
     mockRequest.mockResolvedValue({ ticks: [] });
 
     const queryClient = createTestQueryClient();
+    const Wrapper = createBoardAdapterWrapper(
+      () => ({
+        isAuthenticated: mockUseSession().status === 'authenticated',
+        isAuthLoading: mockUseSession().status === 'loading',
+        executeHttp: (async (query: string, variables?: object) =>
+          mockRequest(query, variables)) as unknown as ExecuteHttp,
+      }),
+      { queryClient },
+    );
     render(
-      <QueryClientProvider client={queryClient}>
+      <Wrapper>
         <AscentStatusHarness />
-      </QueryClientProvider>,
+      </Wrapper>,
     );
 
     await waitFor(() => {

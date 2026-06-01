@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { createTestQueryClient } from '@/app/test-utils/test-providers';
-import { QueryClientProvider } from '@tanstack/react-query';
-import React from 'react';
+import { createBoardAdapterWrapper, createTestQueryClient } from '@/app/test-utils/test-providers';
+import type { ExecuteHttp } from '@boardsesh/board-react';
 import { useWsAuthToken } from '../use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import { useSaveTick, type SaveTickOptions } from '../use-save-tick';
@@ -35,8 +34,15 @@ const mockUseSession = vi.mocked(useSession);
 
 function createTestWrapper() {
   const queryClient = createTestQueryClient();
-  const wrapper = ({ children }: { children: React.ReactNode }) =>
-    React.createElement(QueryClientProvider, { client: queryClient }, children);
+  const wrapper = createBoardAdapterWrapper(
+    () => ({
+      isAuthenticated: mockUseSession().status === 'authenticated',
+      isAuthLoading: mockUseSession().status === 'loading',
+      executeHttp: (async (query: string, variables?: object) =>
+        mockRequest(query, variables)) as unknown as ExecuteHttp,
+    }),
+    { queryClient },
+  );
   return { wrapper, queryClient };
 }
 
@@ -110,17 +116,10 @@ describe('useSaveTick', () => {
     expect(result.current.error?.message).toBe('Not authenticated');
   });
 
-  it('throws when no token', async () => {
-    mockUseWsAuthToken.mockReturnValue({
-      token: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
-    });
-
+  it('throws when no board is selected', async () => {
     const { wrapper } = createTestWrapper();
 
-    const { result } = renderHook(() => useSaveTick('kilter'), { wrapper });
+    const { result } = renderHook(() => useSaveTick(null), { wrapper });
 
     await act(async () => {
       result.current.mutate(createTickOptions());
@@ -130,7 +129,7 @@ describe('useSaveTick', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error?.message).toBe('Auth token not available');
+    expect(result.current.error?.message).toBe('No board selected');
   });
 
   it('calls GraphQL mutation with correct variables', async () => {
@@ -167,6 +166,7 @@ describe('useSaveTick', () => {
         layoutId: undefined,
         sizeId: undefined,
         setIds: undefined,
+        videoUrl: undefined,
       },
     });
   });

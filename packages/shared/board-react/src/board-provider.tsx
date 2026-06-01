@@ -1,0 +1,124 @@
+// Shared BoardProvider — single React component used by both web and mobile.
+// Wires the per-platform `BoardAdapter` into the data-access surface
+// (`useBoardProvider()`) that climb screens, queue mutations, and form
+// components consume. Adapter-side wiring is what differs per platform;
+// the orchestration and the public surface are the same.
+
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
+import type { BoardName, UpdateClimbInput } from '@boardsesh/shared-schema';
+import { useBoardAdapter } from './adapter';
+import { useLogbook as useLogbookQuery } from './use-logbook';
+import { useSaveTick as useSaveTickMutation } from './use-save-tick';
+import { useSaveClimb as useSaveClimbMutation, useUpdateClimb as useUpdateClimbMutation } from './use-save-climb';
+import type { LogbookEntry } from './logbook-keys';
+import type { SaveTickOptions } from './tick-helpers';
+import type { SaveClimbOptions, SaveClimbResponse, UpdateClimbResponse } from './climb-helpers';
+
+export type BoardContextType = {
+  /**
+   * Nullable: web normally has a concrete board from the route, mobile
+   * resolves it asynchronously. Consumers should treat null as "no board
+   * yet" — mutations throw rather than send an empty boardType.
+   */
+  boardName: BoardName | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  isInitialized: boolean;
+  logbook: LogbookEntry[];
+  getLogbook: (climbUuids: string[]) => Promise<void>;
+  saveTick: (options: SaveTickOptions) => Promise<void>;
+  saveClimb: (options: SaveClimbOptions) => Promise<SaveClimbResponse>;
+  updateClimb: (input: UpdateClimbInput) => Promise<UpdateClimbResponse>;
+};
+
+const BoardContext = createContext<BoardContextType | undefined>(undefined);
+
+export function BoardProvider({ boardName, children }: { boardName: BoardName | null; children: ReactNode }) {
+  const { isAuthenticated, isAuthLoading, resolveActiveSessionId } = useBoardAdapter();
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [climbUuids, setClimbUuids] = useState<string[]>([]);
+
+  // React Query hooks for fetching + mutations. All shared.
+  const { logbook } = useLogbookQuery(boardName, climbUuids);
+  const saveTickMutation = useSaveTickMutation(boardName);
+  const saveClimbMutation = useSaveClimbMutation(boardName);
+  const updateClimbMutation = useUpdateClimbMutation();
+
+  // Flip isInitialized once auth has resolved. Latched: once true, stays
+  // true even if auth re-enters a loading state (e.g. token refresh).
+  useEffect(() => {
+    if (!isAuthLoading) {
+      setIsInitialized(true);
+    }
+  }, [isAuthLoading]);
+
+  const getLogbook = useCallback(async (uuids: string[]): Promise<void> => {
+    setClimbUuids(uuids);
+  }, []);
+
+  // Stable callback identity for saveTick/saveClimb/updateClimb. React Query
+  // mutation objects produce a fresh `mutateAsync` reference on every render,
+  // so capture them in refs that are updated *after* commit (useEffect) —
+  // never during render, which would be unsafe under React 18 strict / async
+  // rendering. Empty-dep `useCallback` then keeps the public callback stable.
+  const saveTickMutateRef = useRef(saveTickMutation.mutateAsync);
+  const saveClimbMutateRef = useRef(saveClimbMutation.mutateAsync);
+  const updateClimbMutateRef = useRef(updateClimbMutation.mutateAsync);
+  useEffect(() => {
+    saveTickMutateRef.current = saveTickMutation.mutateAsync;
+    saveClimbMutateRef.current = saveClimbMutation.mutateAsync;
+    updateClimbMutateRef.current = updateClimbMutation.mutateAsync;
+  });
+
+  const saveTick = useCallback(
+    async (options: SaveTickOptions): Promise<void> => {
+      const resolvedSessionId = options.sessionId ?? resolveActiveSessionId() ?? undefined;
+      await saveTickMutateRef.current({
+        ...options,
+        sessionId: resolvedSessionId,
+      });
+    },
+    [resolveActiveSessionId],
+  );
+
+  const saveClimb = useCallback(async (options: SaveClimbOptions): Promise<SaveClimbResponse> => {
+    return saveClimbMutateRef.current(options);
+  }, []);
+
+  const updateClimb = useCallback(async (input: UpdateClimbInput): Promise<UpdateClimbResponse> => {
+    return updateClimbMutateRef.current(input);
+  }, []);
+
+  const value = useMemo<BoardContextType>(
+    () => ({
+      boardName,
+      isAuthenticated,
+      isLoading: isAuthLoading,
+      error: null,
+      isInitialized,
+      logbook,
+      getLogbook,
+      saveTick,
+      saveClimb,
+      updateClimb,
+    }),
+    [boardName, isAuthenticated, isAuthLoading, isInitialized, logbook, getLogbook, saveTick, saveClimb, updateClimb],
+  );
+
+  return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
+}
+
+export function useBoardProvider(): BoardContextType {
+  const context = useContext(BoardContext);
+  if (context === undefined) {
+    throw new Error('useBoardProvider must be used within a BoardProvider');
+  }
+  return context;
+}
+
+export function useOptionalBoardProvider(): BoardContextType | null {
+  return useContext(BoardContext) ?? null;
+}
+
+export { BoardContext };

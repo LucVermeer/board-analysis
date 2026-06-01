@@ -10,7 +10,9 @@ import { Separator } from './Separator';
 import { SegmentedControl } from './SegmentedControl';
 import { StarRating } from './StarRating';
 import { useTheme } from '../providers/theme-provider';
-import { useSaveTick, useGrades } from '../lib/graphql/hooks';
+import { useGrades } from '../lib/graphql/hooks';
+import { useSaveTick } from '@boardsesh/board-react';
+import { toBoardName } from '@boardsesh/board-config';
 import { hapticSuccess, hapticLight, hapticError, hapticSelection } from '../lib/haptics';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
@@ -88,11 +90,15 @@ export function LogAscentSheet({
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
-    // Sheet mounts when visible becomes true — expand it
-    sheetRef.current?.expand();
-  }, []);
+    // Sheet mounts when visible becomes true — expand it. Re-run on every
+    // `visible` toggle, since the parent keeps the sheet mounted across
+    // opens, and a [] deps array would only expand on the first open.
+    if (visible) {
+      sheetRef.current?.expand();
+    }
+  }, [visible]);
 
-  const saveTick = useSaveTick();
+  const saveTick = useSaveTick(toBoardName(boardName));
   const { data: grades } = useGrades(boardName);
 
   const [status, setStatus] = useState<TickStatus>('flash');
@@ -157,23 +163,20 @@ export function LogAscentSheet({
   const handleSave = useCallback(() => {
     saveTick.mutate(
       {
-        input: {
-          boardType: boardName,
-          climbUuid,
-          angle,
-          isMirror,
-          status,
-          attemptCount,
-          quality: quality > 0 ? quality : null,
-          difficulty: selectedDifficultyId,
-          isBenchmark,
-          comment,
-          climbedAt: new Date().toISOString(),
-          ...(sessionId ? { sessionId } : {}),
-          ...(layoutId != null ? { layoutId } : {}),
-          ...(sizeId != null ? { sizeId } : {}),
-          ...(setIds ? { setIds } : {}),
-        },
+        climbUuid,
+        angle,
+        isMirror,
+        status,
+        attemptCount,
+        quality: quality > 0 ? quality : null,
+        difficulty: selectedDifficultyId,
+        isBenchmark,
+        comment,
+        climbedAt: new Date().toISOString(),
+        ...(sessionId ? { sessionId } : {}),
+        ...(layoutId != null ? { layoutId } : {}),
+        ...(sizeId != null ? { sizeId } : {}),
+        ...(setIds ? { setIds } : {}),
       },
       {
         onSuccess: () => {
@@ -190,7 +193,6 @@ export function LogAscentSheet({
     );
   }, [
     saveTick,
-    boardName,
     climbUuid,
     angle,
     isMirror,

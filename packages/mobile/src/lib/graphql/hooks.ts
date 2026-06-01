@@ -29,7 +29,6 @@ import {
   GET_SESSION_SUMMARY,
   END_SESSION,
   TOGGLE_FAVORITE,
-  SAVE_TICK,
   type GetProfileQueryResponse,
   type GetMyBoardsQueryResponse,
   type GetDefaultBoardQueryResponse,
@@ -49,8 +48,6 @@ import {
   type EndSessionMutationResponse,
   type ToggleFavoriteMutationVariables,
   type ToggleFavoriteMutationResponse,
-  type SaveTickMutationVariables,
-  type SaveTickMutationResponse,
 } from './operations';
 
 // ============================================
@@ -219,18 +216,8 @@ export function useToggleFavorite() {
   });
 }
 
-export function useSaveTick() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (variables: SaveTickMutationVariables) =>
-      getHttpClient().request<SaveTickMutationResponse>(SAVE_TICK, variables),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['climb'] });
-      queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
-    },
-  });
-}
+// `useSaveTick` moved to `@boardsesh/board-react` — call sites import the
+// shared hook (with optimistic updates + stats invalidations) directly.
 
 // ============================================
 // Beta Videos (Instagram + TikTok per climb)

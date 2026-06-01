@@ -1,0 +1,92 @@
+import type { BoardName } from '@boardsesh/shared-schema';
+
+// Tick status type matching the database enum.
+export type TickStatus = 'flash' | 'send' | 'attempt';
+
+// Logbook entry representing a user's tick on a climb. snake_case lives
+// here because it matches the pre-existing wire / cache shape both web and
+// mobile already render against — changing it would be a separate change.
+export type LogbookEntry = {
+  uuid: string;
+  climb_uuid: string;
+  angle: number;
+  is_mirror: boolean;
+  tries: number;
+  quality: number | null;
+  difficulty: number | null;
+  comment: string;
+  climbed_at: string;
+  is_ascent: boolean;
+  status?: TickStatus;
+  upvotes: number;
+  downvotes: number;
+  commentCount: number;
+};
+
+// The camelCase server-side shape (matches `GetTicksQueryResponse['ticks'][n]`
+// and `SaveTickMutationResponse['saveTick']`). Kept structural so the helper
+// works regardless of which GraphQL operation produced it.
+export type LogbookSourceTick = {
+  uuid: string;
+  climbUuid: string;
+  angle: number;
+  isMirror: boolean;
+  status: TickStatus;
+  attemptCount: number;
+  quality: number | null;
+  difficulty: number | null;
+  comment: string;
+  climbedAt: string;
+  upvotes?: number | null;
+  downvotes?: number | null;
+  commentCount?: number | null;
+};
+
+export function toLogbookEntry(tick: LogbookSourceTick): LogbookEntry {
+  return {
+    uuid: tick.uuid,
+    climb_uuid: tick.climbUuid,
+    angle: tick.angle,
+    is_mirror: tick.isMirror,
+    tries: tick.attemptCount,
+    quality: tick.quality,
+    difficulty: tick.difficulty,
+    comment: tick.comment,
+    climbed_at: tick.climbedAt,
+    is_ascent: tick.status === 'flash' || tick.status === 'send',
+    status: tick.status,
+    upvotes: tick.upvotes ?? 0,
+    downvotes: tick.downvotes ?? 0,
+    commentCount: tick.commentCount ?? 0,
+  };
+}
+
+export function mergeLogbookEntries(existing: LogbookEntry[], incoming: LogbookEntry[]): LogbookEntry[] {
+  if (incoming.length === 0) return existing;
+
+  const existingUuids = new Set(existing.map((entry) => entry.uuid));
+  const uniqueIncoming = incoming.filter((entry) => !existingUuids.has(entry.uuid));
+
+  if (uniqueIncoming.length === 0) return existing;
+  return [...existing, ...uniqueIncoming];
+}
+
+// `boardName | null` so a not-yet-resolved board (mobile boot, web's loose
+// route param) maps to a distinct, inert key that's never fetched into.
+export function accumulatedLogbookQueryKey(boardName: BoardName | null) {
+  return ['logbook', boardName, 'accumulated'] as const;
+}
+
+export function fetchLogbookQueryKeyPrefix(boardName: BoardName | null) {
+  return ['logbook', boardName, 'fetch'] as const;
+}
+
+export function fetchLogbookQueryKey(boardName: BoardName | null, climbUuids: string[]) {
+  return [...fetchLogbookQueryKeyPrefix(boardName), [...climbUuids].sort().join(',')] as const;
+}
+
+// Pre-extraction key shape — retained for callers that built keys directly
+// before the prefix split. New code should prefer the prefixed builders above.
+export function logbookQueryKey(boardName: BoardName | null, climbUuids: string[]) {
+  return ['logbook', boardName, [...climbUuids].sort().join(',')] as const;
+}

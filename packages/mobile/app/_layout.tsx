@@ -17,6 +17,9 @@ import { PartyProfileProvider } from '../src/providers/party-profile-provider';
 import { ConnectionSettingsProvider } from '../src/providers/connection-settings-provider';
 import { FavoritesProvider } from '../src/providers/favorites-provider';
 import { PlaylistsProvider } from '../src/providers/playlists-provider';
+import { BoardAdapterWrapper } from '../src/providers/board-adapter';
+import { BoardProvider } from '@boardsesh/board-react';
+import { toBoardName } from '@boardsesh/board-config';
 import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
 import { useDefaultBoard } from '../src/lib/graphql/hooks';
 import { LiveActivityBridge } from '../src/lib/live-activity/live-activity-bridge';
@@ -121,6 +124,15 @@ function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
   );
 }
 
+// Supplies the active board name to the shared BoardProvider. The API types
+// `boardType` as a loose string, so it's validated to a `BoardName | null`.
+// A null board keeps logbook fetches idle and makes mutations throw rather
+// than send an empty `boardType`.
+function BoardProviderWrapper({ children }: { children: ReactNode }) {
+  const { data: defaultBoard } = useDefaultBoard();
+  return <BoardProvider boardName={toBoardName(defaultBoard?.boardType)}>{children}</BoardProvider>;
+}
+
 function RootLayout() {
   const onAuthReady = useCallback(() => {
     SplashScreen.hideAsync();
@@ -141,15 +153,22 @@ function RootLayout() {
                         <FavoritesProvider>
                           <PlaylistsProvider>
                             <QueueProvider>
-                              <BluetoothProviderWrapper>
-                                <DrawerHostProvider>
-                                  <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                    <Stack.Screen name="(tabs)" />
-                                    <Stack.Screen name="auth" options={{ headerShown: false, gestureEnabled: false }} />
-                                  </Stack>
-                                  <PersistentQueueBar />
-                                </DrawerHostProvider>
-                              </BluetoothProviderWrapper>
+                              <BoardAdapterWrapper>
+                                <BoardProviderWrapper>
+                                  <BluetoothProviderWrapper>
+                                    <DrawerHostProvider>
+                                      <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                        <Stack.Screen name="(tabs)" />
+                                        <Stack.Screen
+                                          name="auth"
+                                          options={{ headerShown: false, gestureEnabled: false }}
+                                        />
+                                      </Stack>
+                                      <PersistentQueueBar />
+                                    </DrawerHostProvider>
+                                  </BluetoothProviderWrapper>
+                                </BoardProviderWrapper>
+                              </BoardAdapterWrapper>
                             </QueueProvider>
                           </PlaylistsProvider>
                         </FavoritesProvider>

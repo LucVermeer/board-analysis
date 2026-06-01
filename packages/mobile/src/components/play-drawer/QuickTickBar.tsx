@@ -14,7 +14,9 @@ import { Icon } from '../Icon';
 import { InlineStarPicker } from './InlineStarPicker';
 import { InlineGradePicker } from './InlineGradePicker';
 import { InlineTriesPicker } from './InlineTriesPicker';
-import { useSaveTick, useGrades } from '../../lib/graphql/hooks';
+import { useGrades } from '../../lib/graphql/hooks';
+import { useSaveTick } from '@boardsesh/board-react';
+import { toBoardName } from '@boardsesh/board-config';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -49,7 +51,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   onDismiss,
 }: QuickTickBarProps) {
   const { t } = useTranslation('session');
-  const saveTick = useSaveTick();
+  const saveTick = useSaveTick(toBoardName(boardName));
   const { data: grades } = useGrades(boardName);
 
   const [tickState, setTickState] = useState(createInitialTickState);
@@ -105,23 +107,20 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 
     saveTick.mutate(
       {
-        input: {
-          boardType: boardName,
-          climbUuid,
-          angle,
-          isMirror,
-          status,
-          attemptCount: finalAttempts,
-          quality: tickState.quality != null && tickState.quality > 0 ? tickState.quality : null,
-          difficulty: tickState.difficulty ?? null,
-          isBenchmark,
-          comment: '',
-          climbedAt: new Date().toISOString(),
-          ...(sessionId ? { sessionId } : {}),
-          ...(layoutId != null ? { layoutId } : {}),
-          ...(sizeId != null ? { sizeId } : {}),
-          ...(setIds ? { setIds } : {}),
-        },
+        climbUuid,
+        angle,
+        isMirror,
+        status,
+        attemptCount: finalAttempts,
+        quality: tickState.quality != null && tickState.quality > 0 ? tickState.quality : null,
+        difficulty: tickState.difficulty ?? null,
+        isBenchmark,
+        comment: '',
+        climbedAt: new Date().toISOString(),
+        ...(sessionId ? { sessionId } : {}),
+        ...(layoutId != null ? { layoutId } : {}),
+        ...(sizeId != null ? { sizeId } : {}),
+        ...(setIds ? { setIds } : {}),
       },
       {
         onSuccess: () => {
@@ -135,7 +134,6 @@ export const QuickTickBar = React.memo(function QuickTickBar({
     );
   }, [
     saveTick,
-    boardName,
     climbUuid,
     angle,
     isMirror,

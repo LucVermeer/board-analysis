@@ -25,6 +25,7 @@ const nextConfig = {
     '@boardsesh/queue',
     '@boardsesh/queue-runtime',
     '@boardsesh/queue-react',
+    '@boardsesh/board-react',
     '@boardsesh/party-profile',
     '@boardsesh/climb-actions',
     '@boardsesh/play-view',

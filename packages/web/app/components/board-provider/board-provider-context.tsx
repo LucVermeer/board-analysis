@@ -1,127 +1,51 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { BoardName, ClimbUuid } from '@/app/lib/types';
-import type { SaveClimbOptions } from '@/app/lib/api-wrappers/aurora/types';
-import { useSession } from 'next-auth/react';
-import { useLogbook as useLogbookQuery, type LogbookEntry } from '@/app/hooks/use-logbook';
-import { useSaveTick as useSaveTickMutation, type SaveTickOptions } from '@/app/hooks/use-save-tick';
+// Web BoardProvider. Mounts the platform adapter (auth, GraphQL clients,
+// persistent-session, snackbar, tick-draft cleanup) and then delegates to
+// the shared BoardProvider in `@boardsesh/board-react`. The data surface
+// (logbook, saveTick, saveClimb, updateClimb) is implemented once in the
+// shared package; this file is only the web-side wiring.
+
+import type { ReactNode } from 'react';
 import {
-  useSaveClimb as useSaveClimbMutation,
-  useUpdateClimb as useUpdateClimbMutation,
-  type SaveClimbResponse,
-  type UpdateClimbResponse,
-} from '@/app/hooks/use-save-climb';
-import { usePersistentSessionState } from '@/app/components/persistent-session/persistent-session-context';
-import type { UpdateClimbInput } from '@boardsesh/shared-schema';
+  BoardProvider as SharedBoardProvider,
+  useBoardProvider as useSharedBoardProvider,
+  useOptionalBoardProvider as useSharedOptionalBoardProvider,
+  BoardContext,
+  type BoardContextType as SharedBoardContextType,
+} from '@boardsesh/board-react';
+import type { BoardName } from '@/app/lib/types';
+import { BoardAdapterWrapper } from './board-adapter';
 
-// Re-export types for backward compatibility
-export type { SaveTickOptions } from '@/app/hooks/use-save-tick';
-export type { SaveClimbResponse, UpdateClimbResponse } from '@/app/hooks/use-save-climb';
-export type { TickStatus, LogbookEntry } from '@/app/hooks/use-logbook';
+// Web-side narrowing: web mounts BoardProvider with a concrete
+// route-derived BoardName, never null. Consumers can rely on a non-null
+// boardName without manual narrowing.
+export type BoardContextType = Omit<SharedBoardContextType, 'boardName'> & { boardName: BoardName };
 
-type BoardContextType = {
-  boardName: BoardName;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
-  isInitialized: boolean;
-  logbook: LogbookEntry[];
-  getLogbook: (climbUuids: ClimbUuid[]) => Promise<void>;
-  saveTick: (options: SaveTickOptions) => Promise<void>;
-  saveClimb: (options: Omit<SaveClimbOptions, 'setter_id' | 'user_id'>) => Promise<SaveClimbResponse>;
-  updateClimb: (input: UpdateClimbInput) => Promise<UpdateClimbResponse>;
-};
+// Re-exports kept stable for existing import sites.
+export type {
+  SaveTickOptions,
+  SaveClimbResponse,
+  UpdateClimbResponse,
+  TickStatus,
+  LogbookEntry,
+} from '@boardsesh/board-react';
+export { BoardContext };
 
-const BoardContext = createContext<BoardContextType | undefined>(undefined);
-
-export function BoardProvider({ boardName, children }: { boardName: BoardName; children: React.ReactNode }) {
-  const { status: sessionStatus } = useSession();
-  const { activeSession } = usePersistentSessionState();
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [climbUuids, setClimbUuids] = useState<ClimbUuid[]>([]);
-
-  // Use TanStack Query hooks for data fetching and mutations
-  const { logbook } = useLogbookQuery(boardName, climbUuids);
-  const saveTickMutation = useSaveTickMutation(boardName);
-  const saveClimbMutation = useSaveClimbMutation(boardName);
-  const updateClimbMutation = useUpdateClimbMutation();
-
-  // Initialize when session status changes
-  useEffect(() => {
-    if (sessionStatus !== 'loading') {
-      setIsInitialized(true);
-    }
-  }, [sessionStatus]);
-
-  // getLogbook now just sets the climbUuids state; TanStack Query handles the fetch
-  const getLogbook = useCallback(async (uuids: ClimbUuid[]): Promise<void> => {
-    setClimbUuids(uuids);
-  }, []);
-
-  // Wrapper to maintain backward-compatible API
-  // Refs for stable callback identity — mutation objects change reference every render
-  const saveTickMutateRef = useRef(saveTickMutation.mutateAsync);
-  saveTickMutateRef.current = saveTickMutation.mutateAsync;
-  const saveClimbMutateRef = useRef(saveClimbMutation.mutateAsync);
-  saveClimbMutateRef.current = saveClimbMutation.mutateAsync;
-  const updateClimbMutateRef = useRef(updateClimbMutation.mutateAsync);
-  updateClimbMutateRef.current = updateClimbMutation.mutateAsync;
-  const activeSessionIdRef = useRef(activeSession?.sessionId);
-  activeSessionIdRef.current = activeSession?.sessionId;
-
-  const saveTick = useCallback(async (options: SaveTickOptions): Promise<void> => {
-    const sessionId = options.sessionId ?? activeSessionIdRef.current;
-    await saveTickMutateRef.current({
-      ...options,
-      sessionId,
-    });
-  }, []);
-
-  const saveClimb = useCallback(
-    async (options: Omit<SaveClimbOptions, 'setter_id' | 'user_id'>): Promise<SaveClimbResponse> => {
-      return saveClimbMutateRef.current(options);
-    },
-    [],
+export function BoardProvider({ boardName, children }: { boardName: BoardName; children: ReactNode }) {
+  return (
+    <BoardAdapterWrapper>
+      <SharedBoardProvider boardName={boardName}>{children}</SharedBoardProvider>
+    </BoardAdapterWrapper>
   );
-
-  const updateClimb = useCallback(async (input: UpdateClimbInput): Promise<UpdateClimbResponse> => {
-    return updateClimbMutateRef.current(input);
-  }, []);
-
-  const isAuthenticated = sessionStatus === 'authenticated';
-  const isLoading = sessionStatus === 'loading';
-
-  const value = useMemo<BoardContextType>(
-    () => ({
-      boardName,
-      isAuthenticated,
-      isLoading,
-      error: null,
-      isInitialized,
-      logbook,
-      getLogbook,
-      saveTick,
-      saveClimb,
-      updateClimb,
-    }),
-    [boardName, isAuthenticated, isLoading, isInitialized, logbook, getLogbook, saveTick, saveClimb, updateClimb],
-  );
-
-  return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
 }
 
-export function useBoardProvider() {
-  const context = useContext(BoardContext);
-  if (context === undefined) {
-    throw new Error('useBoardProvider must be used within a BoardProvider');
-  }
-  return context;
+export function useBoardProvider(): BoardContextType {
+  // Web always mounts BoardProvider with a non-null boardName, so the
+  // narrower web context type holds at runtime. Cast at the boundary.
+  return useSharedBoardProvider() as BoardContextType;
 }
 
 export function useOptionalBoardProvider(): BoardContextType | null {
-  return useContext(BoardContext) ?? null;
+  return useSharedOptionalBoardProvider() as BoardContextType | null;
 }
-
-export type { BoardContextType };
-export { BoardContext };

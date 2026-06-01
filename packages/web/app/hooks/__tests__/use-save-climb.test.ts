@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { createQueryWrapper } from '@/app/test-utils/test-providers';
+import { createBoardAdapterWrapper } from '@/app/test-utils/test-providers';
+import type { ExecuteWs } from '@boardsesh/board-react';
 import { useWsAuthToken } from '../use-ws-auth-token';
 import { useSession } from 'next-auth/react';
 import { useSaveClimb } from '../use-save-climb';
@@ -54,6 +55,31 @@ vi.mock('@boardsesh/graphql/operations/new-climb-feed', () => ({
 const mockUseWsAuthToken = vi.mocked(useWsAuthToken);
 const mockUseSession = vi.mocked(useSession);
 
+// The web adapter's executeWs creates+disposes a WS client per call.
+// Tests provide an adapter that follows the same pattern so the create /
+// execute / dispose lifecycle is exercised end-to-end against the same
+// mock surface (`mockExecute`, `mockDispose`) the tests assert on.
+// `showError` mirrors the real web adapter: translate the typed reason to
+// the same i18n key the snackbar renders and forward to `mockShowMessage`,
+// so the fallback-toast path is exercised end-to-end.
+function mkWrapper() {
+  return createBoardAdapterWrapper(() => ({
+    isAuthenticated: mockUseSession().status === 'authenticated',
+    isAuthLoading: mockUseSession().status === 'loading',
+    executeWs: (async ({ query, variables }: { query: string; variables?: Record<string, unknown> }) => {
+      const client = { dispose: mockDispose };
+      try {
+        return await mockExecute(client, { query, variables });
+      } finally {
+        void client.dispose();
+      }
+    }) as unknown as ExecuteWs,
+    showError: () => {
+      mockShowMessage('createClimbForm.alerts.saveFailedFallback', 'error');
+    },
+  }));
+}
+
 function createClimbOptions() {
   return {
     layout_id: 1,
@@ -94,7 +120,7 @@ describe('useSaveClimb', () => {
     });
 
     const { result } = renderHook(() => useSaveClimb('kilter'), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await act(async () => {
@@ -108,16 +134,9 @@ describe('useSaveClimb', () => {
     expect(result.current.error?.message).toBe('Authentication required to create climbs');
   });
 
-  it('throws when no token', async () => {
-    mockUseWsAuthToken.mockReturnValue({
-      token: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
-    });
-
-    const { result } = renderHook(() => useSaveClimb('kilter'), {
-      wrapper: createQueryWrapper(),
+  it('throws when no board is selected', async () => {
+    const { result } = renderHook(() => useSaveClimb(null), {
+      wrapper: mkWrapper(),
     });
 
     await act(async () => {
@@ -128,7 +147,7 @@ describe('useSaveClimb', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error?.message).toBe('Authentication required to create climbs');
+    expect(result.current.error?.message).toBe('No board selected');
   });
 
   it('creates GraphQL client and executes mutation', async () => {
@@ -137,7 +156,7 @@ describe('useSaveClimb', () => {
     });
 
     const { result } = renderHook(() => useSaveClimb('kilter'), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await act(async () => {
@@ -175,7 +194,7 @@ describe('useSaveClimb', () => {
     });
 
     const { result } = renderHook(() => useSaveClimb('kilter'), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await act(async () => {
@@ -195,7 +214,7 @@ describe('useSaveClimb', () => {
     });
 
     const { result } = renderHook(() => useSaveClimb('kilter'), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await act(async () => {
@@ -213,7 +232,7 @@ describe('useSaveClimb', () => {
     mockExecute.mockRejectedValue(new Error('Network failure'));
 
     const { result } = renderHook(() => useSaveClimb('kilter'), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await act(async () => {
@@ -224,16 +243,20 @@ describe('useSaveClimb', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    // useTranslation is mocked to return the key unchanged, so the test
-    // sees the catalog key rather than the rendered English string.
+    // Shared hook signals fallback via `showError('saveClimbFailed')`; the
+    // wrapper's adapter (mirroring the real web adapter) translates to the
+    // catalog key and forwards to `mockShowMessage`.
     expect(mockShowMessage).toHaveBeenCalledWith('createClimbForm.alerts.saveFailedFallback', 'error');
+    // The error itself still propagates so per-call onError handlers can
+    // observe non-duplicate failures.
+    expect(result.current.error?.message).toBe('Network failure');
   });
 
   it('disposes client even on error (finally block)', async () => {
     mockExecute.mockRejectedValue(new Error('Network failure'));
 
     const { result } = renderHook(() => useSaveClimb('kilter'), {
-      wrapper: createQueryWrapper(),
+      wrapper: mkWrapper(),
     });
 
     await act(async () => {
