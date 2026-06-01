@@ -172,6 +172,22 @@ describe('useMobileClimbActionsData', () => {
 
       await expect(result.current.favoritesProviderProps.toggleFavorite('climb-x')).rejects.toThrow(/no active board/);
     });
+
+    it('rejects when the active board has no angle (no silent angle-0 fallback)', async () => {
+      // Active board with angle missing — common during a board switch before
+      // the angle picker has been resolved. Defaulting to 0 would silently
+      // file the favorite under the wrong climb variant.
+      withActiveBoard({ ...kilterBoard, angle: null } as unknown as UserBoard);
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+
+      await expect(result.current.favoritesProviderProps.toggleFavorite('climb-x')).rejects.toThrow(/no angle/);
+      // Server must not have been called with a fabricated angle.
+      expect(requestMock).not.toHaveBeenCalledWith(
+        TOGGLE_FAVORITE,
+        expect.objectContaining({ input: expect.objectContaining({ angle: 0 }) }),
+      );
+    });
   });
 
   describe('addToPlaylist + removeFromPlaylist', () => {
@@ -211,6 +227,15 @@ describe('useMobileClimbActionsData', () => {
       const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
 
       await expect(result.current.playlistsProviderProps.createPlaylist('Project')).rejects.toThrow(/no active board/);
+    });
+
+    it('rejects when the active board has no layoutId (CreatePlaylistInput requires Int!)', async () => {
+      withActiveBoard({ ...kilterBoard, layoutId: null } as unknown as UserBoard);
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(() => useMobileClimbActionsData(), { wrapper: Wrapper });
+
+      await expect(result.current.playlistsProviderProps.createPlaylist('Project')).rejects.toThrow(/no layoutId/);
+      expect(requestMock).not.toHaveBeenCalledWith(CREATE_PLAYLIST, expect.anything());
     });
 
     it('sends boardType + layoutId from the active board and returns the new playlist', async () => {

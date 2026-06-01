@@ -37,9 +37,6 @@ import { getHttpClient } from '../client';
 import { useAuth } from '../../../providers/auth-provider';
 import { useActiveBoard } from '../use-active-board';
 
-const EMPTY_FAVORITES: ReadonlySet<string> = new Set();
-const EMPTY_PLAYLISTS: ReadonlyArray<Playlist> = [];
-const EMPTY_MEMBERSHIPS: ReadonlyMap<string, Set<string>> = new Map();
 const PLAYLISTS_QUERY_KEY = ['userPlaylists'] as const;
 
 type MobileClimbActionsData = {
@@ -68,7 +65,7 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
 
   // === Playlists ===
 
-  const { data: playlists = EMPTY_PLAYLISTS as Playlist[], isLoading: playlistsLoading } = useQuery({
+  const { data: playlists = [] as Playlist[], isLoading: playlistsLoading } = useQuery({
     queryKey: PLAYLISTS_QUERY_KEY,
     queryFn: async (): Promise<Playlist[]> => {
       const response = await getHttpClient().request<GetAllUserPlaylistsQueryResponse>(GET_ALL_USER_PLAYLISTS, {
@@ -96,8 +93,14 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
     mutationFn: async (climbUuid: string): Promise<{ uuid: string; favorited: boolean }> => {
       const { activeBoard: board } = mutationDepsRef.current;
       if (!board) throw new Error('Cannot toggle favorite: no active board selected.');
+      // The favorite key is (userId, boardName, climbUuid, angle) on the
+      // backend today. Defaulting a missing angle to 0 would silently file
+      // the favorite under the wrong climb variant — better to surface the
+      // problem at the call site than write bad data. Stops being relevant
+      // once #2449 lands and the key collapses to (userId, climbUuid).
+      if (board.angle == null) throw new Error('Cannot toggle favorite: active board has no angle.');
       const response = await getHttpClient().request<ToggleFavoriteMutationResponse>(TOGGLE_FAVORITE, {
-        input: { boardName: board.boardType, climbUuid, angle: board.angle ?? 0 },
+        input: { boardName: board.boardType, climbUuid, angle: board.angle },
       });
       return { uuid: climbUuid, favorited: response.toggleFavorite.favorited };
     },
@@ -123,6 +126,10 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
     mutationFn: async (vars: { name: string; description?: string; color?: string; icon?: string }) => {
       const { activeBoard: board } = mutationDepsRef.current;
       if (!board) throw new Error('Cannot create playlist: no active board selected.');
+      // CreatePlaylistInput types layoutId as Int! — sending undefined would
+      // round-trip a 400 from the server. Throw locally so the call site sees
+      // the actual constraint rather than a generic GraphQL error.
+      if (board.layoutId == null) throw new Error('Cannot create playlist: active board has no layoutId.');
       const response = await getHttpClient().request<CreatePlaylistMutationResponse>(CREATE_PLAYLIST, {
         input: {
           boardType: board.boardType,
@@ -182,14 +189,19 @@ export function useMobileClimbActionsData(): MobileClimbActionsData {
 
   return {
     favoritesProviderProps: {
-      favorites: EMPTY_FAVORITES as Set<string>,
+      // Fresh empty Set per render rather than a module-scoped constant —
+      // a future provider that calls `.add()`/`.delete()` on its own copy
+      // can't accidentally mutate a shared singleton this way. Allocating an
+      // empty Set is essentially free; the mobile UI doesn't yet read this
+      // anyway, so even the trigger-effect cost is moot.
+      favorites: new Set<string>(),
       toggleFavorite,
       isLoading: isAuthLoading,
       isAuthenticated,
     },
     playlistsProviderProps: {
       playlists,
-      playlistMemberships: EMPTY_MEMBERSHIPS as Map<string, Set<string>>,
+      playlistMemberships: new Map<string, Set<string>>(),
       addToPlaylist,
       removeFromPlaylist,
       createPlaylist,
