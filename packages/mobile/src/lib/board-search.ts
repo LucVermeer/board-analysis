@@ -1,6 +1,9 @@
 // Pure helpers for the board-search map. Ported verbatim from the web hook
 // (packages/web/app/hooks/use-search-boards-map.ts) so web and mobile derive the
 // same search radius and coordinate stability from the map camera.
+//
+// TODO(#2456): these are platform-free and duplicated with web — extract into a
+// shared package and import from both sides so the zoom→radius table can't drift.
 
 /**
  * Map zoom level → search radius in km. Roughly tracks the visible radius at

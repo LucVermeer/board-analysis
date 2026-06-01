@@ -11,8 +11,6 @@ const SNAP_INTERVAL = DISCOVERY_CARD_WIDTH + CARD_GAP;
 type BoardCarouselProps = {
   items: DiscoveryBoardItem[];
   onSelect: (item: DiscoveryBoardItem) => void;
-  /** Called when the user scrolls near the end (popular boards paginate). */
-  onEndReached?: () => void;
   contentStyle?: ViewStyle;
 };
 
@@ -22,7 +20,7 @@ type BoardCarouselProps = {
  * board scroller. Built on FlashList so long sections (popular/nearby) stay
  * cheap to render.
  */
-export function BoardCarousel({ items, onSelect, onEndReached, contentStyle }: BoardCarouselProps) {
+export function BoardCarousel({ items, onSelect, contentStyle }: BoardCarouselProps) {
   const renderItem = useCallback(
     ({ item }: { item: DiscoveryBoardItem }) => <BoardDiscoveryCard item={item} onPress={onSelect} />,
     [onSelect],
@@ -44,8 +42,6 @@ export function BoardCarousel({ items, onSelect, onEndReached, contentStyle }: B
       disableIntervalMomentum
       ItemSeparatorComponent={Separator}
       contentContainerStyle={[styles.content, contentStyle]}
-      onEndReached={onEndReached}
-      onEndReachedThreshold={0.5}
     />
   );
 }

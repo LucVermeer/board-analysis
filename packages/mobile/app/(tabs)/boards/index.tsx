@@ -55,7 +55,9 @@ export default function BoardSelection() {
   const { data: popular } = usePopularBoardConfigs({ limit: 12 });
 
   const location = useDeviceLocation();
-  const { data: nearby, isLoading: isNearbyLoading } = useNearbyBoards(location.coords);
+  // 20 km, not the hook's 1 km default — "nearby" should reach across town
+  // (a gym a couple of streets away must still surface).
+  const { data: nearby, isLoading: isNearbyLoading } = useNearbyBoards(location.coords, 20);
 
   const customSheetRef = useRef<BottomSheet>(null);
   const bluetoothSheetRef = useRef<BottomSheet>(null);
@@ -116,9 +118,10 @@ export default function BoardSelection() {
     [myBoards, nearby?.boards, activateBoard, showToast, t],
   );
 
+  const requestLocation = location.request;
   const onModeFindNearby = useCallback(() => {
-    void location.request();
-  }, [location]);
+    void requestLocation();
+  }, [requestLocation]);
 
   const onModeBluetooth = useCallback(() => {
     setBluetoothActive(true);
@@ -137,9 +140,9 @@ export default function BoardSelection() {
     [activateBoard],
   );
 
-  // Popular/custom configs become a real board via the custom builder. For now,
-  // popular selection opens the custom sheet pre-seeded is a follow-up; selecting
-  // a popular config routes through the same CREATE path by opening the builder.
+  // A popular config has no UserBoard yet, so it becomes one through the custom
+  // builder (which CREATEs it). For now this just opens an empty builder rather
+  // than pre-seeding it from the tapped config — see #2455.
   const onSelectPopular = useCallback(() => {
     customSheetRef.current?.expand();
   }, []);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, TextInput, StyleSheet, Platform, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -47,29 +47,36 @@ export default function BoardSearchScreen() {
   const setActiveBoard = useSetActiveBoard();
 
   const location = useDeviceLocation();
+  const requestLocation = location.request;
   const [query, setQuery] = useState('');
   const [camera, setCamera] = useState<Camera>({ ...DEFAULT_CENTER, zoom: DEFAULT_ZOOM });
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   // Camera updates we push programmatically (recenter / locate) — fed to the
   // map's cameraPosition without echoing back through onCameraMove.
   const [cameraTarget, setCameraTarget] = useState<Camera>({ ...DEFAULT_CENTER, zoom: DEFAULT_ZOOM });
+  // Until the user's location resolves OR they pan the map, the camera is just
+  // the neutral default (20,0) — searching by those coordinates would fire a
+  // wrong query near the equator (web flags the same as a footgun). Gate the
+  // location-based search on a real viewport; text search works regardless.
+  const [hasRealViewport, setHasRealViewport] = useState(false);
 
   // Ask for location on mount; center on the user once we have a fix.
   useEffect(() => {
-    void location.request();
-  }, [location]);
+    void requestLocation();
+  }, [requestLocation]);
   useEffect(() => {
     if (location.coords) {
       const next = { ...location.coords, zoom: NEARBY_ZOOM };
       setCamera(next);
       setCameraTarget(next);
+      setHasRealViewport(true);
     }
   }, [location.coords]);
 
   const { boards } = useSearchBoardsMap({
     query,
-    latitude: camera.latitude,
-    longitude: camera.longitude,
+    latitude: hasRealViewport ? camera.latitude : null,
+    longitude: hasRealViewport ? camera.longitude : null,
     zoom: camera.zoom,
     enabled: true,
   });
@@ -118,6 +125,15 @@ export default function BoardSearchScreen() {
     [boards, camera.zoom],
   );
 
+  // Memoised so the native MapView doesn't re-bind the handler every render.
+  // A user-driven move means the viewport is real — start searching by it.
+  const onCameraMove = useCallback((event: { coordinates: { latitude?: number; longitude?: number }; zoom: number }) => {
+    const { latitude, longitude } = event.coordinates;
+    if (latitude == null || longitude == null) return;
+    setCamera({ latitude, longitude, zoom: event.zoom });
+    setHasRealViewport(true);
+  }, []);
+
   const searchField = (
     <View style={[styles.searchField, { backgroundColor: systemColors.secondaryBackground, top: insets.top + spacing[2] }]}>
       <Icon name="search" size={18} color={systemColors.secondaryLabel} />
@@ -163,12 +179,6 @@ export default function BoardSearchScreen() {
   const cameraPosition = {
     coordinates: { latitude: cameraTarget.latitude, longitude: cameraTarget.longitude },
     zoom: cameraTarget.zoom,
-  };
-
-  const onCameraMove = (event: { coordinates: { latitude?: number; longitude?: number }; zoom: number }) => {
-    const { latitude, longitude } = event.coordinates;
-    if (latitude == null || longitude == null) return;
-    setCamera({ latitude, longitude, zoom: event.zoom });
   };
 
   // iOS → Apple Maps (no API key); Android → Google Maps (env-supplied key).

@@ -24,9 +24,9 @@ type BoardModeCardProps = {
 };
 
 /**
- * Entry card for a discovery mode (Find Nearby / Bluetooth / Custom). Mirrors
- * the web home's mode cards: an icon + label with per-state styling — idle is
- * tappable, loading shows a spinner, denied/unavailable dim and disable.
+ * Entry card for a discovery mode (Find Nearby / Bluetooth / Custom / Search).
+ * Mirrors the web home's mode cards: an icon + label with per-state styling —
+ * idle is tappable, loading shows a spinner, denied/unavailable dim and disable.
  */
 export function BoardModeCard({ icon, label, sublabel, state = 'idle', onPress }: BoardModeCardProps) {
   const { systemColors } = useTheme();
@@ -85,10 +85,9 @@ export function BoardModeCard({ icon, label, sublabel, state = 'idle', onPress }
 
 const styles = StyleSheet.create({
   card: {
-    // flex: 1 so the three mode cards split the row evenly instead of a fixed
-    // 120pt each — three fixed cards + gaps + padding overflowed every iPhone
-    // narrower than ~416pt (i.e. all of them). aspectRatio keeps them square as
-    // they shrink.
+    // flex: 1 so the mode cards split the row evenly instead of a fixed width
+    // each — fixed-width cards + gaps + padding overflowed narrow iPhones once
+    // there were three+ of them. aspectRatio keeps them square as they shrink.
     flex: 1,
     aspectRatio: 1,
     borderRadius: borderRadius.lg,
