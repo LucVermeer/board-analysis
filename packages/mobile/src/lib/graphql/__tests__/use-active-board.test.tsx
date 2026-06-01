@@ -24,14 +24,8 @@ vi.mock('@react-native-async-storage/async-storage', () => {
   };
 });
 
-// Server client — the GET_DEFAULT_BOARD seed source.
-const requestMock = vi.fn();
-vi.mock('../client', () => ({
-  getHttpClient: () => ({ request: requestMock }),
-}));
-
-const serverBoard = { uuid: 'server-1', boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as unknown as UserBoard;
 const storedBoard = { uuid: 'stored-1', boardType: 'tension', layoutId: 9, sizeId: 8, setIds: '7', angle: 25 } as unknown as UserBoard;
+const otherBoard = { uuid: 'other-1', boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as unknown as UserBoard;
 
 function wrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -48,11 +42,10 @@ async function resetAsyncStorage() {
 describe('useActiveBoard', () => {
   beforeEach(async () => {
     vi.resetModules();
-    requestMock.mockReset();
     await resetAsyncStorage();
   });
 
-  it('returns the stored board without hitting the server', async () => {
+  it('returns the stored board', async () => {
     const { setStoredActiveBoard } = await import('../../active-board-store');
     await setStoredActiveBoard(storedBoard);
 
@@ -60,44 +53,25 @@ describe('useActiveBoard', () => {
     const { result } = renderHook(() => useActiveBoard(), { wrapper: wrapper() });
 
     await waitFor(() => expect(result.current.data).toEqual(storedBoard));
-    expect(requestMock).not.toHaveBeenCalled();
   });
 
-  it('seeds from the server default when nothing is stored, and persists it', async () => {
-    requestMock.mockResolvedValue({ defaultBoard: serverBoard });
-
+  it('returns null when nothing is stored — no server fallback', async () => {
     const { useActiveBoard } = await import('../use-active-board');
-    const { getStoredActiveBoard } = await import('../../active-board-store');
-    const { result } = renderHook(() => useActiveBoard(), { wrapper: wrapper() });
-
-    await waitFor(() => expect(result.current.data).toEqual(serverBoard));
-    expect(requestMock).toHaveBeenCalledTimes(1);
-    // The server default is written to storage so the next cold start reads it locally.
-    await expect(getStoredActiveBoard()).resolves.toEqual(serverBoard);
-  });
-
-  it('returns null (and stores nothing) when there is no stored or server board', async () => {
-    requestMock.mockResolvedValue({ defaultBoard: null });
-
-    const { useActiveBoard } = await import('../use-active-board');
-    const { getStoredActiveBoard } = await import('../../active-board-store');
     const { result } = renderHook(() => useActiveBoard(), { wrapper: wrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeNull();
-    await expect(getStoredActiveBoard()).resolves.toBeNull();
   });
 
   it('setActiveBoard persists and updates the cache so reads see the new board', async () => {
-    requestMock.mockResolvedValue({ defaultBoard: serverBoard });
-
     const { useActiveBoard, useSetActiveBoard } = await import('../use-active-board');
     const { getStoredActiveBoard } = await import('../../active-board-store');
     const sharedWrapper = wrapper();
 
     const read = renderHook(() => useActiveBoard(), { wrapper: sharedWrapper });
     const setter = renderHook(() => useSetActiveBoard(), { wrapper: sharedWrapper });
-    await waitFor(() => expect(read.result.current.data).toEqual(serverBoard));
+    await waitFor(() => expect(read.result.current.isSuccess).toBe(true));
+    expect(read.result.current.data).toBeNull();
 
     await act(async () => {
       await setter.result.current(storedBoard);
@@ -107,11 +81,32 @@ describe('useActiveBoard', () => {
     await expect(getStoredActiveBoard()).resolves.toEqual(storedBoard);
   });
 
+  it('setActiveBoard switches from one board to another', async () => {
+    const { setStoredActiveBoard } = await import('../../active-board-store');
+    await setStoredActiveBoard(storedBoard);
+
+    const { useActiveBoard, useSetActiveBoard } = await import('../use-active-board');
+    const { getStoredActiveBoard } = await import('../../active-board-store');
+    const sharedWrapper = wrapper();
+
+    const read = renderHook(() => useActiveBoard(), { wrapper: sharedWrapper });
+    const setter = renderHook(() => useSetActiveBoard(), { wrapper: sharedWrapper });
+    await waitFor(() => expect(read.result.current.data).toEqual(storedBoard));
+
+    await act(async () => {
+      await setter.result.current(otherBoard);
+    });
+
+    await waitFor(() => expect(read.result.current.data).toEqual(otherBoard));
+    await expect(getStoredActiveBoard()).resolves.toEqual(otherBoard);
+  });
+
   // Mirrors what AuthProvider.signOut does: removeQueries on the active-board
   // key must evict the staleTime: Infinity entry so the next signed-in user
   // doesn't inherit the previous user's board from the in-memory cache.
   it('removeQueries(ACTIVE_BOARD_QUERY_KEY) evicts the cached board', async () => {
-    requestMock.mockResolvedValue({ defaultBoard: serverBoard });
+    const { setStoredActiveBoard } = await import('../../active-board-store');
+    await setStoredActiveBoard(storedBoard);
 
     const { useActiveBoard, ACTIVE_BOARD_QUERY_KEY } = await import('../use-active-board');
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -120,7 +115,7 @@ describe('useActiveBoard', () => {
     );
 
     const { result } = renderHook(() => useActiveBoard(), { wrapper: sharedWrapper });
-    await waitFor(() => expect(result.current.data).toEqual(serverBoard));
+    await waitFor(() => expect(result.current.data).toEqual(storedBoard));
 
     act(() => {
       queryClient.removeQueries({ queryKey: ACTIVE_BOARD_QUERY_KEY });
