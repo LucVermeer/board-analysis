@@ -8,7 +8,7 @@ This document describes how Kilter Grips' backend (`portal.kiltergrips.com` REST
 
 Kilter has split from Aurora's backend and runs on Keycloak + PowerSync + Postgres. Two flows:
 
-1. **Catalog sync** (Kilter → Boardsesh, anonymous-ish). Periodic, cooldown-throttled. Pulls public climbs, walls, holds, hold sets, and the supporting reference tables into Boardsesh's `board_*` schema.
+1. **Catalog sync** (Kilter → Boardsesh). Periodic, cooldown-throttled. The public climb catalog (`climbs` + `climb_stats`) is pulled over **REST**, paginated by board region; the small reference tables (holds, hold sets, grades, products, layouts, mounting holes) and `gyms`/`walls` come over **PowerSync**. See [`KILTER_POWERSYNC_SPEC.md §6`](KILTER_POWERSYNC_SPEC.md#6-what-syncs-where) for why the catalog is REST and not a bucket.
 2. **Per-user sync** (bidirectional, opt-in). One PowerSync stream per cycle for one Kilter-linked user — pulls their logs/attempts/circuits/ratings into Boardsesh, then pushes Boardsesh-recorded ticks/ratings/circuits back to Kilter via the REST API.
 
 The Bluetooth path is unchanged — Kilter's hardware uses the same Aurora-shared protocol covered in [`AURORA_BLUETOOTH_PROTOCOL_SPEC.md`](AURORA_BLUETOOTH_PROTOCOL_SPEC.md).
@@ -163,12 +163,16 @@ A single helper `resolveCanonicalClimbUuid(boardType, uuid) → uuid` is consult
 
 ## Catalog sync (Flow A)
 
-Periodic, **not long-lived**. Each cycle:
+Periodic, **not long-lived**. The catalog spans two transports — don't try to get the climb catalog from PowerSync; it isn't there ([`KILTER_POWERSYNC_SPEC.md §6`](KILTER_POWERSYNC_SPEC.md#6-what-syncs-where)). Each cycle:
 
-1. Acquire an access token (service account or piggyback — see §6).
-2. Open a `@powersync/node` connection to `sync1.kiltergrips.com/sync/stream` scoped to the catalog buckets (all the global / public buckets — see [`KILTER_POWERSYNC_SPEC.md §6`](KILTER_POWERSYNC_SPEC.md#6-bucket-model-inferred)).
-3. Wait for the initial `StreamingSyncCheckpointComplete`. PowerSync now has every catalog row in a local SQLite mirror.
-4. For each table in the FK-safe processing order (mirroring `aurora-sync/src/sync/shared-sync.ts:60-75` — products → product_layouts → mounting_holes → holds → hold_sets → placement_types → difficulty_grades → climbs → climb_stats → climb_mounting_holes → climb_beta_links → walls), read the SQLite mirror and translate into Boardsesh's `board_*` tables.
+1. Acquire an access token (service account or piggyback — see below). The same token authorizes both the PowerSync stream and the REST catalog endpoints.
+2. **Reference tables over PowerSync.** Open a `@powersync/node` connection with a schema covering `products`, `product_layouts`, `mounting_holes`, `holds`, `hold_sets`, `placement_types`, `difficulty_grades`, `gyms`, `walls`. `await waitForFirstSync()`, then read the local mirror. These are small and identical for every user.
+3. **Climb catalog over REST.** For each product, page the public catalog:
+   - `GET /api/climbs/climbdetails/{productName}/edges/count` → total, to bound the loop.
+   - `GET /api/climbs/climbdetails/{productName}/edges?edgeLeft=&edgeRight=&edgeBottom=&edgeTop=&limit=&offset=` → pages of climbs with their stats. Walk `offset` until the count is covered. (Confirm whether `/api/climbs/all/` + `/api/climb-stat/all/` give a simpler unpaginated bulk pull — open question.)
+   - `GET /api/climbs/delteduuids` → UUIDs to soft-delete from `board_climbs` since last run.
+   - Mirror the app's own first-login flow (`preparing_screen.dart`): it pages exactly these endpoints into a local `climbs` table.
+4. Translate into Boardsesh's `board_*` tables in FK-safe order (mirroring `aurora-sync/src/sync/shared-sync.ts:60-75`): products → product_layouts → mounting_holes → holds → hold_sets → placement_types → difficulty_grades → climbs → climb_stats → climb_mounting_holes → climb_beta_links → walls. (`climb_mounting_holes` / `climb_beta_links` are per-user over PowerSync — for an anonymous catalog pull, source hold placements from `/api/climb-mounting-holes/{climbUuid}` on demand, or defer to the per-user flow.)
 5. Run the climb dedup logic from §3 for every `climbs` row.
 6. After `climbs` ingest, gather the set of canonical UUIDs that were newly inserted (not just newly aliased) and call `createSetterSyncNotifications` exactly like `shared-sync.ts:892-986` does.
 7. Close the PowerSync connection.
@@ -216,8 +220,8 @@ One PowerSync stream per cycle, one Kilter-linked user at a time. Inside the cyc
 | `circuits` + `circuit_climbs` | `playlists` + `playlist_climbs` + `playlistOwnership`; record origin via `playlists.kilterId` | Full-replace pattern from `user-sync.ts:325-389` — delete then re-insert children. Existing `playlists.auroraId` untouched |
 | `climb_ratings` | New `board_climb_ratings` table — see §5 | First-class table so push-back has a single source of truth |
 | `user_settings` | `kilter_user_settings` (JSON blob, optional in v1) | Defer until we have a use case |
-| `walls` where `gym_uuid IS NULL AND user_uuid = self` | `user_boards` | Homewalls appear in Boardsesh |
-| `climbs` where `user_uuid = self AND is_listed = false` | Leave as alias-table entries only; don't promote drafts to public `board_climbs` | Drafts stay Kilter-local |
+| `walls` where `gym_uuid IS NULL AND user_uuid = self` | `user_boards` | Homewalls appear in Boardsesh — `walls` streams over PowerSync |
+| the user's own `climbs` (incl. unlisted drafts) | Leave as alias-table entries only; don't promote drafts to public `board_climbs` | **Not on the PowerSync stream** — pull from REST `GET /api/climbs/climbdetails/user` if needed. Drafts stay Kilter-local |
 
 On transient errors (network, 5xx, timeout) leave `syncStatus` unchanged and re-throw — same policy as `sync-runner.ts:268-278`. On 401 from Keycloak, set `syncStatus='expired'`.
 
@@ -289,7 +293,7 @@ Single daemon process mirroring `aurora-sync/src/runner/daemon.ts`:
 - One Kilter-linked user picked per cycle: oldest `lastSyncAt` first, NULL ahead of any timestamp.
 - Random 1–15 minute delay between cycles.
 - Abort signal honored mid-cycle.
-- Catalog sync piggybacks: after a successful per-user cycle, if `board_shared_syncs.lastSyncedAt` for `board_type='kilter'` is older than the cooldown (1 hour default), open a second short-lived PowerSync stream for the catalog buckets, drain, close.
+- Catalog sync piggybacks: after a successful per-user cycle, if `board_shared_syncs.lastSyncedAt` for `board_type='kilter'` is older than the cooldown (1 hour default), run the catalog cycle (REST climb pull + a short-lived PowerSync connection for the reference tables), then close.
 - Per-user serialization — one active stream per Keycloak `sub`. If the user has the Kilter app open we may get disconnected; treat as transient, retry next cycle.
 - Schema-drift detection — if the stream emits a column we don't have in the translator, fail the cycle with a loud error and skip the user (but stamp `lastSyncAt` so they're not first in line next time). Same for inverse.
 
@@ -325,8 +329,8 @@ The daemon deploys alongside aurora-sync on Railway, hitting the same `/sync-cro
 
 ## Phased rollout
 
-1. **Traffic capture** — sign in to Kilter with one of our accounts, capture the `/sync/stream` request. Confirms the Keycloak-token-is-PowerSync-token assumption, the wire content-type, and the first few `StreamingSyncCheckpoint` payloads. Closes the top open question.
-2. **Standalone POC** — Node script outside the Boardsesh repo: authenticate one user against Keycloak, open a PowerSync stream, print the `logs` table rows. No DB writes.
+1. **Confirm the catalog REST contract** — the Keycloak-token-is-PowerSync-token assumption is already confirmed (a working `@powersync/node` scraper syncs `gyms`/`walls` with the `kilter` client + `openid offline_access`). The remaining unknown is the climb-catalog REST shape: authenticate one account, then call `/api/climbs/climbdetails/{productName}/edges/count` and `…/edges?…limit=&offset=` and record the params, page size, and JSON casing. Check whether `/api/climbs/all/` is a simpler bulk pull.
+2. **Standalone POC** — Node script outside the Boardsesh repo: authenticate one user against Keycloak, (a) open a PowerSync stream and print `logs` + `gyms`, (b) page the REST catalog and print a `climbs` count. No DB writes.
 3. **Promote to `packages/kilter-sync/`** — write into `board_climbs` and `boardsesh_ticks` behind a per-user feature flag. Read-only (no push to Kilter yet). Dedup logic + alias table land here.
 4. **Catalog spin-up** — add the cooldown-throttled catalog cycle and the `kilter_ascensionist_count` writer. Update aurora-sync and the recompute path to recognize the new column in the sum.
 5. **Push-back: logs first**, then ratings, then circuits — each behind its own flag. Watch for tick duplication after enabling logs.
