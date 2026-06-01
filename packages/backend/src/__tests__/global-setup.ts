@@ -65,6 +65,20 @@ async function ensureInfra(): Promise<void> {
 // them against the current schema. Running tests always materialise their own
 // DB via worker-db, so there is nothing else to prepare here.
 async function dropStaleWorkerDatabases(): Promise<void> {
+  // This globalSetup initialises whenever the backend project is part of a run,
+  // including jobs that exclude it and skip its tests (e.g. CI's `test-default`,
+  // which runs the non-backend projects). Those jobs have no Postgres — probe
+  // first and skip when nothing's listening: there are no stale worker DBs to
+  // drop without a server, and the real backend job (Postgres up) cleans up as
+  // before. The backend job's Postgres is health-gated, so this never silently
+  // skips cleanup there.
+  const { hostname, port } = new URL(baseConnectionString);
+  const dbPort = port ? Number(port) : 5432;
+  if (!(await isPortOpen(hostname, dbPort))) {
+    console.info(`[test-infra] no Postgres at ${hostname}:${dbPort} — skipping stale worker-db cleanup`);
+    return;
+  }
+
   const adminClient = postgres(baseConnectionString, { max: 1, onnotice: () => {} });
   try {
     const stale = await adminClient`

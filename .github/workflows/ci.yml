@@ -277,22 +277,19 @@ jobs:
       # negation lets new packages get picked up automatically as they're
       # added to root vite.config.ts's `test.projects` list.
       - name: Run tests
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
           mkdir -p test-results
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            vp test run --changed "origin/$BASE_REF" \
-              --project '!backend' --project '!moonboard-ocr' \
-              --reporter=verbose --reporter=github-actions \
-              --reporter=junit --outputFile.junit=./test-results/junit-default.xml
-          else
-            vp test run \
-              --project '!backend' --project '!moonboard-ocr' \
-              --reporter=verbose --reporter=github-actions \
-              --reporter=junit --outputFile.junit=./test-results/junit-default.xml
-          fi
+          # No `--changed` here. It force-runs a changed *backend* test file even
+          # though this job excludes the backend project (project/`--exclude`
+          # filters don't drop changed files), and backend tests need a Postgres
+          # this job doesn't have — so a backend-only PR fails here on worker-db
+          # setup. The full non-backend suite is fast, never misses dependency-
+          # affected tests, and is exactly what `main` pushes already run; the
+          # backend suite stays isolated to the `test-backend` job.
+          vp test run \
+            --project '!backend' --project '!moonboard-ocr' \
+            --reporter=verbose --reporter=github-actions \
+            --reporter=junit --outputFile.junit=./test-results/junit-default.xml
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
