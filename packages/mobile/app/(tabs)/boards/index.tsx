@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type BottomSheet from '@gorhom/bottom-sheet';
@@ -21,15 +22,25 @@ import { CustomBoardSheet } from '../../../src/components/board-discovery/Custom
 import { BluetoothQuickstartSheet } from '../../../src/components/board-discovery/BluetoothQuickstartSheet';
 import { userBoardToItem, popularConfigToItem } from '../../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
+import {
+  BAR_CONTENT_HEIGHT,
+  TAB_BAR_HEIGHT,
+} from '../../../src/components/queue-control/persistent-queue-bar';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function BoardSelection() {
   const { isAuthenticated, refreshAuthState } = useAuth();
   const { systemColors } = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation('boards');
   const { showToast } = useToast();
+
+  // Clear the absolutely-positioned PersistentQueueBar (which sits above the tab
+  // bar) so the last carousel isn't tucked underneath it — same inset the queue
+  // tab uses.
+  const scrollBottomPadding = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
 
   const setActiveBoard = useSetActiveBoard();
   const { data: activeBoard } = useActiveBoard();
@@ -183,7 +194,7 @@ export default function BoardSelection() {
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         style={styles.flex}
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingBottom: scrollBottomPadding }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Mode cards */}
