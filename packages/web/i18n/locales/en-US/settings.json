@@ -221,10 +221,9 @@
       "tooLarge": "File is too large (max 200MB). Please check you selected the correct file.",
       "parseError": "Failed to parse JSON file. Please check the file format.",
       "readError": "Failed to read file. Please try again.",
-      "interrupted": "Import was interrupted. The server may have timed out. Your data may have been partially imported.",
-      "interruptedShort": "Import was interrupted",
       "failed": "Import failed",
       "successCount": "Successfully imported {{count}} items",
+      "partialWarning": "Import partially completed — see details",
       "dialog": {
         "previewTitle": "Import Aurora Data",
         "importingTitle": "Importing Aurora Data...",
@@ -250,9 +249,15 @@
         "attemptsSummary": "{{imported}} imported, {{skipped}} skipped (already exist), {{failed}} unmatched",
         "circuits": "Circuits",
         "circuitsSummary": "{{imported}} imported, {{skipped}} skipped, {{failed}} failed",
-        "unresolvedTitle_one": "{{count}} climb could not be matched",
-        "unresolvedTitle_other": "{{count}} climbs could not be matched",
-        "unresolvedMore": "...and {{count}} more"
+        "unresolvedAscentsTitle_one": "{{count}} ascent had no matching climb",
+        "unresolvedAscentsTitle_other": "{{count}} ascents had no matching climb",
+        "unresolvedAttemptsTitle_one": "{{count}} attempt had no matching climb",
+        "unresolvedAttemptsTitle_other": "{{count}} attempts had no matching climb",
+        "unresolvedCircuitsTitle_one": "{{count}} circuit climb couldn't be matched",
+        "unresolvedCircuitsTitle_other": "{{count}} circuit climbs couldn't be matched",
+        "unresolvedMore": "...and {{count}} more",
+        "partialTitle": "Import was interrupted",
+        "partialBody": "Some data may not have been imported. Re-importing the same file is safe and will fill in the gaps."
       }
     },
     "kilterEmail": {

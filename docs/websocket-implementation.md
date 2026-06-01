@@ -117,6 +117,17 @@ Targeted hooks: `useQueueActions()`, `useQueueData()`, `usePersistentSessionActi
 | Stream Consumer    | Redis (streamConsumer connection) | Dedicated connection for blocking `XREADGROUP` in EventBroker |
 | Persistent Storage | PostgreSQL                        | Durable session & queue history                               |
 
+### Shared client primitives
+
+The web and mobile queue providers are thin wrappers around a small stack of shared packages. The lower two are pure TS (no React, DOM, or React Native); the third is the renderer-agnostic React layer both platforms delegate to:
+
+- **`@boardsesh/queue`** — the state machine: `queueReducer`, `mapQueueEventToAction`, `createQueueSyncCoordinator` (correlation-ID tracking + echo suppression), playlist suggestion helpers.
+- **`@boardsesh/queue-runtime`** — transport-wiring helpers (pure TS):
+  - **`mapSubscriptionEnvelopeToAction`** — wire-envelope normaliser, called directly by the subscription hooks (web `graphql-queue/hooks/use-queue-event-subscription.ts`, mobile `queue-provider.tsx`). Each platform's subscription returns its own `ClimbQueueItem` shape (web: full `@boardsesh/shared-schema` type; mobile: slim `SubscriptionQueueItem`) and aliases (`addedItem`/`item`, `currentItem`/`item`, `mirroredUuid`/`uuid`); this helper takes an optional per-platform item lifter and emits a single `EventMappingResult`.
+  - **`createSetCurrentClimbCoalescer`** — serialize-and-supersede. At most one `SET_CURRENT_CLIMB` in flight at a time; a newer call while one is pending overwrites the queued args. A superseded args that carried `shouldAddToQueue:true` still fires its `ADD_QUEUE_ITEM` (so the queue mutation reaches the server even when the setCurrent gets dropped). Prevents rapid swipes from stacking requests. Generic over the item type; consumed by `@boardsesh/queue-react` (below), not by the platform hooks directly.
+  - **`createJoinSessionTracker`** — `(sessionId, epoch)`-keyed `JOIN_SESSION` promise cache. Callers bump the epoch from the socket's `closed` handler so a mutation racing between `closed` and `connected` doesn't await a stale-resolved promise from the dead connection and fire over the new socket before its own `JOIN_SESSION` lands. Mobile uses the tracker; web's `use-session-lifecycle.ts` has a parallel implementation that hasn't yet been migrated.
+- **`@boardsesh/queue-react`** — the renderer-agnostic React layer (the first `@boardsesh/*-react` package; see the shared-packages rule in CLAUDE.md). It holds `useQueueMutations`, a thin hook over the pure `createQueueMutations` factory that owns the coalescer and issues every queue-session mutation (`ADD_QUEUE_ITEM`, `SET_CURRENT_CLIMB`, `takeControl`, …). It lists `react` as a `peerDependency` and imports no DOM, `next`, MUI, React Native, or Expo — every platform input (GraphQL client, session id, item→wire mapper, error sink) is injected via a `QueueMutationsDeps` object. Web (`persistent-session/hooks/use-queue-mutations.ts`) and mobile (`queue-provider.tsx`) each wrap it: web injects a synchronous client + session and omits `ensureReady` (already-joined → throw on disconnect); mobile injects `getWsClient()` plus an `ensureReady` that lazily creates/joins the session (no-op on disconnect). New shared React for this layer belongs here, kept platform-neutral by injecting all I/O.
+
 **Redis Connection Architecture:** The backend maintains 3 Redis connections:
 
 1. **Publisher** — shared by RoomManager, RedisSessionStore, DistributedState, EventBroker (non-blocking ops like `xadd`, `xack`)
@@ -194,8 +205,8 @@ sequenceDiagram
 
 ### Key Points
 
-1. **Origin Validation**: WebSocket connections are validated against allowed origins
-2. **Authentication**: Optional auth token passed in `connectionParams`
+1. **Origin Validation**: WebSocket upgrades are validated against the allowed-origins list (`BOARDSESH_URL` + `www.` variant, Vercel/homelab preview patterns, dev origins). Two additional paths are accepted: connections with **no** `Origin` header (native/direct clients), and genuine **same-origin** upgrades where the `Origin`'s hostname equals the request's `Host` header (`isSameOriginUpgrade` in `handlers/cors.ts`). The same-origin path is why the React Native **Android** app connects — RN derives `Origin` from the `wss://` URL (`https://ws.boardsesh.com`, the backend's own host, never on the website allow-list) — and why preview WS hosts (`{N}.ws.preview.boardsesh.com`) work without per-PR config. It's safe against cross-site WebSocket hijacking because a cross-site attacker's `Origin` is its own domain, and WS auth is token-based (`connectionParams`), not cookie-based. Rejected upgrades log `{ origin, host, userAgent, forwardedFor, remoteAddress }` for attribution.
+2. **Authentication**: Auth token passed in `connectionParams` — web supplies a static `authToken` string; mobile supplies an async `connectionParams` provider (re-reads the token from secure storage on every reconnect). Both paths and the `shouldRetry` predicate (mobile rejects 4401 auth-error close codes) are handled by the shared `createGraphQLClient` factory in `@boardsesh/graphql-client`.
 3. **Eager Subscription**: Queue subscription starts BEFORE fetching state to prevent race conditions
 4. **Session Restoration**: Sessions can be restored from Redis (warm cache) or PostgreSQL (dormant durable state)
 5. **Stable Participant Identity (authenticated only)**: Authenticated clients bind `participantId` to their verified `userId`, so reconnects across socket drops update the same participant row (peers see `UserPresenceChanged`, not `UserLeft` + `UserJoined`). Anonymous clients bind `participantId` to their `connectionId` instead — a client-supplied participantId is intentionally rejected on the server (it would let any session member impersonate any other participant, since `SessionUser.id` is broadcast to peers). Each anonymous WebSocket drop therefore appears as a fresh participant.
@@ -1780,7 +1791,8 @@ A GraphQL mutation would require either the JS GraphQL client (not available in 
 ### Frontend
 
 - `packages/web/app/lib/backend-url.ts` - Runtime backend URL resolver (preview deploys, dev overrides)
-- `packages/web/app/components/graphql-queue/graphql-client.ts` - Browser-based `graphql-ws` client used on web, Android, and iOS Capacitor
+- `packages/shared/graphql-client/` - Platform-agnostic `graphql-ws` helpers (`execute`, `subscribe`, `createGraphQLClient`, `GraphQLOperationError`). Web and the React Native mobile app both consume this; web passes its `SafeWebSocket` wrapper + `connectionManager` registration via the `webSocketImpl` / `onClientCreated` hooks.
+- `packages/web/app/components/graphql-queue/graphql-client.ts` - Thin web wrapper around `@boardsesh/graphql-client` that adds the `SafeWebSocket` DOM-error suppression and `connectionManager` registration. Also re-exports the shared primitives for legacy relative imports.
 - `packages/web/app/components/connection-manager/websocket-connection-manager.ts` - Connection state tracking
 - `packages/web/app/components/persistent-session/hooks/use-session-lifecycle.ts` - Session lifecycle
 - `packages/web/app/components/persistent-session/hooks/use-queue-mutations.ts` - Queue mutations

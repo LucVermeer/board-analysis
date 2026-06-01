@@ -108,7 +108,15 @@
 // i18n-keep boards.mobile.activeBoard
 // i18n-keep boards.mobile.emptyTitle
 // i18n-keep boards.mobile.emptySubtitle
+// i18n-keep boards.mobile.signInTitle
+// i18n-keep boards.mobile.signInSubtitle
+// i18n-keep boards.mobile.signInCta
+// i18n-keep boards.mobile.errorTitle
+// i18n-keep boards.mobile.errorRetry
 // i18n-keep common.mobile.more.title
+// i18n-keep common.mobile.more.development
+// i18n-keep common.mobile.more.metroServersTitle
+// i18n-keep common.mobile.more.metroServersSubtitle
 // i18n-keep common.mobile.nav.boards
 // i18n-keep common.mobile.nav.climbs
 // i18n-keep common.mobile.nav.climb
@@ -117,8 +125,3 @@
 // i18n-keep auth.nativeStart.tagline
 // i18n-keep auth.nativeStart.signInApple
 // i18n-keep auth.nativeStart.signInGoogle
-// i18n-keep common.board.imageUnavailable
-// i18n-keep common.mobile.errorBoundary.title
-// i18n-keep common.mobile.errorBoundary.message
-// i18n-keep common.mobile.errorBoundary.tryAgain
-// i18n-keep common.mobile.errorBoundary.goHome

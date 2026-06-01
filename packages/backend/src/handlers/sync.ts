@@ -62,8 +62,12 @@ export async function handleSyncCron(req: IncomingMessage, res: ServerResponse):
 
     logger.info(`[Sync] Completed: ${result.successful}/${result.total} user synced`);
   } catch (error) {
+    // logger.error forwards to Sentry via SentryWinstonTransport. The
+    // previous explicit captureException with `tags: { source: 'sync-cron' }`
+    // is dropped to avoid duplicate events; the transport tags it with
+    // `source: 'winston-logger'`, and `extra.logMessage` (`[Sync] Cron job
+    // failed:`) preserves enough triage context.
     logger.error('[Sync] Cron job failed:', error);
-    Sentry.captureException(error, { tags: { source: 'sync-cron' } });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({

@@ -40,12 +40,19 @@ export default defineConfig({
       './packages/aurora-sync/vite.config.ts',
       './packages/crypto/vite.config.ts',
       './packages/shared/ble-protocol/vite.config.ts',
+      './packages/shared/board-config/vite.config.ts',
       './packages/shared/queue/vite.config.ts',
+      './packages/shared/queue-runtime/vite.config.ts',
+      './packages/shared/queue-react/vite.config.ts',
+      './packages/shared/party-profile/vite.config.ts',
+      './packages/shared/climb-actions/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',
       './packages/shared/graphql/vite.config.ts',
+      './packages/shared/graphql-client/vite.config.ts',
       './packages/shared-schema/vite.config.ts',
       './packages/mobile/vite.config.ts',
+      './scripts/vite.config.ts',
     ],
   },
   staged: {
@@ -187,6 +194,18 @@ export default defineConfig({
       'typecheck:queue': {
         command: 'bun run --filter=@boardsesh/queue typecheck',
       },
+      'typecheck:queue-runtime': {
+        command: 'bun run --filter=@boardsesh/queue-runtime typecheck',
+      },
+      'typecheck:queue-react': {
+        command: 'bun run --filter=@boardsesh/queue-react typecheck',
+      },
+      'typecheck:party-profile': {
+        command: 'bun run --filter=@boardsesh/party-profile typecheck',
+      },
+      'typecheck:climb-actions': {
+        command: 'bun run --filter=@boardsesh/climb-actions typecheck',
+      },
       'typecheck:board-config': {
         command: 'bun run --filter=@boardsesh/board-config typecheck',
       },
@@ -200,8 +219,12 @@ export default defineConfig({
         command: 'bun run --filter=@boardsesh/graphql typecheck',
         dependsOn: ['codegen'],
       },
+      'typecheck:graphql-client': {
+        command: 'bun run --filter=@boardsesh/graphql-client typecheck',
+      },
       'typecheck:mobile': {
         command: 'bun run --filter=@boardsesh/mobile typecheck',
+        dependsOn: ['build:shared', 'build:constants'],
       },
       typecheck: {
         command: 'true',
@@ -212,15 +235,24 @@ export default defineConfig({
           'typecheck:web',
           'typecheck:ble-protocol',
           'typecheck:queue',
+          'typecheck:queue-runtime',
+          'typecheck:queue-react',
+          'typecheck:party-profile',
+          'typecheck:climb-actions',
           'typecheck:board-config',
           'typecheck:play-view',
           'typecheck:climb-filters',
           'typecheck:graphql',
+          'typecheck:graphql-client',
           'typecheck:mobile',
         ],
       },
 
       // --- Mobile validation ---
+      'check:mobile-native-deps': {
+        command: 'tsx scripts/mobile-native-deps-check.ts',
+        cache: false,
+      },
       'check:mobile-bundle': {
         command: 'bash scripts/mobile-bundle-check.sh',
         cache: false,
@@ -239,6 +271,10 @@ export default defineConfig({
       },
       'mobile:preview-build': {
         command: 'tsx scripts/mobile-preview-build.ts',
+        cache: false,
+      },
+      'mobile:dev-client-build': {
+        command: 'tsx scripts/mobile-dev-client-build.ts',
         cache: false,
       },
 

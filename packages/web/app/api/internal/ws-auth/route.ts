@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { isSecureCookieContext, sessionCookieName } from '@/app/lib/auth/secure-cookies';
 
 /**
  * API endpoint to get a WebSocket authentication token.
@@ -7,11 +8,16 @@ import { getToken } from 'next-auth/jwt';
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get the NextAuth JWT token from the request
+    const secureCookie = isSecureCookieContext();
+    // Pass cookieName + secureCookie explicitly: next-auth's internal derivation
+    // breaks if NEXTAUTH_URL is set to an http:// value (the `??` only falls back
+    // when NEXTAUTH_URL is unset, not when it's wrong).
     const token = await getToken({
       req: request,
       secret: process.env.NEXTAUTH_SECRET,
-      raw: true, // Get the raw encoded JWT string
+      secureCookie,
+      cookieName: sessionCookieName(),
+      raw: true,
     });
 
     if (!token) {

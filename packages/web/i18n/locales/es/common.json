@@ -2,6 +2,9 @@
   "languageSwitcher": {
     "ariaLabelWithCurrent": "Idioma: {{language}}"
   },
+  "auth": {
+    "mustBeSignedIn": "Debes iniciar sesión"
+  },
   "actions": {
     "yes": "Sí",
     "no": "No",
@@ -202,7 +205,10 @@
   },
   "mobile": {
     "more": {
-      "title": "Más"
+      "title": "Más",
+      "development": "Desarrollo",
+      "metroServersTitle": "Servidores Metro",
+      "metroServersSubtitle": "Cambia entre bundlers de Tailnet"
     },
     "nav": {
       "boards": "Tablas",

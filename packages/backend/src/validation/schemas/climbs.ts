@@ -66,6 +66,9 @@ export const ClimbInputSchema = z.object({
   published_at: z.string().max(100).nullish(),
   userAscents: z.number().min(0).nullish(),
   userAttempts: z.number().min(0).nullish(),
+  // Round-trip multi-frame metadata so peers don't have to refetch /climb.
+  framesCount: z.number().int().min(1).nullish(),
+  framesPace: z.number().int().min(0).nullish(),
 });
 
 /**

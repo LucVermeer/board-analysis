@@ -3,6 +3,7 @@ import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-nat
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { hapticLight } from '../lib/haptics';
 import { springs } from '../theme/animations';
+import { useTheme } from '../providers/theme-provider';
 
 type CardProps = {
   children: ReactNode;
@@ -14,6 +15,7 @@ type CardProps = {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function Card({ children, onPress, haptic = true, style }: CardProps) {
+  const { systemColors } = useTheme();
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -37,6 +39,8 @@ export function Card({ children, onPress, haptic = true, style }: CardProps) {
     onPress?.();
   };
 
+  const backgroundStyle = { backgroundColor: systemColors.secondaryBackground };
+
   if (onPress) {
     return (
       <AnimatedPressable
@@ -44,14 +48,14 @@ export function Card({ children, onPress, haptic = true, style }: CardProps) {
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         accessibilityRole="button"
-        style={[animatedStyle, styles.card, style]}
+        style={[animatedStyle, styles.card, backgroundStyle, style]}
       >
         {children}
       </AnimatedPressable>
     );
   }
 
-  return <View style={[styles.card, style]}>{children}</View>;
+  return <View style={[styles.card, backgroundStyle, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({

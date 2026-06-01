@@ -1,4 +1,5 @@
 import type { Client, Event as WsEvent, EventListener as WsEventListener } from 'graphql-ws';
+import { KEEP_ALIVE_MS } from '@boardsesh/graphql-client';
 
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'stale' | 'error';
 
@@ -19,7 +20,6 @@ type RegisteredClient = {
   cleanup: (() => void)[];
 };
 
-const KEEP_ALIVE_MS = 5000;
 const STALE_GRACE_MS = 25_000;
 const HEALTH_CHECK_INTERVAL_MS = 1000;
 

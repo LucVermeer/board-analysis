@@ -149,6 +149,57 @@ export function isOriginAllowed(origin: string): boolean {
 }
 
 /**
+ * Reduce a Host header or URL hostname to a bare, comparable hostname:
+ * lowercase, no trailing dot, no surrounding IPv6 brackets, no port.
+ * Bracket-aware so the colons inside an IPv6 literal aren't read as a port
+ * separator.
+ */
+function normalizeHostForCompare(value: string): string {
+  let host = value.trim().toLowerCase().replace(/\.$/, '');
+  if (host.startsWith('[')) {
+    // IPv6 literal: [::1] or [::1]:3000 — take what's between the brackets.
+    const closing = host.indexOf(']');
+    return closing === -1 ? '' : host.slice(1, closing);
+  }
+  const colon = host.indexOf(':');
+  if (colon !== -1) host = host.slice(0, colon);
+  return host;
+}
+
+/**
+ * Allow a connection when its Origin is the same host it is connecting to.
+ *
+ * A genuine same-origin upgrade — the Origin's hostname equals the Host header
+ * the client is connecting to — cannot be a cross-site WebSocket hijack: a
+ * cross-site attacker's Origin is always their own domain, never our host. WS
+ * auth here is token-based (`connectionParams.authToken`), not cookie-based, so
+ * there is no ambient-credential surface to abuse either. This is strictly
+ * narrower than the no-Origin branch the WS upgrade handler already allows.
+ *
+ * This is what lets the React Native Android app connect: RN derives the Origin
+ * from the wss:// URL (https://ws.boardsesh.com), which equals the backend's own
+ * host. It also covers preview WS hosts ({N}.ws.preview.boardsesh.com) with no
+ * per-environment config, because the Railway/Cloudflare edge forwards the real
+ * public host — the same value join.ts already trusts to build redirect URLs.
+ *
+ * Compares hostnames only (case-insensitive, trailing dot / port / IPv6 brackets
+ * normalized away); scheme and port are intentionally not part of the
+ * comparison. Fails closed on a missing Host header or an unparseable Origin.
+ */
+export function isSameOriginUpgrade(origin: string, host: string | undefined): boolean {
+  if (!origin || !host) return false;
+  let originHostname: string;
+  try {
+    originHostname = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+  const normalizedOrigin = normalizeHostForCompare(originHostname);
+  const normalizedHost = normalizeHostForCompare(host);
+  return normalizedOrigin !== '' && normalizedOrigin === normalizedHost;
+}
+
+/**
  * Apply CORS headers to a response.
  * Returns false if this was an OPTIONS request and response was sent.
  * Returns true if processing should continue.
@@ -156,7 +207,7 @@ export function isOriginAllowed(origin: string): boolean {
 export function applyCorsHeaders(req: IncomingMessage, res: ServerResponse): boolean {
   const origin = req.headers.origin;
 
-  if (origin && isOriginAllowed(origin)) {
+  if (origin && (isOriginAllowed(origin) || isSameOriginUpgrade(origin, req.headers.host))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }

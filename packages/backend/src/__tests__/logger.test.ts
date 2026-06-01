@@ -4,6 +4,7 @@ import { transports as winstonTransports, type Logger } from 'winston';
 import { appendSplatFormat, createBackendLogger, instanceIdFormat, setInstanceIdProvider } from '../utils/logger';
 
 const SPLAT = Symbol.for('splat');
+const ERROR_INSTANCE = Symbol.for('boardsesh.errorInstance');
 
 type LoggerInfoForTest = Record<string | symbol, unknown> & {
   level: string;
@@ -102,6 +103,22 @@ describe('logger formats', () => {
       stack: error.stack,
     });
     expect(transformed.stack).toBe(error.stack);
+  });
+
+  it('preserves the live Error reference at ERROR_INSTANCE for downstream consumers', () => {
+    // This symbol is the contract between appendSplatFormat and
+    // SentryWinstonTransport. Without it, the transport cannot recover the
+    // Error after appendSplatFormat flattens `info.error` to a plain object.
+    const error = new Error('boom');
+    const info = {
+      level: 'error',
+      message: 'Failed to publish',
+      [SPLAT]: [error],
+    };
+
+    const transformed = applyFormat(appendSplatFormat() as LoggerFormatForTest, info);
+
+    expect(transformed[ERROR_INSTANCE]).toBe(error);
   });
 
   it('drops an empty splat symbol without changing the message', () => {

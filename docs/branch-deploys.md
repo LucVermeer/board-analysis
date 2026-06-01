@@ -12,12 +12,58 @@ Boardsesh is a monorepo with three deployable services:
 | **Backend** (`packages/backend`) | Railway (Node.js)   | Docker container at `{PRID}.ws.preview.boardsesh.com` |
 | **Database** (`packages/db`)     | Neon PostgreSQL     | `boardsesh-dev-db` Docker image (per PR)              |
 
+### Vercel project settings (production)
+
+The web project deploys from `packages/web`, not the repo root. Two dashboard settings under **Settings → Build & Deployment** are hard prerequisites — `packages/web/vercel.json` does nothing without them (and `vercel.json` is strict JSON, so this can't be a comment in the file):
+
+1. **Root Directory = `packages/web`.** This is how Vercel finds `next` (it lives only in `packages/web/package.json`, not the root). Without it the build fails with `No Next.js version detected`.
+2. **"Include source files outside of the Root Directory in the Build Step" = on.** The build reaches outside `packages/web`: `bun.lock` lives at the repo root (so `bun install --frozen-lockfile` walks up to find it), Next transpiles sibling workspace packages from source, and `outputFileTracingIncludes` pulls the board-renderer WASM from the hoisted root `node_modules`. With the toggle off, Vercel clones only `packages/web` and the install regenerates or rejects the lockfile.
+
+Keep the larger build machine — `bun install` builds `sharp` plus the Expo/React Native native tree and OOMs on the default size.
+
+## Production deploys (GitHub Actions)
+
+Production deploys run through a single workflow, `.github/workflows/production-deploy.yml`, on push to `main` (or `workflow_dispatch`). Vercel's native git auto-deploy is off (`git.deploymentEnabled: false` in `packages/web/vercel.json`), so Actions is the only production deployer.
+
+Flow:
+
+1. `detect-changes` decides `web_changed` / `backend_changed` from the push diff (backend uses the same path list as `branch-deploy.yml`; web deploys on anything that isn't docs- or mobile-only). `check-rollback` runs in parallel and flags whether a Vercel Instant Rollback is active (see below).
+2. `build-web` runs `vercel pull --environment=production` + `vercel build --prod` and uploads `.vercel` (prebuilt output + project link) as an artifact. `build-backend` builds `Dockerfile.backend` and pushes it to `ghcr.io/boardsesh/boardsesh-daemon` with `:production` / `:staging` / `:sha-<short>` / `:latest` tags.
+3. **The gate:** `migrate` runs `@boardsesh/db db:migrate` only once every *attempted* build passed. A build that ran and failed blocks the gate, which skips both production deploys — nothing reaches prod half-built. (Migrations used to run inside the Vercel build; they moved here so they only run behind the gate.)
+4. `deploy-web` (`vercel deploy --prebuilt --prod`) and `deploy-production-backend` (`railway redeploy`) run after the gate.
+5. One of three Discord notifications fires (all gated on `DISCORD_DEPLOY_WEBHOOK`, all best-effort — webhook failures `::warning::` rather than fail the run, all post with `allowed_mentions.parse=[]` so user-controlled text like PR titles can't ping the channel):
+   - `notify-success` on a promoted deploy — lists the PRs that shipped (parsed from `Merge pull request #N` subjects in `github.event.before..github.sha`, titles via `gh api`).
+   - `notify-no-promote` when a rollback is active (see Instant Rollback below).
+   - `notify-failure` on any job failure or cancellation.
+
+Required GitHub config — these live in the **`Production` GitHub environment** (Settings → Environments), not as repo-level secrets. Every job that reads them declares `environment: Production`; jobs that don't (`detect-changes`, `build-backend`, which uses only the automatic `GITHUB_TOKEN`) are left out. Environment-scoped secrets only resolve for jobs that opt in via `environment:` — without it they expand to empty strings and the run fails (401 from Vercel, empty `DATABASE_URL`, etc.).
+
+- **Secrets:** `VERCEL_TOKEN`, `DATABASE_URL` (production Neon — used by the gated migrate job), `RAILWAY_TOKEN`, `DISCORD_DEPLOY_WEBHOOK`.
+- **Variables:** `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `RAILWAY_BACKEND_SERVICE_ID`.
+
+Because the `Production` environment is gated to `main`, a `workflow_dispatch` dry run from a feature branch can't resolve these secrets (the environment-scoped jobs are blocked by the deployment-branch rule). Dry-run from `main`, or temporarily add the branch to the environment's allowed deployment branches.
+
+Railway runs from the prebuilt image, not its own build — keep `railway.toml` free of a `[build]` block and point the service Source at `ghcr.io/boardsesh/boardsesh-daemon:production`.
+
+The homelab staging-backend deploy job is commented out in the workflow until the self-hosted runner is healthy.
+
+### Instant Rollback interaction
+
+When someone uses Vercel **Instant Rollback**, production is pinned to a previous deployment and Vercel disables production-domain auto-assignment. The pipeline handles this by **deploying without promoting** rather than failing:
+
+- **`check-rollback`** reads `lastRollbackTarget` on the Vercel project (`GET /v9/projects/{id}`) and outputs `active=true/false`. It fails closed — if the project API can't be read at all, the run is blocked.
+- **When a rollback is active**, the run still builds and migrates, but:
+  - `deploy-web` runs `vercel deploy --prebuilt --prod --skip-domain` — the production deployment is created and uploaded but *not* assigned to the production domain, so the rolled-back deployment keeps serving traffic.
+  - `deploy-production-backend` pushes the image to GHCR (`:production`, `:sha-<short>`) but **skips the Railway redeploy** (Railway has no "deploy without promote"). The image is ready to redeploy once the rollback is cleared.
+  - `notify-no-promote` posts to Discord with the staged web URL and the GHCR image, plus instructions: clear the rollback (revert the offending commit and re-promote), then promote the staged web deployment and redeploy the backend.
+- **Migrations only move forward; Instant Rollback never reverts the DB.** The `migrate` job runs `db:migrate` forward and Instant Rollback rolls back *only the web deployment*. A rolled-back web build therefore runs against the already-migrated schema, so **production migrations must stay backward-compatible (expand/contract)** — never drop or rename a column in the same release that depends on it gone. (This also keeps the staged-but-not-promoted release DB-ready for a clean promotion later.)
+
 ### What Broke
 
 Branch deploys stopped working after migrating from Vercel Postgres (which was a managed Neon account under Vercel) to a direct Neon paid account. Specifically:
 
 1. **Neon branching integration is broken** - The Vercel-Neon integration that automatically created database branches per preview deployment no longer functions. Neon support has not resolved this.
-2. **Migrations are skipped on preview** - `vercel.json` explicitly skips migrations for preview deploys:
+2. **Migrations are skipped on preview** - `packages/web/vercel.json` explicitly skips migrations for preview deploys:
    ```json
    "buildCommand": "if [ \"$VERCEL_ENV\" != \"preview\" ]; then npm run db:migrate; fi && npm run build --workspace=@boardsesh/web"
    ```
@@ -45,7 +91,7 @@ Branch deploys stopped working after migrating from Vercel Postgres (which was a
 
 Drizzle migrations are idempotent - running them against the development database is safe. The current skip was a workaround for the broken Neon branching (to avoid running migrations against a non-existent branch DB). Since branch deploys use the pre-built `boardsesh-dev-db` Docker image (not the production database), migrations should run unconditionally.
 
-**Change in `vercel.json`:**
+**Change in `packages/web/vercel.json`:**
 
 ```json
 {
@@ -1172,7 +1218,7 @@ After API consolidation:
 
 Sync runs in two places:
 
-1. **Vercel crons** (`vercel.json:6-22`):
+1. **Vercel crons** (`packages/web/vercel.json`):
    - `/api/internal/shared-sync/tension` - every 2 hours
    - `/api/internal/shared-sync/kilter` - every 2 hours
    - `/api/internal/user-sync-cron` - every 2 hours
@@ -1209,7 +1255,7 @@ Sync runs in two places:
                -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
    ```
 
-4. **Remove Vercel crons** - Delete the `crons` array from `vercel.json` and remove the corresponding API route handlers.
+4. **Remove Vercel crons** - Delete the `crons` array from `packages/web/vercel.json` and remove the corresponding API route handlers.
 
 ### Branch Deploy Sync Strategy
 
@@ -1287,7 +1333,7 @@ What changed → what gets deployed:
 
 | Item                   | Cost                        | Complexity                         |
 | ---------------------- | --------------------------- | ---------------------------------- |
-| Vercel preview deploys | Free (included in plan)     | Minimal - one `vercel.json` change |
+| Vercel preview deploys | Free (included in plan)     | Minimal - one `packages/web/vercel.json` change |
 | GitHub Actions minutes | Free tier (~2000 min/month) | Low - simple workflow              |
 | **Total**              | **$0/month**                | **~1-2 days**                      |
 
@@ -1360,7 +1406,7 @@ What changed → what gets deployed:
 
 ### Phase 1: Frontend-Only Previews
 
-- [ ] Re-enable migrations in `vercel.json` build command
+- [ ] Re-enable migrations in `packages/web/vercel.json` build command
 - [ ] Set `NEXT_PUBLIC_WS_URL` in Vercel Preview environment scope
 - [ ] Create change detection workflow (`.github/workflows/branch-deploy.yml`)
 - [ ] Verify preview deployments connect to production backend
@@ -1448,7 +1494,7 @@ Everything else is treated as FE-only. `workflow_dispatch` always does a full bu
 
 The staging backend runs as part of the shared docker-compose infrastructure (managed by Ansible):
 
-- **Image:** `ghcr.io/boardsesh/boardsesh-daemon:staging` (auto-rebuilt on main push via `staging-backend-deploy.yml`)
+- **Image:** `ghcr.io/boardsesh/boardsesh-daemon:staging` (auto-rebuilt on main push by the `build-backend` job in `production-deploy.yml`; the homelab `deploy-staging-backend` job is currently commented out until the runner is healthy)
 - **Database:** Real Neon DB (same `DATABASE_URL` as per-PR deploys)
 - **Redis:** Shared Redis container on the `branch-deploys` network
 - **NEXTAUTH_SECRET:** Shared fixed value stored in 1Password (Homelab vault, "Branch Deploy Host" item) and as GitHub Actions secret `BRANCH_DEPLOY_STAGING_NEXTAUTH_SECRET`
@@ -1458,7 +1504,7 @@ The staging backend runs as part of the shared docker-compose infrastructure (ma
 
 Backend-affecting paths are defined in two places that must stay in sync:
 
-1. `staging-backend-deploy.yml` lines 7-14 — YAML `paths:` filter (triggers staging rebuild on main push)
+1. `production-deploy.yml` `detect-changes` job — shell `case` patterns (decides web/backend builds + deploys on main push)
 2. `branch-deploy.yml` `detect-changes` job — shell `case` patterns (decides per-PR vs staging for PRs)
 
 ### Workflows
@@ -1466,7 +1512,7 @@ Backend-affecting paths are defined in two places that must stay in sync:
 | Workflow                     | Trigger                      | Purpose                                                             |
 | ---------------------------- | ---------------------------- | ------------------------------------------------------------------- |
 | `branch-deploy.yml`          | PR open/sync                 | Detects changes, builds web (always) + backend (if needed), deploys |
-| `staging-backend-deploy.yml` | Push to main (backend paths) | Rebuilds staging backend image, restarts container on VM            |
+| `production-deploy.yml`      | Push to main / dispatch      | Builds web + backend, gated migrate, deploys prod web (Vercel) + backend (Railway) |
 | `branch-deploy-cleanup.yml`  | PR close                     | Removes per-PR containers (backend may not exist for FE-only)       |
 | `branch-deploy-sweep.yml`    | Daily 3am UTC + main push    | Cleans stale containers, prunes images (7-day TTL)                  |
 
@@ -1487,7 +1533,7 @@ Backend-affecting paths are defined in two places that must stay in sync:
 | `packages/backend/src/server.ts`              | All backend HTTP routes, session cleanup                                      |
 | `packages/backend/Dockerfile`                 | Backend container build                                                       |
 | `packages/aurora-sync/`                       | Shared sync library used by both web and backend                              |
-| `vercel.json`                                 | Build command (migration skip), cron definitions                              |
+| `packages/web/vercel.json`                    | Build command (migration skip), cron definitions                              |
 | `.github/workflows/branch-deploy.yml`         | Build images + trigger Ansible deploy on PR open/sync                         |
 | `.github/workflows/branch-deploy-cleanup.yml` | Trigger Ansible cleanup + GHCR delete on PR close                             |
 | `.github/workflows/branch-deploy-sweep.yml`   | Trigger Ansible sweep on push to main / daily                                 |

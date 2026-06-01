@@ -13,6 +13,7 @@ import { useTheme } from '../providers/theme-provider';
 import { useSaveTick, useGrades } from '../lib/graphql/hooks';
 import { hapticSuccess, hapticLight, hapticError, hapticSelection } from '../lib/haptics';
 import { brandColors } from '../theme/colors';
+import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 
 type TickStatus = 'flash' | 'send' | 'attempt';
@@ -45,7 +46,7 @@ function GradeChip({ grade, selected, onPress }: { grade: Grade; selected: boole
     paddingVertical: spacing[1],
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: selected ? brandColors.primary : 'rgba(60, 60, 67, 0.18)',
+    borderColor: selected ? brandColors.primary : iosSystemColors.separator,
     backgroundColor: selected ? brandColors.primary : 'transparent',
   };
 
@@ -60,7 +61,7 @@ function GradeChip({ grade, selected, onPress }: { grade: Grade; selected: boole
       accessibilityLabel={grade.name}
     >
       <View style={chipStyle}>
-        <Text variant="footnote" color={selected ? '#FFFFFF' : undefined} style={styles.gradeChipText}>
+        <Text variant="footnote" color={selected ? iosSystemColors.white : undefined} style={styles.gradeChipText}>
           {grade.name}
         </Text>
       </View>
@@ -311,7 +312,7 @@ export function LogAscentSheet({
                 <Icon
                   name="minus.circle"
                   size={22}
-                  color={attemptCount <= minAttempts ? '#C7C7CC' : brandColors.primary}
+                  color={attemptCount <= minAttempts ? iosSystemColors.systemGray4 : brandColors.primary}
                 />
               </Pressable>
               <Text variant="title3" style={styles.attemptCount}>
@@ -404,7 +405,7 @@ export function LogAscentSheet({
 
 const styles = StyleSheet.create({
   indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
+    backgroundColor: iosSystemColors.separator,
     width: 36,
     height: 5,
     borderRadius: 3,

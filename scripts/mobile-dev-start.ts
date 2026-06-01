@@ -2,27 +2,64 @@
 
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync, createWriteStream } from 'node:fs';
-import { resolve, dirname, join } from 'node:path';
+import { createServer } from 'node:net';
+import { resolve, dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveTailscaleHostname } from './lib/tailscale-hostname';
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const METRO_DEFAULT_PORT = '8081';
+const METRO_DEFAULT_PORT = 8081;
+const METRO_MAX_PORT = 8099;
 const BOARDSESH_DIR = join(ROOT_DIR, '.boardsesh');
 
-function resolveMetroPort(args: string[]): string {
-  let port = METRO_DEFAULT_PORT;
+function resolveExplicitMetroPort(args: string[]): number | null {
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
     if (argument === '--port' || argument === '-p') {
       const next = args[index + 1];
-      if (next && !next.startsWith('-')) port = next;
+      if (next && !next.startsWith('-')) {
+        const port = Number(next);
+        return Number.isInteger(port) && port > 0 ? port : null;
+      }
     } else if (argument.startsWith('--port=')) {
-      port = argument.slice('--port='.length);
+      const port = Number(argument.slice('--port='.length));
+      return Number.isInteger(port) && port > 0 ? port : null;
     }
   }
-  return port;
+  return null;
+}
+
+function withMetroPort(args: string[], port: number): string[] {
+  if (resolveExplicitMetroPort(args) !== null) return args;
+  return [...args, '--port', String(port)];
+}
+
+async function isPortAvailable(port: number): Promise<boolean> {
+  return await new Promise((resolveAvailable) => {
+    const server = createServer();
+    server.once('error', () => resolveAvailable(false));
+    server.once('listening', () => {
+      server.close(() => resolveAvailable(true));
+    });
+    // Bind to loopback only — `server.listen(port)` listens on 0.0.0.0,
+    // briefly exposing the probe externally. Note there's still a small
+    // TOCTOU window between this close() and Metro's subsequent bind:
+    // Metro auto-bumps to the next free port on collision, so the URL we
+    // print is advisory.
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function resolveMetroPort(args: string[]): Promise<number> {
+  const explicitPort = resolveExplicitMetroPort(args);
+  if (explicitPort !== null) return explicitPort;
+
+  for (let port = METRO_DEFAULT_PORT; port <= METRO_MAX_PORT; port++) {
+    if (await isPortAvailable(port)) return port;
+  }
+
+  throw new Error(`No free Metro port found in ${METRO_DEFAULT_PORT}-${METRO_MAX_PORT}`);
 }
 const METRO_LOG_PATH = join(BOARDSESH_DIR, 'mobile-metro.log');
 const DEFAULT_QA_NOTES_PATH = join(BOARDSESH_DIR, 'qa-notes.md');
@@ -75,13 +112,17 @@ function parseArgs(args: string[]): { qaNotesFilePath: string | null; passthroug
 // ---------------------------------------------------------------------------
 
 function resolveCurrentBranchName(): string | null {
+  return runGitCommand(['branch', '--show-current']);
+}
+
+function runGitCommand(args: string[]): string | null {
   try {
-    const branchName = execFileSync('git', ['branch', '--show-current'], {
+    const output = execFileSync('git', args, {
       cwd: ROOT_DIR,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-    return branchName || null;
+    return output || null;
   } catch {
     return null;
   }
@@ -112,75 +153,96 @@ function resolveQaNotes(explicitPath: string | null): { contents: string | null;
 // Main
 // ---------------------------------------------------------------------------
 
-const { qaNotesFilePath: cliQaNotesPath, passthroughArgs } = parseArgs(process.argv.slice(2));
-const branchName = resolveCurrentBranchName();
-const qaNotes = resolveQaNotes(cliQaNotesPath);
-const tailscale = resolveTailscaleHostname();
-const metroPort = resolveMetroPort(passthroughArgs);
+async function main() {
+  const { qaNotesFilePath: cliQaNotesPath, passthroughArgs } = parseArgs(process.argv.slice(2));
+  const branchName = resolveCurrentBranchName();
+  const commitSha = runGitCommand(['rev-parse', '--short', 'HEAD']);
+  const qaNotes = resolveQaNotes(cliQaNotesPath);
+  const tailscale = resolveTailscaleHostname();
+  const metroPort = await resolveMetroPort(passthroughArgs);
+  const metroPassthroughArgs = withMetroPort(passthroughArgs, metroPort);
+  const startedAt = new Date().toISOString();
+  const worktreeLabel = basename(ROOT_DIR);
 
-console.log(`[dev:mobile] Branch: ${branchName ?? '(detached)'}`);
-if (qaNotes.filePath) {
-  console.log(`[dev:mobile] QA notes: ${qaNotes.filePath}`);
+  console.log(`[dev:mobile] Branch: ${branchName ?? '(detached)'}`);
+  if (commitSha) {
+    console.log(`[dev:mobile] Commit: ${commitSha}`);
+  }
+  if (qaNotes.filePath) {
+    console.log(`[dev:mobile] QA notes: ${qaNotes.filePath}`);
+  }
+  console.log(`[dev:mobile] Worktree: ${worktreeLabel}`);
+  console.log(`[dev:mobile] Hostname: ${tailscale.hostname} (${tailscale.source})`);
+  if (tailscale.reason) {
+    console.log(`[dev:mobile] ${tailscale.reason}`);
+  }
+  if (tailscale.source !== 'fallback') {
+    console.log(`[dev:mobile] Metro: http://${tailscale.hostname}:${metroPort}`);
+  }
+  console.log(`[dev:mobile] Metro log: .boardsesh/mobile-metro.log`);
+
+  mkdirSync(BOARDSESH_DIR, { recursive: true });
+  const logStream = createWriteStream(METRO_LOG_PATH, { flags: 'w' });
+
+  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  if (branchName) childEnv.BOARDSESH_DEV_BRANCH_NAME = branchName;
+  if (commitSha) childEnv.BOARDSESH_DEV_COMMIT_SHA = commitSha;
+  if (qaNotes.contents) childEnv.BOARDSESH_DEV_QA_NOTES = qaNotes.contents;
+  if (qaNotes.filePath) childEnv.BOARDSESH_DEV_QA_NOTES_FILE = qaNotes.filePath;
+  childEnv.BOARDSESH_DEV_ROOT_DIR = ROOT_DIR;
+  childEnv.BOARDSESH_DEV_WORKTREE_LABEL = worktreeLabel;
+  childEnv.BOARDSESH_DEV_STARTED_AT = startedAt;
+  childEnv.BOARDSESH_METRO_PORT = String(metroPort);
+  if (tailscale.source !== 'fallback') {
+    childEnv.REACT_NATIVE_PACKAGER_HOSTNAME = tailscale.hostname;
+  }
+
+  // Bind Metro on 0.0.0.0 (Expo's --host lan) so devices on the same Tailnet can
+  // reach the bundler. Respect a user-supplied --host so manual overrides win.
+  const userPassedHost = metroPassthroughArgs.some((arg) => arg === '--host' || arg.startsWith('--host='));
+  // We ship a custom dev client (EAS preview-build flow); Metro must serve the
+  // dev-client bundle, not the Expo Go one. Opt out by passing --go.
+  const userPickedClient = passthroughArgs.some(
+    (arg) => arg === '--dev-client' || arg === '--go' || arg.startsWith('--dev-client=') || arg.startsWith('--go='),
+  );
+  const expoArgs = [
+    'expo',
+    'start',
+    ...(userPassedHost ? [] : ['--host', 'lan']),
+    ...(userPickedClient ? [] : ['--dev-client']),
+    ...metroPassthroughArgs,
+  ];
+
+  const child = spawn('bunx', expoArgs, {
+    cwd: join(ROOT_DIR, 'packages', 'mobile'),
+    env: childEnv,
+    stdio: ['inherit', 'pipe', 'pipe'],
+  });
+
+  child.stdout!.on('data', (chunk: Buffer) => {
+    process.stdout.write(chunk);
+    logStream.write(chunk);
+  });
+
+  child.stderr!.on('data', (chunk: Buffer) => {
+    process.stderr.write(chunk);
+    logStream.write(chunk);
+  });
+
+  const forwardSignal = (signal: NodeJS.Signals) => {
+    child.kill(signal);
+  };
+  process.on('SIGINT', forwardSignal);
+  process.on('SIGTERM', forwardSignal);
+
+  child.on('close', (exitCode: number | null) => {
+    logStream.end();
+    process.exit(exitCode ?? 1);
+  });
 }
-console.log(`[dev:mobile] Hostname: ${tailscale.hostname} (${tailscale.source})`);
-if (tailscale.reason) {
-  console.log(`[dev:mobile] ${tailscale.reason}`);
-}
-if (tailscale.source !== 'fallback') {
-  console.log(`[dev:mobile] Metro: http://${tailscale.hostname}:${metroPort}`);
-}
-console.log(`[dev:mobile] Metro log: .boardsesh/mobile-metro.log`);
 
-mkdirSync(BOARDSESH_DIR, { recursive: true });
-const logStream = createWriteStream(METRO_LOG_PATH, { flags: 'w' });
-
-const childEnv: NodeJS.ProcessEnv = { ...process.env };
-if (branchName) childEnv.BOARDSESH_DEV_BRANCH_NAME = branchName;
-if (qaNotes.contents) childEnv.BOARDSESH_DEV_QA_NOTES = qaNotes.contents;
-if (qaNotes.filePath) childEnv.BOARDSESH_DEV_QA_NOTES_FILE = qaNotes.filePath;
-if (tailscale.source !== 'fallback') {
-  childEnv.REACT_NATIVE_PACKAGER_HOSTNAME = tailscale.hostname;
-}
-
-// Bind Metro on 0.0.0.0 (Expo's --host lan) so devices on the same Tailnet can
-// reach the bundler. Respect a user-supplied --host so manual overrides win.
-const userPassedHost = passthroughArgs.some((arg) => arg === '--host' || arg.startsWith('--host='));
-// We ship a custom dev client (EAS preview-build flow); Metro must serve the
-// dev-client bundle, not the Expo Go one. Opt out by passing --go.
-const userPickedClient = passthroughArgs.some(
-  (arg) => arg === '--dev-client' || arg === '--go' || arg.startsWith('--dev-client=') || arg.startsWith('--go='),
-);
-const expoArgs = [
-  'expo',
-  'start',
-  ...(userPassedHost ? [] : ['--host', 'lan']),
-  ...(userPickedClient ? [] : ['--dev-client']),
-  ...passthroughArgs,
-];
-
-const child = spawn('bunx', expoArgs, {
-  cwd: join(ROOT_DIR, 'packages', 'mobile'),
-  env: childEnv,
-  stdio: ['inherit', 'pipe', 'pipe'],
-});
-
-child.stdout!.on('data', (chunk: Buffer) => {
-  process.stdout.write(chunk);
-  logStream.write(chunk);
-});
-
-child.stderr!.on('data', (chunk: Buffer) => {
-  process.stderr.write(chunk);
-  logStream.write(chunk);
-});
-
-const forwardSignal = (signal: NodeJS.Signals) => {
-  child.kill(signal);
-};
-process.on('SIGINT', forwardSignal);
-process.on('SIGTERM', forwardSignal);
-
-child.on('close', (exitCode: number | null) => {
-  logStream.end();
-  process.exit(exitCode ?? 1);
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[dev:mobile] ${message}`);
+  process.exit(1);
 });

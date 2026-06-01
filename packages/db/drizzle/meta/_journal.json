@@ -757,6 +757,13 @@
       "when": 1779580000000,
       "tag": "0107_revoked_at_index",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1779667200000,
+      "tag": "0108_fix_tick_flash_status",
+      "breakpoints": true
     }
   ]
 }

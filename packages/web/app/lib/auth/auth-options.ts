@@ -9,6 +9,7 @@ import * as schema from '@/app/lib/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { compare } from 'bcryptjs';
 import { verifyNativeOAuthTransferToken } from '@/app/lib/auth/native-oauth-transfer';
+import { isSecureCookieContext } from '@/app/lib/auth/secure-cookies';
 
 // Build providers array conditionally based on available env vars
 const providers: NextAuthOptions['providers'] = [];
@@ -139,7 +140,7 @@ providers.push(
 // Apple Sign-In posts its callback cross-origin (response_mode=form_post),
 // so verification cookies need SameSite=None (which requires Secure).
 // We override callbackUrl, state, nonce, and pkceCodeVerifier cookies for this reason.
-const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith('https://') ?? !!process.env.VERCEL_URL;
+const useSecureCookies = isSecureCookieContext();
 
 export const authOptions: NextAuthOptions = {
   adapter: DrizzleAdapter(getDb(), {

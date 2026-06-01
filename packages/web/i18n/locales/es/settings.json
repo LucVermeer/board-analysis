@@ -221,10 +221,9 @@
       "tooLarge": "El archivo es demasiado grande (máx. 200 MB). Comprueba que has elegido el archivo correcto.",
       "parseError": "No se pudo leer el archivo JSON. Comprueba el formato del archivo.",
       "readError": "No se pudo leer el archivo. Inténtalo de nuevo.",
-      "interrupted": "La importación se interrumpió. El servidor pudo agotar el tiempo de espera. Puede que tus datos se hayan importado parcialmente.",
-      "interruptedShort": "Importación interrumpida",
       "failed": "Importación fallida",
       "successCount": "{{count}} elementos importados correctamente",
+      "partialWarning": "Importación parcial — revisa los detalles",
       "dialog": {
         "previewTitle": "Importar datos de Aurora",
         "importingTitle": "Importando datos de Aurora...",
@@ -250,9 +249,15 @@
         "attemptsSummary": "{{imported}} importados, {{skipped}} omitidos (ya existían), {{failed}} sin emparejar",
         "circuits": "Circuitos",
         "circuitsSummary": "{{imported}} importados, {{skipped}} omitidos, {{failed}} fallidos",
-        "unresolvedTitle_one": "No se pudo emparejar {{count}} vía",
-        "unresolvedTitle_other": "No se pudieron emparejar {{count}} vías",
-        "unresolvedMore": "...y {{count}} más"
+        "unresolvedAscentsTitle_one": "{{count}} encadene sin vía asociada",
+        "unresolvedAscentsTitle_other": "{{count}} encadenes sin vía asociada",
+        "unresolvedAttemptsTitle_one": "{{count}} intento sin vía asociada",
+        "unresolvedAttemptsTitle_other": "{{count}} intentos sin vía asociada",
+        "unresolvedCircuitsTitle_one": "{{count}} vía del circuito no se pudo emparejar",
+        "unresolvedCircuitsTitle_other": "{{count}} vías del circuito no se pudieron emparejar",
+        "unresolvedMore": "...y {{count}} más",
+        "partialTitle": "La importación se interrumpió",
+        "partialBody": "Es posible que algunos datos no se hayan importado. Volver a importar el mismo archivo es seguro y completará lo que falte."
       }
     },
     "kilterEmail": {

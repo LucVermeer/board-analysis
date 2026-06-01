@@ -11,6 +11,7 @@ import { bleManager } from './ble-manager';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
 
 const SCAN_TIMEOUT_MS = 30_000;
+const CONNECTION_TIMEOUT_MS = 12_000;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -68,28 +69,48 @@ export class RNBleAdapter implements BluetoothAdapter {
       });
     }
 
-    bleManager.startDeviceScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID], null, (_error, scannedDevice) => {
-      if (_error || !scannedDevice) return;
-
-      const device: DiscoveredDevice = {
-        deviceId: scannedDevice.id,
-        name: scannedDevice.localName ?? scannedDevice.name ?? undefined,
-        rssi: scannedDevice.rssi ?? -100,
-      };
-
-      // Deduplicate by deviceId — react-native-ble-plx uses stable
-      // peripheral UUIDs on iOS and device addresses on Android.
-      devices.set(device.deviceId, device);
-      pushDevices();
-
-      if (autoSelectResolve && targetSerial) {
-        const serial = parseSerialNumber(device.name);
-        if (serial === targetSerial) {
-          autoSelectResolve(device.deviceId);
-          autoSelectResolve = null;
+    bleManager.startDeviceScan(
+      [AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID],
+      null,
+      (scanError, scannedDevice) => {
+        if (scanError) {
+          bleManager.stopDeviceScan();
+          const error = new Error(`BLE scan failed: ${scanError.message}`);
+          if (autoSelectReject) {
+            autoSelectReject(error);
+            autoSelectReject = null;
+          }
+          if (pickerTimeoutReject) {
+            // Surface the failure to the picker UI immediately so the user
+            // sees feedback instead of waiting out the 30s scan window.
+            pickerTimeoutReject(error);
+            pickerTimeoutReject = null;
+          }
+          return;
         }
-      }
-    });
+
+        if (!scannedDevice) return;
+
+        const device: DiscoveredDevice = {
+          deviceId: scannedDevice.id,
+          name: scannedDevice.localName ?? scannedDevice.name ?? undefined,
+          rssi: scannedDevice.rssi ?? -100,
+        };
+
+        // Deduplicate by deviceId — react-native-ble-plx uses stable
+        // peripheral UUIDs on iOS and device addresses on Android.
+        devices.set(device.deviceId, device);
+        pushDevices();
+
+        if (autoSelectResolve && targetSerial) {
+          const serial = parseSerialNumber(device.name);
+          if (serial === targetSerial) {
+            autoSelectResolve(device.deviceId);
+            autoSelectResolve = null;
+          }
+        }
+      },
+    );
 
     const scanTimeoutId = setTimeout(() => {
       bleManager.stopDeviceScan();
@@ -120,7 +141,18 @@ export class RNBleAdapter implements BluetoothAdapter {
       }
     }
 
-    const connected = await bleManager.connectToDevice(selectedDeviceId);
+    let connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    const connected = await Promise.race([
+      bleManager.connectToDevice(selectedDeviceId),
+      new Promise<never>((_resolve, reject) => {
+        connectionTimeoutId = setTimeout(() => {
+          bleManager.cancelDeviceConnection(selectedDeviceId).catch(() => {});
+          reject(new Error('Connection timed out — board may be powered off'));
+        }, CONNECTION_TIMEOUT_MS);
+      }),
+    ]).finally(() => {
+      if (connectionTimeoutId != null) clearTimeout(connectionTimeoutId);
+    });
 
     // Negotiate MTU before service discovery (Android requires this order
     // for best results; iOS handles MTU automatically but the call is safe).
@@ -189,6 +221,13 @@ export class RNBleAdapter implements BluetoothAdapter {
         throw new DOMException('Write aborted', 'AbortError');
       }
 
+      // Re-check the characteristic before each chunk — a mid-write
+      // disconnect sets it to null via the onDeviceDisconnected handler.
+      const characteristic = this.writeCharacteristic;
+      if (!characteristic) {
+        throw new Error('Device disconnected during write');
+      }
+
       if (chunkIndex > 0) {
         await delay(INTER_CHUNK_DELAY_MS);
       }
@@ -196,7 +235,7 @@ export class RNBleAdapter implements BluetoothAdapter {
       const chunk = chunks[chunkIndex];
       const base64Chunk = uint8ArrayToBase64(chunk);
 
-      await this.writeCharacteristic.writeWithoutResponse(base64Chunk);
+      await characteristic.writeWithoutResponse(base64Chunk);
     }
   }
 

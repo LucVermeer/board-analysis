@@ -1,5 +1,6 @@
 import util from 'node:util';
 import { createLogger, format, transports, type Logger, type LoggerOptions } from 'winston';
+import { SentryWinstonTransport } from './sentry-transport';
 
 // Explicit annotation prevents TS2742 from inferring a path through bun's
 // isolated `node_modules/.bun/logform@x.y/...` install layout.
@@ -15,6 +16,9 @@ export function setInstanceIdProvider(provider: InstanceIdProvider | null): void
 
 const SPLAT = Symbol.for('splat');
 const TRAILING_ERROR = Symbol('boardsesh.trailingError');
+// Global-registry symbol so SentryWinstonTransport can read the same key
+// without an import cycle between logger.ts and sentry-transport.ts.
+const ERROR_INSTANCE = Symbol.for('boardsesh.errorInstance');
 
 type LoggerInfoRecord = Record<string | symbol, unknown>;
 
@@ -52,6 +56,11 @@ export const appendSplatFormat: FormatFactory = format((info) => {
         infoRecord.error ??= errorDetails(arg);
         infoRecord.stack ??= arg.stack;
         infoRecord[TRAILING_ERROR] = true;
+        // Preserve the live Error reference for SentryWinstonTransport. The
+        // `error` field above is already flattened to a serialisable shape
+        // ({ name, message, stack }) for JSON output, which loses
+        // `instanceof Error` and any cause chain or custom subclass info.
+        infoRecord[ERROR_INSTANCE] ??= arg;
         return arg.stack ?? `${arg.name}: ${arg.message}`;
       }
       if (typeof arg === 'string') return arg;
@@ -110,7 +119,10 @@ export function createBackendLogger(options: BackendLoggerOptions = {}): Logger 
           format.json(),
         )
       : format.combine(instanceIdFormat(), appendSplatFormat(), format.colorize(), devPrintf),
-    transports: options.loggerTransports ?? [new transports.Console({ stderrLevels: ['error', 'warn'] })],
+    transports: options.loggerTransports ?? [
+      new transports.Console({ stderrLevels: ['error', 'warn'] }),
+      new SentryWinstonTransport({ nodeEnv: options.nodeEnv ?? process.env.NODE_ENV }),
+    ],
   });
 }
 

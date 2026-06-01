@@ -32,7 +32,12 @@
   "mobile": {
     "emptyTitle": "Aún no tienes boards",
     "emptySubtitle": "Busca un board para empezar",
-    "activeBoard": "Board activo"
+    "activeBoard": "Board activo",
+    "signInTitle": "Inicia sesión para ver tus boards",
+    "signInSubtitle": "Tus boards están vinculados a tu cuenta.",
+    "signInCta": "Iniciar sesión",
+    "errorTitle": "No se pudieron cargar tus boards",
+    "errorRetry": "Reintentar"
   },
   "boardEntity": {
     "notFound": "Tabla de escalada no encontrada",
@@ -80,6 +85,8 @@
       "submit": "Crear tabla de escalada",
       "authRequired": "Debes iniciar sesión para crear una tabla de escalada",
       "errorMessage": "Error al crear la tabla de escalada. Puede que ya exista para esta configuración.",
+      "duplicateNamed": "Ya tienes una tabla de escalada llamada «{{name}}» con esta configuración.",
+      "goToExisting": "Ir a tu tabla de escalada",
       "nameRequired": "Se requiere el nombre de la tabla de escalada",
       "createdNamed": "¡Tabla de escalada \"{{name}}\" creada!",
       "namePlaceholder": "p. ej., Tabla de casa, Nombre del gimnasio",

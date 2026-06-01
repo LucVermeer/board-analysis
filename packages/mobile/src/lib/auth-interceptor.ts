@@ -13,6 +13,7 @@ async function refreshTokens(): Promise<boolean> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: currentRefreshToken }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {

@@ -76,6 +76,10 @@ export type ClimbInput = {
   published_at?: string | null;
   userAscents?: number | null;
   userAttempts?: number | null;
+  // Round-trip through the queue input so peers reconstruct multi-frame climb
+  // metadata without a /climb refetch — the playback engine reads these.
+  framesCount?: number | null;
+  framesPace?: number | null;
 };
 
 /**

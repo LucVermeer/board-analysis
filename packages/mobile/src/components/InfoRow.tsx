@@ -14,16 +14,14 @@ export function InfoRow({ label, value, showSeparator = true }: InfoRowProps) {
   return (
     <View>
       <View style={styles.row}>
-        <Text variant="footnote" color={systemColors.secondaryLabel}>
+        <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.label}>
           {label}
         </Text>
-        <Text variant="footnote" color={systemColors.label} style={styles.monospace} selectable>
+        <Text variant="footnote" color={systemColors.label} style={styles.value} selectable>
           {value}
         </Text>
       </View>
-      {showSeparator && (
-        <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
-      )}
+      {showSeparator && <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />}
     </View>
   );
 }
@@ -32,10 +30,16 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 12,
     paddingVertical: 6,
   },
-  monospace: {
+  label: {
+    flexShrink: 0,
+  },
+  value: {
+    flex: 1,
+    textAlign: 'right',
     ...Platform.select({
       ios: { fontFamily: 'Menlo' },
       android: { fontFamily: 'monospace' },

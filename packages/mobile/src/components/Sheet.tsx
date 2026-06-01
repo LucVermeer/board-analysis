@@ -2,6 +2,8 @@ import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
+import { useTheme } from '../providers/theme-provider';
+import { iosSystemColors } from '../theme/ios-colors';
 
 type SheetProps = {
   children: ReactNode;
@@ -23,6 +25,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
   },
   ref,
 ) {
+  const { systemColors } = useTheme();
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
 
   const renderBackdrop = useCallback(
@@ -40,6 +43,11 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [onChange],
   );
 
+  const backgroundStyle = {
+    ...styles.background,
+    backgroundColor: systemColors.secondaryBackground,
+  };
+
   return (
     <BottomSheet
       ref={ref}
@@ -51,7 +59,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       onChange={handleChange}
       onClose={onClose}
       handleIndicatorStyle={styles.indicator}
-      backgroundStyle={styles.background}
+      backgroundStyle={backgroundStyle}
       style={styles.sheet}
     >
       <BottomSheetView style={styles.content}>{children}</BottomSheetView>
@@ -78,7 +86,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
   },
   indicator: {
-    backgroundColor: 'rgba(60, 60, 67, 0.3)',
+    backgroundColor: iosSystemColors.separator,
     width: 36,
     height: 5,
     borderRadius: 3,

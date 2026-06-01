@@ -12,8 +12,17 @@ import type { BoardHold, HoldPlacement } from './types';
  *
  * This hook resolves each hold ID to its (cx, cy, r) position from `holdsData`,
  * and maps the state code to a display color via HOLD_STATE_MAP.
+ *
+ * When `mirrored` is true, each hold with a `mirroredHoldId` is rendered at the
+ * mirrored hold's (cx, cy) position instead — matching the web renderer's approach
+ * of swapping individual hold positions rather than flipping the entire image.
  */
-export function useParseFrames(frames: string, boardName: BoardName, holdsData: HoldPlacement[]): BoardHold[] {
+export function useParseFrames(
+  frames: string,
+  boardName: BoardName,
+  holdsData: HoldPlacement[],
+  mirrored: boolean = false,
+): BoardHold[] {
   return useMemo(() => {
     if (!frames) return [];
 
@@ -47,13 +56,28 @@ export function useParseFrames(frames: string, boardName: BoardName, holdsData: 
         const placement = holdLookup.get(holdId);
         if (!placement) continue;
 
+        // When mirrored, use the mirrored hold's position coordinates
+        // instead of flipping the entire image (which would render text/logos backwards).
+        let renderCx = placement.cx;
+        let renderCy = placement.cy;
+        let renderRadius = placement.r;
+
+        if (mirrored && placement.mirroredHoldId) {
+          const mirroredPlacement = holdLookup.get(placement.mirroredHoldId);
+          if (mirroredPlacement) {
+            renderCx = mirroredPlacement.cx;
+            renderCy = mirroredPlacement.cy;
+            renderRadius = mirroredPlacement.r;
+          }
+        }
+
         const renderStyle = renderStyleByName.get(holdInfo.state) ?? 'circle';
 
         result.push({
           id: holdId,
-          cx: placement.cx,
-          cy: placement.cy,
-          radius: placement.r,
+          cx: renderCx,
+          cy: renderCy,
+          radius: renderRadius,
           color: holdInfo.displayColor,
           role: holdInfo.state,
           renderStyle,
@@ -62,5 +86,5 @@ export function useParseFrames(frames: string, boardName: BoardName, holdsData: 
     }
 
     return result;
-  }, [frames, boardName, holdsData]);
+  }, [frames, boardName, holdsData, mirrored]);
 }

@@ -221,10 +221,9 @@
       "tooLarge": "Fichier trop volumineux (max 200 Mo). Vérifiez que vous avez choisi le bon fichier.",
       "parseError": "Lecture du JSON impossible. Vérifiez le format du fichier.",
       "readError": "Lecture du fichier impossible. Réessayez.",
-      "interrupted": "Importation interrompue. Le serveur a peut-être expiré. Une partie de vos données a peut-être été importée.",
-      "interruptedShort": "Importation interrompue",
       "failed": "Échec de l'importation",
       "successCount": "{{count}} éléments importés",
+      "partialWarning": "Importation partielle — voir les détails",
       "dialog": {
         "previewTitle": "Importer les données Aurora",
         "importingTitle": "Importation des données Aurora...",
@@ -250,9 +249,15 @@
         "attemptsSummary": "{{imported}} importés, {{skipped}} ignorés (déjà existants), {{failed}} non associés",
         "circuits": "Circuits",
         "circuitsSummary": "{{imported}} importés, {{skipped}} ignorés, {{failed}} échoués",
-        "unresolvedTitle_one": "{{count}} bloc n'a pas pu être associé",
-        "unresolvedTitle_other": "{{count}} blocs n'ont pas pu être associés",
-        "unresolvedMore": "...et {{count}} de plus"
+        "unresolvedAscentsTitle_one": "{{count}} enchaînement sans bloc associé",
+        "unresolvedAscentsTitle_other": "{{count}} enchaînements sans bloc associé",
+        "unresolvedAttemptsTitle_one": "{{count}} essai sans bloc associé",
+        "unresolvedAttemptsTitle_other": "{{count}} essais sans bloc associé",
+        "unresolvedCircuitsTitle_one": "{{count}} bloc du circuit n'a pas pu être associé",
+        "unresolvedCircuitsTitle_other": "{{count}} blocs du circuit n'ont pas pu être associés",
+        "unresolvedMore": "...et {{count}} de plus",
+        "partialTitle": "Importation interrompue",
+        "partialBody": "Certaines données n'ont peut-être pas été importées. Réimporter le même fichier est sûr et complétera ce qui manque."
       }
     },
     "kilterEmail": {

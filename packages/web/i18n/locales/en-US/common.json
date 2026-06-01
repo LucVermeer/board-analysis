@@ -2,9 +2,15 @@
   "languageSwitcher": {
     "ariaLabelWithCurrent": "Language: {{language}}"
   },
+  "auth": {
+    "mustBeSignedIn": "You must be signed in"
+  },
   "mobile": {
     "more": {
-      "title": "More"
+      "title": "More",
+      "development": "Development",
+      "metroServersTitle": "Metro servers",
+      "metroServersSubtitle": "Switch between Tailnet bundlers"
     },
     "nav": {
       "boards": "Boards",
