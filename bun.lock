@@ -162,9 +162,9 @@
         "@boardsesh/climb-filters": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
+        "@boardsesh/key-value-storage": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
-        "@boardsesh/preferences": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/queue-react": "*",
         "@boardsesh/queue-runtime": "*",
@@ -338,6 +338,13 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/key-value-storage": {
+      "name": "@boardsesh/key-value-storage",
+      "version": "1.0.0",
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared/party-profile": {
       "name": "@boardsesh/party-profile",
       "version": "1.0.0",
@@ -355,13 +362,6 @@
       },
       "devDependencies": {
         "typescript": "~6.0.3",
-      },
-    },
-    "packages/shared/preferences": {
-      "name": "@boardsesh/preferences",
-      "version": "1.0.0",
-      "devDependencies": {
-        "typescript": "^5.9.3",
       },
     },
     "packages/shared/queue": {
@@ -830,6 +830,8 @@
 
     "@boardsesh/graphql-client": ["@boardsesh/graphql-client@workspace:packages/shared/graphql-client"],
 
+    "@boardsesh/key-value-storage": ["@boardsesh/key-value-storage@workspace:packages/shared/key-value-storage"],
+
     "@boardsesh/mobile": ["@boardsesh/mobile@workspace:packages/mobile"],
 
     "@boardsesh/moonboard-ocr": ["@boardsesh/moonboard-ocr@workspace:packages/moonboard-ocr"],
@@ -837,8 +839,6 @@
     "@boardsesh/party-profile": ["@boardsesh/party-profile@workspace:packages/shared/party-profile"],
 
     "@boardsesh/play-view": ["@boardsesh/play-view@workspace:packages/shared/play-view"],
-
-    "@boardsesh/preferences": ["@boardsesh/preferences@workspace:packages/shared/preferences"],
 
     "@boardsesh/queue": ["@boardsesh/queue@workspace:packages/shared/queue"],
 

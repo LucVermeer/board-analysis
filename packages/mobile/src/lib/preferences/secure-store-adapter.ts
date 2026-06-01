@@ -5,7 +5,7 @@
 // some across AsyncStorage.
 
 import * as SecureStore from 'expo-secure-store';
-import type { KeyValueStorage } from '@boardsesh/preferences';
+import type { KeyValueStorage } from '@boardsesh/key-value-storage';
 
 export const secureStorePreferences: KeyValueStorage = {
   async get<T>(key: string): Promise<T | null> {

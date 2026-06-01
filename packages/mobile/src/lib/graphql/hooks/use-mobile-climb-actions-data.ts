@@ -2,20 +2,25 @@
 // web's `useClimbActionsData`. Returns provider-shaped props the layout passes
 // straight in.
 //
-// Scope: mutations are bound to the user's *default* board (boardType + angle
-// + layoutId). Mobile mounts these providers above QueueProvider, so there's
-// no per-climb board context available here; the default board is the only
-// stable signal we have at this point in the tree. If/when mobile gains a
-// "use a different board for a session" flow, this hook should accept a board
-// override or move below the queue provider.
+// Playlist mutations are board-scoped: `addToPlaylist` / `createPlaylist` are
+// bound to the user's *default* board (boardType + layoutId), because mobile
+// mounts these providers above QueueProvider and the default board is the
+// only stable signal here. That's fine for playlists — playlists genuinely
+// belong to a board + layout. The instant mobile gains multi-board UX, the
+// hook should accept the active board as an arg.
 //
-// Favorites Set is left empty for now: there's no single GraphQL query that
-// returns just the favorited UUIDs for a board, and paginating
-// `GET_USER_FAVORITE_CLIMBS` solely to populate a Set is wasteful when no
-// mobile screen currently consumes it. When a screen needs per-climb
-// favorited state, call `GET_FAVORITES` for the visible UUIDs and feed the
-// result into `favoritesStore` directly. The `toggleFavorite` mutation is
-// fully wired today.
+// `toggleFavorite` deliberately ignores the active board context: even though
+// the current GraphQL schema requires `boardName` + `angle` on the input
+// (tracked in #2449 as a backend cleanup — favorites should be keyed by
+// climb UUID alone), we still send the default board because that's the
+// only signal we have. Once #2449 lands, drop those args from the mutation.
+//
+// Favorites Set is left empty: the current `GET_FAVORITES` query takes a
+// `climbUuids` list (web batches it as the user scrolls a climb list), and
+// mobile has no equivalent batched fetcher today. When a mobile screen needs
+// per-climb favorited state, fetch with `GET_FAVORITES` for the visible
+// UUIDs and write the result into `favoritesStore` directly so subscribers
+// re-render — the toggle path here doesn't touch that store.
 
 import { useCallback, useMemo, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,7 +37,7 @@ import {
 } from '@boardsesh/graphql/operations/playlists';
 import { getHttpClient } from '../client';
 import { useAuth } from '../../../providers/auth-provider';
-import { useDefaultBoard } from '../hooks';
+import { useDefaultBoard } from '.';
 
 const EMPTY_FAVORITES: ReadonlySet<string> = new Set();
 const EMPTY_PLAYLISTS: ReadonlyArray<Playlist> = [];

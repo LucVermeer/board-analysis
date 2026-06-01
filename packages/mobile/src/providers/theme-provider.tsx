@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, useColorScheme, type ColorValue } from 'react-native';
-import { THEME_OVERRIDE_KEY, isThemeOverride, type ThemeOverride } from '@boardsesh/preferences';
+import { THEME_OVERRIDE_KEY, isThemeOverride, type ThemeOverride } from '@boardsesh/key-value-storage';
 import { iosSystemColors, brandColors, androidFallbackColors } from '../theme/colors';
 import { textStyles, type TextVariant } from '../theme/typography';
 import { spacing, borderRadius, shadows, opacity } from '../theme/tokens';
@@ -84,13 +84,17 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   // resolved scheme switches to the saved override (if any) without a visible
   // flash when the OS already matches the override.
   const [themeOverride, setThemeOverrideState] = useState<ThemeOverride>('system');
+  // Guards the hydration effect against stomping a user choice that lands
+  // before the SecureStore read resolves (a tap on a settings toggle can
+  // beat the keychain read on a cold launch).
+  const hasUserChosenRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     secureStorePreferences
       .get<ThemeOverride>(THEME_OVERRIDE_KEY)
       .then((value) => {
-        if (cancelled) return;
+        if (cancelled || hasUserChosenRef.current) return;
         if (isThemeOverride(value)) setThemeOverrideState(value);
       })
       .catch(() => {
@@ -110,13 +114,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [themeOverride, deviceColorScheme]);
 
   const setThemeOverride = useCallback(async (next: ThemeOverride) => {
+    hasUserChosenRef.current = true;
     setThemeOverrideState(next);
-    // Fire-and-forget the persistence call after the optimistic state update
-    // so the UI reflects the choice immediately; if the write fails we log
-    // and revert nothing — the user's pick stays in-memory for the session.
     try {
       await secureStorePreferences.set(THEME_OVERRIDE_KEY, next);
     } catch (error) {
+      // Storage write failed (rare); leave the in-memory state on the user's
+      // pick so the session reflects it, and log so we notice if this happens
+      // consistently. Reverting on write failure would be worse — the toggle
+      // would visibly snap back, which the user reads as a broken UI.
       // eslint-disable-next-line no-console
       console.warn('[theme-provider] Failed to persist theme override', error);
     }

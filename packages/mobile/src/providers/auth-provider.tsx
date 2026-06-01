@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { useSegments, Redirect } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
   startSignIn,
@@ -40,6 +41,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
+  const queryClient = useQueryClient();
 
   const checkAuth = useCallback(async () => {
     const token = await getAuthToken();
@@ -92,8 +94,14 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     await Promise.all([clearStoredSessionId(), clearStoredBoardConfig()]);
     resetHttpClient();
     disposeWsClient();
+    // Drop every cached query so the next signed-in user doesn't inherit the
+    // previous user's data. Query keys don't currently include a user/token
+    // dimension, and individual keys' staleTime (e.g. userPlaylists' 5 min)
+    // would otherwise paper over the cross-user leak. Doing this at the auth
+    // boundary keeps the rest of the hooks simple.
+    queryClient.clear();
     setIsAuthenticated(false);
-  }, []);
+  }, [queryClient]);
 
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;

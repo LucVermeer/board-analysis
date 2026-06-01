@@ -12,7 +12,7 @@ import type {
   UserProfile,
   SessionSummary,
 } from '@boardsesh/shared-schema';
-import { getHttpClient } from './client';
+import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
   GET_MY_BOARDS,
@@ -48,7 +48,7 @@ import {
   type EndSessionMutationResponse,
   type ToggleFavoriteMutationVariables,
   type ToggleFavoriteMutationResponse,
-} from './operations';
+} from '../operations';
 
 // ============================================
 // User Profile
@@ -232,7 +232,7 @@ import {
   type AttachBetaLinkMutationResponse,
 } from '@boardsesh/graphql/operations/beta-links';
 import { dedupeBetaLinks } from '@boardsesh/shared-schema';
-import { mapBetaLinks } from '../beta-video-url';
+import { mapBetaLinks } from '../../beta-video-url';
 
 export function useBetaLinks(boardType: string, climbUuid: string, enabled = true) {
   return useQuery({
@@ -261,3 +261,7 @@ export function useAttachBetaLink() {
     },
   });
 }
+
+// Re-export feature-specific hooks that live alongside this barrel so the
+// import surface from this directory stays a single path.
+export { useMobileClimbActionsData } from './use-mobile-climb-actions-data';

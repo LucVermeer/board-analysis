@@ -1,0 +1,10 @@
+// Pure-TS storage contract shared across web and mobile. Each app injects its
+// own adapter (web: IndexedDB; mobile: SecureStore / AsyncStorage). The package
+// also holds the key constants + type guards for any preference whose schema is
+// the same shape on both platforms (today: theme override). New preference
+// schemas can land here as additional modules, kept lean — if any one schema
+// grows past a couple files it can graduate to its own `@boardsesh/<name>`
+// package.
+
+export type { KeyValueStorage } from './storage';
+export { THEME_OVERRIDE_KEY, isThemeOverride, type ThemeOverride } from './theme';
