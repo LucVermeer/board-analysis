@@ -10,6 +10,12 @@
 // stored (not a remapped subset) so every reader that previously consumed
 // `useDefaultBoard()` keeps the exact same shape after switching to
 // `useActiveBoard()`.
+//
+// Schema migration note: `getPreference` silently returns null when JSON.parse
+// fails, but a stale value whose shape no longer matches `UserBoard` will parse
+// successfully and be cast to the wrong type. If `UserBoard` gains required
+// fields in a future migration, bump `ACTIVE_BOARD_KEY` so stale values are
+// ignored rather than misread.
 
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { getPreference, setPreference, removePreference } from './preference-store';
