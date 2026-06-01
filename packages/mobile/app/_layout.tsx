@@ -22,6 +22,7 @@ import { BoardProvider } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
 import { useDefaultBoard } from '../src/lib/graphql/hooks';
+import { useMobileClimbActionsData } from '../src/lib/graphql/hooks/use-mobile-climb-actions-data';
 import { LiveActivityBridge } from '../src/lib/live-activity/live-activity-bridge';
 import { Text } from '../src/components/Text';
 import { Button } from '../src/components/Button';
@@ -104,6 +105,18 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   );
 }
 
+// Wires real React Query data into FavoritesProvider and PlaylistsProvider.
+// Has to live below AuthProvider (uses auth state) and QueryProvider (uses
+// useQuery), and above the two providers it feeds.
+function ClimbActionsDataWrapper({ children }: { children: ReactNode }) {
+  const { favoritesProviderProps, playlistsProviderProps } = useMobileClimbActionsData();
+  return (
+    <FavoritesProvider {...favoritesProviderProps}>
+      <PlaylistsProvider {...playlistsProviderProps}>{children}</PlaylistsProvider>
+    </FavoritesProvider>
+  );
+}
+
 function BluetoothProviderWrapper({ children }: { children: ReactNode }) {
   const { data: defaultBoard } = useDefaultBoard();
 
@@ -150,28 +163,26 @@ function RootLayout() {
                   <ConnectionSettingsProvider>
                     <ToastProvider>
                       <BottomSheetModalProvider>
-                        <FavoritesProvider>
-                          <PlaylistsProvider>
-                            <QueueProvider>
-                              <BoardAdapterWrapper>
-                                <BoardProviderWrapper>
-                                  <BluetoothProviderWrapper>
-                                    <DrawerHostProvider>
-                                      <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                        <Stack.Screen name="(tabs)" />
-                                        <Stack.Screen
-                                          name="auth"
-                                          options={{ headerShown: false, gestureEnabled: false }}
-                                        />
-                                      </Stack>
-                                      <PersistentQueueBar />
-                                    </DrawerHostProvider>
-                                  </BluetoothProviderWrapper>
-                                </BoardProviderWrapper>
-                              </BoardAdapterWrapper>
-                            </QueueProvider>
-                          </PlaylistsProvider>
-                        </FavoritesProvider>
+                        <ClimbActionsDataWrapper>
+                          <QueueProvider>
+                            <BoardAdapterWrapper>
+                              <BoardProviderWrapper>
+                                <BluetoothProviderWrapper>
+                                  <DrawerHostProvider>
+                                    <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                      <Stack.Screen name="(tabs)" />
+                                      <Stack.Screen
+                                        name="auth"
+                                        options={{ headerShown: false, gestureEnabled: false }}
+                                      />
+                                    </Stack>
+                                    <PersistentQueueBar />
+                                  </DrawerHostProvider>
+                                </BluetoothProviderWrapper>
+                              </BoardProviderWrapper>
+                            </BoardAdapterWrapper>
+                          </QueueProvider>
+                        </ClimbActionsDataWrapper>
                       </BottomSheetModalProvider>
                     </ToastProvider>
                   </ConnectionSettingsProvider>

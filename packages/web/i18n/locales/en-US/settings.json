@@ -300,10 +300,6 @@
     "errorToast": "Couldn't send — we'll keep your rating.",
     "dismissAria": "Dismiss"
   },
-  "shakeToReport": {
-    "disabledToast": "Shake to report off. Tap your avatar up top to send feedback.",
-    "dontShowAgain": "Don't show this again"
-  },
   "storeReview": {
     "title": "Help others find Boardsesh",
     "body": "Thanks for the rating. Would you also leave a quick review on your app store? It's the single best thing you can do to help other climbers find us.",

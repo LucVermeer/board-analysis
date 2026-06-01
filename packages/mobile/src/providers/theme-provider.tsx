@@ -1,9 +1,11 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform, useColorScheme, type ColorValue } from 'react-native';
+import { THEME_OVERRIDE_KEY, isThemeOverride, type ThemeOverride } from '@boardsesh/preferences';
 import { iosSystemColors, brandColors, androidFallbackColors } from '../theme/colors';
 import { textStyles, type TextVariant } from '../theme/typography';
 import { spacing, borderRadius, shadows, opacity } from '../theme/tokens';
 import { springs, timing } from '../theme/animations';
+import { secureStorePreferences } from '../lib/preferences/secure-store-adapter';
 
 type ColorScheme = 'light' | 'dark';
 
@@ -34,6 +36,8 @@ type Theme = {
   opacity: typeof opacity;
   springs: typeof springs;
   timing: typeof timing;
+  themeOverride: ThemeOverride;
+  setThemeOverride: (next: ThemeOverride) => Promise<void>;
 };
 
 const ThemeContext = createContext<Theme | null>(null);
@@ -75,7 +79,48 @@ type ThemeProviderProps = {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const deviceColorScheme = useColorScheme();
-  const colorScheme: ColorScheme = deviceColorScheme === 'dark' ? 'dark' : 'light';
+  // `'system'` until SecureStore hydrates — same value as a brand-new user, so
+  // the first paint matches the OS preference. Once hydration completes the
+  // resolved scheme switches to the saved override (if any) without a visible
+  // flash when the OS already matches the override.
+  const [themeOverride, setThemeOverrideState] = useState<ThemeOverride>('system');
+
+  useEffect(() => {
+    let cancelled = false;
+    secureStorePreferences
+      .get<ThemeOverride>(THEME_OVERRIDE_KEY)
+      .then((value) => {
+        if (cancelled) return;
+        if (isThemeOverride(value)) setThemeOverrideState(value);
+      })
+      .catch(() => {
+        // Storage read can fail if SecureStore is unavailable (rare). Stay on
+        // the 'system' default rather than crashing — the user's override is
+        // lost for this session but the app remains usable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const colorScheme: ColorScheme = useMemo(() => {
+    if (themeOverride === 'light') return 'light';
+    if (themeOverride === 'dark') return 'dark';
+    return deviceColorScheme === 'dark' ? 'dark' : 'light';
+  }, [themeOverride, deviceColorScheme]);
+
+  const setThemeOverride = useCallback(async (next: ThemeOverride) => {
+    setThemeOverrideState(next);
+    // Fire-and-forget the persistence call after the optimistic state update
+    // so the UI reflects the choice immediately; if the write fails we log
+    // and revert nothing — the user's pick stays in-memory for the session.
+    try {
+      await secureStorePreferences.set(THEME_OVERRIDE_KEY, next);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[theme-provider] Failed to persist theme override', error);
+    }
+  }, []);
 
   const theme = useMemo<Theme>(() => {
     const resolvedSystemColors = resolveSystemColors(colorScheme);
@@ -91,8 +136,10 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       opacity,
       springs,
       timing,
+      themeOverride,
+      setThemeOverride,
     };
-  }, [colorScheme]);
+  }, [colorScheme, themeOverride, setThemeOverride]);
 
   // React 19 context provider syntax (Expo SDK 53+ / React 19)
   return <ThemeContext value={theme}>{children}</ThemeContext>;

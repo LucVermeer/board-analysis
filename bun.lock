@@ -164,6 +164,7 @@
         "@boardsesh/graphql-client": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
+        "@boardsesh/preferences": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/queue-react": "*",
         "@boardsesh/queue-runtime": "*",
@@ -354,6 +355,13 @@
       },
       "devDependencies": {
         "typescript": "~6.0.3",
+      },
+    },
+    "packages/shared/preferences": {
+      "name": "@boardsesh/preferences",
+      "version": "1.0.0",
+      "devDependencies": {
+        "typescript": "^5.9.3",
       },
     },
     "packages/shared/queue": {
@@ -829,6 +837,8 @@
     "@boardsesh/party-profile": ["@boardsesh/party-profile@workspace:packages/shared/party-profile"],
 
     "@boardsesh/play-view": ["@boardsesh/play-view@workspace:packages/shared/play-view"],
+
+    "@boardsesh/preferences": ["@boardsesh/preferences@workspace:packages/shared/preferences"],
 
     "@boardsesh/queue": ["@boardsesh/queue@workspace:packages/shared/queue"],
 

@@ -300,10 +300,6 @@
     "errorToast": "Envoi impossible. On garde votre note.",
     "dismissAria": "Ignorer"
   },
-  "shakeToReport": {
-    "disabledToast": "Secouer pour signaler : désactivé. Touchez votre avatar en haut pour envoyer un retour.",
-    "dontShowAgain": "Ne plus afficher"
-  },
   "storeReview": {
     "title": "Aidez les autres à trouver Boardsesh",
     "body": "Merci pour la note. Vous laisseriez aussi un petit avis sur votre app store ? C'est la meilleure façon d'aider d'autres grimpeurs à nous trouver.",
