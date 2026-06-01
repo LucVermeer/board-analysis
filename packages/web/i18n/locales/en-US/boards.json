@@ -45,6 +45,7 @@
       "custom": "Custom",
       "locationDenied": "Allow location",
       "nearbyTitle": "Near you",
+      "nearbyShowing": "Showing nearby",
       "yourBoardsTitle": "Your boards",
       "popularTitle": "Popular setups"
     },

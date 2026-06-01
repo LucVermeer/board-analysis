@@ -10,7 +10,7 @@ import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import type { IconName } from '../icon-map';
 
-export type ModeCardState = 'idle' | 'loading' | 'denied' | 'unavailable';
+export type ModeCardState = 'idle' | 'loading' | 'done' | 'denied' | 'unavailable';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -33,35 +33,43 @@ export function BoardModeCard({ icon, label, sublabel, state = 'idle', onPress }
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  const disabled = state === 'denied' || state === 'unavailable' || state === 'loading';
-  const tint = state === 'denied' || state === 'unavailable' ? systemColors.tertiaryLabel : brandColors.primary;
+  // 'done' is non-interactive (its results are already shown below) but, unlike
+  // denied/unavailable, it's a success state — not dimmed.
+  const nonInteractive = state === 'denied' || state === 'unavailable' || state === 'loading' || state === 'done';
+  const dimmed = state === 'denied' || state === 'unavailable';
+  const tint =
+    state === 'denied' || state === 'unavailable'
+      ? systemColors.tertiaryLabel
+      : state === 'done'
+        ? brandColors.success
+        : brandColors.primary;
 
   return (
     <AnimatedPressable
       onPress={() => {
-        if (disabled) return;
+        if (nonInteractive) return;
         hapticLight();
         onPress();
       }}
       onPressIn={() => {
-        if (!disabled) scale.value = withSpring(0.97, springs.snappy);
+        if (!nonInteractive) scale.value = withSpring(0.97, springs.snappy);
       }}
       onPressOut={() => {
-        if (!disabled) scale.value = withSpring(1, springs.snappy);
+        if (!nonInteractive) scale.value = withSpring(1, springs.snappy);
       }}
       accessibilityRole="button"
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled: nonInteractive }}
       style={[
         animatedStyle,
         styles.card,
         { backgroundColor: systemColors.secondaryBackground, borderColor: systemColors.separator },
-        disabled ? styles.dimmed : null,
+        dimmed ? styles.dimmed : null,
       ]}
     >
       {state === 'loading' ? (
         <ActivityIndicator size="small" />
       ) : (
-        <Icon name={icon} size={28} color={tint} />
+        <Icon name={state === 'done' ? 'tick' : icon} size={28} color={tint} />
       )}
       <Text variant="footnote" numberOfLines={1} style={styles.label}>
         {label}
@@ -77,8 +85,12 @@ export function BoardModeCard({ icon, label, sublabel, state = 'idle', onPress }
 
 const styles = StyleSheet.create({
   card: {
-    width: 120,
-    height: 120,
+    // flex: 1 so the three mode cards split the row evenly instead of a fixed
+    // 120pt each — three fixed cards + gaps + padding overflowed every iPhone
+    // narrower than ~416pt (i.e. all of them). aspectRatio keeps them square as
+    // they shrink.
+    flex: 1,
+    aspectRatio: 1,
     borderRadius: borderRadius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing[2],

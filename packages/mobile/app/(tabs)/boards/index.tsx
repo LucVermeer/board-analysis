@@ -144,17 +144,20 @@ export default function BoardSelection() {
     customSheetRef.current?.expand();
   }, []);
 
-  // 'granted' means the fix is in and the nearby query is running — keep the
-  // card in its loading state until results arrive so it doesn't look like it's
-  // waiting on another tap.
+  // Drive the Find Nearby card off both the location permission and the nearby
+  // query: loading while resolving the fix or fetching, 'done' once results are
+  // in (re-tapping would no-op, so show it as complete rather than tappable),
+  // denied/unavailable on failure.
   const nearbyState: ModeCardState =
     location.status === 'loading' || (location.status === 'granted' && isNearbyLoading)
       ? 'loading'
-      : location.status === 'denied'
-        ? 'denied'
-        : location.status === 'unavailable'
-          ? 'unavailable'
-          : 'idle';
+      : location.status === 'granted'
+        ? 'done'
+        : location.status === 'denied'
+          ? 'denied'
+          : location.status === 'unavailable'
+            ? 'unavailable'
+            : 'idle';
 
   if (isMyBoardsLoading) {
     return (
@@ -210,7 +213,13 @@ export default function BoardSelection() {
           <BoardModeCard
             icon="location"
             label={t('mobile.discovery.findNearby')}
-            sublabel={nearbyState === 'denied' ? t('mobile.discovery.locationDenied') : undefined}
+            sublabel={
+              nearbyState === 'denied'
+                ? t('mobile.discovery.locationDenied')
+                : nearbyState === 'done'
+                  ? t('mobile.discovery.nearbyShowing')
+                  : undefined
+            }
             state={nearbyState}
             onPress={onModeFindNearby}
           />

@@ -214,7 +214,7 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
 
         <Button
           title={t('mobile.custom.start')}
-          onPress={handleCreate}
+          onPress={() => void handleCreate()}
           variant="filled"
           size="large"
           disabled={!canCreate}
