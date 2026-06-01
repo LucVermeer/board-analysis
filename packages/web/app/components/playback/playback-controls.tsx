@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Box, IconButton, Popover, Slider, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ReplayIcon from '@mui/icons-material/Replay';
 import SkipPreviousIcon from '@mui/icons-material/SkipPrevious';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
@@ -56,6 +57,9 @@ export function PlaybackControls({
   const [draftSpeed, setDraftSpeed] = useState<number>(2);
 
   const isCustomSpeed = !PRESET_SPEEDS.includes(speed);
+  // Stopped on the final frame: the primary button becomes a replay control
+  // that restarts from frame 0 (the engine's play() handles the reset).
+  const isAtEnd = !isPlaying && frameIndex >= frameCount - 1;
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -108,10 +112,10 @@ export function PlaybackControls({
     >
       <IconButton
         onClick={isPlaying ? onPause : onPlay}
-        aria-label={isPlaying ? t('playback.pause') : t('playback.play')}
+        aria-label={isPlaying ? t('playback.pause') : isAtEnd ? t('playback.replay') : t('playback.play')}
         size="small"
       >
-        {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+        {isPlaying ? <PauseIcon /> : isAtEnd ? <ReplayIcon /> : <PlayArrowIcon />}
       </IconButton>
       <Stack direction="row" alignItems="center" spacing={1}>
         <IconButton
@@ -168,17 +172,14 @@ export function PlaybackControls({
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Box sx={{ px: 3, py: 2, width: 220 }}>
-          <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-            {t('playback.speedCustom', { value: formatSpeed(draftSpeed) })}
-          </Typography>
+        <Box sx={{ px: 3, pt: 4, pb: 2, width: 220 }}>
           <Slider
             value={draftSpeed}
             min={MIN_CUSTOM_SPEED}
             max={MAX_CUSTOM_SPEED}
             step={0.1}
             aria-label={t('playback.speed')}
-            valueLabelDisplay="auto"
+            valueLabelDisplay="on"
             valueLabelFormat={(value) => formatSpeed(value)}
             onChange={(_, value) => {
               if (typeof value === 'number') setDraftSpeed(value);

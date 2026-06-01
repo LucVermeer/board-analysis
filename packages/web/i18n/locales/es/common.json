@@ -271,6 +271,7 @@
   "playback": {
     "play": "Reproducir",
     "pause": "Pausar",
+    "replay": "Repetir",
     "controls": "Controles de reproducción",
     "speed": "Velocidad",
     "frameOfTotal": "Cuadro {{index}} de {{total}}",

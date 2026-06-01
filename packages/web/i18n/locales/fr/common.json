@@ -271,6 +271,7 @@
   "playback": {
     "play": "Lire",
     "pause": "Pause",
+    "replay": "Rejouer",
     "controls": "Commandes de lecture",
     "speed": "Vitesse",
     "frameOfTotal": "Image {{index}} sur {{total}}",
