@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { useSegments, Redirect } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
 import {
   startSignIn,
@@ -13,6 +14,7 @@ import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
 import { clearStoredActiveBoard } from '../lib/active-board-store';
+import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 
 type AuthState = {
   isAuthenticated: boolean;
@@ -40,6 +42,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
+  const queryClient = useQueryClient();
 
   const checkAuth = useCallback(async () => {
     const token = await getAuthToken();
@@ -90,10 +93,14 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const signOut = useCallback(async () => {
     await authSignOut();
     await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
+    // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
+    // without this the next user to sign in on a shared device would inherit the
+    // previous user's board until a manual switch.
+    queryClient.removeQueries({ queryKey: ACTIVE_BOARD_QUERY_KEY });
     resetHttpClient();
     disposeWsClient();
     setIsAuthenticated(false);
-  }, []);
+  }, [queryClient]);
 
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;

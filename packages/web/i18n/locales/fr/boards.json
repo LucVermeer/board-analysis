@@ -37,7 +37,8 @@
     "signInSubtitle": "Tes boards sont liés à ton compte.",
     "signInCta": "Se connecter",
     "errorTitle": "Impossible de charger tes boards",
-    "errorRetry": "Réessayer"
+    "errorRetry": "Réessayer",
+    "boardSwitchError": "Impossible d'enregistrer ce board. Réessaie."
   },
   "boardEntity": {
     "notFound": "Board introuvable",

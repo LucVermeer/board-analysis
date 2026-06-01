@@ -106,4 +106,26 @@ describe('useActiveBoard', () => {
     await waitFor(() => expect(read.result.current.data).toEqual(storedBoard));
     await expect(getStoredActiveBoard()).resolves.toEqual(storedBoard);
   });
+
+  // Mirrors what AuthProvider.signOut does: removeQueries on the active-board
+  // key must evict the staleTime: Infinity entry so the next signed-in user
+  // doesn't inherit the previous user's board from the in-memory cache.
+  it('removeQueries(ACTIVE_BOARD_QUERY_KEY) evicts the cached board', async () => {
+    requestMock.mockResolvedValue({ defaultBoard: serverBoard });
+
+    const { useActiveBoard, ACTIVE_BOARD_QUERY_KEY } = await import('../use-active-board');
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const sharedWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useActiveBoard(), { wrapper: sharedWrapper });
+    await waitFor(() => expect(result.current.data).toEqual(serverBoard));
+
+    act(() => {
+      queryClient.removeQueries({ queryKey: ACTIVE_BOARD_QUERY_KEY });
+    });
+
+    expect(queryClient.getQueryData(ACTIVE_BOARD_QUERY_KEY)).toBeUndefined();
+  });
 });
