@@ -1,0 +1,105 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
+
+const expoLocation = vi.hoisted(() => ({
+  requestForegroundPermissionsAsync: vi.fn(),
+  getCurrentPositionAsync: vi.fn(),
+  Accuracy: { Balanced: 3 },
+}));
+
+vi.mock('expo-location', () => expoLocation);
+
+import { useDeviceLocation } from '../use-device-location';
+
+describe('useDeviceLocation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    expoLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    expoLocation.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 1, longitude: 2 } });
+  });
+
+  it('resolves coords and status=granted when permission is granted', async () => {
+    const { result } = renderHook(() => useDeviceLocation());
+    expect(result.current.status).toBe('idle');
+
+    await act(async () => {
+      await result.current.request();
+    });
+
+    expect(result.current.status).toBe('granted');
+    expect(result.current.coords).toEqual({ latitude: 1, longitude: 2 });
+  });
+
+  it('reports denied when permission is refused, without fetching position', async () => {
+    expoLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    const { result } = renderHook(() => useDeviceLocation());
+
+    await act(async () => {
+      await result.current.request();
+    });
+
+    expect(result.current.status).toBe('denied');
+    expect(result.current.coords).toBeNull();
+    expect(expoLocation.getCurrentPositionAsync).not.toHaveBeenCalled();
+  });
+
+  it('does not re-call the native permission API after a denial (sticky)', async () => {
+    expoLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    const { result } = renderHook(() => useDeviceLocation());
+
+    await act(async () => {
+      await result.current.request();
+    });
+    await act(async () => {
+      await result.current.request();
+    });
+
+    expect(expoLocation.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports unavailable when getting the position throws, and allows retry', async () => {
+    expoLocation.getCurrentPositionAsync.mockRejectedValueOnce(new Error('gps error'));
+    const { result } = renderHook(() => useDeviceLocation());
+
+    await act(async () => {
+      await result.current.request();
+    });
+    expect(result.current.status).toBe('unavailable');
+
+    // unavailable is transient — a retry re-enters and can succeed.
+    await act(async () => {
+      await result.current.request();
+    });
+    expect(result.current.status).toBe('granted');
+    expect(result.current.coords).toEqual({ latitude: 1, longitude: 2 });
+  });
+
+  it('does not start a second request while one is in flight', async () => {
+    let resolvePermission: ((value: { status: string }) => void) | undefined;
+    expoLocation.requestForegroundPermissionsAsync.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePermission = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useDeviceLocation());
+
+    let first: Promise<void> = Promise.resolve();
+    act(() => {
+      first = result.current.request();
+    });
+    await waitFor(() => expect(result.current.status).toBe('loading'));
+
+    // Second tap while loading is a no-op.
+    await act(async () => {
+      await result.current.request();
+    });
+    expect(expoLocation.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolvePermission?.({ status: 'granted' });
+      await first;
+    });
+    expect(result.current.status).toBe('granted');
+  });
+});

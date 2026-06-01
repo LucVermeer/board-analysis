@@ -38,7 +38,39 @@
     "signInCta": "Iniciar sesión",
     "errorTitle": "No se pudieron cargar tus boards",
     "errorRetry": "Reintentar",
-    "boardSwitchError": "No se pudo guardar ese board. Inténtalo de nuevo."
+    "boardSwitchError": "No se pudo guardar ese board. Inténtalo de nuevo.",
+    "discovery": {
+      "findNearby": "Buscar cerca",
+      "bluetooth": "Bluetooth",
+      "custom": "Personalizar",
+      "locationDenied": "Permitir ubicación",
+      "nearbyTitle": "Cerca de ti",
+      "nearbyShowing": "Mostrando cercanos",
+      "yourBoardsTitle": "Tus boards",
+      "popularTitle": "Configuraciones populares",
+      "search": "Buscar"
+    },
+    "custom": {
+      "title": "Crea un board",
+      "board": "Board",
+      "layout": "Layout",
+      "size": "Tamaño",
+      "sets": "Sets",
+      "angle": "Ángulo",
+      "start": "Empezar a escalar",
+      "createError": "No se pudo crear ese board. Inténtalo de nuevo."
+    },
+    "bluetooth": {
+      "title": "Boards cerca de ti",
+      "scanning": "Buscando boards…",
+      "resolving": "Cargando boards…",
+      "noResults": "Ningún board al alcance",
+      "unavailable": "Activa el Bluetooth para buscar"
+    },
+    "search": {
+      "placeholder": "Busca por nombre o lugar",
+      "mapUnavailable": "Actualiza la app para ver el mapa. Puedes buscar por nombre."
+    }
   },
   "boardEntity": {
     "notFound": "Tabla de escalada no encontrada",
