@@ -12,7 +12,7 @@ import {
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
-import { clearStoredBoardConfig } from '../lib/board-store';
+import { clearStoredActiveBoard } from '../lib/active-board-store';
 
 type AuthState = {
   isAuthenticated: boolean;
@@ -89,7 +89,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
 
   const signOut = useCallback(async () => {
     await authSignOut();
-    await Promise.all([clearStoredSessionId(), clearStoredBoardConfig()]);
+    await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
     resetHttpClient();
     disposeWsClient();
     setIsAuthenticated(false);

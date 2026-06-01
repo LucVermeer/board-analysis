@@ -16,7 +16,6 @@ import { getHttpClient } from './client';
 import {
   GET_PROFILE,
   GET_MY_BOARDS,
-  GET_DEFAULT_BOARD,
   GET_BOARD,
   SEARCH_BOARDS,
   GET_BOARDS_BY_SERIAL_NUMBERS,
@@ -31,7 +30,6 @@ import {
   TOGGLE_FAVORITE,
   type GetProfileQueryResponse,
   type GetMyBoardsQueryResponse,
-  type GetDefaultBoardQueryResponse,
   type GetBoardQueryResponse,
   type SearchBoardsQueryResponse,
   type GetBoardsBySerialNumbersQueryResponse,
@@ -72,14 +70,6 @@ export function useMyBoards(input?: MyBoardsInput, options?: { enabled?: boolean
     queryFn: () => getHttpClient().request<GetMyBoardsQueryResponse>(GET_MY_BOARDS, { input }),
     select: (data) => data.myBoards,
     enabled: options?.enabled ?? true,
-  });
-}
-
-export function useDefaultBoard() {
-  return useQuery({
-    queryKey: ['defaultBoard'],
-    queryFn: () => getHttpClient().request<GetDefaultBoardQueryResponse>(GET_DEFAULT_BOARD),
-    select: (data) => data.defaultBoard,
   });
 }
 

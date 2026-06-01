@@ -18,7 +18,8 @@ import {
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
-import { useDefaultBoard, useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
@@ -126,15 +127,15 @@ export default function ClimbList() {
       .catch(() => {});
   }, [isAuthenticated]);
 
-  const { data: defaultBoard, isLoading: isBoardLoading } = useDefaultBoard();
+  const { data: activeBoard, isLoading: isBoardLoading } = useActiveBoard();
 
-  const boardName = defaultBoard?.boardType ?? '';
-  const layoutId = defaultBoard?.layoutId ?? 0;
-  const sizeId = defaultBoard?.sizeId ?? 0;
-  const setIds = defaultBoard?.setIds ?? '';
-  const angle = defaultBoard?.angle ?? 0;
+  const boardName = activeBoard?.boardType ?? '';
+  const layoutId = activeBoard?.layoutId ?? 0;
+  const sizeId = activeBoard?.sizeId ?? 0;
+  const setIds = activeBoard?.setIds ?? '';
+  const angle = activeBoard?.angle ?? 0;
 
-  const hasBoardConfig = !!defaultBoard;
+  const hasBoardConfig = !!activeBoard;
 
   const { data: gradesData } = useGrades(boardName);
   const gradesRef = useRef(gradesData);
@@ -142,12 +143,12 @@ export default function ClimbList() {
 
   // Pre-warm board images so they're cached before the user taps into a climb
   useEffect(() => {
-    if (!defaultBoard) return;
-    const parsedSetIds = defaultBoard.setIds.split(',').map(Number);
+    if (!activeBoard) return;
+    const parsedSetIds = activeBoard.setIds.split(',').map(Number);
     const renderData = getBoardRenderData({
-      boardName: defaultBoard.boardType as BoardName,
-      layoutId: defaultBoard.layoutId,
-      sizeId: defaultBoard.sizeId,
+      boardName: activeBoard.boardType as BoardName,
+      layoutId: activeBoard.layoutId,
+      sizeId: activeBoard.sizeId,
       setIds: parsedSetIds,
     });
     if (renderData?.imageUrls) {
@@ -155,7 +156,7 @@ export default function ClimbList() {
         Image.prefetch(url);
       }
     }
-  }, [defaultBoard]);
+  }, [activeBoard]);
 
   // Track pagination
   const [pageNumber, setPageNumber] = useState(1);
