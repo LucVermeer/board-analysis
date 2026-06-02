@@ -70,6 +70,22 @@
     "search": {
       "placeholder": "Busca por nombre o lugar",
       "mapUnavailable": "Actualiza la app para ver el mapa. Puedes buscar por nombre."
+    },
+    "boardDetail": {
+      "setActive": "Usar esta tabla",
+      "alreadyActive": "Tabla activa",
+      "stats": {
+        "ascents": "ascensiones",
+        "climbers": "escaladores",
+        "followers": "seguidores"
+      },
+      "spec": {
+        "layout": "Layout",
+        "size": "Tamaño",
+        "sets": "Sets",
+        "angle": "Ángulo",
+        "adjustable": "ajustable"
+      }
     }
   },
   "boardEntity": {

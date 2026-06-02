@@ -70,6 +70,22 @@
     "search": {
       "placeholder": "Search by name or place",
       "mapUnavailable": "Update the app to see the map. You can still search by name."
+    },
+    "boardDetail": {
+      "setActive": "Set as active board",
+      "alreadyActive": "Active board",
+      "stats": {
+        "ascents": "ascents",
+        "climbers": "climbers",
+        "followers": "followers"
+      },
+      "spec": {
+        "layout": "Layout",
+        "size": "Size",
+        "sets": "Sets",
+        "angle": "Angle",
+        "adjustable": "adjustable"
+      }
     }
   },
   "boardEntity": {
