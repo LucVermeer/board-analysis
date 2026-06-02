@@ -45,10 +45,6 @@ export type LogAscentInput = {
   // without being preselected. Optional — callers that don't have a
   // freshly fetched climb can omit it.
   consensusGradeName?: string;
-  // True when the user has previously logged any tick on this climb.
-  // Forwarded to QuickTickBar so the save button reads "Send" instead of
-  // "Flash" on re-attempts.
-  hasPriorHistory?: boolean;
 };
 
 export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
@@ -184,8 +180,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       sizeId: climbActions.boardConfig.sizeId,
       setIds: climbActions.boardConfig.setIds,
       consensusGradeName: climbActions.climb.difficulty,
-      hasPriorHistory:
-        (climbActions.climb.userAscents ?? 0) > 0 || (climbActions.climb.userAttempts ?? 0) > 0,
     });
   }, [climbActions]);
 
@@ -213,7 +207,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           setIds={logAscentInput.setIds}
           sessionId={logAscentInput.sessionId}
           consensusGradeName={logAscentInput.consensusGradeName}
-          hasPriorHistory={logAscentInput.hasPriorHistory}
         />
       ) : null}
       {climbActions ? (

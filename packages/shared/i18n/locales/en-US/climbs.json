@@ -570,7 +570,8 @@
       "decreaseAttempts": "Decrease attempts",
       "increaseAttempts": "Increase attempts",
       "errorTitle": "Save failed",
-      "errorMessage": "Could not save your ascent. Please try again."
+      "errorMessage": "Could not save your ascent. Please try again.",
+      "savedToast": "Tick saved"
     },
     "filter": {
       "title": "Filters",

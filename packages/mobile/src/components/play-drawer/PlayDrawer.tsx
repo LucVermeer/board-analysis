@@ -18,7 +18,7 @@ import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
-import { QuickTickBar } from './QuickTickBar';
+import { LogAscentSheet } from '../LogAscentSheet';
 import { DeferredSections } from './DeferredSections';
 import { QueueSheet } from './QueueSheet';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
@@ -394,22 +394,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     />
                   )}
 
-                  {/* Quick Tick Bar (expanded mode, triggered by tick button in action bar) */}
-                  <QuickTickBar
-                    visible={isTickBarActive}
-                    climbUuid={displayedClimb.uuid}
-                    boardName={boardName}
-                    angle={angle}
-                    isMirror={isMirrored}
-                    isBenchmark={displayedClimb.benchmark_difficulty != null}
-                    layoutId={layoutId}
-                    sizeId={sizeId}
-                    setIds={setIds}
-                    sessionId={sessionId}
-                    consensusGradeName={displayedClimb.difficulty}
-                    hasPriorHistory={(displayedClimb.userAscents ?? 0) > 0 || (displayedClimb.userAttempts ?? 0) > 0}
-                    onDismiss={handleTickBarDismiss}
-                  />
                 </View>
 
                 <PlayDrawerActionBar
@@ -505,6 +489,26 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         />
       )}
 
+      {/* Tick sheet — sibling of the PlayDrawer modal so it renders above
+          (gorhom `BottomSheetModal` with stackBehavior=push). Snap-point is
+          60% so the climb image above stays visible while logging. */}
+      {displayedClimb && (
+        <LogAscentSheet
+          visible={isTickBarActive}
+          onDismiss={handleTickBarDismiss}
+          climbUuid={displayedClimb.uuid}
+          climbName={displayedClimb.name}
+          boardName={boardName}
+          angle={angle}
+          isMirror={isMirrored}
+          isBenchmark={displayedClimb.benchmark_difficulty != null}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
+          sessionId={sessionId}
+          consensusGradeName={displayedClimb.difficulty}
+        />
+      )}
     </>
   );
 });

@@ -1,16 +1,20 @@
-// Sheet wrapper around the unified QuickTickBar. Used by callers outside
-// PlayDrawer (the persistent queue bar, the climb detail screen) that need
-// a draggable, dismissible bottom sheet with a handle. PlayDrawer's inline
-// FAB flow renders QuickTickBar directly without this wrapper because the
-// FAB already lives inside the drawer's board section and doesn't need
-// another sheet shell.
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, type ViewStyle } from 'react-native';
-import BottomSheet, {
+// Bottom-sheet wrapper around QuickTickBar. Used by every ticking entry
+// point — the play drawer's tick button, the persistent queue bar, the
+// climb detail screen — so the form, dismissal model (handle + pan-down +
+// backdrop tap), and keyboard handling stay identical across surfaces.
+//
+// Uses `BottomSheetModal` (not the regular `BottomSheet`) so it renders in
+// a portal above the play drawer's own modal. `FullWindowOverlay` on iOS
+// lifts the sheet above the tab bar — same pattern as DevicePickerSheet.
+import { useCallback, useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
+import {
+  BottomSheetModal,
   BottomSheetBackdrop,
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import { FullWindowOverlay } from 'react-native-screens';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 import { QuickTickBar } from './play-drawer/QuickTickBar';
@@ -29,8 +33,13 @@ type LogAscentSheetProps = {
   setIds?: string;
   sessionId?: string | null;
   consensusGradeName?: string;
-  hasPriorHistory?: boolean;
 };
+
+function LogAscentModalContainer({ children }: PropsWithChildren) {
+  return <FullWindowOverlay>{children}</FullWindowOverlay>;
+}
+
+const modalContainerComponent = Platform.OS === 'ios' ? LogAscentModalContainer : undefined;
 
 export function LogAscentSheet({
   visible,
@@ -45,19 +54,21 @@ export function LogAscentSheet({
   setIds,
   sessionId,
   consensusGradeName,
-  hasPriorHistory,
 }: LogAscentSheetProps) {
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
   const { systemColors } = useTheme();
 
   useEffect(() => {
     if (visible) {
-      sheetRef.current?.expand();
+      sheetRef.current?.present();
     } else {
-      sheetRef.current?.close();
+      sheetRef.current?.dismiss();
     }
   }, [visible]);
 
+  // 60% leaves the climb image visible above the sheet — the UX review
+  // flagged the previous full-cover behaviour (with carousel disabled) as
+  // the wrong tradeoff: users want to glance at the holds while logging.
   const snapPoints = useMemo(() => ['60%'], []);
 
   const renderBackdrop = useCallback(
@@ -67,28 +78,22 @@ export function LogAscentSheet({
     [],
   );
 
-  const handleChange = useCallback(
-    (index: number) => {
-      if (index === -1) onDismiss();
-    },
-    [onDismiss],
-  );
-
   const backgroundStyle: ViewStyle = {
     backgroundColor: systemColors.secondaryBackground as string,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   };
 
-  if (!visible) return null;
-
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={sheetRef}
+      name="log-ascent"
       index={0}
+      stackBehavior="push"
       snapPoints={snapPoints}
+      containerComponent={modalContainerComponent}
       enablePanDownToClose
-      onChange={handleChange}
+      onDismiss={onDismiss}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={styles.indicator}
       backgroundStyle={backgroundStyle}
@@ -97,8 +102,6 @@ export function LogAscentSheet({
     >
       <BottomSheetView style={styles.content}>
         <QuickTickBar
-          visible={visible}
-          embedded
           climbUuid={climbUuid}
           boardName={boardName}
           angle={angle}
@@ -109,11 +112,10 @@ export function LogAscentSheet({
           setIds={setIds}
           sessionId={sessionId}
           consensusGradeName={consensusGradeName}
-          hasPriorHistory={hasPriorHistory}
           onDismiss={onDismiss}
         />
       </BottomSheetView>
-    </BottomSheet>
+    </BottomSheetModal>
   );
 }
 

@@ -570,7 +570,8 @@
       "decreaseAttempts": "Disminuir intentos",
       "increaseAttempts": "Aumentar intentos",
       "errorTitle": "Error al guardar",
-      "errorMessage": "No se pudo guardar tu ascenso. Inténtalo de nuevo."
+      "errorMessage": "No se pudo guardar tu ascenso. Inténtalo de nuevo.",
+      "savedToast": "Tick guardado"
     },
     "filter": {
       "title": "Filtros",

@@ -1,6 +1,9 @@
+// Ticking form contents. Always rendered inside `LogAscentSheet`'s
+// BottomSheetModal — the sheet owns positioning, slide-in, backdrop,
+// pan-down-to-close, and the drag handle. This component is just the
+// pickers + save row.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet, TextInput, type TextStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import {
   createInitialTickState,
@@ -11,22 +14,20 @@ import {
 } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { GlassSurface } from '../GlassSurface';
 import { InlineStarPicker } from './InlineStarPicker';
 import { InlineGradePicker } from './InlineGradePicker';
 import { InlineTriesPicker } from './InlineTriesPicker';
 import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
-import { useSaveTick } from '@boardsesh/board-react';
+import { useOptionalBoardProvider, useSaveTick } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
+import { useToast } from '../../providers/toast-provider';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
-import { timing } from '../../theme/animations';
 
 type QuickTickBarProps = {
-  visible: boolean;
   climbUuid: string;
   boardName: string;
   angle: number;
@@ -36,29 +37,15 @@ type QuickTickBarProps = {
   sizeId?: number;
   setIds?: string;
   sessionId?: string | null;
-  // The climb's consensus grade label (e.g. "V5", "7a+"). Mapped to a
+  // The climb's consensus grade label (e.g. "V5", "7a+"). Resolved to a
   // numeric difficulty id at render time via the loaded grades list and
   // forwarded to InlineGradePicker so the consensus chip is centered (and
-  // visually outlined) without being preselected. This is just the
-  // existing Climb.difficulty string — getClimbByUuid already produces it
-  // from ROUND(display_difficulty), so no new GraphQL field is needed.
+  // visually outlined) without being preselected.
   consensusGradeName?: string;
-  // True when the user has previously logged an ascent or attempt on this
-  // climb. Drives `deriveAscentType` so the primary save button reads
-  // "Send" (not "Flash") on the first attempt of a re-attempt — a flash
-  // requires no prior history at all.
-  hasPriorHistory?: boolean;
-  // When true, render contents in a passive View instead of the
-  // absolute-positioned animated bar. Use this when a parent (e.g. a
-  // BottomSheet) already owns positioning and slide-in animation. The
-  // `visible` prop still drives mount/unmount so child state resets work
-  // identically across the two modes.
-  embedded?: boolean;
   onDismiss: () => void;
 };
 
 export const QuickTickBar = React.memo(function QuickTickBar({
-  visible,
   climbUuid,
   boardName,
   angle,
@@ -69,19 +56,35 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   setIds,
   sessionId,
   consensusGradeName,
-  hasPriorHistory = false,
-  embedded = false,
   onDismiss,
 }: QuickTickBarProps) {
   const { t } = useTranslation('session');
   const { t: tClimbs } = useTranslation('climbs');
   const { systemColors } = useTheme();
+  const { showToast } = useToast();
   const saveTick = useSaveTick(toBoardName(boardName));
   const { data: grades } = useGrades(boardName);
 
+  // Mobile's `Climb.userAscents`/`userAttempts` GraphQL fields aren't
+  // populated server-side, so we read the user's accumulated logbook
+  // (denormalised via `BoardProvider` → `useLogbook`) directly. Same source
+  // AscentStatusBadge uses for its flash/send/attempt pill.
+  //
+  // Pessimistic default when the provider isn't mounted yet: treat the
+  // climb as already-attempted so the primary save button reads "Send"
+  // rather than the optimistic "Flash". Logging a real first-flash as a
+  // send is a one-tap fix; logging a re-send as a flash is unrecoverable.
+  const board = useOptionalBoardProvider();
+  const hasPriorHistory = useMemo(() => {
+    if (!board) return true;
+    return board.logbook.some((entry) => entry.climb_uuid === climbUuid && entry.angle === angle);
+  }, [board, climbUuid, angle]);
+
   const [tickState, setTickState] = useState(createInitialTickState);
   const [comment, setComment] = useState('');
-  const [mounted, setMounted] = useState(visible);
+  // Renders an inline error row above the save buttons when the last
+  // save attempt failed. Cleared on the next attempt or on success.
+  const [lastError, setLastError] = useState<string | null>(null);
 
   // Resolve the consensus grade *name* (e.g. "V5") to a numeric difficulty
   // id by matching against the loaded grades list. The id is what
@@ -94,33 +97,13 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const ascentType = deriveAscentType(hasPriorHistory, tickState.attemptCount);
   const minAttempts = useMemo(() => getMinAttempts(ascentType), [ascentType]);
 
+  // Reset form state when the climb context changes underneath an open
+  // sheet (e.g. user swiped to next while the sheet was already open).
   useEffect(() => {
     setTickState(createInitialTickState());
     setComment('');
+    setLastError(null);
   }, [climbUuid]);
-
-  useEffect(() => {
-    if (visible) {
-      setMounted(true);
-    }
-  }, [visible]);
-
-  const translateY = useSharedValue(200);
-
-  useEffect(() => {
-    if (visible) {
-      translateY.value = withTiming(0, { duration: timing.normal });
-    } else {
-      translateY.value = withTiming(200, { duration: timing.fast }, () => {
-        runOnJS(setMounted)(false);
-      });
-    }
-  }, [visible, translateY]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    opacity: translateY.value < 100 ? 1 : 0,
-  }));
 
   const handleQualitySelect = useCallback((value: number | null) => {
     setTickState((prev) => ({ ...prev, quality: value }));
@@ -137,6 +120,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const handleSaveWithStatus = useCallback(
     (status: TickStatus) => {
       if (saveTick.isPending) return;
+      setLastError(null);
 
       const finalAttempts = clampAttempts(tickState.attemptCount, status);
 
@@ -160,10 +144,21 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         {
           onSuccess: () => {
             hapticSuccess();
+            // Reset on commit so reopening the sheet on the same climb
+            // doesn't show stale state from the just-saved tick.
+            setTickState(createInitialTickState());
+            setComment('');
+            setLastError(null);
+            showToast(tClimbs('mobile.logAscent.savedToast'), 'success');
             onDismiss();
           },
-          onError: () => {
+          onError: (error: unknown) => {
             hapticError();
+            const message =
+              error instanceof Error && error.message
+                ? error.message
+                : tClimbs('mobile.logAscent.errorMessage');
+            setLastError(message);
           },
         },
       );
@@ -181,22 +176,18 @@ export const QuickTickBar = React.memo(function QuickTickBar({
       tickState,
       comment,
       onDismiss,
+      showToast,
+      tClimbs,
     ],
   );
 
   const handleSave = useCallback(() => handleSaveWithStatus(ascentType), [handleSaveWithStatus, ascentType]);
   const handleAttempt = useCallback(() => handleSaveWithStatus('attempt'), [handleSaveWithStatus]);
 
-  if (!embedded && !mounted) return null;
-  if (embedded && !visible) return null;
-
   const saveLabel = ascentType === 'flash' ? t('playView.tickBar.flashSaveLabel') : t('playView.tickBar.sendSaveLabel');
 
-  // Shared between the inline (Animated.View + GlassSurface) and embedded
-  // (plain View inside a BottomSheet) branches — the only thing those two
-  // differ on is the outer container chrome.
-  const tickBarContents = (
-    <>
+  return (
+    <View style={styles.container}>
       <View style={styles.row}>
         <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
           {t('playView.tickBar.gradeLabel')}
@@ -235,7 +226,13 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         </View>
       </View>
 
-      <View style={styles.commentRow}>
+      {/* Compact note row — same label grid as the picker rows above, with
+          a borderless input that auto-grows when focused. Lower visual
+          weight than the previous tall bordered textarea. */}
+      <View style={styles.row}>
+        <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
+          {t('playView.tickBar.noteLabel')}
+        </Text>
         <TextInput
           value={comment}
           onChangeText={setComment}
@@ -245,115 +242,73 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           multiline
           style={
             {
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: systemColors.separator as string,
-              borderRadius: 10,
-              paddingHorizontal: spacing[3],
-              paddingVertical: spacing[2],
+              flex: 1,
               fontSize: 14,
               lineHeight: 19,
               color: systemColors.label as string,
-              minHeight: 56,
+              minHeight: 36,
+              paddingVertical: spacing[1],
               textAlignVertical: 'top',
             } satisfies TextStyle
           }
         />
       </View>
 
+      {lastError ? (
+        <View style={styles.errorRow}>
+          <Icon name="close" size={14} color={iosSystemColors.systemRed} />
+          <Text variant="footnote" color={iosSystemColors.systemRed} style={styles.errorText}>
+            {lastError}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.saveRow}>
         <Pressable
-          onPress={onDismiss}
+          onPress={handleAttempt}
+          disabled={saveTick.isPending}
           accessibilityRole="button"
-          accessibilityLabel={t('playView.tickBar.cancelLabel')}
-          style={styles.cancelButton}
+          accessibilityLabel={t('playView.tickBar.logAscentAria', { status: 'attempt' })}
+          style={({ pressed }) => [
+            styles.attemptButton,
+            { borderColor: systemColors.separator as string },
+            pressed && styles.buttonPressed,
+            saveTick.isPending && styles.buttonDisabled,
+          ]}
         >
-          <Text variant="footnote" color={iosSystemColors.systemGray}>
-            {t('playView.tickBar.cancelLabel')}
+          <Text
+            variant="footnote"
+            color={systemColors.label}
+            style={styles.attemptLabel}
+          >
+            {tClimbs('mobile.logAscent.attempt')}
           </Text>
         </Pressable>
 
-        <View style={styles.saveRowActions}>
-          <Pressable
-            onPress={handleAttempt}
-            disabled={saveTick.isPending}
-            accessibilityRole="button"
-            accessibilityLabel={t('playView.tickBar.logAscentAria', { status: 'attempt' })}
-            style={({ pressed }) => [
-              styles.attemptButton,
-              pressed && styles.saveButtonPressed,
-              saveTick.isPending && styles.saveButtonDisabled,
-            ]}
-          >
-            <Icon name="tick.outline" size={18} color={iosSystemColors.white} />
-            <Text variant="footnote" color={iosSystemColors.white} style={styles.saveLabel}>
-              {tClimbs('mobile.logAscent.attempt')}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handleSave}
-            disabled={saveTick.isPending}
-            accessibilityRole="button"
-            accessibilityLabel={t('playView.tickBar.logAscentAria', { status: ascentType })}
-            style={({ pressed }) => [
-              styles.saveButton,
-              pressed && styles.saveButtonPressed,
-              saveTick.isPending && styles.saveButtonDisabled,
-            ]}
-          >
-            <Icon name="tick.outline" size={18} color={iosSystemColors.white} />
-            <Text variant="footnote" color={iosSystemColors.white} style={styles.saveLabel}>
-              {saveLabel}
-            </Text>
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={handleSave}
+          disabled={saveTick.isPending}
+          accessibilityRole="button"
+          accessibilityLabel={t('playView.tickBar.logAscentAria', { status: ascentType })}
+          style={({ pressed }) => [
+            styles.saveButton,
+            pressed && styles.buttonPressed,
+            saveTick.isPending && styles.buttonDisabled,
+          ]}
+        >
+          <Icon name="tick.outline" size={18} color={iosSystemColors.white} />
+          <Text variant="footnote" color={iosSystemColors.white} style={styles.saveLabel}>
+            {saveLabel}
+          </Text>
+        </Pressable>
       </View>
-    </>
-  );
-
-  if (embedded) {
-    return <View style={styles.embeddedContainer}>{tickBarContents}</View>;
-  }
-
-  return (
-    <Animated.View
-      style={[
-        styles.container,
-        // Solid safety-net background so the bar is always legible even on
-        // dev clients where the glass/blur native module isn't linked, or on
-        // platforms where GlassSurface degrades. Glass effect, when present,
-        // composites over this opaque base.
-        { backgroundColor: systemColors.secondaryBackground, borderTopColor: systemColors.separator },
-        animatedStyle,
-      ]}
-      pointerEvents={visible ? 'auto' : 'none'}
-    >
-      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />
-      {tickBarContents}
-    </Animated.View>
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    // Clip the glass / blur material to the rounded top edge.
-    overflow: 'hidden',
-    zIndex: 5,
-    paddingTop: spacing[3],
-    paddingBottom: spacing[3],
-  },
-  // Sibling of `container` for the `embedded` mode: drops absolute
-  // positioning, slide-in animation, and chrome (rounded corners + top
-  // border) since the host BottomSheet owns all of that.
-  embeddedContainer: {
-    paddingTop: spacing[2],
+    paddingTop: spacing[1],
     paddingBottom: spacing[3],
   },
   row: {
@@ -363,7 +318,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   rowLabel: {
-    width: 48,
+    width: 56,
     fontWeight: '500',
   },
   rowPicker: {
@@ -372,53 +327,53 @@ const styles = StyleSheet.create({
   saveRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing[3],
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
-    marginTop: spacing[2],
-  },
-  cancelButton: {
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[3],
+    paddingTop: spacing[3],
   },
   saveButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing[1],
-    paddingVertical: spacing[2],
+    paddingVertical: spacing[3],
     paddingHorizontal: spacing[4],
-    borderRadius: 20,
+    borderRadius: 22,
     backgroundColor: brandColors.success,
   },
   attemptButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[1],
-    paddingVertical: spacing[2],
+    justifyContent: 'center',
+    paddingVertical: spacing[3],
     paddingHorizontal: spacing[4],
-    borderRadius: 20,
-    backgroundColor: iosSystemColors.systemRed,
+    borderRadius: 22,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
   },
-  saveRowActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
-  commentRow: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
-    paddingBottom: spacing[1],
-  },
-  saveButtonPressed: {
-    transform: [{ scale: 0.95 }],
+  buttonPressed: {
+    transform: [{ scale: 0.97 }],
     opacity: 0.9,
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
+  buttonDisabled: {
+    opacity: 0.5,
   },
   saveLabel: {
     fontWeight: '600',
+  },
+  attemptLabel: {
+    fontWeight: '600',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[2],
+  },
+  errorText: {
+    flexShrink: 1,
   },
 });
