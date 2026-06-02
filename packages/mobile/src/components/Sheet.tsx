@@ -7,9 +7,8 @@ import BottomSheet, {
   type BottomSheetBackgroundProps,
 } from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
-import { useTheme } from '../providers/theme-provider';
-import { GlassSurface } from './GlassSurface';
-import { iosSystemColors } from '../theme/ios-colors';
+import { sheetStyles } from '../theme/tokens';
+import { SheetGlassBackground } from './SheetGlassBackground';
 
 type SheetProps = {
   children: ReactNode;
@@ -31,7 +30,6 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
   },
   ref,
 ) {
-  const { systemColors } = useTheme();
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
 
   const renderBackdrop = useCallback(
@@ -49,16 +47,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [onChange],
   );
 
-  const renderBackground = useCallback(
-    ({ style }: BottomSheetBackgroundProps) => (
-      <GlassSurface
-        glassEffectStyle="regular"
-        fallbackColor={systemColors.secondaryBackground}
-        style={[style, styles.background]}
-      />
-    ),
-    [systemColors.secondaryBackground],
-  );
+  const renderBackground = useCallback((props: BottomSheetBackgroundProps) => <SheetGlassBackground {...props} />, []);
 
   return (
     <BottomSheet
@@ -71,7 +60,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       backgroundComponent={renderBackground}
       onChange={handleChange}
       onClose={onClose}
-      handleIndicatorStyle={styles.indicator}
+      handleIndicatorStyle={sheetStyles.indicator}
       style={styles.sheet}
     >
       <BottomSheetView style={styles.content}>{children}</BottomSheetView>
@@ -92,18 +81,6 @@ const styles = StyleSheet.create({
         elevation: 16,
       },
     }),
-  },
-  background: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    // Clip the glass / blur material to the rounded top edge.
-    overflow: 'hidden',
-  },
-  indicator: {
-    backgroundColor: iosSystemColors.separator,
-    width: 36,
-    height: 5,
-    borderRadius: 3,
   },
   content: {
     flex: 1,

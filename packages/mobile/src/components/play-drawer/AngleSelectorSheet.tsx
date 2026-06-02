@@ -4,11 +4,13 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetFlatList,
   type BottomSheetBackdropProps,
+  type BottomSheetBackgroundProps,
   type BottomSheetFlatListMethods,
 } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Text } from '../Text';
+import { SheetGlassBackground } from '../SheetGlassBackground';
 import { getHttpClient } from '../../lib/graphql/client';
 import { GET_ANGLES, type GetAnglesQueryResponse } from '../../lib/graphql/operations';
 import { hapticSelection } from '../../lib/haptics';
@@ -114,6 +116,8 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
     [],
   );
 
+  const renderBackground = useCallback((props: BottomSheetBackgroundProps) => <SheetGlassBackground {...props} />, []);
+
   const renderAngleRow = useCallback(
     ({ item }: { item: AngleItem }) => {
       const isSelected = item.angle === currentAngle;
@@ -150,7 +154,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
       backdropComponent={renderBackdrop}
       onClose={handleClose}
       handleIndicatorStyle={sheetStyles.indicator}
-      backgroundStyle={sheetStyles.background}
+      backgroundComponent={renderBackground}
     >
       <View style={styles.header}>
         <Text variant="headline">{t('mobile.angleSelector.title')}</Text>

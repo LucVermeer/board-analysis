@@ -11,7 +11,7 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import { QueueSheetHeader } from './QueueSheetHeader';
 import { QueueList } from './QueueList';
 import { Text } from '../Text';
-import { GlassSurface } from '../GlassSurface';
+import { SheetGlassBackground } from '../SheetGlassBackground';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticMedium, hapticWarning } from '../../lib/haptics';
@@ -130,12 +130,7 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
     [],
   );
 
-  const renderBackground = useCallback(
-    ({ style }: BottomSheetBackgroundProps) => (
-      <GlassSurface glassEffectStyle="regular" style={[style, sheetStyles.background, styles.glassBackground]} />
-    ),
-    [],
-  );
+  const renderBackground = useCallback((props: BottomSheetBackgroundProps) => <SheetGlassBackground {...props} />, []);
 
   const viewOnlyMode = queue.length === 0;
 
@@ -218,10 +213,6 @@ const styles = StyleSheet.create({
         elevation: 16,
       },
     }),
-  },
-  glassBackground: {
-    // Clip the glass / blur material to the sheet's rounded top edge.
-    overflow: 'hidden',
   },
   bulkBar: {
     position: 'absolute',

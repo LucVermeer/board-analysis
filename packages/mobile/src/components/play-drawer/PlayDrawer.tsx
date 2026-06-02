@@ -26,7 +26,7 @@ import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { LogAscentSheet } from '../LogAscentSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
-import { GlassSurface } from '../GlassSurface';
+import { SheetGlassBackground } from '../SheetGlassBackground';
 import { useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
@@ -268,12 +268,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [],
   );
 
-  const renderBackground = useCallback(
-    ({ style }: BottomSheetBackgroundProps) => (
-      <GlassSurface glassEffectStyle="regular" style={[style, sheetStyles.background, styles.glassBackground]} />
-    ),
-    [],
-  );
+  const renderBackground = useCallback((props: BottomSheetBackgroundProps) => <SheetGlassBackground {...props} />, []);
 
   const snapPoints = useMemo(() => ['100%'], []);
 
@@ -480,10 +475,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-  },
-  glassBackground: {
-    // Clip the glass / blur material to the sheet's rounded top edge.
-    overflow: 'hidden',
   },
   closeButton: {
     position: 'absolute',
