@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react';
-import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { View, Pressable, Platform, StyleSheet, type ViewStyle } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '../Icon';
 import { Badge } from '../Badge';
@@ -102,47 +103,72 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   return (
     <View style={styles.container}>
       <View style={styles.rowPrimary}>
-        {supportsMirroring && (
+        <View style={styles.primarySlot}>
+          {supportsMirroring ? (
+            <ActionButton
+              size="lg"
+              iconName="mirror"
+              onPress={handleMirror}
+              active={isMirrored}
+              activeColor={brandColors.primary}
+              accessibilityLabel={
+                isMirrored ? t('playView.actionBar.unmirrorAria') : t('playView.actionBar.mirrorAria')
+              }
+            />
+          ) : (
+            // On boards without mirror support, the favorite (heart) takes the
+            // first slot — keeps the row visually balanced and gives heart a
+            // bigger tap target. It is removed from Row 2 below in that case.
+            <ActionButton
+              size="lg"
+              iconName={isFavorited ? 'favorite.fill' : 'favorite'}
+              onPress={handleFavorite}
+              iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
+              accessibilityLabel={
+                isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')
+              }
+            />
+          )}
+        </View>
+        <View style={styles.primarySlot}>
           <ActionButton
             size="lg"
-            iconName="mirror"
-            onPress={handleMirror}
-            active={isMirrored}
-            activeColor={brandColors.primary}
-            accessibilityLabel={isMirrored ? t('playView.actionBar.unmirrorAria') : t('playView.actionBar.mirrorAria')}
+            iconName="skip.previous"
+            onPress={handlePrev}
+            disabled={!canSwipePrevious}
+            accessibilityLabel={t('playView.actionBar.previousAria')}
           />
-        )}
-        <ActionButton
-          size="lg"
-          iconName="skip.previous"
-          onPress={handlePrev}
-          disabled={!canSwipePrevious}
-          accessibilityLabel={t('playView.actionBar.previousAria')}
-        />
-        <TickButton
-          size="lg"
-          ascentCount={ascentCount}
-          onPress={onTickPress}
-          onLongPress={onTickLongPress}
-          accessibilityLabel={t('playView.tickFab.logAscentAria')}
-        />
-        <ActionButton
-          size="lg"
-          iconName="skip.next"
-          onPress={handleNext}
-          disabled={!canSwipeNext}
-          accessibilityLabel={t('playView.actionBar.nextAria')}
-        />
-        <BleLightbulbButton
-          isConnected={lightbulbActive}
-          isScanning={lightbulbPending}
-          onPress={onLightbulb}
-          accessibilityLabel={lightbulbActive ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
-          scanningAccessibilityHint={tSettings('ble.scanning')}
-          haptic="medium"
-          size={SIZES.lg.icon}
-          containerSize={SIZES.lg.dim}
-        />
+        </View>
+        <View style={styles.primarySlot}>
+          <TickButton
+            size="lg"
+            ascentCount={ascentCount}
+            onPress={onTickPress}
+            onLongPress={onTickLongPress}
+            accessibilityLabel={t('playView.tickFab.logAscentAria')}
+          />
+        </View>
+        <View style={styles.primarySlot}>
+          <ActionButton
+            size="lg"
+            iconName="skip.next"
+            onPress={handleNext}
+            disabled={!canSwipeNext}
+            accessibilityLabel={t('playView.actionBar.nextAria')}
+          />
+        </View>
+        <View style={styles.primarySlot}>
+          <BleLightbulbButton
+            isConnected={lightbulbActive}
+            isScanning={lightbulbPending}
+            onPress={onLightbulb}
+            accessibilityLabel={lightbulbActive ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
+            scanningAccessibilityHint={tSettings('ble.scanning')}
+            haptic="medium"
+            size={SIZES.lg.icon}
+            containerSize={SIZES.lg.dim}
+          />
+        </View>
       </View>
 
       <View style={styles.rowSecondary}>
@@ -162,15 +188,17 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             </Text>
           </Pressable>
         )}
-        <ActionButton
-          size="sm"
-          iconName={isFavorited ? 'favorite.fill' : 'favorite'}
-          onPress={handleFavorite}
-          iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
-          accessibilityLabel={
-            isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')
-          }
-        />
+        {supportsMirroring && (
+          <ActionButton
+            size="sm"
+            iconName={isFavorited ? 'favorite.fill' : 'favorite'}
+            onPress={handleFavorite}
+            iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
+            accessibilityLabel={
+              isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')
+            }
+          />
+        )}
         <ActionButton
           size="sm"
           iconName="more"
@@ -180,12 +208,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
 
         <View style={styles.spacer} />
 
-        <ActionButton
-          size="sm"
-          iconName="share"
-          onPress={handleShare}
-          accessibilityLabel={tClimbs('mobile.climbRow.share')}
-        />
+        <ShareButton size="sm" onPress={handleShare} accessibilityLabel={tClimbs('mobile.climbRow.share')} />
         <View>
           <ActionButton
             size="sm"
@@ -256,6 +279,37 @@ function ActionButton({
   );
 }
 
+type ShareButtonProps = {
+  size: ButtonSize;
+  onPress: () => void;
+  accessibilityLabel: string;
+};
+
+// Renders the native iOS share glyph (square.and.arrow.up) on iOS via expo-symbols.
+// Falls back to the Material Design share icon on Android (via the standard Icon
+// component, which uses MaterialCommunityIcons).
+function ShareButton({ size, onPress, accessibilityLabel }: ShareButtonProps) {
+  const { dim, icon } = SIZES[size];
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => [
+        styles.actionButton,
+        { width: dim, height: dim, borderRadius: dim / 2 },
+        pressed && styles.actionButtonPressed,
+      ]}
+    >
+      {Platform.OS === 'ios' ? (
+        <SymbolView name="square.and.arrow.up" size={icon} tintColor={iosSystemColors.systemGray} />
+      ) : (
+        <Icon name="share" size={icon} color={iosSystemColors.systemGray} />
+      )}
+    </Pressable>
+  );
+}
+
 type TickButtonProps = {
   size: ButtonSize;
   ascentCount: number;
@@ -307,10 +361,14 @@ const styles = StyleSheet.create({
   },
   rowPrimary: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
+  },
+  primarySlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowSecondary: {
     flexDirection: 'row',
