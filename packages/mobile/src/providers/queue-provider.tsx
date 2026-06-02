@@ -403,15 +403,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       // climb-list/search open passes null to clear playlist context; re-opening
       // the current climb passes nothing, leaving the source intact.
       if (options) setPlaylistSuggestionSourceState(options.playlistSuggestionSource);
-      // If this climb is already in the queue, navigate to the EXISTING item
-      // instead of appending a duplicate, and skip the suggested-after-current
-      // prune — forward-swipe then walks the existing queue first and only falls
-      // through to suggestions once it's exhausted. (Re-tapping playlist item 1
-      // after swiping to 10 then swipes 1→…→10→11, not straight to 11.)
-      const existing =
-        stateRef.current.queue.find((queued) => queued.uuid === item.uuid) ??
-        stateRef.current.queue.find((queued) => queued.climb?.uuid === item.climb?.uuid);
-      dispatchSetCurrent(existing ?? item, true, existing ? undefined : options?.playlistSuggestionSource);
+      // Append (fresh-uuid items add to the queue; the reducer's uuid dedup makes
+      // re-selecting an existing queue item a no-op add). Re-tapping a playlist
+      // climb thus starts a fresh pass — forward-swipe re-appends the rest of the
+      // playlist (queue grows 1..10, 1..10), driven by
+      // findNextQueueItemWithSuggestions anchoring on the current climb.
+      dispatchSetCurrent(item, true, options?.playlistSuggestionSource);
     },
     [dispatchSetCurrent],
   );

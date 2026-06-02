@@ -197,14 +197,31 @@ describe('findNextQueueItemWithSuggestions', () => {
     expect(peek?.suggested).toBe(true);
   });
 
-  it('skips suggestions already present in the queue', () => {
+  it('returns the playlist climb after the CURRENT climb (not the activated one)', () => {
     const x = makeClimb('x');
     const y = makeClimb('y');
     const z = makeClimb('z');
-    const queue = [itemFor(x), itemFor(y)]; // y already queued
+    const queue = [itemFor(x), itemFor(y)];
     const source = makeSource(x, [x, y, z]);
+    // current is y (tail of queue) → next playlist climb after y is z.
     const peek = findNextQueueItemWithSuggestions(queue, queue[1], source);
     expect(peek?.climb.uuid).toBe('z');
+  });
+
+  it('re-walks the playlist on re-activation, even when climbs are already queued', () => {
+    const a = makeClimb('a');
+    const b = makeClimb('b');
+    const c = makeClimb('c');
+    // Whole playlist already swiped into the queue, then `a` re-activated and
+    // appended at the tail (fresh queue uuid, same climb).
+    const reactivatedA: ClimbQueueItem = { uuid: 'item-reactivated-a', climb: a };
+    const queue = [itemFor(a), itemFor(b), itemFor(c), reactivatedA];
+    const source = makeSource(a, [a, b, c]);
+    // Next after the current `a` is `b` — even though `b` is already in the queue
+    // (a second pass appends 1..N again, rather than jumping to an un-queued one).
+    const peek = findNextQueueItemWithSuggestions(queue, reactivatedA, source);
+    expect(peek?.climb.uuid).toBe('b');
+    expect(peek?.suggested).toBe(true);
   });
 });
 
