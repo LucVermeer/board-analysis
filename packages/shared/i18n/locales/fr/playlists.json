@@ -141,9 +141,9 @@
     "fields": {
       "name": "Nom",
       "namePlaceholder": "ex. : Réglettes qui piquent",
-      "description": "Description (facultative)",
+      "description": "Description",
       "descriptionPlaceholder": "Description facultative...",
-      "color": "Couleur (facultative)"
+      "color": "Couleur"
     }
   },
   "generator": {

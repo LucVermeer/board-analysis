@@ -141,9 +141,9 @@
     "fields": {
       "name": "Nombre",
       "namePlaceholder": "p. ej., Regletas duras",
-      "description": "Descripción (opcional)",
+      "description": "Descripción",
       "descriptionPlaceholder": "Descripción opcional...",
-      "color": "Color (opcional)"
+      "color": "Color"
     }
   },
   "generator": {

@@ -141,9 +141,9 @@
     "fields": {
       "name": "Name",
       "namePlaceholder": "e.g., Hard Crimps",
-      "description": "Description (optional)",
+      "description": "Description",
       "descriptionPlaceholder": "Optional description...",
-      "color": "Color (optional)"
+      "color": "Color"
     }
   },
   "generator": {
