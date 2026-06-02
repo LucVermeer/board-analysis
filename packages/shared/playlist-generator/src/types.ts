@@ -43,38 +43,28 @@ export type GradeFocusOptions = {
 
 export type GeneratorOptions = VolumeOptions | PyramidOptions | LadderOptions | GradeFocusOptions;
 
+/** Workout-type metadata for UI rendering. Display labels live in the
+ *  consuming app's i18n catalog (web: `playlists:generator.workoutTypes.<type>.name`,
+ *  mobile: `session:mobile.session.preGenerator<Type>`). Don't add `name` /
+ *  `description` here — keeping the shared package pure-data avoids untranslated
+ *  English leaking through `t(variable)` patterns. */
 export type WorkoutTypeInfo = {
   type: WorkoutType;
-  name: string;
-  description: string;
   icon: 'volume' | 'pyramid' | 'ladder' | 'focus';
 };
 
 export const WORKOUT_TYPES: WorkoutTypeInfo[] = [
-  { type: 'volume', name: 'Volume', description: 'Generate a high-volume workout.', icon: 'volume' },
-  { type: 'pyramid', name: 'Pyramid', description: 'Work up to a max grade and back down again.', icon: 'pyramid' },
-  { type: 'ladder', name: 'Ladder', description: 'Work up through the grades in steps.', icon: 'ladder' },
-  { type: 'gradeFocus', name: 'Grade Focus', description: 'Pick a grade and go!', icon: 'focus' },
+  { type: 'volume', icon: 'volume' },
+  { type: 'pyramid', icon: 'pyramid' },
+  { type: 'ladder', icon: 'ladder' },
+  { type: 'gradeFocus', icon: 'focus' },
 ];
 
-export const WARM_UP_OPTIONS: { value: WarmUpType; label: string }[] = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'extended', label: 'Extended' },
-  { value: 'none', label: 'None' },
-];
+export const WARM_UP_OPTIONS: WarmUpType[] = ['standard', 'extended', 'none'];
 
-export const EFFORT_LEVELS: { value: EffortLevel; label: string }[] = [
-  { value: 'moderate', label: 'Moderate' },
-  { value: 'challenging', label: 'Challenging' },
-  { value: 'veryDifficult', label: 'Very Difficult' },
-  { value: 'maxEffort', label: 'Max Effort' },
-];
+export const EFFORT_LEVELS: EffortLevel[] = ['moderate', 'challenging', 'veryDifficult', 'maxEffort'];
 
-export const CLIMB_BIAS_OPTIONS: { value: ClimbBias; label: string }[] = [
-  { value: 'unfamiliar', label: 'Unfamiliar' },
-  { value: 'attempted', label: 'Attempted' },
-  { value: 'any', label: 'Any' },
-];
+export const CLIMB_BIAS_OPTIONS: ClimbBias[] = ['unfamiliar', 'attempted', 'any'];
 
 export const DEFAULT_VOLUME_OPTIONS: Omit<VolumeOptions, 'targetGrade'> = {
   type: 'volume',

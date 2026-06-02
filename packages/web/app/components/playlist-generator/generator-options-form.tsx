@@ -72,13 +72,13 @@ const GeneratorOptionsForm: React.FC<GeneratorOptionsFormProps> = ({
   const grades = getGradesForBoard(boardDetails.board_name);
   const angles = ANGLES[boardDetails.board_name] ?? [];
 
-  const warmUpOptions = WARM_UP_OPTIONS.map((opt) => ({
-    value: opt.value,
-    label: t(`generator.warmUpOptions.${opt.value}`),
+  const warmUpOptions = WARM_UP_OPTIONS.map((value) => ({
+    value,
+    label: t(`generator.warmUpOptions.${value}`),
   }));
-  const climbBiasOptions = CLIMB_BIAS_OPTIONS.map((opt) => ({
-    value: opt.value,
-    label: t(`generator.climbBiasOptions.${opt.value}`),
+  const climbBiasOptions = CLIMB_BIAS_OPTIONS.map((value) => ({
+    value,
+    label: t(`generator.climbBiasOptions.${value}`),
   }));
 
   // Check if we should show the tall climbs filter.

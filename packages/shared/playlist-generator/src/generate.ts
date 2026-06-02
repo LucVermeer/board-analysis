@@ -21,25 +21,29 @@ const generateWarmUp = (
   warmUpType: WarmUpType,
   grades: GeneratorGradeScale,
 ): PlannedClimbSlot[] => {
-  if (warmUpType === 'none') {
+  if (warmUpType === 'none' || grades.length === 0) {
     return [];
   }
 
   const config = WARM_UP_CONFIG[warmUpType];
   const slots: PlannedClimbSlot[] = [];
 
-  const startGrade = clampGrade(targetGrade - config.grades, grades);
-  const minGrade = grades[0]?.difficulty_id ?? startGrade;
-  let index = 0;
+  // Iterate over the grades array by index — difficulty_id values aren't
+  // guaranteed to be dense contiguous integers (MoonBoard starts at 13;
+  // future boards may skip values entirely). Walking the array keeps the
+  // warm-up grounded in the real grade table.
+  const targetIndex = grades.findIndex((grade) => grade.difficulty_id >= targetGrade);
+  if (targetIndex <= 0) return [];
 
-  for (let grade = startGrade; grade < targetGrade; grade++) {
-    if (grade < minGrade) continue;
+  const startIndex = Math.max(0, targetIndex - config.grades);
+  let slotIndex = 0;
 
-    for (let i = 0; i < config.climbsPerGrade; i++) {
+  for (let i = startIndex; i < targetIndex; i++) {
+    for (let copy = 0; copy < config.climbsPerGrade; copy++) {
       slots.push({
-        grade: clampGrade(grade, grades),
+        grade: grades[i].difficulty_id,
         section: 'warmUp',
-        index: index++,
+        index: slotIndex++,
       });
     }
   }
@@ -183,8 +187,13 @@ export const generateWorkoutPlan = (options: GeneratorOptions, grades: Generator
       return generateLadderPlan(options, grades);
     case 'gradeFocus':
       return generateGradeFocusPlan(options, grades);
-    default:
+    default: {
+      // Exhaustiveness check — a new WorkoutType variant fails to compile
+      // here rather than silently emitting an empty plan.
+      const _exhaustive: never = options;
+      void _exhaustive;
       return [];
+    }
   }
 };
 

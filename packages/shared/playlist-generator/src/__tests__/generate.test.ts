@@ -121,6 +121,47 @@ describe('generateWorkoutPlan', () => {
   });
 });
 
+describe('warm-up against sparse / mid-range grade pools', () => {
+  // MoonBoard grades start at difficulty_id: 13 (see MOONBOARD_MIN_DIFFICULTY_ID
+  // in @boardsesh/board-config). Warm-up math previously assumed dense
+  // contiguous integers and would emit slots below the pool's minimum.
+  const MOONBOARD_LIKE_GRADES: GeneratorGradeScale = Array.from({ length: 20 }, (_, i) => ({
+    difficulty_id: 13 + i,
+  }));
+
+  it('does not emit warm-up grades below the pool minimum (MoonBoard-style range)', () => {
+    const slots = generateGradeFocusPlan(
+      { ...DEFAULT_GRADE_FOCUS_OPTIONS, warmUp: 'standard', numberOfClimbs: 3, targetGrade: 15 },
+      MOONBOARD_LIKE_GRADES,
+    );
+    const minId = MOONBOARD_LIKE_GRADES[0].difficulty_id;
+    for (const slot of slots) {
+      expect(slot.grade).toBeGreaterThanOrEqual(minId);
+    }
+    // Target grade is only two steps above the floor — warm-up should clamp
+    // rather than walk off the bottom of the pool.
+    const warmUpSlots = slots.filter((slot) => slot.section === 'warmUp');
+    expect(warmUpSlots.every((slot) => slot.grade < 15)).toBe(true);
+  });
+
+  it('returns no warm-up slots when target is at the pool minimum', () => {
+    const slots = generateGradeFocusPlan(
+      { ...DEFAULT_GRADE_FOCUS_OPTIONS, warmUp: 'standard', numberOfClimbs: 3, targetGrade: 13 },
+      MOONBOARD_LIKE_GRADES,
+    );
+    const warmUpSlots = slots.filter((slot) => slot.section === 'warmUp');
+    expect(warmUpSlots).toHaveLength(0);
+  });
+
+  it('handles an empty grade scale by emitting no warm-up slots', () => {
+    const slots = generateGradeFocusPlan(
+      { ...DEFAULT_GRADE_FOCUS_OPTIONS, warmUp: 'standard', numberOfClimbs: 0, targetGrade: 15 },
+      [],
+    );
+    expect(slots).toEqual([]);
+  });
+});
+
 describe('groupSlotsBySection', () => {
   it('collapses consecutive same-section slots into one group', () => {
     const groups = groupSlotsBySection([
