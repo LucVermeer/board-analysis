@@ -9,13 +9,13 @@ import {
   type GetSmartPlaylistInput,
   type GetSmartPlaylistQueryResponse,
 } from '@boardsesh/graphql/operations/playlists';
-import type { Climb } from '@boardsesh/queue';
 import { Text } from '../../../../src/components/Text';
 import { Icon } from '../../../../src/components/Icon';
 import { ActivityIndicator } from '../../../../src/components/ActivityIndicator';
 import { PlaylistDetailView } from '../../../../src/components/playlist';
 import { getHttpClient } from '../../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../../src/lib/playlists/use-playlist-activation';
+import { toQueueClimbs } from '../../../../src/lib/climb-types';
 import { smartPlaylistByType } from '../../../../src/lib/smart-playlists';
 import { useProfile } from '../../../../src/lib/graphql/hooks';
 import { useAuthToken } from '../../../../src/lib/graphql/use-auth-token';
@@ -57,7 +57,7 @@ export default function SmartPlaylistDetail() {
         { input },
       );
       return {
-        climbs: response.smartPlaylist.climbs as unknown as Climb[],
+        climbs: toQueueClimbs(response.smartPlaylist.climbs),
         hasMore: response.smartPlaylist.hasMore,
       };
     },

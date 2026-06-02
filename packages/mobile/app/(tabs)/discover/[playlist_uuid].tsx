@@ -12,13 +12,13 @@ import {
   type GetPlaylistClimbsInput,
   type GetPlaylistClimbsQueryResponse,
 } from '@boardsesh/graphql/operations/playlists';
-import type { Climb } from '@boardsesh/queue';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { PlaylistDetailView } from '../../../src/components/playlist';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
+import { toQueueClimbs } from '../../../src/lib/climb-types';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 type DetailParams = {
@@ -73,7 +73,7 @@ export default function PlaylistDetail() {
         { input },
       );
       return {
-        climbs: response.playlistClimbs.climbs as unknown as Climb[],
+        climbs: toQueueClimbs(response.playlistClimbs.climbs),
         hasMore: response.playlistClimbs.hasMore,
       };
     },

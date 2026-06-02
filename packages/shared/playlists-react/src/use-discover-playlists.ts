@@ -130,7 +130,7 @@ export function useDiscoverPlaylists({
         }
         loadMoreFailCountRef.current = 0;
         setHasError(false);
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Failed to fetch discover playlists:', err);
         if (isInitial) {
           setHasError(true);

@@ -27,7 +27,7 @@ import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
-import type { Climb as QueueClimb } from '@boardsesh/queue';
+import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
@@ -252,7 +252,7 @@ export default function ClimbList() {
       );
       const response = await getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
       return {
-        climbs: response.searchClimbs.climbs as unknown as QueueClimb[],
+        climbs: toQueueClimbs(response.searchClimbs.climbs),
         hasMore: response.searchClimbs.hasMore,
       };
     },
@@ -264,14 +264,14 @@ export default function ClimbList() {
   // listed after it — mirroring the playlist flow.
   const activateClimbListClimb = usePlaylistActivation({
     sourceId: 'climblist',
-    allClimbs: accumulatedClimbs as unknown as QueueClimb[],
+    allClimbs: toQueueClimbs(accumulatedClimbs),
     fetchPage: fetchSearchPage,
     refreshErrorMessage: 'Failed to refresh climb-list suggestions:',
   });
 
   const handleClimbPress = useCallback(
     (climb: Climb) => {
-      void activateClimbListClimb(climb as unknown as QueueClimb);
+      void activateClimbListClimb(toQueueClimb(climb));
     },
     [activateClimbListClimb],
   );

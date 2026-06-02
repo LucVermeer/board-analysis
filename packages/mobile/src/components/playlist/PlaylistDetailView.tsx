@@ -3,13 +3,14 @@ import { View, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { Climb as SchemaClimb, BoardName } from '@boardsesh/shared-schema';
+import type { BoardName } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { PlaylistPreviewSquare } from './PlaylistPreviewSquare';
+import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
 import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -73,13 +74,13 @@ export function PlaylistDetailView({
       if (!boardConfig) return null;
       return (
         <ClimbListRow
-          climb={item as unknown as SchemaClimb}
+          climb={toSchemaClimb(item)}
           boardName={boardConfig.boardName as BoardName}
           layoutId={boardConfig.layoutId}
           sizeId={boardConfig.sizeId}
           setIds={boardConfig.setIds}
           angle={boardConfig.angle}
-          onPress={(tapped) => onActivateClimb(tapped as unknown as Climb)}
+          onPress={(tapped) => onActivateClimb(toQueueClimb(tapped))}
         />
       );
     },

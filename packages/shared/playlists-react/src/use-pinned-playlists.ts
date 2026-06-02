@@ -75,7 +75,7 @@ export function usePinnedPlaylists({
         variables,
       );
       setPinned(response.myPinnedPlaylists);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to fetch pinned playlists:', err);
       setPinned([]);
     }

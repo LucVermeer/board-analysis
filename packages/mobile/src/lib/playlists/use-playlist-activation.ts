@@ -17,6 +17,7 @@ import { useQueue } from '../../providers/queue-provider';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useActiveBoard } from '../graphql/use-active-board';
 import { climbToQueueItem } from '../climb-to-queue-item';
+import { toSchemaClimb } from '../climb-types';
 
 /** A single page of the suggestion-refresh fetch. */
 export type PlaylistActivationPage = {
@@ -62,7 +63,7 @@ export function usePlaylistActivation({
   const queueApi = useMemo(
     () => ({
       setCurrentClimb: async (climb: Climb, options: Parameters<typeof setCurrentClimb>[1]) => {
-        const item = climbToQueueItem(climb as unknown as Parameters<typeof climbToQueueItem>[0]);
+        const item = climbToQueueItem(toSchemaClimb(climb));
         setCurrentClimb(item, options);
         return item;
       },
@@ -115,12 +116,12 @@ export function usePlaylistActivation({
       // setAsCurrent:false — the activation already dispatched setCurrentClimb
       // with the suggestion source; re-dispatching from the drawer would wipe
       // that source (it has no suggestion-source argument).
-      openPlayDrawer(climb as unknown as Parameters<typeof openPlayDrawer>[0], { setAsCurrent: false });
+      openPlayDrawer(toSchemaClimb(climb), { setAsCurrent: false });
     },
     [openPlayDrawer],
   );
 
-  return usePlaylistClimbActivation({
+  const activate = usePlaylistClimbActivation({
     queueApi,
     sourceId,
     allClimbs,
@@ -129,4 +130,18 @@ export function usePlaylistActivation({
     onActivated,
     refreshErrorMessage,
   });
+
+  // The synchronous activation phase shouldn't reject in practice (the queue
+  // dispatch is fire-and-forget), but call sites invoke this as
+  // `void activate(climb)`. Guard the floating promise so a future change can't
+  // surface an unhandled rejection; the async suggestion refresh keeps its own
+  // catch inside the shared hook (graceful degradation — the drawer is already
+  // open with the initial source built from the loaded climbs).
+  return useCallback(
+    (climb: Climb) =>
+      activate(climb).catch((error: unknown) => {
+        console.error('Playlist climb activation failed:', error);
+      }),
+    [activate],
+  );
 }

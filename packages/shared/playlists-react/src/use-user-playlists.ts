@@ -111,7 +111,7 @@ export function useUserPlaylists({
         pageRef.current = page + 1;
         loadMoreFailCountRef.current = 0;
         setHasError(false);
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Failed to fetch user playlists:', err);
         if (isInitial) {
           setHasError(true);
