@@ -398,12 +398,20 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   const setCurrentClimb = useCallback(
     (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => {
-      // Only touch the source when the caller passes options (activation does;
-      // re-opening the drawer for the already-current climb does not, so the
-      // source survives). dispatchSetCurrent still forwards it to the reducer so
-      // it prunes suggested-after-current.
+      // Source is client-only provider state (see note above) — set it whenever
+      // the caller passes options. Activation passes a source; a fresh
+      // climb-list/search open passes null to clear playlist context; re-opening
+      // the current climb passes nothing, leaving the source intact.
       if (options) setPlaylistSuggestionSourceState(options.playlistSuggestionSource);
-      dispatchSetCurrent(item, true, options?.playlistSuggestionSource);
+      // If this climb is already in the queue, navigate to the EXISTING item
+      // instead of appending a duplicate, and skip the suggested-after-current
+      // prune — forward-swipe then walks the existing queue first and only falls
+      // through to suggestions once it's exhausted. (Re-tapping playlist item 1
+      // after swiping to 10 then swipes 1→…→10→11, not straight to 11.)
+      const existing =
+        stateRef.current.queue.find((queued) => queued.uuid === item.uuid) ??
+        stateRef.current.queue.find((queued) => queued.climb?.uuid === item.climb?.uuid);
+      dispatchSetCurrent(existing ?? item, true, existing ? undefined : options?.playlistSuggestionSource);
     },
     [dispatchSetCurrent],
   );

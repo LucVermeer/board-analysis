@@ -176,7 +176,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setActiveSubDrawer('none');
       lastSnappedClimbUuidRef.current = null;
       if (options?.setAsCurrent ?? true) {
-        setCurrentClimb(climbToQueueItem(selectedClimb));
+        // Fresh activation from the list/search clears any playlist suggestion
+        // source (web passes the same null option on every non-playlist set).
+        setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
       }
       sheetRef.current?.present();
     },
@@ -272,7 +274,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsTickBarActive(false);
       const queueItem = climbToQueueItem(similarClimb);
       addToQueue(queueItem);
-      setCurrentClimb(queueItem);
+      setCurrentClimb(queueItem, { playlistSuggestionSource: null });
     },
     [addToQueue, setCurrentClimb],
   );
