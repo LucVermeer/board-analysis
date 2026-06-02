@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text } from './Text';
 import { Icon } from './Icon';
@@ -23,6 +23,8 @@ type CollapsibleSectionProps = {
   resetKey?: number;
   /** Optional trailing action rendered in the header (e.g. an Attach button). */
   headerAction?: ReactNode;
+  /** Fires with the measured height of the header row whenever layout settles. */
+  onHeaderLayout?: (height: number) => void;
   children: ReactNode;
 };
 
@@ -33,12 +35,20 @@ export function CollapsibleSection({
   summary,
   resetKey,
   headerAction,
+  onHeaderLayout,
   children,
 }: CollapsibleSectionProps) {
+  const handleHeaderLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      onHeaderLayout?.(event.nativeEvent.layout.height);
+    },
+    [onHeaderLayout],
+  );
+
   if (keepExpanded) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={styles.header} onLayout={onHeaderLayout ? handleHeaderLayout : undefined}>
           <Text variant="headline" style={styles.title}>
             {title}
           </Text>
@@ -56,6 +66,7 @@ export function CollapsibleSection({
       summary={summary}
       resetKey={resetKey}
       headerAction={headerAction}
+      onHeaderLayout={onHeaderLayout ? handleHeaderLayout : undefined}
     >
       {children}
     </CollapsibleSectionInternal>
@@ -68,6 +79,7 @@ function CollapsibleSectionInternal({
   summary,
   resetKey,
   headerAction,
+  onHeaderLayout,
   children,
 }: {
   title: string;
@@ -75,6 +87,7 @@ function CollapsibleSectionInternal({
   summary?: string | null;
   resetKey?: number;
   headerAction?: ReactNode;
+  onHeaderLayout?: (event: LayoutChangeEvent) => void;
   children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -111,6 +124,7 @@ function CollapsibleSectionInternal({
         accessibilityLabel={title}
         accessibilityState={{ expanded }}
         style={styles.header}
+        onLayout={onHeaderLayout}
       >
         <Text variant="headline" style={styles.title}>
           {title}

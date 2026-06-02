@@ -1,7 +1,6 @@
 export { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from './PlayDrawer';
 export { PlayDrawerHeader } from './PlayDrawerHeader';
 export { PlayDrawerActionBar } from './PlayDrawerActionBar';
-export { PlayDrawerTickFab } from './PlayDrawerTickFab';
 export { SwipeBoardCarousel } from './SwipeBoardCarousel';
 export { QuickTickBar } from './QuickTickBar';
 export { QueueSheet } from './QueueSheet';

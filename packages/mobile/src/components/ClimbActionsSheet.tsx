@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, StyleSheet, Share } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
@@ -88,16 +88,6 @@ function ClimbActionsSheet({
     }
   }, [auroraAppUrl, onClose]);
 
-  const handleShare = useCallback(async () => {
-    if (!climb) return;
-    const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
-    try {
-      await Share.share({ message: `${climb.name}\n${url}`, url });
-    } finally {
-      onClose();
-    }
-  }, [climb, boardName, layoutId, sizeId, setIds, angle, onClose]);
-
   const handleCopyLink = useCallback(async () => {
     if (!climb) return;
     try {
@@ -152,12 +142,6 @@ function ClimbActionsSheet({
             showSeparator
           />
         )}
-        <ListRow
-          title={t('mobile.climbRow.share')}
-          leading={<Icon name="share" size={22} color={brandColors.primary} />}
-          onPress={handleShare}
-          showSeparator
-        />
         <ListRow
           title={t('mobile.climbActions.copyLink')}
           leading={<Icon name="copy" size={22} color={iosSystemColors.systemBlue} />}

@@ -1,18 +1,43 @@
 import { memo, useCallback } from 'react';
 import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import type { ActionBarContract } from '@boardsesh/play-view';
 import { Icon } from '../Icon';
 import { Badge } from '../Badge';
 import { Text } from '../Text';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
-import { spacing } from '../../theme/tokens';
+import { spacing, shadows } from '../../theme/tokens';
 import { hapticMedium } from '../../lib/haptics';
 
-type PlayDrawerActionBarProps = ActionBarContract & {
+type ButtonSize = 'lg' | 'sm';
+
+const SIZES: Record<ButtonSize, { dim: number; icon: number }> = {
+  lg: { dim: 56, icon: 28 },
+  sm: { dim: 40, icon: 22 },
+};
+
+type PlayDrawerActionBarProps = {
+  canSwipePrevious: boolean;
+  canSwipeNext: boolean;
+  isMirrored: boolean;
+  supportsMirroring: boolean;
+  isFavorited: boolean;
+  remainingQueueCount: number;
+  lightbulbActive: boolean;
+  lightbulbPending?: boolean;
+  ascentCount: number;
   currentAngle?: number;
+  onPrevClick: () => void;
+  onNextClick: () => void;
+  onMirror: () => void;
+  onToggleFavorite: () => void;
+  onLightbulb: () => void;
+  onOpenActions: () => void;
+  onOpenQueue: () => void;
+  onShare: () => void;
+  onTickPress: () => void;
+  onTickLongPress: () => void;
   onOpenAngleSelector?: () => void;
 };
 
@@ -25,6 +50,8 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   remainingQueueCount,
   lightbulbActive,
   lightbulbPending = false,
+  ascentCount,
+  currentAngle,
   onPrevClick,
   onNextClick,
   onMirror,
@@ -32,10 +59,13 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   onLightbulb,
   onOpenActions,
   onOpenQueue,
-  currentAngle,
+  onShare,
+  onTickPress,
+  onTickLongPress,
   onOpenAngleSelector,
 }: PlayDrawerActionBarProps) {
   const { t } = useTranslation('session');
+  const { t: tClimbs } = useTranslation('climbs');
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
 
@@ -64,95 +94,119 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
     onOpenAngleSelector?.();
   }, [onOpenAngleSelector]);
 
+  const handleShare = useCallback(() => {
+    hapticMedium();
+    onShare();
+  }, [onShare]);
+
   return (
     <View style={styles.container}>
-      {/* Previous */}
-      <ActionButton
-        iconName="skip.previous"
-        onPress={handlePrev}
-        disabled={!canSwipePrevious}
-        accessibilityLabel={t('playView.actionBar.previousAria')}
-      />
-
-      {/* Mirror */}
-      {supportsMirroring && (
-        <ActionButton
-          iconName="mirror"
-          onPress={handleMirror}
-          active={isMirrored}
-          activeColor={brandColors.primary}
-          accessibilityLabel={isMirrored ? t('playView.actionBar.unmirrorAria') : t('playView.actionBar.mirrorAria')}
-        />
-      )}
-
-      {/* Favorite */}
-      <ActionButton
-        iconName={isFavorited ? 'favorite.fill' : 'favorite'}
-        onPress={handleFavorite}
-        iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
-        accessibilityLabel={
-          isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')
-        }
-      />
-
-      {/* Lightbulb */}
-      <BleLightbulbButton
-        isConnected={lightbulbActive}
-        isScanning={lightbulbPending}
-        onPress={onLightbulb}
-        accessibilityLabel={lightbulbActive ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
-        scanningAccessibilityHint={tSettings('ble.scanning')}
-        haptic="medium"
-      />
-
-      {/* Angle pill */}
-      {onOpenAngleSelector && currentAngle != null && (
-        <Pressable
-          onPress={handleAngleSelector}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.angleSelector.title')}
-          style={({ pressed }) => [styles.actionButton, styles.anglePill, pressed && styles.actionButtonPressed]}
-        >
-          <Text variant="caption1" style={styles.angleText}>
-            {currentAngle}°
-          </Text>
-        </Pressable>
-      )}
-
-      {/* More actions */}
-      <ActionButton
-        iconName="more"
-        onPress={onOpenActions}
-        accessibilityLabel={t('playView.actionBar.climbActionsAria')}
-      />
-
-      {/* Queue */}
-      <View>
-        <ActionButton
-          iconName="queue"
-          onPress={onOpenQueue}
-          accessibilityLabel={t('playView.actionBar.queueCountAria', { count: remainingQueueCount })}
-        />
-        {remainingQueueCount > 0 && (
-          <View style={styles.badgeContainer}>
-            <Badge count={remainingQueueCount} color={brandColors.primary} size="small" />
-          </View>
+      <View style={styles.rowPrimary}>
+        {supportsMirroring && (
+          <ActionButton
+            size="lg"
+            iconName="mirror"
+            onPress={handleMirror}
+            active={isMirrored}
+            activeColor={brandColors.primary}
+            accessibilityLabel={isMirrored ? t('playView.actionBar.unmirrorAria') : t('playView.actionBar.mirrorAria')}
+          />
         )}
+        <ActionButton
+          size="lg"
+          iconName="skip.previous"
+          onPress={handlePrev}
+          disabled={!canSwipePrevious}
+          accessibilityLabel={t('playView.actionBar.previousAria')}
+        />
+        <TickButton
+          size="lg"
+          ascentCount={ascentCount}
+          onPress={onTickPress}
+          onLongPress={onTickLongPress}
+          accessibilityLabel={t('playView.tickFab.logAscentAria')}
+        />
+        <ActionButton
+          size="lg"
+          iconName="skip.next"
+          onPress={handleNext}
+          disabled={!canSwipeNext}
+          accessibilityLabel={t('playView.actionBar.nextAria')}
+        />
+        <BleLightbulbButton
+          isConnected={lightbulbActive}
+          isScanning={lightbulbPending}
+          onPress={onLightbulb}
+          accessibilityLabel={lightbulbActive ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
+          scanningAccessibilityHint={tSettings('ble.scanning')}
+          haptic="medium"
+          size={SIZES.lg.icon}
+          containerSize={SIZES.lg.dim}
+        />
       </View>
 
-      {/* Next */}
-      <ActionButton
-        iconName="skip.next"
-        onPress={handleNext}
-        disabled={!canSwipeNext}
-        accessibilityLabel={t('playView.actionBar.nextAria')}
-      />
+      <View style={styles.rowSecondary}>
+        {onOpenAngleSelector && currentAngle != null && (
+          <Pressable
+            onPress={handleAngleSelector}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.angleSelector.title')}
+            style={({ pressed }) => [
+              styles.anglePill,
+              { height: SIZES.sm.dim, borderRadius: SIZES.sm.dim / 2 },
+              pressed && styles.actionButtonPressed,
+            ]}
+          >
+            <Text variant="caption1" style={styles.angleText}>
+              {currentAngle}°
+            </Text>
+          </Pressable>
+        )}
+        <ActionButton
+          size="sm"
+          iconName={isFavorited ? 'favorite.fill' : 'favorite'}
+          onPress={handleFavorite}
+          iconColor={isFavorited ? iosSystemColors.systemRed : undefined}
+          accessibilityLabel={
+            isFavorited ? t('playView.actionBar.removeFavoriteAria') : t('playView.actionBar.addFavoriteAria')
+          }
+        />
+        <ActionButton
+          size="sm"
+          iconName="more"
+          onPress={onOpenActions}
+          accessibilityLabel={t('playView.actionBar.climbActionsAria')}
+        />
+
+        <View style={styles.spacer} />
+
+        <ActionButton
+          size="sm"
+          iconName="share"
+          onPress={handleShare}
+          accessibilityLabel={tClimbs('mobile.climbRow.share')}
+        />
+        <View>
+          <ActionButton
+            size="sm"
+            iconName="queue"
+            onPress={onOpenQueue}
+            accessibilityLabel={t('playView.actionBar.queueCountAria', { count: remainingQueueCount })}
+          />
+          {remainingQueueCount > 0 && (
+            <View style={styles.badgeContainer}>
+              <Badge count={remainingQueueCount} color={brandColors.primary} size="small" />
+            </View>
+          )}
+        </View>
+      </View>
     </View>
   );
 });
 
 type ActionButtonProps = {
   iconName: import('../icon-map').IconName;
+  size: ButtonSize;
   onPress: () => void;
   disabled?: boolean;
   active?: boolean;
@@ -163,6 +217,7 @@ type ActionButtonProps = {
 
 function ActionButton({
   iconName,
+  size,
   onPress,
   disabled = false,
   active = false,
@@ -170,7 +225,11 @@ function ActionButton({
   iconColor,
   accessibilityLabel,
 }: ActionButtonProps) {
-  const buttonStyle: ViewStyle[] = [styles.actionButton];
+  const { dim, icon } = SIZES[size];
+  const buttonStyle: ViewStyle[] = [
+    styles.actionButton,
+    { width: dim, height: dim, borderRadius: dim / 2 },
+  ];
   if (active && activeColor) {
     buttonStyle.push({ backgroundColor: `${activeColor}20` });
   }
@@ -192,28 +251,81 @@ function ActionButton({
         pressed && !disabled && styles.actionButtonPressed,
       ]}
     >
-      <Icon name={iconName} size={24} color={resolvedColor} />
+      <Icon name={iconName} size={icon} color={resolvedColor} />
+    </Pressable>
+  );
+}
+
+type TickButtonProps = {
+  size: ButtonSize;
+  ascentCount: number;
+  onPress: () => void;
+  onLongPress?: () => void;
+  accessibilityLabel: string;
+};
+
+function TickButton({ size, ascentCount, onPress, onLongPress, accessibilityLabel }: TickButtonProps) {
+  const { dim, icon } = SIZES[size];
+  const handlePress = useCallback(() => {
+    hapticMedium();
+    onPress();
+  }, [onPress]);
+  const handleLongPress = useCallback(() => {
+    if (!onLongPress) return;
+    hapticMedium();
+    onLongPress();
+  }, [onLongPress]);
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => [
+        styles.tickButton,
+        { width: dim, height: dim, borderRadius: dim / 2 },
+        pressed && styles.tickButtonPressed,
+      ]}
+    >
+      <Icon name="tick.outline" size={icon} color={iosSystemColors.white} />
+      {ascentCount > 0 && (
+        <View style={styles.countBadge}>
+          <Text variant="caption2" color={iosSystemColors.white} style={styles.countText}>
+            {ascentCount > 99 ? '99' : String(ascentCount)}
+          </Text>
+        </View>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: iosSystemColors.separator,
+  },
+  rowPrimary: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+  },
+  rowSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
     paddingTop: spacing[2],
     paddingBottom: spacing[3],
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
+  },
+  spacer: {
+    flex: 1,
   },
   actionButton: {
-    width: 44,
-    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
   },
   actionButtonDisabled: {
     opacity: 0.4,
@@ -224,15 +336,44 @@ const styles = StyleSheet.create({
   },
   badgeContainer: {
     position: 'absolute',
-    top: 2,
-    right: 2,
+    top: 0,
+    right: 0,
   },
   anglePill: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: `${iosSystemColors.systemGray}1F`,
   },
   angleText: {
     fontWeight: '600',
     color: iosSystemColors.systemGray,
+  },
+  tickButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: brandColors.success,
+    ...shadows.md,
+  },
+  tickButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.92 }],
+  },
+  countBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: brandColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  countText: {
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 12,
   },
 });

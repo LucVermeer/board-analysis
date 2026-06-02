@@ -1,6 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -17,7 +16,6 @@ import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
-import { PlayDrawerTickFab } from './PlayDrawerTickFab';
 import { QuickTickBar } from './QuickTickBar';
 import { DeferredSections } from './DeferredSections';
 import { QueueSheet } from './QueueSheet';
@@ -30,12 +28,12 @@ import { useTheme } from '../../providers/theme-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
+import { useShareClimb } from '../../hooks/use-share-climb';
 import { getBoardRenderData } from '../../lib/board-details';
 import { hapticSuccess } from '../../lib/haptics';
 import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
-import { timing } from '../../theme/animations';
 
 function climbToQueueItem(climb: Climb): ClimbQueueItem {
   return {
@@ -106,6 +104,21 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
   const resetZoomRef = useRef<(() => void) | null>(null);
 
+  // Measured heights driving the peek snap-point. The peek opens the drawer
+  // just far enough to reveal the Beta Videos section header. Because board
+  // carousel height varies by board/layout, we measure both regions at runtime
+  // rather than hardcoding.
+  const [aboveFoldHeight, setAboveFoldHeight] = useState(0);
+  const [betaHeaderHeight, setBetaHeaderHeight] = useState(0);
+
+  const handleAboveFoldLayout = useCallback((event: LayoutChangeEvent) => {
+    const measured = event.nativeEvent.layout.height;
+    setAboveFoldHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
+  }, []);
+  const handleBetaHeaderLayout = useCallback((measured: number) => {
+    setBetaHeaderHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
+  }, []);
+
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
@@ -138,19 +151,18 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
   }, [displayedClimbUuid]);
 
-  // FAB animation: hide when tick bar is active
-  const fabScale = useSharedValue(1);
-  const fabOpacity = useSharedValue(1);
+  const shareClimb = useShareClimb({
+    climb: displayedClimb ?? null,
+    boardName,
+    layoutId,
+    sizeId,
+    setIds,
+    angle,
+  });
 
-  useEffect(() => {
-    fabScale.value = withTiming(isTickBarActive ? 0.5 : 1, { duration: timing.fast });
-    fabOpacity.value = withTiming(isTickBarActive ? 0 : 1, { duration: timing.fast });
-  }, [isTickBarActive, fabScale, fabOpacity]);
-
-  const fabAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: fabScale.value }],
-    opacity: fabOpacity.value,
-  }));
+  const handleShare = useCallback(() => {
+    void shareClimb();
+  }, [shareClimb]);
 
   useImperativeHandle(ref, () => ({
     open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
@@ -270,7 +282,23 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
-  const snapPoints = useMemo(() => ['100%'], []);
+  const peekHeight =
+    aboveFoldHeight > 0 && betaHeaderHeight > 0 ? aboveFoldHeight + betaHeaderHeight + spacing[2] : 0;
+
+  const snapPoints = useMemo<(number | string)[]>(
+    () => (peekHeight > 0 ? [peekHeight, '100%'] : ['100%']),
+    [peekHeight],
+  );
+
+  // Once peek-height becomes known after the sheet is already open, snap to it.
+  // First-frame measurement may land after the sheet has already presented at
+  // 100% — this single corrective snap settles into peek without a perceptible
+  // full-screen flash on subsequent climb opens.
+  useEffect(() => {
+    if (peekHeight > 0 && isSheetOpen) {
+      sheetRef.current?.snapToIndex(0);
+    }
+  }, [peekHeight, isSheetOpen]);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
@@ -281,6 +309,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       <BottomSheetModal
         ref={sheetRef}
         snapPoints={snapPoints}
+        index={0}
         topInset={insets.top}
         enablePanDownToClose
         enableContentPanningGesture={!subDrawerOpen}
@@ -305,84 +334,78 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
           {displayedClimb && (
             <>
-              <PlayDrawerHeader
-                name={displayedClimb.name}
-                difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
-                rawDifficulty={displayedClimb.difficulty}
-                qualityAverage={displayedClimb.quality_average}
-                ascensionistCount={displayedClimb.ascensionist_count}
-                stars={displayedClimb.stars}
-                setterUsername={displayedClimb.setter_username}
-              />
+              <View onLayout={handleAboveFoldLayout}>
+                <PlayDrawerHeader
+                  name={displayedClimb.name}
+                  difficulty={formatGrade(displayedClimb.difficulty) ?? displayedClimb.difficulty}
+                  rawDifficulty={displayedClimb.difficulty}
+                  qualityAverage={displayedClimb.quality_average}
+                  ascensionistCount={displayedClimb.ascensionist_count}
+                  stars={displayedClimb.stars}
+                  setterUsername={displayedClimb.setter_username}
+                />
 
-              <View style={styles.boardSection}>
-                {boardRenderData && (
-                  <SwipeBoardCarousel
-                    boardName={boardName as BoardName}
-                    boardRenderData={boardRenderData}
+                <View style={styles.boardSection}>
+                  {boardRenderData && (
+                    <SwipeBoardCarousel
+                      boardName={boardName as BoardName}
+                      boardRenderData={boardRenderData}
+                      layoutId={layoutId}
+                      sizeId={sizeId}
+                      setIds={setIds}
+                      currentFrames={displayedClimb.frames}
+                      nextFrames={navigationState.nextItem?.climb.frames ?? null}
+                      prevFrames={navigationState.prevItem?.climb.frames ?? null}
+                      mirrored={isMirrored}
+                      canSwipeNext={navigationState.canNext}
+                      canSwipePrevious={navigationState.canPrevious}
+                      onSwipeNext={handleNext}
+                      onSwipePrevious={handlePrev}
+                      onResetZoomReady={handleResetZoomReady}
+                      enabled={!isTickBarActive}
+                    />
+                  )}
+
+                  {/* Quick Tick Bar (expanded mode, triggered by tick button in action bar) */}
+                  <QuickTickBar
+                    visible={isTickBarActive}
+                    climbUuid={displayedClimb.uuid}
+                    boardName={boardName}
+                    angle={angle}
+                    isMirror={isMirrored}
+                    isBenchmark={displayedClimb.benchmark_difficulty != null}
                     layoutId={layoutId}
                     sizeId={sizeId}
                     setIds={setIds}
-                    currentFrames={displayedClimb.frames}
-                    nextFrames={navigationState.nextItem?.climb.frames ?? null}
-                    prevFrames={navigationState.prevItem?.climb.frames ?? null}
-                    mirrored={isMirrored}
-                    canSwipeNext={navigationState.canNext}
-                    canSwipePrevious={navigationState.canPrevious}
-                    onSwipeNext={handleNext}
-                    onSwipePrevious={handlePrev}
-                    onResetZoomReady={handleResetZoomReady}
-                    enabled={!isTickBarActive}
+                    sessionId={sessionId}
+                    onDismiss={handleTickBarDismiss}
                   />
-                )}
+                </View>
 
-                {/* Tick FAB */}
-                <Animated.View
-                  style={[styles.fabWrapper, fabAnimatedStyle]}
-                  pointerEvents={isTickBarActive ? 'none' : 'auto'}
-                >
-                  <PlayDrawerTickFab
-                    ascentCount={ascentCount}
-                    onPress={handleTickFabPress}
-                    onLongPress={handleTickFabLongPress}
-                  />
-                </Animated.View>
-
-                {/* Quick Tick Bar (expanded mode) */}
-                <QuickTickBar
-                  visible={isTickBarActive}
-                  climbUuid={displayedClimb.uuid}
-                  boardName={boardName}
-                  angle={angle}
-                  isMirror={isMirrored}
-                  isBenchmark={displayedClimb.benchmark_difficulty != null}
-                  layoutId={layoutId}
-                  sizeId={sizeId}
-                  setIds={setIds}
-                  sessionId={sessionId}
-                  onDismiss={handleTickBarDismiss}
+                <PlayDrawerActionBar
+                  canSwipePrevious={navigationState.canPrevious}
+                  canSwipeNext={navigationState.canNext}
+                  isMirrored={isMirrored}
+                  supportsMirroring={supportsMirroring}
+                  isFavorited={isFavorited}
+                  remainingQueueCount={navigationState.remainingCount}
+                  lightbulbActive={bluetooth?.isConnected ?? false}
+                  lightbulbPending={bluetooth?.loading ?? false}
+                  ascentCount={ascentCount}
+                  onPrevClick={handlePrev}
+                  onNextClick={handleNext}
+                  onMirror={handleMirror}
+                  onToggleFavorite={handleToggleFavorite}
+                  onLightbulb={handleLightbulb}
+                  onOpenActions={handleOpenActions}
+                  onOpenQueue={handleOpenQueue}
+                  onShare={handleShare}
+                  onTickPress={handleTickFabPress}
+                  onTickLongPress={handleTickFabLongPress}
+                  currentAngle={angle}
+                  onOpenAngleSelector={handleOpenAngleSelector}
                 />
               </View>
-
-              <PlayDrawerActionBar
-                canSwipePrevious={navigationState.canPrevious}
-                canSwipeNext={navigationState.canNext}
-                isMirrored={isMirrored}
-                supportsMirroring={supportsMirroring}
-                isFavorited={isFavorited}
-                remainingQueueCount={navigationState.remainingCount}
-                lightbulbActive={bluetooth?.isConnected ?? false}
-                lightbulbPending={bluetooth?.loading ?? false}
-                onPrevClick={handlePrev}
-                onNextClick={handleNext}
-                onMirror={handleMirror}
-                onToggleFavorite={handleToggleFavorite}
-                onLightbulb={handleLightbulb}
-                onOpenActions={handleOpenActions}
-                onOpenQueue={handleOpenQueue}
-                currentAngle={angle}
-                onOpenAngleSelector={handleOpenAngleSelector}
-              />
 
               {/* Below-fold deferred sections */}
               <DeferredSections
@@ -394,6 +417,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                 angle={angle}
                 enabled={isSheetOpen}
                 onSimilarClimbPress={handleSimilarClimbPress}
+                onBetaHeaderLayout={handleBetaHeaderLayout}
               />
             </>
           )}
@@ -492,11 +516,5 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     marginHorizontal: spacing[4],
-  },
-  fabWrapper: {
-    position: 'absolute',
-    bottom: 12,
-    right: 16,
-    zIndex: 10,
   },
 });
