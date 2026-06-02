@@ -368,4 +368,63 @@ describe('SwipeableDrawer', () => {
       expect(onClose).not.toHaveBeenCalled();
     });
   });
+
+  // The opacity guard is the iOS-Safari snap fix: once a gesture has slid the
+  // paper off-screen, the paper is hidden the instant `open` flips false so MUI's
+  // Slide exit can't flash it back at the open position. `gesturePrePositioned`
+  // is read at render time (before Slide's exit mutates the transform), so it
+  // distinguishes a gesture close from a button/Esc close.
+  describe('gesture-close opacity guard', () => {
+    function getPaper(): HTMLElement {
+      return document.querySelector('.MuiDrawer-paper') as HTMLElement;
+    }
+
+    it('hides the off-screen paper when a gesture close flips open to false, and restores on reopen', () => {
+      const onClose = vi.fn();
+      const { rerender } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      const paper = getPaper();
+      Object.defineProperty(paper, 'offsetHeight', { value: 1000, configurable: true });
+      // The gesture left the paper translated fully off-screen.
+      paper.style.transform = 'translateY(900px)';
+      expect(paper.style.opacity).not.toBe('0'); // visible while open
+
+      rerender(
+        <SwipeableDrawer {...baseProps} placement="bottom" open={false} onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      expect(paper.style.opacity).toBe('0');
+
+      // Reopening makes it visible again.
+      rerender(
+        <SwipeableDrawer {...baseProps} placement="bottom" open onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      expect(paper.style.opacity).toBe('');
+    });
+
+    it('does not hide the paper on a plain close with no gesture transform (button / Esc)', () => {
+      const onClose = vi.fn();
+      const { rerender } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      const paper = getPaper();
+      Object.defineProperty(paper, 'offsetHeight', { value: 1000, configurable: true });
+      paper.style.transform = ''; // no in-progress gesture
+
+      rerender(
+        <SwipeableDrawer {...baseProps} placement="bottom" open={false} onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      expect(paper.style.opacity).not.toBe('0');
+    });
+  });
 });

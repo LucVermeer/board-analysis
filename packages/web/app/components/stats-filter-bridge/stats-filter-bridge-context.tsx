@@ -1,17 +1,7 @@
 'use client';
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-  useLayoutEffect,
-  useEffect,
-} from 'react';
-
-const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+import React, { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useIsomorphicLayoutEffect } from '@/app/lib/hooks/use-isomorphic-layout-effect';
 
 // -------------------------------------------------------------------
 // State context (consumed by GlobalHeader)

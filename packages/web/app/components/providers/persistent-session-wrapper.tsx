@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useIsomorphicLayoutEffect } from '@/app/lib/hooks/use-isomorphic-layout-effect';
 import { usePathnameWithoutLocale } from '@/app/lib/i18n/use-locale-router';
 import { PartyProfileProvider } from '../party-manager/party-profile-context';
 import { PersistentSessionProvider, usePersistentSession, usePersistentSessionState } from '../persistent-session';
@@ -35,8 +36,6 @@ import { FeedbackPromptBanner } from '../feedback/feedback-prompt-banner';
 const SeshSettingsDrawer = dynamic(() => import('../sesh-settings/sesh-settings-drawer'), {
   ssr: false,
 });
-
-const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 type PersistentSessionWrapperProps = {
   children: React.ReactNode;
