@@ -21,7 +21,6 @@ type YouFilterSheetProps = {
   onSelectBoard: (board: string) => void;
   timeframe: UnifiedTimeframeType;
   onSelectTimeframe: (timeframe: UnifiedTimeframeType) => void;
-  onClose: () => void;
 };
 
 /** Board + timeframe filter for the Progress tab. Applies changes live. */
@@ -31,7 +30,6 @@ export function YouFilterSheet({
   onSelectBoard,
   timeframe,
   onSelectTimeframe,
-  onClose,
 }: YouFilterSheetProps) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
@@ -49,7 +47,6 @@ export function YouFilterSheet({
       ref={sheetRef}
       snapPoints={['55%']}
       scrollable
-      onClose={onClose}
       footer={<Button title={t('mobile.filter.done')} onPress={() => sheetRef.current?.close()} />}
       contentContainerStyle={styles.content}
     >

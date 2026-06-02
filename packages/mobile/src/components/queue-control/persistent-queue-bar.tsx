@@ -34,12 +34,12 @@ import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
 import { TAB_BAR_HEIGHT } from '../BlurTabBar';
+import { BAR_CONTENT_HEIGHT } from '../../theme/layout';
 import { useRouter } from 'expo-router';
 
-export const BAR_CONTENT_HEIGHT = 56;
 // Re-export so layout consumers that already import bar metrics from this
-// module don't need to know which file owns the tab-bar height.
-export { TAB_BAR_HEIGHT };
+// module don't need to know which file owns them. Source of truth: theme/layout.
+export { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT };
 
 type ClimbDisplay = {
   difficulty: string | null | undefined;

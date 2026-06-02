@@ -18,8 +18,12 @@ export function useYouProfileData(userId: string | undefined) {
 
   const [selectedBoard, setSelectedBoard] = useState<string>('all');
   const [timeframe, setTimeframe] = useState<UnifiedTimeframeType>('all');
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
+  // Custom date-range filtering isn't surfaced yet — YouFilterSheet only offers
+  // all/year/month/week. Kept as empty constants so deriveProfileViewModel gets
+  // a stable range; not exposed until the custom-range UI lands.
+  // TODO(you-page): add from/to date pickers to YouFilterSheet and lift these to state.
+  const fromDate = '';
+  const toDate = '';
 
   const allBoardsTicksQuery = useAllBoardsTicks(userId);
   const profileStatsQuery = useUserProfileStats(userId);
@@ -72,10 +76,6 @@ export function useYouProfileData(userId: string | undefined) {
     setSelectedBoard,
     timeframe,
     setTimeframe,
-    fromDate,
-    setFromDate,
-    toDate,
-    setToDate,
     hasActiveFilters,
 
     // Derived view model (renderer-agnostic; colors applied in components)

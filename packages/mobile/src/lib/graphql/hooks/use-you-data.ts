@@ -119,7 +119,6 @@ export function usePublicProfile(userId: string | undefined) {
       const response = await getHttpClient().request<GetPublicProfileQueryResponse>(GET_PUBLIC_PROFILE, { userId });
       return response.publicProfile;
     },
-    select: (publicProfile) => publicProfile,
     enabled: !!userId,
     staleTime: PROFILE_STALE_TIME_MS,
   });

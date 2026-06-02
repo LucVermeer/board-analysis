@@ -9,7 +9,7 @@ import { SectionHeader } from '../SectionHeader';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { StatsSummaryCard } from './StatsSummaryCard';
 import { StackedBarChart, GroupedBarChart, TotalAreaChart } from './YouCharts';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';

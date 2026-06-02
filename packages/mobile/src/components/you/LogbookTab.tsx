@@ -11,7 +11,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { LogbookRow } from './LogbookRow';
 import { LogbookEditSheet } from './LogbookEditSheet';
 import { useUserAscentsFeed } from '../../lib/graphql/hooks';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';

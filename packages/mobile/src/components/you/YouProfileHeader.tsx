@@ -72,7 +72,7 @@ export function YouProfileHeader({ userId, profile }: YouProfileHeaderProps) {
         </Pressable>
       </View>
 
-      <FollowListSheet sheetRef={sheetRef} userId={userId} mode={mode} enabled={opened} onClose={() => undefined} />
+      <FollowListSheet sheetRef={sheetRef} userId={userId} mode={mode} enabled={opened} />
     </View>
   );
 }

@@ -121,7 +121,6 @@ export default function YouScreen() {
         onSelectBoard={youData.setSelectedBoard}
         timeframe={youData.timeframe}
         onSelectTimeframe={youData.setTimeframe}
-        onClose={() => undefined}
       />
     </View>
   );

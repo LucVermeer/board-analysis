@@ -16,11 +16,10 @@ type FollowListSheetProps = {
   mode: 'followers' | 'following';
   /** Only fetch once the sheet has been opened. */
   enabled: boolean;
-  onClose: () => void;
 };
 
 /** Bottom sheet listing a user's followers or following. */
-export function FollowListSheet({ sheetRef, userId, mode, enabled, onClose }: FollowListSheetProps) {
+export function FollowListSheet({ sheetRef, userId, mode, enabled }: FollowListSheetProps) {
   const { t } = useTranslation('you');
   const followersQuery = useFollowers(userId, enabled && mode === 'followers');
   const followingQuery = useFollowing(userId, enabled && mode === 'following');
@@ -34,13 +33,7 @@ export function FollowListSheet({ sheetRef, userId, mode, enabled, onClose }: Fo
   const query = mode === 'followers' ? followersQuery : followingQuery;
 
   return (
-    <Sheet
-      ref={sheetRef}
-      snapPoints={['60%', '90%']}
-      scrollable
-      onClose={onClose}
-      contentContainerStyle={styles.content}
-    >
+    <Sheet ref={sheetRef} snapPoints={['60%', '90%']} scrollable contentContainerStyle={styles.content}>
       <Text variant="title3" style={styles.title}>
         {mode === 'followers' ? t('mobile.followers') : t('mobile.following')}
       </Text>
