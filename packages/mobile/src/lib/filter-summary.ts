@@ -67,6 +67,7 @@ export function getFilterSummary(
       gradeAccuracy: filters.gradeAccuracy,
       onlyTallClimbs: filters.onlyTallClimbs,
       onlyWideClimbs: filters.onlyWideClimbs,
+      onlyWithBetaVideos: filters.onlyWithBetaVideos,
       status: filters.status,
       hideAttempted: filters.hideAttempted,
       hideCompleted: filters.hideCompleted,

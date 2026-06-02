@@ -184,6 +184,10 @@ describe('getQualityPanelSummary vs Status (no duplication)', () => {
     expect(getQualityPanelSummary(makeParams({ onlyTallClimbs: true }), summaryLabels.quality)).toContain('Tall');
   });
 
+  it('uses the translated beta videos summary label', () => {
+    expect(getQualityPanelSummary(makeParams({ onlyWithBetaVideos: true }), summaryLabels.quality)).toContain('Beta');
+  });
+
   it('does not include "N+ ascents" when minAscents is 2 (Established handles it)', () => {
     const parts = getQualityPanelSummary(makeParams({ minAscents: 2 }), summaryLabels.quality);
     expect(parts.find((p) => p.includes('ascents'))).toBeUndefined();
