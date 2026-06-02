@@ -251,6 +251,28 @@ const AccordionSearchForm: React.FC<AccordionSearchFormProps> = ({ boardDetails,
         </div>
       )}
 
+      <div className={styles.switchGroup}>
+        <FormControlLabel
+          className={styles.switchRow}
+          labelPlacement="start"
+          control={
+            <MuiSwitch
+              size="small"
+              color="primary"
+              checked={uiSearchParams.onlyWithBetaVideos}
+              onChange={(_, checked) => updateFilters({ onlyWithBetaVideos: checked })}
+            />
+          }
+          label={
+            <MuiTooltip title={t('search.fields.betaVideosTooltip')}>
+              <MuiTypography variant="body2" component="span">
+                {t('search.fields.betaVideosOnly')}
+              </MuiTypography>
+            </MuiTooltip>
+          }
+        />
+      </div>
+
       <div className={styles.inputGroup}>
         <span className={styles.fieldLabel}>{t('search.fields.setter')}</span>
         <SetterNameSelect />

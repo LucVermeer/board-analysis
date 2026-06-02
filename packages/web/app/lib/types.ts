@@ -120,6 +120,7 @@ export type SearchRequest = {
   onlyClassics: boolean;
   onlyTallClimbs: boolean;
   onlyWideClimbs: boolean;
+  onlyWithBetaVideos: boolean;
   settername: string[];
   setternameSuggestion: string;
   holdsFilter: HoldsFilter;

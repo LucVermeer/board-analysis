@@ -161,6 +161,8 @@ export const climbTypeDefs = /* GraphQL */ `
     onlyTallClimbs: Boolean
     "Only show Kilter Homewall climbs that use the 10x10 side expansion"
     onlyWideClimbs: Boolean
+    "Only show climbs that have a beta video"
+    onlyWithBetaVideos: Boolean
     "Hold filter object: { holdId: 'ANY' | 'NOT', ... }"
     holdsFilter: JSON
     "Hide climbs the user has attempted (requires auth)"

@@ -14,6 +14,7 @@ export type FilterSummaryLabels = {
   gradeAccuracy?: (value: string) => string;
   tallOnly?: () => string;
   wideOnly?: () => string;
+  betaOnly?: () => string;
   status?: (kind: 'drafts' | 'established' | 'projects') => string;
   hideAttempted?: () => string;
   hideCompleted?: () => string;
@@ -33,6 +34,7 @@ export type BaseFilters = {
   gradeAccuracy?: string;
   onlyTallClimbs?: boolean;
   onlyWideClimbs?: boolean;
+  onlyWithBetaVideos?: boolean;
   status?: 'any' | 'drafts' | 'established' | 'projects';
   hideAttempted?: boolean;
   hideCompleted?: boolean;
@@ -92,6 +94,10 @@ export function getBaseFilterParts(
 
   if (filters.onlyWideClimbs && labels.wideOnly) {
     parts.push(labels.wideOnly());
+  }
+
+  if (filters.onlyWithBetaVideos && labels.betaOnly) {
+    parts.push(labels.betaOnly());
   }
 
   // 'any' is the catch-all default and 'established' overlaps the usual

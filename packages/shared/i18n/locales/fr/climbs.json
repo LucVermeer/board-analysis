@@ -106,6 +106,8 @@
       "tallClimbsTooltip": "Afficher uniquement les blocs qui utilisent les prises des 8 rangées du bas (disponible sur les boards 8x12 et 10x12 uniquement)",
       "wideClimbsOnly": "Blocs larges uniquement",
       "wideClimbsTooltip": "Afficher uniquement les blocs qui utilisent les colonnes latérales supplémentaires (disponible sur les boards 10x10 et 10x12)",
+      "betaVideosOnly": "Avec vidéo de beta uniquement",
+      "betaVideosTooltip": "Afficher uniquement les blocs qui ont une vidéo de beta",
       "gradeAccuracy": "Précision de la cotation",
       "somewhatAccurate": "Plutôt précise (<0.2)",
       "veryAccurate": "Très précise (<0.1)",
@@ -123,7 +125,8 @@
     },
     "quality": {
       "tallClimbsOnly": "Hauts",
-      "wideClimbsOnly": "Larges"
+      "wideClimbsOnly": "Larges",
+      "betaVideosOnly": "Beta"
     },
     "summary": {
       "default": "Quel bloc cherchez-vous ?",
@@ -631,6 +634,8 @@
       "tallDescription": "Atteignent le haut du mur",
       "wide": "Voies larges uniquement",
       "wideDescription": "Utilisent l'extension 10x10",
+      "betaVideos": "Avec vidéo de beta uniquement",
+      "betaVideosDescription": "Uniquement les voies avec une vidéo de beta",
       "searchSetters": "Rechercher des ouvreurs",
       "noSetters": "Aucun ouvreur",
       "cancel": "Annuler",

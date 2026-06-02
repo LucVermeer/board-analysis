@@ -88,6 +88,7 @@ export type QualitySummaryLabels = {
   gradeAccuracy: string;
   tallClimbsOnly: string;
   wideClimbsOnly: string;
+  betaVideosOnly: string;
 };
 
 export function getQualityPanelSummary(params: SearchRequestPagination, labels: QualitySummaryLabels): string[] {
@@ -113,6 +114,9 @@ export function getQualityPanelSummary(params: SearchRequestPagination, labels: 
   }
   if (params.onlyWideClimbs) {
     parts.push(labels.wideClimbsOnly);
+  }
+  if (params.onlyWithBetaVideos) {
+    parts.push(labels.betaVideosOnly);
   }
 
   return parts;
@@ -211,6 +215,7 @@ export function createSearchSummaryLabels(t: SearchSummaryTranslate): SearchPill
       gradeAccuracy: t('search.summary.gradeAccuracy'),
       tallClimbsOnly: t('search.quality.tallClimbsOnly'),
       wideClimbsOnly: t('search.quality.wideClimbsOnly'),
+      betaVideosOnly: t('search.quality.betaVideosOnly'),
     },
     status: {
       drafts: t('search.summary.drafts'),

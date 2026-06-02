@@ -101,6 +101,7 @@ export function buildClimbSearchParamsJson(searchParams: SearchRequestPagination
       settername: searchParams.settername,
       onlyTallClimbs: searchParams.onlyTallClimbs,
       onlyWideClimbs: searchParams.onlyWideClimbs,
+      onlyWithBetaVideos: searchParams.onlyWithBetaVideos,
       holdsFilter: searchParams.holdsFilter,
       zoneBox: searchParams.zoneBox,
       zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,

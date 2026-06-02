@@ -42,6 +42,7 @@ const mockSearchParams: SearchRequestPagination = {
   onlyClassics: false,
   onlyTallClimbs: false,
   onlyWideClimbs: false,
+  onlyWithBetaVideos: false,
   settername: [],
   setternameSuggestion: '',
   holdsFilter: {},

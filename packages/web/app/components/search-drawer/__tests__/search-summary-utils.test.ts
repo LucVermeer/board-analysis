@@ -30,6 +30,7 @@ const summaryLabels = {
     gradeAccuracy: 'Grade accuracy',
     tallClimbsOnly: 'Tall',
     wideClimbsOnly: 'Wide',
+    betaVideosOnly: 'Beta',
   },
   status: {
     drafts: 'Drafts',

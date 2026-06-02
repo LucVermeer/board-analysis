@@ -46,6 +46,7 @@ export type ClimbSearchParams = {
   onlyClassics?: boolean;
   onlyTallClimbs?: boolean;
   onlyWideClimbs?: boolean;
+  onlyWithBetaVideos?: boolean;
   // Hold filters: per-hold partial map of {STATE: 'include' | 'exclude'} entries.
   // Walked at SQL build time by `createClimbFilters`. Shape is intentionally
   // loose (Record<string, unknown>) here so this package doesn't depend on
@@ -94,6 +95,7 @@ export type ClimbSearchInputLike = {
   settername?: string[] | null;
   onlyTallClimbs?: boolean | null;
   onlyWideClimbs?: boolean | null;
+  onlyWithBetaVideos?: boolean | null;
   holdsFilter?: Record<string, unknown> | null;
   hideAttempted?: boolean | null;
   hideCompleted?: boolean | null;
@@ -143,6 +145,7 @@ export function mapSearchInputToParams(input: ClimbSearchInputLike): ClimbSearch
     settername: setter && setter.length > 0 ? setter : undefined,
     onlyTallClimbs: input.onlyTallClimbs ?? undefined,
     onlyWideClimbs: input.onlyWideClimbs ?? undefined,
+    onlyWithBetaVideos: input.onlyWithBetaVideos ?? undefined,
     holdsFilter: input.holdsFilter && Object.keys(input.holdsFilter).length > 0 ? input.holdsFilter : undefined,
     hideAttempted: input.hideAttempted ?? undefined,
     hideCompleted: input.hideCompleted ?? undefined,

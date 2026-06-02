@@ -161,6 +161,7 @@ describe('hasUserSpecificFilters', () => {
     onlyClassics: false,
     onlyTallClimbs: false,
     onlyWideClimbs: false,
+    onlyWithBetaVideos: false,
     settername: [] as string[],
     setternameSuggestion: '',
     holdsFilter: {},

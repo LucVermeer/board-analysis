@@ -94,6 +94,7 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   const onlyClassics = safeInput.onlyClassics ?? DEFAULT_SEARCH_PARAMS.onlyClassics;
   const onlyTallClimbs = safeInput.onlyTallClimbs ?? DEFAULT_SEARCH_PARAMS.onlyTallClimbs;
   const onlyWideClimbs = safeInput.onlyWideClimbs ?? DEFAULT_SEARCH_PARAMS.onlyWideClimbs;
+  const onlyWithBetaVideos = safeInput.onlyWithBetaVideos ?? DEFAULT_SEARCH_PARAMS.onlyWithBetaVideos;
   const settername = safeInput.settername ?? DEFAULT_SEARCH_PARAMS.settername;
   const setternameSuggestion = safeInput.setternameSuggestion ?? DEFAULT_SEARCH_PARAMS.setternameSuggestion;
   const holdsFilter = safeInput.holdsFilter ?? DEFAULT_SEARCH_PARAMS.holdsFilter;
@@ -146,6 +147,9 @@ export const searchParamsToUrlParams = (input: SearchRequestPagination): URLSear
   }
   if (onlyWideClimbs !== DEFAULT_SEARCH_PARAMS.onlyWideClimbs) {
     params.onlyWideClimbs = onlyWideClimbs.toString();
+  }
+  if (onlyWithBetaVideos !== DEFAULT_SEARCH_PARAMS.onlyWithBetaVideos) {
+    params.onlyWithBetaVideos = onlyWithBetaVideos.toString();
   }
   if (settername && settername.length > 0) {
     params.settername = settername.join(',');
@@ -227,6 +231,7 @@ export const DEFAULT_SEARCH_PARAMS: SearchRequestPagination = {
   onlyClassics: false,
   onlyTallClimbs: false,
   onlyWideClimbs: false,
+  onlyWithBetaVideos: false,
   settername: [],
   setternameSuggestion: '',
   holdsFilter: {},
@@ -323,6 +328,7 @@ export const urlParamsToSearchParams = (urlParams: URLSearchParams): SearchReque
     onlyClassics: urlParams.get('onlyClassics') === 'true',
     onlyTallClimbs: urlParams.get('onlyTallClimbs') === 'true',
     onlyWideClimbs: urlParams.get('onlyWideClimbs') === 'true',
+    onlyWithBetaVideos: urlParams.get('onlyWithBetaVideos') === 'true',
     settername:
       urlParams
         .get('settername')
@@ -396,6 +402,7 @@ export const parsedRouteSearchParamsToSearchParams = (urlParams: SearchRequestPa
     // Next.js route search params come as strings, so coerce to boolean
     onlyTallClimbs: String(urlParams.onlyTallClimbs) === 'true',
     onlyWideClimbs: String(urlParams.onlyWideClimbs) === 'true',
+    onlyWithBetaVideos: String(urlParams.onlyWithBetaVideos) === 'true',
     // The zone filter is serialised as four separate query params; the typed
     // SearchRequestPagination shape doesn't capture that, so read off the raw
     // route record. Without this, SSR list pages hit the GraphQL search with

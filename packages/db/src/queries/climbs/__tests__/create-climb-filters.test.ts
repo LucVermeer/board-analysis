@@ -351,6 +351,47 @@ void describe('createClimbFilters: wide climbs', () => {
   });
 });
 
+void describe('createClimbFilters: beta videos', () => {
+  const params: BoardRouteParams = {
+    board_name: 'kilter',
+    layout_id: 8,
+    size_id: 25,
+    set_ids: [26, 27, 28, 29],
+    angle: 40,
+  };
+
+  void it('does not add a beta-videos predicate when the filter is off', () => {
+    const filters = createClimbFilters(params, {});
+
+    assert.equal(filters.betaVideosConditions.length, 0);
+  });
+
+  void it('adds an EXISTS predicate over visible beta links when enabled', () => {
+    const filters = createClimbFilters(params, { onlyWithBetaVideos: true });
+
+    assert.equal(filters.betaVideosConditions.length, 1);
+    const rendered = sqlToString(filters.betaVideosConditions[0]);
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /bl\.board_type = kilter/);
+    assert.match(rendered, /bl\.climb_uuid = uuid/);
+    // Visible links are is_listed true or NULL — explicitly hidden links excluded.
+    assert.match(rendered, /bl\.is_listed IS NOT FALSE/);
+  });
+
+  void it('applies on non-Kilter boards too — it is not size-gated', () => {
+    const filters = createClimbFilters(
+      { ...params, board_name: 'tension', layout_id: 1, size_id: 7 },
+      { onlyWithBetaVideos: true },
+    );
+
+    assert.equal(filters.betaVideosConditions.length, 1);
+    const rendered = sqlToString(filters.betaVideosConditions[0]);
+    assert.notEqual(rendered, 'false');
+    assert.match(rendered, /EXISTS/);
+    assert.match(rendered, /bl\.board_type = tension/);
+  });
+});
+
 void describe('createClimbFilters: personal progress filters are scoped to the current angle', () => {
   // Locks in the angle-scoping contract — a send at one angle must not leak
   // into hide/show filters at a different angle. Each filter renders a
