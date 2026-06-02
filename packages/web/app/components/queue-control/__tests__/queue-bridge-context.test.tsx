@@ -714,6 +714,177 @@ describe('queue-bridge-context', () => {
     });
 
     // -------------------------------------------------------------------
+    // getNextClimbQueueItem now delegates to the shared @boardsesh/play-view
+    // helper (`findNextQueueItemWithSuggestions`) so the bridge's off-board
+    // swipe path stays in lockstep with mobile. These cases pin the behaviour
+    // the delegation brings, plus the web-only `from` / `suggestionsOnly`
+    // wrappers the bridge keeps around the shared helper.
+    // -------------------------------------------------------------------
+    describe('getNextClimbQueueItem delegation parity', () => {
+      const bd = createTestBoardDetails();
+      const climbA = createTestClimb({ uuid: 'a', name: 'Climb A' });
+      const climbB = createTestClimb({ uuid: 'b', name: 'Climb B' });
+      const climbC = createTestClimb({ uuid: 'c', name: 'Climb C' });
+
+      function renderWithLocalQueue(queue: ClimbQueueItem[], current: ClimbQueueItem | null) {
+        mockPersistentSession = createDefaultPersistentSession({
+          localQueue: queue,
+          localCurrentClimbQueueItem: current,
+          localBoardDetails: bd,
+          localBoardPath: '/kilter/1/10/1,2',
+          isLocalQueueLoaded: true,
+        });
+        const wrapper = ({ children }: { children: React.ReactNode }) => (
+          <QueueBridgeProvider>{children}</QueueBridgeProvider>
+        );
+        return renderHook(() => useTestQueueContext(), { wrapper });
+      }
+
+      it('re-walks the playlist from the re-activated climb instead of the first un-queued climb', () => {
+        // Behavior intentionally changed by the queue-bridge delegation
+        // (lockstep with mobile). The old bridge fell through to
+        // getPlaylistSuggestedClimbs(source, queue)[0] — the first source climb
+        // not already queued — which here would be `c`. The shared helper
+        // re-walks the source from the CURRENT climb (`a`), so re-activating the
+        // re-appended `a` at the tail surfaces `b` (a fresh pass), even though
+        // `b` is already in the queue. This is the "queue grows 1..n, 1..n"
+        // re-walk semantics that mobile relies on.
+        const itemA = createTestQueueItem(climbA, 'u-a');
+        const itemB = createTestQueueItem(climbB, 'u-b');
+        const itemC = createTestQueueItem(climbC, 'u-c');
+        // `a'` — climb `a` re-appended at the tail with a distinct queue uuid.
+        const itemATail = createTestQueueItem(climbA, 'u-a-tail');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climbA,
+          climbs: [climbA, climbB, climbC],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([itemA, itemB, itemC, itemATail], itemATail);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const next = result.current!.getNextClimbQueueItem();
+        expect(next?.climb.uuid).toBe('b');
+        expect(next?.uuid).toBe('playlist-peek:b');
+        expect(next?.suggested).toBe(true);
+      });
+
+      it('returns queue[0] when there is no current climb and the queue is non-empty', () => {
+        // Behavior intentionally changed by the queue-bridge delegation
+        // (lockstep with mobile). The old bridge skipped queue[0] (its anchor
+        // lookup found nothing for a null current) and fell straight through to
+        // suggestions, returning null with no playlist source. The shared
+        // helper short-circuits to queue[0] so a queued-but-never-activated
+        // climb still drives the Next button.
+        const item1 = createTestQueueItem(climbA, 'i1');
+        const item2 = createTestQueueItem(climbB, 'i2');
+        const { result } = renderWithLocalQueue([item1, item2], null);
+
+        const next = result.current!.getNextClimbQueueItem();
+        expect(next?.uuid).toBe('i1');
+        expect(next?.climb.uuid).toBe('a');
+      });
+
+      it('seeds the first playlist suggestion when there is no current climb and the queue is empty', () => {
+        // Empty-seed parity: matches the helper's getPlaylistSuggestedClimbs
+        // anchor on source.activatedClimbUuid. Source [a, b, c] activated on
+        // `a` → first suggestion is `b`.
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climbA,
+          climbs: [climbA, climbB, climbC],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([], null);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const next = result.current!.getNextClimbQueueItem();
+        expect(next?.climb.uuid).toBe('b');
+        expect(next?.uuid).toBe('playlist-peek:b');
+        expect(next?.suggested).toBe(true);
+      });
+
+      it('honours the `from` anchor mid-queue and returns queue[idx + 1]', () => {
+        const item1 = createTestQueueItem(climbA, 'u1');
+        const item2 = createTestQueueItem(climbB, 'u2');
+        const item3 = createTestQueueItem(climbC, 'u3');
+        // current is item3 (tail) but `from` overrides the anchor to item1.
+        const { result } = renderWithLocalQueue([item1, item2, item3], item3);
+
+        const next = result.current!.getNextClimbQueueItem({ from: item1 });
+        expect(next?.uuid).toBe('u2');
+      });
+
+      it('falls through to the playlist from the `from` climb when that anchor is at the tail', () => {
+        const item1 = createTestQueueItem(climbA, 'u1');
+        const item2 = createTestQueueItem(climbB, 'u2');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climbA,
+          climbs: [climbA, climbB, climbC],
+          boardDetails: bd,
+        });
+        // current is null; the `from` anchor (item2, climb `b`, at the tail)
+        // drives the re-walk → climb after `b` in the source is `c`.
+        const { result } = renderWithLocalQueue([item1, item2], null);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const next = result.current!.getNextClimbQueueItem({ from: item2 });
+        expect(next?.climb.uuid).toBe('c');
+        expect(next?.uuid).toBe('playlist-peek:c');
+        expect(next?.suggested).toBe(true);
+      });
+
+      it('returns null for suggestionsOnly (web-only branch preserved)', () => {
+        // The bridge has no search results plumbed through, so suggestionsOnly
+        // stays a no-op even after delegating the rest to the shared helper.
+        const item1 = createTestQueueItem(climbA, 'u1');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climbA,
+          climbs: [climbA, climbB, climbC],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([item1], item1);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        expect(result.current!.getNextClimbQueueItem({ suggestionsOnly: true })).toBeNull();
+      });
+
+      it('produces a stable playlist-peek uuid across repeated calls in the same state', () => {
+        const item1 = createTestQueueItem(climbA, 'u1');
+        const source = createPlaylistSuggestionSource({
+          playlistUuid: 'playlist-1',
+          activatedClimb: climbA,
+          climbs: [climbA, climbB],
+          boardDetails: bd,
+        });
+        const { result } = renderWithLocalQueue([item1], item1);
+
+        act(() => {
+          result.current!.setPlaylistSuggestionSource(source);
+        });
+
+        const first = result.current!.getNextClimbQueueItem();
+        const second = result.current!.getNextClimbQueueItem();
+        expect(first?.uuid).toBe('playlist-peek:b');
+        expect(second?.uuid).toBe(first?.uuid);
+      });
+    });
+
+    // -------------------------------------------------------------------
     // Cold-start seeding: selecting a climb from a surface with no active
     // board (e.g. a playlist view) must auto-activate the climb's board.
     // -------------------------------------------------------------------

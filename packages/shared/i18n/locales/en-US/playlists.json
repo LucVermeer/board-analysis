@@ -84,6 +84,12 @@
     "shareError": "Failed to share",
     "deleted": "Playlist deleted",
     "deleteFailed": "Failed to delete playlist",
+    "deleteConfirm": {
+      "title": "Delete playlist?",
+      "message": "This permanently deletes \"{{name}}\" and its climbs. This can't be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
     "discussion": "Discussion",
     "empty": "No climbs in this playlist yet",
     "climbCount_one": "{{count}} climb",

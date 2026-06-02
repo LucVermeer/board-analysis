@@ -84,6 +84,12 @@
     "shareError": "No se pudo compartir",
     "deleted": "Playlist eliminada",
     "deleteFailed": "No se pudo eliminar la playlist",
+    "deleteConfirm": {
+      "title": "¿Eliminar playlist?",
+      "message": "Esto elimina \"{{name}}\" y sus bloques de forma permanente. No se puede deshacer.",
+      "confirm": "Eliminar",
+      "cancel": "Cancelar"
+    },
     "discussion": "Discusión",
     "empty": "Aún no hay bloques en esta playlist",
     "climbCount_one": "{{count}} bloque",

@@ -41,6 +41,10 @@ export type {
   FetchActivationClimbsArgs,
 } from './use-playlist-climb-activation';
 
+// Mutation callbacks (create / update / delete / pin / unpin / follow / unfollow).
+export { usePlaylistMutations } from './use-playlist-mutations';
+export type { UsePlaylistMutationsOptions, UsePlaylistMutationsResult } from './use-playlist-mutations';
+
 // Suggestion-refresh helper (also reachable via the
 // ./fetch-playlist-suggestion-climbs subpath).
 export {

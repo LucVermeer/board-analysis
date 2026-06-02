@@ -84,6 +84,12 @@
     "shareError": "Impossible de partager",
     "deleted": "Playlist supprimée",
     "deleteFailed": "Impossible de supprimer la playlist",
+    "deleteConfirm": {
+      "title": "Supprimer la playlist ?",
+      "message": "Cela supprime définitivement « {{name}} » et ses voies. Cette action est irréversible.",
+      "confirm": "Supprimer",
+      "cancel": "Annuler"
+    },
     "discussion": "Discussion",
     "empty": "Aucun bloc dans cette playlist pour l'instant",
     "climbCount_one": "{{count}} bloc",

@@ -25,6 +25,12 @@ export type PlaylistDetailHero = {
   icon?: string;
   /** Secondary line under the climb count (e.g. the smart-playlist creator). */
   subtitle?: string;
+  /** Already-translated follower-count line (public playlists). */
+  followerLabel?: string;
+  /** Board for the optional frosted board backdrop behind the hero square. */
+  boardType?: string;
+  layoutId?: number | null;
+  showBoardBackdrop?: boolean;
 };
 
 export type PlaylistDetailViewProps = {
@@ -89,7 +95,14 @@ export function PlaylistDetailView({
 
   const header = (
     <View style={styles.hero}>
-      <PlaylistPreviewSquare color={hero.color} icon={hero.icon} size={HERO_SQUARE} />
+      <PlaylistPreviewSquare
+        color={hero.color}
+        icon={hero.icon}
+        size={HERO_SQUARE}
+        boardType={hero.boardType}
+        layoutId={hero.layoutId}
+        showBoardBackdrop={hero.showBoardBackdrop}
+      />
       <View style={styles.heroText}>
         <Text variant="title3" numberOfLines={2} style={styles.heroName}>
           {hero.name}
@@ -97,6 +110,11 @@ export function PlaylistDetailView({
         <Text variant="subheadline" style={styles.heroMeta}>
           {t('detail.climbCount', { count: hero.climbCount })}
         </Text>
+        {hero.followerLabel ? (
+          <Text variant="footnote" style={styles.heroMeta}>
+            {hero.followerLabel}
+          </Text>
+        ) : null}
         {hero.subtitle ? (
           <Text variant="footnote" numberOfLines={1} style={styles.heroSubtitle}>
             {hero.subtitle}
