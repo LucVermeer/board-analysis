@@ -1,3 +1,9 @@
+// Polyfill Intl.PluralRules before i18next initialises. Hermes ships an
+// incomplete Intl implementation; without this, i18next's plural resolver
+// silently falls back to the v3 compatibility format and emits a startup
+// warning, plus picks wrong plural forms for es/fr. Mirrors how web wires
+// the same polyfill in app/lib/i18n/{server.ts,client.tsx}.
+import 'intl-pluralrules';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { getLocales } from 'expo-localization';

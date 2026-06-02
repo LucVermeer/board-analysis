@@ -173,7 +173,6 @@ export function PersistentQueueBar() {
     hapticSelection();
     openLogAscent({
       climbUuid: currentClimbQueueItem.climb.uuid,
-      climbName: currentClimbQueueItem.climb.name,
       boardName: boardConfig.boardName,
       angle: currentClimbQueueItem.climb.angle,
       isMirror: currentClimbQueueItem.climb.mirrored === true,
@@ -182,6 +181,7 @@ export function PersistentQueueBar() {
       sizeId: boardConfig.sizeId,
       setIds: boardConfig.setIds,
       sessionId,
+      consensusGradeName: currentClimbQueueItem.climb.difficulty,
     });
   }, [openLogAscent, currentClimbQueueItem, boardConfig, sessionId]);
 

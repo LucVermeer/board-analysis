@@ -31,7 +31,6 @@ export type BoardConfig = {
 
 export type LogAscentInput = {
   climbUuid: string;
-  climbName: string;
   boardName: string;
   angle: number;
   isMirror: boolean;
@@ -40,6 +39,11 @@ export type LogAscentInput = {
   sizeId?: number;
   setIds?: string;
   sessionId?: string | null;
+  // Climb's consensus grade name (just `Climb.difficulty`). Forwarded to
+  // InlineGradePicker so the consensus chip is centered and outlined
+  // without being preselected. Optional — callers that don't have a
+  // freshly fetched climb can omit it.
+  consensusGradeName?: string;
 };
 
 export type OpenPlayDrawerOptions = PlayDrawerOpenOptions & {
@@ -166,7 +170,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     if (!climbActions) return;
     setLogAscentInput({
       climbUuid: climbActions.climb.uuid,
-      climbName: climbActions.climb.name,
       boardName: climbActions.boardConfig.boardName,
       angle: climbActions.boardConfig.angle,
       isMirror: false,
@@ -174,6 +177,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       layoutId: climbActions.boardConfig.layoutId,
       sizeId: climbActions.boardConfig.sizeId,
       setIds: climbActions.boardConfig.setIds,
+      consensusGradeName: climbActions.climb.difficulty,
     });
   }, [climbActions]);
 
@@ -191,7 +195,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           visible
           onDismiss={dismissLogAscent}
           climbUuid={logAscentInput.climbUuid}
-          climbName={logAscentInput.climbName}
           boardName={logAscentInput.boardName}
           angle={logAscentInput.angle}
           isMirror={logAscentInput.isMirror}
@@ -200,6 +203,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           sizeId={logAscentInput.sizeId}
           setIds={logAscentInput.setIds}
           sessionId={logAscentInput.sessionId}
+          consensusGradeName={logAscentInput.consensusGradeName}
         />
       ) : null}
       {climbActions ? (

@@ -18,11 +18,10 @@ import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
-import { QuickTickBar } from './QuickTickBar';
+import { LogAscentSheet } from '../LogAscentSheet';
 import { DeferredSections } from './DeferredSections';
 import { QueueSheet } from './QueueSheet';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
-import { LogAscentSheet } from '../LogAscentSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
@@ -78,7 +77,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [climb, setClimb] = useState<Climb | null>(null);
-  const [showLogAscent, setShowLogAscent] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
   const [isTickBarActive, setIsTickBarActive] = useState(false);
@@ -251,8 +249,11 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(true);
   }, []);
 
+  // Long-press now opens the same QuickTickBar as a short press; LogAscentSheet
+  // has been retired in favour of a single ticking surface (see PR #2366).
   const handleTickFabLongPress = useCallback(() => {
-    setShowLogAscent(true);
+    resetZoomRef.current?.();
+    setIsTickBarActive(true);
   }, []);
 
   const handleTickBarDismiss = useCallback(() => {
@@ -393,20 +394,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     />
                   )}
 
-                  {/* Quick Tick Bar (expanded mode, triggered by tick button in action bar) */}
-                  <QuickTickBar
-                    visible={isTickBarActive}
-                    climbUuid={displayedClimb.uuid}
-                    boardName={boardName}
-                    angle={angle}
-                    isMirror={isMirrored}
-                    isBenchmark={displayedClimb.benchmark_difficulty != null}
-                    layoutId={layoutId}
-                    sizeId={sizeId}
-                    setIds={setIds}
-                    sessionId={sessionId}
-                    onDismiss={handleTickBarDismiss}
-                  />
                 </View>
 
                 <PlayDrawerActionBar
@@ -502,13 +489,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         />
       )}
 
-      {/* Log Ascent sheet (full, via long-press) */}
+      {/* Tick sheet — sibling of the PlayDrawer modal so it renders above
+          (gorhom `BottomSheetModal` with stackBehavior=push). Snap-point is
+          60% so the climb image above stays visible while logging. */}
       {displayedClimb && (
         <LogAscentSheet
-          visible={showLogAscent}
-          onDismiss={() => setShowLogAscent(false)}
+          visible={isTickBarActive}
+          onDismiss={handleTickBarDismiss}
           climbUuid={displayedClimb.uuid}
-          climbName={displayedClimb.name}
           boardName={boardName}
           angle={angle}
           isMirror={isMirrored}
@@ -517,6 +505,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           sizeId={sizeId}
           setIds={setIds}
           sessionId={sessionId}
+          consensusGradeName={displayedClimb.difficulty}
         />
       )}
     </>

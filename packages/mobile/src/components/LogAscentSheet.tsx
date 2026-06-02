@@ -1,35 +1,31 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Pressable, TextInput, ScrollView, StyleSheet, Alert, type ViewStyle } from 'react-native';
-import BottomSheet, {
+// Bottom-sheet wrapper around QuickTickBar. Used by every ticking entry
+// point — the play drawer's tick button, the persistent queue bar, the
+// climb detail screen — so the form, dismissal model (handle + pan-down +
+// backdrop tap), and keyboard handling stay identical across surfaces.
+//
+// Uses `BottomSheetModal` (not the regular `BottomSheet`) so it renders in
+// a portal above the play drawer's own modal. `FullWindowOverlay` on iOS
+// lifts the sheet above the tab bar — same pattern as DevicePickerSheet.
+import { useCallback, useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
+import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import {
+  BottomSheetModal,
   BottomSheetBackdrop,
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FullWindowOverlay } from 'react-native-screens';
 import { useTranslation } from 'react-i18next';
-import type { Grade } from '@boardsesh/shared-schema';
-import { Text } from './Text';
-import { Button } from './Button';
-import { Icon } from './Icon';
-import { Separator } from './Separator';
-import { SegmentedControl } from './SegmentedControl';
-import { StarRating } from './StarRating';
 import { useTheme } from '../providers/theme-provider';
-import { useGrades } from '../lib/graphql/hooks';
-import { useSaveTick } from '@boardsesh/board-react';
-import { toBoardName } from '@boardsesh/board-config';
-import { hapticSuccess, hapticLight, hapticError, hapticSelection } from '../lib/haptics';
-import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
-
-type TickStatus = 'flash' | 'send' | 'attempt';
+import { Icon } from './Icon';
+import { QuickTickBar } from './play-drawer/QuickTickBar';
 
 type LogAscentSheetProps = {
   visible: boolean;
   onDismiss: () => void;
   climbUuid: string;
-  climbName: string;
   boardName: string;
   angle: number;
   isMirror: boolean;
@@ -38,49 +34,19 @@ type LogAscentSheetProps = {
   sizeId?: number;
   setIds?: string;
   sessionId?: string | null;
+  consensusGradeName?: string;
 };
 
-const STATUS_OPTIONS: TickStatus[] = ['flash', 'send', 'attempt'];
-
-function getMinAttempts(tickStatus: TickStatus): number {
-  if (tickStatus === 'send') return 2;
-  return 1;
+function LogAscentModalContainer({ children }: PropsWithChildren) {
+  return <FullWindowOverlay>{children}</FullWindowOverlay>;
 }
 
-function GradeChip({ grade, selected, onPress }: { grade: Grade; selected: boolean; onPress: () => void }) {
-  const chipStyle: ViewStyle = {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: selected ? brandColors.primary : iosSystemColors.separator,
-    backgroundColor: selected ? brandColors.primary : 'transparent',
-  };
-
-  return (
-    <Pressable
-      onPress={() => {
-        hapticSelection();
-        onPress();
-      }}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={grade.name}
-    >
-      <View style={chipStyle}>
-        <Text variant="footnote" color={selected ? iosSystemColors.white : undefined} style={styles.gradeChipText}>
-          {grade.name}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
+const modalContainerComponent = Platform.OS === 'ios' ? LogAscentModalContainer : undefined;
 
 export function LogAscentSheet({
   visible,
   onDismiss,
   climbUuid,
-  climbName,
   boardName,
   angle,
   isMirror,
@@ -89,147 +55,45 @@ export function LogAscentSheet({
   sizeId,
   setIds,
   sessionId,
+  consensusGradeName,
 }: LogAscentSheetProps) {
-  const { t } = useTranslation('climbs');
-  const theme = useTheme();
-  const { systemColors } = theme;
-  const insets = useSafeAreaInsets();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
+  // Tracks whether the modal is currently *presented* (mounted into the
+  // gorhom modal stack), independent of the external `visible` prop. After
+  // a pan-down dismiss, gorhom unregisters the modal internally before
+  // `onDismiss` fires — calling `dismiss()` from our `visible` effect at
+  // that moment leaves the modal in an inconsistent state where a later
+  // `present()` is a no-op (the bug: tap tick → swipe down → tap tick →
+  // nothing happens).
+  const isPresentedRef = useRef(false);
+  const { systemColors } = useTheme();
+  const { t } = useTranslation('session');
 
   useEffect(() => {
-    // Sheet mounts when visible becomes true — expand it. Re-run on every
-    // `visible` toggle, since the parent keeps the sheet mounted across
-    // opens, and a [] deps array would only expand on the first open.
-    if (visible) {
-      sheetRef.current?.expand();
+    if (visible && !isPresentedRef.current) {
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if (!visible && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
     }
   }, [visible]);
 
-  const saveTick = useSaveTick(toBoardName(boardName));
-  const { data: grades } = useGrades(boardName);
+  const handleSheetDismiss = useCallback(() => {
+    isPresentedRef.current = false;
+    onDismiss();
+  }, [onDismiss]);
 
-  const [status, setStatus] = useState<TickStatus>('flash');
-  const [attemptCount, setAttemptCount] = useState(1);
-  const [quality, setQuality] = useState(0);
-  const [selectedDifficultyId, setSelectedDifficultyId] = useState<number | null>(null);
-  const [comment, setComment] = useState('');
-
-  const snapPoints = useMemo(() => ['85%'], []);
-
-  const statusLabels: Record<TickStatus, string> = useMemo(
-    () => ({
-      flash: t('mobile.logAscent.flash'),
-      send: t('mobile.logAscent.send'),
-      attempt: t('mobile.logAscent.attempt'),
-    }),
-    [t],
-  );
-
-  const segmentOptions = useMemo(
-    () => STATUS_OPTIONS.map((option) => ({ key: option, label: statusLabels[option] })),
-    [statusLabels],
-  );
-
-  const minAttempts = getMinAttempts(status);
-
-  const handleStatusChange = useCallback(
-    (newStatus: string) => {
-      const tickStatus = newStatus as TickStatus;
-      setStatus(tickStatus);
-      if (tickStatus === 'flash') {
-        setAttemptCount(1);
-      } else if (tickStatus === 'send' && attemptCount < 2) {
-        setAttemptCount(2);
-      }
-    },
-    [attemptCount],
-  );
-
-  const handleIncrement = useCallback(() => {
-    hapticLight();
-    setAttemptCount((previous) => previous + 1);
-  }, []);
-
-  const handleDecrement = useCallback(() => {
-    hapticLight();
-    setAttemptCount((previous) => Math.max(minAttempts, previous - 1));
-  }, [minAttempts]);
-
-  const handleQualityChange = useCallback((rating: number | undefined) => {
-    setQuality(rating ?? 0);
-  }, []);
-
-  const resetForm = useCallback(() => {
-    setStatus('flash');
-    setAttemptCount(1);
-    setQuality(0);
-    setSelectedDifficultyId(null);
-    setComment('');
-  }, []);
-
-  const handleSave = useCallback(() => {
-    saveTick.mutate(
-      {
-        climbUuid,
-        angle,
-        isMirror,
-        status,
-        attemptCount,
-        quality: quality > 0 ? quality : null,
-        difficulty: selectedDifficultyId,
-        isBenchmark,
-        comment,
-        climbedAt: new Date().toISOString(),
-        ...(sessionId ? { sessionId } : {}),
-        ...(layoutId != null ? { layoutId } : {}),
-        ...(sizeId != null ? { sizeId } : {}),
-        ...(setIds ? { setIds } : {}),
-      },
-      {
-        onSuccess: () => {
-          hapticSuccess();
-          resetForm();
-          sheetRef.current?.close();
-          onDismiss();
-        },
-        onError: () => {
-          hapticError();
-          Alert.alert(t('mobile.logAscent.errorTitle'), t('mobile.logAscent.errorMessage'));
-        },
-      },
-    );
-  }, [
-    saveTick,
-    climbUuid,
-    angle,
-    isMirror,
-    status,
-    attemptCount,
-    quality,
-    selectedDifficultyId,
-    isBenchmark,
-    comment,
-    sessionId,
-    layoutId,
-    sizeId,
-    setIds,
-    onDismiss,
-    resetForm,
-    t,
-  ]);
-
-  const handleSheetChange = useCallback(
-    (index: number) => {
-      if (index === -1) {
-        onDismiss();
-      }
-    },
-    [onDismiss],
-  );
+  // Default to 60% so the climb image stays visible above the sheet (the
+  // UX review flagged full-cover + carousel-disabled as the wrong
+  // tradeoff). The 92% snap is the keyboard-extended state: when the
+  // comment `BottomSheetTextInput` gains focus, gorhom auto-snaps to the
+  // last point so the input and save buttons stay above the keyboard.
+  const snapPoints = useMemo(() => ['60%', '92%'], []);
 
   const renderBackdrop = useCallback(
-    (backdropProps: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...backdropProps} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} pressBehavior="close" />
     ),
     [],
   );
@@ -240,173 +104,54 @@ export function LogAscentSheet({
     borderTopRightRadius: 16,
   };
 
-  const trackColor = systemColors.fill;
-
-  const stepperButtonStyle: ViewStyle = {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: systemColors.fill as string,
-  };
-
-  const commentInputStyle = {
-    borderWidth: 1,
-    borderColor: systemColors.separator as string,
-    borderRadius: 10,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    fontSize: 16,
-    lineHeight: 22,
-    color: systemColors.label as string,
-    minHeight: 80,
-    textAlignVertical: 'top' as const,
-  };
-
-  if (!visible) return null;
-
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={sheetRef}
+      name="log-ascent"
       index={0}
+      stackBehavior="push"
       snapPoints={snapPoints}
+      containerComponent={modalContainerComponent}
       enablePanDownToClose
+      onDismiss={handleSheetDismiss}
       backdropComponent={renderBackdrop}
-      onChange={handleSheetChange}
       handleIndicatorStyle={styles.indicator}
       backgroundStyle={backgroundStyle}
-      keyboardBehavior="interactive"
+      keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
     >
       <BottomSheetView style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text variant="title3">{t('mobile.logAscent.title')}</Text>
-          <Text variant="subheadline" style={styles.climbName}>
-            {climbName}
-          </Text>
+        <View style={styles.closeButtonRow}>
+          <Pressable
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel={t('playView.tickBar.closeAria')}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.closeButton,
+              { backgroundColor: systemColors.fill as string },
+              pressed && styles.closeButtonPressed,
+            ]}
+          >
+            <Icon name="chevron.down" size={18} color={systemColors.secondaryLabel} />
+          </Pressable>
         </View>
-
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Status segmented control */}
-          <View style={styles.section}>
-            <SegmentedControl
-              options={segmentOptions}
-              selectedKey={status}
-              onSelect={handleStatusChange}
-              trackColor={trackColor}
-            />
-          </View>
-
-          {/* Attempt count stepper */}
-          <View style={styles.section}>
-            <Text variant="subheadline" style={styles.sectionLabel}>
-              {t('mobile.logAscent.attempts')}
-            </Text>
-            <View style={styles.stepperRow}>
-              <Pressable
-                onPress={handleDecrement}
-                disabled={attemptCount <= minAttempts}
-                accessibilityRole="button"
-                accessibilityLabel={t('mobile.logAscent.decreaseAttempts')}
-                style={[stepperButtonStyle, attemptCount <= minAttempts && styles.stepperDisabled]}
-              >
-                <Icon
-                  name="minus.circle"
-                  size={22}
-                  color={attemptCount <= minAttempts ? iosSystemColors.systemGray4 : brandColors.primary}
-                />
-              </Pressable>
-              <Text variant="title3" style={styles.attemptCount}>
-                {attemptCount}
-              </Text>
-              <Pressable
-                onPress={handleIncrement}
-                accessibilityRole="button"
-                accessibilityLabel={t('mobile.logAscent.increaseAttempts')}
-                style={stepperButtonStyle}
-              >
-                <Icon name="add" size={22} color={brandColors.primary} />
-              </Pressable>
-            </View>
-          </View>
-
-          <Separator />
-
-          {/* Quality rating */}
-          <View style={styles.section}>
-            <Text variant="subheadline" style={styles.sectionLabel}>
-              {t('mobile.logAscent.quality')}
-            </Text>
-            <StarRating value={quality} onChange={handleQualityChange} clearValue={0} />
-          </View>
-
-          <Separator />
-
-          {/* Grade opinion */}
-          {grades && grades.length > 0 && (
-            <>
-              <View style={styles.section}>
-                <Text variant="subheadline" style={styles.sectionLabel}>
-                  {t('mobile.logAscent.gradeOpinion')}
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.gradeChipsContainer}
-                >
-                  {grades.map((grade) => (
-                    <GradeChip
-                      key={grade.difficultyId}
-                      grade={grade}
-                      selected={selectedDifficultyId === grade.difficultyId}
-                      onPress={() =>
-                        setSelectedDifficultyId(selectedDifficultyId === grade.difficultyId ? null : grade.difficultyId)
-                      }
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-
-              <Separator />
-            </>
-          )}
-
-          {/* Comment */}
-          <View style={styles.section}>
-            <Text variant="subheadline" style={styles.sectionLabel}>
-              {t('mobile.logAscent.comment')}
-            </Text>
-            <TextInput
-              value={comment}
-              onChangeText={setComment}
-              placeholder={t('mobile.logAscent.commentPlaceholder')}
-              placeholderTextColor={systemColors.tertiaryLabel as string}
-              multiline
-              style={commentInputStyle}
-            />
-          </View>
-
-        </ScrollView>
-
-        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
-          <Button
-            title={t('mobile.logAscent.save')}
-            onPress={handleSave}
-            variant="filled"
-            size="large"
-            loading={saveTick.isPending}
-            disabled={saveTick.isPending}
-            style={styles.saveButton}
-          />
-        </View>
+        <QuickTickBar
+          climbUuid={climbUuid}
+          boardName={boardName}
+          angle={angle}
+          isMirror={isMirror}
+          isBenchmark={isBenchmark}
+          layoutId={layoutId}
+          sizeId={sizeId}
+          setIds={setIds}
+          sessionId={sessionId}
+          consensusGradeName={consensusGradeName}
+          onDismiss={onDismiss}
+        />
       </BottomSheetView>
-    </BottomSheet>
+    </BottomSheetModal>
   );
 }
 
@@ -420,54 +165,20 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: spacing[4],
-  },
-  header: {
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[3],
-    alignItems: 'center',
-    gap: 4,
-  },
-  climbName: {
-    opacity: 0.6,
-  },
-  section: {
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-  },
-  sectionLabel: {
-    opacity: 0.6,
-    marginBottom: spacing[2],
-  },
-  stepperRow: {
+  closeButtonRow: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[1],
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing[5],
   },
-  stepperDisabled: {
-    opacity: 0.4,
-  },
-  attemptCount: {
-    minWidth: 40,
-    textAlign: 'center',
-  },
-  gradeChipsContainer: {
-    gap: spacing[2],
-    paddingVertical: spacing[1],
-  },
-  gradeChipText: {
-    fontWeight: '500',
-  },
-  footer: {
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[3],
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
-  },
-  saveButton: {
-    width: '100%',
+  closeButtonPressed: {
+    opacity: 0.7,
   },
 });

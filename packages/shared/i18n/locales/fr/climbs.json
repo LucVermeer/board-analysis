@@ -570,7 +570,8 @@
       "decreaseAttempts": "Diminuer les essais",
       "increaseAttempts": "Augmenter les essais",
       "errorTitle": "Échec de sauvegarde",
-      "errorMessage": "Impossible de sauvegarder votre ascension. Veuillez réessayer."
+      "errorMessage": "Impossible de sauvegarder votre ascension. Veuillez réessayer.",
+      "savedToast": "Tick enregistré"
     },
     "filter": {
       "title": "Filtres",
