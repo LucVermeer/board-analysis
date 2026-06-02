@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback, useRef } from 'react';
+import React, { useMemo, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import MuiSwipeableDrawer from '@mui/material/SwipeableDrawer';
 import Box from '@mui/material/Box';
@@ -8,9 +8,46 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import { themeTokens } from '@/app/theme/theme-config';
+import { onTransformSettled } from '@/app/lib/hooks/pull-to-close';
 import styles from './swipeable-drawer.module.css';
 
 type Placement = 'left' | 'right' | 'top' | 'bottom';
+
+// When a swipe/pull gesture has already slid the paper off-screen, the MUI Slide
+// EXIT must be instant (0ms) so it doesn't re-animate the paper from the open
+// position. `enter` keeps MUI's default entering-screen duration so opening is
+// unaffected; only the exit is collapsed.
+const GESTURE_EXIT_TRANSITION = { appear: 0, enter: 225, exit: 0 } as const;
+
+/**
+ * Read the element's current on-screen translate offset (px) along the swipe
+ * axis from its COMPUTED transform matrix, falling back to parsing the inline
+ * transform when `DOMMatrix`/`getComputedStyle` are unavailable (jsdom). Reading
+ * the computed matrix is resilient to the inline transform being written in a
+ * different syntax (`translate(0, Ypx)` vs `translateY(Ypx)`) or cleared by a
+ * competing transition.
+ */
+function readCurrentTranslate(el: HTMLElement, horizontal: boolean): number {
+  if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+    const computed = window.getComputedStyle(el).transform;
+    if (computed && computed !== 'none' && typeof DOMMatrix !== 'undefined') {
+      try {
+        const matrix = new DOMMatrix(computed);
+        return horizontal ? matrix.m41 : matrix.m42;
+      } catch {
+        // Fall through to inline parsing below.
+      }
+    }
+  }
+  const inline = el.style.transform;
+  const pair = inline.match(/translate(?:3d)?\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/);
+  if (pair) return parseFloat(horizontal ? pair[1] : pair[2]);
+  const single = inline.match(/translate([XY])\(\s*(-?[\d.]+)px/);
+  if (single && ((horizontal && single[1] === 'X') || (!horizontal && single[1] === 'Y'))) {
+    return parseFloat(single[2]);
+  }
+  return 0;
+}
 
 export type SwipeableDrawerProps = {
   swipeEnabled?: boolean;
@@ -273,35 +310,44 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
 
   // SwipeableDrawer onClose handler.
   // When triggered by a swipe fling, the Paper is at an intermediate position
-  // with inline styles from MUI's setPosition (translate(0, Xpx) format, no
-  // transition). We animate it to off-screen ourselves using the SAME format,
-  // then call onClose after the animation completes. This avoids the Slide
-  // transition entirely for swipe-closes — Slide's format (translateY) can't
-  // reliably interpolate with SwipeableDrawer's format in the same macrotask.
-  const closeAnimRef = useRef<number>(0);
+  // with an inline transform from MUI's setPosition (no transition). We finish
+  // the slide off-screen ourselves and flip React `open` only AFTER the paper is
+  // off-screen, so MUI's Slide exit (which runs on the `open=false` flip) starts
+  // from the already-off-screen position and is a visual no-op. Two details make
+  // the hand-off seamless and stop the paper snapping back toward open:
+  //   1. We target the SAME distance Slide's exit uses (viewport-relative) and
+  //      emit it in Slide's single-axis `translateY(...)`/`translateX(...)`
+  //      syntax, so the browser never has to interpolate between mismatched
+  //      transform-function lists.
+  //   2. We leave the inline transform pinned at the target and fire onClose on
+  //      `transitionend` (timer fallback), so there's no timer-vs-transition race.
+  // We intentionally leave MUI's hysteresis/minFlingVelocity at their defaults:
+  // their abort branch only runs when MUI decides NOT to close (it resets the
+  // paper to open without calling onClose), which is not this path.
+  // Tracks the MUI Paper element (set by the wrapper Box's callback ref below).
+  const lastPaperRef = useRef<HTMLDivElement | null>(null);
+  const closeSettleCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => closeSettleCleanupRef.current?.(), []);
   const handleSwipeableClose = useCallback(() => {
     const paper = lastPaperRef.current;
-    if (paper?.style.transform) {
-      // Paper has inline transform from swipe — animate it off-screen ourselves.
-      // We use the same translate() format MUI's setPosition uses so the browser
-      // can interpolate between the current swipe position and the target.
+    // Only a swipe leaves an inline transform on the paper. Backdrop click, Esc,
+    // and programmatic closes have none — close synchronously as before.
+    if (paper && paper.style.transform) {
       const isHorizontal = placement === 'left' || placement === 'right';
+      // Off-screen target = the paper's layout size along the swipe axis, which
+      // equals MUI Slide's exit distance for an edge-anchored drawer. Use
+      // offsetWidth/offsetHeight (NOT getBoundingClientRect, which already
+      // includes the live swipe transform) and emit Slide's single-axis syntax.
       const maxTranslate = isHorizontal ? paper.offsetWidth : paper.offsetHeight;
       const sign = placement === 'right' || placement === 'bottom' ? 1 : -1;
-      const target = isHorizontal ? `translate(${sign * maxTranslate}px, 0)` : `translate(0, ${sign * maxTranslate}px)`;
+      const target = isHorizontal ? `translateX(${sign * maxTranslate}px)` : `translateY(${sign * maxTranslate}px)`;
 
-      // Calculate duration proportional to remaining distance so the animation
-      // feels like it carries the fling momentum. A short fling from near the
-      // top has more distance → longer duration. A deep fling has less → snappier.
-      const currentMatch = paper.style.transform.match(/translate\(\s*(.+?)px\s*,\s*(.+?)px\s*\)/);
-      let currentTranslate = 0;
-      if (currentMatch) {
-        currentTranslate = Math.abs(parseFloat(isHorizontal ? currentMatch[1] : currentMatch[2]));
-      }
-      const remaining = maxTranslate - currentTranslate;
-      const fraction = remaining / maxTranslate;
-      // Base speed: cross the full distance in 300ms. Minimum 120ms so it doesn't
-      // feel instant, maximum 300ms so it doesn't feel sluggish.
+      // Duration proportional to the remaining distance so the slide carries the
+      // fling's momentum: a short fling from near the top has more distance left
+      // → longer; a deep fling has less → snappier. Clamp to a sensible range.
+      const currentTranslate = Math.abs(readCurrentTranslate(paper, isHorizontal));
+      const remaining = Math.max(0, maxTranslate - currentTranslate);
+      const fraction = maxTranslate > 0 ? remaining / maxTranslate : 1;
       const duration = Math.max(120, Math.min(300, fraction * 300));
 
       // Force reflow so the browser commits the current swipe position as the
@@ -315,11 +361,11 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
       paper.style.transform = target;
       paper.style.webkitTransform = target;
 
-      // Call onClose after animation so React state update doesn't interfere
-      clearTimeout(closeAnimRef.current);
-      closeAnimRef.current = window.setTimeout(() => {
+      closeSettleCleanupRef.current?.();
+      closeSettleCleanupRef.current = onTransformSettled(paper, duration + 60, () => {
+        closeSettleCleanupRef.current = null;
         onClose?.();
-      }, duration + 10);
+      });
       return;
     }
     onClose?.();
@@ -362,13 +408,34 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
   // and the drawer mounts already-open, MUI skips the slide-in animation.
   // After mount the prop has no effect, so subsequent open/close cycles
   // animate normally without any extra bookkeeping.
+  // If the paper is already animated off-screen by a swipe/pull gesture (its
+  // inline transform is translated past the half-way point) and React `open`
+  // then flips to false, MUI's Slide exit would re-animate the paper from the
+  // fully-OPEN position — the janky "snap back up, then close". Detect that
+  // pre-positioned state and make the Slide EXIT instant: the gesture already
+  // performed the visible slide, so the exit only needs to unmount the paper. A
+  // normal button / Esc / backdrop close leaves no inline transform, so it keeps
+  // MUI's default animated exit.
+  //
+  // We set the instant exit via BOTH `transitionDuration` and `SlideProps.timeout`.
+  // For a fling, MUI uses an internally-computed `calculatedDurationRef` that
+  // overrides `transitionDuration`, but `SlideProps.timeout` is merged onto the
+  // transition slot last, so it wins and the exit stays instant on every path.
+  const exitPaper = lastPaperRef.current;
+  const exitIsHorizontal = placement === 'left' || placement === 'right';
+  const gesturePrePositioned =
+    !!exitPaper &&
+    Math.abs(readCurrentTranslate(exitPaper, exitIsHorizontal)) >
+      (exitIsHorizontal ? exitPaper.offsetWidth : exitPaper.offsetHeight) * 0.5;
+
   const slideProps = useMemo(
     () => ({
       onExited: () => userOnTransitionEnd?.(false),
       onEntered: () => userOnTransitionEnd?.(true),
       appear: !disableEnterAnimation,
+      ...(gesturePrePositioned ? { timeout: GESTURE_EXIT_TRANSITION } : {}),
     }),
-    [userOnTransitionEnd, disableEnterAnimation],
+    [userOnTransitionEnd, disableEnterAnimation, gesturePrePositioned],
   );
 
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
@@ -422,7 +489,6 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
   );
 
   // Forward paperRef to the MUI Paper element via the wrapper Box's parent.
-  const lastPaperRef = useRef<HTMLDivElement | null>(null);
   const wrapperBoxRef = useCallback(
     (node: HTMLDivElement | null) => {
       // The wrapper Box's parentElement is the MUI Paper element
@@ -438,6 +504,8 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
     },
     [paperRef],
   );
+
+  const transitionDuration = gesturePrePositioned ? GESTURE_EXIT_TRANSITION : undefined;
 
   const bodyContent = (
     <>
@@ -485,6 +553,7 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
       disableSwipeToOpen
       disableDiscovery
       allowSwipeInChildren={allowSwipeInChildren}
+      transitionDuration={transitionDuration}
       SlideProps={slideProps}
       slotProps={slotProps}
       PaperProps={muiPaperProps}

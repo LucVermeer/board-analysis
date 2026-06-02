@@ -8,6 +8,35 @@ export const DECELERATE_EASING = 'cubic-bezier(0.0, 0, 0.2, 1)';
 export const CLOSE_ANIMATION_MS = 200;
 export const ANIMATION_DELAY_MS = 210; // CLOSE_ANIMATION_MS + safety margin
 
+/**
+ * Invoke `cb` once the element's `transform` transition ends, falling back to a
+ * timer when `transitionend` never fires (an interrupted transition, or jsdom,
+ * which has no layout engine). Callers use this to flip React state only AFTER
+ * an off-screen close animation has actually finished — so MUI's `Slide` exit
+ * (triggered by the `open=false` flip) runs from the already-off-screen position
+ * and stays a single monotonic slide instead of snapping back toward open.
+ *
+ * Returns a cleanup that cancels the pending callback without invoking it; call
+ * it on unmount so a half-finished close can't fire `cb` after teardown.
+ */
+export function onTransformSettled(el: HTMLElement, fallbackMs: number, cb: () => void): () => void {
+  let done = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  function finish(invoke: boolean) {
+    if (done) return;
+    done = true;
+    el.removeEventListener('transitionend', onEnd);
+    if (timer) clearTimeout(timer);
+    if (invoke) cb();
+  }
+  const onEnd = (event: Event) => {
+    if ((event as TransitionEvent).propertyName === 'transform') finish(true);
+  };
+  el.addEventListener('transitionend', onEnd);
+  timer = setTimeout(() => finish(true), fallbackMs);
+  return () => finish(false);
+}
+
 // ── Scroll container utility ──────────────────────────────────────────────────
 
 /**
@@ -93,11 +122,13 @@ export function usePullToClose({
 
   const stateRef = useRef<PullToCloseState>(createInitialState());
   const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  // Cancels a pending "fire onClose once the close animation settles" listener.
+  const settleCleanupRef = useRef<(() => void) | null>(null);
   // Capture the paper element in a ref so callbacks don't depend on it
   const paperElRef = useRef(paperEl);
   paperElRef.current = paperEl;
 
-  // Clean up timers on unmount
+  // Clean up timers and any pending settle listener on unmount
   useEffect(() => {
     const timers = timersRef.current;
     return () => {
@@ -105,6 +136,8 @@ export function usePullToClose({
         clearTimeout(id);
       }
       timers.clear();
+      settleCleanupRef.current?.();
+      settleCleanupRef.current = null;
     };
   }, []);
 
@@ -209,13 +242,24 @@ export function usePullToClose({
     }
 
     if (state.translateY > closeThreshold && el) {
-      // Animate off-screen then close
+      // Animate the paper fully off-screen, then flip React `open` only AFTER it
+      // is off-screen — that's what stops the janky snap-back. Previously `open`
+      // flipped on a fixed 210ms timer that raced the 200ms transition, and the
+      // paper still carried its gesture transform when MUI's `Slide` exit ran, so
+      // the Slide exit re-asserted the open position before sliding out. Firing
+      // on `transitionend` (timer fallback) and leaving the transform pinned
+      // makes the Slide exit a visual no-op. `offsetHeight` is the paper's layout
+      // height (unaffected by the live transform — `getBoundingClientRect().top`
+      // would already include the drag offset) and equals the Slide exit distance
+      // for a bottom-anchored drawer, so the paper ends fully off-screen.
       const targetY = el.offsetHeight;
       el.style.transition = `transform ${CLOSE_ANIMATION_MS}ms ${DECELERATE_EASING}`;
       el.style.transform = `translateY(${targetY}px)`;
-      scheduleTimer(() => {
+      settleCleanupRef.current?.();
+      settleCleanupRef.current = onTransformSettled(el, ANIMATION_DELAY_MS, () => {
+        settleCleanupRef.current = null;
         onCloseRef.current();
-      }, ANIMATION_DELAY_MS);
+      });
     } else if (el) {
       // Snap back
       el.style.transition = `transform ${CLOSE_ANIMATION_MS}ms ${DECELERATE_EASING}`;

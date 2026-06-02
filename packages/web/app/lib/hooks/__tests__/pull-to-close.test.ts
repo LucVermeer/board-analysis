@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { renderHook, act } from '@testing-library/react';
-import { usePullToClose, findScrollContainer } from '../pull-to-close';
+import { usePullToClose, findScrollContainer, onTransformSettled } from '../pull-to-close';
 
 function createPaperElement(): HTMLDivElement {
   const el = document.createElement('div');
@@ -166,6 +166,23 @@ describe('usePullToClose', () => {
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('animates the paper to its full offsetHeight (off-screen) when closing', () => {
+    // The close target is the paper's layout height (offsetHeight, mocked to
+    // 500) — the off-screen distance for a bottom drawer — not the
+    // gesture-translated bounding-rect top.
+    const onClose = vi.fn();
+    const paper = createPaperElement();
+    const { result } = renderHook(() => usePullToClose({ paperEl: paper, onClose }));
+
+    act(() => {
+      result.current.onTouchStart(100, null);
+      result.current.onTouchMove(200, 1); // 100px — past 80px threshold
+      result.current.onTouchEnd();
+    });
+
+    expect(paper.style.transform).toBe('translateY(500px)');
   });
 
   it('respects custom close threshold', () => {
@@ -430,5 +447,82 @@ describe('usePullToClose', () => {
     // onClose is NOT called because the close animation path requires a paper element
     // to calculate offsetHeight for the off-screen target
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('onTransformSettled', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires the callback on a transform transitionend', () => {
+    const el = document.createElement('div');
+    const cb = vi.fn();
+    onTransformSettled(el, 999, cb);
+
+    const event = new Event('transitionend') as TransitionEvent;
+    Object.defineProperty(event, 'propertyName', { value: 'transform' });
+    el.dispatchEvent(event);
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores transitionend for other properties', () => {
+    const el = document.createElement('div');
+    const cb = vi.fn();
+    onTransformSettled(el, 999, cb);
+
+    const event = new Event('transitionend') as TransitionEvent;
+    Object.defineProperty(event, 'propertyName', { value: 'opacity' });
+    el.dispatchEvent(event);
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('fires the callback via the fallback timer when transitionend never arrives', () => {
+    const el = document.createElement('div');
+    const cb = vi.fn();
+    onTransformSettled(el, 250, cb);
+
+    expect(cb).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('only fires once when both transitionend and the timer would fire', () => {
+    const el = document.createElement('div');
+    const cb = vi.fn();
+    onTransformSettled(el, 250, cb);
+
+    const event = new Event('transitionend') as TransitionEvent;
+    Object.defineProperty(event, 'propertyName', { value: 'transform' });
+    el.dispatchEvent(event);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancel cleanup prevents the callback from firing', () => {
+    const el = document.createElement('div');
+    const cb = vi.fn();
+    const cancel = onTransformSettled(el, 250, cb);
+
+    cancel();
+    const event = new Event('transitionend') as TransitionEvent;
+    Object.defineProperty(event, 'propertyName', { value: 'transform' });
+    el.dispatchEvent(event);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(cb).not.toHaveBeenCalled();
   });
 });
