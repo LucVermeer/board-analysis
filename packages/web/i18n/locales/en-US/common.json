@@ -49,9 +49,9 @@
     }
   },
   "bluetooth": {
-    "boardTaken": "Lost the board. Another app may have taken it.",
+    "boardTaken": "Lost the board — another phone or app connected to it.",
     "takeItBack": "Take it back",
-    "boardNotFound": "Couldn't find your board. Make sure it's powered on and nearby.",
+    "boardNotFound": "Couldn't find your board. Make sure it's on and nearby — and if another phone is connected to it, disconnect there first.",
     "connectFailed": "Couldn't connect. Move closer to the board and try again.",
     "serviceMissing": "Connected, but the board didn't respond. Power-cycle it and try again.",
     "unavailable": "Bluetooth is off. Turn it on to connect to your board.",

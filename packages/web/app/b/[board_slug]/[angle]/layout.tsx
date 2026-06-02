@@ -9,7 +9,6 @@ import { ConnectionSettingsProvider } from '@/app/components/connection-manager/
 import { WebSocketConnectionProvider } from '@/app/components/connection-manager/websocket-connection-provider';
 import { PartyProvider } from '@/app/components/party-manager/party-context';
 import { BoardSessionBridge } from '@/app/components/persistent-session';
-import { BluetoothProvider } from '@/app/components/board-bluetooth-control/bluetooth-context';
 import { UISearchParamsProvider } from '@/app/components/queue-control/ui-searchparams-provider';
 import { BoardProvider } from '@/app/components/board-provider/board-provider-context';
 import { QueueBridgeInjector } from '@/app/components/queue-control/queue-bridge-context';
@@ -86,29 +85,27 @@ export default async function BoardSlugLayout(props: PropsWithChildren<{ params:
               <WebSocketConnectionProvider>
                 <GraphQLQueueProvider parsedParams={parsedParams} boardDetails={boardDetails}>
                   <PartyProvider>
-                    <BluetoothProvider boardDetails={boardDetails} boardUuid={board.uuid}>
-                      <UISearchParamsProvider>
-                        <QueueBridgeInjector boardDetails={boardDetails} angle={angle} />
+                    <UISearchParamsProvider>
+                      <QueueBridgeInjector boardDetails={boardDetails} angle={angle} boardUuid={board.uuid} />
 
-                        <main
-                          id="content-for-scrollable"
-                          style={{
-                            flex: 1,
-                            paddingLeft: `${themeTokens.spacing[2]}px`,
-                            paddingRight: `${themeTokens.spacing[2]}px`,
-                            paddingTop: 'var(--global-header-height)',
-                            paddingBottom: 'var(--bottom-bar-height)',
-                          }}
-                        >
-                          <BoardSeshHeader
-                            boardDetails={boardDetails}
-                            angle={angle}
-                            isAngleAdjustable={board.isAngleAdjustable}
-                          />
-                          {children}
-                        </main>
-                      </UISearchParamsProvider>
-                    </BluetoothProvider>
+                      <main
+                        id="content-for-scrollable"
+                        style={{
+                          flex: 1,
+                          paddingLeft: `${themeTokens.spacing[2]}px`,
+                          paddingRight: `${themeTokens.spacing[2]}px`,
+                          paddingTop: 'var(--global-header-height)',
+                          paddingBottom: 'var(--bottom-bar-height)',
+                        }}
+                      >
+                        <BoardSeshHeader
+                          boardDetails={boardDetails}
+                          angle={angle}
+                          isAngleAdjustable={board.isAngleAdjustable}
+                        />
+                        {children}
+                      </main>
+                    </UISearchParamsProvider>
                   </PartyProvider>
                 </GraphQLQueueProvider>
               </WebSocketConnectionProvider>

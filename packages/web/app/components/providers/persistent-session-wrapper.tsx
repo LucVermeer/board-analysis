@@ -59,12 +59,14 @@ export default function PersistentSessionWrapper({ children, boardConfigs }: Per
             <SearchDrawerBridgeProvider>
               <StatsFilterBridgeProvider>
                 <ProfileHeaderShareProvider>
-                  <GlobalHeader boardConfigs={boardConfigs} />
-                  {children}
-                  <RootBottomBar boardConfigs={boardConfigs} />
-                  <RootSessionSummaryDialog />
-                  <RootSeshSettingsDrawer />
-                  <SessionWakeLock />
+                  <RootBluetoothProvider>
+                    <GlobalHeader boardConfigs={boardConfigs} />
+                    {children}
+                    <RootBottomBar boardConfigs={boardConfigs} />
+                    <RootSessionSummaryDialog />
+                    <RootSeshSettingsDrawer />
+                    <SessionWakeLock />
+                  </RootBluetoothProvider>
                 </ProfileHeaderShareProvider>
               </StatsFilterBridgeProvider>
             </SearchDrawerBridgeProvider>
@@ -72,6 +74,27 @@ export default function PersistentSessionWrapper({ children, boardConfigs }: Per
         </QueueBridgeProvider>
       </PersistentSessionProvider>
     </PartyProfileProvider>
+  );
+}
+
+/**
+ * Single, app-wide BluetoothProvider. Mounted once here so the *same* BLE
+ * adapter + AutoSender are shared by both the persistent bottom bar (lightbulb,
+ * play drawer) and the route page content (climb list, create-climb form) —
+ * previously each route layout and the bottom bar mounted their own provider,
+ * so a connection made via the lightbulb was invisible to the page content and
+ * two dormant AutoSenders/AutoConnectHandlers raced on a last-wins board.
+ *
+ * boardDetails comes from the queue bridge (null on off-board routes, where BLE
+ * stays inert). Living at the root means the connection now persists across
+ * route navigation instead of tearing down when a route layout unmounts.
+ */
+function RootBluetoothProvider({ children }: { children: React.ReactNode }) {
+  const { boardDetails, boardUuid } = useQueueBridgeBoardInfo();
+  return (
+    <BluetoothProvider boardDetails={boardDetails} boardUuid={boardUuid ?? undefined}>
+      {children}
+    </BluetoothProvider>
   );
 }
 
@@ -220,9 +243,9 @@ export function RootBottomBar({ boardConfigs }: { boardConfigs: BoardConfigData 
           <BoardProvider boardName={boardDetails.board_name}>
             <ConnectionSettingsProvider>
               <WebSocketConnectionProvider>
-                <BluetoothProvider boardDetails={boardDetails}>
-                  <RootQueueControlBarWithProviders boardDetails={boardDetails} angle={angle} />
-                </BluetoothProvider>
+                {/* BLE is provided once at the root (RootBluetoothProvider), an
+                    ancestor of this bar — no per-bar provider needed. */}
+                <RootQueueControlBarWithProviders boardDetails={boardDetails} angle={angle} />
               </WebSocketConnectionProvider>
             </ConnectionSettingsProvider>
           </BoardProvider>

@@ -92,6 +92,7 @@ type QueueBridgeSetters = {
     bd: BoardDetails,
     angle: Angle,
     baseBoardPath: string,
+    boardUuid: string | null,
   ) => void;
   updateContext: (ctx: GraphQLQueueContextType, actions: GraphQLQueueActionsType) => void;
   clear: () => void;
@@ -765,6 +766,8 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   // Board details and angle from the injector (stable across context updates)
   const [injectedBoardDetails, setInjectedBoardDetails] = useState<BoardDetails | null>(null);
   const [injectedAngle, setInjectedAngle] = useState<Angle>(0);
+  // Saved-board UUID from a `/b/{slug}` injector (null for non-saved board routes).
+  const [injectedBoardUuid, setInjectedBoardUuid] = useState<string | null>(null);
 
   // Injected values stored in refs to avoid cleanup/setup cycles. The combined
   // context now carries every data field, so the separate `injectedDataRef`
@@ -804,6 +807,9 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   }, [isInjected, adapter.actionsValue, _actionsVersion]);
 
   const effectiveBoardDetails = isInjected ? injectedBoardDetails : adapter.boardDetails;
+  // Only board-route injectors carry a saved-board UUID; the solo/session
+  // adapter path has none.
+  const effectiveBoardUuid = isInjected ? injectedBoardUuid : null;
   const effectiveAngle = isInjected ? injectedAngle : adapter.angle;
   // The injector path passes a fully-resolved angle from the board route
   // segment, so injected => resolved by definition.
@@ -818,12 +824,20 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
   const boardInfo = useMemo<QueueBridgeBoardInfo>(
     () => ({
       boardDetails: effectiveBoardDetails,
+      boardUuid: effectiveBoardUuid,
       angle: effectiveAngle,
       hasResolvedAngle: effectiveHasResolvedAngle,
       hasActiveQueue: effectiveHasActiveQueue,
       isHydrated: effectiveIsHydrated,
     }),
-    [effectiveBoardDetails, effectiveAngle, effectiveHasResolvedAngle, effectiveHasActiveQueue, effectiveIsHydrated],
+    [
+      effectiveBoardDetails,
+      effectiveBoardUuid,
+      effectiveAngle,
+      effectiveHasResolvedAngle,
+      effectiveHasActiveQueue,
+      effectiveIsHydrated,
+    ],
   );
 
   const inject = useCallback(
@@ -833,6 +847,7 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       bd: BoardDetails,
       a: Angle,
       baseBoardPath: string,
+      bu: string | null,
     ) => {
       injectedContextRef.current = ctx;
       injectedActionsRef.current = actions;
@@ -840,6 +855,7 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
       injectedBaseBoardPathRef.current = baseBoardPath;
       setInjectedBoardDetails(bd);
       setInjectedAngle(a);
+      setInjectedBoardUuid(bu);
       setIsInjected(true);
       setActionsVersion((v) => v + 1);
       setDataVersion((v) => v + 1);
@@ -884,6 +900,7 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
     setIsInjected(false);
     setInjectedBoardDetails(null);
     setInjectedAngle(0);
+    setInjectedBoardUuid(null);
     setActionsVersion((v) => v + 1);
     setDataVersion((v) => v + 1);
   }, []);
@@ -1034,9 +1051,12 @@ export function QueueBridgeProvider({ children }: { children: React.ReactNode })
 type QueueBridgeInjectorProps = {
   boardDetails: BoardDetails;
   angle: Angle;
+  /** Saved-board UUID on `/b/{slug}` routes so the root BluetoothProvider can
+   * link a paired serial to the saved board. Omitted on standard board routes. */
+  boardUuid?: string | null;
 };
 
-export function QueueBridgeInjector({ boardDetails, angle }: QueueBridgeInjectorProps) {
+export function QueueBridgeInjector({ boardDetails, angle, boardUuid = null }: QueueBridgeInjectorProps) {
   const { inject, updateContext, clear } = useContext(QueueBridgeSetterContext);
   const pathname = usePathname();
   const baseBoardPath = useMemo(() => getBaseBoardPath(pathname), [pathname]);
@@ -1053,10 +1073,14 @@ export function QueueBridgeInjector({ boardDetails, angle }: QueueBridgeInjector
   const baseBoardPathRef = useRef(baseBoardPath);
   baseBoardPathRef.current = baseBoardPath;
 
+  // Same ref trick for boardUuid so the layout effect doesn't re-run on it.
+  const boardUuidRef = useRef(boardUuid);
+  boardUuidRef.current = boardUuid;
+
   // Initial injection: set board details + context on mount
   useLayoutEffect(() => {
     if (queueContext && queueActions) {
-      inject(queueContext, queueActions, boardDetails, angle, baseBoardPathRef.current);
+      inject(queueContext, queueActions, boardDetails, angle, baseBoardPathRef.current, boardUuidRef.current);
       hasInjectedRef.current = true;
     }
     // Only clean up on unmount (navigating away from board route)
@@ -1076,10 +1100,10 @@ export function QueueBridgeInjector({ boardDetails, angle }: QueueBridgeInjector
     if (hasInjectedRef.current) {
       updateContext(queueContext, queueActions);
     } else {
-      inject(queueContext, queueActions, boardDetails, angle, baseBoardPath);
+      inject(queueContext, queueActions, boardDetails, angle, baseBoardPath, boardUuid);
       hasInjectedRef.current = true;
     }
-  }, [queueContext, queueActions, updateContext, inject, boardDetails, angle, baseBoardPath]);
+  }, [queueContext, queueActions, updateContext, inject, boardDetails, angle, baseBoardPath, boardUuid]);
 
   return null;
 }

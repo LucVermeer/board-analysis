@@ -19,6 +19,7 @@ import { useEffectiveAngle } from '../use-effective-angle';
 function wrapper(bridge: Partial<QueueBridgeBoardInfo>) {
   const value: QueueBridgeBoardInfo = {
     boardDetails: null,
+    boardUuid: null,
     angle: 0,
     hasResolvedAngle: false,
     hasActiveQueue: false,

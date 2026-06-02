@@ -247,9 +247,9 @@
     }
   },
   "bluetooth": {
-    "boardTaken": "Se perdió la tabla. Quizá otra app la tomó.",
+    "boardTaken": "Se perdió la tabla: otro teléfono o app se conectó a ella.",
     "takeItBack": "Recuperarla",
-    "boardNotFound": "No se encontró tu tabla. Asegúrate de que esté encendida y cerca.",
+    "boardNotFound": "No se encontró tu tabla. Asegúrate de que esté encendida y cerca; y si otro teléfono está conectado, desconéctalo allí primero.",
     "connectFailed": "No se pudo conectar. Acércate a la tabla e inténtalo de nuevo.",
     "serviceMissing": "Conectado, pero la tabla no respondió. Reiníciala e inténtalo de nuevo.",
     "unavailable": "El Bluetooth está apagado. Actívalo para conectar con tu tabla.",

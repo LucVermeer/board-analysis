@@ -6,7 +6,7 @@ import CreateClimbForm from '../create-climb-form';
 import { useBoardProvider } from '../../board-provider/board-provider-context';
 import { useCreateClimb } from '../use-create-climb';
 import { useMoonBoardCreateClimb } from '../use-moonboard-create-climb';
-import { useBoardBluetooth } from '../../board-bluetooth-control/use-board-bluetooth';
+import { useOptionalBluetoothContext } from '../../board-bluetooth-control/bluetooth-context';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import type { LitUpHoldsMap } from '@boardsesh/shared-schema';
 import type { BoardContextType } from '../../board-provider/board-provider-context';
@@ -65,8 +65,8 @@ vi.mock('../../board-provider/board-provider-context', () => ({
   })),
 }));
 
-vi.mock('../../board-bluetooth-control/use-board-bluetooth', () => ({
-  useBoardBluetooth: vi.fn(() => ({ isConnected: false, sendFramesToBoard: mockSendFramesToBoard })),
+vi.mock('../../board-bluetooth-control/bluetooth-context', () => ({
+  useOptionalBluetoothContext: vi.fn(() => ({ isConnected: false, sendFramesToBoard: mockSendFramesToBoard })),
 }));
 
 vi.mock('../use-create-climb', () => ({
@@ -799,10 +799,10 @@ describe('CreateClimbForm — Aurora rendering', () => {
   });
 
   it('sends frames to board via Bluetooth when connected and holds change', async () => {
-    vi.mocked(useBoardBluetooth).mockReturnValue({
+    vi.mocked(useOptionalBluetoothContext).mockReturnValue({
       isConnected: true,
       sendFramesToBoard: mockSendFramesToBoard,
-    } as unknown as ReturnType<typeof useBoardBluetooth>);
+    } as unknown as ReturnType<typeof useOptionalBluetoothContext>);
     mockAuroraCreateState = {
       isValid: true,
       totalHolds: 1,

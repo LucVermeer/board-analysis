@@ -55,9 +55,11 @@ type BluetoothContextValue = {
   ) => Promise<boolean | undefined>;
   /** Send a "clear all LEDs" packet to the connected board. */
   clearBoard: () => Promise<boolean | undefined>;
-  /** Board configuration for the current route — exposed so light-show
-   * features (party mode) can read holdsData and edge bounds. */
-  boardDetails: BoardDetails;
+  /** Board configuration for the current route, or null when the single
+   * root-level provider is mounted off a board route. Consumers that need a
+   * guaranteed board (e.g. the light-show drawer) take it as a prop from a
+   * board-scoped parent instead of reading it here. */
+  boardDetails: BoardDetails | null;
   /** Which non-queue light show is driving the board, if any. The
    * auto-sender stops emitting queue frames whenever this is non-'off'.
    * 'glyphs' spells BOARDSESH across the wall; 'disco' strobes the
@@ -133,12 +135,18 @@ function BluetoothAutoSender({
   // as the old abort-and-restart pattern, but no overlapping GATT calls.
   const isWritingRef = useRef(false);
   const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
-  // Deduplicate same-uuid broadcasts. The reducer now lets duplicate
+  // Deduplicate truly-identical re-broadcasts. The reducer lets duplicate
   // CurrentClimbChanged events through (so the BLE phone re-sends on each
-  // event), but the wall is already showing the climb — re-sending double-
-  // counts analytics and double-fires confirmClimbOnWall. Skip the send when
-  // the pending uuid matches the last one we actually wrote.
-  const lastSentUuidRef = useRef<string | null>(null);
+  // event) — but the wall is already showing those exact pixels, so re-sending
+  // would double-count analytics and double-fire confirmClimbOnWall. We key the
+  // skip on the *rendered payload* (climb uuid + frames + mirror), NOT the uuid
+  // alone: a mirror toggle, a hold edit (create form), or a driver hand-off all
+  // keep the same uuid while needing a fresh write, and a uuid-only key swallows
+  // them (the wall would only update after a disconnect/reconnect reset this
+  // ref — exactly the regression users reported). A genuine duplicate (same
+  // uuid, frames, and mirror) still skips the write but re-emits the wall-confirm
+  // so a hand-off taker's 2s timer clears even though no physical re-send ran.
+  const lastSentSignatureRef = useRef<string | null>(null);
   // Single AbortController lives across the AutoSender's lifetime. Aborted
   // exactly once on unmount so the in-flight drain loop (a) cancels the
   // underlying adapter.write via the signal, and (b) returns before firing
@@ -169,14 +177,6 @@ function BluetoothAutoSender({
         while (toSend) {
           if (signal?.aborted) return;
           const item = toSend;
-          // Deduplicate same-uuid re-broadcasts. The board is idempotent so a
-          // re-send is functionally fine, but we'd double-fire analytics and
-          // confirmClimbOnWall — skip the send entirely instead.
-          if (item.climb.uuid === lastSentUuidRef.current) {
-            toSend = pendingClimbRef.current;
-            pendingClimbRef.current = null;
-            continue;
-          }
           // For variable-speed climbs (`frames` is a sequence of comma-
           // separated delta frames using `p<id>r<role>` for sets and
           // `x<id>` for offs) the BLE encoder doesn't understand commas
@@ -192,19 +192,33 @@ function BluetoothAutoSender({
           // by lighting the wrong colours. The playback engine on /play
           // handles subsequent ticks for multi-frame climbs.
           const rawFrames = item.climb.frames ?? '';
+          const mirrored = !!item.climb.mirrored;
+          // Skip only a byte-identical re-broadcast (same climb, same frames,
+          // same mirror). A changed climb, an edited hold, or a flipped mirror
+          // all change this signature and fall through to a real write.
+          const sendSignature = `${item.climb.uuid}::${rawFrames}::${mirrored ? 1 : 0}`;
+          if (sendSignature === lastSentSignatureRef.current) {
+            // Same pixels already on the wall — skip the physical write (so we
+            // don't double-count analytics) but still confirm so a hand-off
+            // taker's 2s wall-confirm timer clears; the wall already shows it.
+            onWallConfirmedRef.current(item.climb.uuid);
+            toSend = pendingClimbRef.current;
+            pendingClimbRef.current = null;
+            continue;
+          }
           const isSingleFrame = rawFrames.length > 0 && !rawFrames.includes(',') && !rawFrames.includes('x');
           const firstFrame = isSingleFrame
             ? rawFrames
             : (accumulatedMapsToFrameStrings(accumulateFramesToMaps(rawFrames, boardName), boardName)[0] ?? '');
           const climbHoldCount = countClimbHolds(firstFrame);
           try {
-            const result = await sendFramesToBoard(firstFrame, !!item.climb.mirrored, signal, item.climb.uuid);
+            const result = await sendFramesToBoard(firstFrame, mirrored, signal, item.climb.uuid);
             // After the await, the AutoSender may have unmounted — skip the
             // post-send side effects so a navigated-away climb doesn't fire
             // analytics or confirmClimbOnWall for a session the user has left.
             if (signal?.aborted) return;
             if (result === true) {
-              lastSentUuidRef.current = item.climb.uuid;
+              lastSentSignatureRef.current = sendSignature;
               track('Climb Sent to Board Success', {
                 climbUuid: item.climb?.uuid,
                 boardLayout: layoutName,
@@ -249,7 +263,9 @@ export function BluetoothProvider({
   boardUuid,
   children,
 }: {
-  boardDetails: BoardDetails;
+  /** Null when the single root-level provider is mounted off a board route;
+   * BLE stays inert (connect/send are no-ops) until a board route supplies it. */
+  boardDetails: BoardDetails | null;
   /** Saved board UUID when this provider sits under a /b/{slug}/... route. */
   boardUuid?: string;
   children: React.ReactNode;
@@ -316,7 +332,7 @@ export function BluetoothProvider({
   );
 
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({
-    boardDetails,
+    boardDetails: boardDetails ?? undefined,
     boardUuid,
     ledColorOverrides,
     onConnectSuccess: handleConnectSuccess,
@@ -580,7 +596,9 @@ export function BluetoothProvider({
 
   const handlePickerSelect = useCallback(
     (deviceId: string) => {
-      if (!activePickerState) return;
+      // No board on this route → nothing to match against; the picker can't be
+      // open here anyway (connect needs boardDetails), so bail defensively.
+      if (!activePickerState || !boardDetails) return;
       const decision = decidePickerSelection(deviceId, activePickerState.devices, activeResolvedBoards, boardDetails);
       if (decision.kind === 'forward') {
         activePickerState.handleSelect(deviceId);
@@ -628,7 +646,7 @@ export function BluetoothProvider({
 
   return (
     <BluetoothContext.Provider value={value}>
-      {isConnected && partyMode === 'off' && (
+      {isConnected && partyMode === 'off' && boardDetails && (
         <BluetoothAutoSender
           sendFramesToBoard={sendFramesToBoard}
           layoutName={boardDetails.layout_name ?? ''}
@@ -666,6 +684,16 @@ export function useBluetoothContext() {
     throw new Error('useBluetoothContext must be used within a BluetoothProvider');
   }
   return context;
+}
+
+/**
+ * Like `useBluetoothContext` but returns null instead of throwing when no
+ * provider is mounted. For components (e.g. the create-climb form) that render
+ * both inside the app shell (provider present) and in isolated unit tests
+ * (no provider) — mirrors `useOptionalQueueActions`.
+ */
+export function useOptionalBluetoothContext() {
+  return useContext(BluetoothContext);
 }
 
 export { BluetoothContext };

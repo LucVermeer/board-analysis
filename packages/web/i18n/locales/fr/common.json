@@ -49,9 +49,9 @@
     }
   },
   "bluetooth": {
-    "boardTaken": "Board perdu. Une autre app l'a peut-être pris.",
+    "boardTaken": "Board perdu : un autre téléphone ou une autre app s'y est connecté.",
     "takeItBack": "Le reprendre",
-    "boardNotFound": "Board introuvable. Vérifiez qu'il est allumé et à proximité.",
+    "boardNotFound": "Board introuvable. Vérifiez qu'il est allumé et à proximité ; et si un autre téléphone y est connecté, déconnectez-le d'abord.",
     "connectFailed": "Connexion impossible. Rapprochez-vous du board et réessayez.",
     "serviceMissing": "Connecté, mais le board n'a pas répondu. Redémarrez-le et réessayez.",
     "unavailable": "Le Bluetooth est éteint. Activez-le pour vous connecter à votre board.",

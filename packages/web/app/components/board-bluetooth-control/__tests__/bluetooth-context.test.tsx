@@ -234,6 +234,20 @@ describe('BluetoothProvider', () => {
       expect(result.current.isConnected).toBe(false);
       expect(result.current.loading).toBe(false);
     });
+
+    it('renders an inert context with null boardDetails (off-board route)', () => {
+      // The single root-level provider spans every route; off a board route it
+      // gets null boardDetails and must still provide a usable (inert) context
+      // rather than throwing for any stray consumer.
+      const NullWrapper = ({ children }: { children: React.ReactNode }) => (
+        <BluetoothProvider boardDetails={null}>{children}</BluetoothProvider>
+      );
+      const { result } = renderHook(() => useBluetoothContext(), { wrapper: NullWrapper });
+
+      expect(result.current.boardDetails).toBeNull();
+      expect(result.current.isConnected).toBe(false);
+      expect(typeof result.current.sendFramesToBoard).toBe('function');
+    });
   });
 
   describe('auto-send on climb change', () => {
@@ -444,11 +458,13 @@ describe('BluetoothProvider', () => {
       expect(mockSendFramesToBoard).toHaveBeenLastCalledWith('p5r16', false, expect.any(AbortSignal), 'climb-3');
     });
 
-    it('deduplicates back-to-back same-uuid broadcasts — single send + single confirmClimbOnWall', async () => {
-      // The reducer now lets duplicate CurrentClimbChanged events through
-      // (so the BLE phone re-sends on every event, including takeControl
-      // re-broadcasts of the same climb). The AutoSender must skip the
-      // re-send so analytics + confirmClimbOnWall don't double-fire.
+    it('deduplicates the WRITE for byte-identical re-broadcasts but re-confirms the wall', async () => {
+      // The reducer lets duplicate CurrentClimbChanged events through (so the
+      // BLE phone reacts to every event, including a peer's takeControl
+      // re-broadcast of the same climb). The AutoSender skips the physical
+      // re-WRITE (no double GATT write, no double "Climb Sent" analytics) — but
+      // still re-emits the wall-confirm so a non-BLE hand-off taker's 2-second
+      // timer clears even though the wall already shows the climb.
       mockPersistentSessionState = { session: { id: 'session-1' } };
       mockSendFramesToBoard.mockResolvedValue(true);
       mockCurrentClimbQueueItem = {
@@ -468,7 +484,7 @@ describe('BluetoothProvider', () => {
         });
       });
 
-      // Same uuid re-broadcast (new object identity, but uuid unchanged).
+      // Same uuid + frames + mirror re-broadcast (new object identity).
       mockCurrentClimbQueueItem = {
         climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
       };
@@ -480,14 +496,74 @@ describe('BluetoothProvider', () => {
         await Promise.resolve();
       });
 
-      // No additional send / confirm fired for the duplicate.
+      // No additional physical write or success analytics for the duplicate...
       expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1);
-      expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(1);
       expect(
         mockTrack.mock.calls.filter(
           (call) => call[0] === 'Climb Sent to Board Success' && call[1]?.climbUuid === 'climb-1',
         ),
       ).toHaveLength(1);
+      // ...but the wall-confirm re-fires so a hand-off taker's timer clears.
+      expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-sends when the same climb is mirrored (same uuid, mirror flipped)', async () => {
+      // Regression: the old uuid-only dedup swallowed mirror toggles, so the
+      // board only mirrored after a disconnect/reconnect.
+      mockSendFramesToBoard.mockResolvedValue(true);
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      const { rerender } = renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1));
+      });
+      expect(mockSendFramesToBoard).toHaveBeenLastCalledWith('p1r12', false, expect.any(AbortSignal), 'climb-1');
+
+      // Mirror the current climb: same uuid + frames, mirrored now true.
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: true },
+      };
+      rerender();
+
+      await act(async () => {
+        await vi.waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(2));
+      });
+      expect(mockSendFramesToBoard).toHaveBeenLastCalledWith('p1r12', true, expect.any(AbortSignal), 'climb-1');
+    });
+
+    it('re-sends when the same climb uuid gets edited frames (create-form live preview)', async () => {
+      // Regression: building a climb reuses a stable uuid while the frames
+      // change on every hold edit; the uuid-only dedup froze the wall.
+      mockSendFramesToBoard.mockResolvedValue(true);
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'draft-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      const { rerender } = renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1));
+      });
+
+      // Edit a hold: same uuid, new frames.
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'draft-1', frames: 'p1r12p2r13', mirrored: false },
+      };
+      rerender();
+
+      await act(async () => {
+        await vi.waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(2));
+      });
+      expect(mockSendFramesToBoard).toHaveBeenLastCalledWith('p1r12p2r13', false, expect.any(AbortSignal), 'draft-1');
     });
   });
 
