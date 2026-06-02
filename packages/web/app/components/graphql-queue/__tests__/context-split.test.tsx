@@ -131,6 +131,7 @@ function makeSearchParams(overrides: Partial<SearchRequestPagination> = {}): Sea
     onlyClassics: false,
     onlyTallClimbs: false,
     onlyWideClimbs: false,
+    onlyWithBetaVideos: false,
     settername: [],
     setternameSuggestion: '',
     holdsFilter: {},

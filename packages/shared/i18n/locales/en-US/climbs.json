@@ -106,6 +106,8 @@
       "tallClimbsTooltip": "Show only climbs that use holds in the bottom 8 rows (only available on 8x12 and 10x12 boards)",
       "wideClimbsOnly": "Wide Climbs Only",
       "wideClimbsTooltip": "Show only climbs that use the 10x10 side expansion holds",
+      "betaVideosOnly": "Beta Videos Only",
+      "betaVideosTooltip": "Show only climbs that have a beta video",
       "gradeAccuracy": "Grade Accuracy",
       "somewhatAccurate": "Somewhat Accurate (<0.2)",
       "veryAccurate": "Very Accurate (<0.1)",
@@ -123,7 +125,8 @@
     },
     "quality": {
       "tallClimbsOnly": "Tall",
-      "wideClimbsOnly": "Wide"
+      "wideClimbsOnly": "Wide",
+      "betaVideosOnly": "Beta"
     },
     "summary": {
       "default": "What do you want to climb?",
@@ -631,6 +634,8 @@
       "tallDescription": "Reach the top of the wall",
       "wide": "Wide climbs only",
       "wideDescription": "Use the 10x10 side expansion",
+      "betaVideos": "Beta videos only",
+      "betaVideosDescription": "Only climbs with a beta video",
       "searchSetters": "Search setters",
       "noSetters": "No setters yet",
       "cancel": "Cancel",

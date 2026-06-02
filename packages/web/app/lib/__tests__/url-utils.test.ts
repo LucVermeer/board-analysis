@@ -148,6 +148,20 @@ describe('searchParamsToUrlParams', () => {
     expect(defaultResult.has('onlyWideClimbs')).toBe(false);
   });
 
+  it('should serialize beta videos filter only when enabled', () => {
+    const enabledResult = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      onlyWithBetaVideos: true,
+    });
+    expect(enabledResult.get('onlyWithBetaVideos')).toBe('true');
+
+    const defaultResult = searchParamsToUrlParams({
+      ...DEFAULT_SEARCH_PARAMS,
+      onlyWithBetaVideos: false,
+    });
+    expect(defaultResult.has('onlyWithBetaVideos')).toBe(false);
+  });
+
   it('should handle page and pageSize correctly', () => {
     const result = searchParamsToUrlParams({
       ...DEFAULT_SEARCH_PARAMS,
@@ -555,6 +569,12 @@ describe('urlParamsToSearchParams', () => {
     const result = urlParamsToSearchParams(new URLSearchParams({ onlyWideClimbs: 'true' }));
 
     expect(result.onlyWideClimbs).toBe(true);
+  });
+
+  it('should parse beta videos filter from URL params', () => {
+    const result = urlParamsToSearchParams(new URLSearchParams({ onlyWithBetaVideos: 'true' }));
+
+    expect(result.onlyWithBetaVideos).toBe(true);
   });
 
   it('should parse any-hold zone mode only with a valid zone', () => {

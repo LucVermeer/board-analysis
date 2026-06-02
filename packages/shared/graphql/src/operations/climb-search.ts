@@ -131,6 +131,7 @@ export type ClimbSearchInputVariables = {
     setter?: string[];
     onlyTallClimbs?: boolean;
     onlyWideClimbs?: boolean;
+    onlyWithBetaVideos?: boolean;
     holdsFilter?: HoldsFilter;
     hideAttempted?: boolean;
     hideCompleted?: boolean;

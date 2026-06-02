@@ -15,6 +15,7 @@ import {
   boardClimbHolds,
   boardPlacements,
   boardHoles,
+  boardBetaLinks,
 } from '../../schema/index';
 import type { BoardRouteParams, ClimbSearchParams } from './types';
 
@@ -374,6 +375,22 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     }
   }
 
+  // Beta-videos filter: keep only climbs that have at least one beta link the
+  // user could actually watch (is_listed true or NULL — exclude explicitly
+  // hidden links). Applies on every board, unlike the size-gated tall/wide
+  // filters above.
+  const betaVideosConditions: SQL[] = [];
+
+  if (searchParams.onlyWithBetaVideos) {
+    betaVideosConditions.push(sql`EXISTS (
+      SELECT 1
+      FROM ${boardBetaLinks} bl
+      WHERE bl.board_type = ${params.board_name}
+        AND bl.climb_uuid = ${boardClimbs.uuid}
+        AND bl.is_listed IS NOT FALSE
+    )`);
+  }
+
   // Set membership filter: exclude climbs that use holds from sets the user doesn't own.
   // Uses denormalized required_set_ids array (pre-computed from climb_holds -> placements).
   // The <@ operator checks that all required sets are in the user's selected sets.
@@ -511,6 +528,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
       ...holdStateConditions,
       ...tallClimbsConditions,
       ...wideClimbsConditions,
+      ...betaVideosConditions,
       ...zoneConditions,
       ...setIdsConditions,
       ...personalProgressConditions,
@@ -543,6 +561,7 @@ export const createClimbFilters = (params: BoardRouteParams, searchParams: Climb
     holdStateConditions,
     tallClimbsConditions,
     wideClimbsConditions,
+    betaVideosConditions,
     zoneConditions,
     setIdsConditions,
     sizeConditions,

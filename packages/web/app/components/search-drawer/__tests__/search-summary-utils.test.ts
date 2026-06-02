@@ -30,6 +30,7 @@ const summaryLabels = {
     gradeAccuracy: 'Grade accuracy',
     tallClimbsOnly: 'Tall',
     wideClimbsOnly: 'Wide',
+    betaVideosOnly: 'Beta',
   },
   status: {
     drafts: 'Drafts',
@@ -181,6 +182,10 @@ describe('getQualityPanelSummary vs Status (no duplication)', () => {
 
   it('uses the translated tall climbs summary label', () => {
     expect(getQualityPanelSummary(makeParams({ onlyTallClimbs: true }), summaryLabels.quality)).toContain('Tall');
+  });
+
+  it('uses the translated beta videos summary label', () => {
+    expect(getQualityPanelSummary(makeParams({ onlyWithBetaVideos: true }), summaryLabels.quality)).toContain('Beta');
   });
 
   it('does not include "N+ ascents" when minAscents is 2 (Established handles it)', () => {

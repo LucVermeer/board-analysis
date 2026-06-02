@@ -34,6 +34,7 @@ export type ClimbFilterState = {
   setter?: string[];
   onlyTallClimbs?: boolean;
   onlyWideClimbs?: boolean;
+  onlyWithBetaVideos?: boolean;
   status: StatusFilter;
   hideAttempted?: boolean;
   hideCompleted?: boolean;
@@ -62,6 +63,7 @@ export function hasActiveClimbFilters(state: ClimbFilterState): boolean {
   if (state.setter != null && state.setter.length > 0) return true;
   if (state.onlyTallClimbs) return true;
   if (state.onlyWideClimbs) return true;
+  if (state.onlyWithBetaVideos) return true;
   if (state.hideAttempted) return true;
   if (state.hideCompleted) return true;
   if (state.showOnlyAttempted) return true;
@@ -143,6 +145,7 @@ export function toClimbSearchInput(
   if (state.setter != null && state.setter.length > 0) input.setter = state.setter;
   if (state.onlyTallClimbs) input.onlyTallClimbs = true;
   if (state.onlyWideClimbs) input.onlyWideClimbs = true;
+  if (state.onlyWithBetaVideos) input.onlyWithBetaVideos = true;
   if (state.hideAttempted) input.hideAttempted = true;
   if (state.hideCompleted) input.hideCompleted = true;
   if (state.showOnlyAttempted) input.showOnlyAttempted = true;

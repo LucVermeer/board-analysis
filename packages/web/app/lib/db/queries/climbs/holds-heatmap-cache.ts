@@ -48,6 +48,7 @@ export async function cachedGetHoldHeatmapData(
         onlyClassics: searchParams.onlyClassics,
         onlyTallClimbs: searchParams.onlyTallClimbs,
         onlyWideClimbs: searchParams.onlyWideClimbs,
+        onlyWithBetaVideos: searchParams.onlyWithBetaVideos,
         holdsFilter: searchParams.holdsFilter,
         zoneBox: searchParams.zoneBox,
         zoneMode: searchParams.zoneBox ? searchParams.zoneMode : undefined,

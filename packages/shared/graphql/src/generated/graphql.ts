@@ -626,6 +626,8 @@ export type ClimbSearchInput = {
   onlyTallClimbs?: InputMaybe<Scalars['Boolean']['input']>;
   /** Only show Kilter Homewall climbs that use the 10x10 side expansion */
   onlyWideClimbs?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Only show climbs that have a beta video */
+  onlyWithBetaVideos?: InputMaybe<Scalars['Boolean']['input']>;
   /** Page number for pagination (1-indexed) */
   page?: InputMaybe<Scalars['Int']['input']>;
   /** Number of results per page */

@@ -103,6 +103,8 @@
       "tallClimbsTooltip": "Muestra solo bloques que usan presas en las 8 filas inferiores (solo disponible en tableros 8x12 y 10x12)",
       "wideClimbsOnly": "Solo bloques anchos",
       "wideClimbsTooltip": "Muestra solo bloques que usan las presas laterales extra del 10x10",
+      "betaVideosOnly": "Solo con vídeos de beta",
+      "betaVideosTooltip": "Muestra solo bloques que tienen un vídeo de beta",
       "gradeAccuracy": "Precisión del grado",
       "somewhatAccurate": "Algo precisa (<0.2)",
       "veryAccurate": "Muy precisa (<0.1)",
@@ -123,7 +125,8 @@
     },
     "quality": {
       "tallClimbsOnly": "Altos",
-      "wideClimbsOnly": "Anchos"
+      "wideClimbsOnly": "Anchos",
+      "betaVideosOnly": "Beta"
     },
     "summary": {
       "default": "¿Qué quieres escalar?",
@@ -631,6 +634,8 @@
       "tallDescription": "Alcanzar el techo",
       "wide": "Solo vías anchas",
       "wideDescription": "Usan la extensión 10x10",
+      "betaVideos": "Solo con vídeos de beta",
+      "betaVideosDescription": "Solo vías con un vídeo de beta",
       "searchSetters": "Buscar equipadores",
       "noSetters": "Sin equipadores",
       "cancel": "Cancelar",

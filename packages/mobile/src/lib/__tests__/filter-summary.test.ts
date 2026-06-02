@@ -93,4 +93,9 @@ describe('getFilterSummary', () => {
     const filters: ClimbFilters = { ...DEFAULT_FILTERS, minGrade: 10 };
     expect(getFilterSummary(filters, 'test', mockGrades, mockT)).toBe('"test" · V4+');
   });
+
+  it('shows the beta videos filter part when enabled', () => {
+    const filters: ClimbFilters = { ...DEFAULT_FILTERS, onlyWithBetaVideos: true };
+    expect(getFilterSummary(filters, '', mockGrades, mockT)).toBe('mobile.filter.betaVideos');
+  });
 });

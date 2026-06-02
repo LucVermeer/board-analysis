@@ -121,6 +121,7 @@ export const ClimbSearchInputSchema = z.object({
   onlyBenchmarks: z.boolean().optional(),
   onlyTallClimbs: z.boolean().optional(),
   onlyWideClimbs: z.boolean().optional(),
+  onlyWithBetaVideos: z.boolean().optional(),
   // Per-hold map of type→mode filters. Each hold can carry filters for
   // multiple types (e.g. STARTING:include + FOOT:exclude). ANY means "hold
   // present in any state" (the wildcard, was the legacy `ANY`/`NOT` value).

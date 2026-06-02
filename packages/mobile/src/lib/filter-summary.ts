@@ -23,6 +23,7 @@ function buildLabels(t: TFunction<'climbs'>): FilterSummaryLabels {
     gradeAccuracy: (value) => t(`mobile.filter.accuracy.${gradeAccuracyBucket(value)}`),
     tallOnly: () => t('mobile.filter.tall'),
     wideOnly: () => t('mobile.filter.wide'),
+    betaOnly: () => t('mobile.filter.betaVideos'),
     // i18n-keep mobile.filter.status.drafts mobile.filter.status.established mobile.filter.status.projects
     status: (kind) => t(`mobile.filter.status.${kind}`),
     hideAttempted: () => t('mobile.filter.progress.hideAttempted'),
@@ -66,6 +67,7 @@ export function getFilterSummary(
       gradeAccuracy: filters.gradeAccuracy,
       onlyTallClimbs: filters.onlyTallClimbs,
       onlyWideClimbs: filters.onlyWideClimbs,
+      onlyWithBetaVideos: filters.onlyWithBetaVideos,
       status: filters.status,
       hideAttempted: filters.hideAttempted,
       hideCompleted: filters.hideCompleted,

@@ -119,6 +119,7 @@ export type ClimbSearchInput = {
   onlyBenchmarks?: boolean;
   onlyTallClimbs?: boolean;
   onlyWideClimbs?: boolean;
+  onlyWithBetaVideos?: boolean;
   // Hold filters: per-hold partial type→mode map (see HoldFilterEntry).
   holdsFilter?: HoldsFilter;
   // Personal progress filters

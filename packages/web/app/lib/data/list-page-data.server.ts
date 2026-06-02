@@ -52,6 +52,7 @@ export async function fetchListPageData(
     (searchParamsObject.sortOrder || 'desc') === 'desc' &&
     !searchParamsObject.onlyTallClimbs &&
     !searchParamsObject.onlyWideClimbs &&
+    !searchParamsObject.onlyWithBetaVideos &&
     (!searchParamsObject.holdsFilter || Object.keys(searchParamsObject.holdsFilter).length === 0) &&
     !hasProgressFilters;
 
