@@ -73,6 +73,9 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       style={styles.sheet}
     >
       {scrollable ? (
+        // style (flex: 1) sizes the scroll viewport to fill the sheet; the
+        // caller's padding goes on contentContainerStyle so it scrolls with the
+        // content rather than clipping the scrollable area.
         <BottomSheetScrollView
           style={styles.content}
           contentContainerStyle={contentContainerStyle}

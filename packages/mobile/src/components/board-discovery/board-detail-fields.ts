@@ -13,9 +13,7 @@ export type BoardDetailFields = {
 export function getBoardDetailFields(board: UserBoard): BoardDetailFields {
   const subLocation = board.gymName ?? board.locationName ?? undefined;
   const setNames = (board.setNames ?? []).join(' · ');
-  const sizeText = board.sizeDescription
-    ? `${board.sizeName ?? ''} · ${board.sizeDescription}`.trim().replace(/^· /, '')
-    : (board.sizeName ?? undefined);
+  const sizeText = [board.sizeName, board.sizeDescription].filter(Boolean).join(' · ') || undefined;
   return { subLocation, setNames, sizeText };
 }
 
