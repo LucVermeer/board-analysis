@@ -45,6 +45,9 @@ export function CommentSheet({ sheetRef, sessionId, onClose }: CommentSheetProps
       scrollable
       onClose={onClose}
       contentContainerStyle={styles.content}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       footer={
         <View style={styles.composer}>
           <BottomSheetTextInput

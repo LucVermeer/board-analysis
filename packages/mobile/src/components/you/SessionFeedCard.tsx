@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { SessionFeedItem } from '@boardsesh/shared-schema';
@@ -12,11 +13,14 @@ import { FeedSocialRow } from './FeedSocialRow';
 import { StackedBarChart } from './YouCharts';
 import { gradeBadgeColor } from './profile-chart-colors';
 import { brandColors, withAlpha } from '../../theme/colors';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
 type SessionFeedCardProps = {
   session: SessionFeedItem;
+  /** Per-viewer vote summary (count + userVote) for this session, if loaded. */
+  voteSummary?: { upvotes: number; userVote: number | null };
   onOpenComments: (sessionId: string) => void;
 };
 
@@ -27,7 +31,11 @@ function formatDuration(minutes: number): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
-export function SessionFeedCard({ session, onOpenComments }: SessionFeedCardProps) {
+export const SessionFeedCard = memo(function SessionFeedCard({
+  session,
+  voteSummary,
+  onOpenComments,
+}: SessionFeedCardProps) {
   const { t } = useTranslation('feed');
   const { systemColors } = useTheme();
 
@@ -36,14 +44,17 @@ export function SessionFeedCard({ session, onOpenComments }: SessionFeedCardProp
     .filter((name): name is string => !!name)
     .join(', ');
 
-  const gradeBars =
-    session.gradeDistribution.length > 0
-      ? session.gradeDistribution.map((item) => ({
-          key: item.grade,
-          label: item.grade,
-          segments: [{ value: item.flash + item.send, key: item.grade, label: item.grade }],
-        }))
-      : null;
+  const gradeBars = useMemo(
+    () =>
+      session.gradeDistribution.length > 0
+        ? session.gradeDistribution.map((item) => ({
+            key: item.grade,
+            label: item.grade,
+            segments: [{ value: item.flash + item.send, key: item.grade, label: item.grade }],
+          }))
+        : null,
+    [session.gradeDistribution],
+  );
 
   return (
     <Card style={styles.card} haptic={false}>
@@ -81,7 +92,9 @@ export function SessionFeedCard({ session, onOpenComments }: SessionFeedCardProp
       <View style={styles.chips}>
         {session.totalFlashes > 0 && <Chip icon="flash" label={`${session.totalFlashes}`} tint={brandColors.warning} />}
         {session.totalSends > 0 && <Chip icon="tick" label={`${session.totalSends}`} tint={brandColors.success} />}
-        {session.totalAttempts > 0 && <Chip icon="circle" label={`${session.totalAttempts}`} tint={NEUTRAL_TINT} />}
+        {session.totalAttempts > 0 && (
+          <Chip icon="circle" label={`${session.totalAttempts}`} tint={iosSystemColors.systemGray} />
+        )}
         {session.hardestGrade ? <GradeChip grade={session.hardestGrade} /> : null}
       </View>
 
@@ -102,15 +115,14 @@ export function SessionFeedCard({ session, onOpenComments }: SessionFeedCardProp
 
       <FeedSocialRow
         sessionId={session.sessionId}
-        upvotes={session.upvotes}
+        upvotes={voteSummary?.upvotes ?? session.upvotes}
+        userVote={voteSummary?.userVote ?? null}
         commentCount={session.commentCount}
         onOpenComments={onOpenComments}
       />
     </Card>
   );
-}
-
-const NEUTRAL_TINT = '#8E8E93';
+});
 
 function Chip({ icon, label, tint }: { icon: IconName; label: string; tint: string }) {
   return (

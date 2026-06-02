@@ -29,6 +29,12 @@ type SheetProps = {
   // safe-area-aware bottom padding so the CTA sits comfortably above the home
   // indicator (instead of flush against the screen edge).
   footer?: ReactNode;
+  // Keyboard handling for sheets with text inputs (e.g. a comment composer in
+  // the footer). Defaults to gorhom's behaviour; pass 'interactive'/'restore'
+  // so the input rises above the keyboard instead of being covered.
+  keyboardBehavior?: 'extend' | 'fillParent' | 'interactive';
+  keyboardBlurBehavior?: 'none' | 'restore';
+  android_keyboardInputMode?: 'adjustPan' | 'adjustResize';
 };
 
 export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
@@ -42,6 +48,9 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     scrollable = false,
     contentContainerStyle,
     footer,
+    keyboardBehavior,
+    keyboardBlurBehavior,
+    android_keyboardInputMode,
   },
   ref,
 ) {
@@ -84,6 +93,9 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       snapPoints={enableDynamicSizing ? undefined : snapPoints}
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
+      keyboardBehavior={keyboardBehavior}
+      keyboardBlurBehavior={keyboardBlurBehavior}
+      android_keyboardInputMode={android_keyboardInputMode}
       backdropComponent={renderBackdrop}
       backgroundStyle={backgroundStyle}
       onChange={handleChange}

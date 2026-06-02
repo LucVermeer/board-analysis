@@ -42,7 +42,7 @@ export function LogbookTab({ userId }: { userId: string | undefined }) {
     [handlePress],
   );
 
-  if (feed.isPending && !!userId) {
+  if (!userId || feed.isPending) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />

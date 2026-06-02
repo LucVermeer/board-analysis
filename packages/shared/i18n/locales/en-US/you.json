@@ -33,7 +33,10 @@
     "emptyFollowing": "Not following anyone yet",
     "cancel": "Cancel",
     "sessions": {
-      "empty": "No sessions yet"
+      "empty": "No sessions logged yet — go climb something."
+    },
+    "progress": {
+      "empty": "Nothing logged yet — your stats show up once you start ticking climbs."
     },
     "comments": {
       "title": "Comments",
@@ -52,7 +55,7 @@
       "done": "Done"
     },
     "logbook": {
-      "empty": "No logged climbs yet",
+      "empty": "Your logbook's empty — log your first send.",
       "editTitle": "Edit ascent",
       "statusLabel": "Status",
       "gradeLabel": "Grade",

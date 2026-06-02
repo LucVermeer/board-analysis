@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { AscentFeedItem } from '@boardsesh/graphql/operations';
@@ -21,10 +22,10 @@ type LogbookRowProps = {
 const STATUS_META: Record<AscentFeedItem['status'], { icon: IconName; color: string }> = {
   flash: { icon: 'flash', color: brandColors.warning },
   send: { icon: 'tick', color: brandColors.success },
-  attempt: { icon: 'circle', color: '#8E8E93' },
+  attempt: { icon: 'circle', color: iosSystemColors.systemGray },
 };
 
-export function LogbookRow({ ascent, onPress }: LogbookRowProps) {
+export const LogbookRow = memo(function LogbookRow({ ascent, onPress }: LogbookRowProps) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
 
@@ -38,6 +39,7 @@ export function LogbookRow({ ascent, onPress }: LogbookRowProps) {
       title={ascent.climbName}
       subtitle={subtitle}
       onPress={() => onPress(ascent)}
+      showChevron
       leading={
         <View style={[styles.badge, { backgroundColor: meta.color }]}>
           <Icon name={meta.icon} size={14} color={iosSystemColors.white} />
@@ -61,7 +63,7 @@ export function LogbookRow({ ascent, onPress }: LogbookRowProps) {
       }
     />
   );
-}
+});
 
 const styles = StyleSheet.create({
   badge: {

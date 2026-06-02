@@ -16,14 +16,23 @@ import { getHttpClient } from '../client';
 
 /**
  * Cast a vote on a social entity (e.g. a session). Returns the updated
- * VoteSummary so the caller can reflect the new count/`userVote` locally
- * without a feed-wide refetch.
+ * VoteSummary so the caller can reflect the new count/`userVote` locally, and
+ * patches any cached bulk-vote-summary lists so recycled / re-scrolled rows
+ * (which reset their optimistic state on remount) stay in sync — no feed-wide
+ * refetch needed.
  */
 export function useVote() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: VoteMutationVariables['input']) => {
       const response = await getHttpClient().request<VoteMutationResponse>(VOTE, { input });
       return response.vote;
+    },
+    onSuccess: (summary) => {
+      queryClient.setQueriesData<GetBulkVoteSummariesQueryResponse['bulkVoteSummaries']>(
+        { queryKey: ['bulkVoteSummaries'] },
+        (old) => old?.map((entry) => (entry.entityId === summary.entityId ? summary : entry)),
+      );
     },
   });
 }

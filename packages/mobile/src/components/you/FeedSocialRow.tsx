@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
@@ -10,42 +10,53 @@ import { useTheme } from '../../providers/theme-provider';
 
 type FeedSocialRowProps = {
   sessionId: string;
+  /** Server upvote count (from the bulk vote summary, else the feed item). */
   upvotes: number;
+  /** Server vote for the viewer: 1 = upvoted, else not. */
+  userVote: number | null;
   commentCount: number;
   onOpenComments: (sessionId: string) => void;
 };
 
 /** Vote + comment row for a session feed card. */
-export function FeedSocialRow({ sessionId, upvotes, commentCount, onOpenComments }: FeedSocialRowProps) {
+export function FeedSocialRow({ sessionId, upvotes, userVote, commentCount, onOpenComments }: FeedSocialRowProps) {
   const { systemColors } = useTheme();
   const vote = useVote();
-  const [voted, setVoted] = useState(false);
-  const [count, setCount] = useState(upvotes);
+
+  // Optimistic override layered over the server values. Null = show server
+  // state. Reset whenever the row is recycled onto a different session
+  // (FlashList reuses component instances), so one card's vote can't bleed
+  // onto another.
+  const [optimistic, setOptimistic] = useState<{ count: number; voted: boolean } | null>(null);
+  useEffect(() => setOptimistic(null), [sessionId]);
+
+  const voted = optimistic ? optimistic.voted : userVote === 1;
+  const count = optimistic ? optimistic.count : upvotes;
 
   const handleVote = () => {
+    if (vote.isPending) return; // guard double-tap
     hapticLight();
     const nextVoted = !voted;
-    // Optimistic; reconcile from the returned summary.
-    setVoted(nextVoted);
-    setCount((current) => current + (nextVoted ? 1 : -1));
+    setOptimistic({ count: count + (nextVoted ? 1 : -1), voted: nextVoted });
     vote.mutate(
       { entityType: 'session', entityId: sessionId, value: nextVoted ? 1 : 0 },
       {
-        onSuccess: (summary) => {
-          setCount(summary.upvotes);
-          setVoted(summary.userVote === 1);
-        },
-        onError: () => {
-          setVoted(!nextVoted);
-          setCount((current) => current + (nextVoted ? -1 : 1));
-        },
+        onSuccess: (summary) => setOptimistic({ count: summary.upvotes, voted: summary.userVote === 1 }),
+        onError: () => setOptimistic(null),
       },
     );
   };
 
   return (
     <View style={styles.row}>
-      <Pressable style={styles.button} onPress={handleVote} accessibilityRole="button" hitSlop={6}>
+      <Pressable
+        style={styles.button}
+        onPress={handleVote}
+        disabled={vote.isPending}
+        accessibilityRole="button"
+        accessibilityState={{ selected: voted }}
+        hitSlop={6}
+      >
         <Icon
           name={voted ? 'favorite.fill' : 'favorite'}
           size={18}

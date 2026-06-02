@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
 import type { RawBar, RawGroupedBar, RawVPointsTimeline } from '@boardsesh/profile-stats';
@@ -8,6 +8,9 @@ import { useTheme } from '../../providers/theme-provider';
 import { gradeChartColor, layoutChartColor, flashRedpointColor } from './profile-chart-colors';
 
 const MAX_X_LABELS = 12;
+const AXIS_LABEL_SIZE = 10;
+
+export type ChartLegendItem = { color: string; label: string };
 
 // Keep only ~MAX_X_LABELS evenly-spaced labels; blank the rest so a dense
 // 52-week axis stays legible.
@@ -29,6 +32,23 @@ function fitBars(width: number, count: number, minBar = 3): { barWidth: number; 
 
 function formatThousands(value: number): string {
   return value >= 1000 ? `${Math.round(value / 100) / 10}k` : `${Math.round(value)}`;
+}
+
+/** Color-dot + label row beneath a chart so its colors can be decoded. */
+function Legend({ items }: { items: ChartLegendItem[] }) {
+  const { systemColors } = useTheme();
+  return (
+    <View style={styles.legend}>
+      {items.map((item) => (
+        <View key={item.label} style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+          <Text variant="caption2" color={systemColors.secondaryLabel}>
+            {item.label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 type FrameProps = {
@@ -67,52 +87,61 @@ type StackedBarsProps = {
   height?: number;
   loading?: boolean;
   emptyLabel?: string;
+  legend?: ChartLegendItem[];
 };
 
 /** Stacked bars (weekly activity, grade distribution). */
-export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLabel }: StackedBarsProps) {
+export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLabel, legend }: StackedBarsProps) {
   const { systemColors } = useTheme();
   const isEmpty = !bars || bars.length === 0;
 
+  // Color resolution is width-independent, so memoize it off the data.
+  const stackData = useMemo(
+    () =>
+      (bars ?? []).map((bar, index) => {
+        const stacks = bar.segments
+          .filter((segment) => segment.value > 0)
+          .map((segment) => ({
+            value: segment.value,
+            color: colorBy === 'grade' ? gradeChartColor(segment.key) : layoutChartColor(segment.key),
+          }));
+        return {
+          stacks: stacks.length > 0 ? stacks : [{ value: 0, color: 'transparent' }],
+          label: downsampleLabel(index, bars!.length, bar.label),
+        };
+      }),
+    [bars, colorBy],
+  );
+
   return (
-    <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
-      {(width) => {
-        const list = bars ?? [];
-        const { barWidth, spacing } = fitBars(width, list.length);
-        const stackData = list.map((bar, index) => {
-          const stacks = bar.segments
-            .filter((segment) => segment.value > 0)
-            .map((segment) => ({
-              value: segment.value,
-              color: colorBy === 'grade' ? gradeChartColor(segment.key) : layoutChartColor(segment.key),
-            }));
-          return {
-            stacks: stacks.length > 0 ? stacks : [{ value: 0, color: 'transparent' }],
-            label: downsampleLabel(index, list.length, bar.label),
-          };
-        });
-        return (
-          <BarChart
-            stackData={stackData}
-            width={width - 8}
-            height={height - 28}
-            barWidth={barWidth}
-            spacing={spacing}
-            initialSpacing={8}
-            barBorderRadius={2}
-            hideRules
-            hideYAxisText
-            yAxisThickness={0}
-            xAxisThickness={StyleSheet.hairlineWidth}
-            xAxisColor={systemColors.separator as string}
-            rotateLabel
-            xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: 9 }}
-            isAnimated={false}
-            disableScroll
-          />
-        );
-      }}
-    </ChartFrame>
+    <View>
+      <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
+        {(width) => {
+          const { barWidth, spacing } = fitBars(width, stackData.length);
+          return (
+            <BarChart
+              stackData={stackData}
+              width={width - 8}
+              height={height - 28}
+              barWidth={barWidth}
+              spacing={spacing}
+              initialSpacing={8}
+              barBorderRadius={2}
+              hideRules
+              hideYAxisText
+              yAxisThickness={0}
+              xAxisThickness={StyleSheet.hairlineWidth}
+              xAxisColor={systemColors.separator as string}
+              rotateLabel
+              xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
+              isAnimated={false}
+              disableScroll
+            />
+          );
+        }}
+      </ChartFrame>
+      {legend && !isEmpty ? <Legend items={legend} /> : null}
+    </View>
   );
 }
 
@@ -121,6 +150,7 @@ type GroupedBarsProps = {
   height?: number;
   loading?: boolean;
   emptyLabel?: string;
+  legend?: ChartLegendItem[];
 };
 
 /**
@@ -128,51 +158,53 @@ type GroupedBarsProps = {
  * API, so we flatten to a single data array: two adjacent bars per grade with a
  * wider gap separating groups, and the grade label centered under each pair.
  */
-export function GroupedBarChart({ bars, height = 150, loading, emptyLabel }: GroupedBarsProps) {
+export function GroupedBarChart({ bars, height = 150, loading, emptyLabel, legend }: GroupedBarsProps) {
   const { systemColors } = useTheme();
   const isEmpty = !bars || bars.length === 0;
+  const groupGap = 14;
+  const innerGap = 2;
 
   return (
-    <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
-      {(width) => {
-        const list = bars ?? [];
-        // Two bars per group; reserve group gaps in the width budget.
-        const groupGap = 14;
-        const innerGap = 2;
-        const initial = 8;
-        const barWidth = Math.max(
-          4,
-          Math.floor((width - initial * 2 - groupGap * list.length - innerGap * list.length) / (list.length * 2)),
-        );
-        const data = list.flatMap((bar) =>
-          bar.values.map((value, valueIndex) => ({
-            value: value.value,
-            frontColor: flashRedpointColor(value.key),
-            spacing: valueIndex === 0 ? innerGap : groupGap,
-            label: valueIndex === 0 ? bar.label : undefined,
-            labelWidth: barWidth * 2 + innerGap,
-          })),
-        );
-        return (
-          <BarChart
-            data={data}
-            width={width - 8}
-            height={height - 28}
-            barWidth={barWidth}
-            initialSpacing={initial}
-            barBorderRadius={2}
-            hideRules
-            hideYAxisText
-            yAxisThickness={0}
-            xAxisThickness={StyleSheet.hairlineWidth}
-            xAxisColor={systemColors.separator as string}
-            xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: 9 }}
-            isAnimated={false}
-            disableScroll
-          />
-        );
-      }}
-    </ChartFrame>
+    <View>
+      <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
+        {(width) => {
+          const list = bars ?? [];
+          const initial = 8;
+          const barWidth = Math.max(
+            4,
+            Math.floor((width - initial * 2 - groupGap * list.length - innerGap * list.length) / (list.length * 2)),
+          );
+          const data = list.flatMap((bar) =>
+            bar.values.map((value, valueIndex) => ({
+              value: value.value,
+              frontColor: flashRedpointColor(value.key),
+              spacing: valueIndex === 0 ? innerGap : groupGap,
+              label: valueIndex === 0 ? bar.label : undefined,
+              labelWidth: barWidth * 2 + innerGap,
+            })),
+          );
+          return (
+            <BarChart
+              data={data}
+              width={width - 8}
+              height={height - 28}
+              barWidth={barWidth}
+              initialSpacing={initial}
+              barBorderRadius={2}
+              hideRules
+              hideYAxisText
+              yAxisThickness={0}
+              xAxisThickness={StyleSheet.hairlineWidth}
+              xAxisColor={systemColors.separator as string}
+              xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
+              isAnimated={false}
+              disableScroll
+            />
+          );
+        }}
+      </ChartFrame>
+      {legend && !isEmpty ? <Legend items={legend} /> : null}
+    </View>
   );
 }
 
@@ -194,27 +226,34 @@ export function TotalAreaChart({ timeline, color, height = 170, loading, emptyLa
   const { systemColors } = useTheme();
   const isEmpty = !timeline || timeline.series.length === 0;
 
+  // Data + axis labels are width-independent — memoize off the timeline.
+  const model = useMemo(() => {
+    if (!timeline) return null;
+    const weekLabels = timeline.weekLabels;
+    const totals = weekLabels.map((_, index) =>
+      timeline.series.reduce((sum, series) => sum + (series.data[index] ?? 0), 0),
+    );
+    const maxValue = Math.max(...totals, 1);
+    const sections = 4;
+    const yAxisLabelTexts = Array.from({ length: sections + 1 }, (_, index) =>
+      formatThousands((maxValue * index) / sections),
+    );
+    const data = totals.map((value, index) => ({
+      value,
+      label: downsampleLabel(index, weekLabels.length, weekLabels[index]),
+    }));
+    return { data, maxValue, sections, yAxisLabelTexts, pointCount: weekLabels.length };
+  }, [timeline]);
+
   return (
     <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
       {(width) => {
-        const weekLabels = timeline!.weekLabels;
-        const totals = weekLabels.map((_, index) =>
-          timeline!.series.reduce((sum, series) => sum + (series.data[index] ?? 0), 0),
-        );
-        const maxValue = Math.max(...totals, 1);
-        const sections = 4;
-        const yAxisLabelTexts = Array.from({ length: sections + 1 }, (_, index) =>
-          formatThousands((maxValue * index) / sections),
-        );
-        const data = totals.map((value, index) => ({
-          value,
-          label: downsampleLabel(index, weekLabels.length, weekLabels[index]),
-        }));
-        const spacing = Math.max(1, Math.floor((width - 40) / Math.max(1, weekLabels.length - 1)));
+        if (!model) return null;
+        const spacing = Math.max(1, Math.floor((width - 48) / Math.max(1, model.pointCount - 1)));
         return (
           <LineChart
             areaChart
-            data={data}
+            data={model.data}
             width={width - 48}
             height={height - 28}
             spacing={spacing}
@@ -227,16 +266,16 @@ export function TotalAreaChart({ timeline, color, height = 170, loading, emptyLa
             thickness={2}
             hideDataPoints
             curved
-            maxValue={maxValue}
-            noOfSections={sections}
-            yAxisLabelTexts={yAxisLabelTexts}
+            maxValue={model.maxValue}
+            noOfSections={model.sections}
+            yAxisLabelTexts={model.yAxisLabelTexts}
             yAxisThickness={0}
             xAxisThickness={StyleSheet.hairlineWidth}
             xAxisColor={systemColors.separator as string}
             rulesColor={systemColors.separator as string}
             rulesType="solid"
-            yAxisTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: 9 }}
-            xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: 9 }}
+            yAxisTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
+            xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
             isAnimated={false}
             disableScroll
           />
@@ -250,5 +289,22 @@ const styles = StyleSheet.create({
   frame: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });

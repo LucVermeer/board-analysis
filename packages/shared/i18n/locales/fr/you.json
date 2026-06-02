@@ -33,7 +33,10 @@
     "emptyFollowing": "Aucun abonnement pour l'instant",
     "cancel": "Annuler",
     "sessions": {
-      "empty": "Aucune session pour l'instant"
+      "empty": "Aucune session enregistrée — va grimper."
+    },
+    "progress": {
+      "empty": "Rien d'enregistré pour l'instant — tes stats apparaissent dès que tu coches des voies."
     },
     "comments": {
       "title": "Commentaires",
@@ -52,7 +55,7 @@
       "done": "Terminé"
     },
     "logbook": {
-      "empty": "Aucune voie enregistrée",
+      "empty": "Ton carnet est vide — enregistre ta première croix.",
       "editTitle": "Modifier la croix",
       "statusLabel": "Statut",
       "gradeLabel": "Cotation",

@@ -43,22 +43,6 @@ function toLogbookEntry(tick: GetUserTicksQueryResponse['userTicks'][number], bo
   };
 }
 
-/** One board's ticks for a user, normalised to LogbookEntry[]. */
-export function useUserTicks(userId: string | undefined, boardType: string, enabled = true) {
-  return useQuery({
-    queryKey: ['userTicks', userId, boardType],
-    queryFn: async () => {
-      const response = await getHttpClient().request<GetUserTicksQueryResponse>(GET_USER_TICKS, {
-        userId,
-        boardType,
-      });
-      return response.userTicks.map((tick) => toLogbookEntry(tick, boardType));
-    },
-    enabled: enabled && !!userId,
-    staleTime: PROFILE_STALE_TIME_MS,
-  });
-}
-
 /**
  * All of a user's ticks across every supported board, keyed by board type —
  * the input `deriveProfileViewModel` expects. Shares the `['userTicks', userId]`
@@ -132,7 +116,8 @@ export function useUserAscentsFeed(userId: string | undefined, input?: GetUserAs
     queryFn: ({ pageParam }) =>
       getHttpClient().request<GetUserAscentsFeedQueryResponse>(GET_USER_ASCENTS_FEED, {
         userId,
-        input: { limit: FEED_PAGE_SIZE, offset: pageParam, ...input },
+        // Spread caller input first so the paginator's limit/offset always win.
+        input: { ...input, limit: FEED_PAGE_SIZE, offset: pageParam },
       }),
     getNextPageParam: (lastPage, allPages) =>
       lastPage.userAscentsFeed.hasMore

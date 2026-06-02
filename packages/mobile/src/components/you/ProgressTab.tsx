@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { View, ScrollView, RefreshControl, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -8,7 +9,8 @@ import { Card } from '../Card';
 import { SectionHeader } from '../SectionHeader';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { StatsSummaryCard } from './StatsSummaryCard';
-import { StackedBarChart, GroupedBarChart, TotalAreaChart } from './YouCharts';
+import { StackedBarChart, GroupedBarChart, TotalAreaChart, type ChartLegendItem } from './YouCharts';
+import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
 import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
@@ -18,12 +20,29 @@ type YouData = ReturnType<typeof useYouProfileData>;
 
 export function ProgressTab({ data }: { data: YouData }) {
   const { t } = useTranslation('profile');
+  const { t: tYou } = useTranslation('you');
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const paddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom + spacing[6];
 
   const totalAscents = data.statisticsSummary.totalAscents;
   const noAscentData = t('empty.noAscentData');
+
+  // Legends so the layout-colored grade-distribution bars and the
+  // flash-vs-redpoint pairs can be decoded (charts are color-only otherwise).
+  const gradeDistLegend = useMemo<ChartLegendItem[] | undefined>(
+    () =>
+      data.aggregatedStackedBars?.legend.map((entry) => ({ label: entry.label, color: layoutChartColor(entry.key) })),
+    [data.aggregatedStackedBars],
+  );
+  const flashRedpointLegend = useMemo<ChartLegendItem[] | undefined>(
+    () =>
+      data.aggregatedFlashRedpointBars?.[0]?.values.map((value) => ({
+        label: value.label,
+        color: flashRedpointColor(value.key),
+      })),
+    [data.aggregatedFlashRedpointBars],
+  );
 
   if (data.loading) {
     return (
@@ -45,7 +64,7 @@ export function ProgressTab({ data }: { data: YouData }) {
         <View style={styles.empty}>
           <Icon name="chart.bar" size={48} color={systemColors.tertiaryLabel} />
           <Text variant="headline" style={styles.emptyTitle}>
-            {t('empty.noClimbingData')}
+            {tYou('mobile.progress.empty')}
           </Text>
         </View>
       ) : (
@@ -69,6 +88,7 @@ export function ProgressTab({ data }: { data: YouData }) {
               bars={data.aggregatedStackedBars?.bars ?? null}
               colorBy="layout"
               emptyLabel={noAscentData}
+              legend={gradeDistLegend}
             />
           </Card>
 
@@ -76,7 +96,11 @@ export function ProgressTab({ data }: { data: YouData }) {
             <>
               <SectionHeader title={t('stats.flashVsRedpoint')} />
               <Card style={styles.chartCard}>
-                <GroupedBarChart bars={data.aggregatedFlashRedpointBars} emptyLabel={noAscentData} />
+                <GroupedBarChart
+                  bars={data.aggregatedFlashRedpointBars}
+                  emptyLabel={noAscentData}
+                  legend={flashRedpointLegend}
+                />
               </Card>
             </>
           )}

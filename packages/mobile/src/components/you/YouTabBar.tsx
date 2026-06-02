@@ -48,6 +48,7 @@ export function YouTabBar<K extends string>({ tabs, activeIndex, scrollPosition,
           <Pressable
             key={tab.key}
             style={styles.tab}
+            hitSlop={{ top: 6, bottom: 6 }}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
             onPress={() => {

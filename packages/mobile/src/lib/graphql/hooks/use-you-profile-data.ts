@@ -53,8 +53,11 @@ export function useYouProfileData(userId: string | undefined) {
     void publicProfileQuery.refetch();
   }, [allBoardsTicksQuery, profileStatsQuery, percentileQuery, publicProfileQuery]);
 
+  // `!userId` (the brief post-login window before useProfile resolves) counts
+  // as loading so the Progress tab shows a spinner instead of flashing the
+  // empty state, then the charts.
   const loading =
-    !!userId && (allBoardsTicksQuery.isPending || profileStatsQuery.isPending || publicProfileQuery.isPending);
+    !userId || allBoardsTicksQuery.isPending || profileStatsQuery.isPending || publicProfileQuery.isPending;
 
   const refreshing =
     allBoardsTicksQuery.isRefetching ||

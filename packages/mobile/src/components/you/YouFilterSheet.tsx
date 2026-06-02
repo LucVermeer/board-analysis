@@ -1,4 +1,4 @@
-import { type RefObject } from 'react';
+import { type RefObject, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type BottomSheet from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -34,13 +34,16 @@ export function YouFilterSheet({
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
 
-  const boardOptions = ['all', ...BOARD_TYPES];
-  const timeframeOptions: { key: UnifiedTimeframeType; label: string }[] = [
-    { key: 'all', label: t('mobile.filter.all') },
-    { key: 'lastYear', label: t('mobile.filter.year') },
-    { key: 'lastMonth', label: t('mobile.filter.month') },
-    { key: 'lastWeek', label: t('mobile.filter.week') },
-  ];
+  const boardOptions = useMemo(() => ['all', ...BOARD_TYPES], []);
+  const timeframeOptions = useMemo<{ key: UnifiedTimeframeType; label: string }[]>(
+    () => [
+      { key: 'all', label: t('mobile.filter.all') },
+      { key: 'lastYear', label: t('mobile.filter.year') },
+      { key: 'lastMonth', label: t('mobile.filter.month') },
+      { key: 'lastWeek', label: t('mobile.filter.week') },
+    ],
+    [t],
+  );
 
   return (
     <Sheet

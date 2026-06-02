@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useState } from 'react';
+import { type RefObject, useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Alert, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -54,11 +54,14 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
     setComment(ascent.comment ?? '');
   }, [ascent]);
 
-  const statusOptions: { key: TickStatus; label: string }[] = [
-    { key: 'flash', label: t('mobile.logbook.status.flash') },
-    { key: 'send', label: t('mobile.logbook.status.send') },
-    { key: 'attempt', label: t('mobile.logbook.status.attempt') },
-  ];
+  const statusOptions = useMemo<{ key: TickStatus; label: string }[]>(
+    () => [
+      { key: 'flash', label: t('mobile.logbook.status.flash') },
+      { key: 'send', label: t('mobile.logbook.status.send') },
+      { key: 'attempt', label: t('mobile.logbook.status.attempt') },
+    ],
+    [t],
+  );
 
   const save = () => {
     if (!ascent) return;
@@ -106,6 +109,9 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       scrollable
       onClose={onClose}
       contentContainerStyle={styles.content}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       footer={<Button title={t('mobile.logbook.save')} onPress={save} loading={updateTick.isPending} />}
     >
       <Text variant="title3" numberOfLines={1} style={styles.title}>

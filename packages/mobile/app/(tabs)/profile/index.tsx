@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import PagerView, { type PagerViewOnPageScrollEvent, type PagerViewOnPageSelectedEvent } from 'react-native-pager-view';
 import { useSharedValue } from 'react-native-reanimated';
@@ -33,11 +33,14 @@ export default function YouScreen() {
   const scrollPosition = useSharedValue(0);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const tabs: YouTab<TabKey>[] = [
-    { key: 'progress', label: t('tabs.progress') },
-    { key: 'sessions', label: t('tabs.sessions') },
-    { key: 'logbook', label: t('tabs.logbook') },
-  ];
+  const tabs = useMemo<YouTab<TabKey>[]>(
+    () => [
+      { key: 'progress', label: t('tabs.progress') },
+      { key: 'sessions', label: t('tabs.sessions') },
+      { key: 'logbook', label: t('tabs.logbook') },
+    ],
+    [t],
+  );
 
   const handleTabPress = useCallback((index: number) => {
     pagerRef.current?.setPage(index);
@@ -79,7 +82,12 @@ export default function YouScreen() {
       headerRight:
         activeIndex === 0
           ? () => (
-              <Pressable onPress={openFilters} hitSlop={8} accessibilityRole="button">
+              <Pressable
+                onPress={openFilters}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.filter.title')}
+              >
                 <Icon
                   name="filter"
                   size={22}

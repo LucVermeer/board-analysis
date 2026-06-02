@@ -359,7 +359,6 @@ export function useAttachBetaLink() {
 // import surface from this directory stays a single path.
 export { useMobileClimbActionsData } from './use-mobile-climb-actions-data';
 export {
-  useUserTicks,
   useAllBoardsTicks,
   useUserProfileStats,
   useUserClimbPercentile,

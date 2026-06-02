@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, RefreshControl, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +10,7 @@ import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { SessionFeedCard } from './SessionFeedCard';
 import { CommentSheet } from './CommentSheet';
-import { useSessionGroupedFeed } from '../../lib/graphql/hooks';
+import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
 import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
@@ -26,7 +26,22 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   const [commentSessionId, setCommentSessionId] = useState<string | null>(null);
 
   const feed = useSessionGroupedFeed({ userId }, !!userId);
-  const sessions = feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? [];
+  const sessions = useMemo(
+    () => feed.data?.pages.flatMap((page) => page.sessionGroupedFeed.sessions) ?? [],
+    [feed.data],
+  );
+
+  // Per-viewer vote state for the visible sessions (the feed item carries
+  // counts but not the viewer's own vote). Refetches as more pages load.
+  const sessionIds = useMemo(() => sessions.map((session) => session.sessionId), [sessions]);
+  const voteSummaries = useBulkVoteSummaries('session', sessionIds, !!userId && sessionIds.length > 0);
+  const summaryMap = useMemo(() => {
+    const map = new Map<string, { upvotes: number; userVote: number | null }>();
+    for (const summary of voteSummaries.data ?? []) {
+      map.set(summary.entityId, { upvotes: summary.upvotes, userVote: summary.userVote });
+    }
+    return map;
+  }, [voteSummaries.data]);
 
   const handleOpenComments = useCallback((sessionId: string) => {
     setCommentSessionId(sessionId);
@@ -38,11 +53,17 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   }, [feed]);
 
   const renderItem = useCallback(
-    ({ item }: { item: SessionFeedItem }) => <SessionFeedCard session={item} onOpenComments={handleOpenComments} />,
-    [handleOpenComments],
+    ({ item }: { item: SessionFeedItem }) => (
+      <SessionFeedCard
+        session={item}
+        voteSummary={summaryMap.get(item.sessionId)}
+        onOpenComments={handleOpenComments}
+      />
+    ),
+    [handleOpenComments, summaryMap],
   );
 
-  if (feed.isPending && !!userId) {
+  if (!userId || feed.isPending) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
@@ -54,6 +75,7 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
     <View style={styles.flex}>
       <FlashList
         data={sessions}
+        extraData={summaryMap}
         renderItem={renderItem}
         keyExtractor={(item) => item.sessionId}
         onEndReached={handleEndReached}

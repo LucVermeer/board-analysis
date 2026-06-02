@@ -33,7 +33,10 @@
     "emptyFollowing": "Todavía no sigues a nadie",
     "cancel": "Cancelar",
     "sessions": {
-      "empty": "Aún no hay sesiones"
+      "empty": "Aún no hay sesiones — ve a escalar algo."
+    },
+    "progress": {
+      "empty": "Nada registrado todavía — tus estadísticas aparecen cuando empieces a registrar vías."
     },
     "comments": {
       "title": "Comentarios",
@@ -52,7 +55,7 @@
       "done": "Listo"
     },
     "logbook": {
-      "empty": "Aún no has registrado vías",
+      "empty": "Tu historial está vacío — registra tu primer encadene.",
       "editTitle": "Editar ascenso",
       "statusLabel": "Estado",
       "gradeLabel": "Grado",
