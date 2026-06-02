@@ -6,8 +6,9 @@ import { AccessibilityInfo } from 'react-native';
  *
  * `isLiquidGlassAvailable()` can report `true` even when the user has asked the
  * system to limit translucency, so glass/blur surfaces consult this hook and
- * fall back to a solid background when it returns `true`. Defaults to `false`
- * until the initial async read resolves.
+ * fall back to a solid background when it returns `true`. Defaults to `true`
+ * (conservative) until the initial async read resolves, so a Reduce-Transparency
+ * user never sees a frame of glass on cold start.
  */
 export function useReduceTransparency(): boolean {
   // Default to `true` (conservative) until the async OS read resolves, so a

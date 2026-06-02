@@ -1,10 +1,11 @@
-import { View, Text, Pressable, StyleSheet, useColorScheme } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
 import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
 import { useBluetoothConnectedStatus } from '../lib/ble/bluetooth-status-store';
 import { brandColors } from '../theme/colors';
+import { useTheme } from '../providers/theme-provider';
 import { GlassSurface } from './GlassSurface';
 
 // Exported so the persistent queue bar (which docks above the tab bar) and
@@ -23,7 +24,7 @@ const TAB_ICONS: Record<string, TabIconName> = {
 
 export default function BlurTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useTheme();
   const isDark = colorScheme === 'dark';
   const isBluetoothConnected = useBluetoothConnectedStatus();
 

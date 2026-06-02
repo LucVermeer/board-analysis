@@ -72,18 +72,21 @@ export function GlassSurface({
   }
 
   // iOS 26+: real Liquid Glass. colorScheme is pinned to the resolved scheme so
-  // it tracks the in-app appearance toggle (Appearance.setColorScheme).
+  // it tracks the in-app appearance toggle (Appearance.setColorScheme). The
+  // GlassView fills a plain wrapper that owns `pointerEvents` — same shape as
+  // the blur/solid paths, and it doesn't depend on GlassView keeping a
+  // ViewProps-compatible `pointerEvents`.
   if (Platform.OS === 'ios' && isLiquidGlassAvailable() && isGlassEffectAPIAvailable()) {
     return (
-      <GlassView
-        glassEffectStyle={glassEffectStyle}
-        tintColor={tintColor}
-        colorScheme={isDark ? 'dark' : 'light'}
-        style={style}
-        pointerEvents={pointerEvents}
-      >
+      <View style={style} pointerEvents={pointerEvents}>
+        <GlassView
+          glassEffectStyle={glassEffectStyle}
+          tintColor={tintColor}
+          colorScheme={isDark ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
         {children}
-      </GlassView>
+      </View>
     );
   }
 
