@@ -271,6 +271,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setBleControlOpen(true);
   }, [bluetooth]);
 
+  // Close the BLE controls sheet if the link drops while it's open — otherwise
+  // it lingers showing Re-light / Disconnect actions that no-op on a dead link.
+  const bluetoothConnected = bluetooth?.isConnected ?? false;
+  useEffect(() => {
+    if (!bluetoothConnected) setBleControlOpen(false);
+  }, [bluetoothConnected]);
+
   const handleOpenActions = useCallback(() => {
     setActiveSubDrawer('actions');
   }, []);

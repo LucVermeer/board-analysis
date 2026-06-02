@@ -400,6 +400,13 @@ export function useBoardBluetooth({
   // Serial to silently reconnect to for the board currently in view, or null
   // when nothing is remembered or the user switched boards (in which case the
   // caller opens the device picker instead).
+  //
+  // Deliberately keyed on board+layout+size only — NOT set_ids, which web's
+  // boardIdentityKey also folds in. The mobile BluetoothProvider is handed a
+  // single global activeBoard (no set_ids), and the LED placement map keys on
+  // layout+size alone, so a same-board reconnect renders identically regardless
+  // of set_ids. Don't thread set_ids in here without also passing it to the
+  // provider.
   const currentConfigKey =
     boardName && layoutId !== undefined && sizeId !== undefined ? `${boardName}::${layoutId}::${sizeId}` : null;
   const reconnectSerialForCurrentBoard =

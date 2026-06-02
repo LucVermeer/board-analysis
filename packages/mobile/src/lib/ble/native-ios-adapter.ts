@@ -40,6 +40,9 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     return result.available;
   }
 
+  // The scan/select flow (silent serial auto-select → grace-window picker
+  // fallback → scan timeout) mirrors RNBleAdapter.requestAndConnect and the web
+  // adapters. Kept in lockstep by hand; if you change one, change the others.
   async requestAndConnect(targetSerial?: string): Promise<BleConnection> {
     const native = this.requireNative();
     const devices = new Map<string, DiscoveredDevice>();
@@ -93,35 +96,42 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       }
     });
 
-    await native.startScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID]);
-
-    // Grace window: if the stored serial hasn't matched shortly, open the picker
-    // (scan keeps running so it live-updates) instead of waiting out the full
-    // scan window and failing. Matches the web reconnect-by-serial fallback.
-    const pickerFallbackId = targetSerial
-      ? setTimeout(() => {
-          if (autoSelecting) openPicker();
-        }, SERIAL_RECONNECT_GRACE_MS)
-      : undefined;
-
-    const scanTimeoutId = setTimeout(() => {
-      void native.stopScan();
-      // Belt-and-suspenders: make sure the picker is open even if the grace
-      // window never fired.
-      if (autoSelecting) openPicker();
-      // The picker is showing but nothing ever advertised — surface the empty
-      // result so the sheet doesn't spin forever.
-      if (pickerOpened && devices.size === 0) {
-        rejectSelection(new Error('No boards found within scan window'));
-      }
-    }, SCAN_TIMEOUT_MS);
-
+    // startScan and the timers live inside the try so that a startScan failure
+    // (Bluetooth toggled off / permission revoked mid-flow) still runs the
+    // finally — otherwise the scanResult listener would leak and the scan stay
+    // running.
+    let pickerFallbackId: ReturnType<typeof setTimeout> | undefined;
+    let scanTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let selectedDeviceId: string;
     try {
+      await native.startScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID]);
+
+      // Grace window: if the stored serial hasn't matched shortly, open the
+      // picker (scan keeps running so it live-updates) instead of waiting out
+      // the full scan window and failing. Matches the web reconnect-by-serial
+      // fallback.
+      pickerFallbackId = targetSerial
+        ? setTimeout(() => {
+            if (autoSelecting) openPicker();
+          }, SERIAL_RECONNECT_GRACE_MS)
+        : undefined;
+
+      scanTimeoutId = setTimeout(() => {
+        void native.stopScan();
+        // Belt-and-suspenders: make sure the picker is open even if the grace
+        // window never fired.
+        if (autoSelecting) openPicker();
+        // The picker is showing but nothing ever advertised — surface the empty
+        // result so the sheet doesn't spin forever.
+        if (pickerOpened && devices.size === 0) {
+          rejectSelection(new Error('No boards found within scan window'));
+        }
+      }, SCAN_TIMEOUT_MS);
+
       selectedDeviceId = await selectionPromise;
     } finally {
       if (pickerFallbackId) clearTimeout(pickerFallbackId);
-      clearTimeout(scanTimeoutId);
+      if (scanTimeoutId) clearTimeout(scanTimeoutId);
       scanSubscription.remove();
       await native.stopScan();
     }

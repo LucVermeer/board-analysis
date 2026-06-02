@@ -32,6 +32,9 @@ export class RNBleAdapter implements BluetoothAdapter {
     }
   }
 
+  // The scan/select flow (silent serial auto-select → grace-window picker
+  // fallback → scan timeout) mirrors NativeIosBleAdapter.requestAndConnect and
+  // the web adapters. Kept in lockstep by hand; if you change one, change the others.
   async requestAndConnect(targetSerial?: string): Promise<BleConnection> {
     const devices = new Map<string, DiscoveredDevice>();
     let updateListener: ((devices: DiscoveredDevice[]) => void) | null = null;
@@ -65,69 +68,75 @@ export class RNBleAdapter implements BluetoothAdapter {
       openPicker();
     }
 
-    bleManager.startDeviceScan(
-      [AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID],
-      null,
-      (scanError, scannedDevice) => {
-        if (scanError) {
-          bleManager.stopDeviceScan();
-          // Surface the failure immediately so the user sees feedback instead of
-          // waiting out the 30s scan window (the picker, if open, closes too).
-          rejectSelection(new Error(`BLE scan failed: ${scanError.message}`));
-          return;
-        }
-
-        if (!scannedDevice) return;
-
-        const device: DiscoveredDevice = {
-          deviceId: scannedDevice.id,
-          name: scannedDevice.localName ?? scannedDevice.name ?? undefined,
-          rssi: scannedDevice.rssi ?? -100,
-        };
-
-        // Deduplicate by deviceId — react-native-ble-plx uses stable
-        // peripheral UUIDs on iOS and device addresses on Android.
-        devices.set(device.deviceId, device);
-        pushDevices();
-
-        // Auto-select the stored board only until the picker takes over.
-        if (autoSelecting && targetSerial) {
-          const serial = parseSerialNumber(device.name);
-          if (serial === targetSerial) {
-            autoSelecting = false;
-            resolveSelection(device.deviceId);
-          }
-        }
-      },
-    );
-
-    // Grace window: if the stored serial hasn't matched shortly, open the picker
-    // (scan keeps running so it live-updates) instead of waiting out the full
-    // scan window and failing. Matches the web reconnect-by-serial fallback.
-    const pickerFallbackId = targetSerial
-      ? setTimeout(() => {
-          if (autoSelecting) openPicker();
-        }, SERIAL_RECONNECT_GRACE_MS)
-      : undefined;
-
-    const scanTimeoutId = setTimeout(() => {
-      bleManager.stopDeviceScan();
-      // Belt-and-suspenders: make sure the picker is open even if the grace
-      // window never fired.
-      if (autoSelecting) openPicker();
-      // The picker is showing but nothing ever advertised — surface the empty
-      // result so the sheet doesn't spin forever.
-      if (pickerOpened && devices.size === 0) {
-        rejectSelection(new Error('No boards found within scan window'));
-      }
-    }, SCAN_TIMEOUT_MS);
-
+    // The scan start and the timers live inside the try so that a
+    // startDeviceScan failure still runs the finally — otherwise the scan could
+    // be left running and the timers (if any) uncleared.
+    let pickerFallbackId: ReturnType<typeof setTimeout> | undefined;
+    let scanTimeoutId: ReturnType<typeof setTimeout> | undefined;
     let selectedDeviceId: string;
     try {
+      bleManager.startDeviceScan(
+        [AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID],
+        null,
+        (scanError, scannedDevice) => {
+          if (scanError) {
+            bleManager.stopDeviceScan();
+            // Surface the failure immediately so the user sees feedback instead
+            // of waiting out the 30s scan window (the picker, if open, closes too).
+            rejectSelection(new Error(`BLE scan failed: ${scanError.message}`));
+            return;
+          }
+
+          if (!scannedDevice) return;
+
+          const device: DiscoveredDevice = {
+            deviceId: scannedDevice.id,
+            name: scannedDevice.localName ?? scannedDevice.name ?? undefined,
+            rssi: scannedDevice.rssi ?? -100,
+          };
+
+          // Deduplicate by deviceId — react-native-ble-plx uses stable
+          // peripheral UUIDs on iOS and device addresses on Android.
+          devices.set(device.deviceId, device);
+          pushDevices();
+
+          // Auto-select the stored board only until the picker takes over.
+          if (autoSelecting && targetSerial) {
+            const serial = parseSerialNumber(device.name);
+            if (serial === targetSerial) {
+              autoSelecting = false;
+              resolveSelection(device.deviceId);
+            }
+          }
+        },
+      );
+
+      // Grace window: if the stored serial hasn't matched shortly, open the
+      // picker (scan keeps running so it live-updates) instead of waiting out
+      // the full scan window and failing. Matches the web reconnect-by-serial
+      // fallback.
+      pickerFallbackId = targetSerial
+        ? setTimeout(() => {
+            if (autoSelecting) openPicker();
+          }, SERIAL_RECONNECT_GRACE_MS)
+        : undefined;
+
+      scanTimeoutId = setTimeout(() => {
+        bleManager.stopDeviceScan();
+        // Belt-and-suspenders: make sure the picker is open even if the grace
+        // window never fired.
+        if (autoSelecting) openPicker();
+        // The picker is showing but nothing ever advertised — surface the empty
+        // result so the sheet doesn't spin forever.
+        if (pickerOpened && devices.size === 0) {
+          rejectSelection(new Error('No boards found within scan window'));
+        }
+      }, SCAN_TIMEOUT_MS);
+
       selectedDeviceId = await selectionPromise;
     } finally {
       if (pickerFallbackId) clearTimeout(pickerFallbackId);
-      clearTimeout(scanTimeoutId);
+      if (scanTimeoutId) clearTimeout(scanTimeoutId);
       bleManager.stopDeviceScan();
     }
 
@@ -233,7 +242,23 @@ export class RNBleAdapter implements BluetoothAdapter {
       const chunk = chunks[chunkIndex];
       const base64Chunk = uint8ArrayToBase64(chunk);
 
-      await characteristic.writeWithoutResponse(base64Chunk);
+      try {
+        await characteristic.writeWithoutResponse(base64Chunk);
+      } catch (error) {
+        // react-native-ble-plx surfaces a mid-write drop as a BleError whose
+        // message (e.g. CharacteristicWriteFailed — "Characteristic … write
+        // failed for device …") doesn't name the disconnect, so
+        // isDisconnectionError can't classify it from the message. Probe the
+        // live link: if the device is actually gone, normalise to the
+        // disconnect signature the write-failure path keys on so the lightbulb
+        // darkens; otherwise rethrow the original error untouched (a genuine
+        // transient write failure on a live link must not look like a drop).
+        const stillConnected = await this.connectedDevice?.isConnected().catch(() => false);
+        if (!stillConnected) {
+          throw new Error('Device disconnected during write');
+        }
+        throw error;
+      }
     }
   }
 
