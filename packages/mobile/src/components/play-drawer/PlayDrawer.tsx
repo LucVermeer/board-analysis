@@ -345,7 +345,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
             accessibilityLabel={t('playView.closeAria')}
             style={styles.closeButton}
           >
-            <Icon name="close" size={20} color={iosSystemColors.systemGray} />
+            <Icon name="chevron.down" size={20} color={iosSystemColors.systemGray} />
           </Pressable>
 
           {displayedClimb && (
