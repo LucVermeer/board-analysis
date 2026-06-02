@@ -113,7 +113,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // and leaves manual user expansion alone afterwards.
   const lastSnappedClimbUuidRef = useRef<string | null>(null);
 
-  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
+  const { state, setCurrentClimb, nextClimb, previousClimb, playlistSuggestionSource, sessionId, addToQueue } =
+    useQueue();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { formatGrade } = useGradeFormat();
@@ -133,9 +134,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [boardName, layoutId, sizeId, setIds]);
 
   const navigationState = useMemo(
-    () =>
-      computeNavigationStateWithSuggestions(state.queue, state.currentClimbQueueItem, state.playlistSuggestionSource),
-    [state.queue, state.currentClimbQueueItem, state.playlistSuggestionSource],
+    () => computeNavigationStateWithSuggestions(state.queue, state.currentClimbQueueItem, playlistSuggestionSource),
+    [state.queue, state.currentClimbQueueItem, playlistSuggestionSource],
   );
 
   const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;

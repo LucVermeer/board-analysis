@@ -16,6 +16,7 @@ import {
   createQueueSyncCoordinator,
   generateClientId,
   isPlaylistPeekQueueItemUuid,
+  playlistSuggestionSourceMatches,
 } from '@boardsesh/queue';
 import type {
   QueueState,
@@ -70,6 +71,8 @@ type QueueContextValue = {
   setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
   nextClimb: () => void;
   previousClimb: () => void;
+  /** Active playlist suggestion source (client-only; survives server syncs). */
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
   /** Replace the playlist suggestion source that drives swipe-through climbs. */
   setPlaylistSuggestionSource: (source: PlaylistSuggestionSource | null) => void;
   /** Refresh the suggestion source in place (no-op unless it matches the active one). */
@@ -109,6 +112,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const sessionCreationRef = useRef<Promise<string | null> | null>(null);
+  // Playlist suggestion source lives in provider state, NOT the reducer: the
+  // reducer clears its suggestion field on full server syncs (INITIAL_QUEUE_DATA
+  // / UPDATE_QUEUE), which would wipe the source the moment activation
+  // creates/syncs a session — killing swipe-through-playlist. Web keeps it
+  // outside the reducer for the same reason. The ref mirrors it so the
+  // imperative nextClimb path reads the latest value.
+  const [playlistSuggestionSource, setPlaylistSuggestionSourceState] = useState<PlaylistSuggestionSource | null>(null);
+  const playlistSuggestionSourceRef = useRef<PlaylistSuggestionSource | null>(null);
+  playlistSuggestionSourceRef.current = playlistSuggestionSource;
   const { showToast } = useToast();
   const { t } = useTranslation('session');
 
@@ -352,6 +364,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const clearQueue = useCallback(() => {
     const itemsToRemove = stateRef.current.queue;
     dispatch({ type: 'CLEAR_QUEUE' });
+    setPlaylistSuggestionSourceState(null);
     // Surface at most one toast if any removal fails — a persistent join
     // failure would otherwise toast once per queued item.
     void Promise.allSettled(itemsToRemove.map((item) => mutations.removeQueueItem(item.uuid))).then((results) => {
@@ -384,14 +397,24 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   );
 
   const setCurrentClimb = useCallback(
-    (item: ClimbQueueItem, options?: SetCurrentClimbOptions) =>
-      dispatchSetCurrent(item, true, options?.playlistSuggestionSource),
+    (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => {
+      // Only touch the source when the caller passes options (activation does;
+      // re-opening the drawer for the already-current climb does not, so the
+      // source survives). dispatchSetCurrent still forwards it to the reducer so
+      // it prunes suggested-after-current.
+      if (options) setPlaylistSuggestionSourceState(options.playlistSuggestionSource);
+      dispatchSetCurrent(item, true, options?.playlistSuggestionSource);
+    },
     [dispatchSetCurrent],
   );
 
   const nextClimb = useCallback(() => {
-    const { queue, currentClimbQueueItem, playlistSuggestionSource } = stateRef.current;
-    const nextItem = findNextQueueItemWithSuggestions(queue, currentClimbQueueItem, playlistSuggestionSource);
+    const { queue, currentClimbQueueItem } = stateRef.current;
+    const nextItem = findNextQueueItemWithSuggestions(
+      queue,
+      currentClimbQueueItem,
+      playlistSuggestionSourceRef.current,
+    );
     if (!nextItem) return;
     if (isPlaylistPeekQueueItemUuid(nextItem.uuid)) {
       // Mirror web: turn the transient peek into a real queue item with a fresh
@@ -416,11 +439,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, [dispatchSetCurrent]);
 
   const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
-    dispatch({ type: 'SET_PLAYLIST_SUGGESTION_SOURCE', payload: source });
+    setPlaylistSuggestionSourceState(source);
   }, []);
 
+  // No-op unless the incoming source matches the active one (same playlist +
+  // activated climb + board) — so a late async refresh can't clobber a newer
+  // activation. Mirrors the reducer's REFRESH semantics.
   const refreshPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource) => {
-    dispatch({ type: 'REFRESH_PLAYLIST_SUGGESTION_SOURCE', payload: source });
+    setPlaylistSuggestionSourceState((current) =>
+      playlistSuggestionSourceMatches(current, source) ? source : current,
+    );
   }, []);
 
   const clearSession = useCallback(async () => {
@@ -429,6 +457,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       type: 'INITIAL_QUEUE_DATA',
       payload: { queue: [], currentClimbQueueItem: null },
     });
+    setPlaylistSuggestionSourceState(null);
     await clearStoredSessionId();
   }, []);
 
@@ -461,6 +490,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setCurrentClimb,
       nextClimb,
       previousClimb,
+      playlistSuggestionSource,
       setPlaylistSuggestionSource,
       refreshPlaylistSuggestionSource,
       clearSession,
@@ -476,6 +506,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setCurrentClimb,
       nextClimb,
       previousClimb,
+      playlistSuggestionSource,
       setPlaylistSuggestionSource,
       refreshPlaylistSuggestionSource,
       clearSession,
