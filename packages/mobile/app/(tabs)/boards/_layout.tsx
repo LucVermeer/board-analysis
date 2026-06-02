@@ -14,6 +14,8 @@ export default function BoardsLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: t('mobile.nav.boards') }} />
+      {/* Full-screen map; it has its own overlay search field, no nav header. */}
+      <Stack.Screen name="search" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
     </Stack>
   );
 }

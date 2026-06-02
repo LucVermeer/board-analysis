@@ -19,7 +19,6 @@ type UseDrawerPlaybackInput = {
 type UseDrawerPlaybackOutput = {
   isAnimatable: boolean;
   frameCount: number;
-  paceMs: number;
   currentFrameString: string;
   frameIndex: number;
   isPlaying: boolean;
@@ -209,6 +208,22 @@ export function useDrawerPlayback({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- climbFrames.frameStrings is captured via frameStringsKey
   }, [isOpen, playback.isAnimatable, frameStringsKey, isMirrored, boardDetails]);
 
+  // Track deliberate user Play presses on a route. Peer-driven playback
+  // converges via `setIsPlaying` inside the engine and never calls `play()`,
+  // so this stays a user-only signal (no double counting from party sync).
+  const playWithTracking = useCallback(() => {
+    if (playback.isAnimatable) {
+      track('Route Played', {
+        boardName: boardDetails.board_name,
+        layoutName: boardDetails.layout_name ?? '',
+        frameCount: climbFrames.frameStrings.length,
+        speed: playback.speed,
+        climbUuid: activeClimbUuid,
+      });
+    }
+    playback.play();
+  }, [playback, boardDetails, climbFrames.frameStrings.length, activeClimbUuid]);
+
   // Stable reference so the drawer's `aboveFold` memo and the
   // `SwipeBoardCarousel` props don't bust on every render that doesn't
   // change observable playback state.
@@ -216,16 +231,15 @@ export function useDrawerPlayback({
     () => ({
       isAnimatable: playback.isAnimatable,
       frameCount: climbFrames.frameStrings.length,
-      paceMs: climbFrames.paceMs,
       currentFrameString: playback.currentFrameString,
       frameIndex: playback.frameIndex,
       isPlaying: playback.isPlaying,
       speed: playback.speed,
-      play: playback.play,
+      play: playWithTracking,
       pause: playback.pause,
       seek: playback.seek,
       setSpeed: playback.setSpeed,
     }),
-    [playback, climbFrames.frameStrings.length, climbFrames.paceMs],
+    [playback, climbFrames.frameStrings.length, playWithTracking],
   );
 }

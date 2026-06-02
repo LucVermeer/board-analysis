@@ -8,6 +8,8 @@ import type {
   Angle,
   MyBoardsInput,
   SearchBoardsInput,
+  PopularBoardConfigsInput,
+  CreateBoardInput,
   SetterStatsInput,
   UserProfile,
   SessionSummary,
@@ -19,6 +21,8 @@ import {
   GET_BOARD,
   SEARCH_BOARDS,
   GET_BOARDS_BY_SERIAL_NUMBERS,
+  GET_POPULAR_BOARD_CONFIGS,
+  CREATE_BOARD,
   GET_GRADES,
   GET_ANGLES,
   SEARCH_CLIMBS,
@@ -33,6 +37,8 @@ import {
   type GetBoardQueryResponse,
   type SearchBoardsQueryResponse,
   type GetBoardsBySerialNumbersQueryResponse,
+  type GetPopularBoardConfigsQueryResponse,
+  type CreateBoardMutationResponse,
   type GetGradesQueryResponse,
   type GetAnglesQueryResponse,
   type SearchClimbsQueryResponse,
@@ -98,6 +104,50 @@ export function useBoardsBySerialNumbers(serialNumbers: string[]) {
       getHttpClient().request<GetBoardsBySerialNumbersQueryResponse>(GET_BOARDS_BY_SERIAL_NUMBERS, { serialNumbers }),
     select: (data) => data.boardsBySerialNumbers,
     enabled: serialNumbers.length > 0,
+  });
+}
+
+export function usePopularBoardConfigs(input?: PopularBoardConfigsInput, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['popularBoardConfigs', input],
+    queryFn: () =>
+      getHttpClient().request<GetPopularBoardConfigsQueryResponse>(GET_POPULAR_BOARD_CONFIGS, { input }),
+    select: (data) => data.popularBoardConfigs,
+    // The popular set is server-cached and changes rarely; avoid refetch churn.
+    staleTime: 60 * 60 * 1000,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+/**
+ * Boards near a set of coordinates, sorted by distance (the backend computes
+ * `distanceMeters` via PostGIS when lat/long are supplied). Stays disabled
+ * until coordinates resolve, so callers can pass `null` while awaiting a
+ * location permission/fix.
+ */
+export function useNearbyBoards(coords: { latitude: number; longitude: number } | null, radiusKm = 1) {
+  return useQuery({
+    queryKey: ['nearbyBoards', coords, radiusKm],
+    queryFn: () =>
+      getHttpClient().request<SearchBoardsQueryResponse>(SEARCH_BOARDS, {
+        input: { latitude: coords?.latitude, longitude: coords?.longitude, radiusKm, limit: 20 },
+      }),
+    select: (data) => data.searchBoards,
+    enabled: coords !== null,
+  });
+}
+
+export function useCreateBoard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateBoardInput) => {
+      const response = await getHttpClient().request<CreateBoardMutationResponse>(CREATE_BOARD, { input });
+      return response.createBoard;
+    },
+    onSuccess: () => {
+      // A freshly created board should appear in the user's board list.
+      void queryClient.invalidateQueries({ queryKey: ['myBoards'] });
+    },
   });
 }
 

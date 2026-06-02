@@ -168,6 +168,23 @@ export default defineConfig({
         dependsOn: ['build:constants'],
         cache: false,
       },
+      'docker-context:backend': {
+        command: 'node scripts/create-service-docker-context.mjs backend',
+        cache: false,
+      },
+      'docker-context:web': {
+        command: 'node scripts/create-service-docker-context.mjs web',
+        cache: false,
+      },
+      'test:service-deploy-inputs': {
+        command: 'node --test scripts/check-service-deploy-inputs.test.mjs scripts/railway-deployment-status.test.mjs',
+        cache: false,
+      },
+      'check:service-deploy-inputs': {
+        command: 'node scripts/check-service-deploy-inputs.mjs',
+        dependsOn: ['test:service-deploy-inputs'],
+        cache: false,
+      },
       build: {
         command: 'true',
         dependsOn: ['build:backend', 'build:web'],

@@ -28,8 +28,8 @@ Production deploys run through a single workflow, `.github/workflows/production-
 Flow:
 
 1. `detect-changes` decides `web_changed` / `backend_changed` from the push diff (backend uses the same path list as `branch-deploy.yml`; web deploys on anything that isn't docs- or mobile-only). `check-rollback` runs in parallel and flags whether a Vercel Instant Rollback is active (see below).
-2. `build-web` runs `vercel pull --environment=production` + `vercel build --prod` and uploads `.vercel` (prebuilt output + project link) as an artifact. `build-backend` builds `Dockerfile.backend` and pushes it to `ghcr.io/boardsesh/boardsesh-daemon` with `:production` / `:staging` / `:sha-<short>` / `:latest` tags.
-3. **The gate:** `migrate` runs `@boardsesh/db db:migrate` only once every *attempted* build passed. A build that ran and failed blocks the gate, which skips both production deploys — nothing reaches prod half-built. (Migrations used to run inside the Vercel build; they moved here so they only run behind the gate.)
+2. `build-web` runs `vercel pull --environment=production` + `vercel build --prod` and uploads `.vercel` (prebuilt output + project link) as an artifact. `build-backend` runs `vp run docker-context:backend`, builds the generated `.docker-context/backend`, and pushes it to `ghcr.io/boardsesh/boardsesh-daemon` with `:production` / `:staging` / `:sha-<short>` / `:latest` tags.
+3. **The gate:** `migrate` runs `@boardsesh/db db:migrate` only once every _attempted_ build passed. A build that ran and failed blocks the gate, which skips both production deploys — nothing reaches prod half-built. (Migrations used to run inside the Vercel build; they moved here so they only run behind the gate.)
 4. `deploy-web` (`vercel deploy --prebuilt --prod`) and `deploy-production-backend` (`railway redeploy`) run after the gate.
 5. One of three Discord notifications fires (all gated on `DISCORD_DEPLOY_WEBHOOK`, all best-effort — webhook failures `::warning::` rather than fail the run, all post with `allowed_mentions.parse=[]` so user-controlled text like PR titles can't ping the channel):
    - `notify-success` on a promoted deploy — lists the PRs that shipped (parsed from `Merge pull request #N` subjects in `github.event.before..github.sha`, titles via `gh api`).
@@ -53,10 +53,10 @@ When someone uses Vercel **Instant Rollback**, production is pinned to a previou
 
 - **`check-rollback`** reads `lastRollbackTarget` on the Vercel project (`GET /v9/projects/{id}`) and outputs `active=true/false`. It fails closed — if the project API can't be read at all, the run is blocked.
 - **When a rollback is active**, the run still builds and migrates, but:
-  - `deploy-web` runs `vercel deploy --prebuilt --prod --skip-domain` — the production deployment is created and uploaded but *not* assigned to the production domain, so the rolled-back deployment keeps serving traffic.
+  - `deploy-web` runs `vercel deploy --prebuilt --prod --skip-domain` — the production deployment is created and uploaded but _not_ assigned to the production domain, so the rolled-back deployment keeps serving traffic.
   - `deploy-production-backend` pushes the image to GHCR (`:production`, `:sha-<short>`) but **skips the Railway redeploy** (Railway has no "deploy without promote"). The image is ready to redeploy once the rollback is cleared.
   - `notify-no-promote` posts to Discord with the staged web URL and the GHCR image, plus instructions: clear the rollback (revert the offending commit and re-promote), then promote the staged web deployment and redeploy the backend.
-- **Migrations only move forward; Instant Rollback never reverts the DB.** The `migrate` job runs `db:migrate` forward and Instant Rollback rolls back *only the web deployment*. A rolled-back web build therefore runs against the already-migrated schema, so **production migrations must stay backward-compatible (expand/contract)** — never drop or rename a column in the same release that depends on it gone. (This also keeps the staged-but-not-promoted release DB-ready for a clean promotion later.)
+- **Migrations only move forward; Instant Rollback never reverts the DB.** The `migrate` job runs `db:migrate` forward and Instant Rollback rolls back _only the web deployment_. A rolled-back web build therefore runs against the already-migrated schema, so **production migrations must stay backward-compatible (expand/contract)** — never drop or rename a column in the same release that depends on it gone. (This also keeps the staged-but-not-promoted release DB-ready for a clean promotion later.)
 
 ### What Broke
 
@@ -1331,11 +1331,11 @@ What changed → what gets deployed:
 
 ### Phase 1 (Frontend-Only)
 
-| Item                   | Cost                        | Complexity                         |
-| ---------------------- | --------------------------- | ---------------------------------- |
+| Item                   | Cost                        | Complexity                                      |
+| ---------------------- | --------------------------- | ----------------------------------------------- |
 | Vercel preview deploys | Free (included in plan)     | Minimal - one `packages/web/vercel.json` change |
-| GitHub Actions minutes | Free tier (~2000 min/month) | Low - simple workflow              |
-| **Total**              | **$0/month**                | **~1-2 days**                      |
+| GitHub Actions minutes | Free tier (~2000 min/month) | Low - simple workflow                           |
+| **Total**              | **$0/month**                | **~1-2 days**                                   |
 
 ### Phase 2 (Full-Stack on Homelab)
 
@@ -1482,13 +1482,12 @@ Client-side WebSocket resolution works unchanged — `{N}.ws.preview.boardsesh.c
 
 The `detect-changes` job in `branch-deploy.yml` checks the PR diff. These paths trigger a per-PR backend build:
 
-- `packages/backend/**`, `packages/shared-schema/**`, `packages/db/**`
-- `packages/crypto/**`, `packages/aurora-sync/**`
-- `Dockerfile.backend`, `bun.lock`, `package.json`
+- `packages/**`
+- `Dockerfile.backend`, `scripts/create-service-docker-context.mjs`, `bun.lock`, `package.json`
 
 Everything else is treated as FE-only. `workflow_dispatch` always does a full build.
 
-> **Note:** The same path list appears in two places (see "Path patterns" below). Keep them in sync.
+> **Note:** The same core package/Docker path list appears in two places (see "Path patterns" below). Keep them in sync. Production also treats `scripts/railway-deployment-status.mjs`, `railway.toml`, and `production-deploy.yml` edits as backend-affecting.
 
 ### Staging Backend Configuration
 
@@ -1507,14 +1506,20 @@ Backend-affecting paths are defined in two places that must stay in sync:
 1. `production-deploy.yml` `detect-changes` job — shell `case` patterns (decides web/backend builds + deploys on main push)
 2. `branch-deploy.yml` `detect-changes` job — shell `case` patterns (decides per-PR vs staging for PRs)
 
+`scripts/create-service-docker-context.mjs` generates `.docker-context/backend` and `.docker-context/web` before image builds. Each generated context contains every root workspace `package.json` under `manifests/` for the Bun install layer, then only the source packages reachable from that service under `source/`. The Dockerfiles copy only `manifests/` before `bun install`, so source-only edits keep the install cache warm and new workspaces are discovered from root `workspaces` instead of hand-maintained Dockerfile lists.
+
+`service-deploy-inputs.yml` runs the generator and verifies both contexts: manifests must match root `workspaces`, service source closures must match workspace dependencies, and Dockerfiles must not reintroduce per-package `COPY packages/.../package.json` lines.
+
+`production-deploy.yml` polls Railway deployment status after redeploy and attempts to roll back to the previously observed Railway deployment if the new one fails. Production deploys use a non-canceling concurrency group.
+
 ### Workflows
 
-| Workflow                     | Trigger                      | Purpose                                                             |
-| ---------------------------- | ---------------------------- | ------------------------------------------------------------------- |
-| `branch-deploy.yml`          | PR open/sync                 | Detects changes, builds web (always) + backend (if needed), deploys |
-| `production-deploy.yml`      | Push to main / dispatch      | Builds web + backend, gated migrate, deploys prod web (Vercel) + backend (Railway) |
-| `branch-deploy-cleanup.yml`  | PR close                     | Removes per-PR containers (backend may not exist for FE-only)       |
-| `branch-deploy-sweep.yml`    | Daily 3am UTC + main push    | Cleans stale containers, prunes images (7-day TTL)                  |
+| Workflow                    | Trigger                   | Purpose                                                                            |
+| --------------------------- | ------------------------- | ---------------------------------------------------------------------------------- |
+| `branch-deploy.yml`         | PR open/sync              | Detects changes, builds web (always) + backend (if needed), deploys                |
+| `production-deploy.yml`     | Push to main / dispatch   | Builds web + backend, gated migrate, deploys prod web (Vercel) + backend (Railway) |
+| `branch-deploy-cleanup.yml` | PR close                  | Removes per-PR containers (backend may not exist for FE-only)                      |
+| `branch-deploy-sweep.yml`   | Daily 3am UTC + main push | Cleans stale containers, prunes images (7-day TTL)                                 |
 
 ---
 

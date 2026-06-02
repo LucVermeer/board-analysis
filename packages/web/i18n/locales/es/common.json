@@ -271,11 +271,15 @@
   "playback": {
     "play": "Reproducir",
     "pause": "Pausar",
+    "replay": "Repetir",
+    "controls": "Controles de reproducción",
     "speed": "Velocidad",
     "frameOfTotal": "Cuadro {{index}} de {{total}}",
-    "seek": "Desplazar cuadros",
+    "prevFrame": "Cuadro anterior",
+    "nextFrame": "Cuadro siguiente",
     "speedHalf": "0.5×",
     "speedNormal": "1×",
-    "speedDouble": "2×"
+    "speedCustom": "{{value}}×",
+    "speedCustomLabel": "Velocidad personalizada"
   }
 }

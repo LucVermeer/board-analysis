@@ -24,7 +24,7 @@
  * Document AST (e.g. `name:{kind:"Name",value:"GetBetaLinks"}`), even
  * though the *Document import identifiers get minified.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,21 +47,38 @@ function extractOperationNames(source: string): string[] {
   return [...new Set(Array.from(matches, (m) => m[1]))];
 }
 
+if (!existsSync(operationsDir) || !statSync(operationsDir).isDirectory()) {
+  fail(`operations directory not found at ${operationsDir}`);
+}
+
+const operationFileNames = readdirSync(operationsDir).filter((name) => name.endsWith('.ts'));
+if (operationFileNames.length === 0) {
+  fail(`no TypeScript operation files found under ${operationsDir}`);
+}
+
 // Discover graphql() call sites: any file in operations/ that imports the
 // `graphql` helper from the generated module is in scope. Files that use
 // `gql` from `graphql-request` are not — their operations don't go through
 // the Documents map.
+const operationNamesByFile: Record<string, string[]> = {};
 const liveOperationsByFile: Record<string, string[]> = {};
-for (const name of readdirSync(operationsDir).filter((n) => n.endsWith('.ts'))) {
+for (const name of operationFileNames) {
   const path = join(operationsDir, name);
   const source = readFileSync(path, 'utf8');
+  const names = extractOperationNames(source);
+  if (names.length > 0) {
+    operationNamesByFile[name] = names;
+  }
   if (!/import\s*\{[^}]*\bgraphql\b[^}]*\}\s*from\s*['"][^'"]*graphql\/generated/.test(source)) {
     continue;
   }
-  const names = extractOperationNames(source);
   if (names.length > 0) {
     liveOperationsByFile[name] = names;
   }
+}
+const discoveredOperationNames = [...new Set(Object.values(operationNamesByFile).flat())];
+if (discoveredOperationNames.length === 0) {
+  fail(`no GraphQL operations found under ${operationsDir}; check operation discovery configuration`);
 }
 const liveOperationNames = [...new Set(Object.values(liveOperationsByFile).flat())];
 

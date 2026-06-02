@@ -126,6 +126,8 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep climbs:mobile.filter.cancel
 // i18n-keep climbs:mobile.filter.done
 // i18n-keep climbs:mobile.filter.clearAll
+// Mobile board switcher
+// i18n-keep boards:mobile.boardSwitchError
 // i18n-keep session:playView.tickBar.cancelLabel
 // i18n-keep session:playView.tickBar.decreaseTriesAria
 // i18n-keep session:playView.tickBar.flashSaveLabel
