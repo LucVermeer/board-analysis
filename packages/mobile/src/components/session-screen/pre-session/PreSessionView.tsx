@@ -9,6 +9,7 @@ import { Text } from '../../Text';
 import { useTheme } from '../../../providers/theme-provider';
 import { spacing } from '../../../theme/tokens';
 import { useActiveBoard } from '../../../lib/graphql/use-active-board';
+import { useAuth } from '../../../providers/auth-provider';
 import { useQueue } from '../../../providers/queue-provider';
 import { useToast } from '../../../providers/toast-provider';
 import { BoardSummaryCard } from './BoardSummaryCard';
@@ -26,6 +27,7 @@ export function PreSessionView() {
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const { data: activeBoard } = useActiveBoard();
+  const { isAuthenticated } = useAuth();
   const { startSession, addToQueue } = useQueue();
   const { showToast } = useToast();
 
@@ -48,7 +50,11 @@ export function PreSessionView() {
         const grades = getGradesForBoard(boardName);
         const plan = generateWorkoutPlan(selection.options, grades);
         if (plan.length > 0) {
-          const items = await selectClimbsForPlan(plan, activeBoard);
+          const { minAscents, minRating, onlyTallClimbs, climbBias } = selection.options;
+          const items = await selectClimbsForPlan(plan, activeBoard, {
+            isAuthenticated,
+            filters: { minAscents, minRating, onlyTallClimbs, climbBias },
+          });
           // addToQueue dispatches optimistically + fires the server mutation
           // through the existing queue-provider plumbing, so the queue echoes
           // through the WS subscription exactly like a manual add.
@@ -60,7 +66,7 @@ export function PreSessionView() {
     } finally {
       setIsStarting(false);
     }
-  }, [activeBoard, selection, startSession, addToQueue, showToast, t]);
+  }, [activeBoard, isAuthenticated, selection, startSession, addToQueue, showToast, t]);
 
   const canStart = activeBoard != null && !isStarting;
 
