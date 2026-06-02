@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { Climb as SchemaClimb, BoardName } from '@boardsesh/shared-schema';
 import type { Climb } from '@boardsesh/queue';
@@ -9,6 +10,7 @@ import { Icon } from '../Icon';
 import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { PlaylistPreviewSquare } from './PlaylistPreviewSquare';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
@@ -57,6 +59,10 @@ export function PlaylistDetailView({
 }: PlaylistDetailViewProps) {
   const { t } = useTranslation('playlists');
   const { boardConfig } = useDrawerHost();
+  const insets = useSafeAreaInsets();
+  // Reserve room for the floating queue bar + tab bar so the last row isn't
+  // hidden behind them (matches the boards list).
+  const listPaddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
 
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
@@ -108,6 +114,7 @@ export function PlaylistDetailView({
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ paddingBottom: listPaddingBottom }}
         ListHeaderComponent={header}
         ListFooterComponent={
           isFetchingNextPage ? (
