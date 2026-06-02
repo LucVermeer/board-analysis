@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
-import { brandColors } from '../theme/colors';
+import { brandColors, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
+import { useTheme } from '../providers/theme-provider';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
 
@@ -22,15 +23,16 @@ type ToastProps = {
   onDismiss: (id: string) => void;
 };
 
-const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; color: string; backgroundColor: string }> = {
-  success: { icon: 'success', color: brandColors.success, backgroundColor: 'rgba(107, 144, 128, 0.15)' },
-  error: { icon: 'error', color: brandColors.error, backgroundColor: 'rgba(184, 82, 76, 0.15)' },
-  info: { icon: 'info', color: brandColors.primary, backgroundColor: 'rgba(140, 74, 82, 0.15)' },
-  warning: { icon: 'warning', color: brandColors.warning, backgroundColor: 'rgba(196, 148, 60, 0.15)' },
+const VARIANT_CONFIG: Record<ToastVariant, { icon: IconName; color: string }> = {
+  success: { icon: 'success', color: brandColors.success },
+  error: { icon: 'error', color: brandColors.error },
+  info: { icon: 'info', color: brandColors.primary },
+  warning: { icon: 'warning', color: brandColors.warning },
 };
 
 export function Toast({ toast, onDismiss }: ToastProps) {
   const insets = useSafeAreaInsets();
+  const { systemColors, colorScheme } = useTheme();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const config = VARIANT_CONFIG[toast.variant];
 
@@ -41,14 +43,20 @@ export function Toast({ toast, onDismiss }: ToastProps) {
     };
   }, [toast.id, toast.duration, onDismiss]);
 
+  // Opaque themed pill keeps the toast legible over any content; the brand-hued
+  // wash on top carries the variant cue. Bump the wash alpha in dark mode where
+  // a 15% tint barely registers.
+  const tintColor = withAlpha(config.color, colorScheme === 'dark' ? 0.24 : 0.15);
+
   return (
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(200)}
-      style={[styles.container, { top: insets.top + spacing[2], backgroundColor: config.backgroundColor }]}
+      style={[styles.container, { top: insets.top + spacing[2], backgroundColor: systemColors.secondaryBackground }]}
       accessibilityRole="alert"
       accessibilityLiveRegion="assertive"
     >
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
       <Icon name={config.icon} size={18} color={config.color} />
       <Text variant="subheadline" color={config.color} style={styles.message} numberOfLines={2}>
         {toast.message}
@@ -67,6 +75,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
     borderRadius: borderRadius.full,
+    overflow: 'hidden',
     zIndex: 9999,
   },
   message: {

@@ -6,7 +6,7 @@ import { Text } from './Text';
 import { Button } from './Button';
 import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
-import { spacing } from '../theme/tokens';
+import { spacing, sheetStyles } from '../theme/tokens';
 
 type EndSessionSheetProps = {
   visible: boolean;
@@ -56,7 +56,7 @@ export function EndSessionSheet({ visible, onDismiss, onConfirm, isEnding, climb
       onClose={handleClose}
       backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: systemColors.secondaryBackground }}
-      handleIndicatorStyle={{ backgroundColor: systemColors.separator }}
+      handleIndicatorStyle={sheetStyles.indicator}
     >
       <BottomSheetView style={styles.content}>
         <Icon name="end.session" size={40} color={systemColors.secondaryLabel} />

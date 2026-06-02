@@ -1,20 +1,52 @@
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { ThemeOverride } from '@boardsesh/key-value-storage';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { spacing } from '../../../src/theme/tokens';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
 import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
+import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
 
 export default function MoreScreen() {
-  const { systemColors, spacing, borderRadius } = useTheme();
+  const { systemColors, borderRadius, themeOverride, setThemeOverride } = useTheme();
   const { t } = useTranslation('common');
+
+  const appearanceOptions: { key: ThemeOverride; label: string }[] = [
+    { key: 'system', label: t('mobile.more.appearance.system') },
+    { key: 'light', label: t('mobile.more.appearance.light') },
+    { key: 'dark', label: t('mobile.more.appearance.dark') },
+  ];
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <DevMetadataPanel />
+
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.appearance.title')} />
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderRadius: borderRadius.lg,
+              marginHorizontal: spacing[4],
+              padding: spacing[3],
+            },
+          ]}
+        >
+          <SegmentedControl
+            options={appearanceOptions}
+            selectedKey={themeOverride}
+            onSelect={(key) => void setThemeOverride(key)}
+            trackColor={systemColors.fill}
+            accessibilityLabel={t('mobile.more.appearance.title')}
+          />
+        </View>
+      </View>
       {__DEV__ ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />
@@ -63,12 +95,12 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    paddingTop: 16,
-    paddingBottom: 32,
+    paddingTop: spacing[4],
+    paddingBottom: spacing[8],
   },
   section: {
     width: '100%',
-    marginBottom: 24,
+    marginBottom: spacing[6],
   },
   card: {
     overflow: 'hidden',

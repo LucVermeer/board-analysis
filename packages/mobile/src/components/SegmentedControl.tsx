@@ -5,20 +5,23 @@ import { hapticSelection } from '../lib/haptics';
 import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
+import { useTheme } from '../providers/theme-provider';
 
-type SegmentOption = {
-  key: string;
+type SegmentOption<K extends string> = {
+  key: K;
   label: string;
 };
 
-type SegmentedControlProps = {
-  options: SegmentOption[];
-  selectedKey: string;
-  onSelect: (key: string) => void;
+type SegmentedControlProps<K extends string> = {
+  options: SegmentOption<K>[];
+  selectedKey: K;
+  onSelect: (key: K) => void;
   /** Text variant for segment labels. Defaults to 'subheadline'. */
   textVariant?: 'subheadline' | 'footnote';
   /** Background color for the segmented control track. */
   trackColor: ColorValue;
+  /** Accessibility label naming the group (e.g. "Appearance"), so VoiceOver announces what the segments control. */
+  accessibilityLabel?: string;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -34,6 +37,8 @@ function Segment({
   onPress: () => void;
   textVariant: 'subheadline' | 'footnote';
 }) {
+  const { systemColors, colorScheme } = useTheme();
+  const isDark = colorScheme === 'dark';
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -48,7 +53,8 @@ function Segment({
     scale.value = withSpring(1, springs.snappy);
   };
 
-  // White segment background is an intentional iOS design choice (pill highlight)
+  // Selected pill is a raised tile over the track — elevatedSurface reads as a
+  // light pill in light mode and a lighter-than-track tile in dark mode.
   const segmentStyle: ViewStyle = {
     flex: 1,
     paddingVertical: spacing[2],
@@ -56,7 +62,7 @@ function Segment({
     justifyContent: 'center',
     borderRadius: 7,
     ...(selected && {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: systemColors.elevatedSurface,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.15,
@@ -64,6 +70,10 @@ function Segment({
       elevation: 2,
     }),
   };
+
+  // Maroon brand accent reads well on the light pill; on the dark pill it's too
+  // low-contrast, so fall back to the high-contrast label colour there.
+  const selectedTextColor = isDark ? systemColors.label : brandColors.primary;
 
   return (
     <AnimatedPressable
@@ -73,14 +83,14 @@ function Segment({
       }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      accessibilityRole="tab"
+      accessibilityRole="radio"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
       style={[animatedStyle, segmentStyle]}
     >
       <Text
         variant={textVariant}
-        color={selected ? brandColors.primary : undefined}
+        color={selected ? selectedTextColor : undefined}
         style={selected ? styles.labelSelected : styles.label}
       >
         {label}
@@ -89,13 +99,14 @@ function Segment({
   );
 }
 
-export function SegmentedControl({
+export function SegmentedControl<K extends string = string>({
   options,
   selectedKey,
   onSelect,
   textVariant = 'subheadline',
   trackColor,
-}: SegmentedControlProps) {
+  accessibilityLabel,
+}: SegmentedControlProps<K>) {
   const containerStyle = {
     flexDirection: 'row' as const,
     backgroundColor: trackColor,
@@ -104,7 +115,7 @@ export function SegmentedControl({
   };
 
   return (
-    <View style={containerStyle}>
+    <View style={containerStyle} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel}>
       {options.map((option) => (
         <Segment
           key={option.key}

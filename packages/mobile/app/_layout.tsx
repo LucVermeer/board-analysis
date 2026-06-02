@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, SplashScreen, router } from 'expo-router';
+// Navigation theme comes from expo-router's vendored React Navigation. Expo
+// SDK 56's expo-router is not compatible with a separately-installed
+// @react-navigation/* package, so import these from `expo-router` directly.
+import {
+  Stack,
+  SplashScreen,
+  router,
+  ThemeProvider as NavigationThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryProvider } from '../src/providers/query-provider';
-import { ThemeProvider } from '../src/providers/theme-provider';
+import { ThemeProvider, useTheme } from '../src/providers/theme-provider';
 import { AuthProvider } from '../src/providers/auth-provider';
 import { I18nProvider } from '../src/providers/i18n-provider';
 import { BluetoothProvider } from '../src/providers/bluetooth-provider';
@@ -28,6 +38,7 @@ import { Text } from '../src/components/Text';
 import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
 import { brandColors } from '../src/theme/colors';
+import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
 import { wrapWithSentry, reportError } from '../src/lib/sentry';
 
@@ -146,6 +157,30 @@ function BoardProviderWrapper({ children }: { children: ReactNode }) {
   return <BoardProvider boardName={toBoardName(activeBoard?.boardType)}>{children}</BoardProvider>;
 }
 
+// Dark-aware navigation theme so screen/scene backgrounds adapt — without it,
+// React Navigation's light-grey DefaultTheme background shows through every
+// screen in dark mode. Reads the *resolved* scheme from useTheme() (which
+// honours the appearance override) rather than a separate useColorScheme(), so
+// the nav chrome and the app theme can't disagree for a frame.
+function ThemedNavigation({ children }: { children: ReactNode }) {
+  const { colorScheme } = useTheme();
+  const navTheme = useMemo(
+    () =>
+      colorScheme === 'dark'
+        ? {
+            ...DarkTheme,
+            colors: {
+              ...DarkTheme.colors,
+              background: iosDarkColors.background,
+              card: iosDarkColors.secondaryBackground,
+            },
+          }
+        : DefaultTheme,
+    [colorScheme],
+  );
+  return <NavigationThemeProvider value={navTheme}>{children}</NavigationThemeProvider>;
+}
+
 function RootLayout() {
   const onAuthReady = useCallback(() => {
     SplashScreen.hideAsync();
@@ -166,27 +201,33 @@ function RootLayout() {
                         <QueueProvider>
                           <BoardAdapterWrapper>
                             <BoardProviderWrapper>
-                              <BluetoothProviderWrapper>
-                                {/* BottomSheetModalProvider lives *inside* the
-                                    board providers: gorhom's BottomSheetModal
-                                    portals its content (PlayDrawer → QuickTickBar)
-                                    to this host, so the host must sit within
-                                    BoardAdapterProvider/BoardProvider or the
-                                    portaled hooks (useSaveTick → useBoardAdapter)
-                                    escape that context. */}
-                                <BottomSheetModalProvider>
+                              {/* BottomSheetModalProvider sits inside the board
+                                  providers (gorhom's BottomSheetModal portals
+                                  PlayDrawer → QuickTickBar here, so the host
+                                  must be able to see BoardAdapter/BoardProvider
+                                  through context) but *outside*
+                                  BluetoothProviderWrapper, because
+                                  BluetoothProvider renders DevicePickerSheet
+                                  as a BottomSheetModal — the modal host has to
+                                  exist before the picker mounts or gorhom
+                                  throws "BottomSheetModalInternalContext
+                                  cannot be null". */}
+                              <BottomSheetModalProvider>
+                                <BluetoothProviderWrapper>
                                   <DrawerHostProvider>
-                                    <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                      <Stack.Screen name="(tabs)" />
-                                      <Stack.Screen
-                                        name="auth"
-                                        options={{ headerShown: false, gestureEnabled: false }}
-                                      />
-                                    </Stack>
+                                    <ThemedNavigation>
+                                      <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                        <Stack.Screen name="(tabs)" />
+                                        <Stack.Screen
+                                          name="auth"
+                                          options={{ headerShown: false, gestureEnabled: false }}
+                                        />
+                                      </Stack>
+                                    </ThemedNavigation>
                                     <PersistentQueueBar />
                                   </DrawerHostProvider>
-                                </BottomSheetModalProvider>
-                              </BluetoothProviderWrapper>
+                                </BluetoothProviderWrapper>
+                              </BottomSheetModalProvider>
                             </BoardProviderWrapper>
                           </BoardAdapterWrapper>
                         </QueueProvider>

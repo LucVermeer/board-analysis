@@ -110,8 +110,7 @@ export function useBoardsBySerialNumbers(serialNumbers: string[]) {
 export function usePopularBoardConfigs(input?: PopularBoardConfigsInput, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['popularBoardConfigs', input],
-    queryFn: () =>
-      getHttpClient().request<GetPopularBoardConfigsQueryResponse>(GET_POPULAR_BOARD_CONFIGS, { input }),
+    queryFn: () => getHttpClient().request<GetPopularBoardConfigsQueryResponse>(GET_POPULAR_BOARD_CONFIGS, { input }),
     select: (data) => data.popularBoardConfigs,
     // The popular set is server-cached and changes rarely; avoid refetch churn.
     staleTime: 60 * 60 * 1000,

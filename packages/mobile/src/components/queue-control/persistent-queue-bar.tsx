@@ -243,10 +243,16 @@ export function PersistentQueueBar() {
             // Sit directly above the BlurTabBar — side margins + rounded
             // corners give the floating-card look; no extra vertical gap.
             bottom: insets.bottom + TAB_BAR_HEIGHT,
-            backgroundColor: tintBackground ?? systemColors.background,
+            // Opaque base so the bar stays readable over scrolling content —
+            // Liquid Glass is too see-through for a text-bearing floating bar.
+            // The grade hue is layered on top as a solid card tint.
+            backgroundColor: systemColors.background,
           },
         ]}
       >
+        {tintBackground ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintBackground }]} />
+        ) : null}
         <View style={styles.row}>
           <GestureDetector gesture={composedGesture}>
             <View style={styles.swipeArea} onLayout={onLayout} accessibilityRole="button">

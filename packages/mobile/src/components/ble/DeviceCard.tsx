@@ -25,9 +25,10 @@ const rssiBarColor: Record<RssiStrength, string> = {
 };
 
 function RssiIndicator({ rssi }: { rssi: number }) {
+  const { systemColors } = useTheme();
   const strength = classifyRssi(rssi);
   const activeColor = rssiBarColor[strength];
-  const inactiveColor = 'rgba(120, 120, 128, 0.2)';
+  const inactiveColor = systemColors.fill;
 
   const barHeights = [8, 13, 18];
   const activeBars = strength === 'strong' ? 3 : strength === 'good' ? 2 : 1;

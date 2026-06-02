@@ -26,6 +26,7 @@ import { LogAscentSheet } from '../LogAscentSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
+import { useTheme } from '../../providers/theme-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
@@ -93,6 +94,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   ref,
 ) {
   const { t } = useTranslation('session');
+  const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [climb, setClimb] = useState<Climb | null>(null);
@@ -266,6 +268,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [],
   );
 
+  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
+
   const snapPoints = useMemo(() => ['100%'], []);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
@@ -284,7 +288,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         backdropComponent={renderBackdrop}
         onDismiss={handleClose}
         handleIndicatorStyle={sheetStyles.indicator}
-        backgroundStyle={sheetStyles.background}
+        backgroundStyle={backgroundStyle}
       >
         <BottomSheetScrollView
           style={styles.content}

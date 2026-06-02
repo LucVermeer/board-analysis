@@ -15,6 +15,7 @@ import { hapticSelection } from '../../lib/haptics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { brandColors } from '../../theme/colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
+import { useTheme } from '../../providers/theme-provider';
 
 type AngleSelectorSheetProps = {
   visible: boolean;
@@ -36,6 +37,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
   onAngleChange,
 }: AngleSelectorSheetProps) {
   const { t } = useTranslation('session');
+  const { systemColors } = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
   const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
 
@@ -114,6 +116,8 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
     [],
   );
 
+  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
+
   const renderAngleRow = useCallback(
     ({ item }: { item: AngleItem }) => {
       const isSelected = item.angle === currentAngle;
@@ -150,7 +154,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
       backdropComponent={renderBackdrop}
       onClose={handleClose}
       handleIndicatorStyle={sheetStyles.indicator}
-      backgroundStyle={sheetStyles.background}
+      backgroundStyle={backgroundStyle}
     >
       <View style={styles.header}>
         <Text variant="headline">{t('mobile.angleSelector.title')}</Text>

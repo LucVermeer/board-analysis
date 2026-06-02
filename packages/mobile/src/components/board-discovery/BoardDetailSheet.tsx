@@ -38,7 +38,13 @@ export function BoardDetailSheet({ board, visible, onClose, onSetActive }: Board
   }, [visible, board]);
 
   return (
-    <Sheet ref={sheetRef} snapPoints={['55%', '90%']} onClose={onClose} scrollable contentContainerStyle={styles.content}>
+    <Sheet
+      ref={sheetRef}
+      snapPoints={['55%', '90%']}
+      onClose={onClose}
+      scrollable
+      contentContainerStyle={styles.content}
+    >
       {board ? (
         <>
           <BoardDetailBody board={board} systemColors={systemColors} t={t} />
@@ -104,9 +110,7 @@ function BoardDetailBody({ board, systemColors, t }: { board: UserBoard; systemC
         <SpecRow
           label={t('mobile.boardDetail.spec.angle')}
           value={
-            board.isAngleAdjustable
-              ? `${board.angle}° · ${t('mobile.boardDetail.spec.adjustable')}`
-              : `${board.angle}°`
+            board.isAngleAdjustable ? `${board.angle}° · ${t('mobile.boardDetail.spec.adjustable')}` : `${board.angle}°`
           }
           systemColors={systemColors}
         />

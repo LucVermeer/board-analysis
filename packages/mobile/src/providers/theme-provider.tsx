@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, useColorScheme, type ColorValue } from 'react-native';
+import { Appearance, Platform, useColorScheme, type ColorValue } from 'react-native';
 import { THEME_OVERRIDE_KEY, isThemeOverride, type ThemeOverride } from '@boardsesh/key-value-storage';
 import { iosSystemColors, brandColors, androidFallbackColors } from '../theme/colors';
 import { textStyles, type TextVariant } from '../theme/typography';
@@ -18,6 +18,7 @@ type ResolvedSystemColors = {
   secondaryBackground: ColorValue;
   tertiaryBackground: ColorValue;
   groupedBackground: ColorValue;
+  elevatedSurface: ColorValue;
   label: ColorValue;
   secondaryLabel: ColorValue;
   tertiaryLabel: ColorValue;
@@ -65,6 +66,7 @@ function resolveSystemColors(colorScheme: ColorScheme): ResolvedSystemColors {
     secondaryBackground: fallback.secondaryBackground,
     tertiaryBackground: fallback.tertiaryBackground,
     groupedBackground: fallback.groupedBackground,
+    elevatedSurface: fallback.elevatedSurface,
     label: fallback.label,
     secondaryLabel: fallback.secondaryLabel,
     tertiaryLabel: fallback.tertiaryLabel,
@@ -106,6 +108,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       cancelled = true;
     };
   }, []);
+
+  // Drive the native Appearance so the override actually flips iOS
+  // `PlatformColor` (which follows the native trait collection, not our JS
+  // `colorScheme`). 'unspecified' = follow the OS. Without this, a non-system
+  // choice would leave iOS system colours on the OS scheme. Keep
+  // `userInterfaceStyle: 'automatic'` in app.config.ts so this can take effect.
+  useEffect(() => {
+    Appearance.setColorScheme(themeOverride === 'system' ? 'unspecified' : themeOverride);
+  }, [themeOverride]);
 
   const colorScheme: ColorScheme = useMemo(() => {
     if (themeOverride === 'light') return 'light';
@@ -160,6 +171,15 @@ export function useTheme(): Theme {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return theme;
+}
+
+/**
+ * Access the theme without throwing when no provider is mounted. Returns null
+ * outside a ThemeProvider — used by low-level primitives (e.g. Text) that may
+ * render before providers mount, such as the root error boundary.
+ */
+export function useOptionalTheme(): Theme | null {
+  return useContext(ThemeContext);
 }
 
 export type { Theme, ColorScheme, ResolvedSystemColors, TextVariant };

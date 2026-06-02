@@ -7,8 +7,8 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
+import { sheetStyles } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
-import { iosSystemColors } from '../theme/ios-colors';
 
 type SheetProps = {
   children: ReactNode;
@@ -56,10 +56,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [onChange],
   );
 
-  const backgroundStyle = {
-    ...styles.background,
-    backgroundColor: systemColors.secondaryBackground,
-  };
+  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
   return (
     <BottomSheet
@@ -69,17 +66,21 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
       backdropComponent={renderBackdrop}
+      backgroundStyle={backgroundStyle}
       onChange={handleChange}
       onClose={onClose}
-      handleIndicatorStyle={styles.indicator}
-      backgroundStyle={backgroundStyle}
+      handleIndicatorStyle={sheetStyles.indicator}
       style={styles.sheet}
     >
       {scrollable ? (
         // style (flex: 1) sizes the scroll viewport to fill the sheet; the
         // caller's padding goes on contentContainerStyle so it scrolls with the
         // content rather than clipping the scrollable area.
-        <BottomSheetScrollView style={styles.content} contentContainerStyle={contentContainerStyle} showsVerticalScrollIndicator={false}>
+        <BottomSheetScrollView
+          style={styles.content}
+          contentContainerStyle={contentContainerStyle}
+          showsVerticalScrollIndicator={false}
+        >
           {children}
         </BottomSheetScrollView>
       ) : (
@@ -102,16 +103,6 @@ const styles = StyleSheet.create({
         elevation: 16,
       },
     }),
-  },
-  background: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  indicator: {
-    backgroundColor: iosSystemColors.separator,
-    width: 36,
-    height: 5,
-    borderRadius: 3,
   },
   content: {
     flex: 1,

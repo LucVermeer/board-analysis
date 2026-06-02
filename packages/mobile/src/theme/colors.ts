@@ -15,6 +15,10 @@ export const iosSystemColors: Record<string, ColorValue> | null =
         secondaryBackground: PlatformColor('secondarySystemBackground'),
         tertiaryBackground: PlatformColor('tertiarySystemBackground'),
         groupedBackground: PlatformColor('systemGroupedBackground'),
+        // Raised tile on top of a secondary/fill surface (e.g. the selected
+        // segmented-control pill). tertiarySystemBackground sits a clear step
+        // above secondary in both light and dark.
+        elevatedSurface: PlatformColor('tertiarySystemBackground'),
         label: PlatformColor('label'),
         secondaryLabel: PlatformColor('secondaryLabel'),
         tertiaryLabel: PlatformColor('tertiaryLabel'),
@@ -44,6 +48,7 @@ export const androidFallbackColors = {
     secondaryBackground: '#F2F2F7',
     tertiaryBackground: '#FFFFFF',
     groupedBackground: '#F2F2F7',
+    elevatedSurface: '#FFFFFF',
     label: '#000000',
     secondaryLabel: 'rgba(60, 60, 67, 0.6)',
     tertiaryLabel: 'rgba(60, 60, 67, 0.3)',
@@ -55,6 +60,7 @@ export const androidFallbackColors = {
     secondaryBackground: '#1C1C1E',
     tertiaryBackground: '#2C2C2E',
     groupedBackground: '#000000',
+    elevatedSurface: '#2C2C2E',
     label: '#FFFFFF',
     secondaryLabel: 'rgba(235, 235, 245, 0.6)',
     tertiaryLabel: 'rgba(235, 235, 245, 0.3)',
@@ -66,3 +72,26 @@ export const androidFallbackColors = {
 export type SystemColorKey = keyof typeof androidFallbackColors.light;
 export type BrandColors = typeof brandColors;
 export type AndroidFallbackColors = typeof androidFallbackColors;
+
+/**
+ * Apply an alpha (0–1) to a colour. Handles `#RGB` and `#RRGGBB` hex by
+ * emitting an `rgba()` string; any other format (already-`rgba()`, named
+ * colour, PlatformColor) is returned unchanged so this never produces an
+ * invalid colour value. Safer than concatenating a hex alpha suffix, which
+ * only works for 6-digit hex.
+ */
+export function withAlpha(color: string, alpha: number): string {
+  const hex = color.replace('#', '');
+  const full = hex.length === 3 ? hex.replace(/(.)/g, '$1$1') : hex;
+  if (full.length !== 6 || /[^0-9a-fA-F]/.test(full)) {
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.warn(`[withAlpha] expected a hex colour, got "${color}" — returning it unchanged (alpha not applied)`);
+    }
+    return color;
+  }
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

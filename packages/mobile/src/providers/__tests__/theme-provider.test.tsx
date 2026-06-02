@@ -27,6 +27,9 @@ vi.mock('react-native', () => ({
   Platform: { OS: 'android' },
   useColorScheme: () => useColorSchemeMock(),
   PlatformColor: (name: string) => name,
+  // The provider drives Appearance.setColorScheme so the override flips native
+  // iOS colours; mock it so the effect doesn't blow up under jsdom.
+  Appearance: { setColorScheme: vi.fn() },
 }));
 
 import { ThemeProvider, useTheme } from '../theme-provider';

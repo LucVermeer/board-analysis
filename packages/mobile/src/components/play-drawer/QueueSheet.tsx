@@ -125,6 +125,8 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
     [],
   );
 
+  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
+
   const viewOnlyMode = queue.length === 0;
 
   return (
@@ -137,7 +139,7 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
       onChange={handleSheetChange}
       onClose={handleClose}
       handleIndicatorStyle={sheetStyles.indicator}
-      backgroundStyle={sheetStyles.background}
+      backgroundStyle={backgroundStyle}
       style={styles.sheet}
     >
       <QueueSheetHeader

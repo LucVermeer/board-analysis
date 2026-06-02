@@ -1,11 +1,12 @@
-import { View, Text, Pressable, StyleSheet, Platform, useColorScheme } from 'react-native';
-import { BlurView } from '@react-native-community/blur';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
 import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
 import { useBluetoothConnectedStatus } from '../lib/ble/bluetooth-status-store';
 import { brandColors } from '../theme/colors';
+import { useTheme } from '../providers/theme-provider';
+import { GlassSurface } from './GlassSurface';
 
 // Exported so the persistent queue bar (which docks above the tab bar) and
 // FlashLists below it can compute their layouts off the same constant.
@@ -21,12 +22,9 @@ const TAB_ICONS: Record<string, TabIconName> = {
   more: 'dots-horizontal',
 };
 
-// Placeholder badge count for the queue tab
-const QUEUE_BADGE_COUNT = 0;
-
 export default function BlurTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useTheme();
   const isDark = colorScheme === 'dark';
   const isBluetoothConnected = useBluetoothConnectedStatus();
 
@@ -42,7 +40,6 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
         const isFocused = state.index === index;
         const tintColor = isFocused ? activeTint : inactiveTint;
         const iconName = TAB_ICONS[route.name] ?? 'dots-horizontal';
-        const showBadge = route.name === 'queue' && QUEUE_BADGE_COUNT > 0;
         const showBluetoothDot = route.name === 'queue' && isBluetoothConnected;
 
         const onPress = () => {
@@ -76,11 +73,6 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
           >
             <View style={styles.iconContainer}>
               <MaterialCommunityIcons name={iconName} size={24} color={tintColor} />
-              {showBadge && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{QUEUE_BADGE_COUNT}</Text>
-                </View>
-              )}
               {showBluetoothDot && <View style={styles.bluetoothDot} />}
             </View>
             <Text style={[styles.label, { color: tintColor }]} numberOfLines={1}>
@@ -92,42 +84,12 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
     </View>
   );
 
-  if (Platform.OS === 'ios') {
-    return (
-      <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }]}>
-        <BlurView
-          blurType={isDark ? 'dark' : 'light'}
-          blurAmount={20}
-          reducedTransparencyFallbackColor={
-            isDark ? iosDarkColors.secondaryBackground : iosLightColors.secondaryBackground
-          }
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          style={[styles.separator, { backgroundColor: isDark ? iosDarkColors.separator : iosLightColors.separator }]}
-        />
-        {renderContent()}
-      </View>
-    );
-  }
-
-  // Android fallback: semi-transparent background
+  // Bottom-anchored, full-width Liquid Glass bar. GlassSurface resolves the
+  // material per device (Liquid Glass on iOS 26+, frosted blur on older iOS,
+  // solid on Android); the glass spans through the home-indicator inset.
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          height: totalHeight,
-          paddingBottom: insets.bottom,
-          backgroundColor: isDark
-            ? `${iosDarkColors.secondaryBackground}F2`
-            : `${iosLightColors.secondaryBackground}F2`,
-        },
-      ]}
-    >
-      <View
-        style={[styles.separator, { backgroundColor: isDark ? iosDarkColors.separator : iosLightColors.separator }]}
-      />
+    <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }]}>
+      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />
       {renderContent()}
     </View>
   );
@@ -137,13 +99,6 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
   },
@@ -160,23 +115,6 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -10,
-    backgroundColor: iosSystemColors.systemRed,
-    borderRadius: 9,
-    minWidth: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: iosSystemColors.white,
-    fontSize: 11,
-    fontWeight: '600',
   },
   bluetoothDot: {
     position: 'absolute',

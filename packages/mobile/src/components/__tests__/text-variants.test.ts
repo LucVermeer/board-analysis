@@ -1,11 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// Mock react-native so StyleSheet.create is a pass-through identity function
+// Mock react-native so StyleSheet.create is a pass-through identity function.
 vi.mock('react-native', () => ({
   Text: 'Text',
   StyleSheet: {
     create: <T extends Record<string, Record<string, unknown>>>(styles: T): T => styles,
   },
+}));
+
+// Text reads its default colour from the theme provider. Stub it so importing
+// Text doesn't pull in the full provider chain (SecureStore / key-value-storage)
+// in this typography-only unit test.
+vi.mock('../../providers/theme-provider', () => ({
+  useOptionalTheme: () => null,
 }));
 
 // Import after mock so StyleSheet.create returns raw objects

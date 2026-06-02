@@ -104,20 +104,14 @@ export default function BoardSearchScreen() {
   // The selected board drives both the pin recolour and the detail sheet.
   // Detail is a sheet *over* the live map — never a pushed screen — because
   // expo-maps crashes when its view is unmounted from a backgrounded stack.
-  const selectedBoard = useMemo(
-    () => boards.find((b) => b.uuid === selectedUuid) ?? null,
-    [boards, selectedUuid],
-  );
+  const selectedBoard = useMemo(() => boards.find((b) => b.uuid === selectedUuid) ?? null, [boards, selectedUuid]);
 
   const openBoardDetail = useCallback((uuid: string) => {
     hapticSelection();
     setSelectedUuid(uuid);
   }, []);
 
-  const onSelectItem = useCallback(
-    (item: DiscoveryBoardItem) => openBoardDetail(item.key),
-    [openBoardDetail],
-  );
+  const onSelectItem = useCallback((item: DiscoveryBoardItem) => openBoardDetail(item.key), [openBoardDetail]);
 
   // Tapping a pin recolours it and opens its detail sheet (no recenter — keep
   // the map exactly where it is so closing the sheet returns to the same view).
@@ -143,12 +137,15 @@ export default function BoardSearchScreen() {
 
   // Memoised so the native MapView doesn't re-bind the handler every render.
   // A user-driven move means the viewport is real — start searching by it.
-  const onCameraMove = useCallback((event: { coordinates: { latitude?: number; longitude?: number }; zoom: number }) => {
-    const { latitude, longitude } = event.coordinates;
-    if (latitude == null || longitude == null) return;
-    setCamera({ latitude, longitude, zoom: event.zoom });
-    setHasRealViewport(true);
-  }, []);
+  const onCameraMove = useCallback(
+    (event: { coordinates: { latitude?: number; longitude?: number }; zoom: number }) => {
+      const { latitude, longitude } = event.coordinates;
+      if (latitude == null || longitude == null) return;
+      setCamera({ latitude, longitude, zoom: event.zoom });
+      setHasRealViewport(true);
+    },
+    [],
+  );
 
   // Apple markers take an SF Symbol + tint (so the selected pin recolours);
   // Google markers only share id/coordinates/title — pass just those there.
@@ -175,7 +172,9 @@ export default function BoardSearchScreen() {
   );
 
   const searchField = (
-    <View style={[styles.searchField, { backgroundColor: systemColors.secondaryBackground, top: insets.top + spacing[2] }]}>
+    <View
+      style={[styles.searchField, { backgroundColor: systemColors.secondaryBackground, top: insets.top + spacing[2] }]}
+    >
       <Icon name="search" size={18} color={systemColors.secondaryLabel} />
       <TextInput
         value={query}
