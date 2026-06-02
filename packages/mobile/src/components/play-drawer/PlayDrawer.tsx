@@ -10,9 +10,9 @@ import {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
-import type { ClimbQueueItem } from '@boardsesh/queue';
 import { randomUUID } from 'expo-crypto';
 import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
+import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
@@ -36,27 +36,6 @@ import { usePlayDrawerWakeLock } from './use-play-drawer-wake-lock';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
 import { timing } from '../../theme/animations';
-
-function climbToQueueItem(climb: Climb): ClimbQueueItem {
-  return {
-    uuid: randomUUID(),
-    climb: {
-      uuid: climb.uuid,
-      name: climb.name,
-      frames: climb.frames,
-      setter_username: climb.setter_username,
-      angle: climb.angle,
-      ascensionist_count: climb.ascensionist_count,
-      difficulty: climb.difficulty,
-      quality_average: climb.quality_average,
-      stars: climb.stars,
-      difficulty_error: climb.difficulty_error,
-      benchmark_difficulty: climb.benchmark_difficulty,
-      userAscents: climb.userAscents,
-      userAttempts: climb.userAttempts,
-    },
-  };
-}
 
 type BoardConfig = {
   boardName: string;

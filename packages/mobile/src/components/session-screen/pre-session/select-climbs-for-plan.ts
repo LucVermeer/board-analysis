@@ -1,9 +1,9 @@
 import type { Climb, ClimbSearchInput, UserBoard } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { PlannedClimbSlot } from '@boardsesh/playlist-generator';
-import { randomUUID } from 'expo-crypto';
 import { getHttpClient } from '../../../lib/graphql/client';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../lib/graphql/operations';
+import { climbToQueueItem } from '../../../lib/climb-to-queue-item';
 
 const POOL_SIZE_PER_GRADE = 50;
 
@@ -61,13 +61,10 @@ export async function selectClimbsForPlan(
     const next = pool.find((climb) => !usedUuids.has(climb.uuid)) ?? pool[0];
     if (!next) continue;
     usedUuids.add(next.uuid);
-    items.push({
-      // expo-crypto.randomUUID, not globalThis.crypto — RN's JS runtime doesn't
-      // expose a Web Crypto API, and the server validates the queue-item uuid.
-      uuid: randomUUID(),
-      climb: next as ClimbQueueItem['climb'],
-      suggested: true,
-    });
+    // ClimbInput (the GraphQL mutation surface) is a strict subset of Climb —
+    // shape-pick via the shared helper so SEARCH_CLIMBS extras (`created_at`,
+    // ...) don't trip server validation.
+    items.push(climbToQueueItem(next, { suggested: true }));
   }
 
   return items;
