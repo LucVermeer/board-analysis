@@ -14,3 +14,15 @@ const SUPPORTED_BOARD_SET: ReadonlySet<string> = new Set(SUPPORTED_BOARDS);
 export function toBoardName(value: string | null | undefined): BoardName | null {
   return value != null && SUPPORTED_BOARD_SET.has(value) ? (value as BoardName) : null;
 }
+
+/**
+ * Trademark-safe display name for a board type (e.g. `kilter` → "Kilter",
+ * `moonboard` → "MoonBoard", `soill` → "So iLL"). Lives here so both web
+ * (`@/app/lib/string-utils`) and shared packages (`@boardsesh/profile-stats`)
+ * share one source of truth for board-name casing.
+ */
+export function formatBoardDisplayName(boardType: string): string {
+  if (boardType === 'moonboard') return 'MoonBoard';
+  if (boardType === 'soill') return 'So iLL';
+  return boardType.charAt(0).toUpperCase() + boardType.slice(1);
+}

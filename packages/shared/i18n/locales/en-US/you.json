@@ -20,5 +20,57 @@
   },
   "progress": {
     "title": "Progress"
+  },
+  "mobile": {
+    "settings": "Settings",
+    "unknownName": "Climber",
+    "followers": "followers",
+    "following": "following",
+    "followerCount_one": "{{count}} follower",
+    "followerCount_other": "{{count}} followers",
+    "loadMore": "Load more",
+    "emptyFollowers": "No followers yet",
+    "emptyFollowing": "Not following anyone yet",
+    "cancel": "Cancel",
+    "sessions": {
+      "empty": "No sessions yet"
+    },
+    "comments": {
+      "title": "Comments",
+      "empty": "No comments yet — start the conversation",
+      "placeholder": "Add a comment…"
+    },
+    "filter": {
+      "title": "Filters",
+      "timeRange": "Time range",
+      "board": "Board",
+      "allBoards": "All boards",
+      "all": "All",
+      "year": "Year",
+      "month": "Month",
+      "week": "Week",
+      "done": "Done"
+    },
+    "logbook": {
+      "empty": "No logged climbs yet",
+      "editTitle": "Edit ascent",
+      "statusLabel": "Status",
+      "gradeLabel": "Grade",
+      "qualityLabel": "Stars",
+      "triesLabel": "Tries",
+      "commentLabel": "Comment",
+      "commentPlaceholder": "How did it go?",
+      "save": "Save",
+      "delete": "Delete",
+      "deleteTitle": "Delete ascent",
+      "deleteConfirm": "This removes the logged ascent and can't be undone.",
+      "tries_one": "{{count}} try",
+      "tries_other": "{{count}} tries",
+      "status": {
+        "flash": "Flash",
+        "send": "Send",
+        "attempt": "Attempt"
+      }
+    }
   }
 }

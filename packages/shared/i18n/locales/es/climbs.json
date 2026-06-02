@@ -557,19 +557,7 @@
       "send_other": "encadenes"
     },
     "logAscent": {
-      "title": "Registrar encadene",
-      "flash": "Flash",
-      "send": "Encadene",
       "attempt": "Intento",
-      "attempts": "Intentos",
-      "quality": "Calidad",
-      "gradeOpinion": "Tu grado",
-      "comment": "Notas",
-      "commentPlaceholder": "¿Cómo se sintió?",
-      "save": "Guardar",
-      "decreaseAttempts": "Disminuir intentos",
-      "increaseAttempts": "Aumentar intentos",
-      "errorTitle": "Error al guardar",
       "errorMessage": "No se pudo guardar tu ascenso. Inténtalo de nuevo.",
       "savedToast": "Tick guardado"
     },

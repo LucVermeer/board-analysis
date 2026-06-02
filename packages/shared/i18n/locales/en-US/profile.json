@@ -211,7 +211,7 @@
     }
   },
   "mobile": {
-    "unknownName": "Unknown",
+    "account": "Account",
     "signOut": "Sign out"
   },
   "setter": {

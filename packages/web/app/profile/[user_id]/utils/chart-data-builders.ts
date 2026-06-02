@@ -1,105 +1,39 @@
-import dayjs from 'dayjs';
-import isoWeek from 'dayjs/plugin/isoWeek';
-import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
-import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
-import { parseTickTime, tickTimeMs } from '@/app/lib/format-tick-time';
+import {
+  filterLogbookByTimeframe,
+  buildAggregatedStackedBars as buildAggregatedStackedBarsRaw,
+  buildWeeklyBars as buildWeeklyBarsRaw,
+  buildFlashRedpointBars as buildFlashRedpointBarsRaw,
+  buildAggregatedFlashRedpointBars as buildAggregatedFlashRedpointBarsRaw,
+  buildVPointsTimeline as buildVPointsTimelineRaw,
+  buildStatisticsSummary as buildStatisticsSummaryRaw,
+  parseLayoutKey,
+  type LogbookEntry,
+  type UnifiedTimeframeType,
+} from '@boardsesh/profile-stats';
 import type { GetUserProfileStatsQueryResponse } from '@boardsesh/graphql/operations';
 import type { CssBarChartBar, GroupedBar } from '@/app/components/charts/css-bar-chart';
 import { themeTokens } from '@/app/theme/theme-config';
 import { type GradeDisplayFormat } from '@/app/lib/grade-colors';
-import {
-  type LogbookEntry,
-  type UnifiedTimeframeType,
-  difficultyMapping,
-  getDifficultyMapping,
-  sortGrades,
-  getGradeChartColor,
-  getLayoutKey,
-  getLayoutDisplayName,
-  getLayoutColor,
-  BOARD_TYPES,
-} from './profile-constants';
+import { getGradeChartColor, getLayoutColor } from './profile-constants';
+
+// The aggregation logic lives in @boardsesh/profile-stats (renderer-agnostic,
+// keyed by gradeKey/layoutKey/flash|redpoint, no colors). This module is the
+// WEB adapter: it calls the shared raw builders and maps the keys back to the
+// web's design-token colors, reconstructing the exact CssBarChartBar /
+// GroupedBar / VPointsTimelineData / LayoutPercentage shapes the chart
+// components already consume.
+
+// Re-export the (color-less) timeframe filter unchanged.
+export { filterLogbookByTimeframe };
 
 // Derive flash/redpoint colors from design tokens
 const FLASH_COLOR = `${themeTokens.colors.success}99`; // 60% opacity hex
 const REDPOINT_COLOR = `${themeTokens.colors.error}99`;
 
-/**
- * Grade id to use for chart bucketing: prefer the server-supplied
- * `effectiveDifficulty` (COALESCE of user override + climb consensus) and
- * fall back to the raw `difficulty` when absent. See
- * docs/ascents-and-attempts.md.
- */
-function gradeIdForEntry(entry: LogbookEntry): number | null {
-  return entry.effectiveDifficulty ?? entry.difficulty ?? null;
-}
-
-dayjs.extend(isoWeek);
-dayjs.extend(isSameOrAfter);
-dayjs.extend(isSameOrBefore);
-
-// ── Timeframe filtering ─────────────────────────────────────────────
-
-export function filterLogbookByTimeframe(
-  logbook: LogbookEntry[],
-  timeframe: UnifiedTimeframeType,
-  fromDate: string,
-  toDate: string,
-): LogbookEntry[] {
-  const now = dayjs();
-  switch (timeframe) {
-    case 'today':
-      return logbook.filter((entry) => parseTickTime(entry.climbed_at).isSame(now, 'day'));
-    case 'lastWeek':
-      return logbook.filter((entry) => parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'week')));
-    case 'lastMonth':
-      return logbook.filter((entry) => parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'month')));
-    case 'lastYear':
-      return logbook.filter((entry) => parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'year')));
-    case 'custom':
-      return logbook.filter((entry) => {
-        // Compare date strings only (YYYY-MM-DD) to avoid timezone issues.
-        // climbed_at is an ISO 8601 UTC timestamp, but the user picks calendar
-        // dates — matching on the date portion keeps the filter intuitive and
-        // timezone-agnostic.
-        const dateStr = entry.climbed_at.slice(0, 10); // 'YYYY-MM-DD'
-        return dateStr >= fromDate && dateStr <= toDate;
-      });
-    case 'all':
-    default:
-      return logbook;
-  }
-}
-
-// ── Shared timeframe filter ─────────────────────────────────────────
-
-function filterByUnifiedTimeframe(
-  entries: LogbookEntry[],
-  timeframe: UnifiedTimeframeType,
-  fromDate?: string,
-  toDate?: string,
-): LogbookEntry[] {
-  if (timeframe === 'all') return entries;
-  const now = dayjs();
-  return entries.filter((entry) => {
-    switch (timeframe) {
-      case 'today':
-        return parseTickTime(entry.climbed_at).isSame(now, 'day');
-      case 'lastWeek':
-        return parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'week'));
-      case 'lastMonth':
-        return parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'month'));
-      case 'lastYear':
-        return parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'year'));
-      case 'custom': {
-        const dateStr = entry.climbed_at.slice(0, 10);
-        return (!fromDate || dateStr >= fromDate) && (!toDate || dateStr <= toDate);
-      }
-      default:
-        return true;
-    }
-  });
-}
+const layoutColorForKey = (layoutKey: string): string => {
+  const { boardType, layoutId } = parseLayoutKey(layoutKey);
+  return getLayoutColor(boardType, layoutId);
+};
 
 // ── Aggregated stacked bars (grade x layout, for stats summary) ─────
 
@@ -115,76 +49,22 @@ export function buildAggregatedStackedBars(
   fromDate?: string,
   toDate?: string,
 ): { bars: CssBarChartBar[]; legendEntries: LayoutLegendEntry[] } | null {
-  const mapping = getDifficultyMapping(gradeFormat);
-  const layoutGradeClimbs: Record<string, Record<string, Set<string>>> = {};
-  const allGrades = new Set<string>();
-  const allLayouts = new Set<string>();
+  const raw = buildAggregatedStackedBarsRaw(allBoardsTicks, timeframe, gradeFormat, fromDate, toDate);
+  if (!raw) return null;
 
-  BOARD_TYPES.forEach((boardType) => {
-    const ticks = allBoardsTicks[boardType] || [];
-    const filteredTicks = filterByUnifiedTimeframe(ticks, timeframe, fromDate, toDate);
+  const legendEntries: LayoutLegendEntry[] = raw.legend.map((entry) => ({
+    label: entry.label,
+    color: layoutColorForKey(entry.key),
+  }));
 
-    filteredTicks.forEach((entry) => {
-      const gradeId = gradeIdForEntry(entry);
-      if (gradeId == null || entry.status === 'attempt' || !entry.climbUuid) return;
-      const grade = mapping[gradeId];
-      if (grade) {
-        const layoutKey = getLayoutKey(boardType, entry.layoutId);
-        if (!layoutGradeClimbs[layoutKey]) layoutGradeClimbs[layoutKey] = {};
-        if (!layoutGradeClimbs[layoutKey][grade]) layoutGradeClimbs[layoutKey][grade] = new Set();
-        layoutGradeClimbs[layoutKey][grade].add(entry.climbUuid);
-        allGrades.add(grade);
-        allLayouts.add(layoutKey);
-      }
-    });
-  });
-
-  if (allGrades.size === 0) return null;
-
-  const sortedGrades = sortGrades(Array.from(allGrades), gradeFormat);
-
-  const layoutOrder = [
-    'kilter-1',
-    'kilter-8',
-    'tension-9',
-    'tension-10',
-    'tension-11',
-    'moonboard-1',
-    'moonboard-2',
-    'moonboard-3',
-    'moonboard-4',
-    'moonboard-5',
-  ];
-  const sortedLayouts = Array.from(allLayouts).sort((a, b) => {
-    const indexA = layoutOrder.indexOf(a);
-    const indexB = layoutOrder.indexOf(b);
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA !== -1) return -1;
-    if (indexB !== -1) return 1;
-    return a.localeCompare(b);
-  });
-
-  const legendEntries: LayoutLegendEntry[] = sortedLayouts.map((layoutKey) => {
-    const [boardType, layoutIdStr] = layoutKey.split('-');
-    const layoutId = layoutIdStr === 'unknown' ? null : parseInt(layoutIdStr, 10);
-    return {
-      label: getLayoutDisplayName(boardType, layoutId),
-      color: getLayoutColor(boardType, layoutId),
-    };
-  });
-
-  const bars: CssBarChartBar[] = sortedGrades.map((grade) => ({
-    key: grade,
-    label: grade,
-    segments: sortedLayouts.map((layoutKey) => {
-      const [boardType, layoutIdStr] = layoutKey.split('-');
-      const layoutId = layoutIdStr === 'unknown' ? null : parseInt(layoutIdStr, 10);
-      return {
-        value: layoutGradeClimbs[layoutKey]?.[grade]?.size || 0,
-        color: getLayoutColor(boardType, layoutId),
-        label: getLayoutDisplayName(boardType, layoutId),
-      };
-    }),
+  const bars: CssBarChartBar[] = raw.bars.map((bar) => ({
+    key: bar.key,
+    label: bar.label,
+    segments: bar.segments.map((segment) => ({
+      value: segment.value,
+      color: layoutColorForKey(segment.key),
+      label: segment.label,
+    })),
   }));
 
   return { bars, legendEntries };
@@ -198,118 +78,41 @@ export function buildWeeklyBars(
   toDate?: string,
   gradeFormat: GradeDisplayFormat = 'v-grade',
 ): CssBarChartBar[] | null {
-  if (filteredLogbook.length === 0) return null;
+  const raw = buildWeeklyBarsRaw(filteredLogbook, fromDate, toDate, gradeFormat);
+  if (!raw) return null;
 
-  const mapping = getDifficultyMapping(gradeFormat);
-
-  const entries =
-    fromDate || toDate
-      ? filteredLogbook.filter((entry) => {
-          const d = parseTickTime(entry.climbed_at);
-          if (fromDate && d.isBefore(dayjs(fromDate), 'day')) return false;
-          if (toDate && d.isAfter(dayjs(toDate), 'day')) return false;
-          return true;
-        })
-      : filteredLogbook;
-
-  if (entries.length === 0) return null;
-
-  const DEFAULT_MAX_WEEKS = 52;
-  const allWeekKeys: string[] = [];
-  // Safe to drop the optional chain: `entries.length === 0` is handled above.
-  const first = parseTickTime(entries[entries.length - 1].climbed_at).startOf('isoWeek');
-  const last = parseTickTime(entries[0].climbed_at).endOf('isoWeek');
-  let current = first;
-  while (current.isBefore(last) || current.isSame(last)) {
-    allWeekKeys.push(`${current.isoWeekYear()}-W${current.isoWeek()}`);
-    current = current.add(1, 'week');
-  }
-  const weekKeys = allWeekKeys.length > DEFAULT_MAX_WEEKS ? allWeekKeys.slice(-DEFAULT_MAX_WEEKS) : allWeekKeys;
-
-  const weeklyData: Record<string, Record<string, number>> = {};
-  entries.forEach((entry) => {
-    const gradeId = gradeIdForEntry(entry);
-    if (gradeId == null) return;
-    const grade = mapping[gradeId];
-    if (!grade) return;
-    const d = parseTickTime(entry.climbed_at);
-    const weekKey = `${d.isoWeekYear()}-W${d.isoWeek()}`;
-    if (!weeklyData[weekKey]) weeklyData[weekKey] = {};
-    weeklyData[weekKey][grade] = (weeklyData[weekKey][grade] || 0) + 1;
-  });
-
-  const usedGrades = new Set<string>();
-  Object.values(weeklyData).forEach((weekGrades) => {
-    Object.keys(weekGrades).forEach((grade) => usedGrades.add(grade));
-  });
-  const activeGrades = sortGrades(
-    Array.from(usedGrades).filter((grade) => weekKeys.some((wk) => (weeklyData[wk]?.[grade] || 0) > 0)),
-    gradeFormat,
-  );
-
-  if (activeGrades.length === 0) return null;
-
-  const spansYears = weekKeys.length > 1 && weekKeys[0].split('-')[0] !== weekKeys[weekKeys.length - 1].split('-')[0];
-
-  return weekKeys.map((wk) => {
-    const [year, weekPart] = wk.split('-');
-    const displayLabel = spansYears ? `${weekPart} '${year.slice(2)}` : weekPart;
-    return {
-      key: wk,
-      label: displayLabel,
-      segments: activeGrades.map((grade) => ({
-        value: weeklyData[wk]?.[grade] || 0,
-        color: getGradeChartColor(grade),
-        label: grade,
-      })),
-    };
-  });
+  return raw.map((bar) => ({
+    key: bar.key,
+    label: bar.label,
+    segments: bar.segments.map((segment) => ({
+      value: segment.value,
+      color: getGradeChartColor(segment.key),
+      label: segment.label,
+    })),
+  }));
 }
 
 // ── Flash vs Redpoint grouped bars ──────────────────────────────────
+
+function colorGroupedBars(raw: ReturnType<typeof buildFlashRedpointBarsRaw>): GroupedBar[] | null {
+  if (!raw) return null;
+  return raw.map((bar) => ({
+    key: bar.key,
+    label: bar.label,
+    values: bar.values.map((value) => ({
+      value: value.value,
+      color: value.key === 'flash' ? FLASH_COLOR : REDPOINT_COLOR,
+      label: value.label,
+    })),
+  }));
+}
 
 export function buildFlashRedpointBars(
   filteredLogbook: LogbookEntry[],
   gradeFormat: GradeDisplayFormat = 'v-grade',
 ): GroupedBar[] | null {
-  if (filteredLogbook.length === 0) return null;
-
-  const mapping = getDifficultyMapping(gradeFormat);
-  const flash: Record<string, number> = {};
-  const redpoint: Record<string, number> = {};
-
-  filteredLogbook.forEach((entry) => {
-    const gradeId = gradeIdForEntry(entry);
-    if (gradeId == null) return;
-    const difficulty = mapping[gradeId];
-    if (!difficulty) return;
-    // Prefer the canonical status field when available. Fall back to the old
-    // tries-based heuristic for legacy rows that don't have status set.
-    const isFlash = entry.status === 'flash' || (entry.status == null && entry.tries === 1);
-    const isRedpoint = entry.status === 'send' || (entry.status == null && entry.tries > 1);
-    if (isFlash) {
-      flash[difficulty] = (flash[difficulty] || 0) + 1;
-    } else if (isRedpoint) {
-      redpoint[difficulty] = (redpoint[difficulty] || 0) + Math.max(entry.tries, 1);
-    }
-  });
-
-  const allGrades = new Set([...Object.keys(flash), ...Object.keys(redpoint)]);
-  const sortedGrades = sortGrades(Array.from(allGrades), gradeFormat);
-
-  if (sortedGrades.length === 0) return null;
-
-  return sortedGrades.map((grade) => ({
-    key: grade,
-    label: grade,
-    values: [
-      { value: flash[grade] || 0, color: FLASH_COLOR, label: 'Flash' },
-      { value: redpoint[grade] || 0, color: REDPOINT_COLOR, label: 'Redpoint' },
-    ],
-  }));
+  return colorGroupedBars(buildFlashRedpointBarsRaw(filteredLogbook, gradeFormat));
 }
-
-// ── Aggregated flash vs redpoint (all boards) ─────────────────────────
 
 export function buildAggregatedFlashRedpointBars(
   allBoardsTicks: Record<string, LogbookEntry[]>,
@@ -318,11 +121,9 @@ export function buildAggregatedFlashRedpointBars(
   fromDate?: string,
   toDate?: string,
 ): GroupedBar[] | null {
-  const allEntries = BOARD_TYPES.flatMap((boardType) =>
-    filterByUnifiedTimeframe(allBoardsTicks[boardType] || [], timeframe, fromDate, toDate),
+  return colorGroupedBars(
+    buildAggregatedFlashRedpointBarsRaw(allBoardsTicks, timeframe, gradeFormat, fromDate, toDate),
   );
-
-  return buildFlashRedpointBars(allEntries, gradeFormat);
 }
 
 // ── V-Points stacked area timeline ──────────────────────────────────
@@ -341,144 +142,25 @@ export type VPointsTimelineData = {
   totalPoints: number;
 };
 
-/**
- * Extract the numeric V-grade value from a V-grade string.
- * "V3" → 3, "V10" → 10, etc. V0 returns 1 so every send counts.
- */
-function vGradeToPoints(vGrade: string): number {
-  const match = vGrade.match(/^V(\d+)$/);
-  if (!match) return 0;
-  const num = parseInt(match[1], 10);
-  return Math.max(num, 1);
-}
-
-const LAYOUT_ORDER = [
-  'kilter-1',
-  'kilter-8',
-  'tension-9',
-  'tension-10',
-  'tension-11',
-  'moonboard-1',
-  'moonboard-2',
-  'moonboard-3',
-  'moonboard-4',
-  'moonboard-5',
-];
-
 export function buildVPointsTimeline(
   allBoardsTicks: Record<string, LogbookEntry[]>,
   timeframe: UnifiedTimeframeType,
   fromDate?: string,
   toDate?: string,
 ): VPointsTimelineData | null {
-  // Collect entries per layout, filter by timeframe, exclude attempts
-  const entriesByLayout: Record<string, LogbookEntry[]> = {};
+  const raw = buildVPointsTimelineRaw(allBoardsTicks, timeframe, fromDate, toDate);
+  if (!raw) return null;
 
-  BOARD_TYPES.forEach((boardType) => {
-    const ticks = allBoardsTicks[boardType] || [];
-    const filtered = filterByUnifiedTimeframe(ticks, timeframe, fromDate, toDate).filter(
-      (e) => e.difficulty !== null && e.status !== 'attempt',
-    );
-
-    for (const entry of filtered) {
-      const layoutKey = getLayoutKey(boardType, entry.layoutId);
-      if (!entriesByLayout[layoutKey]) entriesByLayout[layoutKey] = [];
-      entriesByLayout[layoutKey].push(entry);
-    }
-  });
-
-  const activeLayouts = Object.keys(entriesByLayout);
-  if (activeLayouts.length === 0) return null;
-
-  // Collect all entries to find the overall time range
-  const allEntries = activeLayouts.flatMap((lk) => entriesByLayout[lk]);
-  const sorted = [...allEntries].sort((a, b) => tickTimeMs(a.climbed_at) - tickTimeMs(b.climbed_at));
-
-  // Build full week key range
-  const allWeekKeys: string[] = [];
-  const first = parseTickTime(sorted[0].climbed_at).startOf('isoWeek');
-  const last = parseTickTime(sorted[sorted.length - 1].climbed_at).endOf('isoWeek');
-  let current = first;
-  while (current.isBefore(last) || current.isSame(last, 'day')) {
-    allWeekKeys.push(`${current.isoWeekYear()}-W${current.isoWeek()}`);
-    current = current.add(1, 'week');
-  }
-
-  if (allWeekKeys.length === 0) return null;
-
-  // Cap at 104 weeks
-  const cappedKeys = allWeekKeys.length > 104 ? allWeekKeys.slice(-104) : allWeekKeys;
-  const skippedKeys = allWeekKeys.length > 104 ? allWeekKeys.slice(0, -104) : [];
-
-  // Per-layout: sum points per week
-  // V-Points always use V-grade mapping regardless of display format
-  const layoutWeeklyPoints: Record<string, Record<string, number>> = {};
-  for (const layoutKey of activeLayouts) {
-    const weekPoints: Record<string, number> = {};
-    for (const entry of entriesByLayout[layoutKey]) {
-      const gradeId = gradeIdForEntry(entry);
-      if (gradeId == null) continue;
-      const grade = difficultyMapping[gradeId];
-      if (!grade) continue;
-      const d = parseTickTime(entry.climbed_at);
-      const wk = `${d.isoWeekYear()}-W${d.isoWeek()}`;
-      weekPoints[wk] = (weekPoints[wk] || 0) + vGradeToPoints(grade);
-    }
-    layoutWeeklyPoints[layoutKey] = weekPoints;
-  }
-
-  // Sort layouts in consistent order
-  const sortedLayouts = activeLayouts.sort((a, b) => {
-    const idxA = LAYOUT_ORDER.indexOf(a);
-    const idxB = LAYOUT_ORDER.indexOf(b);
-    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-    if (idxA !== -1) return -1;
-    if (idxB !== -1) return 1;
-    return a.localeCompare(b);
-  });
-
-  // Week label formatting
-  const spansYears =
-    cappedKeys.length > 1 && cappedKeys[0].split('-')[0] !== cappedKeys[cappedKeys.length - 1].split('-')[0];
-
-  const weekLabels = cappedKeys.map((wk) => {
-    const [year, weekPart] = wk.split('-');
-    return spansYears ? `${weekPart} '${year.slice(2)}` : weekPart;
-  });
-
-  // Build cumulative series per layout
-  let totalPoints = 0;
-  const series: VPointsLayoutSeries[] = sortedLayouts.map((layoutKey) => {
-    const [boardType, layoutIdStr] = layoutKey.split('-');
-    const layoutId = layoutIdStr === 'unknown' ? null : parseInt(layoutIdStr, 10);
-    const weekPoints = layoutWeeklyPoints[layoutKey];
-
-    // Base from skipped weeks
-    let cumulative = 0;
-    for (const wk of skippedKeys) {
-      cumulative += weekPoints[wk] || 0;
-    }
-
-    const data = cappedKeys.map((wk) => {
-      cumulative += weekPoints[wk] || 0;
-      return cumulative;
-    });
-
-    totalPoints += cumulative;
-
-    return {
-      layoutKey,
-      displayName: getLayoutDisplayName(boardType, layoutId),
-      color: getLayoutColor(boardType, layoutId),
-      data,
-    };
-  });
-
-  // Only keep series that have at least 1 point
-  const nonEmptySeries = series.filter((s) => s.data[s.data.length - 1] > 0);
-  if (nonEmptySeries.length === 0) return null;
-
-  return { weekLabels, series: nonEmptySeries, totalPoints };
+  return {
+    weekLabels: raw.weekLabels,
+    totalPoints: raw.totalPoints,
+    series: raw.series.map((series) => ({
+      layoutKey: series.layoutKey,
+      displayName: series.displayName,
+      color: layoutColorForKey(series.layoutKey),
+      data: series.data,
+    })),
+  };
 }
 
 // ── Statistics summary (layout percentages) ─────────────────────────
@@ -498,53 +180,12 @@ export function buildStatisticsSummary(
   profileStats: GetUserProfileStatsQueryResponse['userProfileStats'] | null,
   gradeFormat: GradeDisplayFormat = 'v-grade',
 ): { totalAscents: number; layoutPercentages: LayoutPercentage[] } {
-  if (!profileStats) {
-    return { totalAscents: 0, layoutPercentages: [] };
-  }
-
-  const mapping = getDifficultyMapping(gradeFormat);
-  const totalAscents = profileStats.totalDistinctClimbs;
-
-  const layoutsWithExactPercentages = profileStats.layoutStats
-    .map((stats) => {
-      const exactPercentage = totalAscents > 0 ? (stats.distinctClimbCount / totalAscents) * 100 : 0;
-      const grades: Record<string, number> = {};
-      stats.gradeCounts.forEach(({ grade, count }) => {
-        const difficultyNum = parseInt(grade, 10);
-        if (!isNaN(difficultyNum)) {
-          const gradeName = mapping[difficultyNum];
-          if (gradeName) {
-            grades[gradeName] = (grades[gradeName] || 0) + count;
-          }
-        }
-      });
-      return {
-        layoutKey: stats.layoutKey,
-        boardType: stats.boardType,
-        layoutId: stats.layoutId,
-        displayName: getLayoutDisplayName(stats.boardType, stats.layoutId),
-        color: getLayoutColor(stats.boardType, stats.layoutId),
-        count: stats.distinctClimbCount,
-        grades,
-        exactPercentage,
-        percentage: Math.floor(exactPercentage),
-        remainder: exactPercentage - Math.floor(exactPercentage),
-      };
-    })
-    .filter((layout) => layout.count > 0)
-    .sort((a, b) => b.count - a.count);
-
-  // Distribute remaining percentage points using largest remainder method
-  const totalFloored = layoutsWithExactPercentages.reduce((sum, l) => sum + l.percentage, 0);
-  const remaining = 100 - totalFloored;
-  const sortedByRemainder = [...layoutsWithExactPercentages].sort((a, b) => b.remainder - a.remainder);
-  for (let i = 0; i < remaining && i < sortedByRemainder.length; i++) {
-    sortedByRemainder[i].percentage += 1;
-  }
-
-  const layoutPercentages = layoutsWithExactPercentages.map(
-    ({ exactPercentage: _exactPercentage, remainder: _remainder, ...rest }) => rest,
-  );
-
-  return { totalAscents, layoutPercentages };
+  const raw = buildStatisticsSummaryRaw(profileStats, gradeFormat);
+  return {
+    totalAscents: raw.totalAscents,
+    layoutPercentages: raw.layoutPercentages.map((layout) => ({
+      ...layout,
+      color: getLayoutColor(layout.boardType, layout.layoutId),
+    })),
+  };
 }

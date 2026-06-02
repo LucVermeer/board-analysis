@@ -557,19 +557,7 @@
       "send_other": "enchaînements"
     },
     "logAscent": {
-      "title": "Enregistrer un enchaînement",
-      "flash": "Flash",
-      "send": "Enchaînement",
       "attempt": "Essai",
-      "attempts": "Essais",
-      "quality": "Qualité",
-      "gradeOpinion": "Votre cotation",
-      "comment": "Notes",
-      "commentPlaceholder": "Comment c'était ?",
-      "save": "Enregistrer",
-      "decreaseAttempts": "Diminuer les essais",
-      "increaseAttempts": "Augmenter les essais",
-      "errorTitle": "Échec de sauvegarde",
       "errorMessage": "Impossible de sauvegarder votre ascension. Veuillez réessayer.",
       "savedToast": "Tick enregistré"
     },

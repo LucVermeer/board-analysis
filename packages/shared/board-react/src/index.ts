@@ -26,6 +26,7 @@ export type { SaveClimbOptions, SaveClimbResponse, UpdateClimbResponse } from '.
 
 export { useLogbook, useInvalidateLogbook } from './use-logbook';
 export { useSaveTick } from './use-save-tick';
+export { useUpdateTick, useDeleteTick } from './use-mutate-tick';
 export { useSaveClimb, useUpdateClimb } from './use-save-climb';
 
 export { BoardProvider, useBoardProvider, useOptionalBoardProvider, BoardContext } from './board-provider';

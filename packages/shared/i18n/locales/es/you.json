@@ -20,5 +20,57 @@
   },
   "progress": {
     "title": "Progreso"
+  },
+  "mobile": {
+    "settings": "Ajustes",
+    "unknownName": "Escalador",
+    "followers": "seguidores",
+    "following": "siguiendo",
+    "followerCount_one": "{{count}} seguidor",
+    "followerCount_other": "{{count}} seguidores",
+    "loadMore": "Cargar más",
+    "emptyFollowers": "Aún no tienes seguidores",
+    "emptyFollowing": "Todavía no sigues a nadie",
+    "cancel": "Cancelar",
+    "sessions": {
+      "empty": "Aún no hay sesiones"
+    },
+    "comments": {
+      "title": "Comentarios",
+      "empty": "Aún no hay comentarios — abre la conversación",
+      "placeholder": "Añade un comentario…"
+    },
+    "filter": {
+      "title": "Filtros",
+      "timeRange": "Periodo",
+      "board": "Tabla",
+      "allBoards": "Todas las tablas",
+      "all": "Todo",
+      "year": "Año",
+      "month": "Mes",
+      "week": "Semana",
+      "done": "Listo"
+    },
+    "logbook": {
+      "empty": "Aún no has registrado vías",
+      "editTitle": "Editar ascenso",
+      "statusLabel": "Estado",
+      "gradeLabel": "Grado",
+      "qualityLabel": "Estrellas",
+      "triesLabel": "Intentos",
+      "commentLabel": "Comentario",
+      "commentPlaceholder": "¿Cómo fue?",
+      "save": "Guardar",
+      "delete": "Eliminar",
+      "deleteTitle": "Eliminar ascenso",
+      "deleteConfirm": "Esto elimina el ascenso registrado y no se puede deshacer.",
+      "tries_one": "{{count}} intento",
+      "tries_other": "{{count}} intentos",
+      "status": {
+        "flash": "Flash",
+        "send": "Encadenada",
+        "attempt": "Intento"
+      }
+    }
   }
 }

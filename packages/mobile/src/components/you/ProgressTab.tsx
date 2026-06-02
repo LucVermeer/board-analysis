@@ -1,0 +1,115 @@
+import { View, ScrollView, RefreshControl, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import type { useYouProfileData } from '../../lib/graphql/hooks';
+import { Text } from '../Text';
+import { Icon } from '../Icon';
+import { Card } from '../Card';
+import { SectionHeader } from '../SectionHeader';
+import { ActivityIndicator } from '../ActivityIndicator';
+import { StatsSummaryCard } from './StatsSummaryCard';
+import { StackedBarChart, GroupedBarChart, TotalAreaChart } from './YouCharts';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
+import { brandColors } from '../../theme/colors';
+import { spacing } from '../../theme/tokens';
+import { useTheme } from '../../providers/theme-provider';
+
+type YouData = ReturnType<typeof useYouProfileData>;
+
+export function ProgressTab({ data }: { data: YouData }) {
+  const { t } = useTranslation('profile');
+  const { systemColors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const paddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom + spacing[6];
+
+  const totalAscents = data.statisticsSummary.totalAscents;
+  const noAscentData = t('empty.noAscentData');
+
+  if (data.loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={{ paddingBottom }}
+      refreshControl={
+        <RefreshControl refreshing={data.refreshing} onRefresh={data.refetch} tintColor={brandColors.primary} />
+      }
+    >
+      {totalAscents === 0 ? (
+        <View style={styles.empty}>
+          <Icon name="chart.bar" size={48} color={systemColors.tertiaryLabel} />
+          <Text variant="headline" style={styles.emptyTitle}>
+            {t('empty.noClimbingData')}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <View style={styles.topGap} />
+          <StatsSummaryCard
+            statisticsSummary={data.statisticsSummary}
+            hardestSend={data.hardestSend}
+            hardestFlash={data.hardestFlash}
+            percentile={data.percentile}
+          />
+
+          <SectionHeader title={t('stats.activity')} />
+          <Card style={styles.chartCard}>
+            <StackedBarChart bars={data.weeklyBars} colorBy="grade" emptyLabel={noAscentData} />
+          </Card>
+
+          <SectionHeader title={t('stats.gradeDistribution')} />
+          <Card style={styles.chartCard}>
+            <StackedBarChart
+              bars={data.aggregatedStackedBars?.bars ?? null}
+              colorBy="layout"
+              emptyLabel={noAscentData}
+            />
+          </Card>
+
+          {data.aggregatedFlashRedpointBars && (
+            <>
+              <SectionHeader title={t('stats.flashVsRedpoint')} />
+              <Card style={styles.chartCard}>
+                <GroupedBarChart bars={data.aggregatedFlashRedpointBars} emptyLabel={noAscentData} />
+              </Card>
+            </>
+          )}
+
+          {data.vPointsTimeline && (
+            <>
+              <SectionHeader title={t('stats.vPoints')} />
+              <Card style={styles.chartCard}>
+                <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.vpTotal}>
+                  {t('stats.vPointsTotal', { value: data.vPointsTimeline.totalPoints.toLocaleString() })}
+                </Text>
+                <TotalAreaChart timeline={data.vPointsTimeline} color={brandColors.primary} emptyLabel={noAscentData} />
+              </Card>
+            </>
+          )}
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  topGap: { height: spacing[4] },
+  chartCard: { marginHorizontal: spacing[4] },
+  vpTotal: { marginBottom: spacing[2] },
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 120,
+    paddingHorizontal: spacing[8],
+    gap: spacing[2],
+  },
+  emptyTitle: { opacity: 0.6, marginTop: spacing[3], textAlign: 'center' },
+});

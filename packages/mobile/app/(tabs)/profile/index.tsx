@@ -1,121 +1,134 @@
-import { View, Text, Image, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
+import PagerView, { type PagerViewOnPageScrollEvent, type PagerViewOnPageSelectedEvent } from 'react-native-pager-view';
+import { useSharedValue } from 'react-native-reanimated';
+import { router, useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useProfile } from '../../../src/lib/graphql/hooks';
-import { useAuth } from '../../../src/providers/auth-provider';
+import type BottomSheet from '@gorhom/bottom-sheet';
+import { useProfile, useYouProfileData } from '../../../src/lib/graphql/hooks';
 import { useTheme } from '../../../src/providers/theme-provider';
-import { ListRow } from '../../../src/components/ListRow';
+import { YouTabBar, type YouTab } from '../../../src/components/you/YouTabBar';
+import { YouProfileHeader } from '../../../src/components/you/YouProfileHeader';
+import { YouFilterSheet } from '../../../src/components/you/YouFilterSheet';
+import { ProgressTab } from '../../../src/components/you/ProgressTab';
+import { SessionsTab } from '../../../src/components/you/SessionsTab';
+import { LogbookTab } from '../../../src/components/you/LogbookTab';
 import { Icon } from '../../../src/components/Icon';
-import { spacing } from '../../../src/theme/tokens';
+import { brandColors } from '../../../src/theme/colors';
+import { iosSystemColors } from '../../../src/theme/ios-colors';
 
-export default function Profile() {
-  const { data: profile, isLoading } = useProfile();
-  const { signOut } = useAuth();
-  const { systemColors, borderRadius } = useTheme();
-  const { t } = useTranslation('profile');
-  const { t: tCommon } = useTranslation('common');
+type TabKey = 'progress' | 'sessions' | 'logbook';
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+export default function YouScreen() {
+  const navigation = useNavigation();
+  const { t } = useTranslation('you');
+  const { systemColors } = useTheme();
+
+  const { data: profile } = useProfile();
+  const userId = profile?.id;
+  const youData = useYouProfileData(userId);
+
+  const pagerRef = useRef<PagerView>(null);
+  const filterSheetRef = useRef<BottomSheet | null>(null);
+  const scrollPosition = useSharedValue(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const tabs: YouTab<TabKey>[] = [
+    { key: 'progress', label: t('tabs.progress') },
+    { key: 'sessions', label: t('tabs.sessions') },
+    { key: 'logbook', label: t('tabs.logbook') },
+  ];
+
+  const handleTabPress = useCallback((index: number) => {
+    pagerRef.current?.setPage(index);
+  }, []);
+
+  const handlePageScroll = useCallback(
+    (event: PagerViewOnPageScrollEvent) => {
+      scrollPosition.value = event.nativeEvent.position + event.nativeEvent.offset;
+    },
+    [scrollPosition],
+  );
+
+  const handlePageSelected = useCallback((event: PagerViewOnPageSelectedEvent) => {
+    setActiveIndex(event.nativeEvent.position);
+  }, []);
+
+  const openFilters = useCallback(() => {
+    filterSheetRef.current?.snapToIndex(0);
+  }, []);
+
+  // Opaque header (overrides the stack's transparent/blur default for this
+  // screen) so the fixed profile header + tab bar sit cleanly below it. A
+  // settings gear (left) reaches More; the filter button (right) shows only on
+  // the Progress tab.
+  useEffect(() => {
+    navigation.setOptions({
+      title: t('metadata.dashboard.title'),
+      headerTransparent: false,
+      headerLeft: () => (
+        <Pressable
+          onPress={() => router.push('/(tabs)/profile/more')}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.settings')}
+        >
+          <Icon name="settings" size={22} color={iosSystemColors.systemGray} />
+        </Pressable>
+      ),
+      headerRight:
+        activeIndex === 0
+          ? () => (
+              <Pressable onPress={openFilters} hitSlop={8} accessibilityRole="button">
+                <Icon
+                  name="filter"
+                  size={22}
+                  color={youData.hasActiveFilters ? brandColors.primary : iosSystemColors.systemGray}
+                />
+              </Pressable>
+            )
+          : undefined,
+    });
+  }, [navigation, t, activeIndex, openFilters, youData.hasActiveFilters]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" style={styles.flex} contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        {profile?.avatarUrl ? (
-          <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatarPlaceholder, { backgroundColor: systemColors.fill }]}>
-            <Text style={[styles.avatarInitial, { color: systemColors.secondaryLabel }]}>
-              {profile?.displayName?.charAt(0)?.toUpperCase() ?? '?'}
-            </Text>
-          </View>
-        )}
-        <Text style={[styles.name, { color: systemColors.label }]}>
-          {profile?.displayName ?? t('mobile.unknownName')}
-        </Text>
-        <Text style={[styles.email, { color: systemColors.secondaryLabel }]}>{profile?.email ?? ''}</Text>
-      </View>
+    <View style={[styles.container, { backgroundColor: systemColors.background }]}>
+      <YouProfileHeader userId={userId} profile={youData.profile} />
+      <YouTabBar tabs={tabs} activeIndex={activeIndex} scrollPosition={scrollPosition} onTabPress={handleTabPress} />
 
-      {/* Settings / More — appearance, developer tools, preview build. */}
-      <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground, borderRadius: borderRadius.lg }]}>
-        <ListRow
-          title={tCommon('mobile.more.title')}
-          leading={<Icon name="settings" size={22} color={systemColors.secondaryLabel} />}
-          showChevron
-          showSeparator={false}
-          onPress={() => router.push('/(tabs)/profile/more')}
-        />
-      </View>
+      <PagerView
+        ref={pagerRef}
+        style={styles.pager}
+        initialPage={0}
+        offscreenPageLimit={1}
+        onPageScroll={handlePageScroll}
+        onPageSelected={handlePageSelected}
+      >
+        <View key="progress" style={styles.page}>
+          <ProgressTab data={youData} />
+        </View>
+        <View key="sessions" style={styles.page}>
+          <SessionsTab userId={userId} />
+        </View>
+        <View key="logbook" style={styles.page}>
+          <LogbookTab userId={userId} />
+        </View>
+      </PagerView>
 
-      <Pressable style={[styles.signOutButton, { borderColor: systemColors.separator }]} onPress={signOut}>
-        <Text style={styles.signOutText}>{t('mobile.signOut')}</Text>
-      </Pressable>
-    </ScrollView>
+      <YouFilterSheet
+        sheetRef={filterSheetRef}
+        selectedBoard={youData.selectedBoard}
+        onSelectBoard={youData.setSelectedBoard}
+        timeframe={youData.timeframe}
+        onSelectTimeframe={youData.setTimeframe}
+        onClose={() => undefined}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flexGrow: 1,
-    padding: 24,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 32,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: {
-    fontSize: 32,
-    fontWeight: '600',
-  },
-  name: {
-    marginTop: 16,
-    fontSize: 22,
-    fontWeight: '600',
-  },
-  email: {
-    marginTop: 4,
-    fontSize: 15,
-  },
-  card: {
-    overflow: 'hidden',
-    marginBottom: spacing[6],
-  },
-  signOutButton: {
-    marginTop: 'auto',
-    marginBottom: 32,
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  signOutText: {
-    fontSize: 17,
-    color: '#FF3B30',
-  },
+  container: { flex: 1 },
+  pager: { flex: 1 },
+  page: { flex: 1 },
 });

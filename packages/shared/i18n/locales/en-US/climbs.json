@@ -557,19 +557,7 @@
       "send_other": "sends"
     },
     "logAscent": {
-      "title": "Log Ascent",
-      "flash": "Flash",
-      "send": "Send",
       "attempt": "Attempt",
-      "attempts": "Attempts",
-      "quality": "Quality",
-      "gradeOpinion": "Grade opinion",
-      "comment": "Notes",
-      "commentPlaceholder": "How did it feel?",
-      "save": "Save",
-      "decreaseAttempts": "Decrease attempts",
-      "increaseAttempts": "Increase attempts",
-      "errorTitle": "Save failed",
       "errorMessage": "Could not save your ascent. Please try again.",
       "savedToast": "Tick saved"
     },
