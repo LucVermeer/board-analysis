@@ -24,6 +24,10 @@ import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/S
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
 import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
+import { getHttpClient } from '../../../src/lib/graphql/client';
+import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
+import type { Climb as QueueClimb } from '@boardsesh/queue';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
@@ -44,7 +48,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 export default function ClimbList() {
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
-  const { openPlayDrawer, openClimbActions } = useDrawerHost();
+  const { openClimbActions } = useDrawerHost();
   const { addToQueue } = useQueue();
   const { getLogbook } = useBoardProvider();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
@@ -235,11 +239,41 @@ export default function ClimbList() {
     [hasBoardConfig, boardName, layoutId, sizeId, setIds, angle],
   );
 
+  // Page the same search query the list uses so the play-drawer swipe can walk
+  // climbs beyond what's loaded in the list (capped by the shared refresh
+  // helper). Activation pages are 0-based; the search query is 1-based.
+  const fetchSearchPage = useCallback(
+    async ({ page, pageSize }: { page: number; pageSize: number }) => {
+      const input = toClimbSearchInput(
+        filters,
+        { boardName, layoutId, sizeId, setIds, angle },
+        { page: page + 1, pageSize },
+        { name: debouncedSearch },
+      );
+      const response = await getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
+      return {
+        climbs: response.searchClimbs.climbs as unknown as QueueClimb[],
+        hasMore: response.searchClimbs.hasMore,
+      };
+    },
+    [filters, boardName, layoutId, sizeId, setIds, angle, debouncedSearch],
+  );
+
+  // Tapping a climb seeds a suggestion source from the search results, anchored
+  // at the tapped climb, so the play-drawer swipe continues through the climbs
+  // listed after it — mirroring the playlist flow.
+  const activateClimbListClimb = usePlaylistActivation({
+    sourceId: 'climblist',
+    allClimbs: accumulatedClimbs as unknown as QueueClimb[],
+    fetchPage: fetchSearchPage,
+    refreshErrorMessage: 'Failed to refresh climb-list suggestions:',
+  });
+
   const handleClimbPress = useCallback(
     (climb: Climb) => {
-      openPlayDrawer(climb);
+      void activateClimbListClimb(climb as unknown as QueueClimb);
     },
-    [openPlayDrawer],
+    [activateClimbListClimb],
   );
 
   const handleAddToQueue = useCallback(
