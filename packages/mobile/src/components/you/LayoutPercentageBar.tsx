@@ -3,6 +3,7 @@ import type { RawLayoutPercentage } from '@boardsesh/profile-stats';
 import { Text } from '../Text';
 import { layoutChartColor } from './profile-chart-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { iosSystemColors } from '../../theme/ios-colors';
 
 type LayoutPercentageBarProps = {
   layoutPercentages: RawLayoutPercentage[];
@@ -24,7 +25,7 @@ export function LayoutPercentageBar({ layoutPercentages }: LayoutPercentageBarPr
           accessibilityLabel={`${layout.displayName}: ${layout.percentage}%`}
         >
           {layout.percentage >= 15 && (
-            <Text variant="caption2" color="#FFFFFF" numberOfLines={1} style={styles.label}>
+            <Text variant="caption2" color={iosSystemColors.white} numberOfLines={1} style={styles.label}>
               {`${shortName(layout.displayName)} ${layout.percentage}%`}
             </Text>
           )}

@@ -2,6 +2,7 @@ import { View, StyleSheet } from 'react-native';
 import { Avatar } from '../Avatar';
 import { Text } from '../Text';
 import { brandColors } from '../../theme/colors';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { useTheme } from '../../providers/theme-provider';
 
 type Participant = { userId: string; displayName?: string | null; avatarUrl?: string | null };
@@ -56,7 +57,7 @@ export function AvatarGroup({ participants, size = 32, max = 3 }: AvatarGroupPro
             },
           ]}
         >
-          <Text variant="caption2" color="#FFFFFF" style={styles.overflowText}>
+          <Text variant="caption2" color={iosSystemColors.white} style={styles.overflowText}>
             {`+${overflow}`}
           </Text>
         </View>

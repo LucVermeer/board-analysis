@@ -64,6 +64,8 @@
       "delete": "Eliminar",
       "deleteTitle": "Eliminar ascenso",
       "deleteConfirm": "Esto elimina el ascenso registrado y no se puede deshacer.",
+      "saveError": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
+      "deleteError": "No se pudo eliminar el ascenso. Inténtalo de nuevo.",
       "tries_one": "{{count}} intento",
       "tries_other": "{{count}} intentos",
       "status": {

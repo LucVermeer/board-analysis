@@ -9,6 +9,7 @@ import { type IconName } from '../icon-map';
 import { ListRow } from '../ListRow';
 import { gradeBadgeColor } from './profile-chart-colors';
 import { brandColors } from '../../theme/colors';
+import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 
@@ -39,7 +40,7 @@ export function LogbookRow({ ascent, onPress }: LogbookRowProps) {
       onPress={() => onPress(ascent)}
       leading={
         <View style={[styles.badge, { backgroundColor: meta.color }]}>
-          <Icon name={meta.icon} size={14} color="#FFFFFF" />
+          <Icon name={meta.icon} size={14} color={iosSystemColors.white} />
         </View>
       }
       trailing={

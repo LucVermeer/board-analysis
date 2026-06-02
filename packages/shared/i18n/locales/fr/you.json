@@ -64,6 +64,8 @@
       "delete": "Supprimer",
       "deleteTitle": "Supprimer la croix",
       "deleteConfirm": "Cela supprime la croix enregistrée et est irréversible.",
+      "saveError": "Impossible d'enregistrer tes modifications. Réessaie.",
+      "deleteError": "Impossible de supprimer la croix. Réessaie.",
       "tries_one": "{{count}} essai",
       "tries_other": "{{count}} essais",
       "status": {

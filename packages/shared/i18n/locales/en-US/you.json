@@ -64,6 +64,8 @@
       "delete": "Delete",
       "deleteTitle": "Delete ascent",
       "deleteConfirm": "This removes the logged ascent and can't be undone.",
+      "saveError": "Couldn't save your changes. Try again.",
+      "deleteError": "Couldn't delete the ascent. Try again.",
       "tries_one": "{{count}} try",
       "tries_other": "{{count}} tries",
       "status": {

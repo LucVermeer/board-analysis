@@ -14,10 +14,11 @@ import { SegmentedControl } from '../SegmentedControl';
 import { SectionHeader } from '../SectionHeader';
 import { useGrades } from '../../lib/graphql/hooks';
 import { gradeBadgeColor } from './profile-chart-colors';
-import { hapticSuccess } from '../../lib/haptics';
+import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
+import { useToast } from '../../providers/toast-provider';
 
 type TickStatus = 'flash' | 'send' | 'attempt';
 
@@ -31,6 +32,7 @@ type LogbookEditSheetProps = {
 export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheetProps) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
+  const { showToast } = useToast();
   const updateTick = useUpdateTick();
   const deleteTick = useDeleteTick();
   const gradesQuery = useGrades(ascent?.boardType ?? '', !!ascent);
@@ -70,6 +72,10 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
           hapticSuccess();
           sheetRef.current?.close();
         },
+        onError: () => {
+          hapticError();
+          showToast(t('mobile.logbook.saveError'), 'error');
+        },
       },
     );
   };
@@ -84,6 +90,10 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
         onPress: () =>
           deleteTick.mutate(ascent.uuid, {
             onSuccess: () => sheetRef.current?.close(),
+            onError: () => {
+              hapticError();
+              showToast(t('mobile.logbook.deleteError'), 'error');
+            },
           }),
       },
     ]);
