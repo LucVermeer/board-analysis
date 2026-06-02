@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { StyleSheet, View, useColorScheme } from 'react-native';
-import { Stack, SplashScreen, router } from 'expo-router';
+// Navigation theme comes from expo-router's vendored React Navigation. Expo
+// SDK 56's expo-router is not compatible with a separately-installed
+// @react-navigation/* package, so import these from `expo-router` directly.
+import {
+  Stack,
+  SplashScreen,
+  router,
+  ThemeProvider as NavigationThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ThemeProvider as NavigationThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryProvider } from '../src/providers/query-provider';
