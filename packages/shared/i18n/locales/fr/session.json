@@ -240,18 +240,25 @@
       "noEntries": "Pas encore d'ascensions",
       "sendsAndAttempts": "{{sends}} envois, {{attempts}} tentatives",
       "sendsOnly": "{{sends}} envois",
-      "attemptsOnly": "{{attempts}} tentatives"
+      "attemptsOnly": "{{attempts}} tentatives",
+      "tries_one": "{{count}} essai",
+      "tries_other": "{{count}} essais",
+      "mirroredTag": "Miroir"
     },
     "similarClimbs": {
       "title": "Voies similaires",
-      "empty": "Aucune voie similaire trouvee"
+      "empty": "Aucune voie similaire trouvee",
+      "retry": "Reessayer",
+      "sends_one": "{{count}} envoi",
+      "sends_other": "{{count}} envois"
     },
     "community": {
       "title": "Communaute",
       "empty": "Pas encore de donnees communautaires",
       "ascensionists_one": "{{count}} grimpeur",
       "ascensionists_other": "{{count}} grimpeurs",
-      "avgQuality": "Qualite moyenne"
+      "avgQuality": "Qualite moyenne",
+      "gradeByAngle": "Cotation par angle"
     },
     "betaVideos": {
       "title": "Videos Beta",

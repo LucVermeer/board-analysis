@@ -3,6 +3,10 @@ import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { DifficultyByAngleChart } from './DifficultyByAngleChart';
+import { buildAngleGradeBars } from './community-utils';
+import { useClimbStatsHistory } from '../../lib/graphql/hooks';
+import { useGradeFormat } from '../../hooks/use-grade-format';
 import { formatQuality } from '../../lib/format-climb-stats';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
@@ -10,16 +14,19 @@ import { spacing } from '../../theme/tokens';
 type CommunitySectionProps = {
   climbUuid: string;
   boardName: string;
-  angle: number;
   qualityAverage: string;
   ascensionistCount: number;
 };
 
 export const CommunitySection = memo(function CommunitySection({
+  climbUuid,
+  boardName,
   qualityAverage,
   ascensionistCount,
 }: CommunitySectionProps) {
   const { t } = useTranslation('session');
+  const { gradeFormat } = useGradeFormat();
+  const { data: history } = useClimbStatsHistory(boardName, climbUuid);
 
   const qualityNum = parseFloat(qualityAverage);
   const hasQuality = qualityNum > 0;
@@ -28,8 +35,7 @@ export const CommunitySection = memo(function CommunitySection({
   const starIcons = useMemo(() => {
     if (!hasQuality) return null;
     const fullStars = Math.floor(qualityNum);
-    const totalStars = 5;
-    return Array.from({ length: totalStars }, (_, starIndex) => (
+    return Array.from({ length: 5 }, (_, starIndex) => (
       <Icon
         key={starIndex}
         name={starIndex < fullStars ? 'star.fill' : 'star'}
@@ -39,7 +45,9 @@ export const CommunitySection = memo(function CommunitySection({
     ));
   }, [qualityNum, hasQuality]);
 
-  if (!hasQuality && !hasAscensionists) {
+  const angleBars = useMemo(() => buildAngleGradeBars(history, gradeFormat), [history, gradeFormat]);
+
+  if (!hasQuality && !hasAscensionists && angleBars.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Icon name="people" size={20} color={iosSystemColors.systemGray} />
@@ -67,6 +75,15 @@ export const CommunitySection = memo(function CommunitySection({
           <Text variant="subheadline">{t('mobile.community.ascensionists', { count: ascensionistCount })}</Text>
         </View>
       )}
+
+      {angleBars.length > 0 && (
+        <View style={styles.histogram}>
+          <Text variant="footnote" color={iosSystemColors.systemGray}>
+            {t('mobile.community.gradeByAngle')}
+          </Text>
+          <DifficultyByAngleChart data={angleBars} />
+        </View>
+      )}
     </View>
   );
 });
@@ -88,5 +105,8 @@ const styles = StyleSheet.create({
   starsRow: {
     flexDirection: 'row',
     gap: 2,
+  },
+  histogram: {
+    gap: spacing[2],
   },
 });

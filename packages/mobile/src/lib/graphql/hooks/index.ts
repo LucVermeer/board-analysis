@@ -14,6 +14,13 @@ import type {
   UserProfile,
   SessionSummary,
 } from '@boardsesh/shared-schema';
+import {
+  SIMILAR_CLIMBS_QUERY,
+  type SimilarClimbsVariables,
+  type SimilarClimbsResponse,
+  CLIMB_STATS_HISTORY,
+  type ClimbStatsHistoryResponse,
+} from '@boardsesh/graphql/operations';
 import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
@@ -283,6 +290,53 @@ export function useBetaLinks(boardType: string, climbUuid: string, enabled = tru
       }),
     select: (data) => dedupeBetaLinks(mapBetaLinks(data.betaLinks)),
     enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// ============================================
+// Similar Climbs + Community stats (play drawer)
+// ============================================
+
+/**
+ * Position-only Jaccard similar climbs for a saved climb. `climbUuid` null
+ * disables the query (e.g. before a climb is selected).
+ */
+export function useSimilarClimbs(
+  boardName: string,
+  climbUuid: string | null,
+  layoutId: number,
+  angle: number,
+  limit = 12,
+) {
+  return useQuery({
+    queryKey: ['similarClimbs', boardName, climbUuid, layoutId, angle, limit],
+    queryFn: () => {
+      const variables: SimilarClimbsVariables = {
+        input: { boardType: boardName, layoutId, climbUuid: climbUuid!, angle, limit },
+      };
+      return getHttpClient().request<SimilarClimbsResponse>(SIMILAR_CLIMBS_QUERY, variables);
+    },
+    select: (data) => data.similarClimbs,
+    enabled: !!climbUuid,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Last-12-months stats snapshots for a climb, one row per (angle, snapshot).
+ * Powers the Community "grade by angle" histogram.
+ */
+export function useClimbStatsHistory(boardName: string, climbUuid: string | null) {
+  return useQuery({
+    queryKey: ['climbStatsHistory', boardName, climbUuid],
+    queryFn: () =>
+      getHttpClient().request<ClimbStatsHistoryResponse>(CLIMB_STATS_HISTORY, {
+        boardName,
+        climbUuid: climbUuid!,
+      }),
+    select: (data) => data.climbStatsHistory,
+    enabled: !!climbUuid,
     staleTime: 5 * 60 * 1000,
   });
 }

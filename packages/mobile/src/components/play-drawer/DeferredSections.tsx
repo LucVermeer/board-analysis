@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Climb } from '@boardsesh/shared-schema';
@@ -42,6 +42,17 @@ export const DeferredSections = memo(function DeferredSections({
   const [readyToRender, setReadyToRender] = useState(false);
   const previousClimbUuid = useRef(climb.uuid);
 
+  // Tally shown next to the collapsed Logbook header so the user sees their
+  // history without expanding. Mirrors LogbookSection's summary fallback.
+  const logbookSummary = useMemo(() => {
+    const sends = climb.userAscents ?? 0;
+    const attempts = climb.userAttempts ?? 0;
+    if (sends > 0 && attempts > 0) return t('mobile.logbook.sendsAndAttempts', { sends, attempts });
+    if (sends > 0) return t('mobile.logbook.sendsOnly', { sends });
+    if (attempts > 0) return t('mobile.logbook.attemptsOnly', { attempts });
+    return null;
+  }, [climb.userAscents, climb.userAttempts, t]);
+
   // Both effects key on climb.uuid. React runs effects in declaration order
   // within the same commit, so the reset below always fires before the
   // InteractionManager re-schedule — readyToRender goes false, then the
@@ -80,21 +91,16 @@ export const DeferredSections = memo(function DeferredSections({
   // cheap to schedule; only the JS-heavy sub-sections wait below.
   return (
     <View style={styles.container}>
-      <CollapsibleSection
-        title={t('mobile.betaVideos.title')}
-        keepExpanded
-        onHeaderLayout={onBetaHeaderLayout}
-      >
+      <CollapsibleSection title={t('mobile.betaVideos.title')} keepExpanded onHeaderLayout={onBetaHeaderLayout}>
         <BetaVideosSection climbUuid={climb.uuid} boardName={boardName} angle={angle} />
       </CollapsibleSection>
 
       {readyToRender && (
         <>
-          <CollapsibleSection title={t('mobile.logbook.title')} defaultExpanded>
+          <CollapsibleSection title={t('mobile.logbook.title')} summary={logbookSummary}>
             <LogbookSection
               climbUuid={climb.uuid}
               boardName={boardName}
-              angle={angle}
               userAscents={climb.userAscents}
               userAttempts={climb.userAttempts}
             />
@@ -104,7 +110,6 @@ export const DeferredSections = memo(function DeferredSections({
             <CommunitySection
               climbUuid={climb.uuid}
               boardName={boardName}
-              angle={angle}
               qualityAverage={climb.quality_average}
               ascensionistCount={climb.ascensionist_count}
             />

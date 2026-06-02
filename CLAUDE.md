@@ -230,18 +230,3 @@ Four preview channels (`preview-1` ... `preview-4`), one per test device. Publis
 CI: `mobile-eas-update.yml` auto-publishes on every push to a non-main branch touching `packages/mobile/` or shared packages, and comments on the PR. `EXPO_TOKEN` secret required.
 
 A new preview build is only needed when native deps change (new Expo plugin, new native module, SDK bump). JS/TS changes ride OTA.
-
-### Agent workflow for mobile changes
-
-**Always ask which preview channel to publish to** before pushing a test update:
-
-> "Changes are ready. Which preview channel should I publish to? (preview-1, preview-2, preview-3, preview-4)"
-
-Then publish and point the channel:
-
-```bash
-vp run mobile:publish
-bunx eas-cli@16 channel:edit <channel> --branch <current-branch>
-```
-
-Don't assume a channel. If the user has stated a preferred channel earlier in this session, reuse it without asking.
