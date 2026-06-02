@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
@@ -22,15 +22,29 @@ type PlaylistActionsMenuProps = {
 export function PlaylistActionsMenu({ visible, onEdit, onDelete, onClose }: PlaylistActionsMenuProps) {
   const { t } = useTranslation('playlists');
   const sheetRef = useRef<BottomSheetModal>(null);
+  // Track presented state so we never call dismiss() on a not-presented modal
+  // (which leaves gorhom in a state where the next present() is a no-op — the
+  // "nothing happens" bug). Mirrors LogAscentSheet.
+  const isPresentedRef = useRef(false);
   const snapPoints = useMemo(() => ['25%'], []);
 
   useEffect(() => {
-    if (visible) sheetRef.current?.present();
-    else sheetRef.current?.dismiss();
+    if (visible && !isPresentedRef.current) {
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if (!visible && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
+    }
   }, [visible]);
 
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
+    onClose();
+  }, [onClose]);
+
   return (
-    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={onClose}>
+    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={handleDismiss}>
       <View style={styles.content}>
         <ListRow
           title={t('detail.menu.edit')}

@@ -63,11 +63,13 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
   const [isPublic, setIsPublic] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Seed (edit) or clear (create) the fields each time the sheet opens, then
-  // drive the gorhom sheet open/closed off the `visible` prop.
-  const wasVisibleRef = useRef(false);
+  // Seed (edit) or clear (create) the fields when the sheet opens, then drive
+  // the gorhom modal off the `visible` prop. `isPresentedRef` guards against
+  // calling dismiss() on a not-presented modal (which makes the next present()
+  // a no-op) and is reset in onDismiss so a swipe-dismiss + reopen works.
+  const isPresentedRef = useRef(false);
   useEffect(() => {
-    if (visible && !wasVisibleRef.current) {
+    if (visible && !isPresentedRef.current) {
       if (isEdit && playlist) {
         setName(playlist.name);
         setDescription(playlist.description ?? '');
@@ -83,11 +85,17 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
       }
       setError(null);
       sheetRef.current?.present();
-    } else if (!visible && wasVisibleRef.current) {
+      isPresentedRef.current = true;
+    } else if (!visible && isPresentedRef.current) {
       sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
     }
-    wasVisibleRef.current = visible;
   }, [visible, isEdit, playlist]);
+
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
+    onClose();
+  }, [onClose]);
 
   const handleSubmit = useCallback(() => {
     const trimmedName = name.trim();
@@ -143,7 +151,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
   );
 
   return (
-    <ModalSheet ref={sheetRef} snapPoints={['90%']} onDismiss={onClose} scrollable footer={footer}>
+    <ModalSheet ref={sheetRef} snapPoints={['90%']} onDismiss={handleDismiss} scrollable footer={footer}>
       <View style={styles.body}>
         <View style={styles.header}>
           <PlaylistPreviewSquare color={color} icon={icon} size={56} />
