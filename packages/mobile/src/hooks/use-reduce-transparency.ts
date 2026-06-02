@@ -10,7 +10,11 @@ import { AccessibilityInfo } from 'react-native';
  * until the initial async read resolves.
  */
 export function useReduceTransparency(): boolean {
-  const [reduceTransparency, setReduceTransparency] = useState(false);
+  // Default to `true` (conservative) until the async OS read resolves, so a
+  // user with Reduce Transparency enabled never sees a frame of glass/blur on
+  // cold start. Non-RT users get one frame of solid before glass fades in,
+  // which is far less jarring than the reverse.
+  const [reduceTransparency, setReduceTransparency] = useState(true);
 
   useEffect(() => {
     let mounted = true;

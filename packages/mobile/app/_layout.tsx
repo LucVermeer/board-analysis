@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
-import { StyleSheet, View, useColorScheme } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 // Navigation theme comes from expo-router's vendored React Navigation. Expo
 // SDK 56's expo-router is not compatible with a separately-installed
 // @react-navigation/* package, so import these from `expo-router` directly.
@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryProvider } from '../src/providers/query-provider';
-import { ThemeProvider } from '../src/providers/theme-provider';
+import { ThemeProvider, useTheme } from '../src/providers/theme-provider';
 import { AuthProvider } from '../src/providers/auth-provider';
 import { I18nProvider } from '../src/providers/i18n-provider';
 import { BluetoothProvider } from '../src/providers/bluetooth-provider';
@@ -156,16 +156,13 @@ function BoardProviderWrapper({ children }: { children: ReactNode }) {
   return <BoardProvider boardName={toBoardName(activeBoard?.boardType)}>{children}</BoardProvider>;
 }
 
-function RootLayout() {
-  const colorScheme = useColorScheme();
-  const onAuthReady = useCallback(() => {
-    SplashScreen.hideAsync();
-  }, []);
-
-  // Dark-aware navigation theme so screen/scene backgrounds adapt — without it,
-  // React Navigation's light-grey DefaultTheme background shows through every
-  // screen in dark mode. `useColorScheme` reflects the in-app appearance toggle
-  // (it's driven by Appearance.setColorScheme).
+// Dark-aware navigation theme so screen/scene backgrounds adapt — without it,
+// React Navigation's light-grey DefaultTheme background shows through every
+// screen in dark mode. Reads the *resolved* scheme from useTheme() (which
+// honours the appearance override) rather than a separate useColorScheme(), so
+// the nav chrome and the app theme can't disagree for a frame.
+function ThemedNavigation({ children }: { children: ReactNode }) {
+  const { colorScheme } = useTheme();
   const navTheme = useMemo(
     () =>
       colorScheme === 'dark'
@@ -173,6 +170,13 @@ function RootLayout() {
         : DefaultTheme,
     [colorScheme],
   );
+  return <NavigationThemeProvider value={navTheme}>{children}</NavigationThemeProvider>;
+}
+
+function RootLayout() {
+  const onAuthReady = useCallback(() => {
+    SplashScreen.hideAsync();
+  }, []);
 
   return (
     <GestureHandlerRootView style={layoutStyles.root}>
@@ -199,7 +203,7 @@ function RootLayout() {
                                     escape that context. */}
                                 <BottomSheetModalProvider>
                                   <DrawerHostProvider>
-                                    <NavigationThemeProvider value={navTheme}>
+                                    <ThemedNavigation>
                                       <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
                                         <Stack.Screen name="(tabs)" />
                                         <Stack.Screen
@@ -207,7 +211,7 @@ function RootLayout() {
                                           options={{ headerShown: false, gestureEnabled: false }}
                                         />
                                       </Stack>
-                                    </NavigationThemeProvider>
+                                    </ThemedNavigation>
                                     <PersistentQueueBar />
                                   </DrawerHostProvider>
                                 </BottomSheetModalProvider>

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
-import { brandColors } from '../theme/colors';
+import { brandColors, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 
@@ -46,7 +46,7 @@ export function Toast({ toast, onDismiss }: ToastProps) {
   // Opaque themed pill keeps the toast legible over any content; the brand-hued
   // wash on top carries the variant cue. Bump the wash alpha in dark mode where
   // a 15% tint barely registers.
-  const tintAlpha = colorScheme === 'dark' ? '3D' : '26';
+  const tintColor = withAlpha(config.color, colorScheme === 'dark' ? 0.24 : 0.15);
 
   return (
     <Animated.View
@@ -56,10 +56,7 @@ export function Toast({ toast, onDismiss }: ToastProps) {
       accessibilityRole="alert"
       accessibilityLiveRegion="assertive"
     >
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, { backgroundColor: `${config.color}${tintAlpha}` }]}
-      />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor }]} />
       <Icon name={config.icon} size={18} color={config.color} />
       <Text variant="subheadline" color={config.color} style={styles.message} numberOfLines={2}>
         {toast.message}

@@ -72,3 +72,20 @@ export const androidFallbackColors = {
 export type SystemColorKey = keyof typeof androidFallbackColors.light;
 export type BrandColors = typeof brandColors;
 export type AndroidFallbackColors = typeof androidFallbackColors;
+
+/**
+ * Apply an alpha (0–1) to a colour. Handles `#RGB` and `#RRGGBB` hex by
+ * emitting an `rgba()` string; any other format (already-`rgba()`, named
+ * colour, PlatformColor) is returned unchanged so this never produces an
+ * invalid colour value. Safer than concatenating a hex alpha suffix, which
+ * only works for 6-digit hex.
+ */
+export function withAlpha(color: string, alpha: number): string {
+  const hex = color.replace('#', '');
+  const full = hex.length === 3 ? hex.replace(/(.)/g, '$1$1') : hex;
+  if (full.length !== 6 || /[^0-9a-fA-F]/.test(full)) return color;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

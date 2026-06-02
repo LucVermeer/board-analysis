@@ -21,9 +21,6 @@ const TAB_ICONS: Record<string, TabIconName> = {
   more: 'dots-horizontal',
 };
 
-// Placeholder badge count for the queue tab
-const QUEUE_BADGE_COUNT = 0;
-
 export default function BlurTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -42,7 +39,6 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
         const isFocused = state.index === index;
         const tintColor = isFocused ? activeTint : inactiveTint;
         const iconName = TAB_ICONS[route.name] ?? 'dots-horizontal';
-        const showBadge = route.name === 'queue' && QUEUE_BADGE_COUNT > 0;
         const showBluetoothDot = route.name === 'queue' && isBluetoothConnected;
 
         const onPress = () => {
@@ -76,11 +72,6 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
           >
             <View style={styles.iconContainer}>
               <MaterialCommunityIcons name={iconName} size={24} color={tintColor} />
-              {showBadge && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{QUEUE_BADGE_COUNT}</Text>
-                </View>
-              )}
               {showBluetoothDot && <View style={styles.bluetoothDot} />}
             </View>
             <Text style={[styles.label, { color: tintColor }]} numberOfLines={1}>
@@ -97,7 +88,7 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
   // solid on Android); the glass spans through the home-indicator inset.
   return (
     <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }]}>
-      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} />
+      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />
       {renderContent()}
     </View>
   );
@@ -123,23 +114,6 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -10,
-    backgroundColor: iosSystemColors.systemRed,
-    borderRadius: 9,
-    minWidth: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: iosSystemColors.white,
-    fontSize: 11,
-    fontWeight: '600',
   },
   bluetoothDot: {
     position: 'absolute',
