@@ -24,15 +24,28 @@ type GeneratorPickerCardProps = {
   onChange: (selection: GeneratorSelection) => void;
 };
 
-type WorkoutChip = { value: WorkoutType | 'off'; labelKey: string };
+type ChipValue = WorkoutType | 'off';
 
-const CHIPS: WorkoutChip[] = [
-  { value: 'off', labelKey: 'mobile.session.preGeneratorOff' },
-  { value: 'volume', labelKey: 'mobile.session.preGeneratorVolume' },
-  { value: 'pyramid', labelKey: 'mobile.session.preGeneratorPyramid' },
-  { value: 'ladder', labelKey: 'mobile.session.preGeneratorLadder' },
-  { value: 'gradeFocus', labelKey: 'mobile.session.preGeneratorGradeFocus' },
-];
+// Static value list — the labels are looked up via inline `t('mobile.session.preGenerator…')`
+// calls in `chipLabel()` so the i18n key analyser can see every key as a
+// literal. Adding a new entry requires adding both a value here and a case in
+// `chipLabel`.
+const CHIP_VALUES: ChipValue[] = ['off', 'volume', 'pyramid', 'ladder', 'gradeFocus'];
+
+function chipLabel(value: ChipValue, t: (key: string) => string): string {
+  switch (value) {
+    case 'off':
+      return t('mobile.session.preGeneratorOff');
+    case 'volume':
+      return t('mobile.session.preGeneratorVolume');
+    case 'pyramid':
+      return t('mobile.session.preGeneratorPyramid');
+    case 'ladder':
+      return t('mobile.session.preGeneratorLadder');
+    case 'gradeFocus':
+      return t('mobile.session.preGeneratorGradeFocus');
+  }
+}
 
 function buildDefaultOptions(type: WorkoutType, targetGrade: number): GeneratorOptions {
   switch (type) {
@@ -64,7 +77,7 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
 
-  const handleSelectType = (value: WorkoutType | 'off') => {
+  const handleSelectType = (value: ChipValue) => {
     if (value === 'off') {
       onChange({ type: 'off' });
       return;
@@ -90,12 +103,12 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
       </Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {CHIPS.map((chip) => {
-          const isActive = chip.value === activeType;
+        {CHIP_VALUES.map((value) => {
+          const isActive = value === activeType;
           return (
             <Pressable
-              key={chip.value}
-              onPress={() => handleSelectType(chip.value)}
+              key={value}
+              onPress={() => handleSelectType(value)}
               style={[
                 styles.chip,
                 {
@@ -107,7 +120,7 @@ export function GeneratorPickerCard({ boardName, selection, onChange }: Generato
               accessibilityState={{ selected: isActive }}
             >
               <Text variant="footnote" color={isActive ? iosSystemColors.white : systemColors.label}>
-                {t(chip.labelKey)}
+                {chipLabel(value, t)}
               </Text>
             </Pressable>
           );

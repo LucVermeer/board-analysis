@@ -105,6 +105,8 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep climbs:mobile.climbActions.copyLink
 // i18n-keep climbs:mobile.climbActions.linkCopied
 // i18n-keep climbs:mobile.climbActions.report
+// i18n-keep climbs:mobile.climbActions.tick
+// i18n-keep climbs:mobile.climbActions.openInApp
 // Mobile More tab — dev tools
 // i18n-keep common:mobile.more.development
 // i18n-keep common:mobile.more.metroServersTitle
