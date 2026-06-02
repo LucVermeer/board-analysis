@@ -26,6 +26,9 @@ export function BoardDetailSheet({ board, visible, onClose, onSetActive }: Board
   const { data: activeBoard } = useActiveBoard();
   const sheetRef = useRef<BottomSheet>(null);
 
+  // Always-mounted sheet: open/close imperatively off the visible+board state.
+  // Selecting a different board while the sheet is open re-runs snapToIndex(0)
+  // (board is a dep) — harmless; gorhom no-ops if already at that stop.
   useEffect(() => {
     if (visible && board) {
       sheetRef.current?.snapToIndex(0);
