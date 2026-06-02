@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import { Sheet } from '../Sheet';
+import { ModalSheet } from '../ModalSheet';
 import { ListRow } from '../ListRow';
 import { Icon } from '../Icon';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -21,16 +21,16 @@ type PlaylistActionsMenuProps = {
  */
 export function PlaylistActionsMenu({ visible, onEdit, onDelete, onClose }: PlaylistActionsMenuProps) {
   const { t } = useTranslation('playlists');
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['25%'], []);
 
   useEffect(() => {
-    if (visible) sheetRef.current?.snapToIndex(0);
-    else sheetRef.current?.close();
+    if (visible) sheetRef.current?.present();
+    else sheetRef.current?.dismiss();
   }, [visible]);
 
   return (
-    <Sheet ref={sheetRef} snapPoints={snapPoints} onClose={onClose}>
+    <ModalSheet ref={sheetRef} snapPoints={snapPoints} onDismiss={onClose}>
       <View style={styles.content}>
         <ListRow
           title={t('detail.menu.edit')}
@@ -45,7 +45,7 @@ export function PlaylistActionsMenu({ visible, onEdit, onDelete, onClose }: Play
           showSeparator={false}
         />
       </View>
-    </Sheet>
+    </ModalSheet>
   );
 }
 

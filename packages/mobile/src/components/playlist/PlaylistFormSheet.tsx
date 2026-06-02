@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import BottomSheet, { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
-import { Sheet } from '../Sheet';
+import { ModalSheet } from '../ModalSheet';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { Button } from '../Button';
@@ -53,7 +53,7 @@ type PlaylistFormSheetProps = {
 export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmit, onClose }: PlaylistFormSheetProps) {
   const { t } = useTranslation('playlists');
   const { systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
   const isEdit = mode === 'edit';
 
   const [name, setName] = useState('');
@@ -82,9 +82,9 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
         setIsPublic(false);
       }
       setError(null);
-      sheetRef.current?.snapToIndex(0);
+      sheetRef.current?.present();
     } else if (!visible && wasVisibleRef.current) {
-      sheetRef.current?.close();
+      sheetRef.current?.dismiss();
     }
     wasVisibleRef.current = visible;
   }, [visible, isEdit, playlist]);
@@ -143,7 +143,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
   );
 
   return (
-    <Sheet ref={sheetRef} snapPoints={['90%']} onClose={onClose} scrollable footer={footer}>
+    <ModalSheet ref={sheetRef} snapPoints={['90%']} onDismiss={onClose} scrollable footer={footer}>
       <View style={styles.body}>
         <View style={styles.header}>
           <PlaylistPreviewSquare color={color} icon={icon} size={56} />
@@ -254,7 +254,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
           </Text>
         ) : null}
       </View>
-    </Sheet>
+    </ModalSheet>
   );
 }
 
