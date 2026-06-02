@@ -12,7 +12,6 @@ import { spacing } from '../../theme/tokens';
 type LogbookSectionProps = {
   climbUuid: string;
   boardName: string;
-  angle: number;
   userAscents: number | null | undefined;
   userAttempts: number | null | undefined;
 };

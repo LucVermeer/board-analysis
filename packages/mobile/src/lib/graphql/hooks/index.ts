@@ -14,6 +14,13 @@ import type {
   UserProfile,
   SessionSummary,
 } from '@boardsesh/shared-schema';
+import {
+  SIMILAR_CLIMBS_QUERY,
+  type SimilarClimbsVariables,
+  type SimilarClimbsResponse,
+  CLIMB_STATS_HISTORY,
+  type ClimbStatsHistoryResponse,
+} from '@boardsesh/graphql/operations';
 import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
@@ -290,14 +297,6 @@ export function useBetaLinks(boardType: string, climbUuid: string, enabled = tru
 // ============================================
 // Similar Climbs + Community stats (play drawer)
 // ============================================
-
-import {
-  SIMILAR_CLIMBS_QUERY,
-  type SimilarClimbsVariables,
-  type SimilarClimbsResponse,
-  CLIMB_STATS_HISTORY,
-  type ClimbStatsHistoryResponse,
-} from '@boardsesh/graphql/operations';
 
 /**
  * Position-only Jaccard similar climbs for a saved climb. `climbUuid` null

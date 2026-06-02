@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { ScrollView, View, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName, SimilarClimb } from '@boardsesh/shared-schema';
@@ -7,9 +7,9 @@ import * as Haptics from 'expo-haptics';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { ClimbListThumbnail } from '../ClimbListThumbnail';
+import { buildClimbStub, formatByline, rankBySizeCompatibility } from './similar-climbs-utils';
 import { useSimilarClimbs } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
-import { formatQuality, formatSends } from '../../lib/format-climb-stats';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -27,43 +27,6 @@ type SimilarClimbsSectionProps = {
 const SKELETON_COUNT = 3;
 const CARD_WIDTH = 96;
 
-/**
- * Build a `Climb` from a `SimilarClimb` for the drawer's queue/activation flow,
- * which expects the full type. Mirrors web's `buildClimbStub`: stats fields the
- * similarClimbs query doesn't return get safe placeholders; `difficultyName` is
- * already the display string `climb.difficulty` carries elsewhere in the drawer.
- */
-function buildClimbStub(similar: SimilarClimb, boardType: string): Climb {
-  return {
-    uuid: similar.uuid,
-    layoutId: similar.layoutId,
-    boardType,
-    name: similar.name ?? '',
-    setter_username: similar.setterUsername ?? '',
-    frames: similar.frames ?? '',
-    angle: similar.angle ?? 0,
-    description: '',
-    ascensionist_count: similar.ascensionistCount ?? 0,
-    difficulty: similar.difficultyName ?? '',
-    quality_average: similar.qualityAverage == null ? '' : similar.qualityAverage.toFixed(2),
-    stars: 0,
-    difficulty_error: '',
-    benchmark_difficulty: null,
-  };
-}
-
-function formatByline(similar: SimilarClimb): string {
-  const parts: string[] = [];
-  if (similar.setterUsername) parts.push(similar.setterUsername);
-  if (similar.qualityAverage != null && similar.qualityAverage > 0) {
-    parts.push(`${formatQuality(String(similar.qualityAverage))}★`);
-  }
-  if (similar.ascensionistCount != null && similar.ascensionistCount > 0) {
-    parts.push(formatSends(similar.ascensionistCount));
-  }
-  return parts.join(' · ');
-}
-
 export const SimilarClimbsSection = memo(function SimilarClimbsSection({
   climbUuid,
   boardName,
@@ -76,6 +39,10 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
   const { t } = useTranslation('session');
   const { formatGrade } = useGradeFormat();
   const { data: climbs, isLoading, isError, refetch } = useSimilarClimbs(boardName, climbUuid, layoutId, angle);
+
+  // Compatible-with-current-wall climbs rank first; incompatible ones are
+  // dimmed and pushed to the end (mirrors the web list).
+  const ranked = useMemo(() => rankBySizeCompatibility(climbs ?? [], sizeId), [climbs, sizeId]);
 
   const handlePress = useCallback(
     (similar: SimilarClimb) => {
@@ -102,7 +69,12 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
 
   if (isError) {
     return (
-      <Pressable onPress={handleRetry} style={styles.emptyContainer} accessibilityRole="button">
+      <Pressable
+        onPress={handleRetry}
+        style={styles.emptyContainer}
+        accessibilityRole="button"
+        accessibilityLabel={t('mobile.similarClimbs.retry')}
+      >
         <Icon name="refresh" size={20} color={brandColors.primary} />
         <Text variant="subheadline" color={brandColors.primary}>
           {t('mobile.similarClimbs.retry')}
@@ -111,7 +83,7 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
     );
   }
 
-  if (!climbs || climbs.length === 0) {
+  if (ranked.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Icon name="search" size={20} color={iosSystemColors.systemGray} />
@@ -124,7 +96,7 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroller}>
-      {climbs.map((similar) => {
+      {ranked.map(({ climb: similar, compatible }) => {
         const gradeColor = getGradeColor(similar.difficultyName) ?? DEFAULT_GRADE_COLOR;
         const formattedGrade = formatGrade(similar.difficultyName) ?? similar.difficultyName ?? '';
         const byline = formatByline(similar);
@@ -132,9 +104,9 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
           <Pressable
             key={similar.uuid}
             onPress={() => handlePress(similar)}
-            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+            style={({ pressed }) => [styles.card, !compatible && styles.cardDimmed, pressed && styles.cardPressed]}
             accessibilityRole="button"
-            accessibilityLabel={similar.name ?? undefined}
+            accessibilityLabel={similar.name || t('mobile.queue.unknownClimb')}
           >
             <ClimbListThumbnail
               frames={similar.frames ?? ''}
@@ -176,6 +148,9 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     opacity: 0.6,
+  },
+  cardDimmed: {
+    opacity: 0.45,
   },
   skeletonCard: {
     height: spacing[16],

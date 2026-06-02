@@ -1,17 +1,8 @@
 import { StyleSheet, View } from 'react-native';
 import { Text } from '../Text';
+import type { AngleGradeBar } from './community-utils';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
-
-export type AngleGradeBar = {
-  angle: number;
-  /** Numeric difficulty (Aurora display difficulty) used for relative bar width. */
-  difficulty: number;
-  /** Formatted grade label shown at the end of the bar (e.g. "V6"). */
-  gradeName: string;
-  /** Grade colour for the bar fill. */
-  color: string;
-};
 
 type DifficultyByAngleChartProps = {
   data: AngleGradeBar[];
