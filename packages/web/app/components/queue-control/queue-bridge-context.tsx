@@ -57,6 +57,24 @@ const LiveActivityBridge = dynamic(() => import('@/app/lib/live-activity/live-ac
   ssr: false,
 });
 
+// Bridge web's queue types to the shared `findNextQueueItemWithSuggestions`
+// across the documented type seam (see ./types): web's ClimbQueueItem / Climb /
+// PlaylistSuggestionSource are structurally compatible with — but not identical
+// to — their @boardsesh/queue counterparts (web's Climb is wider). Centralizing
+// the `as unknown as` casts here keeps the call site clean and mirrors the same
+// boundary casting in ./playlist-suggestions.
+function findNextQueueItemAcrossSeam(
+  queue: ClimbQueueItem[],
+  anchor: ClimbQueueItem | null,
+  source: PlaylistSuggestionSource | null,
+): ClimbQueueItem | null {
+  return findNextQueueItemWithSuggestions(
+    queue as unknown as SharedClimbQueue,
+    anchor as unknown as SharedClimbQueueItem | null,
+    source as unknown as SharedPlaylistSuggestionSource | null,
+  ) as unknown as ClimbQueueItem | null;
+}
+
 /**
  * Derive BoardDetails + baseBoardPath from a climb's own boardType/layoutId.
  *
@@ -264,21 +282,13 @@ function usePersistentSessionQueueAdapter(): {
   //  - `from`: pass `options.from ?? current` as the helper's
   //    currentClimbQueueItem. This reproduces the old anchor selection
   //    (anchor = the `from` item when supplied, else the current wall climb).
-  //
-  // TYPE SEAM: the web `ClimbQueueItem` / `PlaylistSuggestionSource` are
-  // structurally compatible with their `@boardsesh/queue` counterparts (web's
-  // Climb is wider — see ./types and ./playlist-suggestions). Cast at the
-  // boundary with the same `as unknown as` style playlist-suggestions.ts uses.
+  // The web↔shared type-seam casts live in `findNextQueueItemAcrossSeam`.
   const getNextClimbQueueItem = useCallback(
     (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }): ClimbQueueItem | null => {
       if (options?.suggestionsOnly) return null;
       const { queue, currentClimbQueueItem: current, playlistSuggestionSource } = latestRef.current;
       const anchor = options?.from ?? current;
-      return findNextQueueItemWithSuggestions(
-        queue as unknown as SharedClimbQueue,
-        anchor as unknown as SharedClimbQueueItem | null,
-        playlistSuggestionSource as unknown as SharedPlaylistSuggestionSource | null,
-      ) as unknown as ClimbQueueItem | null;
+      return findNextQueueItemAcrossSeam(queue, anchor, playlistSuggestionSource);
     },
     [],
   );
