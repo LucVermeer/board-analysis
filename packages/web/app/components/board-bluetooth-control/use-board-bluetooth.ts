@@ -185,6 +185,12 @@ export function useBoardBluetooth({
   // connection can fire several disconnects in a row. Reset once we reconnect
   // (or the user explicitly disconnects) so the next genuine drop prompts again.
   const boardTakenPromptShownRef = useRef(false);
+  // Latest config-matched reconnect serial, mirrored from the derived value
+  // below so handleDisconnection's "take it back" action can silently reconnect
+  // to the same board without taking the derived value (or boardDetails) as a
+  // dep, which would re-create the callback and re-register the disconnect
+  // listener on every change.
+  const reconnectSerialRef = useRef<string | null>(null);
 
   // Device picker state for custom Capacitor scanning.
   // pickerRejectRef holds the pending promise's reject so unmount cleanup
@@ -254,11 +260,14 @@ export function useBoardBluetooth({
 
     // These boards are last-connection-wins and always advertise, so an
     // unexpected drop usually means another phone grabbed the board. Tell the
-    // user instead of going silent, and offer a take-back that reopens the board
-    // picker so they deliberately choose what to reconnect to — important in
-    // gyms with several boards in range. We deliberately don't auto-reconnect —
-    // that would ping-pong with the other app and flicker the wall. Dedup so a
-    // flapping link doesn't stack prompts.
+    // user instead of going silent, and offer a take-back. We deliberately don't
+    // *auto*-reconnect — that would ping-pong with the other app and flicker the
+    // wall — but the take-back is user-initiated, so it reconnects to the board
+    // they were on (matching the lightbulb tap). On native that's silent; the
+    // adapter falls back to the picker if that board isn't found, so gyms with
+    // several boards in range still get a deliberate choice. On web the serial
+    // is ignored and the picker shows. Dedup so a flapping link doesn't stack
+    // prompts.
     if (boardTakenPromptShownRef.current) return;
     boardTakenPromptShownRef.current = true;
     showMessage(
@@ -267,8 +276,7 @@ export function useBoardBluetooth({
       {
         label: t('bluetooth.takeItBack'),
         onClick: () => {
-          // No targetSerial → the adapter shows the device picker.
-          void connectRef.current?.();
+          void connectRef.current?.(undefined, undefined, reconnectSerialRef.current ?? undefined);
         },
       },
       10000,
@@ -735,6 +743,12 @@ export function useBoardBluetooth({
     lastConnectedBoard && boardDetails && lastConnectedBoard.configKey === boardIdentityKey(boardDetails)
       ? lastConnectedBoard.serial
       : null;
+
+  // Mirror into a ref so handleDisconnection's "take it back" action reads the
+  // current value without taking it as a dep.
+  useEffect(() => {
+    reconnectSerialRef.current = reconnectSerialForCurrentBoard;
+  }, [reconnectSerialForCurrentBoard]);
 
   return {
     isConnected,

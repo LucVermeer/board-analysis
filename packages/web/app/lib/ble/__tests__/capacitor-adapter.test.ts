@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vite-plus/test';
 import type { DevicePickerFn } from '../types';
+import { SERIAL_RECONNECT_GRACE_MS } from '../scan-constants';
 import {
   AURORA_OPTIONAL_SERVICE_UUIDS,
   AURORA_SCAN_SERVICE_UUIDS,
@@ -320,9 +321,6 @@ describe('CapacitorBleAdapter', () => {
   // auto-select silently, then falls back to the picker if the stored board
   // doesn't advertise within a short grace window.
   describe('reconnect-by-serial picker fallback (manual scan)', () => {
-    // Mirrors SERIAL_RECONNECT_GRACE_MS in the adapter (not exported).
-    const GRACE_MS = 4_000;
-
     type ManualScanPlugin = typeof mockBlePlugin & {
       requestLEScan?: ReturnType<typeof vi.fn>;
       stopLEScan?: ReturnType<typeof vi.fn>;
@@ -397,7 +395,7 @@ describe('CapacitorBleAdapter', () => {
       expect(devicePicker).not.toHaveBeenCalled();
 
       // Grace elapses → picker opens, seeded with discovered devices.
-      await vi.advanceTimersByTimeAsync(GRACE_MS);
+      await vi.advanceTimersByTimeAsync(SERIAL_RECONNECT_GRACE_MS);
       expect(devicePicker).toHaveBeenCalledTimes(1);
 
       // User picks a board → connect proceeds against their choice.

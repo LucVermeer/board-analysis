@@ -477,17 +477,21 @@ describe('useBoardBluetooth', () => {
   });
 
   describe('unexpected disconnect take-back', () => {
-    it('prompts "take it back" and reopens the board picker (no auto-select)', async () => {
+    it('prompts "take it back" and reconnects to the remembered board', async () => {
       let capturedHandler: (() => void) | null = null;
       mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
         capturedHandler = handler;
         return vi.fn();
       });
-      // Even when the board carried a serial, take-back must NOT auto-select it —
-      // the user should pick deliberately (gyms can have several boards in range).
+      // Real BoardDetails carry a number[] set_ids; the shared mock lies with a
+      // string, so use array set_ids so the serial gets remembered on connect.
+      const arraySetIdsDetails = {
+        ...mockBoardDetails,
+        set_ids: [1, 2],
+      } as unknown as Parameters<typeof useBoardBluetooth>[0]['boardDetails'];
       mockParseSerialNumber.mockReturnValue('AB1234');
 
-      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: mockBoardDetails }));
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: arraySetIdsDetails }));
       await act(async () => {
         await result.current.connect();
       });
@@ -506,13 +510,15 @@ describe('useBoardBluetooth', () => {
       expect(promptCall![1]).toBe('warning');
       expect(promptCall![2].label).toBe('bluetooth.takeItBack');
 
-      // Tapping "take it back" reconnects via the picker — no targetSerial.
+      // Tapping "take it back" reconnects to the board we were on — silently on
+      // native (the adapter falls back to the picker if it's gone), matching the
+      // lightbulb tap.
       await act(async () => {
         promptCall![2].onClick();
         await Promise.resolve();
       });
 
-      expect(mockAdapter.requestAndConnect).toHaveBeenCalledWith(undefined);
+      expect(mockAdapter.requestAndConnect).toHaveBeenCalledWith('AB1234');
     });
 
     it('does not stack prompts when the connection flaps (several drops in a row)', async () => {
@@ -622,6 +628,29 @@ describe('useBoardBluetooth', () => {
       // The board was grabbed by another device — the write throws the GATT
       // "disconnected" error and no gattserverdisconnected event fires.
       mockAdapter.write.mockRejectedValueOnce(new DOMException('GATT Server is disconnected.', 'NetworkError'));
+
+      let sendResult: boolean | undefined;
+      await act(async () => {
+        sendResult = await result.current.sendFramesToBoard('p4131r42');
+      });
+
+      expect(sendResult).toBe(false);
+      expect(result.current.isConnected).toBe(false);
+      errorSpy.mockRestore();
+    });
+
+    it("flips isConnected false on the Capacitor adapter's plain Error('Not connected')", async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: arraySetIdsDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(true);
+
+      // The Capacitor / native-iOS adapters reject a write after the link drops
+      // with a plain Error('Not connected') rather than a DOMException.
+      mockAdapter.write.mockRejectedValueOnce(new Error('Not connected'));
 
       let sendResult: boolean | undefined;
       await act(async () => {

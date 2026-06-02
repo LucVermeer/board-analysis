@@ -111,6 +111,12 @@ describe('isDisconnectionError', () => {
   const notDisconnects: Array<{ name: string; error: unknown }> = [
     // Unmount-mid-write must never tear down the connection.
     { name: 'AbortError', error: new DOMException('The operation was aborted', 'AbortError') },
+    // InvalidStateError without a GATT mention is a different DOM failure
+    // (e.g. a closed IDBTransaction) — must not be treated as a disconnect.
+    {
+      name: 'InvalidStateError without GATT',
+      error: new DOMException('The transaction has finished', 'InvalidStateError'),
+    },
     // Picker-dismissed.
     { name: 'NotFoundError', error: new DOMException('No device chosen', 'NotFoundError') },
     // Validation-shaped messages from the write path.

@@ -22,6 +22,7 @@ import {
   UART_SERVICE_UUID,
   UART_WRITE_CHARACTERISTIC_UUID,
 } from '@/app/components/board-bluetooth-control/bluetooth-shared';
+import { SERIAL_RECONNECT_GRACE_MS } from './scan-constants';
 
 const DEFAULT_MTU = MAX_BLUETOOTH_MESSAGE_SIZE;
 
@@ -32,12 +33,6 @@ const INTER_CHUNK_DELAY_MS = 5;
 // Auto-stop BLE scan after this duration to prevent indefinite battery drain
 // if the user walks away from the picker dialog.
 const SCAN_TIMEOUT_MS = 30_000;
-
-// How long a reconnect-by-serial waits for the stored board to advertise before
-// falling back to the picker. Short enough that a missing board surfaces the
-// picker quickly; long enough that a present board (which advertises within a
-// second or two) reconnects silently without the picker ever flashing.
-const SERIAL_RECONNECT_GRACE_MS = 4_000;
 
 // Raw Capacitor plugin interface as exposed via window.Capacitor.Plugins.BluetoothLe.
 // The plugin JS is injected by the native shell. We type only the methods we use.

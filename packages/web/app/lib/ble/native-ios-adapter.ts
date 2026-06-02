@@ -3,13 +3,9 @@ import {
   AURORA_SCAN_SERVICE_UUIDS,
   parseSerialNumber,
 } from '@/app/components/board-bluetooth-control/bluetooth-aurora';
+import { SERIAL_RECONNECT_GRACE_MS } from './scan-constants';
 
 const SCAN_TIMEOUT_MS = 30_000;
-
-// How long a reconnect-by-serial waits for the stored board to advertise before
-// falling back to the picker. Short enough that a missing board surfaces the
-// picker quickly; long enough that a present board reconnects silently.
-const SERIAL_RECONNECT_GRACE_MS = 4_000;
 
 type NativeBoardBlePlugin = NonNullable<NonNullable<Window['Capacitor']>['Plugins']['BoardBle']>;
 type NativeBoardBleListenerHandle = Awaited<ReturnType<NativeBoardBlePlugin['addListener']>>;
