@@ -9,7 +9,7 @@
 // useInfiniteQuery like the web hook.
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { getHttpClient } from './client';
 import { SEARCH_BOARDS, type SearchBoardsQueryResponse } from './operations';
@@ -75,6 +75,9 @@ export function useSearchBoardsMap({
     select: (response) => response.searchBoards,
     enabled: enabled && (hasCoords || hasQuery),
     staleTime: 30 * 1000,
+    // Keep the previous result visible while the next region's query is in
+    // flight, so map markers don't blink to empty between pans.
+    placeholderData: keepPreviousData,
   });
 
   return {

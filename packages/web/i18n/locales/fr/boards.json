@@ -70,6 +70,23 @@
     "search": {
       "placeholder": "Cherche par nom ou lieu",
       "mapUnavailable": "Mets à jour l'app pour voir la carte. Tu peux chercher par nom."
+    },
+    "boardDetail": {
+      "setActive": "Utiliser ce board",
+      "alreadyActive": "Board actif",
+      "loadError": "Impossible de charger ce board.",
+      "stats": {
+        "ascents": "ascensions",
+        "climbers": "grimpeurs",
+        "followers": "abonnés"
+      },
+      "spec": {
+        "layout": "Layout",
+        "size": "Taille",
+        "sets": "Sets",
+        "angle": "Angle",
+        "adjustable": "ajustable"
+      }
     }
   },
   "boardEntity": {
