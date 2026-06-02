@@ -9,9 +9,16 @@ import Typography from '@mui/material/Typography';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import { themeTokens } from '@/app/theme/theme-config';
 import { onTransformSettled } from '@/app/lib/hooks/pull-to-close';
+import { useIsomorphicLayoutEffect } from '@/app/lib/hooks/use-isomorphic-layout-effect';
 import styles from './swipeable-drawer.module.css';
 
 type Placement = 'left' | 'right' | 'top' | 'bottom';
+
+/** True when the element is translated past half its own size along `axis`. */
+function isTranslatedOffScreen(el: HTMLElement, horizontal: boolean): boolean {
+  const max = horizontal ? el.offsetWidth : el.offsetHeight;
+  return Math.abs(readCurrentTranslate(el, horizontal)) > max * 0.5;
+}
 
 // When a swipe/pull gesture has already slid the paper off-screen, the MUI Slide
 // EXIT must be instant (0ms) so it doesn't re-animate the paper from the open
@@ -421,12 +428,37 @@ const SwipeableDrawer: React.FC<SwipeableDrawerProps> = ({
   // For a fling, MUI uses an internally-computed `calculatedDurationRef` that
   // overrides `transitionDuration`, but `SlideProps.timeout` is merged onto the
   // transition slot last, so it wins and the exit stays instant on every path.
+  //
+  // NOTE: this reads DOM geometry (`getComputedStyle` / `offsetWidth` via
+  // `readCurrentTranslate`) during render. It must be read HERE, not in the
+  // effect below: at render time the paper still carries the GESTURE's inline
+  // transform, but by the time effects run MUI's Slide exit has set an off-screen
+  // transform on the paper for EVERY close (including button/Esc), so an
+  // effect-time read could no longer tell a gesture close from a normal one. The
+  // read is a synchronous read of a ref we own; a torn value under React
+  // concurrent features would only fall back to the animated exit (no
+  // correctness impact), and this drawer is not rendered concurrently today.
   const exitPaper = lastPaperRef.current;
   const exitIsHorizontal = placement === 'left' || placement === 'right';
-  const gesturePrePositioned =
-    !!exitPaper &&
-    Math.abs(readCurrentTranslate(exitPaper, exitIsHorizontal)) >
-      (exitIsHorizontal ? exitPaper.offsetWidth : exitPaper.offsetHeight) * 0.5;
+  const gesturePrePositioned = !!exitPaper && isTranslatedOffScreen(exitPaper, exitIsHorizontal);
+
+  // Hide the paper the instant `open` flips false on a gesture close. The gesture
+  // has already slid it fully off-screen, so making it invisible is itself
+  // invisible — but it means MUI's Slide exit (which clears + re-measures the
+  // transform and, on iOS WebKit, can paint a single frame at the OPEN position)
+  // can no longer flash the paper back on screen. That stray frame is the "snaps
+  // back up" the exit-duration tweaks alone don't catch on Safari. The opacity is
+  // restored when `open` returns true (and the play-view open effect separately
+  // clears the leftover transform).
+  useIsomorphicLayoutEffect(() => {
+    const paper = lastPaperRef.current;
+    if (!paper) return;
+    if (!(open ?? false) && gesturePrePositioned) {
+      paper.style.opacity = '0';
+    } else if (open ?? false) {
+      paper.style.opacity = '';
+    }
+  }, [open, gesturePrePositioned]);
 
   const slideProps = useMemo(
     () => ({

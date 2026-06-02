@@ -1,8 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useMemo, useLayoutEffect, useEffect } from 'react';
-
-const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { useIsomorphicLayoutEffect } from '@/app/lib/hooks/use-isomorphic-layout-effect';
 
 type ProfileHeaderShareState = {
   isActive: boolean;

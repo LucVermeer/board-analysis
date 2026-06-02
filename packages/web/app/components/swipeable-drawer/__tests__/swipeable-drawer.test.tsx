@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 
 import SwipeableDrawer from '../swipeable-drawer';
@@ -262,6 +262,169 @@ describe('SwipeableDrawer', () => {
       screen.getByTestId('inner').dispatchEvent(event);
 
       expect(onClose).not.toHaveBeenCalled();
+    });
+  });
+
+  // handleSwipeableClose is MUI's onClose (fired on backdrop click / Esc / swipe
+  // release). jsdom can't dispatch a real swipe-gesture sequence, so we trigger
+  // it via a backdrop click and prime the paper's inline transform to exercise
+  // the synchronous branches the e2e can't isolate.
+  describe('swipe-close handoff (handleSwipeableClose)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    // The paper element handleSwipeableClose mutates is the one captured in
+    // lastPaperRef — the wrapper Box's parent — which is `.MuiDrawer-paper`.
+    function getPaper(): HTMLElement {
+      return document.querySelector('.MuiDrawer-paper') as HTMLElement;
+    }
+    function triggerClose(container: HTMLElement) {
+      // MUI Modal invokes onClose on a backdrop click.
+      fireEvent.click(container.querySelector('.MuiBackdrop-root') as HTMLElement);
+    }
+    function dispatchTransformEnd(paper: HTMLElement) {
+      const event = new Event('transitionend') as TransitionEvent;
+      Object.defineProperty(event, 'propertyName', { value: 'transform' });
+      paper.dispatchEvent(event);
+    }
+
+    it('closes synchronously when the paper carries no gesture transform', () => {
+      // No in-progress swipe → no inline transform → close immediately (the
+      // backdrop / Esc / programmatic path), bypassing the gesture animation.
+      const onClose = vi.fn();
+      const { container } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      getPaper().style.transform = '';
+      triggerClose(container);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('defers onClose until the close transition ends when a swipe pre-positioned the paper', () => {
+      vi.useFakeTimers();
+      const onClose = vi.fn();
+      const { container } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      const paper = getPaper();
+      Object.defineProperty(paper, 'offsetHeight', { value: 1000, configurable: true });
+      paper.style.transform = 'translateY(600px)'; // gesture pulled it past the half-way gate
+
+      triggerClose(container);
+      // The wrapper animates the paper the rest of the way off-screen first.
+      expect(onClose).not.toHaveBeenCalled();
+      expect(paper.style.transform).toBe('translateY(1000px)');
+
+      act(() => dispatchTransformEnd(paper));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to a timer when transitionend never fires', () => {
+      vi.useFakeTimers();
+      const onClose = vi.fn();
+      const { container } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      const paper = getPaper();
+      Object.defineProperty(paper, 'offsetHeight', { value: 1000, configurable: true });
+      paper.style.transform = 'translateY(600px)';
+
+      triggerClose(container);
+      expect(onClose).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(400); // > duration + fallback margin
+      });
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels the deferred onClose when the drawer unmounts mid-close', () => {
+      vi.useFakeTimers();
+      const onClose = vi.fn();
+      const { container, unmount } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      const paper = getPaper();
+      Object.defineProperty(paper, 'offsetHeight', { value: 1000, configurable: true });
+      paper.style.transform = 'translateY(600px)';
+
+      triggerClose(container);
+      expect(onClose).not.toHaveBeenCalled();
+
+      unmount();
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      dispatchTransformEnd(paper);
+      expect(onClose).not.toHaveBeenCalled();
+    });
+  });
+
+  // The opacity guard is the iOS-Safari snap fix: once a gesture has slid the
+  // paper off-screen, the paper is hidden the instant `open` flips false so MUI's
+  // Slide exit can't flash it back at the open position. `gesturePrePositioned`
+  // is read at render time (before Slide's exit mutates the transform), so it
+  // distinguishes a gesture close from a button/Esc close.
+  describe('gesture-close opacity guard', () => {
+    function getPaper(): HTMLElement {
+      return document.querySelector('.MuiDrawer-paper') as HTMLElement;
+    }
+
+    it('hides the off-screen paper when a gesture close flips open to false, and restores on reopen', () => {
+      const onClose = vi.fn();
+      const { rerender } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      const paper = getPaper();
+      Object.defineProperty(paper, 'offsetHeight', { value: 1000, configurable: true });
+      // The gesture left the paper translated fully off-screen.
+      paper.style.transform = 'translateY(900px)';
+      expect(paper.style.opacity).not.toBe('0'); // visible while open
+
+      rerender(
+        <SwipeableDrawer {...baseProps} placement="bottom" open={false} onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      expect(paper.style.opacity).toBe('0');
+
+      // Reopening makes it visible again.
+      rerender(
+        <SwipeableDrawer {...baseProps} placement="bottom" open onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      expect(paper.style.opacity).toBe('');
+    });
+
+    it('does not hide the paper on a plain close with no gesture transform (button / Esc)', () => {
+      const onClose = vi.fn();
+      const { rerender } = render(
+        <SwipeableDrawer {...baseProps} placement="bottom" onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      const paper = getPaper();
+      Object.defineProperty(paper, 'offsetHeight', { value: 1000, configurable: true });
+      paper.style.transform = ''; // no in-progress gesture
+
+      rerender(
+        <SwipeableDrawer {...baseProps} placement="bottom" open={false} onClose={onClose} keepMounted>
+          <div>body</div>
+        </SwipeableDrawer>,
+      );
+      expect(paper.style.opacity).not.toBe('0');
     });
   });
 });
