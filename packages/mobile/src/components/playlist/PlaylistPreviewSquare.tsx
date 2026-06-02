@@ -64,7 +64,10 @@ export function PlaylistPreviewSquare({ color, icon, index = 0, size = 64, style
       {/* Soft top-left highlight, mirroring web's diagonal white gradient. */}
       <View style={styles.highlight} pointerEvents="none" />
       {icon ? (
-        <Text style={[styles.emoji, { fontSize: emojiSize }]} allowFontScaling={false}>
+        <Text
+          style={[styles.emoji, { fontSize: emojiSize, lineHeight: Math.round(emojiSize * 1.3) }]}
+          allowFontScaling={false}
+        >
           {icon}
         </Text>
       ) : (
