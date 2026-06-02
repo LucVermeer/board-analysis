@@ -14,6 +14,20 @@ type BluetoothContextValue = {
   disconnect: () => Promise<void>;
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
   clearBoard: () => Promise<boolean | undefined>;
+  /**
+   * Force the auto-sender to re-push the current climb to the wall once, even
+   * when the rendered pixels are byte-identical to the last send (which it
+   * normally dedups). The lightbulb tap calls this so re-taking control of an
+   * unchanged climb re-lights the wall — and, if the link is secretly dead, the
+   * failing write trips disconnect detection. No-op until called.
+   */
+  reassertWall: () => void;
+  /**
+   * Serial to silently reconnect to for the board currently in view, or null
+   * when nothing is remembered or the user switched boards — in which case
+   * callers open the device picker instead.
+   */
+  reconnectSerialForCurrentBoard: string | null;
 };
 
 const BluetoothContext = createContext<BluetoothContextValue | null>(null);
@@ -30,19 +44,36 @@ const BluetoothContext = createContext<BluetoothContextValue | null>(null);
  * - `pendingClimbRef` stores the most recent pending climb
  * - When a new climb arrives during a write, it replaces the pending climb
  * - When the current write completes, the drain loop picks up whatever's pending
- * - Deduplicates same-uuid broadcasts via `lastSentUuidRef`
+ * - Deduplicates byte-identical broadcasts via `lastSentSignatureRef` (keyed on
+ *   uuid + frames + mirror, so a mirror toggle or hold edit on the same climb
+ *   re-pushes), and a `reassertNonce` bump punches through the dedup once.
  */
 function BluetoothAutoSender({
   sendFramesToBoard,
+  reassertNonce,
 }: {
   sendFramesToBoard: (frames: string, mirrored?: boolean, signal?: AbortSignal) => Promise<boolean | undefined>;
+  reassertNonce: number;
 }) {
   const { state } = useQueue();
   const { currentClimbQueueItem } = state;
 
   const isWritingRef = useRef(false);
   const pendingClimbRef = useRef<ClimbQueueItem | null>(null);
-  const lastSentUuidRef = useRef<string | null>(null);
+  // The signature of the last climb actually pushed to the wall: uuid + rendered
+  // frames + mirror state. Re-broadcasts with the same signature skip the
+  // physical write (the board is idempotent, but we'd double-fire haptics);
+  // changing any of the three re-pushes.
+  const lastSentSignatureRef = useRef<string | null>(null);
+  // Last `reassertNonce` acted on. When the incoming nonce differs, a one-shot
+  // re-push is requested so the current climb re-fires even if unchanged.
+  const lastReassertNonceRef = useRef(reassertNonce);
+  // Set when a reassert is requested, consumed inside the drain loop. A ref
+  // (not just clearing the signature in the effect) so a reassert landing
+  // *during* an in-flight write survives: the completing write re-sets the
+  // signature, and clearing it again at the top of the next loop iteration is
+  // what actually forces the re-push.
+  const reassertPendingRef = useRef(false);
 
   // Single AbortController scoped to the AutoSender's lifetime. Aborted
   // exactly once on unmount so the in-flight drain loop cancels the
@@ -62,6 +93,15 @@ function BluetoothAutoSender({
     const signal = abortControllerRef.current?.signal;
     if (signal?.aborted) return;
 
+    // A reassert request (lightbulb re-take) forces a fresh write of the current
+    // climb even when the pixels are byte-identical. Flag it; the drain loop
+    // clears the dedup signature when it picks the climb up, which also covers
+    // a reassert that lands while a write is already in flight.
+    if (reassertNonce !== lastReassertNonceRef.current) {
+      lastReassertNonceRef.current = reassertNonce;
+      reassertPendingRef.current = true;
+    }
+
     if (isWritingRef.current) {
       pendingClimbRef.current = currentClimbQueueItem;
       return;
@@ -76,9 +116,20 @@ function BluetoothAutoSender({
           if (signal?.aborted) return;
           const item = toSend;
 
-          // Deduplicate same-uuid re-broadcasts. The board is idempotent so
-          // a re-send is functionally fine, but we'd double-fire haptics.
-          if (item.climb.uuid === lastSentUuidRef.current) {
+          // Honour a pending reassert exactly when the climb is picked up —
+          // clearing the signature here (rather than in the effect) survives an
+          // in-flight write that re-set it on completion.
+          if (reassertPendingRef.current) {
+            reassertPendingRef.current = false;
+            lastSentSignatureRef.current = null;
+          }
+
+          // Deduplicate byte-identical re-broadcasts (same climb, frames and
+          // mirror). The board is idempotent so a re-send is functionally fine,
+          // but we'd double-fire haptics. A mirror toggle or hold edit changes
+          // the signature and re-pushes.
+          const sendSignature = `${item.climb.uuid}::${item.climb.frames}::${item.climb.mirrored ? 1 : 0}`;
+          if (sendSignature === lastSentSignatureRef.current) {
             toSend = pendingClimbRef.current;
             pendingClimbRef.current = null;
             continue;
@@ -92,7 +143,7 @@ function BluetoothAutoSender({
             if (signal?.aborted) return;
 
             if (result === true) {
-              lastSentUuidRef.current = item.climb.uuid;
+              lastSentSignatureRef.current = sendSignature;
               hapticSuccess();
             }
           } catch (error) {
@@ -109,7 +160,7 @@ function BluetoothAutoSender({
     };
 
     void drain();
-  }, [currentClimbQueueItem, sendFramesToBoard]);
+  }, [currentClimbQueueItem, sendFramesToBoard, reassertNonce]);
 
   return null;
 }
@@ -122,13 +173,19 @@ type BluetoothProviderProps = {
 };
 
 export function BluetoothProvider({ boardName, layoutId, sizeId, children }: BluetoothProviderProps) {
-  const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({
-    boardName,
-    layoutId,
-    sizeId,
-  });
+  const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState, reconnectSerialForCurrentBoard } =
+    useBoardBluetooth({
+      boardName,
+      layoutId,
+      sizeId,
+    });
 
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);
+
+  // Bumped by `reassertWall()` to force the auto-sender to re-push the current
+  // climb once, bypassing the byte-identical dedup.
+  const [reassertNonce, setReassertNonce] = useState(0);
+  const reassertWall = useCallback(() => setReassertNonce((nonce) => nonce + 1), []);
 
   // Register with the module-level status store so consumers rendered
   // outside this provider (e.g. the root tab bar) can observe BT connection
@@ -193,13 +250,25 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
       disconnect: wrappedDisconnect,
       sendFramesToBoard,
       clearBoard,
+      reassertWall,
+      reconnectSerialForCurrentBoard,
     }),
-    [isConnected, loading, disconnectedUnexpectedly, wrappedConnect, wrappedDisconnect, sendFramesToBoard, clearBoard],
+    [
+      isConnected,
+      loading,
+      disconnectedUnexpectedly,
+      wrappedConnect,
+      wrappedDisconnect,
+      sendFramesToBoard,
+      clearBoard,
+      reassertWall,
+      reconnectSerialForCurrentBoard,
+    ],
   );
 
   return (
     <BluetoothContext.Provider value={value}>
-      {isConnected && <BluetoothAutoSender sendFramesToBoard={sendFramesToBoard} />}
+      {isConnected && <BluetoothAutoSender sendFramesToBoard={sendFramesToBoard} reassertNonce={reassertNonce} />}
       {children}
       {pickerState && (
         <DevicePickerSheet

@@ -5,8 +5,7 @@ import {
   type NativeBleScanEvent,
 } from '../../../modules/live-activity/src/index';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
-
-const SCAN_TIMEOUT_MS = 30_000;
+import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from './scan-constants';
 
 function uint8ArrayToHex(bytes: Uint8Array): string {
   let hex = '';
@@ -47,36 +46,32 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     let updateListener: ((devices: DiscoveredDevice[]) => void) | null = null;
     const pushDevices = () => updateListener?.([...devices.values()]);
 
-    let autoSelectResolve: ((deviceId: string) => void) | null = null;
-    let autoSelectReject: ((error: Error) => void) | null = null;
-    // Lets the scan-timeout reject the picker promise when no devices have
-    // turned up yet. Without this, the picker UI hangs forever after the 30s
-    // scan window stops scanning. Same fix needed for RNBleAdapter.
-    let pickerTimeoutReject: ((error: Error) => void) | null = null;
+    // One selection promise, resolved by either the silent serial auto-select
+    // or — if that serial never shows up — the picker the grace window opens.
+    let resolveSelection!: (deviceId: string) => void;
+    let rejectSelection!: (error: Error) => void;
+    const selectionPromise = new Promise<string>((resolve, reject) => {
+      resolveSelection = resolve;
+      rejectSelection = reject;
+    });
 
-    let selectionPromise: Promise<string>;
-    if (targetSerial) {
-      selectionPromise = new Promise<string>((resolve, reject) => {
-        autoSelectResolve = resolve;
-        autoSelectReject = reject;
-      });
-    } else {
-      selectionPromise = new Promise<string>((resolve, reject) => {
-        pickerTimeoutReject = reject;
-        this.devicePicker((onUpdate) => {
-          updateListener = onUpdate;
-          pushDevices();
-        }).then(
-          (deviceId) => {
-            pickerTimeoutReject = null;
-            resolve(deviceId);
-          },
-          (error) => {
-            pickerTimeoutReject = null;
-            reject(error);
-          },
-        );
-      });
+    // True only while we're still silently matching the target serial — flips
+    // false the moment we auto-select or hand off to the picker.
+    let autoSelecting = Boolean(targetSerial);
+    let pickerOpened = false;
+    const openPicker = () => {
+      if (pickerOpened) return;
+      pickerOpened = true;
+      autoSelecting = false;
+      this.devicePicker((onUpdate) => {
+        updateListener = onUpdate;
+        pushDevices();
+      }).then(resolveSelection, rejectSelection);
+    };
+
+    // No target serial → straight to the picker.
+    if (!targetSerial) {
+      openPicker();
     }
 
     const scanSubscription = native.addListener('scanResult', (payload: NativeBleScanEvent) => {
@@ -88,30 +83,36 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       devices.set(device.deviceId, device);
       pushDevices();
 
-      if (autoSelectResolve && targetSerial) {
+      // Auto-select the stored board only until the picker takes over.
+      if (autoSelecting && targetSerial) {
         const serial = parseSerialNumber(device.name);
         if (serial === targetSerial) {
-          autoSelectResolve(device.deviceId);
-          autoSelectResolve = null;
+          autoSelecting = false;
+          resolveSelection(device.deviceId);
         }
       }
     });
 
     await native.startScan([AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID]);
 
+    // Grace window: if the stored serial hasn't matched shortly, open the picker
+    // (scan keeps running so it live-updates) instead of waiting out the full
+    // scan window and failing. Matches the web reconnect-by-serial fallback.
+    const pickerFallbackId = targetSerial
+      ? setTimeout(() => {
+          if (autoSelecting) openPicker();
+        }, SERIAL_RECONNECT_GRACE_MS)
+      : undefined;
+
     const scanTimeoutId = setTimeout(() => {
       void native.stopScan();
-      if (autoSelectReject) {
-        autoSelectReject(new Error('Target board not found during scan'));
-        autoSelectReject = null;
-        return;
-      }
-      // Picker flow with no auto-select target. If the user hasn't seen any
-      // devices yet, surface the timeout — otherwise leave the picker open
-      // so they can still tap a discovered board.
-      if (pickerTimeoutReject && devices.size === 0) {
-        pickerTimeoutReject(new Error('No boards found within scan window'));
-        pickerTimeoutReject = null;
+      // Belt-and-suspenders: make sure the picker is open even if the grace
+      // window never fired.
+      if (autoSelecting) openPicker();
+      // The picker is showing but nothing ever advertised — surface the empty
+      // result so the sheet doesn't spin forever.
+      if (pickerOpened && devices.size === 0) {
+        rejectSelection(new Error('No boards found within scan window'));
       }
     }, SCAN_TIMEOUT_MS);
 
@@ -119,6 +120,7 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     try {
       selectedDeviceId = await selectionPromise;
     } finally {
+      if (pickerFallbackId) clearTimeout(pickerFallbackId);
       clearTimeout(scanTimeoutId);
       scanSubscription.remove();
       await native.stopScan();

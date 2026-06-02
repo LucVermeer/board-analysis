@@ -20,6 +20,11 @@
       "import": "./src/moonboard.ts",
       "default": "./src/moonboard.ts"
     },
+    "./connection-error": {
+      "types": "./src/connection-error.ts",
+      "import": "./src/connection-error.ts",
+      "default": "./src/connection-error.ts"
+    },
     "./transport": {
       "types": "./src/transport.ts",
       "import": "./src/transport.ts",

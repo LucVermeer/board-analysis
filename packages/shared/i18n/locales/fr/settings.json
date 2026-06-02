@@ -370,6 +370,8 @@
     "disconnected": "Panneau déconnecté",
     "reconnect": "Reconnecter",
     "connectBoard": "Connecter le panneau",
+    "relightBoard": "Rallumer le panneau",
+    "holdForControls": "Maintenir pour les commandes",
     "notAvailable": "Le Bluetooth n'est pas disponible",
     "errorLedMissing": "Impossible d'envoyer au panneau — données LED manquantes pour cette configuration.",
     "errorIncompatible": "Ce bloc est pour une configuration de panneau différente.",

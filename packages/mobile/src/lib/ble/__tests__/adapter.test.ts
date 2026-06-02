@@ -42,6 +42,7 @@ vi.mock('@boardsesh/ble-protocol', () => ({
 // ── Import after mocks ─────────────────────────────────────────────────
 
 import { RNBleAdapter } from '../adapter';
+import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '../scan-constants';
 import { splitMessages } from '@boardsesh/ble-protocol';
 import { State } from 'react-native-ble-plx';
 
@@ -411,6 +412,40 @@ describe('RNBleAdapter', () => {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toMatch(/scan failed/i);
       expect(mockBleManager.stopDeviceScan).toHaveBeenCalled();
+    });
+
+    it('falls back to the picker when a reconnect-by-serial board never advertises', async () => {
+      vi.useFakeTimers();
+      try {
+        mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+        mockBleManager.startDeviceScan.mockImplementation(() => {});
+
+        let pickerOpened = false;
+        // Picker stays open once shown.
+        const devicePicker: DevicePickerFn = () => {
+          pickerOpened = true;
+          return new Promise<string>(() => {});
+        };
+        const adapter = new RNBleAdapter(devicePicker);
+        const settled = adapter.requestAndConnect('NEEDLE-SERIAL').catch((reason) => reason);
+        await Promise.resolve();
+
+        // Silent auto-select before the grace window — no picker yet.
+        await vi.advanceTimersByTimeAsync(SERIAL_RECONNECT_GRACE_MS - 1);
+        expect(pickerOpened).toBe(false);
+
+        // Grace window elapses with no match → picker opens instead of failing.
+        await vi.advanceTimersByTimeAsync(1);
+        expect(pickerOpened).toBe(true);
+
+        // Nothing ever advertises → scan timeout rejects so the sheet doesn't spin.
+        await vi.advanceTimersByTimeAsync(SCAN_TIMEOUT_MS);
+        const error = await settled;
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(/no boards found/i);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

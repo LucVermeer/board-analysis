@@ -32,6 +32,7 @@ type PlayDrawerActionBarProps = {
   onMirror: () => void;
   onToggleFavorite: () => void;
   onLightbulb: () => void;
+  onLightbulbLongPress?: () => void;
   onOpenActions: () => void;
   onOpenQueue: () => void;
   onShare: () => void;
@@ -56,6 +57,7 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   onMirror,
   onToggleFavorite,
   onLightbulb,
+  onLightbulbLongPress,
   onOpenActions,
   onOpenQueue,
   onShare,
@@ -66,7 +68,6 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
   const { t } = useTranslation('session');
   const { t: tClimbs } = useTranslation('climbs');
   const { t: tSettings } = useTranslation('settings');
-  const { t: tCommon } = useTranslation('common');
 
   const handlePrev = useCallback(() => {
     hapticMedium();
@@ -160,8 +161,10 @@ export const PlayDrawerActionBar = memo(function PlayDrawerActionBar({
             isConnected={lightbulbActive}
             isScanning={lightbulbPending}
             onPress={onLightbulb}
-            accessibilityLabel={lightbulbActive ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')}
+            onLongPress={lightbulbActive ? onLightbulbLongPress : undefined}
+            accessibilityLabel={lightbulbActive ? tSettings('ble.relightBoard') : tSettings('ble.connectBoard')}
             scanningAccessibilityHint={tSettings('ble.scanning')}
+            longPressAccessibilityHint={lightbulbActive ? tSettings('ble.holdForControls') : undefined}
             haptic="medium"
             size={SIZES.lg.icon}
             containerSize={SIZES.lg.dim}

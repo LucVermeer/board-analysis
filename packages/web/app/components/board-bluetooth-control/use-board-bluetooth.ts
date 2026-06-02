@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
-import { classifyBleFailure, isDisconnectionError } from '@/app/lib/ble/connection-error';
+import { classifyBleFailure, isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import { normaliseSetIds } from '@/app/lib/ble/board-config-match';
 import { track } from '@/app/lib/analytics';
 import * as Sentry from '@sentry/nextjs';

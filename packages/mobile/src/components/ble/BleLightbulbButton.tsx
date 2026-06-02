@@ -17,8 +17,16 @@ type BleLightbulbButtonProps = {
   isConnected: boolean;
   isScanning: boolean;
   onPress: () => void;
+  /**
+   * Secondary action on long-press. Wired to disconnect, since a tap now
+   * re-lights the wall (when connected) or reconnects (when disconnected)
+   * rather than toggling the connection.
+   */
+  onLongPress?: () => void;
   accessibilityLabel: string;
   scanningAccessibilityHint?: string;
+  /** Hint describing the long-press action (e.g. "Hold to disconnect"). */
+  longPressAccessibilityHint?: string;
   haptic?: 'light' | 'medium' | 'none';
   size?: number;
   /**
@@ -35,8 +43,10 @@ export function BleLightbulbButton({
   isConnected,
   isScanning,
   onPress,
+  onLongPress,
   accessibilityLabel,
   scanningAccessibilityHint,
+  longPressAccessibilityHint,
   haptic = 'light',
   size = 24,
   containerSize = 44,
@@ -66,6 +76,15 @@ export function BleLightbulbButton({
     onPress();
   };
 
+  const handleLongPress = onLongPress
+    ? () => {
+        // A medium tap confirms the (heavier) disconnect action regardless of
+        // the configured tap haptic.
+        hapticMedium();
+        onLongPress();
+      }
+    : undefined;
+
   const visualState = getBleLightbulbVisualState({
     isConnected,
     connectedColor: brandColors.warning,
@@ -75,9 +94,12 @@ export function BleLightbulbButton({
   return (
     <AnimatedPressable
       onPress={handlePress}
+      onLongPress={handleLongPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={getBleLightbulbAccessibilityHint(isScanning, scanningAccessibilityHint)}
+      accessibilityHint={
+        getBleLightbulbAccessibilityHint(isScanning, scanningAccessibilityHint) ?? longPressAccessibilityHint
+      }
       accessibilityState={{ selected: isConnected }}
       hitSlop={8}
       style={({ pressed }) => [
