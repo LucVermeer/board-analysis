@@ -21,6 +21,12 @@ type BleLightbulbButtonProps = {
   scanningAccessibilityHint?: string;
   haptic?: 'light' | 'medium' | 'none';
   size?: number;
+  /**
+   * Width/height of the pressable container in pixels. Defaults to 44 (iOS HIG
+   * minimum tap target). Used to render a larger 56-pt variant inside the play
+   * drawer's primary action row.
+   */
+  containerSize?: number;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -33,6 +39,7 @@ export function BleLightbulbButton({
   scanningAccessibilityHint,
   haptic = 'light',
   size = 24,
+  containerSize = 44,
 }: BleLightbulbButtonProps) {
   const { systemColors, brandColors } = useTheme();
   const pulseOpacity = useSharedValue(1);
@@ -75,6 +82,7 @@ export function BleLightbulbButton({
       hitSlop={8}
       style={({ pressed }) => [
         styles.container,
+        { width: containerSize, height: containerSize, borderRadius: containerSize / 2 },
         animatedStyle,
         isConnected && {
           backgroundColor: visualState.backgroundColor,
@@ -91,11 +99,8 @@ export function BleLightbulbButton({
 
 const styles = StyleSheet.create({
   container: {
-    width: 44,
-    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
   },
   connected: {
     shadowOffset: { width: 0, height: 0 },

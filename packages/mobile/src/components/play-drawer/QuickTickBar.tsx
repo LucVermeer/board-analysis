@@ -156,7 +156,15 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 
   return (
     <Animated.View
-      style={[styles.container, { borderTopColor: systemColors.separator }, animatedStyle]}
+      style={[
+        styles.container,
+        // Solid safety-net background so the bar is always legible even on
+        // dev clients where the glass/blur native module isn't linked, or on
+        // platforms where GlassSurface degrades. Glass effect, when present,
+        // composites over this opaque base.
+        { backgroundColor: systemColors.secondaryBackground, borderTopColor: systemColors.separator },
+        animatedStyle,
+      ]}
       pointerEvents={visible ? 'auto' : 'none'}
     >
       <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />
