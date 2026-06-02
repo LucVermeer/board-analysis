@@ -114,6 +114,7 @@ export default function PlaylistDetail() {
   const [isPinned, setIsPinned] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -163,6 +164,7 @@ export default function PlaylistDetail() {
     const next = !isFollowing;
     setIsFollowing(next);
     setFollowerCount((count) => count + (next ? 1 : -1));
+    setFollowLoading(true);
     try {
       if (next) await followPlaylist(playlist.uuid);
       else await unfollowPlaylist(playlist.uuid);
@@ -170,12 +172,14 @@ export default function PlaylistDetail() {
         prev ? { ...prev, isFollowedByMe: next, followerCount: prev.followerCount + (next ? 1 : -1) } : prev,
       );
     } catch (err) {
-      // Quiet revert (matches web's follow toggle).
       console.error('Failed to toggle follow:', err);
       setIsFollowing(!next);
       setFollowerCount((count) => count + (next ? -1 : 1));
+      showToast(t('detail.followFailed'), 'error');
+    } finally {
+      setFollowLoading(false);
     }
-  }, [playlist, isFollowing, followPlaylist, unfollowPlaylist, queryClient, playlistUuid]);
+  }, [playlist, isFollowing, followPlaylist, unfollowPlaylist, queryClient, playlistUuid, showToast, t]);
 
   const handleEditSubmit = useCallback(
     async (values: PlaylistFormValues) => {
@@ -259,7 +263,7 @@ export default function PlaylistDetail() {
         playlist ? (
           <View style={styles.headerActions}>
             {isAuthenticated && isFollowable ? (
-              <PlaylistFollowButton isFollowing={isFollowing} onToggle={handleToggleFollow} />
+              <PlaylistFollowButton isFollowing={isFollowing} onToggle={handleToggleFollow} loading={followLoading} />
             ) : null}
             {isAuthenticated ? <PlaylistPinButton isPinned={isPinned} onToggle={handleTogglePin} /> : null}
             {isOwner ? (
@@ -281,6 +285,7 @@ export default function PlaylistDetail() {
     isAuthenticated,
     isFollowable,
     isFollowing,
+    followLoading,
     isPinned,
     isOwner,
     handleToggleFollow,

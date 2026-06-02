@@ -96,6 +96,7 @@
     "climbCount_other": "{{count}} blocs",
     "followerCount_one": "{{count}} abonné",
     "followerCount_other": "{{count}} abonnés",
+    "followFailed": "Impossible de mettre à jour le suivi",
     "errors": {
       "notFoundTitle": "Playlist introuvable",
       "notFoundDescription": "Cette playlist a été supprimée ou vous n'avez pas accès.",

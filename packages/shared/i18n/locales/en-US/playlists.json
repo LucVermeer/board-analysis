@@ -96,6 +96,7 @@
     "climbCount_other": "{{count}} climbs",
     "followerCount_one": "{{count}} follower",
     "followerCount_other": "{{count}} followers",
+    "followFailed": "Failed to update follow status",
     "errors": {
       "notFoundTitle": "Playlist Not Found",
       "notFoundDescription": "This playlist may have been deleted or you may not have permission to view it.",

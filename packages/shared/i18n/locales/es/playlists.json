@@ -96,6 +96,7 @@
     "climbCount_other": "{{count}} bloques",
     "followerCount_one": "{{count}} seguidor",
     "followerCount_other": "{{count}} seguidores",
+    "followFailed": "No se pudo actualizar el seguimiento",
     "errors": {
       "notFoundTitle": "Playlist no encontrada",
       "notFoundDescription": "Esta playlist puede haber sido eliminada o no tienes permiso para verla.",
