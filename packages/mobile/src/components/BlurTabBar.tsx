@@ -32,8 +32,7 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
 
   const activeTint = iosSystemColors.systemBlue;
   const inactiveTint = isDark ? iosDarkColors.systemGray : iosLightColors.inactiveGray;
-  // Capsule radius for the floating Liquid Glass pill.
-  const pillRadius = TAB_BAR_HEIGHT / 2;
+  const totalHeight = TAB_BAR_HEIGHT + insets.bottom;
 
   const renderContent = () => (
     <View style={[styles.tabRow, { height: TAB_BAR_HEIGHT }]}>
@@ -93,14 +92,12 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
     </View>
   );
 
-  // Floating Liquid Glass capsule (iOS 26 style). It floats above the
-  // home-indicator inset; GlassSurface resolves the material per device
-  // (Liquid Glass on iOS 26+, frosted blur on older iOS, solid on Android),
-  // clipped to the capsule. Footprint above the inset stays TAB_BAR_HEIGHT so
-  // the queue bar + scroll padding don't need to change.
+  // Bottom-anchored, full-width Liquid Glass bar. GlassSurface resolves the
+  // material per device (Liquid Glass on iOS 26+, frosted blur on older iOS,
+  // solid on Android); the glass spans through the home-indicator inset.
   return (
-    <View style={[styles.container, { bottom: insets.bottom, height: TAB_BAR_HEIGHT, borderRadius: pillRadius }]}>
-      <GlassSurface glassEffectStyle="regular" style={[StyleSheet.absoluteFill, { borderRadius: pillRadius }]} />
+    <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }]}>
+      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} />
       {renderContent()}
     </View>
   );
@@ -109,12 +106,9 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 8,
-    right: 8,
-    overflow: 'hidden',
-    // Android shadow for lift (iOS gets depth from the glass material itself;
-    // an iOS shadow would be clipped by overflow:'hidden' anyway).
-    elevation: 8,
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   tabRow: {
     flexDirection: 'row',
