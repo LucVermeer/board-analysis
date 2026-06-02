@@ -193,15 +193,19 @@ function RootLayout() {
                         <QueueProvider>
                           <BoardAdapterWrapper>
                             <BoardProviderWrapper>
-                              <BluetoothProviderWrapper>
-                                {/* BottomSheetModalProvider lives *inside* the
-                                    board providers: gorhom's BottomSheetModal
-                                    portals its content (PlayDrawer → QuickTickBar)
-                                    to this host, so the host must sit within
-                                    BoardAdapterProvider/BoardProvider or the
-                                    portaled hooks (useSaveTick → useBoardAdapter)
-                                    escape that context. */}
-                                <BottomSheetModalProvider>
+                              {/* BottomSheetModalProvider sits inside the board
+                                  providers (gorhom's BottomSheetModal portals
+                                  PlayDrawer → QuickTickBar here, so the host
+                                  must be able to see BoardAdapter/BoardProvider
+                                  through context) but *outside*
+                                  BluetoothProviderWrapper, because
+                                  BluetoothProvider renders DevicePickerSheet
+                                  as a BottomSheetModal — the modal host has to
+                                  exist before the picker mounts or gorhom
+                                  throws "BottomSheetModalInternalContext
+                                  cannot be null". */}
+                              <BottomSheetModalProvider>
+                                <BluetoothProviderWrapper>
                                   <DrawerHostProvider>
                                     <ThemedNavigation>
                                       <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
@@ -214,8 +218,8 @@ function RootLayout() {
                                     </ThemedNavigation>
                                     <PersistentQueueBar />
                                   </DrawerHostProvider>
-                                </BottomSheetModalProvider>
-                              </BluetoothProviderWrapper>
+                                </BluetoothProviderWrapper>
+                              </BottomSheetModalProvider>
                             </BoardProviderWrapper>
                           </BoardAdapterWrapper>
                         </QueueProvider>
