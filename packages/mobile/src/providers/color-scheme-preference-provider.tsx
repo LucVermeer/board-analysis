@@ -55,9 +55,11 @@ export function ColorSchemePreferenceProvider({ children }: { children: ReactNod
         setPreferenceState(resolved);
         setReduceTransparency(reduceTransparencyEnabled);
       })
-      .catch(() => {
-        // Never strand the app on the splash if a read fails — proceed with
-        // defaults (follow OS, transparency on).
+      .catch((error: unknown) => {
+        // Never strand the app on the splash if a read fails — log so a
+        // per-device AsyncStorage / AccessibilityInfo regression is diagnosable,
+        // then proceed with defaults (follow OS, transparency off).
+        console.warn('[appearance] failed to load preference; using defaults', error);
       })
       .finally(() => {
         if (mounted) setLoaded(true);

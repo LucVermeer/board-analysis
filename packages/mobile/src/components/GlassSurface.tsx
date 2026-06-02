@@ -2,7 +2,6 @@ import { type ReactNode } from 'react';
 import {
   Platform,
   StyleSheet,
-  useColorScheme,
   View,
   type ColorValue,
   type StyleProp,
@@ -57,9 +56,9 @@ export function GlassSurface({
   blurAmount = 20,
   pointerEvents,
 }: GlassSurfaceProps) {
-  const { systemColors } = useTheme();
+  const { systemColors, colorScheme } = useTheme();
   const { reduceTransparency } = useColorSchemePreference();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = colorScheme === 'dark';
 
   const solidColor = fallbackColor ?? systemColors.secondaryBackground;
 

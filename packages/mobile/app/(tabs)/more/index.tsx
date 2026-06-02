@@ -31,11 +31,11 @@ export default function MoreScreen() {
         <View
           style={[
             styles.card,
-            styles.controlCard,
             {
               backgroundColor: systemColors.secondaryBackground,
               borderRadius: borderRadius.lg,
               marginHorizontal: spacing[4],
+              padding: spacing[3],
             },
           ]}
         >
@@ -105,8 +105,5 @@ const styles = StyleSheet.create({
   },
   card: {
     overflow: 'hidden',
-  },
-  controlCard: {
-    padding: 12,
   },
 });

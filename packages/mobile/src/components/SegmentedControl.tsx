@@ -83,7 +83,7 @@ function Segment({
       }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      accessibilityRole="tab"
+      accessibilityRole="radio"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
       style={[animatedStyle, segmentStyle]}
@@ -115,7 +115,7 @@ export function SegmentedControl({
   };
 
   return (
-    <View style={containerStyle} accessibilityRole="tablist" accessibilityLabel={accessibilityLabel}>
+    <View style={containerStyle} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel}>
       {options.map((option) => (
         <Segment
           key={option.key}

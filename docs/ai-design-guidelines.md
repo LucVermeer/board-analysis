@@ -591,6 +591,8 @@ The queue drawer dynamically expands from partial to full height based on scroll
 
 Mobile-only navigation bar with glassmorphism effect.
 
+> **Web responsive bar only.** The CSS below is the web app's narrow-viewport tab bar. The React Native (Expo) app implements its tab bar with native Liquid Glass via `GlassSurface` — see [React Native App: Liquid Glass & Appearance](#react-native-app-liquid-glass--appearance).
+
 **Styling:**
 
 ```css
@@ -846,6 +848,38 @@ padding: 0 24px;
 ```
 
 - Shows result count inline: "Search . 123"
+
+---
+
+## React Native App: Liquid Glass & Appearance
+
+The Expo app (`packages/mobile/`) is a separate implementation from the web CSS above. It does **not** use CSS `backdrop-filter`; it uses Apple's iOS 26 Liquid Glass material with graceful fallbacks. Tokens live in `packages/mobile/src/theme/`, not `theme-config.ts`.
+
+### GlassSurface
+
+`packages/mobile/src/components/GlassSurface.tsx` is the single primitive for every translucent surface. It resolves the best material per device:
+
+| Condition                                   | Material                                              |
+| ------------------------------------------- | ----------------------------------------------------- |
+| iOS 26+ (Liquid Glass available)            | `expo-glass-effect` `GlassView`                       |
+| iOS < 26                                    | `@react-native-community/blur` `BlurView` (frosted)   |
+| Android                                     | Solid themed surface (`systemColors.secondaryBackground`) |
+| Reduce Transparency on (any platform)       | Solid themed surface                                  |
+
+Props: `glassEffectStyle` (`'regular'` for frosted chrome, `'clear'` for content-forward), `tintColor` (translucent hue composited onto the glass), `fallbackColor` (solid path).
+
+### Where glass is allowed
+
+Glass is for **floating chrome only** — never for content canvases or full-screen surfaces (Apple's HIG, and washed-out content otherwise):
+
+- **Glass:** bottom tab bar (`BlurTabBar`), persistent queue mini-player (`regular` glass + a low-alpha grade-hue wash), and the `QuickTickBar`.
+- **Opaque (themed `secondaryBackground`):** the full-height `PlayDrawer` and all bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.). Sheets get a solid surface, not glass.
+
+### Dark mode & appearance
+
+- iOS resolves system colors via `PlatformColor` (auto-adapting); Android uses the `androidFallbackColors.{light,dark}` maps in `theme/colors.ts`. Components read everything through `useTheme().systemColors`.
+- A **Light / Dark / System** toggle lives in More → Appearance. `ColorSchemePreferenceProvider` persists the choice and calls `Appearance.setColorScheme(...)`, which overrides the app's native trait collection so `PlatformColor`, the status bar, and the glass all follow in lockstep. `app.config.ts` stays `userInterfaceStyle: 'automatic'` so the override can take effect at runtime.
+- `elevatedSurface` (`tertiarySystemBackground` on iOS) is the token for a raised tile over a secondary/fill surface — e.g. the selected segmented-control pill.
 
 ---
 
