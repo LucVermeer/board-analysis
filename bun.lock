@@ -167,6 +167,7 @@
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/playlist-generator": "*",
+        "@boardsesh/playlists-react": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/queue-react": "*",
         "@boardsesh/queue-runtime": "*",
@@ -387,6 +388,26 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/playlists-react": {
+      "name": "@boardsesh/playlists-react",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/graphql": "*",
+        "@boardsesh/queue": "*",
+      },
+      "devDependencies": {
+        "@tanstack/react-query": "^5",
+        "@testing-library/react": "^16.3.2",
+        "@types/react": "^19",
+        "happy-dom": "^15",
+        "react": "^19",
+        "typescript": "~6.0.3",
+      },
+      "peerDependencies": {
+        "@tanstack/react-query": "^5",
+        "react": "^19",
+      },
+    },
     "packages/shared/queue": {
       "name": "@boardsesh/queue",
       "version": "1.0.0",
@@ -453,6 +474,7 @@
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/playlist-generator": "*",
+        "@boardsesh/playlists-react": "*",
         "@boardsesh/queue": "*",
         "@boardsesh/queue-react": "*",
         "@boardsesh/queue-runtime": "*",
@@ -868,6 +890,8 @@
     "@boardsesh/play-view": ["@boardsesh/play-view@workspace:packages/shared/play-view"],
 
     "@boardsesh/playlist-generator": ["@boardsesh/playlist-generator@workspace:packages/shared/playlist-generator"],
+
+    "@boardsesh/playlists-react": ["@boardsesh/playlists-react@workspace:packages/shared/playlists-react"],
 
     "@boardsesh/queue": ["@boardsesh/queue@workspace:packages/shared/queue"],
 
@@ -4294,6 +4318,8 @@
     "@boardsesh/play-view/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/playlist-generator/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "@boardsesh/playlists-react/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/queue/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 

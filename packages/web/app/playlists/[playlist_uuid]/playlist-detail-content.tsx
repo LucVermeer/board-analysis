@@ -22,7 +22,6 @@ import {
   PushPin,
   PushPinOutlined,
 } from '@mui/icons-material';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import { executeGraphQL, createGraphQLHttpClient } from '@/app/lib/graphql/client';
@@ -48,7 +47,6 @@ import {
   type UnpinPlaylistMutationResponse,
   type UnpinPlaylistMutationVariables,
   type GetPlaylistClimbsQueryVariables,
-  type GetPlaylistClimbsInput,
   type PlaylistClimbsResult,
   type AddClimbToPlaylistMutationResponse,
   type AddClimbToPlaylistMutationVariables,
@@ -80,6 +78,7 @@ import { useQueueBridgeBoardInfo } from '@/app/components/queue-control/queue-br
 import { fetchPlaylistSuggestionClimbs } from '@/app/components/queue-control/playlist-suggestion-refresh';
 import { useClearPlaylistSuggestionSourceOnUnmount } from '@/app/components/queue-control/use-clear-playlist-suggestion-source-on-unmount';
 import { usePlaylistClimbActivation } from '@/app/components/queue-control/use-playlist-climb-activation';
+import { usePlaylistClimbs, type PlaylistClimbsBoardInput } from '@boardsesh/playlists-react';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
 import { findMatchingBoard, type BoardConfig } from '@/app/lib/find-matching-board';
 import { ssrSeedMatchesQueryKey } from '@/app/lib/graphql/ssr-query-seed';
@@ -262,65 +261,51 @@ export default function PlaylistDetailContent({
     refreshKey: listRefreshKey,
   });
 
+  // Specific-board mode when a board is selected; all-boards otherwise.
+  const playlistClimbsBoardInput = useMemo<PlaylistClimbsBoardInput | undefined>(() => {
+    if (!selectedBoard) return undefined;
+    return {
+      boardName: selectedBoard.boardType,
+      layoutId: selectedBoard.layoutId,
+      sizeId: selectedBoard.sizeId,
+      setIds: selectedBoard.setIds,
+      angle: selectedBoard.angle ?? getDefaultAngleForBoard(selectedBoard.boardType),
+    };
+  }, [selectedBoard]);
+
+  // Web injects its token-aware transport explicitly so token semantics match
+  // the previous inline query. Public playlists are readable without a token,
+  // so the shared hook only gates on token resolution (tokenLoading), not auth.
+  const executePlaylistClimbsGraphQL = useMemo<Parameters<typeof usePlaylistClimbs>[0]['executeGraphQL']>(
+    () => (query, variables) => createGraphQLHttpClient(token).request(query, variables),
+    [token],
+  );
+
+  const { query: playlistClimbsQuery, allClimbs: sharedAllClimbs } = usePlaylistClimbs({
+    playlistUuid,
+    boardUuid: selectedBoard?.uuid ?? null,
+    refreshKey: listRefreshKey,
+    boardInput: playlistClimbsBoardInput,
+    pageSize: 20,
+    tokenLoading,
+    initialData: initialClimbs,
+    initialDataApplicable: ssrClimbsApplicable,
+    initialDataUpdatedAt: ssrInitialClimbsUpdatedAtRef.current,
+    executeGraphQL: executePlaylistClimbsGraphQL,
+  });
+
   const {
-    data: climbsData,
     fetchNextPage,
     hasNextPage,
     isFetching: isFetchingClimbs,
     isFetchingNextPage,
     isLoading: isClimbsLoading,
-  } = useInfiniteQuery({
-    queryKey: ['playlistClimbs', playlistUuid, selectedBoard?.uuid ?? 'all', listRefreshKey],
-    queryFn: async ({ pageParam }) => {
-      const client = createGraphQLHttpClient(token);
+  } = playlistClimbsQuery;
 
-      const input: GetPlaylistClimbsInput = {
-        playlistId: playlistUuid,
-        page: pageParam,
-        pageSize: 20,
-        // Specific-board mode when a board is selected
-        ...(selectedBoard && {
-          boardName: selectedBoard.boardType,
-          layoutId: selectedBoard.layoutId,
-          sizeId: selectedBoard.sizeId,
-          setIds: selectedBoard.setIds,
-          angle: selectedBoard.angle ?? getDefaultAngleForBoard(selectedBoard.boardType),
-        }),
-      };
-
-      const response = await client.request<GetPlaylistClimbsQueryResponse>(GET_PLAYLIST_CLIMBS, {
-        input,
-      } satisfies GetPlaylistClimbsQueryVariables);
-      return response.playlistClimbs;
-    },
-    // Public playlists are readable without a token (the backend resolver
-    // gates with verifyPlaylistAccess(userId ?? null)), so don't gate the
-    // query on auth — otherwise signed-out viewers see the SSR first page
-    // and "load more" silently does nothing.
-    enabled: !tokenLoading,
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => {
-      if (!lastPage.hasMore) return undefined;
-      return allPages.length;
-    },
-    staleTime: 5 * 60 * 1000,
-    initialData:
-      ssrClimbsApplicable && initialClimbs
-        ? {
-            pages: [initialClimbs],
-            pageParams: [0],
-          }
-        : undefined,
-    // Without this, react-query treats initialData as epoch-stale and fires
-    // an immediate refetch, defeating the SSR optimisation. Only meaningful
-    // when initialData itself is being supplied.
-    initialDataUpdatedAt: ssrClimbsApplicable ? ssrInitialClimbsUpdatedAtRef.current : 0,
-  });
-
-  const allClimbs: Climb[] = useMemo(
-    () => climbsData?.pages.flatMap((page) => page.climbs as Climb[]) ?? [],
-    [climbsData],
-  );
+  // TYPE SEAM: the shared hook returns the structurally-wider queue `Climb`;
+  // this screen uses web `Climb`. Runtime objects are the same flattened GraphQL
+  // climbs, so cast once here.
+  const allClimbs = sharedAllClimbs as unknown as Climb[];
 
   // Collect unique board types for the filter
   const boardTypes = useMemo(() => {

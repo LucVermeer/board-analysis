@@ -1,8 +1,14 @@
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import type { PlaylistSuggestionSource } from './types';
 import { canAddClimbToBoard } from '@/app/lib/board-compatibility';
-import { mergeUniquePlaylistClimbs } from '@boardsesh/queue';
+import {
+  createPlaylistSuggestionSource as createSharedPlaylistSuggestionSource,
+  getQueueBoardKey as getSharedQueueBoardKey,
+  type Climb as QueueClimb,
+} from '@boardsesh/queue';
 
+// Pure playlist helpers are owned by `@boardsesh/queue`; re-export them so the
+// ~web call-sites importing from this module stay untouched.
 export {
   mergeUniquePlaylistClimbs,
   playlistSuggestionSourceMatches,
@@ -13,11 +19,24 @@ export {
   isPlaylistPeekQueueItemUuid,
 } from '@boardsesh/queue';
 
+/**
+ * Web-facing `getQueueBoardKey`: takes the web `BoardDetails` directly.
+ * `BoardDetails` structurally satisfies the shared `QueueBoardKeyTarget`
+ * (board_name / layout_id / size_id / set_ids), so we forward as-is.
+ */
 export function getQueueBoardKey(boardDetails: BoardDetails): string {
-  const setIds = Array.isArray(boardDetails.set_ids) ? boardDetails.set_ids.join(',') : String(boardDetails.set_ids);
-  return `${boardDetails.board_name}:${boardDetails.layout_id}:${boardDetails.size_id}:${setIds}`;
+  return getSharedQueueBoardKey(boardDetails);
 }
 
+/**
+ * Web-facing `createPlaylistSuggestionSource`: keeps the `{ boardDetails }`
+ * signature its ~30 call-sites expect, deriving the shared builder's
+ * `boardKey` + climbability predicate from web board-compatibility.
+ *
+ * TYPE SEAM: web's `Climb` (with `boardType`) is structurally wider than the
+ * shared queue `Climb`; the runtime objects are identical, so we cast at the
+ * boundary rather than re-shaping the data.
+ */
 export function createPlaylistSuggestionSource({
   playlistUuid,
   activatedClimb,
@@ -29,13 +48,12 @@ export function createPlaylistSuggestionSource({
   climbs: Climb[];
   boardDetails: BoardDetails;
 }): PlaylistSuggestionSource {
-  const climbableClimbs = mergeUniquePlaylistClimbs(activatedClimb, climbs).filter(
-    (climb) => climb.uuid === activatedClimb.uuid || canAddClimbToBoard(climb, boardDetails).ok,
-  );
-  return {
+  const source = createSharedPlaylistSuggestionSource({
     playlistUuid,
-    activatedClimbUuid: activatedClimb.uuid,
-    boardKey: getQueueBoardKey(boardDetails),
-    climbs: climbableClimbs,
-  };
+    activatedClimb: activatedClimb as unknown as QueueClimb,
+    climbs: climbs as unknown as QueueClimb[],
+    boardKey: getSharedQueueBoardKey(boardDetails),
+    isClimbable: (climb) => canAddClimbToBoard(climb as unknown as Climb, boardDetails).ok,
+  });
+  return source as unknown as PlaylistSuggestionSource;
 }

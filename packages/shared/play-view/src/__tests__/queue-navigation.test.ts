@@ -1,23 +1,46 @@
 import { describe, it, expect } from 'vitest';
-import type { ClimbQueueItem } from '@boardsesh/queue';
-import { findNextQueueItem, findPreviousQueueItem, computeNavigationState } from '../queue-navigation';
+import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
+import { getPlaylistPeekQueueItemUuid } from '@boardsesh/queue';
+import {
+  findNextQueueItem,
+  findPreviousQueueItem,
+  computeNavigationState,
+  findNextQueueItemWithSuggestions,
+  computeNavigationStateWithSuggestions,
+} from '../queue-navigation';
 
-function makeItem(uuid: string): ClimbQueueItem {
+function makeClimb(uuid: string): Climb {
   return {
     uuid,
-    climb: {
-      uuid: `climb-${uuid}`,
-      name: `Climb ${uuid}`,
-      frames: '',
-      setter_username: 'test',
-      angle: 40,
-      ascensionist_count: 0,
-      difficulty: '6a/V3',
-      quality_average: '3.0',
-      stars: 3,
-      difficulty_error: '0',
-      benchmark_difficulty: null,
-    },
+    name: `Climb ${uuid}`,
+    frames: '',
+    setter_username: 'test',
+    angle: 40,
+    ascensionist_count: 0,
+    difficulty: '6a/V3',
+    quality_average: '3.0',
+    stars: 3,
+    difficulty_error: '0',
+    benchmark_difficulty: null,
+  };
+}
+
+function makeItem(uuid: string): ClimbQueueItem {
+  return { uuid, climb: makeClimb(`climb-${uuid}`) };
+}
+
+// Build a queue item that wraps a specific climb (so queued-climb dedup against
+// a suggestion source works on climb.uuid).
+function itemFor(climb: Climb): ClimbQueueItem {
+  return { uuid: `item-${climb.uuid}`, climb };
+}
+
+function makeSource(activatedClimb: Climb, climbs: Climb[]): PlaylistSuggestionSource {
+  return {
+    playlistUuid: 'pl-1',
+    activatedClimbUuid: activatedClimb.uuid,
+    boardKey: 'kilter:1:1:1',
+    climbs,
   };
 }
 
@@ -111,5 +134,100 @@ describe('computeNavigationState', () => {
     // findPreviousQueueItem with an item not in queue: prevIndex is -2
     expect(state.canPrevious).toBe(false);
     expect(state.prevItem).toBeNull();
+  });
+});
+
+describe('findNextQueueItemWithSuggestions', () => {
+  it('behaves like findNextQueueItem when source is null', () => {
+    const items = [makeItem('a'), makeItem('b')];
+    expect(findNextQueueItemWithSuggestions(items, items[0], null)).toBe(items[1]);
+    expect(findNextQueueItemWithSuggestions(items, items[1], null)).toBeNull();
+    expect(findNextQueueItemWithSuggestions([], null, null)).toBeNull();
+    expect(findNextQueueItemWithSuggestions(items, null, null)).toBe(items[0]);
+  });
+
+  it('returns the real next queue item (not a peek) when the queue is not exhausted', () => {
+    const x = makeClimb('x');
+    const y = makeClimb('y');
+    const items = [itemFor(x), makeItem('mid')];
+    const source = makeSource(x, [x, y]);
+    // current is at index 0 with a real next item → return that, ignore suggestions.
+    expect(findNextQueueItemWithSuggestions(items, items[0], source)).toBe(items[1]);
+  });
+
+  it('falls through to a suggestion peek when the queue is exhausted', () => {
+    const x = makeClimb('x');
+    const y = makeClimb('y');
+    const z = makeClimb('z');
+    const queue = [itemFor(x)];
+    const source = makeSource(x, [x, y, z]);
+    const peek = findNextQueueItemWithSuggestions(queue, queue[0], source);
+    expect(peek).not.toBeNull();
+    expect(peek?.climb.uuid).toBe('y');
+    expect(peek?.uuid).toBe(getPlaylistPeekQueueItemUuid('y'));
+    expect(peek?.suggested).toBe(true);
+    expect(peek?.addedBy).toBeNull();
+  });
+
+  it('returns null when the queue is exhausted and no suggestion remains', () => {
+    const x = makeClimb('x');
+    const queue = [itemFor(x)];
+    const source = makeSource(x, [x]); // nothing after the activated climb
+    expect(findNextQueueItemWithSuggestions(queue, queue[0], source)).toBeNull();
+  });
+
+  it('peeks the first suggestion for an empty queue with no current item', () => {
+    const x = makeClimb('x');
+    const y = makeClimb('y');
+    const source = makeSource(x, [x, y]);
+    const peek = findNextQueueItemWithSuggestions([], null, source);
+    expect(peek?.climb.uuid).toBe('y');
+    expect(peek?.suggested).toBe(true);
+  });
+
+  it('falls through to suggestions for an orphan current (not in queue)', () => {
+    const x = makeClimb('x');
+    const y = makeClimb('y');
+    const queue = [makeItem('a'), makeItem('b')];
+    const orphan = itemFor(x); // current climb not present in the queue
+    const source = makeSource(x, [x, y]);
+    const peek = findNextQueueItemWithSuggestions(queue, orphan, source);
+    // Diverges from findNextQueueItem (which would return queue[0]).
+    expect(peek?.climb.uuid).toBe('y');
+    expect(peek?.suggested).toBe(true);
+  });
+
+  it('skips suggestions already present in the queue', () => {
+    const x = makeClimb('x');
+    const y = makeClimb('y');
+    const z = makeClimb('z');
+    const queue = [itemFor(x), itemFor(y)]; // y already queued
+    const source = makeSource(x, [x, y, z]);
+    const peek = findNextQueueItemWithSuggestions(queue, queue[1], source);
+    expect(peek?.climb.uuid).toBe('z');
+  });
+});
+
+describe('computeNavigationStateWithSuggestions', () => {
+  it('matches computeNavigationState when source is null', () => {
+    const items = [makeItem('a'), makeItem('b'), makeItem('c')];
+    expect(computeNavigationStateWithSuggestions(items, items[1], null)).toEqual(
+      computeNavigationState(items, items[1]),
+    );
+  });
+
+  it('lights up canNext from a suggestion at the end of the queue', () => {
+    const x = makeClimb('x');
+    const y = makeClimb('y');
+    const queue = [itemFor(x)];
+    const source = makeSource(x, [x, y]);
+    const state = computeNavigationStateWithSuggestions(queue, queue[0], source);
+    expect(state.canNext).toBe(true);
+    expect(state.nextItem?.climb.uuid).toBe('y');
+    expect(state.nextItem?.suggested).toBe(true);
+    // previous + remainingCount stay queue-based.
+    expect(state.canPrevious).toBe(false);
+    expect(state.prevItem).toBeNull();
+    expect(state.remainingCount).toBe(0);
   });
 });

@@ -66,7 +66,7 @@ export default function MoreScreen() {
               leading={<Icon name="server" size={22} color={systemColors.secondaryLabel} />}
               showChevron
               showSeparator={false}
-              onPress={() => router.push('/(tabs)/more/dev-servers')}
+              onPress={() => router.push('/(tabs)/profile/dev-servers')}
             />
           </View>
         </View>
@@ -84,7 +84,7 @@ export default function MoreScreen() {
             leading={<Icon name="branch" size={22} color={systemColors.label} />}
             showChevron
             showSeparator={false}
-            onPress={() => router.push('/(tabs)/more/branch-switcher')}
+            onPress={() => router.push('/(tabs)/profile/branch-switcher')}
           />
         </>
       ) : null}

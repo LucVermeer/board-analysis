@@ -1,12 +1,6 @@
 import { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
@@ -22,14 +16,20 @@ import { useQueue } from '../providers/queue-provider';
 // FlashLists below it can compute their layouts off the same constant.
 export const TAB_BAR_HEIGHT = 49;
 
-type TabIconName = 'view-dashboard' | 'magnify' | 'record-circle-outline' | 'account' | 'dots-horizontal';
+type TabIconName =
+  | 'view-dashboard'
+  | 'magnify'
+  | 'record-circle-outline'
+  | 'account'
+  | 'bookmark-multiple-outline'
+  | 'dots-horizontal';
 
 const TAB_ICONS: Record<string, TabIconName> = {
   boards: 'view-dashboard',
   climbs: 'magnify',
   record: 'record-circle-outline',
+  discover: 'bookmark-multiple-outline',
   profile: 'account',
-  more: 'dots-horizontal',
 };
 
 const BLINK_MIN_OPACITY = 0.35;

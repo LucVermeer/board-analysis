@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook as rtlRenderHook, waitFor, act } from '@testing-library/react';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
 import type { RecentPlaylist } from '@/app/lib/recent-playlists-db';
+import { PlaylistsAdapterTestProvider } from '@/app/test-utils/playlists-adapter-wrapper';
 
 // --- Mocks ---
 
@@ -23,6 +24,13 @@ vi.mock('@/app/lib/recent-playlists-db', () => ({
 
 // Import after mocks so the module picks up the mocked deps.
 import { usePinnedPlaylists } from '../use-pinned-playlists';
+
+// The web wrapper delegates to the shared `usePinnedPlaylists`, which calls
+// `usePlaylistsAdapter()` unconditionally — wrap every render in the stub
+// provider. The wrapper still injects its own GraphQL/recents overrides, so the
+// stub adapter is never exercised.
+const renderHook: typeof rtlRenderHook = (callback, options) =>
+  rtlRenderHook(callback, { wrapper: PlaylistsAdapterTestProvider, ...options });
 
 // --- Helpers ---
 

@@ -12,7 +12,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
-import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
+import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@boardsesh/play-view';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
@@ -133,8 +133,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [boardName, layoutId, sizeId, setIds]);
 
   const navigationState = useMemo(
-    () => computeNavigationState(state.queue, state.currentClimbQueueItem),
-    [state.queue, state.currentClimbQueueItem],
+    () =>
+      computeNavigationStateWithSuggestions(state.queue, state.currentClimbQueueItem, state.playlistSuggestionSource),
+    [state.queue, state.currentClimbQueueItem, state.playlistSuggestionSource],
   );
 
   const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;

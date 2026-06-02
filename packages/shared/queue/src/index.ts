@@ -32,7 +32,10 @@ export {
   insertQueueItemAfterCurrent,
   getPlaylistPeekQueueItemUuid,
   isPlaylistPeekQueueItemUuid,
+  getQueueBoardKey,
+  createPlaylistSuggestionSource,
 } from './playlist-suggestions';
+export type { QueueBoardKeyTarget } from './playlist-suggestions';
 
 export {
   createQueueSyncCoordinator,

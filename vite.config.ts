@@ -45,6 +45,7 @@ export default defineConfig({
       './packages/shared/queue/vite.config.ts',
       './packages/shared/queue-runtime/vite.config.ts',
       './packages/shared/queue-react/vite.config.ts',
+      './packages/shared/playlists-react/vite.config.ts',
       './packages/shared/party-profile/vite.config.ts',
       './packages/shared/climb-actions/vite.config.ts',
       './packages/shared/key-value-storage/vite.config.ts',
@@ -222,6 +223,9 @@ export default defineConfig({
       'typecheck:queue-react': {
         command: 'bun run --filter=@boardsesh/queue-react typecheck',
       },
+      'typecheck:playlists-react': {
+        command: 'bun run --filter=@boardsesh/playlists-react typecheck',
+      },
       'typecheck:board-react': {
         command: 'bun run --filter=@boardsesh/board-react typecheck',
       },
@@ -271,6 +275,7 @@ export default defineConfig({
           'typecheck:queue',
           'typecheck:queue-runtime',
           'typecheck:queue-react',
+          'typecheck:playlists-react',
           'typecheck:board-react',
           'typecheck:party-profile',
           'typecheck:climb-actions',
