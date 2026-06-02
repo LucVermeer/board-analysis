@@ -100,36 +100,38 @@ export function PlaylistDetailView({
   );
 
   return (
-    <FlashList
-      data={climbs}
-      renderItem={renderItem}
-      keyExtractor={keyExtractor}
-      onEndReached={handleEndReached}
-      onEndReachedThreshold={0.5}
-      contentInsetAdjustmentBehavior="automatic"
-      ListHeaderComponent={header}
-      ListFooterComponent={
-        isFetchingNextPage ? (
-          <View style={styles.footer}>
-            <ActivityIndicator size="small" />
-          </View>
-        ) : null
-      }
-      ListEmptyComponent={
-        isLoading ? (
-          <View style={styles.stateContainer}>
-            <ActivityIndicator size="large" />
-          </View>
-        ) : (
-          <View style={styles.stateContainer}>
-            <Icon name="playlist" size={44} color={iosSystemColors.systemGray4} />
-            <Text variant="subheadline" style={styles.emptyText}>
-              {emptyMessage}
-            </Text>
-          </View>
-        )
-      }
-    />
+    <View style={styles.container}>
+      <FlashList
+        data={climbs}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        contentInsetAdjustmentBehavior="automatic"
+        ListHeaderComponent={header}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <View style={styles.footer}>
+              <ActivityIndicator size="small" />
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          isLoading ? (
+            <View style={styles.stateContainer}>
+              <ActivityIndicator size="large" />
+            </View>
+          ) : (
+            <View style={styles.stateContainer}>
+              <Icon name="playlist" size={44} color={iosSystemColors.systemGray4} />
+              <Text variant="subheadline" style={styles.emptyText}>
+                {emptyMessage}
+              </Text>
+            </View>
+          )
+        }
+      />
+    </View>
   );
 }
 
@@ -138,6 +140,9 @@ function keyExtractor(item: Climb) {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   hero: {
     flexDirection: 'row',
     alignItems: 'center',
