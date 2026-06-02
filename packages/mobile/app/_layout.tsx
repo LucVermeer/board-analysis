@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
+import { StyleSheet, View, useColorScheme } from 'react-native';
 import { Stack, SplashScreen, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { ThemeProvider as NavigationThemeProvider, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryProvider } from '../src/providers/query-provider';
@@ -135,9 +136,22 @@ function BoardProviderWrapper({ children }: { children: ReactNode }) {
 }
 
 function RootLayout() {
+  const colorScheme = useColorScheme();
   const onAuthReady = useCallback(() => {
     SplashScreen.hideAsync();
   }, []);
+
+  // Dark-aware navigation theme so screen/scene backgrounds adapt — without it,
+  // React Navigation's light-grey DefaultTheme background shows through every
+  // screen in dark mode. `useColorScheme` reflects the in-app appearance toggle
+  // (it's driven by Appearance.setColorScheme).
+  const navTheme = useMemo(
+    () =>
+      colorScheme === 'dark'
+        ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: '#000000', card: '#1C1C1E' } }
+        : DefaultTheme,
+    [colorScheme],
+  );
 
   return (
     <GestureHandlerRootView style={layoutStyles.root}>
@@ -166,13 +180,15 @@ function RootLayout() {
                                       escape that context. */}
                                     <BottomSheetModalProvider>
                                       <DrawerHostProvider>
-                                        <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                          <Stack.Screen name="(tabs)" />
-                                          <Stack.Screen
-                                            name="auth"
-                                            options={{ headerShown: false, gestureEnabled: false }}
-                                          />
-                                        </Stack>
+                                        <NavigationThemeProvider value={navTheme}>
+                                          <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                            <Stack.Screen name="(tabs)" />
+                                            <Stack.Screen
+                                              name="auth"
+                                              options={{ headerShown: false, gestureEnabled: false }}
+                                            />
+                                          </Stack>
+                                        </NavigationThemeProvider>
                                         <PersistentQueueBar />
                                       </DrawerHostProvider>
                                     </BottomSheetModalProvider>

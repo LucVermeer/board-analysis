@@ -111,4 +111,13 @@ export function useTheme(): Theme {
   return theme;
 }
 
+/**
+ * Access the theme without throwing when no provider is mounted. Returns null
+ * outside a ThemeProvider — used by low-level primitives (e.g. Text) that may
+ * render before providers mount, such as the root error boundary.
+ */
+export function useOptionalTheme(): Theme | null {
+  return useContext(ThemeContext);
+}
+
 export type { Theme, ColorScheme, ResolvedSystemColors, TextVariant };

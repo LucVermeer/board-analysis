@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// Mock react-native so StyleSheet.create is a pass-through identity function
+// Mock react-native so StyleSheet.create is a pass-through identity function.
+// Platform/PlatformColor/useColorScheme are needed because Text now pulls in
+// the theme provider (→ colors.ts) for its adaptive default colour.
 vi.mock('react-native', () => ({
   Text: 'Text',
+  Platform: { OS: 'ios', select: (specifics: Record<string, unknown>) => specifics.ios },
+  PlatformColor: (name: string) => ({ semantic: name }),
+  useColorScheme: () => 'light',
   StyleSheet: {
     create: <T extends Record<string, Record<string, unknown>>>(styles: T): T => styles,
   },
