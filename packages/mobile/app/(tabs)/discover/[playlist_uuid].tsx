@@ -152,15 +152,20 @@ export default function PlaylistDetail() {
     if (!playlist) return;
     const next = !isPinned;
     setIsPinned(next);
+    // Update the cache before the await so the reseed effect mirrors the
+    // optimistic value (not a stale one) if it fires mid-request.
+    queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+      prev ? { ...prev, isPinnedByMe: next } : prev,
+    );
     try {
       if (next) await pinPlaylist(playlist.uuid);
       else await unpinPlaylist(playlist.uuid);
-      queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
-        prev ? { ...prev, isPinnedByMe: next } : prev,
-      );
     } catch (err) {
       console.error('Failed to toggle pin:', err);
       setIsPinned(!next);
+      queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+        prev ? { ...prev, isPinnedByMe: !next } : prev,
+      );
       showToast(t(next ? 'library.pin.pinFailed' : 'library.pin.unpinFailed'), 'error');
     }
   }, [playlist, isPinned, pinPlaylist, unpinPlaylist, queryClient, playlistUuid, showToast, t]);
@@ -168,19 +173,25 @@ export default function PlaylistDetail() {
   const handleToggleFollow = useCallback(async () => {
     if (!playlist) return;
     const next = !isFollowing;
+    const delta = next ? 1 : -1;
     setIsFollowing(next);
-    setFollowerCount((count) => count + (next ? 1 : -1));
+    setFollowerCount((count) => count + delta);
+    // Update the cache before the await so a reseed mid-request mirrors the
+    // optimistic count, and the error path can't double-revert from a stale one.
+    queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+      prev ? { ...prev, isFollowedByMe: next, followerCount: prev.followerCount + delta } : prev,
+    );
     setFollowLoading(true);
     try {
       if (next) await followPlaylist(playlist.uuid);
       else await unfollowPlaylist(playlist.uuid);
-      queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
-        prev ? { ...prev, isFollowedByMe: next, followerCount: prev.followerCount + (next ? 1 : -1) } : prev,
-      );
     } catch (err) {
       console.error('Failed to toggle follow:', err);
       setIsFollowing(!next);
-      setFollowerCount((count) => count + (next ? -1 : 1));
+      setFollowerCount((count) => count - delta);
+      queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+        prev ? { ...prev, isFollowedByMe: !next, followerCount: prev.followerCount - delta } : prev,
+      );
       showToast(t('detail.followFailed'), 'error');
     } finally {
       setFollowLoading(false);
