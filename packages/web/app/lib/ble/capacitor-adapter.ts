@@ -33,6 +33,12 @@ const INTER_CHUNK_DELAY_MS = 5;
 // if the user walks away from the picker dialog.
 const SCAN_TIMEOUT_MS = 30_000;
 
+// How long a reconnect-by-serial waits for the stored board to advertise before
+// falling back to the picker. Short enough that a missing board surfaces the
+// picker quickly; long enough that a present board (which advertises within a
+// second or two) reconnects silently without the picker ever flashing.
+const SERIAL_RECONNECT_GRACE_MS = 4_000;
+
 // Raw Capacitor plugin interface as exposed via window.Capacitor.Plugins.BluetoothLe.
 // The plugin JS is injected by the native shell. We type only the methods we use.
 // IMPORTANT: The raw plugin's write() expects `value` as a continuous hex string (no spaces), not DataView.
@@ -138,27 +144,39 @@ export class CapacitorBleAdapter implements BluetoothAdapter {
 
     if (this.devicePicker && ble.requestLEScan && ble.stopLEScan) {
       // Manual scan with custom picker — deduplicates devices ourselves
+      const devicePicker = this.devicePicker;
       const devices = new Map<string, DiscoveredDevice>();
       let updateListener: ((devices: DiscoveredDevice[]) => void) | null = null;
       const pushDevices = () => updateListener?.([...devices.values()]);
 
-      // When targetSerial is set, auto-resolve instead of waiting for picker
-      let autoSelectResolve: ((deviceId: string) => void) | null = null;
-      let autoSelectReject: ((error: Error) => void) | null = null;
+      // One selection promise resolved by either the silent serial auto-select
+      // or, if that serial never shows up, the picker the grace window opens.
+      let resolveSelection!: (deviceId: string) => void;
+      let rejectSelection!: (error: Error) => void;
+      const selectionPromise = new Promise<string>((resolve, reject) => {
+        resolveSelection = resolve;
+        rejectSelection = reject;
+      });
 
-      // Start the picker promise (resolves when user selects a device)
-      let selectionPromise: Promise<string>;
-      if (targetSerial) {
-        // Skip the picker UI — resolve automatically when matching device is found
-        selectionPromise = new Promise<string>((resolve, reject) => {
-          autoSelectResolve = resolve;
-          autoSelectReject = reject;
-        });
-      } else {
-        selectionPromise = this.devicePicker((onUpdate) => {
+      // True only while we're still silently matching the target serial — flips
+      // false the moment we auto-select or hand off to the picker.
+      let autoSelecting = Boolean(targetSerial);
+      let pickerOpened = false;
+      const openPicker = () => {
+        if (pickerOpened) return;
+        pickerOpened = true;
+        autoSelecting = false;
+        // Seed the picker with whatever we've already discovered, then forward
+        // the user's selection onto the unified selection promise.
+        devicePicker((onUpdate) => {
           updateListener = onUpdate;
           pushDevices();
-        });
+        }).then(resolveSelection, rejectSelection);
+      };
+
+      // No target serial → straight to the picker.
+      if (!targetSerial) {
+        openPicker();
       }
 
       // Register scan result listener BEFORE starting the scan.
@@ -182,12 +200,13 @@ export class CapacitorBleAdapter implements BluetoothAdapter {
         devices.set(dedupeKey, device);
         pushDevices();
 
-        // Auto-select if this device matches the target serial
-        if (autoSelectResolve && targetSerial) {
+        // Auto-select if this device matches the target serial (only until the
+        // picker takes over).
+        if (autoSelecting && targetSerial) {
           const serial = parseSerialNumber(device.name);
           if (serial === targetSerial) {
-            autoSelectResolve(device.deviceId);
-            autoSelectResolve = null;
+            autoSelecting = false;
+            resolveSelection(device.deviceId);
           }
         }
       });
@@ -195,19 +214,27 @@ export class CapacitorBleAdapter implements BluetoothAdapter {
       // Start scanning
       await ble.requestLEScan({ services });
 
-      // Auto-stop scan after timeout to prevent indefinite battery drain.
-      // If auto-selecting by serial, reject the promise so the caller isn't stuck forever.
+      // Grace window: if the stored serial hasn't matched shortly, open the
+      // picker (scan keeps running so it live-updates). Lets the user pick when
+      // their board moved, powered off, or another device is holding it.
+      const pickerFallbackId = targetSerial
+        ? setTimeout(() => {
+            if (autoSelecting) openPicker();
+          }, SERIAL_RECONNECT_GRACE_MS)
+        : undefined;
+
+      // Auto-stop scan after timeout to prevent indefinite battery drain. By now
+      // the picker is open (the grace window is shorter than this), so the user
+      // still sees the last results — matching the no-target picker flow.
       const scanTimeoutId = setTimeout(() => {
-        stopScanQuietly(ble);
-        if (autoSelectReject) {
-          autoSelectReject(new Error('Target board not found during scan'));
-          autoSelectReject = null;
-        }
+        void stopScanQuietly(ble);
+        if (autoSelecting) openPicker();
       }, SCAN_TIMEOUT_MS);
 
       try {
         selectedDeviceId = await selectionPromise;
       } finally {
+        if (pickerFallbackId) clearTimeout(pickerFallbackId);
         clearTimeout(scanTimeoutId);
         await scanListener.remove();
         await stopScanQuietly(ble);

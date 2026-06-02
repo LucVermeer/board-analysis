@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vite-plus/test';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vite-plus/test';
+import type { DevicePickerFn } from '../types';
 import {
   AURORA_OPTIONAL_SERVICE_UUIDS,
   AURORA_SCAN_SERVICE_UUIDS,
@@ -311,6 +312,98 @@ describe('CapacitorBleAdapter', () => {
       await adapter.disconnect();
 
       expect(callback).not.toHaveBeenCalled();
+    });
+  });
+
+  // The manual-scan path (custom picker + requestLEScan/stopLEScan) is only
+  // taken when a devicePicker is injected. Reconnect-by-serial tries to
+  // auto-select silently, then falls back to the picker if the stored board
+  // doesn't advertise within a short grace window.
+  describe('reconnect-by-serial picker fallback (manual scan)', () => {
+    // Mirrors SERIAL_RECONNECT_GRACE_MS in the adapter (not exported).
+    const GRACE_MS = 4_000;
+
+    type ManualScanPlugin = typeof mockBlePlugin & {
+      requestLEScan?: ReturnType<typeof vi.fn>;
+      stopLEScan?: ReturnType<typeof vi.fn>;
+    };
+    const manualPlugin = mockBlePlugin as ManualScanPlugin;
+
+    let scanResultCb: ((data: unknown) => void) | null = null;
+    let pickerResolve: ((deviceId: string) => void) | null = null;
+    let devicePicker: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      scanResultCb = null;
+      pickerResolve = null;
+      manualPlugin.requestLEScan = vi.fn().mockResolvedValue(undefined);
+      manualPlugin.stopLEScan = vi.fn().mockResolvedValue(undefined);
+      // Route scan-result vs disconnect listeners by event name.
+      manualPlugin.addListener = vi.fn().mockImplementation((event: string, cb: (data: unknown) => void) => {
+        if (event === 'onScanResult') scanResultCb = cb;
+        else disconnectListenerCallback = cb as (data: { deviceId: string }) => void;
+        return Promise.resolve({ remove: mockListenerRemove });
+      });
+      devicePicker = vi.fn((subscribe: (onUpdate: (devices: unknown[]) => void) => void) => {
+        subscribe(() => {});
+        return new Promise<string>((resolve) => {
+          pickerResolve = resolve;
+        });
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      delete manualPlugin.requestLEScan;
+      delete manualPlugin.stopLEScan;
+      // Restore the default disconnect-capturing addListener for other suites.
+      manualPlugin.addListener = vi
+        .fn()
+        .mockImplementation((_event: string, cb: (data: { deviceId: string }) => void) => {
+          disconnectListenerCallback = cb;
+          return Promise.resolve({ remove: mockListenerRemove });
+        });
+    });
+
+    const emitScan = (deviceId: string, name: string) =>
+      scanResultCb?.({ device: { deviceId, name: undefined }, localName: name, rssi: -50 });
+
+    it('auto-selects the stored board silently without opening the picker', async () => {
+      const adapterWithPicker = new CapacitorBleAdapter('kilter', devicePicker as unknown as DevicePickerFn);
+      const connectPromise = adapterWithPicker.requestAndConnect('123');
+
+      // Let the scan listener register + scan start.
+      await Promise.resolve();
+      await Promise.resolve();
+
+      emitScan('dev-x', 'Kilter Board#123@3');
+
+      const connection = await connectPromise;
+      expect(connection.deviceId).toBe('dev-x');
+      expect(devicePicker).not.toHaveBeenCalled();
+      expect(mockBlePlugin.connect).toHaveBeenCalledWith({ deviceId: 'dev-x' });
+    });
+
+    it('opens the picker after the grace window when the stored serial never appears', async () => {
+      vi.useFakeTimers();
+      const adapterWithPicker = new CapacitorBleAdapter('kilter', devicePicker as unknown as DevicePickerFn);
+      const connectPromise = adapterWithPicker.requestAndConnect('999');
+
+      // Flush the awaited addListener + requestLEScan microtasks.
+      await vi.advanceTimersByTimeAsync(0);
+
+      // A different board shows up — not our serial. Picker stays closed for now.
+      emitScan('dev-other', 'Kilter Board#123@3');
+      expect(devicePicker).not.toHaveBeenCalled();
+
+      // Grace elapses → picker opens, seeded with discovered devices.
+      await vi.advanceTimersByTimeAsync(GRACE_MS);
+      expect(devicePicker).toHaveBeenCalledTimes(1);
+
+      // User picks a board → connect proceeds against their choice.
+      pickerResolve?.('dev-other');
+      await connectPromise;
+      expect(mockBlePlugin.connect).toHaveBeenCalledWith({ deviceId: 'dev-other' });
     });
   });
 });
