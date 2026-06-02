@@ -113,15 +113,22 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
       return;
     }
     setError(null);
-    const values: PlaylistFormValues = {
-      name: trimmedName,
-      description: trimmedDescription || undefined,
-      color,
-    };
-    if (isEdit) {
-      values.icon = icon;
-      values.isPublic = isPublic;
-    }
+    // Edit sends '' for a cleared field so the removal actually persists — the
+    // update API only changes fields that are present, so undefined means "leave
+    // unchanged" and '' means "clear". Create omits empties instead.
+    const values: PlaylistFormValues = isEdit
+      ? {
+          name: trimmedName,
+          description: trimmedDescription,
+          color: color ?? '',
+          icon: icon ?? '',
+          isPublic,
+        }
+      : {
+          name: trimmedName,
+          description: trimmedDescription || undefined,
+          color,
+        };
     onSubmit(values);
   }, [name, description, color, icon, isPublic, isEdit, onSubmit, t]);
 

@@ -7,7 +7,10 @@ export const PlaylistDescriptionSchema = z.string().max(500, 'Playlist descripti
 
 export const PlaylistColorSchema = z
   .string()
-  .regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid color format (must be hex)')
+  // Allow an empty string so an edit can explicitly clear a previously-set
+  // colour. The update resolver only writes fields that are present, so '' is
+  // the "clear" signal (undefined still means "leave unchanged").
+  .regex(/^(#[0-9A-Fa-f]{6})?$/, 'Invalid color format (must be hex)')
   .optional();
 
 export const PlaylistIconSchema = z.string().max(50, 'Icon name too long').optional();
