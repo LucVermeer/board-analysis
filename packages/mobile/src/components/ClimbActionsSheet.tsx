@@ -25,8 +25,17 @@ type ClimbActionsSheetProps = {
   angle: number;
   onAddToQueue?: () => void;
   onToggleFavorite?: () => void;
+  /** When provided, shows a "Log a tick" row that opens the LogAscent sheet. */
+  onTick?: () => void;
   onClose: () => void;
 };
+
+// Mirrors web's constructClimbInfoUrl: Kilter no longer has a public app URL.
+function buildAuroraAppUrl(boardName: string, climbUuid: string): string | null {
+  if (boardName === 'kilter') return null;
+  const suffix = boardName === 'tension' ? '2' : '';
+  return `https://${boardName}boardapp${suffix}.com/climbs/${climbUuid}`;
+}
 
 function ClimbActionsSheet({
   visible,
@@ -38,6 +47,7 @@ function ClimbActionsSheet({
   angle,
   onAddToQueue,
   onToggleFavorite,
+  onTick,
   onClose,
 }: ClimbActionsSheetProps) {
   const { t } = useTranslation('climbs');
@@ -61,6 +71,22 @@ function ClimbActionsSheet({
     onToggleFavorite?.();
     onClose();
   }, [onToggleFavorite, onClose]);
+
+  const handleTick = useCallback(() => {
+    onTick?.();
+    onClose();
+  }, [onTick, onClose]);
+
+  const auroraAppUrl = climb ? buildAuroraAppUrl(boardName, climb.uuid) : null;
+
+  const handleOpenInApp = useCallback(async () => {
+    if (!auroraAppUrl) return;
+    try {
+      await WebBrowser.openBrowserAsync(auroraAppUrl);
+    } finally {
+      onClose();
+    }
+  }, [auroraAppUrl, onClose]);
 
   const handleShare = useCallback(async () => {
     if (!climb) return;
@@ -118,6 +144,14 @@ function ClimbActionsSheet({
             showSeparator
           />
         )}
+        {onTick && (
+          <ListRow
+            title={t('mobile.climbActions.tick')}
+            leading={<Icon name="tick" size={22} color={brandColors.success} />}
+            onPress={handleTick}
+            showSeparator
+          />
+        )}
         <ListRow
           title={t('mobile.climbRow.share')}
           leading={<Icon name="share" size={22} color={brandColors.primary} />}
@@ -134,8 +168,16 @@ function ClimbActionsSheet({
           title={t('mobile.climbActions.report')}
           leading={<Icon name="flag" size={22} color={iosSystemColors.systemOrange} />}
           onPress={handleReport}
-          showSeparator={false}
+          showSeparator={!!auroraAppUrl}
         />
+        {auroraAppUrl && (
+          <ListRow
+            title={t('mobile.climbActions.openInApp')}
+            leading={<Icon name="open.external" size={22} color={iosSystemColors.systemBlue} />}
+            onPress={handleOpenInApp}
+            showSeparator={false}
+          />
+        )}
       </View>
     </Sheet>
   );

@@ -16,6 +16,9 @@ import {
   type ClimbFilters,
 } from '../../../src/components/ClimbFilterSheet';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
+import { useQueue } from '../../../src/providers/queue-provider';
+import { useBoardProvider } from '@boardsesh/board-react';
+import { randomUUID } from 'expo-crypto';
 import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
 import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
@@ -39,7 +42,9 @@ const SEARCH_DEBOUNCE_MS = 300;
 export default function ClimbList() {
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
-  const { openPlayDrawer } = useDrawerHost();
+  const { openPlayDrawer, openClimbActions } = useDrawerHost();
+  const { addToQueue } = useQueue();
+  const { getLogbook } = useBoardProvider();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -197,6 +202,15 @@ export default function ClimbList() {
     setAccumulatedClimbs((previous) => accumulateClimbs(previous, searchResult.climbs, pageNumber));
   }, [searchResult?.climbs, pageNumber]);
 
+  // Feed the visible climb UUIDs into the shared logbook so the ascent badge
+  // can render flash/send/attempt without baking per-user counts into the
+  // (CDN-cacheable) search query. `getLogbook` is a noop when the user is
+  // anonymous or the active board hasn't resolved yet.
+  useEffect(() => {
+    if (accumulatedClimbs.length === 0) return;
+    void getLogbook(accumulatedClimbs.map((climb) => climb.uuid));
+  }, [accumulatedClimbs, getLogbook]);
+
   const handleRefresh = useCallback(() => {
     setAccumulatedClimbs([]);
     setPageNumber(1);
@@ -220,6 +234,20 @@ export default function ClimbList() {
       openPlayDrawer(climb);
     },
     [openPlayDrawer],
+  );
+
+  const handleOpenActions = useCallback(
+    (climb: Climb) => {
+      openClimbActions(climb);
+    },
+    [openClimbActions],
+  );
+
+  const handleAddToQueue = useCallback(
+    (climb: Climb) => {
+      addToQueue({ uuid: randomUUID(), climb });
+    },
+    [addToQueue],
   );
 
   const handleApplyFilters = useCallback(
@@ -273,9 +301,12 @@ export default function ClimbList() {
         setIds={setIds}
         angle={angle}
         onPress={handleClimbPress}
+        onOpenActions={handleOpenActions}
+        onOpenPlaylist={handleOpenActions}
+        onAddToQueue={handleAddToQueue}
       />
     ),
-    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress],
+    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress, handleOpenActions, handleAddToQueue],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {

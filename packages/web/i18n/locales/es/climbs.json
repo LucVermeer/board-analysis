@@ -669,7 +669,9 @@
     "climbActions": {
       "copyLink": "Copiar enlace",
       "report": "Reportar",
-      "linkCopied": "Enlace copiado"
+      "linkCopied": "Enlace copiado",
+      "tick": "Registrar un envío",
+      "openInApp": "Abrir en la app Aurora"
     }
   }
 }

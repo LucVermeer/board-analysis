@@ -41,6 +41,8 @@ export const iconMap = {
   edit: { ios: 'pencil', android: 'pencil-outline' },
   tag: { ios: 'tag', android: 'tag-outline' },
   'check.small': { ios: 'checkmark', android: 'check' },
+  flash: { ios: 'bolt.fill', android: 'flash' },
+  'open.external': { ios: 'arrow.up.right.square', android: 'open-in-new' },
 
   // Climb/Board
   mirror: { ios: 'arrow.triangle.2.circlepath', android: 'sync' },

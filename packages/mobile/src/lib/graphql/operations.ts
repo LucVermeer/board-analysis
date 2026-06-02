@@ -80,6 +80,7 @@ const CLIMB_SEARCH_FIELDS = `
   created_at
   userAscents
   userAttempts
+  userFlashes
 `;
 
 const CLIMB_DETAIL_FIELDS = `
@@ -99,6 +100,7 @@ const CLIMB_DETAIL_FIELDS = `
   benchmark_difficulty
   userAscents
   userAttempts
+  userFlashes
   is_draft
   created_at
   published_at

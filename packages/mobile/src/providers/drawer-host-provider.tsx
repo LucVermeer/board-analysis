@@ -12,10 +12,14 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { randomUUID } from 'expo-crypto';
 import type { Climb } from '@boardsesh/shared-schema';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { useActiveBoard } from '../lib/graphql/use-active-board';
+import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
+import { useToggleFavorite } from '../lib/graphql/hooks';
+import { useQueue } from './queue-provider';
 
 export type BoardConfig = {
   boardName: string;
@@ -52,6 +56,10 @@ type DrawerHostValue = {
   boardConfig: BoardConfig | null;
   openPlayDrawer: (climb: Climb, options?: OpenPlayDrawerOptions) => void;
   openLogAscent: (input: LogAscentInput) => void;
+  /** Opens the climb actions bottom sheet for the given climb. Uses the active
+   *  boardConfig at the time of opening. */
+  openClimbActions: (climb: Climb) => void;
+  closeClimbActions: () => void;
 };
 
 const DrawerHostContext = createContext<DrawerHostValue | null>(null);
@@ -67,6 +75,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const { data: activeBoard } = useActiveBoard();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
+  const [climbActionsClimb, setClimbActionsClimb] = useState<Climb | null>(null);
+  const { addToQueue } = useQueue();
+  const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
   // Climb to open after the boardConfig override has committed. We can't
   // open synchronously inside openPlayDrawer when an override is supplied
@@ -117,9 +128,55 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const dismissLogAscent = useCallback(() => setLogAscentInput(null), []);
 
+  const openClimbActions = useCallback((climb: Climb) => {
+    setClimbActionsClimb(climb);
+  }, []);
+
+  const closeClimbActions = useCallback(() => {
+    setClimbActionsClimb(null);
+  }, []);
+
+  // Pin the boardConfig that was active when the sheet opened so it doesn't
+  // shift mid-interaction if the user's default board changes.
+  const climbActionsBoardConfig = useMemo(
+    () => (climbActionsClimb ? activeBoardConfig : null),
+    [climbActionsClimb, activeBoardConfig],
+  );
+
+  const handleClimbActionsAddToQueue = useCallback(() => {
+    if (!climbActionsClimb) return;
+    addToQueue({ uuid: randomUUID(), climb: climbActionsClimb });
+  }, [climbActionsClimb, addToQueue]);
+
+  const handleClimbActionsToggleFavorite = useCallback(() => {
+    if (!climbActionsClimb || !climbActionsBoardConfig) return;
+    toggleFavoriteMutate({
+      input: {
+        boardName: climbActionsBoardConfig.boardName,
+        climbUuid: climbActionsClimb.uuid,
+        angle: climbActionsBoardConfig.angle,
+      },
+    });
+  }, [climbActionsClimb, climbActionsBoardConfig, toggleFavoriteMutate]);
+
+  const handleClimbActionsTick = useCallback(() => {
+    if (!climbActionsClimb || !climbActionsBoardConfig) return;
+    setLogAscentInput({
+      climbUuid: climbActionsClimb.uuid,
+      climbName: climbActionsClimb.name,
+      boardName: climbActionsBoardConfig.boardName,
+      angle: climbActionsBoardConfig.angle,
+      isMirror: false,
+      isBenchmark: !!climbActionsClimb.benchmark_difficulty,
+      layoutId: climbActionsBoardConfig.layoutId,
+      sizeId: climbActionsBoardConfig.sizeId,
+      setIds: climbActionsBoardConfig.setIds,
+    });
+  }, [climbActionsClimb, climbActionsBoardConfig]);
+
   const value = useMemo<DrawerHostValue>(
-    () => ({ boardConfig: activeBoardConfig, openPlayDrawer, openLogAscent }),
-    [activeBoardConfig, openPlayDrawer, openLogAscent],
+    () => ({ boardConfig: activeBoardConfig, openPlayDrawer, openLogAscent, openClimbActions, closeClimbActions }),
+    [activeBoardConfig, openPlayDrawer, openLogAscent, openClimbActions, closeClimbActions],
   );
 
   return (
@@ -140,6 +197,21 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           sizeId={logAscentInput.sizeId}
           setIds={logAscentInput.setIds}
           sessionId={logAscentInput.sessionId}
+        />
+      ) : null}
+      {climbActionsClimb && climbActionsBoardConfig ? (
+        <ClimbActionsSheet
+          visible
+          climb={climbActionsClimb}
+          boardName={climbActionsBoardConfig.boardName}
+          layoutId={climbActionsBoardConfig.layoutId}
+          sizeId={climbActionsBoardConfig.sizeId}
+          setIds={climbActionsBoardConfig.setIds}
+          angle={climbActionsBoardConfig.angle}
+          onAddToQueue={handleClimbActionsAddToQueue}
+          onToggleFavorite={handleClimbActionsToggleFavorite}
+          onTick={handleClimbActionsTick}
+          onClose={closeClimbActions}
         />
       ) : null}
     </DrawerHostContext.Provider>
