@@ -43,7 +43,7 @@ export default function DiscoverLibrary() {
   const filterLayoutId = boardFilter?.layoutId;
 
   // Smart-playlist counts gate which "Your Picks" cards render.
-  const { data: smartCounts } = useSmartPlaylistCounts({
+  const { data: smartCounts, isLoading: smartCountsLoading } = useSmartPlaylistCounts({
     token: effectiveToken,
     tokenLoading,
     isAuthenticated,
@@ -218,6 +218,7 @@ export default function DiscoverLibrary() {
       {isAuthenticated &&
       !userLoading &&
       !discoverLoading &&
+      !smartCountsLoading &&
       jumpBackIn.length === 0 &&
       discoverItems.length === 0 &&
       smartCardsToShow.length === 0 ? (
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 80,
+    paddingTop: spacing[10] * 2,
     paddingHorizontal: 32,
     gap: 8,
   },
@@ -305,7 +306,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   loadingContainer: {
-    paddingTop: 120,
+    paddingTop: spacing[10] * 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
