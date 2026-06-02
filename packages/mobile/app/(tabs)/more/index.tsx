@@ -15,7 +15,7 @@ export default function MoreScreen() {
   const { systemColors, borderRadius, themeOverride, setThemeOverride } = useTheme();
   const { t } = useTranslation('common');
 
-  const appearanceOptions = [
+  const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
     { key: 'light', label: t('mobile.more.appearance.light') },
     { key: 'dark', label: t('mobile.more.appearance.dark') },
@@ -41,7 +41,7 @@ export default function MoreScreen() {
           <SegmentedControl
             options={appearanceOptions}
             selectedKey={themeOverride}
-            onSelect={(key) => void setThemeOverride(key as ThemeOverride)}
+            onSelect={(key) => void setThemeOverride(key)}
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.appearance.title')}
           />

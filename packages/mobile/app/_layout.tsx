@@ -38,6 +38,7 @@ import { Text } from '../src/components/Text';
 import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
 import { brandColors } from '../src/theme/colors';
+import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
 import { wrapWithSentry, reportError } from '../src/lib/sentry';
 
@@ -166,7 +167,14 @@ function ThemedNavigation({ children }: { children: ReactNode }) {
   const navTheme = useMemo(
     () =>
       colorScheme === 'dark'
-        ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: '#000000', card: '#1C1C1E' } }
+        ? {
+            ...DarkTheme,
+            colors: {
+              ...DarkTheme.colors,
+              background: iosDarkColors.background,
+              card: iosDarkColors.secondaryBackground,
+            },
+          }
         : DefaultTheme,
     [colorScheme],
   );

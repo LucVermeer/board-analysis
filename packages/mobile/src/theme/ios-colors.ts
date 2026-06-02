@@ -35,6 +35,8 @@ export const iosSystemColors = {
  * manual dark/light switching (e.g. BlurTabBar).
  */
 export const iosDarkColors = {
+  /** iOS systemBackground (dark) — base screen background */
+  background: '#000000',
   /** iOS secondarySystemBackground (dark) */
   secondaryBackground: '#1C1C1E',
   /** iOS systemGroupedBackground (dark) */

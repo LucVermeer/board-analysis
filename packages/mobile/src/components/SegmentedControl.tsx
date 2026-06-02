@@ -7,15 +7,15 @@ import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 
-type SegmentOption = {
-  key: string;
+type SegmentOption<K extends string> = {
+  key: K;
   label: string;
 };
 
-type SegmentedControlProps = {
-  options: SegmentOption[];
-  selectedKey: string;
-  onSelect: (key: string) => void;
+type SegmentedControlProps<K extends string> = {
+  options: SegmentOption<K>[];
+  selectedKey: K;
+  onSelect: (key: K) => void;
   /** Text variant for segment labels. Defaults to 'subheadline'. */
   textVariant?: 'subheadline' | 'footnote';
   /** Background color for the segmented control track. */
@@ -99,14 +99,14 @@ function Segment({
   );
 }
 
-export function SegmentedControl({
+export function SegmentedControl<K extends string = string>({
   options,
   selectedKey,
   onSelect,
   textVariant = 'subheadline',
   trackColor,
   accessibilityLabel,
-}: SegmentedControlProps) {
+}: SegmentedControlProps<K>) {
   const containerStyle = {
     flexDirection: 'row' as const,
     backgroundColor: trackColor,
