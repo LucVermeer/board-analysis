@@ -5,8 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
+  BottomSheetHandle,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
+  type BottomSheetHandleProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
@@ -26,6 +28,7 @@ import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
+import { useToast } from '../../providers/toast-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useShareClimb } from '../../hooks/use-share-climb';
@@ -106,18 +109,30 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   // Measured heights driving the peek snap-point. The peek opens the drawer
   // just far enough to reveal the Beta Videos section header. Because board
-  // carousel height varies by board/layout, we measure both regions at runtime
-  // rather than hardcoding.
+  // carousel height varies by board/layout and the gorhom handle owns its own
+  // padding, every contributor is measured at runtime rather than hardcoded.
+  const [handleHeight, setHandleHeight] = useState(0);
   const [aboveFoldHeight, setAboveFoldHeight] = useState(0);
   const [betaHeaderHeight, setBetaHeaderHeight] = useState(0);
 
+  const setHeightIfChanged = (setter: (updater: (prev: number) => number) => void, measured: number) => {
+    setter((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
+  };
+  const handleHandleLayout = useCallback((event: LayoutChangeEvent) => {
+    setHeightIfChanged(setHandleHeight, event.nativeEvent.layout.height);
+  }, []);
   const handleAboveFoldLayout = useCallback((event: LayoutChangeEvent) => {
-    const measured = event.nativeEvent.layout.height;
-    setAboveFoldHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
+    setHeightIfChanged(setAboveFoldHeight, event.nativeEvent.layout.height);
   }, []);
   const handleBetaHeaderLayout = useCallback((measured: number) => {
-    setBetaHeaderHeight((prev) => (Math.abs(prev - measured) > 2 ? Math.round(measured) : prev));
+    setHeightIfChanged(setBetaHeaderHeight, measured);
   }, []);
+
+  // Tracks the last climb the corrective snap fired for. Without this, every
+  // aboveFold re-measurement on climb-switch would yank a user-expanded sheet
+  // back to peek; gating on UUID means the snap fires exactly once per climb
+  // and leaves manual user expansion alone afterwards.
+  const lastSnappedClimbUuidRef = useRef<string | null>(null);
 
   const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
   const bluetooth = useOptionalBluetoothContext();
@@ -151,6 +166,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
   }, [displayedClimbUuid]);
 
+  const { showToast } = useToast();
+
   const shareClimb = useShareClimb({
     climb: displayedClimb ?? null,
     boardName,
@@ -160,9 +177,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     angle,
   });
 
+  // Android can throw on share cancellation; surface anything we didn't expect
+  // rather than silently swallowing the rejection.
   const handleShare = useCallback(() => {
-    void shareClimb();
-  }, [shareClimb]);
+    shareClimb().catch((error) => {
+      console.warn('[playDrawer] share failed:', error);
+      showToast(t('playView.shareError'), 'error');
+    });
+  }, [shareClimb, showToast, t]);
 
   useImperativeHandle(ref, () => ({
     open: (selectedClimb: Climb, options?: PlayDrawerOpenOptions) => {
@@ -172,6 +194,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsTickBarActive(false);
       setIsSheetOpen(true);
       setActiveSubDrawer('none');
+      lastSnappedClimbUuidRef.current = null;
       if (options?.setAsCurrent ?? true) {
         setCurrentClimb(climbToQueueItem(selectedClimb));
       }
@@ -188,6 +211,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     setIsTickBarActive(false);
     setIsSheetOpen(false);
     setActiveSubDrawer('none');
+    lastSnappedClimbUuidRef.current = null;
   }, []);
 
   const handlePrev = useCallback(() => {
@@ -282,23 +306,29 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
+  // Custom handle component wraps gorhom's default in a View whose onLayout
+  // reports the actual handle height (depends on indicator style + paddings).
+  // Memoized so gorhom doesn't see a new component identity each render.
+  const HandleComponent = useMemo(
+    () => (props: BottomSheetHandleProps) => (
+      <View onLayout={handleHandleLayout}>
+        <BottomSheetHandle {...props} indicatorStyle={sheetStyles.indicator} />
+      </View>
+    ),
+    [handleHandleLayout],
+  );
+
   // Sum the contributors so the Beta Videos title is fully revealed at peek
   // with a small reveal margin below (the cue that there's more to scroll).
-  //   handle           — gorhom's default sheet handle (~32px: padding 14 + 4 pill + 14)
+  //   handleHeight     — measured: gorhom sheet handle
   //   contentPadTop    — BottomSheetScrollView contentContainerStyle paddingTop
   //   aboveFoldHeight  — measured: drawer header + carousel + action bar
   //   deferredPadTop   — DeferredSections container.paddingTop (sits above Beta section)
   //   betaHeaderHeight — measured: Beta Videos CollapsibleSection header row
   //   revealMargin     — breathing room below the title so it doesn't hug the edge
-  const SHEET_HANDLE_HEIGHT = 32;
   const peekHeight =
-    aboveFoldHeight > 0 && betaHeaderHeight > 0
-      ? SHEET_HANDLE_HEIGHT +
-        spacing[2] +
-        aboveFoldHeight +
-        spacing[3] +
-        betaHeaderHeight +
-        spacing[3]
+    handleHeight > 0 && aboveFoldHeight > 0 && betaHeaderHeight > 0
+      ? handleHeight + spacing[2] + aboveFoldHeight + spacing[3] + betaHeaderHeight + spacing[3]
       : 0;
 
   const snapPoints = useMemo<(number | string)[]>(
@@ -306,15 +336,17 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [peekHeight],
   );
 
-  // Once peek-height becomes known after the sheet is already open, snap to it.
   // First-frame measurement may land after the sheet has already presented at
   // 100% — this single corrective snap settles into peek without a perceptible
-  // full-screen flash on subsequent climb opens.
+  // full-screen flash on subsequent climb opens. Guarded by a per-climb ref so
+  // it fires exactly once per climb (won't yank a user who has manually pulled
+  // the sheet to 100% while reading; subsequent height re-measurements no-op).
   useEffect(() => {
-    if (peekHeight > 0 && isSheetOpen) {
-      sheetRef.current?.snapToIndex(0);
-    }
-  }, [peekHeight, isSheetOpen]);
+    if (peekHeight === 0 || !isSheetOpen || !displayedClimbUuid) return;
+    if (lastSnappedClimbUuidRef.current === displayedClimbUuid) return;
+    lastSnappedClimbUuidRef.current = displayedClimbUuid;
+    sheetRef.current?.snapToIndex(0);
+  }, [peekHeight, isSheetOpen, displayedClimbUuid]);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
   const supportsMirroring = boardSupportsMirroring(boardName, layoutId);
@@ -331,8 +363,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         enableContentPanningGesture={!subDrawerOpen}
         enableHandlePanningGesture={!subDrawerOpen}
         backdropComponent={renderBackdrop}
+        handleComponent={HandleComponent}
         onDismiss={handleClose}
-        handleIndicatorStyle={sheetStyles.indicator}
         backgroundStyle={backgroundStyle}
       >
         <BottomSheetScrollView

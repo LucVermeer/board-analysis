@@ -66,7 +66,7 @@ export function CollapsibleSection({
       summary={summary}
       resetKey={resetKey}
       headerAction={headerAction}
-      onHeaderLayout={onHeaderLayout ? handleHeaderLayout : undefined}
+      onHeaderLayoutEvent={onHeaderLayout ? handleHeaderLayout : undefined}
     >
       {children}
     </CollapsibleSectionInternal>
@@ -79,7 +79,7 @@ function CollapsibleSectionInternal({
   summary,
   resetKey,
   headerAction,
-  onHeaderLayout,
+  onHeaderLayoutEvent,
   children,
 }: {
   title: string;
@@ -87,7 +87,10 @@ function CollapsibleSectionInternal({
   summary?: string | null;
   resetKey?: number;
   headerAction?: ReactNode;
-  onHeaderLayout?: (event: LayoutChangeEvent) => void;
+  // Internal prop takes the raw LayoutChangeEvent; the public `onHeaderLayout`
+  // exposes just the measured height. Distinct names so the two signatures
+  // never get conflated in callers or refactors.
+  onHeaderLayoutEvent?: (event: LayoutChangeEvent) => void;
   children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -124,7 +127,7 @@ function CollapsibleSectionInternal({
         accessibilityLabel={title}
         accessibilityState={{ expanded }}
         style={styles.header}
-        onLayout={onHeaderLayout}
+        onLayout={onHeaderLayoutEvent}
       >
         <Text variant="headline" style={styles.title}>
           {title}
