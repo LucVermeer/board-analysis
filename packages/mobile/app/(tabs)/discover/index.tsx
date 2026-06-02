@@ -166,6 +166,7 @@ export default function DiscoverLibrary() {
           name: values.name,
           description: values.description,
           color: values.color,
+          icon: values.icon,
         });
         setCreateVisible(false);
         showToast(t('bottomTabBar.createdPlaylistToast', { name: created.name }), 'success');

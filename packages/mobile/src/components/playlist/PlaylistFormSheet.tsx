@@ -128,6 +128,7 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
           name: trimmedName,
           description: trimmedDescription || undefined,
           color,
+          icon,
         };
     onSubmit(values);
   }, [name, description, color, icon, isPublic, isEdit, onSubmit, t]);
@@ -213,54 +214,54 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
           })}
         </View>
 
-        {isEdit ? (
-          <>
-            <Text variant="footnote" style={styles.label}>
-              {t('edit.fields.icon')}
-            </Text>
-            <View style={styles.swatchRow}>
-              {PRESET_ICONS.map((preset) => {
-                const selected = icon === preset;
-                return (
-                  <Pressable
-                    key={preset}
-                    onPress={() => setIcon(selected ? undefined : preset)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    style={[
-                      styles.emojiChip,
-                      { backgroundColor: systemColors.fill as string },
-                      selected && styles.emojiChipSelected,
-                    ]}
-                  >
-                    <Text style={styles.emoji} allowFontScaling={false}>
-                      {preset}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              {icon ? (
-                <Pressable
-                  onPress={() => setIcon(undefined)}
-                  accessibilityRole="button"
-                  style={[styles.removeChip, { borderColor: systemColors.separator as string }]}
-                >
-                  <Text variant="footnote" color={iosSystemColors.systemRed}>
-                    {t('edit.fields.removeIcon')}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
+        {/* Emoji picker — shown for create + edit (visibility stays edit-only,
+            since new playlists are always created private). */}
+        <Text variant="footnote" style={styles.label}>
+          {t('edit.fields.icon')}
+        </Text>
+        <View style={styles.swatchRow}>
+          {PRESET_ICONS.map((preset) => {
+            const selected = icon === preset;
+            return (
+              <Pressable
+                key={preset}
+                onPress={() => setIcon(selected ? undefined : preset)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                style={[
+                  styles.emojiChip,
+                  { backgroundColor: systemColors.fill as string },
+                  selected && styles.emojiChipSelected,
+                ]}
+              >
+                <Text style={styles.emoji} allowFontScaling={false}>
+                  {preset}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {icon ? (
+            <Pressable
+              onPress={() => setIcon(undefined)}
+              accessibilityRole="button"
+              style={[styles.removeChip, { borderColor: systemColors.separator as string }]}
+            >
+              <Text variant="footnote" color={iosSystemColors.systemRed}>
+                {t('edit.fields.removeIcon')}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
 
-            <View style={styles.switchWrap}>
-              <SwitchRow
-                label={t('edit.fields.visibility')}
-                description={isPublic ? t('edit.fields.publicHint') : t('edit.fields.privateHint')}
-                value={isPublic}
-                onValueChange={setIsPublic}
-              />
-            </View>
-          </>
+        {isEdit ? (
+          <View style={styles.switchWrap}>
+            <SwitchRow
+              label={t('edit.fields.visibility')}
+              description={isPublic ? t('edit.fields.publicHint') : t('edit.fields.privateHint')}
+              value={isPublic}
+              onValueChange={setIsPublic}
+            />
+          </View>
         ) : null}
 
         {error ? (
