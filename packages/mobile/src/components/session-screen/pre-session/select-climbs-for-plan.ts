@@ -1,6 +1,7 @@
 import type { Climb, ClimbSearchInput, UserBoard } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { PlannedClimbSlot } from '@boardsesh/playlist-generator';
+import { randomUUID } from 'expo-crypto';
 import { getHttpClient } from '../../../lib/graphql/client';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../lib/graphql/operations';
 
@@ -61,7 +62,9 @@ export async function selectClimbsForPlan(
     if (!next) continue;
     usedUuids.add(next.uuid);
     items.push({
-      uuid: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${items.length}`,
+      // expo-crypto.randomUUID, not globalThis.crypto — RN's JS runtime doesn't
+      // expose a Web Crypto API, and the server validates the queue-item uuid.
+      uuid: randomUUID(),
       climb: next as ClimbQueueItem['climb'],
       suggested: true,
     });
