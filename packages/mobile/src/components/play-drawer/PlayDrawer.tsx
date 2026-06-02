@@ -282,8 +282,24 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
+  // Sum the contributors so the Beta Videos title is fully revealed at peek
+  // with a small reveal margin below (the cue that there's more to scroll).
+  //   handle           — gorhom's default sheet handle (~32px: padding 14 + 4 pill + 14)
+  //   contentPadTop    — BottomSheetScrollView contentContainerStyle paddingTop
+  //   aboveFoldHeight  — measured: drawer header + carousel + action bar
+  //   deferredPadTop   — DeferredSections container.paddingTop (sits above Beta section)
+  //   betaHeaderHeight — measured: Beta Videos CollapsibleSection header row
+  //   revealMargin     — breathing room below the title so it doesn't hug the edge
+  const SHEET_HANDLE_HEIGHT = 32;
   const peekHeight =
-    aboveFoldHeight > 0 && betaHeaderHeight > 0 ? aboveFoldHeight + betaHeaderHeight + spacing[2] : 0;
+    aboveFoldHeight > 0 && betaHeaderHeight > 0
+      ? SHEET_HANDLE_HEIGHT +
+        spacing[2] +
+        aboveFoldHeight +
+        spacing[3] +
+        betaHeaderHeight +
+        spacing[3]
+      : 0;
 
   const snapPoints = useMemo<(number | string)[]>(
     () => (peekHeight > 0 ? [peekHeight, '100%'] : ['100%']),
