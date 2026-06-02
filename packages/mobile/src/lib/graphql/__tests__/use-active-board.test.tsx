@@ -24,12 +24,28 @@ vi.mock('@react-native-async-storage/async-storage', () => {
   };
 });
 
-const storedBoard = { uuid: 'stored-1', boardType: 'tension', layoutId: 9, sizeId: 8, setIds: '7', angle: 25 } as unknown as UserBoard;
-const otherBoard = { uuid: 'other-1', boardType: 'kilter', layoutId: 1, sizeId: 2, setIds: '3', angle: 40 } as unknown as UserBoard;
+const storedBoard = {
+  uuid: 'stored-1',
+  boardType: 'tension',
+  layoutId: 9,
+  sizeId: 8,
+  setIds: '7',
+  angle: 25,
+} as unknown as UserBoard;
+const otherBoard = {
+  uuid: 'other-1',
+  boardType: 'kilter',
+  layoutId: 1,
+  sizeId: 2,
+  setIds: '3',
+  angle: 40,
+} as unknown as UserBoard;
 
 function wrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 async function resetAsyncStorage() {

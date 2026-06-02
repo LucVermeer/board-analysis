@@ -162,6 +162,7 @@
         "@boardsesh/climb-filters": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
+        "@boardsesh/key-value-storage": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
         "@boardsesh/queue": "*",
@@ -335,6 +336,13 @@
       "dependencies": {
         "graphql-ws": "^6.0.8",
       },
+      "devDependencies": {
+        "typescript": "~6.0.3",
+      },
+    },
+    "packages/shared/key-value-storage": {
+      "name": "@boardsesh/key-value-storage",
+      "version": "1.0.0",
       "devDependencies": {
         "typescript": "~6.0.3",
       },
@@ -823,6 +831,8 @@
     "@boardsesh/graphql": ["@boardsesh/graphql@workspace:packages/shared/graphql"],
 
     "@boardsesh/graphql-client": ["@boardsesh/graphql-client@workspace:packages/shared/graphql-client"],
+
+    "@boardsesh/key-value-storage": ["@boardsesh/key-value-storage@workspace:packages/shared/key-value-storage"],
 
     "@boardsesh/mobile": ["@boardsesh/mobile@workspace:packages/mobile"],
 
@@ -4243,6 +4253,8 @@
     "@boardsesh/graphql/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/graphql-client/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "@boardsesh/key-value-storage/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/mobile/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
 

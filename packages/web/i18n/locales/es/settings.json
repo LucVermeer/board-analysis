@@ -300,10 +300,6 @@
     "errorToast": "No se pudo enviar — guardamos tu valoración.",
     "dismissAria": "Descartar"
   },
-  "shakeToReport": {
-    "disabledToast": "Sacudir para reportar desactivado. Toca tu avatar arriba para enviar comentarios.",
-    "dontShowAgain": "No mostrar de nuevo"
-  },
   "storeReview": {
     "title": "Ayuda a otros a descubrir Boardsesh",
     "body": "Gracias por la valoración. ¿Dejarías también una reseña rápida en tu tienda de apps? Es lo mejor que puedes hacer para ayudar a otros escaladores a encontrarnos.",

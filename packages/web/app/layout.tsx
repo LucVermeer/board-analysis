@@ -6,7 +6,6 @@ import { VercelAnalytics, VercelSpeedInsights } from './components/providers/ver
 import AnalyticsClient from './components/analytics-client';
 import SessionProviderWrapper from './components/providers/session-provider';
 import QueryClientProvider from './components/providers/query-client-provider';
-import { NavigationLoadingProvider } from './components/providers/navigation-loading-provider';
 import PersistentSessionWrapper from './components/providers/persistent-session-wrapper';
 import { SnackbarProvider } from './components/providers/snackbar-provider';
 import { AuthModalProvider } from './components/providers/auth-modal-provider';
@@ -101,13 +100,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <AuthModalProvider>
                       <FeatureFlagsProvider flags={EMPTY_FEATURE_FLAGS}>
                         <PersistentSessionWrapper boardConfigs={boardConfigs}>
-                          <NavigationLoadingProvider>
-                            <OnboardingTourProvider>
-                              <NotificationSubscriptionManager>{children}</NotificationSubscriptionManager>
-                              <OnboardingTourOverlay />
-                              <OnboardingDummySeshMount />
-                            </OnboardingTourProvider>
-                          </NavigationLoadingProvider>
+                          <OnboardingTourProvider>
+                            <NotificationSubscriptionManager>{children}</NotificationSubscriptionManager>
+                            <OnboardingTourOverlay />
+                            <OnboardingDummySeshMount />
+                          </OnboardingTourProvider>
                         </PersistentSessionWrapper>
                       </FeatureFlagsProvider>
                     </AuthModalProvider>
