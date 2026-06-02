@@ -145,7 +145,6 @@
 // i18n-keep common.mobile.nav.boards
 // i18n-keep common.mobile.nav.climbs
 // i18n-keep common.mobile.nav.climb
-// i18n-keep common.mobile.nav.queue
 // i18n-keep common.mobile.nav.profile
 // i18n-keep auth.nativeStart.tagline
 // i18n-keep auth.nativeStart.signInApple
