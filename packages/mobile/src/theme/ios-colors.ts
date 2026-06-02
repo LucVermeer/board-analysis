@@ -28,6 +28,8 @@ export const iosSystemColors = {
   starGold: '#FFB800',
   /** Pure white — text on colored backgrounds */
   white: '#FFFFFF',
+  /** Pure black — text on light/yellow backgrounds where white wouldn't pass contrast (e.g. flash badge on systemYellow) */
+  black: '#000000',
 } as const;
 
 /**

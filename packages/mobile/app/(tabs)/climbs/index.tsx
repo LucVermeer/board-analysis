@@ -236,13 +236,6 @@ export default function ClimbList() {
     [openPlayDrawer],
   );
 
-  const handleOpenActions = useCallback(
-    (climb: Climb) => {
-      openClimbActions(climb);
-    },
-    [openClimbActions],
-  );
-
   const handleAddToQueue = useCallback(
     (climb: Climb) => {
       addToQueue({ uuid: randomUUID(), climb });
@@ -301,12 +294,12 @@ export default function ClimbList() {
         setIds={setIds}
         angle={angle}
         onPress={handleClimbPress}
-        onOpenActions={handleOpenActions}
-        onOpenPlaylist={handleOpenActions}
+        onOpenActions={openClimbActions}
+        onOpenPlaylist={openClimbActions}
         onAddToQueue={handleAddToQueue}
       />
     ),
-    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress, handleOpenActions, handleAddToQueue],
+    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress, openClimbActions, handleAddToQueue],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {

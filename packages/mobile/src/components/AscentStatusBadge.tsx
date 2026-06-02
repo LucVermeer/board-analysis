@@ -3,11 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { useOptionalBoardProvider } from '@boardsesh/board-react';
 import { Icon } from './Icon';
 import { iosSystemColors } from '../theme/ios-colors';
-import {
-  normalizeAscentStatus,
-  pickHighestAscentStatus,
-  type AscentStatusValue,
-} from '../lib/ascent-status-utils';
+import { normalizeAscentStatus, pickHighestAscentStatus, type AscentStatusValue } from '../lib/ascent-status-utils';
 
 type AscentStatusBadgeProps = {
   climbUuid: string;
@@ -50,7 +46,7 @@ const AscentStatusBadge = React.memo(function AscentStatusBadge({
   if (status === 'flash') {
     return (
       <View style={[styles.badge, styles.flashBadge]}>
-        <Icon name="flash" size={10} color="#000000" />
+        <Icon name="flash" size={10} color={iosSystemColors.black} />
       </View>
     );
   }

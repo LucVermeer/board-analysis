@@ -75,7 +75,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const { data: activeBoard } = useActiveBoard();
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
-  const [climbActionsClimb, setClimbActionsClimb] = useState<Climb | null>(null);
+  const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const { addToQueue } = useQueue();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
@@ -99,6 +99,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       angle: activeBoard.angle,
     };
   }, [boardConfigOverride, activeBoard]);
+
+  // Keep a ref so the otherwise empty-dep `openClimbActions` callback can
+  // snapshot the current board config without churning its identity.
+  const activeBoardConfigRef = useRef(activeBoardConfig);
+  activeBoardConfigRef.current = activeBoardConfig;
 
   const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
     const { boardConfig: override, ...openOptions } = options ?? {};
@@ -128,51 +133,49 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const dismissLogAscent = useCallback(() => setLogAscentInput(null), []);
 
+  // Snapshot the board config at open time so the sheet's per-row handlers
+  // (queue / favorite / tick) keep operating on the same angle even if the
+  // user switches their active board mid-interaction.
   const openClimbActions = useCallback((climb: Climb) => {
-    setClimbActionsClimb(climb);
+    const boardConfig = activeBoardConfigRef.current;
+    if (!boardConfig) return;
+    setClimbActions({ climb, boardConfig });
   }, []);
 
   const closeClimbActions = useCallback(() => {
-    setClimbActionsClimb(null);
+    setClimbActions(null);
   }, []);
 
-  // Pin the boardConfig that was active when the sheet opened so it doesn't
-  // shift mid-interaction if the user's default board changes.
-  const climbActionsBoardConfig = useMemo(
-    () => (climbActionsClimb ? activeBoardConfig : null),
-    [climbActionsClimb, activeBoardConfig],
-  );
-
   const handleClimbActionsAddToQueue = useCallback(() => {
-    if (!climbActionsClimb) return;
-    addToQueue({ uuid: randomUUID(), climb: climbActionsClimb });
-  }, [climbActionsClimb, addToQueue]);
+    if (!climbActions) return;
+    addToQueue({ uuid: randomUUID(), climb: climbActions.climb });
+  }, [climbActions, addToQueue]);
 
   const handleClimbActionsToggleFavorite = useCallback(() => {
-    if (!climbActionsClimb || !climbActionsBoardConfig) return;
+    if (!climbActions) return;
     toggleFavoriteMutate({
       input: {
-        boardName: climbActionsBoardConfig.boardName,
-        climbUuid: climbActionsClimb.uuid,
-        angle: climbActionsBoardConfig.angle,
+        boardName: climbActions.boardConfig.boardName,
+        climbUuid: climbActions.climb.uuid,
+        angle: climbActions.boardConfig.angle,
       },
     });
-  }, [climbActionsClimb, climbActionsBoardConfig, toggleFavoriteMutate]);
+  }, [climbActions, toggleFavoriteMutate]);
 
   const handleClimbActionsTick = useCallback(() => {
-    if (!climbActionsClimb || !climbActionsBoardConfig) return;
+    if (!climbActions) return;
     setLogAscentInput({
-      climbUuid: climbActionsClimb.uuid,
-      climbName: climbActionsClimb.name,
-      boardName: climbActionsBoardConfig.boardName,
-      angle: climbActionsBoardConfig.angle,
+      climbUuid: climbActions.climb.uuid,
+      climbName: climbActions.climb.name,
+      boardName: climbActions.boardConfig.boardName,
+      angle: climbActions.boardConfig.angle,
       isMirror: false,
-      isBenchmark: !!climbActionsClimb.benchmark_difficulty,
-      layoutId: climbActionsBoardConfig.layoutId,
-      sizeId: climbActionsBoardConfig.sizeId,
-      setIds: climbActionsBoardConfig.setIds,
+      isBenchmark: !!climbActions.climb.benchmark_difficulty,
+      layoutId: climbActions.boardConfig.layoutId,
+      sizeId: climbActions.boardConfig.sizeId,
+      setIds: climbActions.boardConfig.setIds,
     });
-  }, [climbActionsClimb, climbActionsBoardConfig]);
+  }, [climbActions]);
 
   const value = useMemo<DrawerHostValue>(
     () => ({ boardConfig: activeBoardConfig, openPlayDrawer, openLogAscent, openClimbActions, closeClimbActions }),
@@ -199,15 +202,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           sessionId={logAscentInput.sessionId}
         />
       ) : null}
-      {climbActionsClimb && climbActionsBoardConfig ? (
+      {climbActions ? (
         <ClimbActionsSheet
           visible
-          climb={climbActionsClimb}
-          boardName={climbActionsBoardConfig.boardName}
-          layoutId={climbActionsBoardConfig.layoutId}
-          sizeId={climbActionsBoardConfig.sizeId}
-          setIds={climbActionsBoardConfig.setIds}
-          angle={climbActionsBoardConfig.angle}
+          climb={climbActions.climb}
+          boardName={climbActions.boardConfig.boardName}
+          layoutId={climbActions.boardConfig.layoutId}
+          sizeId={climbActions.boardConfig.sizeId}
+          setIds={climbActions.boardConfig.setIds}
+          angle={climbActions.boardConfig.angle}
           onAddToQueue={handleClimbActionsAddToQueue}
           onToggleFavorite={handleClimbActionsToggleFavorite}
           onTick={handleClimbActionsTick}
