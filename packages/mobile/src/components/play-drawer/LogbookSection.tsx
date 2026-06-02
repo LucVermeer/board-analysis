@@ -1,8 +1,11 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { BoardName } from '@boardsesh/shared-schema';
+import { useLogbook } from '@boardsesh/board-react';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { LogbookEntryRow } from './LogbookEntryRow';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
@@ -14,9 +17,39 @@ type LogbookSectionProps = {
   userAttempts: number | null | undefined;
 };
 
-export const LogbookSection = memo(function LogbookSection({ userAscents, userAttempts }: LogbookSectionProps) {
+export const LogbookSection = memo(function LogbookSection({
+  climbUuid,
+  boardName,
+  userAscents,
+  userAttempts,
+}: LogbookSectionProps) {
   const { t } = useTranslation('session');
+  const { logbook } = useLogbook(boardName as BoardName, [climbUuid]);
 
+  const entries = useMemo(
+    () =>
+      logbook
+        .filter((entry) => entry.climb_uuid === climbUuid)
+        .sort((a, b) => new Date(b.climbed_at).getTime() - new Date(a.climbed_at).getTime()),
+    [logbook, climbUuid],
+  );
+
+  // Tension/Decoy log mirrored sends; Kilter never does, so the mirror tag is
+  // only meaningful on mirror-capable boards.
+  const showMirrorTag = boardName === 'tension' || boardName === 'decoy';
+
+  if (entries.length > 0) {
+    return (
+      <View style={styles.container}>
+        {entries.map((entry) => (
+          <LogbookEntryRow key={entry.uuid} entry={entry} showMirrorTag={showMirrorTag} />
+        ))}
+      </View>
+    );
+  }
+
+  // Fallback: no detailed entries fetched (e.g. unauthenticated), but the climb
+  // row carries denormalised counts — show the summary line.
   const sends = userAscents ?? 0;
   const attempts = userAttempts ?? 0;
 
@@ -41,18 +74,16 @@ export const LogbookSection = memo(function LogbookSection({ userAscents, userAt
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.row}>
-        <Icon name="tick" size={20} color={iosSystemColors.systemGreen} />
-        <Text variant="body">{summaryText}</Text>
-      </View>
+    <View style={styles.row}>
+      <Icon name="tick" size={20} color={iosSystemColors.systemGreen} />
+      <Text variant="body">{summaryText}</Text>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing[2],
+    gap: spacing[1],
   },
   emptyContainer: {
     flexDirection: 'row',

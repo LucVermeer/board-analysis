@@ -240,18 +240,23 @@
       "noEntries": "No ascents yet",
       "sendsAndAttempts": "{{sends}} sends, {{attempts}} attempts",
       "sendsOnly": "{{sends}} sends",
-      "attemptsOnly": "{{attempts}} attempts"
+      "attemptsOnly": "{{attempts}} attempts",
+      "tries_one": "{{count}} try",
+      "tries_other": "{{count}} tries",
+      "mirroredTag": "Mirror"
     },
     "similarClimbs": {
       "title": "Similar Climbs",
-      "empty": "No similar climbs found"
+      "empty": "No similar climbs found",
+      "retry": "Try again"
     },
     "community": {
       "title": "Community",
       "empty": "No community data yet",
       "ascensionists_one": "{{count}} ascensionist",
       "ascensionists_other": "{{count}} ascensionists",
-      "avgQuality": "Average quality"
+      "avgQuality": "Average quality",
+      "gradeByAngle": "Grade by angle"
     },
     "betaVideos": {
       "title": "Beta Videos",

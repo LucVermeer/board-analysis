@@ -240,18 +240,23 @@
       "noEntries": "Sin ascensiones todavía",
       "sendsAndAttempts": "{{sends}} envios, {{attempts}} intentos",
       "sendsOnly": "{{sends}} envios",
-      "attemptsOnly": "{{attempts}} intentos"
+      "attemptsOnly": "{{attempts}} intentos",
+      "tries_one": "{{count}} intento",
+      "tries_other": "{{count}} intentos",
+      "mirroredTag": "Espejo"
     },
     "similarClimbs": {
       "title": "Escaladas similares",
-      "empty": "No se encontraron escaladas similares"
+      "empty": "No se encontraron escaladas similares",
+      "retry": "Reintentar"
     },
     "community": {
       "title": "Comunidad",
       "empty": "Sin datos de la comunidad todavía",
       "ascensionists_one": "{{count}} ascensionista",
       "ascensionists_other": "{{count}} ascensionistas",
-      "avgQuality": "Calidad promedio"
+      "avgQuality": "Calidad promedio",
+      "gradeByAngle": "Grado por ángulo"
     },
     "betaVideos": {
       "title": "Videos Beta",
