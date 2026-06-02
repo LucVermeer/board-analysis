@@ -22,6 +22,7 @@ import SwipeBoardCarousel from '../board-renderer/swipe-board-carousel';
 import { PlaybackControls } from '../playback/playback-controls';
 import { useWakeLock } from '../board-bluetooth-control/use-wake-lock';
 import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
+import { isNativeApp } from '@/app/lib/ble/capacitor-utils';
 import { useWallConfirmFallback } from './use-wall-confirm-fallback';
 import { useDrawerPlayback } from './use-drawer-playback';
 import { themeTokens } from '@/app/theme/theme-config';
@@ -183,7 +184,13 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     takeControl,
     releaseControl,
   } = useQueueActions();
-  const { isConnected: isBluetoothConnected, isBluetoothSupported, connect: bluetoothConnect } = useBluetoothContext();
+  const {
+    isConnected: isBluetoothConnected,
+    isBluetoothSupported,
+    connect: bluetoothConnect,
+    reassertWall,
+    reconnectSerialForCurrentBoard,
+  } = useBluetoothContext();
 
   // In a party session, the drawer-local `drawerDisplayedItem` (set by browse
   // callers via the open-drawer event payload) takes precedence over the wall
@@ -622,11 +629,26 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
           boardLayout,
           climbUuid: currentClimb?.uuid ?? null,
         });
-        void bluetoothConnect();
+        // Silent reconnect to the board we were last on (native shells only —
+        // Web Bluetooth ignores a target serial and always shows the chooser).
+        // Null when nothing's remembered or the user switched boards, so we
+        // open the picker. Don't pass frames: the fresh AutoSender re-pushes
+        // the current climb on mount (passing them risks a double-write).
+        if (reconnectSerialForCurrentBoard && isNativeApp()) {
+          void bluetoothConnect(undefined, undefined, reconnectSerialForCurrentBoard);
+        } else {
+          void bluetoothConnect();
+        }
         return;
       }
       if (!currentClimb) return;
       void takeControl(currentClimb);
+      // Force a re-push even when the climb is unchanged — re-tapping the
+      // lightbulb should re-light the wall. If the link is secretly dead (the
+      // board was grabbed but no disconnect event fired), the failing write
+      // trips disconnect detection and darkens the bulb so the next tap
+      // reconnects.
+      reassertWall();
       setDrawerDisplayedItem?.(null);
       track('Wall Control Taken', {
         source: 'lightbulb_drawer',
@@ -665,6 +687,8 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     isPersistentSessionActive,
     isBluetoothConnected,
     bluetoothConnect,
+    reassertWall,
+    reconnectSerialForCurrentBoard,
     armWallConfirmWatcher,
     cancelWallConfirmWatcher,
     boardDetails.layout_name,

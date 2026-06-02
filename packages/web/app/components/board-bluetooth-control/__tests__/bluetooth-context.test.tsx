@@ -507,6 +507,36 @@ describe('BluetoothProvider', () => {
       expect(mockConfirmClimbOnWall).toHaveBeenCalledTimes(2);
     });
 
+    it('reassertWall() forces a physical re-send of the byte-identical current climb', async () => {
+      // The solo lightbulb "re-take" path bumps a reassert nonce so re-tapping
+      // on an unchanged climb actually re-lights the wall, bypassing the
+      // byte-identical dedup that otherwise skips the write.
+      mockSendFramesToBoard.mockResolvedValue(true);
+      mockCurrentClimbQueueItem = {
+        climb: { uuid: 'climb-1', frames: 'p1r12', mirrored: false },
+      };
+      mockBluetoothState.isConnected = true;
+
+      const { result } = renderHook(() => useBluetoothContext(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1));
+      });
+
+      // Re-take: same climb, no broadcast. A plain re-render would dedup; the
+      // reassert nonce punches through it exactly once.
+      act(() => {
+        result.current.reassertWall();
+      });
+
+      await act(async () => {
+        await vi.waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(2));
+      });
+      expect(mockSendFramesToBoard).toHaveBeenLastCalledWith('p1r12', false, expect.any(AbortSignal), 'climb-1');
+    });
+
     it('re-sends when the same climb is mirrored (same uuid, mirror flipped)', async () => {
       // Regression: the old uuid-only dedup swallowed mirror toggles, so the
       // board only mirrored after a disconnect/reconnect.

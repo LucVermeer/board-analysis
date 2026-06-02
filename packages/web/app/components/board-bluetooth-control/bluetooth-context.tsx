@@ -73,6 +73,20 @@ type BluetoothContextValue = {
   setLedColorOverrides: (next: LedColorOverrides) => void;
   isBluetoothSupported: boolean;
   isIOS: boolean;
+  /**
+   * Force the auto-sender to re-push the current climb to the wall once, even
+   * when the pixels are byte-identical to the last send (which it normally
+   * dedups). The solo lightbulb tap calls this so re-taking control of an
+   * unchanged climb actually re-lights the wall — and, if the link is secretly
+   * dead, the failing write trips disconnect detection. No-op until called.
+   */
+  reassertWall: () => void;
+  /**
+   * Serial to silently reconnect to for the board currently in view (native
+   * shells only), or null when nothing is remembered or the user switched
+   * boards — in which case callers open the device picker instead.
+   */
+  reconnectSerialForCurrentBoard: string | null;
 };
 
 const BluetoothContext = createContext<BluetoothContextValue | null>(null);
@@ -93,6 +107,7 @@ function BluetoothAutoSender({
   layoutName,
   boardName,
   onWallConfirmed,
+  reassertNonce,
 }: {
   sendFramesToBoard: (
     frames: string,
@@ -110,6 +125,13 @@ function BluetoothAutoSender({
    * means BluetoothAutoSender doesn't need to know whether a session exists.
    */
   onWallConfirmed: (climbUuid: string) => void;
+  /**
+   * Bumped by `reassertWall()` to force a one-shot re-send of the current
+   * climb that bypasses the byte-identical dedup below. Each new value clears
+   * the last-sent signature exactly once so the wall re-lights even when the
+   * climb hasn't changed.
+   */
+  reassertNonce: number;
 }) {
   const { currentClimbQueueItem } = useCurrentClimb();
   // Mirror onWallConfirmed so the send loop doesn't re-run when
@@ -147,6 +169,11 @@ function BluetoothAutoSender({
   // uuid, frames, and mirror) still skips the write but re-emits the wall-confirm
   // so a hand-off taker's 2s timer clears even though no physical re-send ran.
   const lastSentSignatureRef = useRef<string | null>(null);
+  // Last `reassertNonce` we've acted on. When the incoming nonce differs, the
+  // send effect clears the dedup signature once so the current climb is
+  // physically re-written even if its pixels are byte-identical to the last
+  // send (the solo lightbulb "re-take" path).
+  const lastReassertNonceRef = useRef(reassertNonce);
   // Single AbortController lives across the AutoSender's lifetime. Aborted
   // exactly once on unmount so the in-flight drain loop (a) cancels the
   // underlying adapter.write via the signal, and (b) returns before firing
@@ -166,6 +193,13 @@ function BluetoothAutoSender({
     if (!currentClimbQueueItem) return;
     const signal = abortControllerRef.current?.signal;
     if (signal?.aborted) return;
+    // A reassert request (lightbulb re-take) forces a fresh write of the
+    // current climb: drop the dedup signature so the byte-identical skip below
+    // doesn't suppress it. Record the nonce so we punch through exactly once.
+    if (reassertNonce !== lastReassertNonceRef.current) {
+      lastReassertNonceRef.current = reassertNonce;
+      lastSentSignatureRef.current = null;
+    }
     if (isWritingRef.current) {
       pendingClimbRef.current = currentClimbQueueItem;
       return;
@@ -253,7 +287,7 @@ function BluetoothAutoSender({
       }
     };
     void drain();
-  }, [currentClimbQueueItem, sendFramesToBoard, layoutName, boardName]);
+  }, [currentClimbQueueItem, sendFramesToBoard, layoutName, boardName, reassertNonce]);
 
   return null;
 }
@@ -331,12 +365,18 @@ export function BluetoothProvider({
     [setSessionBoardSerial, boardDetails?.layout_name],
   );
 
-  const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({
-    boardDetails: boardDetails ?? undefined,
-    boardUuid,
-    ledColorOverrides,
-    onConnectSuccess: handleConnectSuccess,
-  });
+  const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState, reconnectSerialForCurrentBoard } =
+    useBoardBluetooth({
+      boardDetails: boardDetails ?? undefined,
+      boardUuid,
+      ledColorOverrides,
+      onConnectSuccess: handleConnectSuccess,
+    });
+
+  // Bumped by reassertWall() to force the auto-sender to re-push the current
+  // climb once even when it's byte-identical to the last send.
+  const [reassertNonce, setReassertNonce] = useState(0);
+  const reassertWall = useCallback(() => setReassertNonce((nonce) => nonce + 1), []);
 
   // Always emit on the local wall-confirm bus (so the same phone's drawer
   // dismisses its 2s fallback timer); only fire the WS mutation when a
@@ -565,6 +605,8 @@ export function BluetoothProvider({
       setLedColorOverrides,
       isBluetoothSupported,
       isIOS,
+      reassertWall,
+      reconnectSerialForCurrentBoard,
     }),
     [
       isConnected,
@@ -580,6 +622,8 @@ export function BluetoothProvider({
       setLedColorOverrides,
       isBluetoothSupported,
       isIOS,
+      reassertWall,
+      reconnectSerialForCurrentBoard,
     ],
   );
 
@@ -652,6 +696,7 @@ export function BluetoothProvider({
           layoutName={boardDetails.layout_name ?? ''}
           boardName={boardDetails.board_name}
           onWallConfirmed={handleWallConfirmed}
+          reassertNonce={reassertNonce}
         />
       )}
       {activePickerState && (
