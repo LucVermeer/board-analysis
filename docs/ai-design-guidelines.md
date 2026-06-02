@@ -870,10 +870,10 @@ Props: `glassEffectStyle` (`'regular'` for frosted chrome, `'clear'` for content
 
 ### Where glass is allowed
 
-Glass is for **floating chrome only** — never for content canvases or full-screen surfaces (Apple's HIG, and washed-out content otherwise):
+Glass is for **floating chrome only** — never for content canvases, full-screen surfaces, or text-bearing bars (Apple's HIG, and washed-out/illegible content otherwise):
 
-- **Glass:** bottom tab bar (`BlurTabBar`), persistent queue mini-player (`regular` glass + a low-alpha grade-hue wash), and the `QuickTickBar`.
-- **Opaque (themed `secondaryBackground`):** the full-height `PlayDrawer` and all bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.). Sheets get a solid surface, not glass.
+- **Glass:** the floating bottom tab bar (`BlurTabBar` — a Liquid Glass capsule, inset from the edges with a capsule radius, floating above the home-indicator inset) and the `QuickTickBar` (over the board image).
+- **Opaque:** the persistent queue mini-player (a solid grade-tinted card — Liquid Glass is too see-through for a floating bar you have to read), the full-height `PlayDrawer`, and all bottom sheets (`Sheet`, `QueueSheet`, `AngleSelectorSheet`, etc.) use themed `secondaryBackground`.
 
 ### Dark mode & appearance
 
