@@ -1098,12 +1098,17 @@ export function QueueBridgeInjector({ boardDetails, angle, boardUuid = null }: Q
   useEffect(() => {
     if (!queueContext || !queueActions) return;
     if (hasInjectedRef.current) {
+      // updateContext only refreshes the queue context/actions. Board identity
+      // (boardDetails/angle/boardUuid) is owned by the layout effect's inject,
+      // which re-fires on route change — so a boardUuid change can't (and
+      // shouldn't) propagate from here. Read it from the ref on the deferred
+      // path below so it isn't a misleading no-op dependency of this effect.
       updateContext(queueContext, queueActions);
     } else {
-      inject(queueContext, queueActions, boardDetails, angle, baseBoardPath, boardUuid);
+      inject(queueContext, queueActions, boardDetails, angle, baseBoardPath, boardUuidRef.current);
       hasInjectedRef.current = true;
     }
-  }, [queueContext, queueActions, updateContext, inject, boardDetails, angle, baseBoardPath, boardUuid]);
+  }, [queueContext, queueActions, updateContext, inject, boardDetails, angle, baseBoardPath]);
 
   return null;
 }
