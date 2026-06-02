@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vite-plus/test';
+import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_LOCALE } from '@/app/lib/i18n/config';
+import { DEFAULT_LOCALE } from '../config';
 
-const LOCALES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'i18n', 'locales');
+const LOCALES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'locales');
 
 // Every supported locale (except the source `en-US`) must stay at full parity
 // with the English catalog. Missing keys silently fall back to English at
@@ -35,13 +35,15 @@ const namespaces = readdirSync(join(LOCALES_DIR, DEFAULT_LOCALE)).filter((file) 
 describe('i18n catalog completeness', () => {
   for (const locale of STRICTLY_ENFORCED_LOCALES) {
     describe(locale, () => {
-      it.each(namespaces)('%s ships the same key set as en-US', (namespace) => {
-        const expected = new Set(collectKeys(loadCatalog(DEFAULT_LOCALE, namespace)));
-        const actual = new Set(collectKeys(loadCatalog(locale, namespace)));
-        const missing = [...expected].filter((key) => !actual.has(key));
-        const extra = [...actual].filter((key) => !expected.has(key));
-        expect({ namespace, missing, extra }).toEqual({ namespace, missing: [], extra: [] });
-      });
+      for (const namespace of namespaces) {
+        it(`${namespace} ships the same key set as en-US`, () => {
+          const expected = new Set(collectKeys(loadCatalog(DEFAULT_LOCALE, namespace)));
+          const actual = new Set(collectKeys(loadCatalog(locale, namespace)));
+          const missing = [...expected].filter((key) => !actual.has(key));
+          const extra = [...actual].filter((key) => !expected.has(key));
+          expect({ namespace, missing, extra }).toEqual({ namespace, missing: [], extra: [] });
+        });
+      }
     });
   }
 });

@@ -543,13 +543,8 @@
         "description": "Rien ne correspond à \"{{query}}\""
       }
     },
-    "contextMenu": {
-      "addToQueue": "Ajouter à la file",
-      "viewSetter": "Voir l'ouvreur"
-    },
     "detail": {
       "notFound": "Bloc introuvable",
-      "boardPreview": "Vue du board bientôt disponible",
       "addToQueue": "Ajouter à la file",
       "logAscent": "Enregistrer un enchaînement",
       "sent_one": "Enchaîné {{count}} fois",
@@ -580,10 +575,6 @@
     "filter": {
       "title": "Filtres",
       "sortBy": "Trier par",
-      "popular": "Populaire",
-      "quality": "Qualité",
-      "difficulty": "Difficulté",
-      "newest": "Récents",
       "gradeRange": "Plage de cotation",
       "minGrade": "Min",
       "maxGrade": "Max",

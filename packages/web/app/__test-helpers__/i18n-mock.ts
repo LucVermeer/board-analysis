@@ -23,20 +23,20 @@
  *   }));
  */
 
-import enAdmin from '@/i18n/locales/en-US/admin.json';
-import enAurora from '@/i18n/locales/en-US/aurora.json';
-import enAuth from '@/i18n/locales/en-US/auth.json';
-import enBoards from '@/i18n/locales/en-US/boards.json';
-import enClimbs from '@/i18n/locales/en-US/climbs.json';
-import enCommon from '@/i18n/locales/en-US/common.json';
-import enFeed from '@/i18n/locales/en-US/feed.json';
-import enMarketing from '@/i18n/locales/en-US/marketing.json';
-import enNotifications from '@/i18n/locales/en-US/notifications.json';
-import enPlaylists from '@/i18n/locales/en-US/playlists.json';
-import enProfile from '@/i18n/locales/en-US/profile.json';
-import enSession from '@/i18n/locales/en-US/session.json';
-import enSettings from '@/i18n/locales/en-US/settings.json';
-import enYou from '@/i18n/locales/en-US/you.json';
+import enAdmin from '@boardsesh/i18n/locales/en-US/admin.json';
+import enAurora from '@boardsesh/i18n/locales/en-US/aurora.json';
+import enAuth from '@boardsesh/i18n/locales/en-US/auth.json';
+import enBoards from '@boardsesh/i18n/locales/en-US/boards.json';
+import enClimbs from '@boardsesh/i18n/locales/en-US/climbs.json';
+import enCommon from '@boardsesh/i18n/locales/en-US/common.json';
+import enFeed from '@boardsesh/i18n/locales/en-US/feed.json';
+import enMarketing from '@boardsesh/i18n/locales/en-US/marketing.json';
+import enNotifications from '@boardsesh/i18n/locales/en-US/notifications.json';
+import enPlaylists from '@boardsesh/i18n/locales/en-US/playlists.json';
+import enProfile from '@boardsesh/i18n/locales/en-US/profile.json';
+import enSession from '@boardsesh/i18n/locales/en-US/session.json';
+import enSettings from '@boardsesh/i18n/locales/en-US/settings.json';
+import enYou from '@boardsesh/i18n/locales/en-US/you.json';
 
 const CATALOGS: Record<string, unknown> = {
   admin: enAdmin,

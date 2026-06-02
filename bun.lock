@@ -162,6 +162,7 @@
         "@boardsesh/climb-filters": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
+        "@boardsesh/i18n": "*",
         "@boardsesh/key-value-storage": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
@@ -342,6 +343,14 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/i18n": {
+      "name": "@boardsesh/i18n",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@types/node": "^25.3.3",
+        "typescript": "~6.0.3",
+      },
+    },
     "packages/shared/key-value-storage": {
       "name": "@boardsesh/key-value-storage",
       "version": "1.0.0",
@@ -439,6 +448,7 @@
         "@boardsesh/db": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
+        "@boardsesh/i18n": "*",
         "@boardsesh/moonboard-ocr": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
@@ -844,6 +854,8 @@
     "@boardsesh/graphql": ["@boardsesh/graphql@workspace:packages/shared/graphql"],
 
     "@boardsesh/graphql-client": ["@boardsesh/graphql-client@workspace:packages/shared/graphql-client"],
+
+    "@boardsesh/i18n": ["@boardsesh/i18n@workspace:packages/shared/i18n"],
 
     "@boardsesh/key-value-storage": ["@boardsesh/key-value-storage@workspace:packages/shared/key-value-storage"],
 
@@ -4268,6 +4280,8 @@
     "@boardsesh/graphql/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/graphql-client/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "@boardsesh/i18n/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@boardsesh/key-value-storage/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 

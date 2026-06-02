@@ -18,6 +18,7 @@
     "@boardsesh/climb-filters": "*",
     "@boardsesh/graphql": "*",
     "@boardsesh/graphql-client": "*",
+    "@boardsesh/i18n": "*",
     "@boardsesh/key-value-storage": "*",
     "@boardsesh/party-profile": "*",
     "@boardsesh/play-view": "*",

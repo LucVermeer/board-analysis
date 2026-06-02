@@ -215,6 +215,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           // analytics surface exists.
         },
         error: () => {
+          // i18n-keep session:mobile.queue.syncError — called through `tRef.current`,
+          // which the orphan checker can't trace back to the session-bound `t`.
           showToastRef.current(tRef.current('mobile.queue.syncError'), 'error');
         },
         complete: () => {},

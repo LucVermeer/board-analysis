@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 /**
- * Static check that fails when a key in `packages/web/i18n/locales/en-US/<ns>.json`
- * has no live reference under `packages/web/app/` or `packages/web/scripts/`.
- * en-US is the source of truth — `es` and `fr` fall back through i18next, so
- * an orphan in en-US is an orphan in every locale.
+ * Static check that fails when a key in `packages/shared/i18n/locales/en-US/<ns>.json`
+ * has no live reference under `packages/web/app/`, `packages/web/scripts/`, or
+ * `packages/mobile/{src,app}/`. en-US is the source of truth — `es` and `fr`
+ * fall back through i18next, so an orphan in en-US is an orphan in every locale.
  *
  * What gets resolved as a reference:
  *   1. `t('foo.bar')` / `t('marketing:foo.bar')` with a static string literal,
@@ -41,9 +41,12 @@ import { DEFAULT_NAMESPACE } from '../app/lib/i18n/config';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
+const packagesRoot = join(webRoot, '..');
 const appRoot = join(webRoot, 'app');
 const scriptsRoot = join(webRoot, 'scripts');
-const catalogRoot = join(webRoot, 'i18n', 'locales', 'en-US');
+const mobileSrcRoot = join(packagesRoot, 'mobile', 'src');
+const mobileAppRoot = join(packagesRoot, 'mobile', 'app');
+const catalogRoot = join(packagesRoot, 'shared', 'i18n', 'locales', 'en-US');
 const repoRoot = join(webRoot, '..', '..');
 
 const KEEP_MARKER = 'i18n-keep';
@@ -612,7 +615,7 @@ type Report = {
 function run(): Report {
   const namespaces = discoverNamespaces();
   const catalog = loadCatalog(namespaces);
-  const files = discoverFiles([appRoot, scriptsRoot]);
+  const files = discoverFiles([appRoot, scriptsRoot, mobileSrcRoot, mobileAppRoot]);
   const usedKeys = new Map<string, Set<string>>();
   const globs = new Map<string, GlobPattern[]>();
   const unanalyzable: UnanalyzableSite[] = [];
@@ -670,7 +673,7 @@ function formatReport(report: Report): { exitCode: 0 | 1; lines: string[] } {
     for (const orphan of report.orphans) {
       if (orphan.namespace !== lastNamespace) {
         if (lastNamespace !== '') lines.push('');
-        lines.push(`packages/web/i18n/locales/en-US/${orphan.namespace}.json`);
+        lines.push(`packages/shared/i18n/locales/en-US/${orphan.namespace}.json`);
         lastNamespace = orphan.namespace;
       }
       lines.push(`  ${orphan.key}`);
@@ -680,7 +683,7 @@ function formatReport(report: Report): { exitCode: 0 | 1; lines: string[] } {
       `Found ${report.orphans.length} orphaned key(s) across ${new Set(report.orphans.map((orphan) => orphan.namespace)).size} namespace(s).`,
     );
     lines.push(
-      'Delete each from every locale catalog (en-US, es, fr) or add `// i18n-keep namespace.key.path` if the key is referenced outside `packages/web/app/`.',
+      'Delete each from every locale catalog (en-US, es, fr) or add `// i18n-keep namespace.key.path` if the key is referenced outside the scanned web + mobile source.',
     );
   }
 

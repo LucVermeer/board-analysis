@@ -4,13 +4,12 @@ import { cache } from 'react';
 import { createInstance, type i18n, type TFunction } from 'i18next';
 import resourcesToBackend from 'i18next-resources-to-backend';
 import { initReactI18next } from 'react-i18next/initReactI18next';
+import { loadCatalog } from '@boardsesh/i18n/catalog-loader';
 import { DEFAULT_LOCALE, DEFAULT_NAMESPACE, SUPPORTED_LOCALES, type Locale, type SeedNamespace } from './config';
 import { getLocale } from './get-locale';
 import { reportMissingI18nKey } from './missing-key-reporter';
 
-const resourceLoader = resourcesToBackend(
-  (locale: string, namespace: string) => import(`../../../i18n/locales/${locale}/${namespace}.json`),
-);
+const resourceLoader = resourcesToBackend((locale: string, namespace: string) => loadCatalog(locale, namespace));
 
 // Per-request memoization. React.cache dedupes calls with the same arguments
 // inside a single render, so generateMetadata + the page body share an

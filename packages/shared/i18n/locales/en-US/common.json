@@ -24,10 +24,6 @@
       "climb": "Climb",
       "profile": "Profile",
       "setters": "Setters"
-    },
-    "play": {
-      "sendCount_one": "{{count}} send",
-      "sendCount_other": "{{count}} sends"
     }
   },
   "lightControl": {

@@ -32,7 +32,6 @@
   "mobile": {
     "emptyTitle": "Aucun board pour le moment",
     "emptySubtitle": "Cherche un board pour commencer",
-    "activeBoard": "Board actif",
     "signInTitle": "Connecte-toi pour voir tes boards",
     "signInSubtitle": "Tes boards sont liés à ton compte.",
     "signInCta": "Se connecter",

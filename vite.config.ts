@@ -51,6 +51,7 @@ export default defineConfig({
       './packages/shared/play-view/vite.config.ts',
       './packages/shared/playlist-generator/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',
+      './packages/shared/i18n/vite.config.ts',
       './packages/shared/graphql/vite.config.ts',
       './packages/shared/graphql-client/vite.config.ts',
       './packages/shared-schema/vite.config.ts',
@@ -64,7 +65,8 @@ export default defineConfig({
       return lintableFileNames.length > 0 ? `vp check --fix ${lintableFileNames.map(shellQuote).join(' ')}` : [];
     },
     'packages/web/app/**/*.{ts,tsx}': () => ['vp run check:i18n', 'vp run check:i18n:orphans'],
-    'packages/web/i18n/locales/**/*.json': () => 'vp run check:i18n:orphans',
+    'packages/mobile/{src,app}/**/*.{ts,tsx}': () => 'vp run check:i18n:orphans',
+    'packages/shared/i18n/locales/**/*.json': () => 'vp run check:i18n:orphans',
   },
   run: {
     tasks: {
@@ -244,6 +246,9 @@ export default defineConfig({
       'typecheck:climb-filters': {
         command: 'bun run --filter=@boardsesh/climb-filters typecheck',
       },
+      'typecheck:i18n': {
+        command: 'bun run --filter=@boardsesh/i18n typecheck',
+      },
       'typecheck:graphql': {
         command: 'bun run --filter=@boardsesh/graphql typecheck',
         dependsOn: ['codegen'],
@@ -274,6 +279,7 @@ export default defineConfig({
           'typecheck:play-view',
           'typecheck:playlist-generator',
           'typecheck:climb-filters',
+          'typecheck:i18n',
           'typecheck:graphql',
           'typecheck:graphql-client',
           'typecheck:mobile',

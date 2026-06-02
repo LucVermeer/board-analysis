@@ -36,7 +36,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="record"
         options={{
-          title: t('mobile.session.recordTab'),
+          title: t('session:mobile.session.recordTab'),
         }}
       />
       <Tabs.Screen

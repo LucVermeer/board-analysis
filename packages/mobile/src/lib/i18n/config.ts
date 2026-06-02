@@ -1,93 +1,58 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { getLocales } from 'expo-localization';
+import { SUPPORTED_LOCALES, DEFAULT_LOCALE, DEFAULT_NAMESPACE, MOBILE_NAMESPACES, type Locale } from '@boardsesh/i18n';
 
-// --- Locale catalogs imported from the web package ---
-// Common (shared chrome)
-import commonEn from '../../../../web/i18n/locales/en-US/common.json';
-import commonEs from '../../../../web/i18n/locales/es/common.json';
-import commonFr from '../../../../web/i18n/locales/fr/common.json';
+// --- Locale catalogs from @boardsesh/i18n ---
+// Static imports so Metro bundles only the namespaces the mobile app uses;
+// web-only namespaces (marketing, admin) are never pulled in.
+import commonEn from '@boardsesh/i18n/locales/en-US/common.json';
+import commonEs from '@boardsesh/i18n/locales/es/common.json';
+import commonFr from '@boardsesh/i18n/locales/fr/common.json';
 
-// Auth
-import authEn from '../../../../web/i18n/locales/en-US/auth.json';
-import authEs from '../../../../web/i18n/locales/es/auth.json';
-import authFr from '../../../../web/i18n/locales/fr/auth.json';
+import authEn from '@boardsesh/i18n/locales/en-US/auth.json';
+import authEs from '@boardsesh/i18n/locales/es/auth.json';
+import authFr from '@boardsesh/i18n/locales/fr/auth.json';
 
-// Climbs
-import climbsEn from '../../../../web/i18n/locales/en-US/climbs.json';
-import climbsEs from '../../../../web/i18n/locales/es/climbs.json';
-import climbsFr from '../../../../web/i18n/locales/fr/climbs.json';
+import climbsEn from '@boardsesh/i18n/locales/en-US/climbs.json';
+import climbsEs from '@boardsesh/i18n/locales/es/climbs.json';
+import climbsFr from '@boardsesh/i18n/locales/fr/climbs.json';
 
-// Session
-import sessionEn from '../../../../web/i18n/locales/en-US/session.json';
-import sessionEs from '../../../../web/i18n/locales/es/session.json';
-import sessionFr from '../../../../web/i18n/locales/fr/session.json';
+import sessionEn from '@boardsesh/i18n/locales/en-US/session.json';
+import sessionEs from '@boardsesh/i18n/locales/es/session.json';
+import sessionFr from '@boardsesh/i18n/locales/fr/session.json';
 
-// Profile
-import profileEn from '../../../../web/i18n/locales/en-US/profile.json';
-import profileEs from '../../../../web/i18n/locales/es/profile.json';
-import profileFr from '../../../../web/i18n/locales/fr/profile.json';
+import profileEn from '@boardsesh/i18n/locales/en-US/profile.json';
+import profileEs from '@boardsesh/i18n/locales/es/profile.json';
+import profileFr from '@boardsesh/i18n/locales/fr/profile.json';
 
-// Settings
-import settingsEn from '../../../../web/i18n/locales/en-US/settings.json';
-import settingsEs from '../../../../web/i18n/locales/es/settings.json';
-import settingsFr from '../../../../web/i18n/locales/fr/settings.json';
+import settingsEn from '@boardsesh/i18n/locales/en-US/settings.json';
+import settingsEs from '@boardsesh/i18n/locales/es/settings.json';
+import settingsFr from '@boardsesh/i18n/locales/fr/settings.json';
 
-// Playlists
-import playlistsEn from '../../../../web/i18n/locales/en-US/playlists.json';
-import playlistsEs from '../../../../web/i18n/locales/es/playlists.json';
-import playlistsFr from '../../../../web/i18n/locales/fr/playlists.json';
+import playlistsEn from '@boardsesh/i18n/locales/en-US/playlists.json';
+import playlistsEs from '@boardsesh/i18n/locales/es/playlists.json';
+import playlistsFr from '@boardsesh/i18n/locales/fr/playlists.json';
 
-// Notifications
-import notificationsEn from '../../../../web/i18n/locales/en-US/notifications.json';
-import notificationsEs from '../../../../web/i18n/locales/es/notifications.json';
-import notificationsFr from '../../../../web/i18n/locales/fr/notifications.json';
+import notificationsEn from '@boardsesh/i18n/locales/en-US/notifications.json';
+import notificationsEs from '@boardsesh/i18n/locales/es/notifications.json';
+import notificationsFr from '@boardsesh/i18n/locales/fr/notifications.json';
 
-// Feed
-import feedEn from '../../../../web/i18n/locales/en-US/feed.json';
-import feedEs from '../../../../web/i18n/locales/es/feed.json';
-import feedFr from '../../../../web/i18n/locales/fr/feed.json';
+import feedEn from '@boardsesh/i18n/locales/en-US/feed.json';
+import feedEs from '@boardsesh/i18n/locales/es/feed.json';
+import feedFr from '@boardsesh/i18n/locales/fr/feed.json';
 
-// You (user's own page/stats)
-import youEn from '../../../../web/i18n/locales/en-US/you.json';
-import youEs from '../../../../web/i18n/locales/es/you.json';
-import youFr from '../../../../web/i18n/locales/fr/you.json';
+import youEn from '@boardsesh/i18n/locales/en-US/you.json';
+import youEs from '@boardsesh/i18n/locales/es/you.json';
+import youFr from '@boardsesh/i18n/locales/fr/you.json';
 
-// Boards
-import boardsEn from '../../../../web/i18n/locales/en-US/boards.json';
-import boardsEs from '../../../../web/i18n/locales/es/boards.json';
-import boardsFr from '../../../../web/i18n/locales/fr/boards.json';
+import boardsEn from '@boardsesh/i18n/locales/en-US/boards.json';
+import boardsEs from '@boardsesh/i18n/locales/es/boards.json';
+import boardsFr from '@boardsesh/i18n/locales/fr/boards.json';
 
-// Aurora (sync-related)
-import auroraEn from '../../../../web/i18n/locales/en-US/aurora.json';
-import auroraEs from '../../../../web/i18n/locales/es/aurora.json';
-import auroraFr from '../../../../web/i18n/locales/fr/aurora.json';
-
-export const SUPPORTED_LOCALES = ['en-US', 'es', 'fr'] as const;
-export type Locale = (typeof SUPPORTED_LOCALES)[number];
-
-export const DEFAULT_LOCALE: Locale = 'en-US';
-export const DEFAULT_NAMESPACE = 'common';
-
-/**
- * Namespaces available in the mobile app. Web-only namespaces
- * (marketing, admin) are excluded.
- */
-export const MOBILE_NAMESPACES = [
-  'common',
-  'auth',
-  'climbs',
-  'session',
-  'profile',
-  'settings',
-  'playlists',
-  'notifications',
-  'feed',
-  'you',
-  'boards',
-  'aurora',
-] as const;
-export type MobileNamespace = (typeof MOBILE_NAMESPACES)[number];
+import auroraEn from '@boardsesh/i18n/locales/en-US/aurora.json';
+import auroraEs from '@boardsesh/i18n/locales/es/aurora.json';
+import auroraFr from '@boardsesh/i18n/locales/fr/aurora.json';
 
 const resources = {
   'en-US': {

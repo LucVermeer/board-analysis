@@ -24,10 +24,6 @@
       "climb": "Bloc",
       "profile": "Profil",
       "setters": "Ouvreurs"
-    },
-    "play": {
-      "sendCount_one": "{{count}} envoi",
-      "sendCount_other": "{{count}} envois"
     }
   },
   "lightControl": {
