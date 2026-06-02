@@ -602,6 +602,126 @@ describe('useBoardBluetooth', () => {
     });
   });
 
+  describe('write failure marks the link lost', () => {
+    // Real BoardDetails carry a number[] set_ids; the shared mock lies with a
+    // string, so use array set_ids here (boardIdentityKey joins the array).
+    const arraySetIdsDetails = {
+      ...mockBoardDetails,
+      set_ids: [1, 2],
+    } as unknown as Parameters<typeof useBoardBluetooth>[0]['boardDetails'];
+
+    it('flips isConnected false when a write fails with a disconnect-shaped error', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: arraySetIdsDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.isConnected).toBe(true);
+
+      // The board was grabbed by another device — the write throws the GATT
+      // "disconnected" error and no gattserverdisconnected event fires.
+      mockAdapter.write.mockRejectedValueOnce(new DOMException('GATT Server is disconnected.', 'NetworkError'));
+
+      let sendResult: boolean | undefined;
+      await act(async () => {
+        sendResult = await result.current.sendFramesToBoard('p4131r42');
+      });
+
+      expect(sendResult).toBe(false);
+      expect(result.current.isConnected).toBe(false);
+      errorSpy.mockRestore();
+    });
+
+    it('keeps isConnected true when a write fails with a non-disconnect error', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: arraySetIdsDetails }));
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      mockAdapter.write.mockRejectedValueOnce(new Error('transient write hiccup'));
+
+      let sendResult: boolean | undefined;
+      await act(async () => {
+        sendResult = await result.current.sendFramesToBoard('p4131r42');
+      });
+
+      expect(sendResult).toBe(false);
+      expect(result.current.isConnected).toBe(true);
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('reconnectSerialForCurrentBoard (solo silent reconnect)', () => {
+    const arraySetIdsDetails = {
+      ...mockBoardDetails,
+      set_ids: [1, 2],
+    } as unknown as Parameters<typeof useBoardBluetooth>[0]['boardDetails'];
+
+    it('remembers the serial on connect and keeps it through an involuntary drop', async () => {
+      let capturedHandler: (() => void) | null = null;
+      mockAdapter.onDisconnect.mockImplementation((handler: () => void) => {
+        capturedHandler = handler;
+        return vi.fn();
+      });
+      mockParseSerialNumber.mockReturnValue('AB1234');
+
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: arraySetIdsDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(result.current.reconnectSerialForCurrentBoard).toBe('AB1234');
+
+      // Another device grabs the board — the serial must survive so a tap can
+      // silently reconnect to it.
+      act(() => {
+        capturedHandler?.();
+      });
+      expect(result.current.isConnected).toBe(false);
+      expect(result.current.reconnectSerialForCurrentBoard).toBe('AB1234');
+    });
+
+    it('forgets the serial after an explicit user disconnect', async () => {
+      mockParseSerialNumber.mockReturnValue('AB1234');
+      const { result } = renderHook(() => useBoardBluetooth({ boardDetails: arraySetIdsDetails }));
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.reconnectSerialForCurrentBoard).toBe('AB1234');
+
+      await act(async () => {
+        await result.current.disconnect();
+      });
+      expect(result.current.reconnectSerialForCurrentBoard).toBeNull();
+    });
+
+    it('returns null once the user is viewing a different board config', async () => {
+      mockParseSerialNumber.mockReturnValue('AB1234');
+      const otherBoardDetails = {
+        ...mockBoardDetails,
+        set_ids: [3, 4],
+      } as unknown as Parameters<typeof useBoardBluetooth>[0]['boardDetails'];
+
+      const { result, rerender } = renderHook(
+        ({ boardDetails }: { boardDetails: Parameters<typeof useBoardBluetooth>[0]['boardDetails'] }) =>
+          useBoardBluetooth({ boardDetails }),
+        { initialProps: { boardDetails: arraySetIdsDetails } },
+      );
+      await act(async () => {
+        await result.current.connect();
+      });
+      expect(result.current.reconnectSerialForCurrentBoard).toBe('AB1234');
+
+      // Switch to a different board (different set_ids) — the remembered serial
+      // no longer applies, so callers fall back to the picker.
+      rerender({ boardDetails: otherBoardDetails });
+      expect(result.current.reconnectSerialForCurrentBoard).toBeNull();
+    });
+  });
+
   describe('Bluetooth Disconnected analytics', () => {
     function findDisconnectCall(): [string, Record<string, unknown>] | undefined {
       return mockTrack.mock.calls.find(([name]) => name === 'Bluetooth Disconnected') as

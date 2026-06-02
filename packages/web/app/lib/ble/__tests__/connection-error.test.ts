@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vite-plus/test';
-import { classifyBleFailure, type BleFailureCategory } from '../connection-error';
+import { classifyBleFailure, isDisconnectionError, type BleFailureCategory } from '../connection-error';
 
 describe('classifyBleFailure', () => {
   const cases: Array<{ name: string; error: unknown; stage?: string; expected: BleFailureCategory }> = [
@@ -84,4 +84,46 @@ describe('classifyBleFailure', () => {
     // A cancel can surface after the stage was advanced; the cancel signal must win.
     expect(classifyBleFailure(new Error('Device selection cancelled'), 'gatt_connect')).toBe('user_cancelled');
   });
+});
+
+describe('isDisconnectionError', () => {
+  const disconnects: Array<{ name: string; error: unknown }> = [
+    {
+      name: 'web NetworkError (GATT disconnected)',
+      error: new DOMException('GATT Server is disconnected.', 'NetworkError'),
+    },
+    {
+      name: 'web InvalidStateError (dead handle)',
+      error: new DOMException('GATT operation failed', 'InvalidStateError'),
+    },
+    { name: 'capacitor/native "Not connected"', error: new Error('Not connected') },
+    { name: 'adapter "Device disconnected during write"', error: new Error('Device disconnected during write') },
+    { name: 'plugin peripheral disconnected', error: new Error('The peripheral disconnected unexpectedly') },
+    { name: 'generic gatt-not-connected message', error: new Error('GATT operation failed: not connected') },
+  ];
+
+  for (const { name, error } of disconnects) {
+    it(`treats as disconnect: ${name}`, () => {
+      expect(isDisconnectionError(error)).toBe(true);
+    });
+  }
+
+  const notDisconnects: Array<{ name: string; error: unknown }> = [
+    // Unmount-mid-write must never tear down the connection.
+    { name: 'AbortError', error: new DOMException('The operation was aborted', 'AbortError') },
+    // Picker-dismissed.
+    { name: 'NotFoundError', error: new DOMException('No device chosen', 'NotFoundError') },
+    // Validation-shaped messages from the write path.
+    { name: 'LED data missing', error: new Error('LED placement map is empty') },
+    { name: 'incompatible climb', error: new Error('climb incompatible with board') },
+    // Opaque / non-error values.
+    { name: 'opaque error', error: new Error('something opaque') },
+    { name: 'plain string', error: 'a plain string' },
+  ];
+
+  for (const { name, error } of notDisconnects) {
+    it(`treats as non-disconnect: ${name}`, () => {
+      expect(isDisconnectionError(error)).toBe(false);
+    });
+  }
 });

@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { useBoardBluetooth } from '../lib/ble/use-board-bluetooth';
 import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
@@ -123,17 +122,10 @@ type BluetoothProviderProps = {
 };
 
 export function BluetoothProvider({ boardName, layoutId, sizeId, children }: BluetoothProviderProps) {
-  // Track the last connected serial number for auto-reconnect on foreground
-  const lastConnectedSerialRef = useRef<string | null>(null);
-  const handleConnectSuccess = useCallback((serial: string | null) => {
-    lastConnectedSerialRef.current = serial;
-  }, []);
-
   const { isConnected, loading, connect, disconnect, sendFramesToBoard, pickerState } = useBoardBluetooth({
     boardName,
     layoutId,
     sizeId,
-    onConnectSuccess: handleConnectSuccess,
   });
 
   const clearBoard = useCallback(() => sendFramesToBoard(''), [sendFramesToBoard]);
@@ -160,7 +152,6 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
   // Wrap disconnect to track user-initiated disconnects
   const wrappedDisconnect = useCallback(async () => {
     isUserDisconnectRef.current = true;
-    lastConnectedSerialRef.current = null;
     setDisconnectedUnexpectedly(false);
     try {
       await disconnect();
@@ -169,30 +160,11 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
     }
   }, [disconnect]);
 
-  // Track app state across effect re-runs so foreground transitions
-  // are never missed when `isConnected` or `connect` identity changes.
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-
-  // Auto-reconnect when the app returns to foreground after a background
-  // disconnect. iOS CBCentralManager restoration handles keeping the
-  // connection alive in most cases, but if the OS killed the connection
-  // while backgrounded, this re-establishes it automatically.
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      const wasBackground = appStateRef.current === 'background' || appStateRef.current === 'inactive';
-      const isNowActive = nextState === 'active';
-
-      if (wasBackground && isNowActive && !isConnected && lastConnectedSerialRef.current) {
-        void connect(undefined, undefined, lastConnectedSerialRef.current);
-      }
-
-      appStateRef.current = nextState;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isConnected, connect]);
+  // Deliberately NO foreground auto-reconnect. These boards are
+  // last-connection-wins, so silently re-grabbing the board whenever the app
+  // foregrounds would steal it back from another device that legitimately took
+  // it — a ping-pong that flickers the wall. Reconnecting stays user-initiated
+  // (tap the lightbulb), matching the web app.
 
   useEffect(() => {
     if (wasConnectedRef.current && !isConnected && !isUserDisconnectRef.current) {

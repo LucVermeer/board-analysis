@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
-import { classifyBleFailure } from '@/app/lib/ble/connection-error';
+import { classifyBleFailure, isDisconnectionError } from '@/app/lib/ble/connection-error';
+import { normaliseSetIds } from '@/app/lib/ble/board-config-match';
 import { track } from '@/app/lib/analytics';
 import * as Sentry from '@sentry/nextjs';
 import type { BoardDetails } from '@/app/lib/types';
@@ -105,6 +106,21 @@ type BoardConfigurationRequest = {
   colorOverrides: LedColorOverrides | undefined;
 };
 
+// Identity of the physical board a serial maps to: board name + the route's
+// layout/size/set config. Used to decide whether a remembered (serial, board)
+// pair still applies — if the user has since switched to a different board the
+// key won't match and we fall back to the picker instead of silently grabbing
+// the old board. Deliberately NOT createBoardConfigurationKey (that also keys on
+// device name + colour overrides, which aren't part of board identity).
+function boardIdentityKey(boardDetails: BoardDetails): string {
+  return [
+    boardDetails.board_name,
+    boardDetails.layout_id,
+    boardDetails.size_id,
+    normaliseSetIds(boardDetails.set_ids.join(',')),
+  ].join('::');
+}
+
 function createBoardConfigurationKey(configuration: BoardConfigurationRequest): string {
   const sortedColorOverrides = Object.entries(configuration.colorOverrides ?? {}).sort(([leftKey], [rightKey]) =>
     leftKey.localeCompare(rightKey),
@@ -130,6 +146,13 @@ export function useBoardBluetooth({
   const { t } = useTranslation('common');
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  // The board this device last successfully connected to, with the identity of
+  // the board config it was paired against. Drives the solo lightbulb's silent
+  // reconnect: after an involuntary drop a tap reconnects straight to this
+  // serial (no picker) — but only while the current board still matches, so
+  // switching boards falls back to the picker. Survives an involuntary drop;
+  // cleared on an explicit user disconnect.
+  const [lastConnectedBoard, setLastConnectedBoard] = useState<{ serial: string; configKey: string } | null>(null);
 
   // Prevent device from sleeping while connected to the board
   useWakeLock(isConnected);
@@ -435,10 +458,19 @@ export function useBoardBluetooth({
           return;
         }
         console.error('Error sending frames to board:', error);
+        // A write that fails because the GATT link is gone (the board dropped or
+        // another device grabbed it — these boards are last-connection-wins) is
+        // the only signal we get when the adapter's disconnect event never
+        // fires. Mark the connection lost so the lightbulb stops showing
+        // "connected" and a deliberate reconnect can run. handleDisconnection
+        // dedups its own take-back prompt, so a burst of failing writes is safe.
+        if (isDisconnectionError(error)) {
+          handleDisconnection();
+        }
         return false;
       }
     },
-    [boardDetails, showMessage, ledColorOverrides, serialisedWrite],
+    [boardDetails, showMessage, ledColorOverrides, serialisedWrite, handleDisconnection],
   );
 
   const configureConnectedBoard = useCallback(
@@ -536,6 +568,9 @@ export function useBoardBluetooth({
           parsedSerial = parseSerialNumber(connection.deviceName) ?? null;
           if (parsedSerial) {
             recordBoardSerial(parsedSerial, boardDetails, boardUuid);
+            // Remember the board (and which config it was paired against) so a
+            // later involuntary drop can be recovered with a silent reconnect.
+            setLastConnectedBoard({ serial: parsedSerial, configKey: boardIdentityKey(boardDetails) });
           }
         }
 
@@ -644,8 +679,10 @@ export function useBoardBluetooth({
     configuredBoardKeyRef.current = null;
     writeChainRef.current = Promise.resolve();
     // The user chose to disconnect — clear the take-back prompt guard so a
-    // later genuine drop can prompt again.
+    // later genuine drop can prompt again, and forget the board so a later tap
+    // opens the picker rather than silently grabbing this board back.
     boardTakenPromptShownRef.current = false;
+    setLastConnectedBoard(null);
     setIsConnected(false);
     onConnectionChange?.(false);
     if (connectedAt !== null) {
@@ -689,6 +726,16 @@ export function useBoardBluetooth({
     };
   }, []);
 
+  // Serial to silently reconnect to for the board currently in view — only when
+  // the remembered board still matches the route's config. Null when nothing is
+  // remembered or the user has switched boards, so callers fall back to the
+  // picker. (Silent reconnect to a serial only works on native shells; web
+  // callers gate on that and ignore the serial.)
+  const reconnectSerialForCurrentBoard =
+    lastConnectedBoard && boardDetails && lastConnectedBoard.configKey === boardIdentityKey(boardDetails)
+      ? lastConnectedBoard.serial
+      : null;
+
   return {
     isConnected,
     loading,
@@ -696,5 +743,6 @@ export function useBoardBluetooth({
     disconnect,
     sendFramesToBoard,
     pickerState,
+    reconnectSerialForCurrentBoard,
   };
 }
