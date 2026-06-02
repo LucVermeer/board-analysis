@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, TextInput, ScrollView, StyleSheet, Alert, type ViewStyle } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import { Text } from './Text';
@@ -87,6 +92,8 @@ export function LogAscentSheet({
 }: LogAscentSheetProps) {
   const { t } = useTranslation('climbs');
   const theme = useTheme();
+  const { systemColors } = theme;
+  const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
@@ -226,8 +233,6 @@ export function LogAscentSheet({
     ),
     [],
   );
-
-  const { systemColors } = theme;
 
   const backgroundStyle: ViewStyle = {
     backgroundColor: systemColors.secondaryBackground as string,
@@ -387,19 +392,19 @@ export function LogAscentSheet({
             />
           </View>
 
-          {/* Save button */}
-          <View style={styles.saveSection}>
-            <Button
-              title={t('mobile.logAscent.save')}
-              onPress={handleSave}
-              variant="filled"
-              size="large"
-              loading={saveTick.isPending}
-              disabled={saveTick.isPending}
-              style={styles.saveButton}
-            />
-          </View>
         </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
+          <Button
+            title={t('mobile.logAscent.save')}
+            onPress={handleSave}
+            variant="filled"
+            size="large"
+            loading={saveTick.isPending}
+            disabled={saveTick.isPending}
+            style={styles.saveButton}
+          />
+        </View>
       </BottomSheetView>
     </BottomSheet>
   );
@@ -415,6 +420,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: spacing[4],
+  },
   header: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[3],
@@ -423,9 +431,6 @@ const styles = StyleSheet.create({
   },
   climbName: {
     opacity: 0.6,
-  },
-  scrollContent: {
-    paddingBottom: spacing[10],
   },
   section: {
     paddingHorizontal: spacing[4],
@@ -455,9 +460,12 @@ const styles = StyleSheet.create({
   gradeChipText: {
     fontWeight: '500',
   },
-  saveSection: {
+  footer: {
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[3],
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: iosSystemColors.separator,
   },
   saveButton: {
     width: '100%',

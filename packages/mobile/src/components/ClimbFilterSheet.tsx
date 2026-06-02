@@ -1,13 +1,15 @@
-import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import { View, Pressable, ScrollView, StyleSheet, type ViewStyle } from 'react-native';
-import BottomSheet, {
+import { useCallback, useMemo, useRef, useState, useEffect, type PropsWithChildren } from 'react';
+import { View, Pressable, ScrollView, StyleSheet, Platform, type ViewStyle } from 'react-native';
+import {
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetScrollView,
-  BottomSheetView,
   type BottomSheetBackdropProps,
   type BottomSheetScrollViewMethods,
 } from '@gorhom/bottom-sheet';
+import { FullWindowOverlay } from 'react-native-screens';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
@@ -56,7 +58,6 @@ type BoardSearchConfig = {
 };
 
 type ClimbFilterSheetProps = {
-  visible: boolean;
   onDismiss: () => void;
   boardConfig: BoardSearchConfig | null;
   currentFilters: ClimbFilters;
@@ -64,6 +65,13 @@ type ClimbFilterSheetProps = {
 };
 
 const ASCENT_BUCKET_VALUES = MIN_ASCENTS_FILTER_OPTIONS;
+
+// Portal the sheet above the tab bar / persistent queue bar on iOS so the
+// footer button isn't covered by those overlays.
+function FilterSheetContainer({ children }: PropsWithChildren) {
+  return <FullWindowOverlay>{children}</FullWindowOverlay>;
+}
+const modalContainerComponent = Platform.OS === 'ios' ? FilterSheetContainer : undefined;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -163,28 +171,31 @@ export function hasActiveFilters(filters: ClimbFilters): boolean {
   return hasActiveClimbFilters(filters);
 }
 
-export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilters, onApply }: ClimbFilterSheetProps) {
+export function ClimbFilterSheet({ onDismiss, boardConfig, currentFilters, onApply }: ClimbFilterSheetProps) {
   const { t } = useTranslation('climbs');
   const theme = useTheme();
+  const { systemColors } = theme;
   const router = useRouter();
   const { isAuthenticated } = useAuth();
-  const sheetRef = useRef<BottomSheet>(null);
+  const insets = useSafeAreaInsets();
+  const sheetRef = useRef<BottomSheetModal>(null);
   const scrollRef = useRef<BottomSheetScrollViewMethods>(null);
   const boardName = boardConfig?.boardName ?? '';
   const { data: grades } = useGrades(boardName);
 
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(currentFilters);
-  const [sectionResetKey, setSectionResetKey] = useState(0);
+  // CollapsibleSection reads this prop to know when to collapse. With
+  // mount-based control the section state is fresh on every open, so we never
+  // actually need to bump this — but the prop is still required by the
+  // component, so keep a stable zero.
+  const sectionResetKey = 0;
 
-  const currentFiltersRef = useRef(currentFilters);
-  currentFiltersRef.current = currentFilters;
+  // Mount-based control: parent renders this only when the sheet should be
+  // open, so we just present on mount and let the parent unmount on dismiss
+  // (same pattern as DevicePickerSheet).
   useEffect(() => {
-    if (visible) {
-      setLocalFilters(currentFiltersRef.current);
-      setSectionResetKey((c) => c + 1);
-      scrollRef.current?.scrollTo({ x: 0, y: 0, animated: false });
-    }
-  }, [visible]);
+    sheetRef.current?.present();
+  }, []);
 
   useEffect(() => {
     return subscribeToSetterSelection((setters) => {
@@ -354,7 +365,7 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
 
   const handleApply = useCallback(() => {
     onApply(localFilters);
-    sheetRef.current?.close();
+    sheetRef.current?.dismiss();
   }, [localFilters, onApply]);
 
   const handleReset = useCallback(() => {
@@ -362,14 +373,8 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
     setLocalFilters(DEFAULT_FILTERS);
   }, []);
 
-  const handleSheetChange = useCallback(
-    (index: number) => {
-      if (index === -1) {
-        onDismiss();
-      }
-    },
-    [onDismiss],
-  );
+  // BottomSheetModal fires onDismiss when the sheet closes — we don't need to
+  // watch index changes for dismiss anymore.
 
   const renderBackdrop = useCallback(
     (backdropProps: BottomSheetBackdropProps) => (
@@ -393,8 +398,6 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
     });
   }, [router, boardConfig, localFilters.setter]);
 
-  const { systemColors } = theme;
-
   const backgroundStyle: ViewStyle = {
     backgroundColor: systemColors.secondaryBackground as string,
     borderTopLeftRadius: 16,
@@ -405,34 +408,36 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
 
   const accuracyValue: GradeAccuracyValue | 'off' = localFilters.gradeAccuracy ?? 'off';
 
-  if (!visible) return null;
-
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={sheetRef}
+      name="climb-filter"
       index={0}
       snapPoints={snapPoints}
+      enableDynamicSizing={false}
+      stackBehavior="push"
+      containerComponent={modalContainerComponent}
       enablePanDownToClose
       backdropComponent={renderBackdrop}
-      onChange={handleSheetChange}
+      onDismiss={onDismiss}
       handleIndicatorStyle={styles.indicator}
       backgroundStyle={backgroundStyle}
     >
-      <BottomSheetView style={styles.sheetContent}>
-        <View style={styles.header}>
-          <Text variant="title3">{t('mobile.filter.title')}</Text>
-          <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
-            <Text variant="subheadline" color={brandColors.primary}>
-              {t('mobile.filter.reset')}
-            </Text>
-          </Pressable>
-        </View>
+      <View style={styles.header}>
+        <Text variant="title3">{t('mobile.filter.title')}</Text>
+        <Pressable onPress={handleReset} hitSlop={8} accessibilityRole="button">
+          <Text variant="subheadline" color={brandColors.primary}>
+            {t('mobile.filter.reset')}
+          </Text>
+        </Pressable>
+      </View>
 
-        <BottomSheetScrollView
-          ref={scrollRef}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+      <BottomSheetScrollView
+        ref={scrollRef}
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
           <View style={styles.sectionsContainer}>
             <CollapsibleSection
               title={t('mobile.filter.section.climb')}
@@ -634,17 +639,16 @@ export function ClimbFilterSheet({ visible, onDismiss, boardConfig, currentFilte
           </View>
         </BottomSheetScrollView>
 
-        <View style={styles.footer}>
-          <Button
-            title={t('mobile.filter.apply')}
-            onPress={handleApply}
-            variant="filled"
-            size="large"
-            style={styles.applyButton}
-          />
-        </View>
-      </BottomSheetView>
-    </BottomSheet>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
+        <Button
+          title={t('mobile.filter.apply')}
+          onPress={handleApply}
+          variant="filled"
+          size="large"
+          style={styles.applyButton}
+        />
+      </View>
+    </BottomSheetModal>
   );
 }
 
@@ -655,7 +659,7 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
   },
-  sheetContent: {
+  scrollView: {
     flex: 1,
   },
   header: {
@@ -742,7 +746,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
-    paddingBottom: spacing[4],
+    paddingBottom: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: iosSystemColors.separator,
   },
