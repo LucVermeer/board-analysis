@@ -6,7 +6,7 @@ import CreateClimbForm from '../create-climb-form';
 import { useBoardProvider } from '../../board-provider/board-provider-context';
 import { useCreateClimb } from '../use-create-climb';
 import { useMoonBoardCreateClimb } from '../use-moonboard-create-climb';
-import { useBoardBluetooth } from '../../board-bluetooth-control/use-board-bluetooth';
+import { useOptionalBluetoothContext } from '../../board-bluetooth-control/bluetooth-context';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import type { LitUpHoldsMap } from '@boardsesh/shared-schema';
 import type { BoardContextType } from '../../board-provider/board-provider-context';
@@ -65,8 +65,8 @@ vi.mock('../../board-provider/board-provider-context', () => ({
   })),
 }));
 
-vi.mock('../../board-bluetooth-control/use-board-bluetooth', () => ({
-  useBoardBluetooth: vi.fn(() => ({ isConnected: false, sendFramesToBoard: mockSendFramesToBoard })),
+vi.mock('../../board-bluetooth-control/bluetooth-context', () => ({
+  useOptionalBluetoothContext: vi.fn(() => ({ isConnected: false, sendFramesToBoard: mockSendFramesToBoard })),
 }));
 
 vi.mock('../use-create-climb', () => ({
@@ -799,10 +799,10 @@ describe('CreateClimbForm — Aurora rendering', () => {
   });
 
   it('sends frames to board via Bluetooth when connected and holds change', async () => {
-    vi.mocked(useBoardBluetooth).mockReturnValue({
+    vi.mocked(useOptionalBluetoothContext).mockReturnValue({
       isConnected: true,
       sendFramesToBoard: mockSendFramesToBoard,
-    } as unknown as ReturnType<typeof useBoardBluetooth>);
+    } as unknown as ReturnType<typeof useOptionalBluetoothContext>);
     mockAuroraCreateState = {
       isValid: true,
       totalHolds: 1,
@@ -825,6 +825,51 @@ describe('CreateClimbForm — Aurora rendering', () => {
     await waitFor(() => {
       expect(mockSendFramesToBoard).toHaveBeenCalledWith('test-frames');
     });
+  });
+
+  it('stops the direct board preview once the climb is Set Active (queue path owns the wall)', async () => {
+    // While building (queueItemUuid == null) hold edits send directly; once the
+    // climb lands in the queue, the replaceQueueItem → AutoSender path owns the
+    // wall, so the direct preview must stand down to avoid double-writes.
+    vi.mocked(useOptionalBluetoothContext).mockReturnValue({
+      isConnected: true,
+      sendFramesToBoard: mockSendFramesToBoard,
+    } as unknown as ReturnType<typeof useOptionalBluetoothContext>);
+    mockSetCurrentClimb.mockResolvedValue({ uuid: 'queue-item-1' });
+    mockQueueActions = {
+      setCurrentClimb: mockSetCurrentClimb,
+      replaceQueueItem: mockReplaceQueueItem,
+      addToQueue: vi.fn(),
+      removeFromQueue: vi.fn(),
+    };
+    mockAuroraCreateState = {
+      isValid: true,
+      totalHolds: 1,
+      litUpHoldsMap: { 1: { state: 'HAND', color: '#blue', displayColor: '#blue' } } as LitUpHoldsMap,
+    };
+    vi.mocked(useCreateClimb).mockReturnValue({
+      litUpHoldsMap: mockAuroraCreateState.litUpHoldsMap,
+      setHoldState: mockSetAuroraHoldState,
+      startingCount: 0,
+      finishCount: 0,
+      totalHolds: 1,
+      isValid: true,
+      resetHolds: mockResetAuroraHolds,
+      generateFramesString: mockGenerateAuroraFramesString,
+      loadHolds: mockLoadAuroraHolds,
+    });
+
+    renderAuroraComponent();
+
+    // Mount preview send fires while the climb is still a draft.
+    await waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1));
+
+    // Set Active → queueItemUuid is set → direct preview must stand down.
+    mockSendFramesToBoard.mockClear();
+    fireEvent.click(screen.getByLabelText('Set as active climb'));
+    await waitFor(() => expect(mockReplaceQueueItem).toHaveBeenCalled());
+
+    expect(mockSendFramesToBoard).not.toHaveBeenCalled();
   });
 
   it('does not show duplicate checking alert for Aurora', () => {

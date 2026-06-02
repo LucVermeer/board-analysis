@@ -610,9 +610,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
     // needed; there's no other device that might emit a wall-confirm).
     // Tap when paired sends the displayed climb to the wall — `takeControl`
     // short-circuits to `setCurrentClimb` in solo, which the BLE AutoSender
-    // picks up. Re-pressing the same climb is deduped at the BLE layer via
-    // `lastSentUuidRef`; the deeper "actually disconnect BLE" path stays on
-    // the long-press into the light-control drawer.
+    // picks up. Re-pressing the exact same frames is deduped at the BLE layer
+    // by the send-payload signature; the deeper "actually disconnect BLE" path
+    // stays on the long-press into the light-control drawer.
     if (!isPersistentSessionActive) {
       if (!isBluetoothConnected) {
         track('Wall Control Taken', {
@@ -1196,7 +1196,9 @@ const PlayViewDrawer: React.FC<PlayViewDrawerProps> = ({
           lightbulb. Hosts disco/glyph light shows, palette customisation,
           and the manual BLE disconnect that the old ShareBoardButton
           used to own. Mounted lazily on first open. */}
-      {hasOpenedLightDrawer && <LightControlDrawer open={lightDrawerOpen} onClose={handleCloseLightDrawer} />}
+      {hasOpenedLightDrawer && (
+        <LightControlDrawer open={lightDrawerOpen} onClose={handleCloseLightDrawer} boardDetails={boardDetails} />
+      )}
     </SwipeableDrawer>
   );
 };

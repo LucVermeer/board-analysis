@@ -25,25 +25,40 @@ export function AutoConnectHandler({ connect, isBluetoothSupported }: AutoConnec
   const router = useLocaleRouter();
   const { climbSearchResults, hasDoneFirstFetch } = useSearchData();
   const { setCurrentClimb } = useQueueActions();
-  const triggeredRef = useRef(false);
+  // The serial we've already acted on for the *current* occurrence of the
+  // ?autoConnect param. NOT a fire-once boolean: this handler is mounted once
+  // at the app root (inside the persistent BluetoothProvider) and never
+  // remounts across navigation, so a boolean latch would swallow every
+  // auto-connect after the first — breaking the board-config mismatch "Switch"
+  // hand-off and repeated board-discovery taps, both of which client-navigate
+  // with a fresh ?autoConnect each time. We strip the param after firing, so
+  // resetting to null when it's absent lets the next occurrence (even the same
+  // serial) auto-connect again, while still ignoring re-renders within one
+  // occurrence.
+  const triggeredForSerialRef = useRef<string | null>(null);
 
   const autoConnectSerial = searchParams.get('autoConnect');
 
   useEffect(() => {
+    if (!autoConnectSerial) {
+      // Param absent (initial load, or stripped after a prior auto-connect) —
+      // clear the latch so a later navigation re-adding it fires.
+      triggeredForSerialRef.current = null;
+      return;
+    }
     // Match the route's Zod schema: 1–64 chars, alphanumerics plus hyphens.
     // The mismatch-dialog "Switch" flow appends serials directly, including
     // hyphenated ones (KB-99, SN-1, etc.), so the validator must accept them.
     if (
-      !autoConnectSerial ||
       !/^[A-Za-z0-9-]+$/.test(autoConnectSerial) ||
       autoConnectSerial.length > 64 ||
-      triggeredRef.current
+      triggeredForSerialRef.current === autoConnectSerial
     )
       return;
     if (!hasDoneFirstFetch || !climbSearchResults || climbSearchResults.length === 0) return;
     if (!isBluetoothSupported) return;
 
-    triggeredRef.current = true;
+    triggeredForSerialRef.current = autoConnectSerial;
 
     // Remove the param from URL immediately to prevent re-trigger
     const params = new URLSearchParams(searchParams.toString());

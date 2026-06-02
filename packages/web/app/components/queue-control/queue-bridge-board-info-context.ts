@@ -5,6 +5,10 @@ import type { Angle, BoardDetails } from '@/app/lib/types';
 
 export type QueueBridgeBoardInfo = {
   boardDetails: BoardDetails | null;
+  /** Saved-board UUID when on a `/b/{slug}` route, else null. Lets the
+   * root-level BluetoothProvider link a freshly-paired BLE serial to the saved
+   * board (the route layout no longer mounts its own provider). */
+  boardUuid: string | null;
   angle: Angle;
   /**
    * Whether `angle` came from a real source (route / session boardPath /
@@ -28,6 +32,7 @@ export type QueueBridgeBoardInfo = {
 
 export const QueueBridgeBoardInfoContext = createContext<QueueBridgeBoardInfo>({
   boardDetails: null,
+  boardUuid: null,
   angle: 0,
   hasResolvedAngle: false,
   hasActiveQueue: false,

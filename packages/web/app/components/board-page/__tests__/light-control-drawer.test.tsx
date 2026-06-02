@@ -36,6 +36,7 @@ vi.mock('../../graphql-queue', () => ({
 }));
 
 import { LightControlDrawer } from '../light-control-drawer';
+import type { BoardDetails } from '@/app/lib/types';
 
 const boardDetails = {
   board_name: 'kilter',
@@ -44,7 +45,7 @@ const boardDetails = {
   edge_right: 100,
   edge_top: 100,
   edge_bottom: 0,
-};
+} as unknown as BoardDetails;
 
 describe('LightControlDrawer light-show failure guard', () => {
   beforeEach(() => {
@@ -55,7 +56,7 @@ describe('LightControlDrawer light-show failure guard', () => {
       sendFramesToBoard: mockSendFramesToBoard,
       clearBoard: mockClearBoard,
       disconnect: vi.fn(),
-      boardDetails,
+      // boardDetails now comes in as a prop, not from the BLE context.
       partyMode: 'glyphs',
       setPartyMode: mockSetPartyMode,
       ledColorOverrides: {},
@@ -71,7 +72,7 @@ describe('LightControlDrawer light-show failure guard', () => {
     // Every write fails — a dead connection while the show is running.
     mockSendFramesToBoard.mockResolvedValue(false);
 
-    render(<LightControlDrawer open onClose={() => {}} />);
+    render(<LightControlDrawer open onClose={() => {}} boardDetails={boardDetails} />);
 
     // Mount tick (failure 1) + one interval tick (failure 2) trips the guard.
     await act(async () => {
@@ -85,7 +86,7 @@ describe('LightControlDrawer light-show failure guard', () => {
   it('keeps the show running while writes succeed', async () => {
     mockSendFramesToBoard.mockResolvedValue(true);
 
-    render(<LightControlDrawer open onClose={() => {}} />);
+    render(<LightControlDrawer open onClose={() => {}} boardDetails={boardDetails} />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1400);

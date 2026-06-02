@@ -28,6 +28,7 @@ import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { GLYPHS, PARTY_LETTERS, buildPartyFrames, mapGlyphToHolds } from './party-glyphs';
 import { CUSTOMISABLE_LED_ROLES, type CustomisableLedRole } from '@/app/lib/led-color-overrides-db';
 import type { BoardName } from '@boardsesh/shared-schema';
+import type { BoardDetails } from '@/app/lib/types';
 
 const PARTY_TICK_MS = 600;
 const DISCO_TICK_MS = 450;
@@ -40,6 +41,10 @@ const LIGHT_SHOW_MAX_CONSECUTIVE_FAILURES = 2;
 type LightControlDrawerProps = {
   open: boolean;
   onClose: () => void;
+  /** Board config for this route. Passed as a prop (not read from the BLE
+   * context) because the single root-level BluetoothProvider exposes a nullable
+   * boardDetails; this drawer only ever renders under a real board. */
+  boardDetails: BoardDetails;
 };
 
 /**
@@ -75,7 +80,7 @@ function getDefaultRoleColor(role: CustomisableLedRole, boardName: BoardName): s
   return HOLD_STATE_MAP[boardName]?.[code]?.color ?? '#0000ff';
 }
 
-export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, onClose }) => {
+export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, onClose, boardDetails }) => {
   const { t } = useTranslation('common');
   const { showMessage } = useSnackbar();
   const {
@@ -83,7 +88,6 @@ export const LightControlDrawer: React.FC<LightControlDrawerProps> = ({ open, on
     sendFramesToBoard,
     clearBoard,
     disconnect,
-    boardDetails,
     partyMode,
     setPartyMode,
     ledColorOverrides,

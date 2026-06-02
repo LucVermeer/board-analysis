@@ -42,7 +42,7 @@ import SwipeableDrawer from '../swipeable-drawer/swipeable-drawer';
 import { useBoardProvider } from '../board-provider/board-provider-context';
 import { useCreateClimb } from './use-create-climb';
 import { useMoonBoardCreateClimb } from './use-moonboard-create-climb';
-import { useBoardBluetooth } from '../board-bluetooth-control/use-board-bluetooth';
+import { useOptionalBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
 import type { MoonBoardClimbDuplicateMatch, UpdateClimbInput } from '@boardsesh/shared-schema';
 import type { BoardDetails, BoardName, Climb } from '@/app/lib/types';
 import { convertLitUpHoldsStringToMap } from '../board-renderer/util';
@@ -181,10 +181,13 @@ export default function CreateClimbForm({
   const setLitUpHoldsMap = boardType === 'moonboard' ? moonboardClimb.setLitUpHoldsMap : undefined;
   const loadAuroraHolds = boardType === 'aurora' ? auroraClimb.loadHolds : undefined;
 
-  // Bluetooth for Aurora boards
-  const { isConnected, sendFramesToBoard } = useBoardBluetooth({
-    boardDetails: boardType === 'aurora' ? boardDetails : undefined,
-  });
+  // Bluetooth for Aurora boards. Share the single root-level connection (the
+  // one the lightbulb actually drives) instead of spinning up a second adapter
+  // that nothing ever connects. Optional so the form still renders in isolated
+  // unit tests that don't mount a BluetoothProvider.
+  const bluetooth = useOptionalBluetoothContext();
+  const isConnected = bluetooth?.isConnected ?? false;
+  const sendFramesToBoard = bluetooth?.sendFramesToBoard;
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -440,13 +443,18 @@ export default function CreateClimbForm({
       : 'This hold pattern already exists. Change at least one hold to save.';
   }, [moonBoardDuplicateMatch]);
 
-  // Send frames to board whenever litUpHoldsMap changes (Aurora only)
+  // Live board preview while BUILDING: push raw frames to the shared connection
+  // on every hold edit. Only while the climb isn't in the queue yet
+  // (queueItemUuid == null) — once it's been Set Active / saved, the queue's
+  // replaceQueueItem → BluetoothAutoSender path owns the wall, so sending here
+  // too would double-write. Local-only (no WS broadcast), matching the pivot's
+  // "building doesn't broadcast" rule.
   useEffect(() => {
+    if (queueItemUuid != null) return;
     if (boardType === 'aurora' && isConnected && generateFramesString) {
-      const frames = generateFramesString();
-      void sendFramesToBoard(frames);
+      void sendFramesToBoard?.(generateFramesString());
     }
-  }, [boardType, litUpHoldsMap, isConnected, generateFramesString, sendFramesToBoard]);
+  }, [boardType, litUpHoldsMap, isConnected, generateFramesString, sendFramesToBoard, queueItemUuid]);
 
   // As soon as the user edits the climb after a successful save, flip the
   // button back to its normal "Save" state so they can save the revision.
@@ -519,7 +527,7 @@ export default function CreateClimbForm({
     // form, not party state.
     setQueueItemUuid(null);
     if (boardType === 'aurora' && isConnected) {
-      void sendFramesToBoard('');
+      void sendFramesToBoard?.('');
     }
     if (boardType === 'moonboard') {
       setUserGrade(undefined);
