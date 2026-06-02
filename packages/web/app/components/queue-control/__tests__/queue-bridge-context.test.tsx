@@ -1415,7 +1415,7 @@ describe('queue-bridge-context', () => {
      * The hook reads from the bridge's QueueContext (root level), while
      * the injector reads from the inner QueueContext (board route level).
      */
-    function renderInjector(boardRouteCtx: GraphQLQueueContextType | undefined) {
+    function renderInjector(boardRouteCtx: GraphQLQueueContextType | undefined, boardUuid?: string) {
       const actions = boardRouteCtx ? extractActions(boardRouteCtx) : undefined;
       const wrapper = ({ children }: { children: React.ReactNode }) => (
         <QueueBridgeProvider>
@@ -1424,7 +1424,7 @@ describe('queue-bridge-context', () => {
           {/* Inner providers simulate GraphQLQueueProvider on board route */}
           <QueueActionsContext.Provider value={actions}>
             <QueueContext.Provider value={boardRouteCtx}>
-              <QueueBridgeInjector boardDetails={bd} angle={angle} />
+              <QueueBridgeInjector boardDetails={bd} angle={angle} boardUuid={boardUuid} />
             </QueueContext.Provider>
           </QueueActionsContext.Provider>
         </QueueBridgeProvider>
@@ -1448,9 +1448,19 @@ describe('queue-bridge-context', () => {
       expect(result.current.boardInfo.hasActiveQueue).toBe(true);
       expect(result.current.boardInfo.boardDetails).toEqual(bd);
       expect(result.current.boardInfo.angle).toBe(40);
+      // No /b/{slug} uuid passed → null (standard board routes don't carry one).
+      expect(result.current.boardInfo.boardUuid).toBeNull();
       // The bridge's exposed QueueContext should be the injected one
       expect(result.current.queueCtx).toBe(fakeCtx);
       expect(result.current.currentClimbUuid).toBeNull();
+    });
+
+    it('surfaces boardUuid when a /b/{slug} route injects it', () => {
+      const fakeCtx = createFakeQueueContext({ queue: [createTestQueueItem()] });
+      const { result } = renderInjector(fakeCtx, 'board-uuid-xyz');
+      // Flows injector → bridge → boardInfo so the root BluetoothProvider can
+      // link a paired serial to the saved board.
+      expect(result.current.boardInfo.boardUuid).toBe('board-uuid-xyz');
     });
 
     it('clears on unmount', () => {

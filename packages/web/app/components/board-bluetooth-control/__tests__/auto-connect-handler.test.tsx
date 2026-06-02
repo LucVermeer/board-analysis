@@ -150,7 +150,7 @@ describe('AutoConnectHandler', () => {
     expect(mockConnect).not.toHaveBeenCalled();
   });
 
-  it('does not trigger twice on re-render (triggeredRef guard)', async () => {
+  it('does not trigger twice on re-render while the same param is still present', async () => {
     mockSearchParams = new URLSearchParams('autoConnect=751737');
 
     const { rerender } = render(<AutoConnectHandler connect={mockConnect} isBluetoothSupported />);
@@ -169,6 +169,54 @@ describe('AutoConnectHandler', () => {
     });
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-fires for a NEW serial without remounting (persistent root handler)', async () => {
+    // The handler lives once at the app root and never remounts on navigation.
+    // A new ?autoConnect serial (mismatch "Switch" / a second board-discovery
+    // tap) must still auto-connect — a fire-once boolean would swallow it.
+    mockSearchParams = new URLSearchParams('autoConnect=751737');
+    const { rerender } = render(<AutoConnectHandler connect={mockConnect} isBluetoothSupported />);
+
+    await act(async () => {
+      await vi.waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1));
+    });
+    expect(mockConnect).toHaveBeenLastCalledWith('p1r12p2r13', false, '751737');
+
+    // A different board is chosen — new serial arrives on the SAME handler.
+    mockSearchParams = new URLSearchParams('autoConnect=480221');
+    rerender(<AutoConnectHandler connect={mockConnect} isBluetoothSupported />);
+
+    await act(async () => {
+      await vi.waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(2));
+    });
+    expect(mockConnect).toHaveBeenLastCalledWith('p1r12p2r13', false, '480221');
+  });
+
+  it('re-fires for the SAME serial after the param is stripped and re-added', async () => {
+    // After firing we strip the param; a later navigation back to the same
+    // board re-adds it. The latch resets when the param is absent, so the
+    // repeat connects again.
+    mockSearchParams = new URLSearchParams('autoConnect=751737');
+    const { rerender } = render(<AutoConnectHandler connect={mockConnect} isBluetoothSupported />);
+
+    await act(async () => {
+      await vi.waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1));
+    });
+
+    // Param stripped (mockReplace is a no-op, so simulate it here).
+    mockSearchParams = new URLSearchParams();
+    rerender(<AutoConnectHandler connect={mockConnect} isBluetoothSupported />);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    // Same serial navigated to again.
+    mockSearchParams = new URLSearchParams('autoConnect=751737');
+    rerender(<AutoConnectHandler connect={mockConnect} isBluetoothSupported />);
+    await act(async () => {
+      await vi.waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(2));
+    });
   });
 
   it('rejects non-alphanumeric serial numbers', async () => {

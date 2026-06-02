@@ -827,6 +827,51 @@ describe('CreateClimbForm — Aurora rendering', () => {
     });
   });
 
+  it('stops the direct board preview once the climb is Set Active (queue path owns the wall)', async () => {
+    // While building (queueItemUuid == null) hold edits send directly; once the
+    // climb lands in the queue, the replaceQueueItem → AutoSender path owns the
+    // wall, so the direct preview must stand down to avoid double-writes.
+    vi.mocked(useOptionalBluetoothContext).mockReturnValue({
+      isConnected: true,
+      sendFramesToBoard: mockSendFramesToBoard,
+    } as unknown as ReturnType<typeof useOptionalBluetoothContext>);
+    mockSetCurrentClimb.mockResolvedValue({ uuid: 'queue-item-1' });
+    mockQueueActions = {
+      setCurrentClimb: mockSetCurrentClimb,
+      replaceQueueItem: mockReplaceQueueItem,
+      addToQueue: vi.fn(),
+      removeFromQueue: vi.fn(),
+    };
+    mockAuroraCreateState = {
+      isValid: true,
+      totalHolds: 1,
+      litUpHoldsMap: { 1: { state: 'HAND', color: '#blue', displayColor: '#blue' } } as LitUpHoldsMap,
+    };
+    vi.mocked(useCreateClimb).mockReturnValue({
+      litUpHoldsMap: mockAuroraCreateState.litUpHoldsMap,
+      setHoldState: mockSetAuroraHoldState,
+      startingCount: 0,
+      finishCount: 0,
+      totalHolds: 1,
+      isValid: true,
+      resetHolds: mockResetAuroraHolds,
+      generateFramesString: mockGenerateAuroraFramesString,
+      loadHolds: mockLoadAuroraHolds,
+    });
+
+    renderAuroraComponent();
+
+    // Mount preview send fires while the climb is still a draft.
+    await waitFor(() => expect(mockSendFramesToBoard).toHaveBeenCalledTimes(1));
+
+    // Set Active → queueItemUuid is set → direct preview must stand down.
+    mockSendFramesToBoard.mockClear();
+    fireEvent.click(screen.getByLabelText('Set as active climb'));
+    await waitFor(() => expect(mockReplaceQueueItem).toHaveBeenCalled());
+
+    expect(mockSendFramesToBoard).not.toHaveBeenCalled();
+  });
+
   it('does not show duplicate checking alert for Aurora', () => {
     renderAuroraComponent();
     expect(screen.queryByText('createClimbForm.alerts.checkingMoonBoardDuplicate')).toBeNull();
