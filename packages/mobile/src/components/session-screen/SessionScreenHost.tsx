@@ -1,14 +1,6 @@
 import { useEffect } from 'react';
 import { Dimensions, StyleSheet, View, useColorScheme } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  Easing,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { useSessionScreen } from '../../providers/session-screen-provider';
 import { GlassSurface } from '../GlassSurface';
@@ -16,8 +8,6 @@ import { SessionScreen } from './SessionScreen';
 import { springs } from '../../theme/animations';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const DISMISS_VELOCITY = 800;
-const DISMISS_DISTANCE = SCREEN_HEIGHT * 0.25;
 
 /**
  * Full-screen Strava-style overlay that hosts the Session screen. Mounted once
@@ -49,29 +39,6 @@ export function SessionScreenHost() {
 
   const handleClose = () => close();
 
-  // Drag-down-to-dismiss on the whole overlay. PanGestureHandler activates on
-  // downward motion only; small horizontal jitter or upward motion is ignored.
-  const startY = useSharedValue(0);
-  const panGesture = Gesture.Pan()
-    .activeOffsetY([10, 9999])
-    .failOffsetY([-9999, -10])
-    .onBegin(() => {
-      startY.value = translateY.value;
-    })
-    .onUpdate((event) => {
-      const next = startY.value + event.translationY;
-      // Only allow dragging downward from the rest position; rubber-band on overshoot up.
-      translateY.value = Math.max(0, next);
-    })
-    .onEnd((event) => {
-      const shouldDismiss = translateY.value > DISMISS_DISTANCE || event.velocityY > DISMISS_VELOCITY;
-      if (shouldDismiss) {
-        runOnJS(handleClose)();
-      } else {
-        translateY.value = withSpring(0, springs.snappy);
-      }
-    });
-
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
@@ -95,12 +62,10 @@ export function SessionScreenHost() {
       {isOpen ? <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} animated /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} />
       <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
-        <GestureDetector gesture={panGesture}>
-          <View style={StyleSheet.absoluteFill}>
-            <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} />
-            <SessionScreen onClose={handleClose} />
-          </View>
-        </GestureDetector>
+        <View style={StyleSheet.absoluteFill}>
+          <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} />
+          <SessionScreen onClose={handleClose} />
+        </View>
       </Animated.View>
     </View>
   );
