@@ -9,6 +9,7 @@ import { gradeChartColor, layoutChartColor, flashRedpointColor } from './profile
 
 const MAX_X_LABELS = 12;
 const AXIS_LABEL_SIZE = 10;
+const STACK_BAR_RADIUS = 3;
 
 export type ChartLegendItem = { color: string; label: string };
 
@@ -99,14 +100,26 @@ export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLab
   const stackData = useMemo(
     () =>
       (bars ?? []).map((bar, index) => {
-        const stacks = bar.segments
+        const filled = bar.segments
           .filter((segment) => segment.value > 0)
           .map((segment) => ({
             value: segment.value,
             color: colorBy === 'grade' ? gradeChartColor(segment.key) : layoutChartColor(segment.key),
           }));
+        const stacks = filled.length > 0 ? filled : [{ value: 0, color: 'transparent' }];
+        // Round only the stack's outer corners (bottom of the bottom segment,
+        // top of the top segment). gifted-charts otherwise rounds every segment
+        // via barBorderRadius, which beads each band.
+        const top = stacks.length - 1;
+        const rounded = stacks.map((segment, segmentIndex) => ({
+          ...segment,
+          borderBottomLeftRadius: segmentIndex === 0 ? STACK_BAR_RADIUS : 0,
+          borderBottomRightRadius: segmentIndex === 0 ? STACK_BAR_RADIUS : 0,
+          borderTopLeftRadius: segmentIndex === top ? STACK_BAR_RADIUS : 0,
+          borderTopRightRadius: segmentIndex === top ? STACK_BAR_RADIUS : 0,
+        }));
         return {
-          stacks: stacks.length > 0 ? stacks : [{ value: 0, color: 'transparent' }],
+          stacks: rounded,
           label: downsampleLabel(index, bars!.length, bar.label),
         };
       }),
@@ -126,7 +139,6 @@ export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLab
               barWidth={barWidth}
               spacing={spacing}
               initialSpacing={8}
-              barBorderRadius={2}
               hideRules
               hideYAxisText
               yAxisThickness={0}
