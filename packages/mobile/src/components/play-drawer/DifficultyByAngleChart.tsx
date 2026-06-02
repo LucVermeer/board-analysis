@@ -8,15 +8,7 @@ type DifficultyByAngleChartProps = {
   data: AngleGradeBar[];
 };
 
-/**
- * Horizontal bars of this climb's average grade at each board angle, built
- * from `climbStatsHistory`. There is no per-grade community vote data to draw
- * a true vote histogram, so this shows how the grade shifts with angle.
- *
- * Bar width is normalised against the local grade range (floored one step
- * below the easiest angle) so a 1–2 grade spread is still legible rather than
- * every bar reading near-full.
- */
+// Grade-per-angle bars; width normalised against the local grade range for legibility.
 export function DifficultyByAngleChart({ data }: DifficultyByAngleChartProps) {
   const { systemColors } = useTheme();
 

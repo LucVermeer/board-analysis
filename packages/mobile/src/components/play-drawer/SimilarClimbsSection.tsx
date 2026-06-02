@@ -40,8 +40,7 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
   const { formatGrade } = useGradeFormat();
   const { data: climbs, isLoading, isError, refetch } = useSimilarClimbs(boardName, climbUuid, layoutId, angle);
 
-  // Compatible-with-current-wall climbs rank first; incompatible ones are
-  // dimmed and pushed to the end (mirrors the web list).
+  // Wall-compatible climbs rank first; incompatible ones are dimmed and last.
   const ranked = useMemo(() => rankBySizeCompatibility(climbs ?? [], sizeId), [climbs, sizeId]);
 
   const handlePress = useCallback(
@@ -99,7 +98,7 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
       {ranked.map(({ climb: similar, compatible }) => {
         const gradeColor = getGradeColor(similar.difficultyName) ?? DEFAULT_GRADE_COLOR;
         const formattedGrade = formatGrade(similar.difficultyName) ?? similar.difficultyName ?? '';
-        const byline = formatByline(similar);
+        const byline = formatByline(similar, t);
         return (
           <Pressable
             key={similar.uuid}

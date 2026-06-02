@@ -15,14 +15,7 @@ export type AngleGradeBar = {
 
 const GRADE_BY_ID = new Map<number, BoulderGrade>(BOULDER_GRADES.map((grade) => [grade.difficulty_id, grade]));
 
-/**
- * Reduce climb stats history to one bar per board angle: the latest snapshot's
- * grade at that angle. There is no per-grade community vote data, so this shows
- * how the grade shifts with angle rather than a vote histogram.
- *
- * Difficulties outside the known grade range fall back to the rounded numeric
- * value rather than rendering a blank label.
- */
+// Latest snapshot per angle → one grade bar; out-of-range difficulties show the rounded number.
 export function buildAngleGradeBars(
   history: ClimbStatsHistoryEntry[] | undefined,
   gradeFormat: GradeDisplayFormat,

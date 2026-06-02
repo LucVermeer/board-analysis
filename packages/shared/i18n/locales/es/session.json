@@ -248,7 +248,9 @@
     "similarClimbs": {
       "title": "Escaladas similares",
       "empty": "No se encontraron escaladas similares",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "sends_one": "{{count}} envío",
+      "sends_other": "{{count}} envíos"
     },
     "community": {
       "title": "Comunidad",

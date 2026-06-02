@@ -248,7 +248,9 @@
     "similarClimbs": {
       "title": "Similar Climbs",
       "empty": "No similar climbs found",
-      "retry": "Try again"
+      "retry": "Try again",
+      "sends_one": "{{count}} send",
+      "sends_other": "{{count}} sends"
     },
     "community": {
       "title": "Community",

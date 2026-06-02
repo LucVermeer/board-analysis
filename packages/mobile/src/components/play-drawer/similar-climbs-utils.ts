@@ -1,12 +1,10 @@
 import type { Climb, SimilarClimb } from '@boardsesh/shared-schema';
-import { formatQuality, formatSends } from '../../lib/format-climb-stats';
+import { formatQuality } from '../../lib/format-climb-stats';
 
-/**
- * Build a `Climb` from a `SimilarClimb` for the drawer's queue/activation flow,
- * which expects the full type. Mirrors web's `buildClimbStub`: stats fields the
- * similarClimbs query doesn't return get safe placeholders; `difficultyName` is
- * already the display string `climb.difficulty` carries elsewhere in the drawer.
- */
+/** Minimal translate signature so this pure util stays out of React. */
+type TranslateCount = (key: string, options: { count: number }) => string;
+
+// Build a Climb stub from a SimilarClimb for queue activation (mirrors web's buildClimbStub).
 export function buildClimbStub(similar: SimilarClimb, boardType: string): Climb {
   return {
     uuid: similar.uuid,
@@ -26,15 +24,15 @@ export function buildClimbStub(similar: SimilarClimb, boardType: string): Climb 
   };
 }
 
-/** Compose the "setter · ★quality · N sends" byline, skipping null/zero fields. */
-export function formatByline(similar: SimilarClimb): string {
+// Compose the "setter · ★quality · N sends" byline, skipping null/zero fields.
+export function formatByline(similar: SimilarClimb, t: TranslateCount): string {
   const parts: string[] = [];
   if (similar.setterUsername) parts.push(similar.setterUsername);
   if (similar.qualityAverage != null && similar.qualityAverage > 0) {
     parts.push(`${formatQuality(String(similar.qualityAverage))}★`);
   }
   if (similar.ascensionistCount != null && similar.ascensionistCount > 0) {
-    parts.push(formatSends(similar.ascensionistCount));
+    parts.push(t('mobile.similarClimbs.sends', { count: similar.ascensionistCount }));
   }
   return parts.join(' · ');
 }
@@ -45,11 +43,7 @@ export type RankedSimilarClimb = {
   compatible: boolean;
 };
 
-/**
- * Partition similar climbs so those compatible with the viewer's wall size
- * rank ahead of incompatible ones, preserving the server's similarity order
- * within each group. Mirrors web's compatible-first / incompatible-last list.
- */
+// Wall-size-compatible climbs first (stable within group), incompatible last — mirrors web.
 export function rankBySizeCompatibility(climbs: SimilarClimb[], sizeId: number): RankedSimilarClimb[] {
   const compatible: RankedSimilarClimb[] = [];
   const incompatible: RankedSimilarClimb[] = [];

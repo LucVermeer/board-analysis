@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { useLogbook } from '@boardsesh/board-react';
@@ -23,7 +23,7 @@ export const LogbookSection = memo(function LogbookSection({
   userAttempts,
 }: LogbookSectionProps) {
   const { t } = useTranslation('session');
-  const { logbook } = useLogbook(boardName as BoardName, [climbUuid]);
+  const { logbook, isLoading } = useLogbook(boardName as BoardName, [climbUuid]);
 
   const entries = useMemo(
     () =>
@@ -33,8 +33,7 @@ export const LogbookSection = memo(function LogbookSection({
     [logbook, climbUuid],
   );
 
-  // Tension/Decoy log mirrored sends; Kilter never does, so the mirror tag is
-  // only meaningful on mirror-capable boards.
+  // Only Tension/Decoy log mirrored sends, so the mirror tag is board-gated.
   const showMirrorTag = boardName === 'tension' || boardName === 'decoy';
 
   if (entries.length > 0) {
@@ -47,8 +46,16 @@ export const LogbookSection = memo(function LogbookSection({
     );
   }
 
-  // Fallback: no detailed entries fetched (e.g. unauthenticated), but the climb
-  // row carries denormalised counts — show the summary line.
+  // Guard the fetch so the summary fallback never flashes before entries land.
+  if (isLoading) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator size="small" color={iosSystemColors.systemGray} />
+      </View>
+    );
+  }
+
+  // Fallback for unauthenticated/no-detail: show the denormalised count summary.
   const sends = userAscents ?? 0;
   const attempts = userAttempts ?? 0;
 

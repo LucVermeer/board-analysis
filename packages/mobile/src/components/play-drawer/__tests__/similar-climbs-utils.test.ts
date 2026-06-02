@@ -22,21 +22,25 @@ function makeSimilar(overrides: Partial<SimilarClimb> = {}): SimilarClimb {
   };
 }
 
+// Fake i18n: pluralizes the sends key, echoes anything else.
+const t = (key: string, options: { count: number }) =>
+  key === 'mobile.similarClimbs.sends' ? `${options.count} send${options.count === 1 ? '' : 's'}` : key;
+
 describe('formatByline', () => {
   it('joins setter, quality, and sends', () => {
-    expect(formatByline(makeSimilar())).toBe('setter · 2.5★ · 5 sends');
+    expect(formatByline(makeSimilar(), t)).toBe('setter · 2.5★ · 5 sends');
   });
 
   it('uses singular "send" for a single ascent', () => {
-    expect(formatByline(makeSimilar({ ascensionistCount: 1 }))).toBe('setter · 2.5★ · 1 send');
+    expect(formatByline(makeSimilar({ ascensionistCount: 1 }), t)).toBe('setter · 2.5★ · 1 send');
   });
 
   it('skips null setter, zero quality, and zero ascensionists', () => {
-    expect(formatByline(makeSimilar({ setterUsername: null, qualityAverage: 0, ascensionistCount: 0 }))).toBe('');
+    expect(formatByline(makeSimilar({ setterUsername: null, qualityAverage: 0, ascensionistCount: 0 }), t)).toBe('');
   });
 
   it('keeps only the setter when stats are null', () => {
-    expect(formatByline(makeSimilar({ setterUsername: 'bob', qualityAverage: null, ascensionistCount: null }))).toBe(
+    expect(formatByline(makeSimilar({ setterUsername: 'bob', qualityAverage: null, ascensionistCount: null }), t)).toBe(
       'bob',
     );
   });
