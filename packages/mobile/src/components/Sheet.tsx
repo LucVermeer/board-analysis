@@ -1,14 +1,9 @@
 import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
 import { Platform, StyleSheet } from 'react-native';
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-  type BottomSheetBackdropProps,
-  type BottomSheetBackgroundProps,
-} from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
 import { sheetStyles } from '../theme/tokens';
-import { SheetGlassBackground } from './SheetGlassBackground';
+import { useTheme } from '../providers/theme-provider';
 
 type SheetProps = {
   children: ReactNode;
@@ -30,6 +25,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
   },
   ref,
 ) {
+  const { systemColors } = useTheme();
   const snapPoints = useMemo(() => customSnapPoints ?? ['50%', '90%'], [customSnapPoints]);
 
   const renderBackdrop = useCallback(
@@ -47,7 +43,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [onChange],
   );
 
-  const renderBackground = useCallback((props: BottomSheetBackgroundProps) => <SheetGlassBackground {...props} />, []);
+  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
   return (
     <BottomSheet
@@ -57,7 +53,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
       backdropComponent={renderBackdrop}
-      backgroundComponent={renderBackground}
+      backgroundStyle={backgroundStyle}
       onChange={handleChange}
       onClose={onClose}
       handleIndicatorStyle={sheetStyles.indicator}

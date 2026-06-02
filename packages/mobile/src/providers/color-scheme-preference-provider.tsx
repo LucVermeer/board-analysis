@@ -1,5 +1,7 @@
-// ColorSchemePreferenceProvider — owns the user's Light / Dark / System choice
-// and applies it to the native Appearance.
+// ColorSchemePreferenceProvider — the app's appearance root. Owns the user's
+// Light / Dark / System choice and the OS "Reduce Transparency" setting, and
+// resolves both BEFORE first paint so there's no wrong-mode / wrong-material
+// flash on cold start.
 //
 // The mechanism matters: iOS `PlatformColor` follows the native trait
 // collection, so a JS-only flag can't move native colours or chrome. Driving
@@ -12,7 +14,7 @@
 // lets `setColorScheme` drive the style at runtime.
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Appearance } from 'react-native';
+import { AccessibilityInfo, Appearance } from 'react-native';
 import {
   getStoredColorSchemePreference,
   setStoredColorSchemePreference,
@@ -22,6 +24,8 @@ import {
 type ColorSchemePreferenceContextValue = {
   preference: ColorSchemePreference;
   setPreference: (next: ColorSchemePreference) => void;
+  /** OS "Reduce Transparency" — glass/blur surfaces fall back to solid when true. */
+  reduceTransparency: boolean;
 };
 
 const ColorSchemePreferenceContext = createContext<ColorSchemePreferenceContextValue | undefined>(undefined);
@@ -33,18 +37,39 @@ function applyAppearance(preference: ColorSchemePreference): void {
 
 export function ColorSchemePreferenceProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<ColorSchemePreference>('system');
+  const [reduceTransparency, setReduceTransparency] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  // Load the stored choice once and apply it. A missing key leaves the app
-  // following the OS, which is already the default — no need to touch Appearance.
+  // Resolve the stored choice + Reduce Transparency before first paint, then
+  // apply the appearance. Rendering is gated on `loaded` so the tree never
+  // paints in the OS scheme before the pinned choice takes effect, and the
+  // toggle never shows a stale segment.
   useEffect(() => {
     let mounted = true;
-    void getStoredColorSchemePreference().then((stored) => {
-      if (!mounted || !stored) return;
-      setPreferenceState(stored);
-      applyAppearance(stored);
-    });
+
+    void Promise.all([getStoredColorSchemePreference(), AccessibilityInfo.isReduceTransparencyEnabled()])
+      .then(([storedPreference, reduceTransparencyEnabled]) => {
+        if (!mounted) return;
+        const resolved = storedPreference ?? 'system';
+        applyAppearance(resolved);
+        setPreferenceState(resolved);
+        setReduceTransparency(reduceTransparencyEnabled);
+      })
+      .catch(() => {
+        // Never strand the app on the splash if a read fails — proceed with
+        // defaults (follow OS, transparency on).
+      })
+      .finally(() => {
+        if (mounted) setLoaded(true);
+      });
+
+    const subscription = AccessibilityInfo.addEventListener('reduceTransparencyChanged', (enabled) =>
+      setReduceTransparency(enabled),
+    );
+
     return () => {
       mounted = false;
+      subscription.remove();
     };
   }, []);
 
@@ -58,9 +83,12 @@ export function ColorSchemePreferenceProvider({ children }: { children: ReactNod
   );
 
   const value = useMemo<ColorSchemePreferenceContextValue>(
-    () => ({ preference, setPreference }),
-    [preference, setPreference],
+    () => ({ preference, setPreference, reduceTransparency }),
+    [preference, setPreference, reduceTransparency],
   );
+
+  // Hold first paint (under the native splash) until appearance is resolved.
+  if (!loaded) return null;
 
   return <ColorSchemePreferenceContext.Provider value={value}>{children}</ColorSchemePreferenceContext.Provider>;
 }

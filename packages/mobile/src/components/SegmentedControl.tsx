@@ -20,6 +20,8 @@ type SegmentedControlProps = {
   textVariant?: 'subheadline' | 'footnote';
   /** Background color for the segmented control track. */
   trackColor: ColorValue;
+  /** Accessibility label naming the group (e.g. "Appearance"), so VoiceOver announces what the segments control. */
+  accessibilityLabel?: string;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -103,6 +105,7 @@ export function SegmentedControl({
   onSelect,
   textVariant = 'subheadline',
   trackColor,
+  accessibilityLabel,
 }: SegmentedControlProps) {
   const containerStyle = {
     flexDirection: 'row' as const,
@@ -112,7 +115,7 @@ export function SegmentedControl({
   };
 
   return (
-    <View style={containerStyle}>
+    <View style={containerStyle} accessibilityRole="tablist" accessibilityLabel={accessibilityLabel}>
       {options.map((option) => (
         <Segment
           key={option.key}

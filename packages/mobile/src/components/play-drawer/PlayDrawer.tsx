@@ -8,7 +8,6 @@ import {
   BottomSheetBackdrop,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
-  type BottomSheetBackgroundProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
@@ -26,8 +25,8 @@ import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { LogAscentSheet } from '../LogAscentSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
-import { SheetGlassBackground } from '../SheetGlassBackground';
 import { useQueue } from '../../providers/queue-provider';
+import { useTheme } from '../../providers/theme-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
 import { useGradeFormat } from '../../hooks/use-grade-format';
@@ -95,6 +94,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   ref,
 ) {
   const { t } = useTranslation('session');
+  const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
   const [climb, setClimb] = useState<Climb | null>(null);
@@ -268,7 +268,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [],
   );
 
-  const renderBackground = useCallback((props: BottomSheetBackgroundProps) => <SheetGlassBackground {...props} />, []);
+  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
   const snapPoints = useMemo(() => ['100%'], []);
 
@@ -288,7 +288,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         backdropComponent={renderBackdrop}
         onDismiss={handleClose}
         handleIndicatorStyle={sheetStyles.indicator}
-        backgroundComponent={renderBackground}
+        backgroundStyle={backgroundStyle}
       >
         <BottomSheetScrollView
           style={styles.content}

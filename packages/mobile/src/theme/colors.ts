@@ -15,9 +15,10 @@ export const iosSystemColors: Record<string, ColorValue> | null =
         secondaryBackground: PlatformColor('secondarySystemBackground'),
         tertiaryBackground: PlatformColor('tertiarySystemBackground'),
         groupedBackground: PlatformColor('systemGroupedBackground'),
-        // Raised tile on top of a grouped/secondary surface (e.g. the selected
-        // segmented-control pill). Reads as elevated in both light and dark.
-        elevatedSurface: PlatformColor('secondarySystemGroupedBackground'),
+        // Raised tile on top of a secondary/fill surface (e.g. the selected
+        // segmented-control pill). tertiarySystemBackground sits a clear step
+        // above secondary in both light and dark.
+        elevatedSurface: PlatformColor('tertiarySystemBackground'),
         label: PlatformColor('label'),
         secondaryLabel: PlatformColor('secondaryLabel'),
         tertiaryLabel: PlatformColor('tertiaryLabel'),

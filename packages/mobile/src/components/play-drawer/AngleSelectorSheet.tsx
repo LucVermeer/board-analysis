@@ -4,19 +4,18 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetFlatList,
   type BottomSheetBackdropProps,
-  type BottomSheetBackgroundProps,
   type BottomSheetFlatListMethods,
 } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Text } from '../Text';
-import { SheetGlassBackground } from '../SheetGlassBackground';
 import { getHttpClient } from '../../lib/graphql/client';
 import { GET_ANGLES, type GetAnglesQueryResponse } from '../../lib/graphql/operations';
 import { hapticSelection } from '../../lib/haptics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { brandColors } from '../../theme/colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
+import { useTheme } from '../../providers/theme-provider';
 
 type AngleSelectorSheetProps = {
   visible: boolean;
@@ -38,6 +37,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
   onAngleChange,
 }: AngleSelectorSheetProps) {
   const { t } = useTranslation('session');
+  const { systemColors } = useTheme();
   const sheetRef = useRef<BottomSheet>(null);
   const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
 
@@ -116,7 +116,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
     [],
   );
 
-  const renderBackground = useCallback((props: BottomSheetBackgroundProps) => <SheetGlassBackground {...props} />, []);
+  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
   const renderAngleRow = useCallback(
     ({ item }: { item: AngleItem }) => {
@@ -154,7 +154,7 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
       backdropComponent={renderBackdrop}
       onClose={handleClose}
       handleIndicatorStyle={sheetStyles.indicator}
-      backgroundComponent={renderBackground}
+      backgroundStyle={backgroundStyle}
     >
       <View style={styles.header}>
         <Text variant="headline">{t('mobile.angleSelector.title')}</Text>

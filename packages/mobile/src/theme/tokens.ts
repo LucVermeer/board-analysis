@@ -97,8 +97,6 @@ export const sheetStyles = {
   background: {
     borderTopLeftRadius: borderRadius.xl,
     borderTopRightRadius: borderRadius.xl,
-    // Clip the glass / blur sheet material to the rounded top edge.
-    overflow: 'hidden',
   },
 } as const;
 

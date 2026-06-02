@@ -13,7 +13,7 @@ import { BlurView } from '@react-native-community/blur';
 import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable, type GlassStyle } from 'expo-glass-effect';
 import { useTheme } from '../providers/theme-provider';
 import { iosDarkColors, iosLightColors } from '../theme/ios-colors';
-import { useReduceTransparency } from '../hooks/use-reduce-transparency';
+import { useColorSchemePreference } from '../providers/color-scheme-preference-provider';
 
 type GlassSurfaceProps = {
   children?: ReactNode;
@@ -58,7 +58,7 @@ export function GlassSurface({
   pointerEvents,
 }: GlassSurfaceProps) {
   const { systemColors } = useTheme();
-  const reduceTransparency = useReduceTransparency();
+  const { reduceTransparency } = useColorSchemePreference();
   const isDark = useColorScheme() === 'dark';
 
   const solidColor = fallbackColor ?? systemColors.secondaryBackground;

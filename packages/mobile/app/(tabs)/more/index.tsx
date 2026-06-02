@@ -44,6 +44,7 @@ export default function MoreScreen() {
             selectedKey={preference}
             onSelect={(key) => setPreference(key as ColorSchemePreference)}
             trackColor={systemColors.fill}
+            accessibilityLabel={t('mobile.more.appearance.title')}
           />
         </View>
       </View>

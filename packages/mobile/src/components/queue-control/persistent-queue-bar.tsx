@@ -233,10 +233,11 @@ export function PersistentQueueBar() {
     ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
 
-  // Low-alpha grade wash so the climb's hue reads through the glass without
-  // killing the translucency. The opaque `tintBackground` is preserved for the
-  // solid (Android / reduce-transparency) path via GlassSurface.fallbackColor.
-  const glassTint = `${currentChipColor}33`;
+  // Low-alpha grade wash so the climb's hue reads through the frosted glass
+  // without a candy cast or hurting climb-name contrast. The opaque
+  // `tintBackground` is preserved for the solid (Android / reduce-transparency)
+  // path via GlassSurface.fallbackColor.
+  const glassTint = `${currentChipColor}26`;
 
   return (
     <>
@@ -253,7 +254,7 @@ export function PersistentQueueBar() {
         ]}
       >
         <GlassSurface
-          glassEffectStyle="clear"
+          glassEffectStyle="regular"
           style={StyleSheet.absoluteFill}
           tintColor={glassTint}
           fallbackColor={tintBackground ?? systemColors.background}
