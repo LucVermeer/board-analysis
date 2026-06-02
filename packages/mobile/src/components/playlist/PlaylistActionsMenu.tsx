@@ -26,7 +26,8 @@ export function PlaylistActionsMenu({ visible, onEdit, onDelete, onClose }: Play
   // (which leaves gorhom in a state where the next present() is a no-op — the
   // "nothing happens" bug). Mirrors LogAscentSheet.
   const isPresentedRef = useRef(false);
-  const snapPoints = useMemo(() => ['25%'], []);
+  // 30% leaves room for the two rows on short screens (e.g. iPhone SE landscape).
+  const snapPoints = useMemo(() => ['30%'], []);
 
   useEffect(() => {
     if (visible && !isPresentedRef.current) {

@@ -119,6 +119,12 @@ export default function PlaylistDetail() {
   const [actionsVisible, setActionsVisible] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Re-seed interactive state whenever the cached playlist changes — including
+  // after a mutation writes its response back via setQueryData. Safe because the
+  // GraphQL payloads (the updatePlaylist response + our optimistic setQueryData)
+  // all carry accurate isPinnedByMe/isFollowedByMe/followerCount (the update
+  // resolver recomputes pin/follow stats), so reseeding can't clobber an
+  // optimistic flip with a stale value.
   useEffect(() => {
     if (!playlist) return;
     setIsPinned(playlist.isPinnedByMe);
