@@ -262,9 +262,11 @@ export default function ClimbList() {
   // Tapping a climb seeds a suggestion source from the search results, anchored
   // at the tapped climb, so the play-drawer swipe continues through the climbs
   // listed after it — mirroring the playlist flow.
+  const allQueueClimbs = useMemo(() => toQueueClimbs(accumulatedClimbs), [accumulatedClimbs]);
+
   const activateClimbListClimb = usePlaylistActivation({
     sourceId: 'climblist',
-    allClimbs: toQueueClimbs(accumulatedClimbs),
+    allClimbs: allQueueClimbs,
     fetchPage: fetchSearchPage,
     refreshErrorMessage: 'Failed to refresh climb-list suggestions:',
   });
