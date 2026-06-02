@@ -382,13 +382,14 @@ export default function ClimbList() {
           ) : null
         }
       />
-      <ClimbFilterSheet
-        visible={showFilters}
-        onDismiss={handleDismissFilters}
-        boardConfig={boardConfig}
-        currentFilters={filters}
-        onApply={handleApplyFilters}
-      />
+      {showFilters ? (
+        <ClimbFilterSheet
+          onDismiss={handleDismissFilters}
+          boardConfig={boardConfig}
+          currentFilters={filters}
+          onApply={handleApplyFilters}
+        />
+      ) : null}
     </View>
   );
 }

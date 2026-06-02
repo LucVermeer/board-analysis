@@ -37,6 +37,19 @@ export function BoardDetailSheet({ board, visible, onClose, onSetActive }: Board
     }
   }, [visible, board]);
 
+  const footer = board
+    ? isActiveBoard(board, activeBoard?.uuid)
+      ? (
+        <View style={[styles.activePill, { backgroundColor: systemColors.tertiaryBackground }]}>
+          <Icon name="tick" size={16} color={systemColors.secondaryLabel} />
+          <Text variant="subheadline" color={systemColors.secondaryLabel}>
+            {t('mobile.boardDetail.alreadyActive')}
+          </Text>
+        </View>
+      )
+      : <Button title={t('mobile.boardDetail.setActive')} size="large" onPress={() => onSetActive(board)} />
+    : null;
+
   return (
     <Sheet
       ref={sheetRef}
@@ -44,22 +57,9 @@ export function BoardDetailSheet({ board, visible, onClose, onSetActive }: Board
       onClose={onClose}
       scrollable
       contentContainerStyle={styles.content}
+      footer={footer}
     >
-      {board ? (
-        <>
-          <BoardDetailBody board={board} systemColors={systemColors} t={t} />
-          {isActiveBoard(board, activeBoard?.uuid) ? (
-            <View style={[styles.activePill, { backgroundColor: systemColors.tertiaryBackground }]}>
-              <Icon name="tick" size={16} color={systemColors.secondaryLabel} />
-              <Text variant="subheadline" color={systemColors.secondaryLabel}>
-                {t('mobile.boardDetail.alreadyActive')}
-              </Text>
-            </View>
-          ) : (
-            <Button title={t('mobile.boardDetail.setActive')} size="large" onPress={() => onSetActive(board)} />
-          )}
-        </>
-      ) : null}
+      {board ? <BoardDetailBody board={board} systemColors={systemColors} t={t} /> : null}
     </Sheet>
   );
 }
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[2],
-    paddingBottom: spacing[8],
+    paddingBottom: spacing[4],
     gap: spacing[4],
   },
   header: {

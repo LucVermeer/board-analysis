@@ -8,6 +8,7 @@ import {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { FullWindowOverlay } from 'react-native-screens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { parseBoardTypeFromDeviceName } from '@boardsesh/ble-protocol';
 import type { DiscoveredDevice } from '../../lib/ble/types';
@@ -34,6 +35,7 @@ const modalContainerComponent = Platform.OS === 'ios' ? DevicePickerModalContain
 export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: DevicePickerSheetProps) {
   const { t } = useTranslation('settings');
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
 
   const snapPoints = useMemo(() => ['72%'], []);
@@ -126,7 +128,7 @@ export function DevicePickerSheet({ devices, onSelect, onDismiss, isScanning }: 
         />
       )}
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing[3] }]}>
         <Button title={t('ble.cancel')} onPress={onDismiss} variant="text" size="medium" />
       </View>
     </BottomSheetModal>
@@ -160,7 +162,9 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
+    paddingTop: spacing[3],
     alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: iosSystemColors.separator,
   },
 });
