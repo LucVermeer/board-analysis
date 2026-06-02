@@ -100,6 +100,9 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
       containerComponent={modalContainerComponent}
       onChange={handleChange}
       onDismiss={onDismiss}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       style={styles.sheet}
     >
       {footer ? (
@@ -109,6 +112,8 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
               style={styles.scrollView}
               contentContainerStyle={contentContainerStyle}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               {children}
             </BottomSheetScrollView>
@@ -122,6 +127,8 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
           style={styles.content}
           contentContainerStyle={contentContainerStyle}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {children}
         </BottomSheetScrollView>
