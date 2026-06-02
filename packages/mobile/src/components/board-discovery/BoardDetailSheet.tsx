@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, StyleSheet, type ColorValue } from 'react-native';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { Sheet } from '../Sheet';
@@ -11,6 +11,7 @@ import { Avatar } from '../Avatar';
 import { useActiveBoard } from '../../lib/graphql/use-active-board';
 import { useTheme } from '../../providers/theme-provider';
 import { spacing, borderRadius } from '../../theme/tokens';
+import { getBoardDetailFields, isActiveBoard } from './board-detail-fields';
 
 type BoardDetailSheetProps = {
   board: UserBoard | null;
@@ -34,11 +35,11 @@ export function BoardDetailSheet({ board, visible, onClose, onSetActive }: Board
   }, [visible, board]);
 
   return (
-    <Sheet ref={sheetRef} snapPoints={['55%', '90%']} onClose={onClose}>
+    <Sheet ref={sheetRef} snapPoints={['55%', '90%']} onClose={onClose} scrollable contentContainerStyle={styles.content}>
       {board ? (
-        <BottomSheetScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <>
           <BoardDetailBody board={board} systemColors={systemColors} t={t} />
-          {activeBoard?.uuid === board.uuid ? (
+          {isActiveBoard(board, activeBoard?.uuid) ? (
             <View style={[styles.activePill, { backgroundColor: systemColors.tertiaryBackground }]}>
               <Icon name="tick" size={16} color={systemColors.secondaryLabel} />
               <Text variant="subheadline" color={systemColors.secondaryLabel}>
@@ -48,7 +49,7 @@ export function BoardDetailSheet({ board, visible, onClose, onSetActive }: Board
           ) : (
             <Button title={t('mobile.boardDetail.setActive')} size="large" onPress={() => onSetActive(board)} />
           )}
-        </BottomSheetScrollView>
+        </>
       ) : null}
     </Sheet>
   );
@@ -58,11 +59,7 @@ type SystemColors = ReturnType<typeof useTheme>['systemColors'];
 type TFn = ReturnType<typeof useTranslation>['t'];
 
 function BoardDetailBody({ board, systemColors, t }: { board: UserBoard; systemColors: SystemColors; t: TFn }) {
-  const subLocation = board.gymName ?? board.locationName ?? undefined;
-  const setNames = (board.setNames ?? []).join(' · ');
-  const sizeText = board.sizeDescription
-    ? `${board.sizeName ?? ''} · ${board.sizeDescription}`.trim().replace(/^· /, '')
-    : (board.sizeName ?? undefined);
+  const { subLocation, setNames, sizeText } = getBoardDetailFields(board);
 
   return (
     <>

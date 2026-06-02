@@ -125,9 +125,11 @@ export default function BoardSearchScreen() {
 
   const handleSetActive = useCallback(
     async (board: UserBoard) => {
-      setSelectedUuid(null);
       try {
         await setActiveBoard(board);
+        // Only close the sheet once the board is saved — if it throws, the
+        // sheet stays open so the error toast has visible context.
+        setSelectedUuid(null);
         // router.back() is the same foreground unmount the X button uses —
         // proven safe for expo-maps — then switch to the climbs tab.
         router.back();

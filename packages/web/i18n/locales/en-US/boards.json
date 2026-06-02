@@ -74,7 +74,6 @@
     "boardDetail": {
       "setActive": "Set as active board",
       "alreadyActive": "Active board",
-      "loadError": "Couldn't load that board.",
       "stats": {
         "ascents": "ascents",
         "climbers": "climbers",

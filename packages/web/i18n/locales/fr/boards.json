@@ -74,7 +74,6 @@
     "boardDetail": {
       "setActive": "Utiliser ce board",
       "alreadyActive": "Board actif",
-      "loadError": "Impossible de charger ce board.",
       "stats": {
         "ascents": "ascensions",
         "climbers": "grimpeurs",
