@@ -669,6 +669,34 @@ describe('BluetoothProvider', () => {
       return rendered;
     }
 
+    it('picker select is a no-op when boardDetails is null (off-board inert provider)', async () => {
+      // The single root-level provider is mounted off board routes too, where
+      // boardDetails is null. handlePickerSelect must bail before forwarding the
+      // selection or opening the mismatch dialog (decidePickerSelection needs a
+      // real board to compare against).
+      mockAuth = { token: 'tok', isAuthenticated: true };
+      mockPickerState = {
+        devices: [{ deviceId: 'dev-1', name: 'Kilter Board#KB-99@3', rssi: -55 }],
+        handleSelect: mockPickerHandleSelect,
+        handleCancel: mockPickerHandleCancel,
+      };
+      mockParseSerialNumber.mockReturnValue('KB-99');
+
+      const NullWrapper = ({ children }: { children: React.ReactNode }) => (
+        <BluetoothProvider boardDetails={null}>{children}</BluetoothProvider>
+      );
+      renderHook(() => useBluetoothContext(), { wrapper: NullWrapper });
+
+      expect(lastPickerProps).not.toBeNull();
+      await act(async () => {
+        lastPickerProps?.onSelect('dev-1');
+      });
+
+      // Guard returned early: no forward to the adapter, no mismatch dialog.
+      expect(mockPickerHandleSelect).not.toHaveBeenCalled();
+      expect(lastMismatchProps).toBeNull();
+    });
+
     it('Switch to correct config: pushes the slug-based URL with autoConnect serial', async () => {
       await setupMismatchScenario({ withSlug: true });
 

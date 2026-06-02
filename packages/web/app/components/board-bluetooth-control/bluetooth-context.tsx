@@ -687,12 +687,14 @@ export function useBluetoothContext() {
 }
 
 /**
- * Like `useBluetoothContext` but returns null instead of throwing when no
- * provider is mounted. For components (e.g. the create-climb form) that render
- * both inside the app shell (provider present) and in isolated unit tests
- * (no provider) — mirrors `useOptionalQueueActions`.
+ * Like `useBluetoothContext` but does NOT throw when no provider is mounted: it
+ * returns the context's default value, which is `null` (see
+ * `createContext<BluetoothContextValue | null>(null)` above). For components
+ * (e.g. the create-climb form) that render both inside the app shell (provider
+ * present) and in isolated unit tests (no provider). Callers must null-check
+ * the result. Mirrors `useOptionalQueueActions`.
  */
-export function useOptionalBluetoothContext() {
+export function useOptionalBluetoothContext(): BluetoothContextValue | null {
   return useContext(BluetoothContext);
 }
 
