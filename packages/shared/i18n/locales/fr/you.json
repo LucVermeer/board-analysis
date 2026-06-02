@@ -24,13 +24,6 @@
   "mobile": {
     "settings": "Réglages",
     "unknownName": "Grimpeur",
-    "followers": "abonnés",
-    "following": "abonnements",
-    "followerCount_one": "{{count}} abonné",
-    "followerCount_other": "{{count}} abonnés",
-    "loadMore": "Charger plus",
-    "emptyFollowers": "Aucun abonné pour l'instant",
-    "emptyFollowing": "Aucun abonnement pour l'instant",
     "cancel": "Annuler",
     "sessions": {
       "empty": "Aucune session enregistrée — va grimper."

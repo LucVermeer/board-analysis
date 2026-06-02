@@ -24,13 +24,6 @@
   "mobile": {
     "settings": "Settings",
     "unknownName": "Climber",
-    "followers": "followers",
-    "following": "following",
-    "followerCount_one": "{{count}} follower",
-    "followerCount_other": "{{count}} followers",
-    "loadMore": "Load more",
-    "emptyFollowers": "No followers yet",
-    "emptyFollowing": "Not following anyone yet",
     "cancel": "Cancel",
     "sessions": {
       "empty": "No sessions logged yet — go climb something."

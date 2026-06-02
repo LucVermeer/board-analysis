@@ -24,13 +24,6 @@
   "mobile": {
     "settings": "Ajustes",
     "unknownName": "Escalador",
-    "followers": "seguidores",
-    "following": "siguiendo",
-    "followerCount_one": "{{count}} seguidor",
-    "followerCount_other": "{{count}} seguidores",
-    "loadMore": "Cargar más",
-    "emptyFollowers": "Aún no tienes seguidores",
-    "emptyFollowing": "Todavía no sigues a nadie",
     "cancel": "Cancelar",
     "sessions": {
       "empty": "Aún no hay sesiones — ve a escalar algo."

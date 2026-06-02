@@ -15,14 +15,7 @@ import {
 import { BOARD_TYPES, type LogbookEntry } from '@boardsesh/profile-stats';
 import type { ActivityFeedInput } from '@boardsesh/shared-schema';
 import { getHttpClient } from '../client';
-import {
-  GET_PUBLIC_PROFILE,
-  GET_FOLLOWERS,
-  GET_FOLLOWING,
-  type GetPublicProfileQueryResponse,
-  type GetFollowersQueryResponse,
-  type GetFollowingQueryResponse,
-} from '../operations';
+import { GET_PUBLIC_PROFILE, type GetPublicProfileQueryResponse } from '../operations';
 
 const PROFILE_STALE_TIME_MS = 30 * 1000;
 const FEED_PAGE_SIZE = 20;
@@ -139,35 +132,5 @@ export function useSessionGroupedFeed(input?: ActivityFeedInput, enabled = true)
     getNextPageParam: (lastPage) =>
       lastPage.sessionGroupedFeed.hasMore ? (lastPage.sessionGroupedFeed.cursor ?? undefined) : undefined,
     enabled,
-  });
-}
-
-/** Followers list for a user (offset-paginated). */
-export function useFollowers(userId: string | undefined, enabled = true) {
-  return useInfiniteQuery({
-    queryKey: ['followers', userId],
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) =>
-      getHttpClient().request<GetFollowersQueryResponse>(GET_FOLLOWERS, {
-        input: { userId, limit: FEED_PAGE_SIZE, offset: pageParam },
-      }),
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.followers.hasMore ? allPages.reduce((total, page) => total + page.followers.users.length, 0) : undefined,
-    enabled: enabled && !!userId,
-  });
-}
-
-/** Following list for a user (offset-paginated). */
-export function useFollowing(userId: string | undefined, enabled = true) {
-  return useInfiniteQuery({
-    queryKey: ['following', userId],
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) =>
-      getHttpClient().request<GetFollowingQueryResponse>(GET_FOLLOWING, {
-        input: { userId, limit: FEED_PAGE_SIZE, offset: pageParam },
-      }),
-    getNextPageParam: (lastPage, allPages) =>
-      lastPage.following.hasMore ? allPages.reduce((total, page) => total + page.following.users.length, 0) : undefined,
-    enabled: enabled && !!userId,
   });
 }

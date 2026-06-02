@@ -101,7 +101,7 @@ export default function YouScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
-      <YouProfileHeader userId={userId} profile={youData.profile} />
+      <YouProfileHeader profile={youData.profile} />
       <YouTabBar tabs={tabs} activeIndex={activeIndex} scrollPosition={scrollPosition} onTabPress={handleTabPress} />
 
       <PagerView

@@ -365,8 +365,6 @@ export {
   usePublicProfile,
   useUserAscentsFeed,
   useSessionGroupedFeed,
-  useFollowers,
-  useFollowing,
 } from './use-you-data';
 export { useYouProfileData } from './use-you-profile-data';
 export { useVote, useBulkVoteSummaries, useComments, useAddComment } from './use-social';
