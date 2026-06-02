@@ -107,6 +107,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       ref={sheetRef}
       snapPoints={['75%']}
       scrollable
+      fullWindowOverlay
       onClose={onClose}
       contentContainerStyle={styles.content}
       keyboardBehavior="interactive"

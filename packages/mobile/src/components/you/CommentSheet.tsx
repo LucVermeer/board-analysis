@@ -43,6 +43,7 @@ export function CommentSheet({ sheetRef, sessionId, onClose }: CommentSheetProps
       ref={sheetRef}
       snapPoints={['60%', '90%']}
       scrollable
+      fullWindowOverlay
       onClose={onClose}
       contentContainerStyle={styles.content}
       keyboardBehavior="interactive"

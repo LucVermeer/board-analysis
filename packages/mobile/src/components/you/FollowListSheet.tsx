@@ -33,7 +33,13 @@ export function FollowListSheet({ sheetRef, userId, mode, enabled }: FollowListS
   const query = mode === 'followers' ? followersQuery : followingQuery;
 
   return (
-    <Sheet ref={sheetRef} snapPoints={['60%', '90%']} scrollable contentContainerStyle={styles.content}>
+    <Sheet
+      ref={sheetRef}
+      snapPoints={['60%', '90%']}
+      scrollable
+      fullWindowOverlay
+      contentContainerStyle={styles.content}
+    >
       <Text variant="title3" style={styles.title}>
         {mode === 'followers' ? t('mobile.followers') : t('mobile.following')}
       </Text>

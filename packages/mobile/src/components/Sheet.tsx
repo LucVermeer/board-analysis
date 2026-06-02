@@ -6,11 +6,20 @@ import BottomSheet, {
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticMedium } from '../lib/haptics';
 import { sheetStyles, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
+
+// On iOS a plain BottomSheet renders inside the screen's view tree, so it sits
+// behind root-level chrome (the floating tab bar + persistent queue bar).
+// Wrapping it in a FullWindowOverlay lifts it into a native window above
+// everything. iOS-only — Android stacks RN views fine without it (matches
+// ClimbFilterSheet/LogAscentSheet). `containerComponent` only exists on
+// BottomSheetModal, so for the plain BottomSheet we wrap the element directly.
+const useOverlay = Platform.OS === 'ios';
 
 type SheetProps = {
   children: ReactNode;
@@ -35,6 +44,10 @@ type SheetProps = {
   keyboardBehavior?: 'extend' | 'fillParent' | 'interactive';
   keyboardBlurBehavior?: 'none' | 'restore';
   android_keyboardInputMode?: 'adjustPan' | 'adjustResize';
+  // Render above root-level chrome (tab bar + queue bar) via a FullWindowOverlay
+  // on iOS. Needed for sheets opened from a tab screen whose footer/buttons
+  // would otherwise sit behind those bars.
+  fullWindowOverlay?: boolean;
 };
 
 export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
@@ -51,6 +64,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     keyboardBehavior,
     keyboardBlurBehavior,
     android_keyboardInputMode,
+    fullWindowOverlay = false,
   },
   ref,
 ) {
@@ -86,7 +100,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     </View>
   ) : null;
 
-  return (
+  const sheet = (
     <BottomSheet
       ref={ref}
       index={-1}
@@ -137,6 +151,8 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       )}
     </BottomSheet>
   );
+
+  return fullWindowOverlay && useOverlay ? <FullWindowOverlay>{sheet}</FullWindowOverlay> : sheet;
 });
 
 const styles = StyleSheet.create({
