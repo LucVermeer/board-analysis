@@ -1,7 +1,9 @@
 /**
- * Playlist suggestion utilities that are pure functions with no web-specific
- * dependencies. Functions that depend on BoardDetails or canAddClimbToBoard
- * (createPlaylistSuggestionSource, getQueueBoardKey) remain in the web app.
+ * Playlist suggestion utilities — pure functions with no web-specific
+ * dependencies. `createPlaylistSuggestionSource` / `getQueueBoardKey` live here
+ * too (shared by web + mobile); the only board-coupled bit — the climbability
+ * filter — is supplied by the caller as an injected predicate so this package
+ * stays dependency-free.
  */
 
 import type { Climb, ClimbQueue, ClimbQueueItem, PlaylistSuggestionSource } from './types';
@@ -114,4 +116,56 @@ export function getPlaylistPeekQueueItemUuid(climbUuid: string): string {
  */
 export function isPlaylistPeekQueueItemUuid(queueItemUuid: string): boolean {
   return queueItemUuid.startsWith('playlist-peek:');
+}
+
+/**
+ * Minimal board identity needed to key a playlist activation to a board.
+ * Web's `BoardDetails` structurally satisfies this (board_name / layout_id /
+ * size_id / set_ids); mobile passes the same fields off its active board.
+ */
+export type QueueBoardKeyTarget = {
+  board_name: string;
+  layout_id: number;
+  size_id: number;
+  set_ids: number[] | number | string;
+};
+
+/**
+ * Build a stable key identifying the board a playlist activation is bound to.
+ * Two activations on different boards never share a suggestion source.
+ */
+export function getQueueBoardKey(target: QueueBoardKeyTarget): string {
+  const setIds = Array.isArray(target.set_ids) ? target.set_ids.join(',') : String(target.set_ids);
+  return `${target.board_name}:${target.layout_id}:${target.size_id}:${setIds}`;
+}
+
+/**
+ * Construct a PlaylistSuggestionSource from the activated climb plus the
+ * visible/fetched playlist climbs. The activated climb is always kept; every
+ * other climb is kept only when `isClimbable(climb)` returns true. Web passes a
+ * `canAddClimbToBoard`-backed predicate; mobile (single active board) can omit
+ * it (defaults to keeping everything).
+ */
+export function createPlaylistSuggestionSource({
+  playlistUuid,
+  activatedClimb,
+  climbs,
+  boardKey,
+  isClimbable = () => true,
+}: {
+  playlistUuid: string;
+  activatedClimb: Climb;
+  climbs: Climb[];
+  boardKey: string;
+  isClimbable?: (climb: Climb) => boolean;
+}): PlaylistSuggestionSource {
+  const climbableClimbs = mergeUniquePlaylistClimbs(activatedClimb, climbs).filter(
+    (climb) => climb.uuid === activatedClimb.uuid || isClimbable(climb),
+  );
+  return {
+    playlistUuid,
+    activatedClimbUuid: activatedClimb.uuid,
+    boardKey,
+    climbs: climbableClimbs,
+  };
 }

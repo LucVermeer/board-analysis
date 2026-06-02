@@ -14,6 +14,10 @@ export default function ProfileLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: t('mobile.nav.profile') }} />
+      <Stack.Screen name="more" options={{ title: t('mobile.more.title') }} />
+      {/* i18n-ignore-next-line — preview-only screen */}
+      <Stack.Screen name="branch-switcher" options={{ title: 'Branch Switcher' }} />
+      <Stack.Screen name="dev-servers" options={{ title: t('mobile.more.metroServersTitle') }} />
     </Stack>
   );
 }

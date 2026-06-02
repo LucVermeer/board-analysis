@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import MuiButton from '@mui/material/Button';
 import Fab from '@mui/material/Fab';
 import Typography from '@mui/material/Typography';
@@ -10,12 +9,8 @@ import { useSession } from 'next-auth/react';
 import { useTranslation } from 'react-i18next';
 import { useLocaleRouter } from '@/app/lib/i18n/use-locale-router';
 import { executeGraphQL } from '@/app/lib/graphql/client';
-import {
-  type GetMySmartPlaylistCountsQueryResponse,
-  type Playlist,
-  type DiscoverablePlaylist,
-  GET_MY_SMART_PLAYLIST_COUNTS,
-} from '@boardsesh/graphql/operations/playlists';
+import { type Playlist, type DiscoverablePlaylist } from '@boardsesh/graphql/operations/playlists';
+import { useSmartPlaylistCounts } from '@boardsesh/playlists-react';
 import { useUserPlaylists } from '@/app/hooks/use-user-playlists';
 import { useDiscoverPlaylists } from '@/app/hooks/use-discover-playlists';
 import { usePinnedPlaylists } from '@/app/hooks/use-pinned-playlists';
@@ -198,18 +193,17 @@ export default function LibraryPageContent({
   // Smart playlist counts — react-query handles caching across the session and
   // dedupes if the page remounts. The token is part of the key so we refetch
   // after sign-in/out, but a 5-minute staleTime avoids refetching every visit.
-  const { data: smartCountsData } = useQuery({
-    queryKey: ['mySmartPlaylistCounts', token ?? null],
-    queryFn: async () => {
-      const res = await executeGraphQL<GetMySmartPlaylistCountsQueryResponse, Record<string, never>>(
-        GET_MY_SMART_PLAYLIST_COUNTS,
-        {},
-        token,
-      );
-      return res.mySmartPlaylistCounts;
-    },
-    enabled: !tokenLoading && isAuthenticated && !!token,
-    staleTime: 5 * 60 * 1000,
+  // Web injects its token-aware transport explicitly so the hook also runs in
+  // unit tests that mock `@/app/lib/graphql/client` without the root provider.
+  const executeSmartCountsGraphQL = useMemo<Parameters<typeof useSmartPlaylistCounts>[0]['executeGraphQL']>(
+    () => (query, variables) => executeGraphQL(query, variables, token),
+    [token],
+  );
+  const { data: smartCountsData } = useSmartPlaylistCounts({
+    token,
+    tokenLoading,
+    isAuthenticated,
+    executeGraphQL: executeSmartCountsGraphQL,
   });
   const smartCounts = smartCountsData ?? [];
 

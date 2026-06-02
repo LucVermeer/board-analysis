@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, Pressable, StyleSheet, RefreshControl, Image, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
@@ -21,7 +22,12 @@ import { useBoardProvider } from '@boardsesh/board-react';
 import { randomUUID } from 'expo-crypto';
 import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
 import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
+import { getHttpClient } from '../../../src/lib/graphql/client';
+import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
+import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
@@ -42,10 +48,14 @@ const SEARCH_DEBOUNCE_MS = 300;
 export default function ClimbList() {
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
-  const { openPlayDrawer, openClimbActions } = useDrawerHost();
+  const { openClimbActions } = useDrawerHost();
   const { addToQueue } = useQueue();
   const { getLogbook } = useBoardProvider();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
+  const insets = useSafeAreaInsets();
+  // Reserve room for the floating queue bar + tab bar so the last row isn't
+  // hidden behind them.
+  const listPaddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
 
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const debouncedSearchRef = useRef('');
@@ -229,11 +239,41 @@ export default function ClimbList() {
     [hasBoardConfig, boardName, layoutId, sizeId, setIds, angle],
   );
 
+  // Page the same search query the list uses so the play-drawer swipe can walk
+  // climbs beyond what's loaded in the list (capped by the shared refresh
+  // helper). Activation pages are 0-based; the search query is 1-based.
+  const fetchSearchPage = useCallback(
+    async ({ page, pageSize }: { page: number; pageSize: number }) => {
+      const input = toClimbSearchInput(
+        filters,
+        { boardName, layoutId, sizeId, setIds, angle },
+        { page: page + 1, pageSize },
+        { name: debouncedSearch },
+      );
+      const response = await getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
+      return {
+        climbs: toQueueClimbs(response.searchClimbs.climbs),
+        hasMore: response.searchClimbs.hasMore,
+      };
+    },
+    [filters, boardName, layoutId, sizeId, setIds, angle, debouncedSearch],
+  );
+
+  // Tapping a climb seeds a suggestion source from the search results, anchored
+  // at the tapped climb, so the play-drawer swipe continues through the climbs
+  // listed after it — mirroring the playlist flow.
+  const activateClimbListClimb = usePlaylistActivation({
+    sourceId: 'climblist',
+    allClimbs: toQueueClimbs(accumulatedClimbs),
+    fetchPage: fetchSearchPage,
+    refreshErrorMessage: 'Failed to refresh climb-list suggestions:',
+  });
+
   const handleClimbPress = useCallback(
     (climb: Climb) => {
-      openPlayDrawer(climb);
+      void activateClimbListClimb(toQueueClimb(climb));
     },
-    [openPlayDrawer],
+    [activateClimbListClimb],
   );
 
   const handleAddToQueue = useCallback(
@@ -335,6 +375,7 @@ export default function ClimbList() {
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ paddingBottom: listPaddingBottom }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={brandColors.primary} />

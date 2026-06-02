@@ -5,6 +5,7 @@ import { useActiveBoard } from '../../src/lib/graphql/use-active-board';
 
 export default function TabLayout() {
   const { t } = useTranslation('common');
+  const { t: tPlaylists } = useTranslation('playlists');
 
   const { data: activeBoard, isLoading } = useActiveBoard();
   // initialRouteName is consumed only on first mount; committing <Tabs> before
@@ -40,15 +41,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="discover"
         options={{
-          title: t('mobile.nav.profile'),
+          title: tPlaylists('bottomTabBar.discover'),
         }}
       />
       <Tabs.Screen
-        name="more"
+        name="profile"
         options={{
-          title: t('mobile.more.title'),
+          title: t('mobile.nav.profile'),
         }}
       />
     </Tabs>

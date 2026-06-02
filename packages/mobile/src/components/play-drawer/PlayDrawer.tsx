@@ -12,7 +12,7 @@ import {
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { randomUUID } from 'expo-crypto';
-import { computeNavigationState, boardSupportsMirroring } from '@boardsesh/play-view';
+import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@boardsesh/play-view';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
@@ -111,7 +111,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   // and leaves manual user expansion alone afterwards.
   const lastSnappedClimbUuidRef = useRef<string | null>(null);
 
-  const { state, setCurrentClimb, nextClimb, previousClimb, sessionId, addToQueue } = useQueue();
+  const { state, setCurrentClimb, nextClimb, previousClimb, playlistSuggestionSource, sessionId, addToQueue } =
+    useQueue();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { formatGrade } = useGradeFormat();
@@ -131,8 +132,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, [boardName, layoutId, sizeId, setIds]);
 
   const navigationState = useMemo(
-    () => computeNavigationState(state.queue, state.currentClimbQueueItem),
-    [state.queue, state.currentClimbQueueItem],
+    () => computeNavigationStateWithSuggestions(state.queue, state.currentClimbQueueItem, playlistSuggestionSource),
+    [state.queue, state.currentClimbQueueItem, playlistSuggestionSource],
   );
 
   const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;
@@ -173,7 +174,9 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setActiveSubDrawer('none');
       lastSnappedClimbUuidRef.current = null;
       if (options?.setAsCurrent ?? true) {
-        setCurrentClimb(climbToQueueItem(selectedClimb));
+        // Fresh activation from the list/search clears any playlist suggestion
+        // source (web passes the same null option on every non-playlist set).
+        setCurrentClimb(climbToQueueItem(selectedClimb), { playlistSuggestionSource: null });
       }
       sheetRef.current?.present();
     },
@@ -272,7 +275,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
       setIsTickBarActive(false);
       const queueItem = climbToQueueItem(similarClimb);
       addToQueue(queueItem);
-      setCurrentClimb(queueItem);
+      setCurrentClimb(queueItem, { playlistSuggestionSource: null });
     },
     [addToQueue, setCurrentClimb],
   );

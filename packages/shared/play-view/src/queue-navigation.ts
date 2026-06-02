@@ -1,4 +1,5 @@
-import type { ClimbQueueItem, ClimbQueue } from '@boardsesh/queue';
+import type { Climb, ClimbQueueItem, ClimbQueue, PlaylistSuggestionSource } from '@boardsesh/queue';
+import { getPlaylistSuggestedClimbs, getPlaylistPeekQueueItemUuid } from '@boardsesh/queue';
 import type { NavigationState } from './types';
 
 /**
@@ -55,6 +56,85 @@ export function computeNavigationState(
 
   const currentIndex = currentClimbQueueItem ? queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid) : -1;
 
+  const remainingCount = currentIndex >= 0 ? queue.length - currentIndex - 1 : queue.length;
+
+  return {
+    canNext: nextItem !== null,
+    canPrevious: prevItem !== null,
+    nextItem,
+    prevItem,
+    remainingCount,
+  };
+}
+
+/** The playlist climb immediately after `currentClimbUuid` in the source's
+ * ordered list, or null if the current climb isn't in the playlist or is last. */
+function getNextPlaylistClimb(
+  source: PlaylistSuggestionSource | null,
+  currentClimbUuid: string | undefined,
+): Climb | null {
+  if (!source || !currentClimbUuid) return null;
+  const index = source.climbs.findIndex((climb) => climb.uuid === currentClimbUuid);
+  if (index === -1) return null;
+  return source.climbs[index + 1] ?? null;
+}
+
+/** Wrap a suggested climb as a transient "peek" queue item. */
+function toPeekItem(climb: Climb): ClimbQueueItem {
+  return { climb, addedBy: null, uuid: getPlaylistPeekQueueItemUuid(climb.uuid), suggested: true };
+}
+
+/**
+ * Like findNextQueueItem, but when the queue is exhausted relative to the
+ * current item, fall through to the next PLAYLIST climb — the one immediately
+ * after the CURRENT climb in the suggestion source's ordered list — as a
+ * transient "peek" item. On commit the peek is appended to the queue even if
+ * that climb already appears earlier, so re-activating a playlist climb starts a
+ * fresh pass that re-appends the rest of the playlist (the queue grows
+ * 1..10, 1..10) instead of jumping ahead to the first un-queued climb.
+ *
+ * Queue-first: while the current item has a real successor in the queue we
+ * return that, so swiping back then forward walks the existing queue without
+ * duplicating. Only at the tail — or for an orphan current (transiently between
+ * a peek commit and the server echo) — do we fall through to the playlist.
+ */
+export function findNextQueueItemWithSuggestions(
+  queue: ClimbQueue,
+  currentClimbQueueItem: ClimbQueueItem | null,
+  source: PlaylistSuggestionSource | null,
+): ClimbQueueItem | null {
+  if (currentClimbQueueItem) {
+    const currentIndex = queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid);
+    if (currentIndex >= 0 && currentIndex < queue.length - 1) {
+      return queue[currentIndex + 1];
+    }
+    const nextClimb = getNextPlaylistClimb(source, currentClimbQueueItem.climb?.uuid);
+    return nextClimb ? toPeekItem(nextClimb) : null;
+  }
+
+  if (queue.length > 0) return queue[0];
+
+  // No current climb and an empty queue: seed from the activated climb's first
+  // suggestion (getPlaylistSuggestedClimbs anchors on source.activatedClimbUuid).
+  const firstSuggestion = getPlaylistSuggestedClimbs(source, queue)[0];
+  return firstSuggestion ? toPeekItem(firstSuggestion) : null;
+}
+
+/**
+ * computeNavigationState that lights up canNext/nextItem from playlist
+ * suggestions when the queue is exhausted. canPrevious/prevItem stay queue-only
+ * (web has no backward suggestion fall-through). remainingCount stays
+ * queue-based to match web's action-bar remaining count.
+ */
+export function computeNavigationStateWithSuggestions(
+  queue: ClimbQueue,
+  currentClimbQueueItem: ClimbQueueItem | null,
+  source: PlaylistSuggestionSource | null,
+): NavigationState {
+  const nextItem = findNextQueueItemWithSuggestions(queue, currentClimbQueueItem, source);
+  const prevItem = findPreviousQueueItem(queue, currentClimbQueueItem);
+
+  const currentIndex = currentClimbQueueItem ? queue.findIndex(({ uuid }) => uuid === currentClimbQueueItem.uuid) : -1;
   const remainingCount = currentIndex >= 0 ? queue.length - currentIndex - 1 : queue.length;
 
   return {

@@ -44,6 +44,7 @@
     "@boardsesh/party-profile": "*",
     "@boardsesh/play-view": "*",
     "@boardsesh/playlist-generator": "*",
+    "@boardsesh/playlists-react": "*",
     "@boardsesh/queue": "*",
     "@boardsesh/queue-react": "*",
     "@boardsesh/queue-runtime": "*",

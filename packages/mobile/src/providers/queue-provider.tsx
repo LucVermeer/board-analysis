@@ -10,8 +10,22 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { queueReducer, initialState, createQueueSyncCoordinator, generateClientId } from '@boardsesh/queue';
-import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from '@boardsesh/queue';
+import {
+  queueReducer,
+  initialState,
+  createQueueSyncCoordinator,
+  generateClientId,
+  isPlaylistPeekQueueItemUuid,
+  playlistSuggestionSourceMatches,
+} from '@boardsesh/queue';
+import type {
+  QueueState,
+  QueueAction,
+  QueueSearchParams,
+  ClimbQueueItem,
+  PlaylistSuggestionSource,
+  SetCurrentClimbOptions,
+} from '@boardsesh/queue';
 import {
   createJoinSessionTracker,
   mapSubscriptionEnvelopeToAction,
@@ -33,8 +47,9 @@ import {
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
-import { findNextQueueItem, findPreviousQueueItem } from '@boardsesh/play-view';
+import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
+import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useToast } from './toast-provider';
 
 export type StartSessionConfig = {
@@ -53,9 +68,15 @@ type QueueContextValue = {
   addToQueue: (item: ClimbQueueItem) => void;
   removeFromQueue: (uuid: string) => void;
   clearQueue: () => void;
-  setCurrentClimb: (item: ClimbQueueItem) => void;
+  setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
   nextClimb: () => void;
   previousClimb: () => void;
+  /** Active playlist suggestion source (client-only; survives server syncs). */
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
+  /** Replace the playlist suggestion source that drives swipe-through climbs. */
+  setPlaylistSuggestionSource: (source: PlaylistSuggestionSource | null) => void;
+  /** Refresh the suggestion source in place (no-op unless it matches the active one). */
+  refreshPlaylistSuggestionSource: (source: PlaylistSuggestionSource) => void;
   clearSession: () => Promise<void>;
   endSession: () => Promise<SessionSummary | null>;
   /**
@@ -91,6 +112,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const sessionCreationRef = useRef<Promise<string | null> | null>(null);
+  // Playlist suggestion source lives in provider state, NOT the reducer: the
+  // reducer clears its suggestion field on full server syncs (INITIAL_QUEUE_DATA
+  // / UPDATE_QUEUE), which would wipe the source the moment activation
+  // creates/syncs a session — killing swipe-through-playlist. Web keeps it
+  // outside the reducer for the same reason. The ref mirrors it so the
+  // imperative nextClimb path reads the latest value.
+  const [playlistSuggestionSource, setPlaylistSuggestionSourceState] = useState<PlaylistSuggestionSource | null>(null);
+  const playlistSuggestionSourceRef = useRef<PlaylistSuggestionSource | null>(null);
+  playlistSuggestionSourceRef.current = playlistSuggestionSource;
   const { showToast } = useToast();
   const { t } = useTranslation('session');
 
@@ -334,6 +364,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const clearQueue = useCallback(() => {
     const itemsToRemove = stateRef.current.queue;
     dispatch({ type: 'CLEAR_QUEUE' });
+    setPlaylistSuggestionSourceState(null);
     // Surface at most one toast if any removal fails — a persistent join
     // failure would otherwise toast once per queued item.
     void Promise.allSettled(itemsToRemove.map((item) => mutations.removeQueueItem(item.uuid))).then((results) => {
@@ -348,11 +379,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // CurrentClimbChanged event (same id in `serverCorrelationId`) is suppressed
   // instead of re-applied.
   const dispatchSetCurrent = useCallback(
-    (item: ClimbQueueItem, shouldAddToQueue: boolean) => {
+    (item: ClimbQueueItem, shouldAddToQueue: boolean, playlistSuggestionSource?: PlaylistSuggestionSource | null) => {
       const correlationId = coordinator.generateCorrelationId();
       dispatch({
         type: 'DELTA_UPDATE_CURRENT_CLIMB',
-        payload: { item, shouldAddToQueue, isServerEvent: false, correlationId },
+        // playlistSuggestionSource is client-only state — when present the
+        // reducer sets it + prunes suggested-after-current; when undefined it's
+        // left unchanged. It is intentionally NOT sent to the server mutation.
+        payload: { item, shouldAddToQueue, isServerEvent: false, correlationId, playlistSuggestionSource },
       });
       coordinator.trackPendingMutation(correlationId);
       mutations.setCurrentClimb(item, shouldAddToQueue, correlationId).catch(() => {
@@ -362,12 +396,45 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [coordinator, mutations, showToast, t],
   );
 
-  const setCurrentClimb = useCallback((item: ClimbQueueItem) => dispatchSetCurrent(item, true), [dispatchSetCurrent]);
+  const setCurrentClimb = useCallback(
+    (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => {
+      // Source is client-only provider state (see note above) — set it whenever
+      // the caller passes options. Activation passes a source; a fresh
+      // climb-list/search open passes null to clear playlist context; re-opening
+      // the current climb passes nothing, leaving the source intact.
+      if (options) setPlaylistSuggestionSourceState(options.playlistSuggestionSource);
+      // Append (fresh-uuid items add to the queue; the reducer's uuid dedup makes
+      // re-selecting an existing queue item a no-op add). Re-tapping a playlist
+      // climb thus starts a fresh pass — forward-swipe re-appends the rest of the
+      // playlist (queue grows 1..10, 1..10), driven by
+      // findNextQueueItemWithSuggestions anchoring on the current climb.
+      dispatchSetCurrent(item, true, options?.playlistSuggestionSource);
+    },
+    [dispatchSetCurrent],
+  );
 
   const nextClimb = useCallback(() => {
     const { queue, currentClimbQueueItem } = stateRef.current;
-    const nextItem = findNextQueueItem(queue, currentClimbQueueItem);
-    if (nextItem) dispatchSetCurrent(nextItem, false);
+    const nextItem = findNextQueueItemWithSuggestions(
+      queue,
+      currentClimbQueueItem,
+      playlistSuggestionSourceRef.current,
+    );
+    if (!nextItem) return;
+    if (isPlaylistPeekQueueItemUuid(nextItem.uuid)) {
+      // Mirror web: turn the transient peek into a real queue item with a fresh
+      // uuid so the synthetic `playlist-peek:<uuid>` never reaches the WS
+      // mutation (toQueueItemInput sends item.uuid verbatim). suggested:true so
+      // suggestion pruning still treats it as suggestion-origin. The peek climb
+      // is the queue package's wide Climb; climbToQueueItem only reads the
+      // ClimbInput subset, so the cast is runtime-safe.
+      const realItem = climbToQueueItem(nextItem.climb as unknown as Parameters<typeof climbToQueueItem>[0], {
+        suggested: true,
+      });
+      dispatchSetCurrent(realItem, true);
+    } else {
+      dispatchSetCurrent(nextItem, false);
+    }
   }, [dispatchSetCurrent]);
 
   const previousClimb = useCallback(() => {
@@ -376,12 +443,26 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (prevItem) dispatchSetCurrent(prevItem, false);
   }, [dispatchSetCurrent]);
 
+  const setPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource | null) => {
+    setPlaylistSuggestionSourceState(source);
+  }, []);
+
+  // No-op unless the incoming source matches the active one (same playlist +
+  // activated climb + board) — so a late async refresh can't clobber a newer
+  // activation. Mirrors the reducer's REFRESH semantics.
+  const refreshPlaylistSuggestionSource = useCallback((source: PlaylistSuggestionSource) => {
+    setPlaylistSuggestionSourceState((current) =>
+      playlistSuggestionSourceMatches(current, source) ? source : current,
+    );
+  }, []);
+
   const clearSession = useCallback(async () => {
     setSessionId(null);
     dispatch({
       type: 'INITIAL_QUEUE_DATA',
       payload: { queue: [], currentClimbQueueItem: null },
     });
+    setPlaylistSuggestionSourceState(null);
     await clearStoredSessionId();
   }, []);
 
@@ -414,6 +495,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setCurrentClimb,
       nextClimb,
       previousClimb,
+      playlistSuggestionSource,
+      setPlaylistSuggestionSource,
+      refreshPlaylistSuggestionSource,
       clearSession,
       endSession,
       startSession: createSessionWithConfig,
@@ -427,6 +511,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setCurrentClimb,
       nextClimb,
       previousClimb,
+      playlistSuggestionSource,
+      setPlaylistSuggestionSource,
+      refreshPlaylistSuggestionSource,
       clearSession,
       endSession,
       createSessionWithConfig,

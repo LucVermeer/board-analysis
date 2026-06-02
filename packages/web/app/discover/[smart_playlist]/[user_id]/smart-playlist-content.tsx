@@ -5,20 +5,18 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import MuiButton from '@mui/material/Button';
 import { IosShare, SentimentDissatisfiedOutlined } from '@mui/icons-material';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import type { UserBoard } from '@boardsesh/shared-schema';
 import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
 import {
-  type GetSmartPlaylistInput,
   type GetSmartPlaylistQueryResponse,
   type GetSmartPlaylistQueryVariables,
-  type SmartPlaylistMeta,
   type SmartPlaylistResult,
   type SmartPlaylistType,
   GET_SMART_PLAYLIST,
 } from '@boardsesh/graphql/operations/playlists';
+import { useSmartPlaylist } from '@boardsesh/playlists-react';
 import { type SmartPlaylistSlug, smartPlaylistByType } from '@/app/lib/smart-playlists';
 import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { useMyBoards } from '@/app/hooks/use-my-boards';
@@ -81,55 +79,42 @@ export default function SmartPlaylistContent({
     boardUuid: selectedBoard?.uuid ?? null,
   });
 
-  const {
-    data: pagedData,
-    fetchNextPage,
-    hasNextPage,
-    isFetching,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    refetch,
-  } = useInfiniteQuery({
-    queryKey: ['smartPlaylist', smartPlaylistType, userId, selectedBoard?.uuid ?? 'all'],
-    queryFn: async ({ pageParam }) => {
-      const client = createGraphQLHttpClient(token);
-      const input: GetSmartPlaylistInput = {
-        type: smartPlaylistType,
-        userId,
-        page: pageParam,
-        pageSize: 20,
-        ...(selectedBoard && { boardName: selectedBoard.boardType }),
-      };
-      const response = await client.request<GetSmartPlaylistQueryResponse>(GET_SMART_PLAYLIST, {
-        input,
-      } satisfies GetSmartPlaylistQueryVariables);
-      return response.smartPlaylist;
-    },
-    enabled: !tokenLoading,
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length : undefined),
-    staleTime: 5 * 60 * 1000,
-    // Only seed when the current query key still matches the tuple the SSR
-    // payload was fetched for. Beyond the obvious first-render case this
-    // also avoids re-applying stale SSR data if the user switches away from
-    // and back to the default view much later.
-    initialData:
-      ssrSmartApplicable && initialSmartPlaylist
-        ? {
-            pages: [initialSmartPlaylist],
-            pageParams: [0],
-          }
-        : undefined,
-    initialDataUpdatedAt: ssrSmartApplicable ? ssrInitialUpdatedAtRef.current : 0,
-  });
-
-  const allClimbs: Climb[] = useMemo(
-    () => pagedData?.pages.flatMap((page) => page.climbs as Climb[]) ?? [],
-    [pagedData],
+  // Web injects its token-aware transport explicitly so token semantics match
+  // the previous inline query (public-readable smart playlists still send the
+  // header when signed in).
+  const executeSmartPlaylistGraphQL = useMemo<Parameters<typeof useSmartPlaylist>[0]['executeGraphQL']>(
+    () => (query, variables) => createGraphQLHttpClient(token).request(query, variables),
+    [token],
   );
 
-  const meta: SmartPlaylistMeta | undefined = pagedData?.pages[0]?.meta ?? initialSmartPlaylist?.meta;
+  const {
+    query: smartPlaylistQuery,
+    allClimbs: sharedAllClimbs,
+    meta,
+  } = useSmartPlaylist({
+    smartPlaylistType,
+    userId,
+    boardUuid: selectedBoard?.uuid ?? null,
+    ...(selectedBoard ? { boardName: selectedBoard.boardType } : {}),
+    pageSize: 20,
+    tokenLoading,
+    // Only seed when the current query key still matches the tuple the SSR
+    // payload was fetched for. Beyond the obvious first-render case this also
+    // avoids re-applying stale SSR data if the user switches away from and back
+    // to the default view much later.
+    initialData: initialSmartPlaylist,
+    initialDataApplicable: ssrSmartApplicable,
+    initialDataUpdatedAt: ssrInitialUpdatedAtRef.current,
+    executeGraphQL: executeSmartPlaylistGraphQL,
+  });
+
+  const { fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, isLoading, isError, refetch } =
+    smartPlaylistQuery;
+
+  // TYPE SEAM: the shared hook returns the structurally-wider queue `Climb`;
+  // this screen (MultiboardClimbList, the activation adapter) uses web `Climb`.
+  // Runtime objects are the same flattened GraphQL climbs, so cast once here.
+  const allClimbs = sharedAllClimbs as unknown as Climb[];
 
   const boardTypes = useMemo(() => {
     const types = new Set<string>();

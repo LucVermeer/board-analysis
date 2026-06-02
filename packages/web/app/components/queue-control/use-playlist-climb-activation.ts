@@ -1,10 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import {
+  usePlaylistClimbActivation as useSharedPlaylistClimbActivation,
+  type PlaylistActivationBoardTarget,
+  type PlaylistActivationQueueApi,
+} from '@boardsesh/playlists-react';
+import type { Climb as QueueClimb } from '@boardsesh/queue';
 import type { BoardDetails, Climb } from '@/app/lib/types';
 import { getBoardDetailsForPlaylist, getDefaultAngleForBoard } from '@/app/lib/board-config-for-playlist';
-import { createPlaylistSuggestionSource } from './playlist-suggestions';
-import { isAbortError } from './playlist-suggestion-refresh';
+import { canAddClimbToBoard } from '@/app/lib/board-compatibility';
+import { getQueueBoardKey } from './playlist-suggestions';
 import { dispatchOpenPlayDrawer } from './play-drawer-event';
 import type { QueueActionsType } from './types';
 import type { QueueBridgeBoardInfo } from './queue-bridge-board-info-context';
@@ -35,6 +41,18 @@ type UsePlaylistClimbActivationOptions = {
   refreshErrorMessage: string;
 };
 
+/**
+ * Web adapter over the shared `usePlaylistClimbActivation`. Keeps the web-facing
+ * options the two playlist screens already pass, and maps them onto the shared,
+ * platform-agnostic activation contract:
+ *  - `resolveTarget` derives the bound board (active queue board → selected
+ *    board → playlist board) plus angle + climbability predicate, and stashes
+ *    the resolved `BoardDetails` by `boardKey` so the web fetch (which needs the
+ *    full details) can recover them.
+ *  - `fetchClimbsForBoard` translates the shared `{ target }` arg back to the
+ *    web `{ boardDetails, angle }` the screens' fetchers expect.
+ *  - `queueApi` / `onActivated` wire web queue actions and the play-drawer open.
+ */
 export function usePlaylistClimbActivation({
   queueActions,
   activeQueueBoardInfo,
@@ -46,102 +64,110 @@ export function usePlaylistClimbActivation({
   allClimbs,
   fetchClimbsForBoard,
   refreshErrorMessage,
-}: UsePlaylistClimbActivationOptions) {
-  const refreshAbortRef = useRef<AbortController | null>(null);
+}: UsePlaylistClimbActivationOptions): (climb: Climb) => Promise<void> {
+  const activeBoardDetails = activeQueueBoardInfo.boardDetails;
+  const activeAngle = activeQueueBoardInfo.angle;
+  const selectedBoardType = selectedBoard?.boardType;
+  const selectedLayoutId = selectedBoard?.layoutId;
+  const selectedAngle = selectedBoard?.angle;
 
-  useEffect(() => {
-    return () => {
-      refreshAbortRef.current?.abort();
-    };
-  }, []);
+  // Recover the full BoardDetails for a target inside fetchClimbsForBoard: the
+  // shared target only carries boardKey/boardName/angle, but the web fetch needs
+  // the full details. boardKey uniquely identifies a board, so a per-key stash
+  // populated during resolveTarget is safe (the shared hook aborts a prior
+  // refresh on re-tap, so the latest activation wins).
+  const boardDetailsByKeyRef = useRef<Map<string, BoardDetails>>(new Map());
 
-  return useCallback(
-    async (climb: Climb): Promise<void> => {
-      if (!queueActions) return;
-
-      const activeBoardDetails = activeQueueBoardInfo.boardDetails;
+  const resolveTarget = useCallback(
+    (climb: Climb): PlaylistActivationBoardTarget | null => {
       const targetBoardDetails =
         activeBoardDetails ??
         selectedBoardDetails ??
         getBoardDetailsForPlaylist(
-          climb.boardType ?? selectedBoard?.boardType ?? fallbackBoardType ?? '',
-          climb.layoutId ?? selectedBoard?.layoutId ?? fallbackLayoutId,
+          climb.boardType ?? selectedBoardType ?? fallbackBoardType ?? '',
+          climb.layoutId ?? selectedLayoutId ?? fallbackLayoutId,
         );
 
-      // Defence-in-depth: incompatible climbs should already be filtered at
-      // the tap target (climbs-list gates on unsupportedClimbs), but if a
-      // playlist row tap somehow reaches the hook without a resolvable board
-      // (e.g., user owns no boards), degrade to a plain activation rather
-      // than failing silently. setCurrentClimb still surfaces a snackbar via
-      // its validator when the active board can't accept the climb.
-      if (!targetBoardDetails) {
-        const activated = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: null });
-        if (activated) dispatchOpenPlayDrawer();
-        return;
-      }
+      if (!targetBoardDetails) return null;
 
       const targetAngle = activeBoardDetails
-        ? activeQueueBoardInfo.angle
-        : (selectedBoard?.angle ?? climb.angle ?? getDefaultAngleForBoard(targetBoardDetails.board_name));
+        ? activeAngle
+        : (selectedAngle ?? climb.angle ?? getDefaultAngleForBoard(targetBoardDetails.board_name));
 
-      const initialSource = createPlaylistSuggestionSource({
-        playlistUuid: sourceId,
-        activatedClimb: climb,
-        climbs: allClimbs,
-        boardDetails: targetBoardDetails,
-      });
+      const boardKey = getQueueBoardKey(targetBoardDetails);
+      boardDetailsByKeyRef.current.set(boardKey, targetBoardDetails);
 
-      const activeItem = await queueActions.setCurrentClimb(climb, { playlistSuggestionSource: initialSource });
-      if (!activeItem) return;
-      // Match the non-playlist browse-tap path (previewClimbFromBrowse) so a
-      // playlist row tap surfaces the play drawer rather than silently
-      // mutating state.
-      dispatchOpenPlayDrawer();
-
-      refreshAbortRef.current?.abort();
-      const abortController = new AbortController();
-      refreshAbortRef.current = abortController;
-
-      void (async () => {
-        try {
-          const fetchedClimbs = await fetchClimbsForBoard({
-            boardDetails: targetBoardDetails,
-            angle: targetAngle,
-            activatedClimbUuid: climb.uuid,
-            signal: abortController.signal,
-          });
-          if (abortController.signal.aborted) return;
-          const refreshedSource = createPlaylistSuggestionSource({
-            playlistUuid: sourceId,
-            activatedClimb: climb,
-            climbs: fetchedClimbs,
-            boardDetails: targetBoardDetails,
-          });
-          queueActions.refreshPlaylistSuggestionSource(refreshedSource);
-        } catch (err: unknown) {
-          if (isAbortError(err)) return;
-          console.error(refreshErrorMessage, err);
-        } finally {
-          if (refreshAbortRef.current === abortController) {
-            refreshAbortRef.current = null;
-          }
-        }
-      })();
+      return {
+        boardKey,
+        boardName: targetBoardDetails.board_name,
+        angle: targetAngle,
+        isClimbable: (candidate: QueueClimb) =>
+          canAddClimbToBoard(candidate as unknown as Climb, targetBoardDetails).ok,
+      };
     },
     [
-      queueActions,
-      activeQueueBoardInfo.boardDetails,
-      activeQueueBoardInfo.angle,
+      activeBoardDetails,
+      activeAngle,
       selectedBoardDetails,
-      selectedBoard?.boardType,
-      selectedBoard?.layoutId,
-      selectedBoard?.angle,
+      selectedBoardType,
+      selectedLayoutId,
+      selectedAngle,
       fallbackBoardType,
       fallbackLayoutId,
-      sourceId,
-      allClimbs,
-      fetchClimbsForBoard,
-      refreshErrorMessage,
     ],
   );
+
+  const fetchSharedClimbsForBoard = useCallback(
+    async ({
+      target,
+      activatedClimbUuid,
+      signal,
+    }: {
+      target: PlaylistActivationBoardTarget;
+      activatedClimbUuid: string;
+      signal: AbortSignal;
+    }): Promise<QueueClimb[]> => {
+      const boardDetails = boardDetailsByKeyRef.current.get(target.boardKey);
+      // resolveTarget always stashes the details before the shared hook calls
+      // this, so a miss is unexpected — degrade to no refreshed climbs rather
+      // than throwing.
+      if (!boardDetails) return [];
+      const climbs = await fetchClimbsForBoard({
+        boardDetails,
+        angle: target.angle,
+        activatedClimbUuid,
+        signal,
+      });
+      return climbs as unknown as QueueClimb[];
+    },
+    [fetchClimbsForBoard],
+  );
+
+  // TYPE SEAM: web queue actions use web's Climb / ClimbQueueItem /
+  // PlaylistSuggestionSource; the shared contract uses the structurally
+  // compatible queue types. Runtime behaviour is identical, so cast the api
+  // object at the boundary.
+  const queueApi = useMemo<PlaylistActivationQueueApi | null>(() => {
+    if (!queueActions) return null;
+    return {
+      setCurrentClimb: queueActions.setCurrentClimb,
+      refreshPlaylistSuggestionSource: queueActions.refreshPlaylistSuggestionSource,
+    } as unknown as PlaylistActivationQueueApi;
+  }, [queueActions]);
+
+  const onActivated = useCallback(() => {
+    dispatchOpenPlayDrawer();
+  }, []);
+
+  // TYPE SEAM: web's Climb is structurally wider than the shared queue Climb;
+  // the runtime objects are identical, so cast allClimbs at the boundary.
+  return useSharedPlaylistClimbActivation({
+    queueApi,
+    sourceId,
+    allClimbs: allClimbs as unknown as QueueClimb[],
+    resolveTarget,
+    fetchClimbsForBoard: fetchSharedClimbsForBoard,
+    onActivated,
+    refreshErrorMessage,
+  }) as unknown as (climb: Climb) => Promise<void>;
 }

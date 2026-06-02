@@ -3,6 +3,7 @@ import { render as rtlRender, screen, fireEvent, waitFor, type RenderOptions } f
 import React from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/app/test-utils/test-providers';
+import { PlaylistsAdapterTestProvider } from '@/app/test-utils/playlists-adapter-wrapper';
 import { tFromCatalog } from '@/app/__test-helpers__/i18n-mock';
 import LibraryPageContent from '../library-page-content';
 import type { UserBoard, PopularBoardConfig } from '@boardsesh/shared-schema';
@@ -12,7 +13,11 @@ import type { StoredBoardConfig } from '@/app/lib/saved-boards-db';
 function render(ui: React.ReactElement, options?: RenderOptions) {
   const queryClient = createTestQueryClient();
   return rtlRender(ui, {
-    wrapper: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <PlaylistsAdapterTestProvider>{children}</PlaylistsAdapterTestProvider>
+      </QueryClientProvider>
+    ),
     ...options,
   });
 }

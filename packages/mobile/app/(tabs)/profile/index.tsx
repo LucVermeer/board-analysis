@@ -1,14 +1,19 @@
 import { View, Text, Image, Pressable, ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useProfile } from '../../../src/lib/graphql/hooks';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { ListRow } from '../../../src/components/ListRow';
+import { Icon } from '../../../src/components/Icon';
+import { spacing } from '../../../src/theme/tokens';
 
 export default function Profile() {
   const { data: profile, isLoading } = useProfile();
   const { signOut } = useAuth();
-  const { systemColors } = useTheme();
+  const { systemColors, borderRadius } = useTheme();
   const { t } = useTranslation('profile');
+  const { t: tCommon } = useTranslation('common');
 
   if (isLoading) {
     return (
@@ -34,6 +39,17 @@ export default function Profile() {
           {profile?.displayName ?? t('mobile.unknownName')}
         </Text>
         <Text style={[styles.email, { color: systemColors.secondaryLabel }]}>{profile?.email ?? ''}</Text>
+      </View>
+
+      {/* Settings / More — appearance, developer tools, preview build. */}
+      <View style={[styles.card, { backgroundColor: systemColors.secondaryBackground, borderRadius: borderRadius.lg }]}>
+        <ListRow
+          title={tCommon('mobile.more.title')}
+          leading={<Icon name="settings" size={22} color={systemColors.secondaryLabel} />}
+          showChevron
+          showSeparator={false}
+          onPress={() => router.push('/(tabs)/profile/more')}
+        />
       </View>
 
       <Pressable style={[styles.signOutButton, { borderColor: systemColors.separator }]} onPress={signOut}>
@@ -85,6 +101,10 @@ const styles = StyleSheet.create({
   email: {
     marginTop: 4,
     fontSize: 15,
+  },
+  card: {
+    overflow: 'hidden',
+    marginBottom: spacing[6],
   },
   signOutButton: {
     marginTop: 'auto',

@@ -30,6 +30,7 @@ import { ConnectionSettingsProvider } from '../src/providers/connection-settings
 import { FavoritesProvider } from '../src/providers/favorites-provider';
 import { PlaylistsProvider } from '../src/providers/playlists-provider';
 import { BoardAdapterWrapper } from '../src/providers/board-adapter';
+import { PlaylistsAdapterWrapper } from '../src/providers/playlists-adapter';
 import { BoardProvider } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { PersistentQueueBar } from '../src/components/queue-control/persistent-queue-bar';
@@ -202,38 +203,40 @@ function RootLayout() {
                       <ClimbActionsDataWrapper>
                         <QueueProvider>
                           <BoardAdapterWrapper>
-                            <BoardProviderWrapper>
-                              {/* BottomSheetModalProvider sits inside the board
-                                  providers (gorhom's BottomSheetModal portals
-                                  PlayDrawer → QuickTickBar here, so the host
-                                  must be able to see BoardAdapter/BoardProvider
-                                  through context) but *outside*
-                                  BluetoothProviderWrapper, because
-                                  BluetoothProvider renders DevicePickerSheet
-                                  as a BottomSheetModal — the modal host has to
-                                  exist before the picker mounts or gorhom
-                                  throws "BottomSheetModalInternalContext
-                                  cannot be null". */}
-                              <BottomSheetModalProvider>
-                                <BluetoothProviderWrapper>
-                                  <SessionScreenProvider>
-                                    <DrawerHostProvider>
-                                      <ThemedNavigation>
-                                        <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                          <Stack.Screen name="(tabs)" />
-                                          <Stack.Screen
-                                            name="auth"
-                                            options={{ headerShown: false, gestureEnabled: false }}
-                                          />
-                                        </Stack>
-                                      </ThemedNavigation>
-                                      <PersistentQueueBar />
-                                      <SessionScreenHost />
-                                    </DrawerHostProvider>
-                                  </SessionScreenProvider>
-                                </BluetoothProviderWrapper>
-                              </BottomSheetModalProvider>
-                            </BoardProviderWrapper>
+                            <PlaylistsAdapterWrapper>
+                              <BoardProviderWrapper>
+                                {/* BottomSheetModalProvider sits inside the board
+                                    providers (gorhom's BottomSheetModal portals
+                                    PlayDrawer → QuickTickBar here, so the host
+                                    must be able to see BoardAdapter/BoardProvider
+                                    through context) but *outside*
+                                    BluetoothProviderWrapper, because
+                                    BluetoothProvider renders DevicePickerSheet
+                                    as a BottomSheetModal — the modal host has to
+                                    exist before the picker mounts or gorhom
+                                    throws "BottomSheetModalInternalContext
+                                    cannot be null". */}
+                                <BottomSheetModalProvider>
+                                  <BluetoothProviderWrapper>
+                                    <SessionScreenProvider>
+                                      <DrawerHostProvider>
+                                        <ThemedNavigation>
+                                          <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                            <Stack.Screen name="(tabs)" />
+                                            <Stack.Screen
+                                              name="auth"
+                                              options={{ headerShown: false, gestureEnabled: false }}
+                                            />
+                                          </Stack>
+                                        </ThemedNavigation>
+                                        <PersistentQueueBar />
+                                        <SessionScreenHost />
+                                      </DrawerHostProvider>
+                                    </SessionScreenProvider>
+                                  </BluetoothProviderWrapper>
+                                </BottomSheetModalProvider>
+                              </BoardProviderWrapper>
+                            </PlaylistsAdapterWrapper>
                           </BoardAdapterWrapper>
                         </QueueProvider>
                       </ClimbActionsDataWrapper>
