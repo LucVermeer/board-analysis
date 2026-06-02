@@ -34,9 +34,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="queue"
+        name="record"
         options={{
-          title: t('mobile.nav.queue'),
+          title: t('mobile.session.recordTab'),
         }}
       />
       <Tabs.Screen

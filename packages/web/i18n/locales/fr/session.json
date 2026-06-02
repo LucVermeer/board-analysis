@@ -306,6 +306,32 @@
     },
     "toast": {
       "sessionEnded": "Session terminée"
+    },
+    "session": {
+      "headerStart": "Démarrer une session",
+      "headerActive": "Session",
+      "minimize": "Réduire la session",
+      "recordTab": "Enregistrer",
+      "preBoardLabel": "Mur",
+      "preGeneratorLabel": "Entraînement",
+      "preGeneratorOff": "Désactivé",
+      "preGeneratorVolume": "Volume",
+      "preGeneratorPyramid": "Pyramide",
+      "preGeneratorLadder": "Échelle",
+      "preGeneratorGradeFocus": "Cotation ciblée",
+      "preGeneratorTargetGrade": "Cotation visée",
+      "preStart": "Démarrer la session",
+      "preStarting": "Démarrage…",
+      "preNoBoard": "Choisis un mur pour démarrer",
+      "preStartError": "Impossible de démarrer la session. Réessaie.",
+      "inStatsSends": "Enchaînées",
+      "inStatsAttempts": "Essais",
+      "inStatsDuration": "Durée",
+      "inStatsHardest": "Plus dure enchaînée",
+      "inStatsGrades": "Répartition par cotation",
+      "inQueueTitle": "File",
+      "inQueueEmpty": "File vide — parcours des voies pour ajouter.",
+      "inEndSession": "Terminer la session"
     }
   },
   "playView": {

@@ -306,6 +306,32 @@
     },
     "toast": {
       "sessionEnded": "Sesión terminada"
+    },
+    "session": {
+      "headerStart": "Empezar sesión",
+      "headerActive": "Sesión",
+      "minimize": "Minimizar sesión",
+      "recordTab": "Grabar",
+      "preBoardLabel": "Tabla",
+      "preGeneratorLabel": "Entrenamiento",
+      "preGeneratorOff": "Apagado",
+      "preGeneratorVolume": "Volumen",
+      "preGeneratorPyramid": "Pirámide",
+      "preGeneratorLadder": "Escalera",
+      "preGeneratorGradeFocus": "Grado fijo",
+      "preGeneratorTargetGrade": "Grado objetivo",
+      "preStart": "Empezar sesión",
+      "preStarting": "Empezando…",
+      "preNoBoard": "Elige una tabla para empezar",
+      "preStartError": "No se pudo iniciar la sesión. Inténtalo de nuevo.",
+      "inStatsSends": "Encadenes",
+      "inStatsAttempts": "Intentos",
+      "inStatsDuration": "Duración",
+      "inStatsHardest": "Encadene más duro",
+      "inStatsGrades": "Distribución de grados",
+      "inQueueTitle": "Cola",
+      "inQueueEmpty": "Cola vacía — explora vías para añadir.",
+      "inEndSession": "Terminar sesión"
     }
   },
   "playView": {

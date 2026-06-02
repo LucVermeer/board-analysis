@@ -1,7 +1,13 @@
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-export default function QueueLayout() {
+/**
+ * The Record tab itself doesn't show a screen — tapping it is intercepted by
+ * `<BlurTabBar>` to open the full-screen session overlay. The Stack exists so
+ * that `/record/summary` (which fires after `endSession()`) has a presentation
+ * surface, and so future deep links / nested routes have a place to land.
+ */
+export default function RecordLayout() {
   const { t } = useTranslation('common');
 
   return (
@@ -13,7 +19,7 @@ export default function QueueLayout() {
         contentStyle: { backgroundColor: 'transparent' },
       }}
     >
-      <Stack.Screen name="index" options={{ title: t('mobile.nav.queue') }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen
         name="summary"
         options={{

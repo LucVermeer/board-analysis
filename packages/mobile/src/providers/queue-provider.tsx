@@ -37,6 +37,14 @@ import { findNextQueueItem, findPreviousQueueItem } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { useToast } from './toast-provider';
 
+export type StartSessionConfig = {
+  name?: string;
+  goal?: string;
+  color?: string;
+  discoverable?: boolean;
+  isPermanent?: boolean;
+};
+
 type QueueContextValue = {
   state: QueueState;
   dispatch: React.Dispatch<QueueAction>;
@@ -50,6 +58,12 @@ type QueueContextValue = {
   previousClimb: () => void;
   clearSession: () => Promise<void>;
   endSession: () => Promise<SessionSummary | null>;
+  /**
+   * Explicitly create a session with optional config (name, goal, etc.).
+   * Returns the new sessionId, or null if there is no active board or the
+   * mutation failed. No-op (returns existing id) when a session is live.
+   */
+  startSession: (config?: StartSessionConfig) => Promise<string | null>;
 };
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -218,42 +232,58 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     };
   }, [sessionId, coordinator, ensureJoined, joinTracker]);
 
-  const ensureSession = useCallback(async (): Promise<string | null> => {
-    if (sessionIdRef.current) return sessionIdRef.current;
-    if (sessionCreationRef.current) return sessionCreationRef.current;
+  const createSessionWithConfig = useCallback(
+    async (config?: StartSessionConfig): Promise<string | null> => {
+      if (sessionIdRef.current) return sessionIdRef.current;
+      if (sessionCreationRef.current) return sessionCreationRef.current;
 
-    const createPromise = (async () => {
-      const activeBoard = await getStoredActiveBoard();
-      if (!activeBoard) return null;
+      const createPromise = (async () => {
+        const activeBoard = await getStoredActiveBoard();
+        if (!activeBoard) return null;
 
-      const boardPath = buildBoardPath(
-        activeBoard.boardType,
-        activeBoard.layoutId,
-        activeBoard.sizeId,
-        activeBoard.setIds,
-        activeBoard.angle,
-      );
+        const boardPath = buildBoardPath(
+          activeBoard.boardType,
+          activeBoard.layoutId,
+          activeBoard.sizeId,
+          activeBoard.setIds,
+          activeBoard.angle,
+        );
 
-      try {
-        const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {
-          input: { boardPath, latitude: 0, longitude: 0, discoverable: false },
-        });
-        const newId = response.createSession.id;
-        sessionIdRef.current = newId;
-        setSessionId(newId);
-        await setStoredSessionId(newId);
-        return newId;
-      } catch {
-        showToast(t('mobile.queue.sessionCreateError'), 'error');
-        return null;
-      } finally {
-        sessionCreationRef.current = null;
-      }
-    })();
+        try {
+          const response = await getHttpClient().request<CreateSessionMutationResponse>(CREATE_SESSION, {
+            input: {
+              boardPath,
+              latitude: 0,
+              longitude: 0,
+              discoverable: config?.discoverable ?? false,
+              ...(config?.name ? { name: config.name } : {}),
+              ...(config?.goal ? { goal: config.goal } : {}),
+              ...(config?.color ? { color: config.color } : {}),
+              ...(config?.isPermanent ? { isPermanent: config.isPermanent } : {}),
+            },
+          });
+          const newId = response.createSession.id;
+          sessionIdRef.current = newId;
+          setSessionId(newId);
+          await setStoredSessionId(newId);
+          return newId;
+        } catch {
+          showToast(t('mobile.queue.sessionCreateError'), 'error');
+          return null;
+        } finally {
+          sessionCreationRef.current = null;
+        }
+      })();
 
-    sessionCreationRef.current = createPromise;
-    return createPromise;
-  }, [showToast, t]);
+      sessionCreationRef.current = createPromise;
+      return createPromise;
+    },
+    [showToast, t],
+  );
+
+  // Internal lazy-create path used by addToQueue / setCurrentClimb when the user
+  // mutates the queue before explicitly starting a session.
+  const ensureSession = useCallback(() => createSessionWithConfig(), [createSessionWithConfig]);
 
   const ensureSessionRef = useRef(ensureSession);
   ensureSessionRef.current = ensureSession;
@@ -384,6 +414,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       previousClimb,
       clearSession,
       endSession,
+      startSession: createSessionWithConfig,
     }),
     [
       state,
@@ -396,6 +427,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       previousClimb,
       clearSession,
       endSession,
+      createSessionWithConfig,
     ],
   );
 
