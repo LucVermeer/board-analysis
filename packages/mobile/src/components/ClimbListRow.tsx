@@ -324,7 +324,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
               mirrored={climb.mirrored ?? false}
             />
             <HeartAnimationOverlay visible={showHeart} onDismiss={dismissHeart} size={32} />
-            <AscentStatusBadge userAscents={climb.userAscents} userAttempts={climb.userAttempts} />
+            <AscentStatusBadge climbUuid={climb.uuid} angle={angle} />
           </View>
 
           {/* Center: Name + subtitle */}

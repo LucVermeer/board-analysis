@@ -67,7 +67,7 @@
 - **Left (64px width, flex-shrink 0):** Thumbnail with ascent status badge
   - `ClimbThumbnail` -- SVG-rendered board with highlighted holds
   - `HeartAnimationOverlay` -- heart animation on double-tap favorite (size 32px)
-  - `AscentStatus` badge -- positioned absolute on thumbnail corner. Shows checkmark (sent), X (attempted), or nothing.
+  - `AscentStatus` badge -- positioned absolute on thumbnail corner. Three states: lightning bolt on amber (flash), checkmark on green (sent), X on orange (attempted), or nothing. Priority: flash > send > attempt. The badge does not live on the climb row — it reads from the user's logbook (separately-fetched user ticks), filtered by `climbUuid` + active angle, so the `searchClimbs` payload stays denormalised and CDN-cacheable.
   - Double-tap on thumbnail: toggles favorite via `useDoubleTapFavorite`
 
 - **Center (flex: 1, min-width 0):** `ClimbTitle` component
@@ -111,6 +111,8 @@
 - `FlashList` replaces virtualized list with `estimatedItemSize={107}`
 - Thumbnail: pre-rendered image or `react-native-svg` inline
 - Haptic feedback on swipe threshold crossing via `expo-haptics`
+- The mobile `ClimbListRow` (`packages/mobile/src/components/ClimbListRow.tsx`) shares the same flash / send / attempt badge via `AscentStatusBadge`, fed by the shared `BoardProvider` (`@boardsesh/board-react`). The climb-list screen calls `useBoardProvider().getLogbook(visibleUuids)` to incrementally fetch ticks for the climbs on screen via `GET_TICKS`; the badge then reads from `BoardProvider.logbook` and filters by climbUuid + active angle. The search query itself stays anonymous so it can be cached.
+- Ellipsis tap and long swipe-right open the shared `ClimbActionsSheet` mounted in `DrawerHostProvider`. Until a dedicated mobile playlist selector ships, the short swipe-right also opens the actions sheet rather than no-op'ing.
 
 ### Climb Card (Grid Mode)
 
