@@ -22,6 +22,8 @@ import { BluetoothProvider } from '../src/providers/bluetooth-provider';
 import { ToastProvider } from '../src/providers/toast-provider';
 import { QueueProvider } from '../src/providers/queue-provider';
 import { DrawerHostProvider } from '../src/providers/drawer-host-provider';
+import { SessionScreenProvider } from '../src/providers/session-screen-provider';
+import { SessionScreenHost } from '../src/components/session-screen/SessionScreenHost';
 import { FeatureFlagsProvider } from '../src/providers/feature-flags-provider';
 import { PartyProfileProvider } from '../src/providers/party-profile-provider';
 import { ConnectionSettingsProvider } from '../src/providers/connection-settings-provider';
@@ -214,18 +216,21 @@ function RootLayout() {
                                   cannot be null". */}
                               <BottomSheetModalProvider>
                                 <BluetoothProviderWrapper>
-                                  <DrawerHostProvider>
-                                    <ThemedNavigation>
-                                      <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                        <Stack.Screen name="(tabs)" />
-                                        <Stack.Screen
-                                          name="auth"
-                                          options={{ headerShown: false, gestureEnabled: false }}
-                                        />
-                                      </Stack>
-                                    </ThemedNavigation>
-                                    <PersistentQueueBar />
-                                  </DrawerHostProvider>
+                                  <SessionScreenProvider>
+                                    <DrawerHostProvider>
+                                      <ThemedNavigation>
+                                        <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                          <Stack.Screen name="(tabs)" />
+                                          <Stack.Screen
+                                            name="auth"
+                                            options={{ headerShown: false, gestureEnabled: false }}
+                                          />
+                                        </Stack>
+                                      </ThemedNavigation>
+                                      <PersistentQueueBar />
+                                      <SessionScreenHost />
+                                    </DrawerHostProvider>
+                                  </SessionScreenProvider>
                                 </BluetoothProviderWrapper>
                               </BottomSheetModalProvider>
                             </BoardProviderWrapper>

@@ -202,7 +202,7 @@ export function PersistentQueueBar() {
     setIsEnding(false);
     setShowEndSession(false);
     if (summary) {
-      router.push({ pathname: '/(tabs)/queue/summary', params: { sessionId: summary.sessionId } });
+      router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
     }
   }, [endSession, router]);
 

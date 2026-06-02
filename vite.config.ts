@@ -49,6 +49,7 @@ export default defineConfig({
       './packages/shared/climb-actions/vite.config.ts',
       './packages/shared/key-value-storage/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
+      './packages/shared/playlist-generator/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',
       './packages/shared/graphql/vite.config.ts',
       './packages/shared/graphql-client/vite.config.ts',
@@ -237,6 +238,9 @@ export default defineConfig({
       'typecheck:play-view': {
         command: 'bun run --filter=@boardsesh/play-view typecheck',
       },
+      'typecheck:playlist-generator': {
+        command: 'bun run --filter=@boardsesh/playlist-generator typecheck',
+      },
       'typecheck:climb-filters': {
         command: 'bun run --filter=@boardsesh/climb-filters typecheck',
       },
@@ -268,6 +272,7 @@ export default defineConfig({
           'typecheck:key-value-storage',
           'typecheck:board-config',
           'typecheck:play-view',
+          'typecheck:playlist-generator',
           'typecheck:climb-filters',
           'typecheck:graphql',
           'typecheck:graphql-client',
