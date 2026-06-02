@@ -23,6 +23,8 @@ export type PlaylistDetailHero = {
   climbCount: number;
   color?: string;
   icon?: string;
+  /** Playlist description, shown under the hero row. */
+  description?: string;
   /** Secondary line under the climb count (e.g. the smart-playlist creator). */
   subtitle?: string;
   /** Already-translated follower-count line (public playlists). */
@@ -94,33 +96,40 @@ export function PlaylistDetailView({
   );
 
   const header = (
-    <View style={styles.hero}>
-      <PlaylistPreviewSquare
-        color={hero.color}
-        icon={hero.icon}
-        size={HERO_SQUARE}
-        boardType={hero.boardType}
-        layoutId={hero.layoutId}
-        showBoardBackdrop={hero.showBoardBackdrop}
-      />
-      <View style={styles.heroText}>
-        <Text variant="title3" numberOfLines={2} style={styles.heroName}>
-          {hero.name}
-        </Text>
-        <Text variant="subheadline" style={styles.heroMeta}>
-          {t('detail.climbCount', { count: hero.climbCount })}
-        </Text>
-        {hero.followerLabel ? (
-          <Text variant="footnote" style={styles.heroMeta}>
-            {hero.followerLabel}
+    <View>
+      <View style={styles.hero}>
+        <PlaylistPreviewSquare
+          color={hero.color}
+          icon={hero.icon}
+          size={HERO_SQUARE}
+          boardType={hero.boardType}
+          layoutId={hero.layoutId}
+          showBoardBackdrop={hero.showBoardBackdrop}
+        />
+        <View style={styles.heroText}>
+          <Text variant="title3" numberOfLines={2} style={styles.heroName}>
+            {hero.name}
           </Text>
-        ) : null}
-        {hero.subtitle ? (
-          <Text variant="footnote" numberOfLines={1} style={styles.heroSubtitle}>
-            {hero.subtitle}
+          <Text variant="subheadline" style={styles.heroMeta}>
+            {t('detail.climbCount', { count: hero.climbCount })}
           </Text>
-        ) : null}
+          {hero.followerLabel ? (
+            <Text variant="footnote" style={styles.heroMeta}>
+              {hero.followerLabel}
+            </Text>
+          ) : null}
+          {hero.subtitle ? (
+            <Text variant="footnote" numberOfLines={1} style={styles.heroSubtitle}>
+              {hero.subtitle}
+            </Text>
+          ) : null}
+        </View>
       </View>
+      {hero.description ? (
+        <Text variant="subheadline" style={styles.heroDescription}>
+          {hero.description}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -190,6 +199,12 @@ const styles = StyleSheet.create({
   },
   heroSubtitle: {
     opacity: 0.5,
+  },
+  heroDescription: {
+    paddingHorizontal: spacing[4],
+    marginTop: -spacing[2],
+    paddingBottom: spacing[4],
+    opacity: 0.7,
   },
   footer: {
     paddingVertical: 20,

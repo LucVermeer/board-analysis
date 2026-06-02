@@ -315,6 +315,7 @@ export default function PlaylistDetail() {
       climbCount: playlist?.climbCount ?? allClimbs.length,
       color: playlist?.color,
       icon: playlist?.icon,
+      description: playlist?.description,
       boardType: playlist?.boardType,
       layoutId: playlist?.layoutId,
       showBoardBackdrop: !!playlist?.boardType,
