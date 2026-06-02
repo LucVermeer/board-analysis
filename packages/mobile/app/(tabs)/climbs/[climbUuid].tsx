@@ -251,6 +251,8 @@ export default function ClimbDetail() {
           sizeId={sizeId ? Number(sizeId) : undefined}
           setIds={setIds}
           sessionId={sessionId}
+          consensusGradeName={climb.difficulty}
+          hasPriorHistory={(climb.userAscents ?? 0) > 0 || (climb.userAttempts ?? 0) > 0}
         />
       )}
     </>

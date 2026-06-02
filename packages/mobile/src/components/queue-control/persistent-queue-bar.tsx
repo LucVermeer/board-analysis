@@ -182,6 +182,9 @@ export function PersistentQueueBar() {
       sizeId: boardConfig.sizeId,
       setIds: boardConfig.setIds,
       sessionId,
+      consensusGradeName: currentClimbQueueItem.climb.difficulty,
+      hasPriorHistory:
+        (currentClimbQueueItem.climb.userAscents ?? 0) > 0 || (currentClimbQueueItem.climb.userAttempts ?? 0) > 0,
     });
   }, [openLogAscent, currentClimbQueueItem, boardConfig, sessionId]);
 
