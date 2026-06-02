@@ -1,0 +1,29 @@
+{
+  "name": "@boardsesh/i18n",
+  "version": "1.0.0",
+  "description": "Shared locale catalogs and i18n config for Boardsesh web + mobile",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./catalog-loader": {
+      "types": "./src/catalog-loader.ts",
+      "import": "./src/catalog-loader.ts",
+      "default": "./src/catalog-loader.ts"
+    },
+    "./locales/*": "./locales/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "typescript": "~6.0.3"
+  }
+}

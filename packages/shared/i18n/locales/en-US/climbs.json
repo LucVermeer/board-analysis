@@ -543,13 +543,8 @@
         "description": "Nothing matches \"{{query}}\""
       }
     },
-    "contextMenu": {
-      "addToQueue": "Add to Queue",
-      "viewSetter": "View Setter"
-    },
     "detail": {
       "notFound": "Climb not found",
-      "boardPreview": "Board view coming soon",
       "addToQueue": "Add to Queue",
       "logAscent": "Log Ascent",
       "sent_one": "Sent {{count}} time",
@@ -580,10 +575,6 @@
     "filter": {
       "title": "Filters",
       "sortBy": "Sort by",
-      "popular": "Popular",
-      "quality": "Quality",
-      "difficulty": "Difficulty",
-      "newest": "Newest",
       "gradeRange": "Grade range",
       "minGrade": "Min",
       "maxGrade": "Max",

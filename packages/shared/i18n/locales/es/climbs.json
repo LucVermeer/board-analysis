@@ -543,13 +543,8 @@
         "description": "Nada coincide con \"{{query}}\""
       }
     },
-    "contextMenu": {
-      "addToQueue": "Agregar a la cola",
-      "viewSetter": "Ver aperturista"
-    },
     "detail": {
       "notFound": "Bloque no encontrado",
-      "boardPreview": "Vista de tabla próximamente",
       "addToQueue": "Agregar a la cola",
       "logAscent": "Registrar encadene",
       "sent_one": "Encadenado {{count}} vez",
@@ -580,10 +575,6 @@
     "filter": {
       "title": "Filtros",
       "sortBy": "Ordenar por",
-      "popular": "Popular",
-      "quality": "Calidad",
-      "difficulty": "Dificultad",
-      "newest": "Recientes",
       "gradeRange": "Rango de grado",
       "minGrade": "Mín",
       "maxGrade": "Máx",

@@ -9,6 +9,7 @@ import React, { useMemo } from 'react';
 import i18next, { type i18n } from 'i18next';
 import resourcesToBackend from 'i18next-resources-to-backend';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
+import { loadCatalog } from '@boardsesh/i18n/catalog-loader';
 import { DEFAULT_LOCALE, DEFAULT_NAMESPACE, SUPPORTED_LOCALES, type Locale } from './config';
 import { reportMissingI18nKey } from './missing-key-reporter';
 
@@ -42,7 +43,7 @@ function getClientInstance(locale: Locale, resources: Record<string, Record<stri
 
   const instance = i18next.createInstance();
   instance
-    .use(resourcesToBackend((lng: string, ns: string) => import(`../../../i18n/locales/${lng}/${ns}.json`)))
+    .use(resourcesToBackend((lng: string, ns: string) => loadCatalog(lng, ns)))
     .use(initReactI18next)
     .init({
       lng: locale,

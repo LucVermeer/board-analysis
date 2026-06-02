@@ -39,6 +39,7 @@
     "@boardsesh/db": "*",
     "@boardsesh/graphql": "*",
     "@boardsesh/graphql-client": "*",
+    "@boardsesh/i18n": "*",
     "@boardsesh/moonboard-ocr": "*",
     "@boardsesh/party-profile": "*",
     "@boardsesh/play-view": "*",

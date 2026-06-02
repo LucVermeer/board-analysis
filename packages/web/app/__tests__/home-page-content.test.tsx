@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
-import enMarketing from '@/i18n/locales/en-US/marketing.json';
+import enMarketing from '@boardsesh/i18n/locales/en-US/marketing.json';
 import type { ActiveSessionInfo } from '@/app/components/persistent-session/types';
 
 // --- Mocks ---

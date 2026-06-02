@@ -367,7 +367,6 @@
     "disconnected": "Tablero desconectado",
     "reconnect": "Reconectar",
     "connectBoard": "Conectar tablero",
-    "connected": "Conectado",
     "notAvailable": "Bluetooth no está disponible",
     "errorLedMissing": "No se pudo enviar al tablero — faltan datos LED para esta configuración.",
     "errorIncompatible": "Este boulder es para una configuración de tablero diferente.",

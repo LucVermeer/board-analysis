@@ -6,7 +6,7 @@ import type { BoardDetails, Climb } from '@/app/lib/types';
 
 // Stub i18n so the test asserts against the English string the user sees,
 // not the bare key. Tests live outside the i18next provider tree; the real
-// label comes from `packages/web/i18n/locales/en-US/climbs.json:actions.sendToBoard`.
+// label comes from `packages/shared/i18n/locales/en-US/climbs.json:actions.sendToBoard`.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => {

@@ -244,8 +244,7 @@
     },
     "similarClimbs": {
       "title": "Voies similaires",
-      "empty": "Aucune voie similaire trouvee",
-      "loading": "Recherche de voies similaires..."
+      "empty": "Aucune voie similaire trouvee"
     },
     "community": {
       "title": "Communaute",
@@ -271,7 +270,6 @@
       "cardLabelWithUser": "Video beta de @{{username}}",
       "cardLabel": "Video beta",
       "openError": "Impossible d ouvrir ce lien",
-      "imageError": "Echec du chargement de l image",
       "urlInvalid": "Doit etre une URL Instagram ou TikTok"
     },
     "angleSelector": {
@@ -288,15 +286,7 @@
       "endSessionConfirm": "Êtes-vous sûr de vouloir terminer cette session ?",
       "climbCount_one": "{{count}} bloc",
       "climbCount_other": "{{count}} blocs",
-      "noSessionTitle": "Pas encore de session",
-      "noSessionSubtitle": "Lancez une session depuis l'onglet blocs",
-      "emptyTitle": "La file est vide",
-      "emptySubtitle": "Parcourez les blocs et ajoutez-les à votre file",
-      "browseClimbs": "Parcourir les blocs",
-      "previousClimb": "Bloc précédent",
-      "nextClimb": "Bloc suivant",
-      "logAscent": "Enregistrer l'ascension",
-      "noClimbSelected": "Aucun bloc sélectionné"
+      "logAscent": "Enregistrer l'ascension"
     },
     "queueSheet": {
       "emptyQueue": "Votre file est vide",
@@ -356,7 +346,6 @@
       "unmirrorAria": "Annuler le miroir",
       "addFavoriteAria": "Ajouter aux favoris",
       "removeFavoriteAria": "Retirer des favoris",
-      "sendToBoardAria": "Envoyer au mur",
       "climbActionsAria": "Actions du bloc",
       "openQueueAria": "Ouvrir la file d'attente",
       "queueCountAria": "File, {{count}} blocs",

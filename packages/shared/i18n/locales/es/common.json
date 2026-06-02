@@ -222,10 +222,6 @@
       "climb": "Bloque",
       "profile": "Perfil",
       "setters": "Equipadores"
-    },
-    "play": {
-      "sendCount_one": "{{count}} envío",
-      "sendCount_other": "{{count}} envíos"
     }
   },
   "lightControl": {

@@ -30,6 +30,7 @@ const nextConfig = {
     '@boardsesh/climb-actions',
     '@boardsesh/play-view',
     '@boardsesh/climb-filters',
+    '@boardsesh/i18n',
   ],
   // Empty turbopack config to silence warning about webpack config
   turbopack: {},

@@ -7,4 +7,4 @@ export {
   MOBILE_NAMESPACES,
   type Locale,
   type MobileNamespace,
-} from './config';
+} from '@boardsesh/i18n';
