@@ -25,6 +25,10 @@ export function getBoardConfigForPlaylist(
   boardType: string,
   layoutId: number | null | undefined,
 ): PlaylistBoardConfig | null {
+  // `boardType` is a free-form string off the playlist record. Cast to
+  // BoardName and lean on the board-constants lookups below returning empty for
+  // anything unknown — we return null (→ plain colour tile) rather than
+  // rendering a bad board, so the unchecked cast is safe at runtime.
   const boardName = boardType as BoardName;
   const effectiveLayoutId = layoutId ?? getDefaultLayoutId(boardName);
   if (!effectiveLayoutId) return null;

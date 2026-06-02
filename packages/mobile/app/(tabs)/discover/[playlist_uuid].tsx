@@ -185,9 +185,13 @@ export default function PlaylistDetail() {
         const updated = await updatePlaylist({
           playlistId: playlist.uuid,
           name: values.name,
-          description: values.description,
+          // Send '' (not undefined) so clearing the description/icon persists:
+          // the backend only updates fields that are present, and graphql-request
+          // omits undefined. Colour can't be cleared (the API validates hex), so
+          // an unset colour stays undefined → omitted → left unchanged.
+          description: values.description ?? '',
           color: values.color,
-          icon: values.icon,
+          icon: values.icon ?? '',
           isPublic: values.isPublic,
         });
         queryClient.setQueryData(['playlist', playlistUuid], updated);
