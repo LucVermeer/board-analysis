@@ -1,20 +1,18 @@
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { ThemeOverride } from '@boardsesh/key-value-storage';
 import { useTheme } from '../../../src/providers/theme-provider';
-import { useColorSchemePreference } from '../../../src/providers/color-scheme-preference-provider';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
 import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
-import type { ColorSchemePreference } from '../../../src/lib/theme-preference-store';
 
 export default function MoreScreen() {
-  const { systemColors, spacing, borderRadius } = useTheme();
+  const { systemColors, spacing, borderRadius, themeOverride, setThemeOverride } = useTheme();
   const { t } = useTranslation('common');
-  const { preference, setPreference } = useColorSchemePreference();
 
   const appearanceOptions = [
     { key: 'system', label: t('mobile.more.appearance.system') },
@@ -41,8 +39,8 @@ export default function MoreScreen() {
         >
           <SegmentedControl
             options={appearanceOptions}
-            selectedKey={preference}
-            onSelect={(key) => setPreference(key as ColorSchemePreference)}
+            selectedKey={themeOverride}
+            onSelect={(key) => void setThemeOverride(key as ThemeOverride)}
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.appearance.title')}
           />

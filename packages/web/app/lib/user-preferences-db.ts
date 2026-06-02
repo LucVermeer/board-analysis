@@ -172,22 +172,6 @@ export type { GradeDisplayFormat } from './grade-colors';
 // The canonical definition lives in grade-colors.ts.
 
 /**
- * Get the "shake to report bug" dismissed preference.
- * When true, the shake detector stays detached for that user.
- */
-export const getShakeToReportDismissed = async (): Promise<boolean> => {
-  const value = await getPreference<boolean>('shakeToReport:dismissed');
-  return value === true;
-};
-
-/**
- * Persist the user's decision to disable shake-to-report.
- */
-export const setShakeToReportDismissed = async (dismissed: boolean): Promise<void> => {
-  await setPreference('shakeToReport:dismissed', dismissed);
-};
-
-/**
  * Get the grade display format preference.
  * Defaults to 'v-grade' if not set.
  */

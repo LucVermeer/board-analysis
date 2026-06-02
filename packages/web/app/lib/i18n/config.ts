@@ -131,6 +131,17 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // i18n-keep climbs:mobile.filter.clearAll
 // Mobile board switcher
 // i18n-keep boards:mobile.boardSwitchError
+// Mobile board-detail sheet (packages/mobile BoardDetailSheet)
+// i18n-keep boards:mobile.boardDetail.setActive
+// i18n-keep boards:mobile.boardDetail.alreadyActive
+// i18n-keep boards:mobile.boardDetail.stats.ascents
+// i18n-keep boards:mobile.boardDetail.stats.climbers
+// i18n-keep boards:mobile.boardDetail.stats.followers
+// i18n-keep boards:mobile.boardDetail.spec.layout
+// i18n-keep boards:mobile.boardDetail.spec.size
+// i18n-keep boards:mobile.boardDetail.spec.sets
+// i18n-keep boards:mobile.boardDetail.spec.angle
+// i18n-keep boards:mobile.boardDetail.spec.adjustable
 // i18n-keep session:playView.tickBar.cancelLabel
 // i18n-keep session:playView.tickBar.decreaseTriesAria
 // i18n-keep session:playView.tickBar.flashSaveLabel

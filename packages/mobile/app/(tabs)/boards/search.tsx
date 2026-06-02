@@ -13,6 +13,7 @@ import { hapticSelection } from '../../../src/lib/haptics';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { BoardCarousel } from '../../../src/components/board-discovery/BoardCarousel';
+import { BoardDetailSheet } from '../../../src/components/board-discovery/BoardDetailSheet';
 import { userBoardToItem } from '../../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
 import { brandColors } from '../../../src/theme/colors';
@@ -35,6 +36,13 @@ try {
 const DEFAULT_CENTER = { latitude: 20, longitude: 0 };
 const DEFAULT_ZOOM = 3;
 const NEARBY_ZOOM = 11;
+
+// iOS → Apple Maps (no API key); Android → Google Maps (env-supplied key).
+// Resolved at module scope: Platform.OS is constant for the process lifetime,
+// so there's no value in re-checking on every render — and a stable MapView
+// reference helps the markers memo below avoid spurious invalidations.
+const isApple = Platform.OS === 'ios';
+const MapView = isApple ? expoMaps?.AppleMaps.View : expoMaps?.GoogleMaps.View;
 
 type Camera = { latitude: number; longitude: number; zoom: number };
 
@@ -93,11 +101,32 @@ export default function BoardSearchScreen() {
     [boards, selectedUuid],
   );
 
-  const activateBoard = useCallback(
+  // The selected board drives both the pin recolour and the detail sheet.
+  // Detail is a sheet *over* the live map — never a pushed screen — because
+  // expo-maps crashes when its view is unmounted from a backgrounded stack.
+  const selectedBoard = useMemo(() => boards.find((b) => b.uuid === selectedUuid) ?? null, [boards, selectedUuid]);
+
+  const openBoardDetail = useCallback((uuid: string) => {
+    hapticSelection();
+    setSelectedUuid(uuid);
+  }, []);
+
+  const onSelectItem = useCallback((item: DiscoveryBoardItem) => openBoardDetail(item.key), [openBoardDetail]);
+
+  // Tapping a pin recolours it and opens its detail sheet (no recenter — keep
+  // the map exactly where it is so closing the sheet returns to the same view).
+  const onMarkerClick = useCallback((uuid: string) => openBoardDetail(uuid), [openBoardDetail]);
+
+  const handleSetActive = useCallback(
     async (board: UserBoard) => {
-      hapticSelection();
       try {
         await setActiveBoard(board);
+        // Only close the sheet once the board is saved — if it throws, the
+        // sheet stays open so the error toast has visible context.
+        setSelectedUuid(null);
+        // router.back() is the same foreground unmount the X button uses —
+        // proven safe for expo-maps — then switch to the climbs tab.
+        router.back();
         router.navigate('/(tabs)/climbs');
       } catch {
         showToast(t('mobile.boardSwitchError'), 'error');
@@ -106,36 +135,46 @@ export default function BoardSearchScreen() {
     [setActiveBoard, router, showToast, t],
   );
 
-  const onSelectItem = useCallback(
-    (item: DiscoveryBoardItem) => {
-      const board = boards.find((b) => b.uuid === item.key);
-      if (board) void activateBoard(board);
-    },
-    [boards, activateBoard],
-  );
-
-  // Tapping a pin selects its board and centers the map on it.
-  const onMarkerClick = useCallback(
-    (uuid: string) => {
-      const board = boards.find((b) => b.uuid === uuid);
-      if (!board || board.latitude == null || board.longitude == null) return;
-      setSelectedUuid(uuid);
-      setCameraTarget({ latitude: board.latitude, longitude: board.longitude, zoom: Math.max(camera.zoom, NEARBY_ZOOM) });
-    },
-    [boards, camera.zoom],
-  );
-
   // Memoised so the native MapView doesn't re-bind the handler every render.
   // A user-driven move means the viewport is real — start searching by it.
-  const onCameraMove = useCallback((event: { coordinates: { latitude?: number; longitude?: number }; zoom: number }) => {
-    const { latitude, longitude } = event.coordinates;
-    if (latitude == null || longitude == null) return;
-    setCamera({ latitude, longitude, zoom: event.zoom });
-    setHasRealViewport(true);
-  }, []);
+  const onCameraMove = useCallback(
+    (event: { coordinates: { latitude?: number; longitude?: number }; zoom: number }) => {
+      const { latitude, longitude } = event.coordinates;
+      if (latitude == null || longitude == null) return;
+      setCamera({ latitude, longitude, zoom: event.zoom });
+      setHasRealViewport(true);
+    },
+    [],
+  );
+
+  // Apple markers take an SF Symbol + tint (so the selected pin recolours);
+  // Google markers only share id/coordinates/title — pass just those there.
+  // Memoised on [pinned, selectedUuid]: any other render must NOT produce a new
+  // array reference, or expo-maps will redraw all annotations on every pan
+  // (this was the source of the visible flicker on scroll).
+  const markers = useMemo(
+    () =>
+      pinned.map((board) => {
+        const base = {
+          id: board.uuid,
+          coordinates: { latitude: board.latitude as number, longitude: board.longitude as number },
+          title: board.name,
+        };
+        return isApple
+          ? {
+              ...base,
+              systemImage: 'mappin.circle.fill',
+              tintColor: board.uuid === selectedUuid ? brandColors.primary : brandColors.success,
+            }
+          : base;
+      }),
+    [pinned, selectedUuid],
+  );
 
   const searchField = (
-    <View style={[styles.searchField, { backgroundColor: systemColors.secondaryBackground, top: insets.top + spacing[2] }]}>
+    <View
+      style={[styles.searchField, { backgroundColor: systemColors.secondaryBackground, top: insets.top + spacing[2] }]}
+    >
       <Icon name="search" size={18} color={systemColors.secondaryLabel} />
       <TextInput
         value={query}
@@ -159,9 +198,18 @@ export default function BoardSearchScreen() {
       </View>
     ) : null;
 
+  const detailSheet = (
+    <BoardDetailSheet
+      board={selectedBoard}
+      visible={selectedBoard != null}
+      onClose={() => setSelectedUuid(null)}
+      onSetActive={handleSetActive}
+    />
+  );
+
   // expo-maps unavailable (pre-build client): show a placeholder but keep the
   // search field + results list working so the feature degrades, not crashes.
-  if (!expoMaps) {
+  if (!expoMaps || !MapView) {
     return (
       <View style={[styles.flex, { backgroundColor: systemColors.background }]}>
         {searchField}
@@ -172,6 +220,7 @@ export default function BoardSearchScreen() {
           </Text>
         </View>
         {resultStrip}
+        {detailSheet}
       </View>
     );
   }
@@ -180,27 +229,6 @@ export default function BoardSearchScreen() {
     coordinates: { latitude: cameraTarget.latitude, longitude: cameraTarget.longitude },
     zoom: cameraTarget.zoom,
   };
-
-  // iOS → Apple Maps (no API key); Android → Google Maps (env-supplied key).
-  const isApple = Platform.OS === 'ios';
-  const MapView = isApple ? expoMaps.AppleMaps.View : expoMaps.GoogleMaps.View;
-
-  // Apple markers take an SF Symbol + tint (so the selected pin recolours);
-  // Google markers only share id/coordinates/title — pass just those there.
-  const markers = pinned.map((board) => {
-    const base = {
-      id: board.uuid,
-      coordinates: { latitude: board.latitude as number, longitude: board.longitude as number },
-      title: board.name,
-    };
-    return isApple
-      ? {
-          ...base,
-          systemImage: 'mappin.circle.fill',
-          tintColor: board.uuid === selectedUuid ? brandColors.primary : brandColors.success,
-        }
-      : base;
-  });
 
   return (
     <View style={styles.flex}>
@@ -213,6 +241,7 @@ export default function BoardSearchScreen() {
       />
       {searchField}
       {resultStrip}
+      {detailSheet}
     </View>
   );
 }

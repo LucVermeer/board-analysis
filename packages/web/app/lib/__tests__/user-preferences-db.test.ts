@@ -5,8 +5,6 @@ import {
   getPreference,
   setPreference,
   removePreference,
-  getShakeToReportDismissed,
-  setShakeToReportDismissed,
   getLastUsedGrade,
   setLastUsedGrade,
 } from '../user-preferences-db';
@@ -166,29 +164,6 @@ describe('user-preferences-db', () => {
       // Second read should return from IndexedDB (localStorage is already cleared)
       const result = await getPreference<string>('climbListViewMode');
       expect(result).toBe('grid');
-    });
-  });
-
-  describe('shakeToReport:dismissed', () => {
-    it('defaults to false when the preference has never been set', async () => {
-      await expect(getShakeToReportDismissed()).resolves.toBe(false);
-    });
-
-    it('round-trips true through IndexedDB', async () => {
-      await setShakeToReportDismissed(true);
-      await expect(getShakeToReportDismissed()).resolves.toBe(true);
-    });
-
-    it('can be cleared by writing false', async () => {
-      await setShakeToReportDismissed(true);
-      await setShakeToReportDismissed(false);
-      await expect(getShakeToReportDismissed()).resolves.toBe(false);
-    });
-
-    it('coerces non-true stored values to false (defensive)', async () => {
-      // Simulate a legacy or corrupted value that isn't strictly boolean true.
-      await setPreference('shakeToReport:dismissed', 'yes' as unknown as boolean);
-      await expect(getShakeToReportDismissed()).resolves.toBe(false);
     });
   });
 

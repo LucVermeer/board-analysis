@@ -14,7 +14,7 @@ import type {
   UserProfile,
   SessionSummary,
 } from '@boardsesh/shared-schema';
-import { getHttpClient } from './client';
+import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
   GET_MY_BOARDS,
@@ -52,7 +52,7 @@ import {
   type EndSessionMutationResponse,
   type ToggleFavoriteMutationVariables,
   type ToggleFavoriteMutationResponse,
-} from './operations';
+} from '../operations';
 
 // ============================================
 // User Profile
@@ -110,8 +110,7 @@ export function useBoardsBySerialNumbers(serialNumbers: string[]) {
 export function usePopularBoardConfigs(input?: PopularBoardConfigsInput, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['popularBoardConfigs', input],
-    queryFn: () =>
-      getHttpClient().request<GetPopularBoardConfigsQueryResponse>(GET_POPULAR_BOARD_CONFIGS, { input }),
+    queryFn: () => getHttpClient().request<GetPopularBoardConfigsQueryResponse>(GET_POPULAR_BOARD_CONFIGS, { input }),
     select: (data) => data.popularBoardConfigs,
     // The popular set is server-cached and changes rarely; avoid refetch churn.
     staleTime: 60 * 60 * 1000,
@@ -272,7 +271,7 @@ import {
   type AttachBetaLinkMutationResponse,
 } from '@boardsesh/graphql/operations/beta-links';
 import { dedupeBetaLinks } from '@boardsesh/shared-schema';
-import { mapBetaLinks } from '../beta-video-url';
+import { mapBetaLinks } from '../../beta-video-url';
 
 export function useBetaLinks(boardType: string, climbUuid: string, enabled = true) {
   return useQuery({
@@ -301,3 +300,7 @@ export function useAttachBetaLink() {
     },
   });
 }
+
+// Re-export feature-specific hooks that live alongside this barrel so the
+// import surface from this directory stays a single path.
+export { useMobileClimbActionsData } from './use-mobile-climb-actions-data';

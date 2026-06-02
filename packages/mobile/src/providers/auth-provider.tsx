@@ -99,6 +99,12 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     queryClient.removeQueries({ queryKey: ACTIVE_BOARD_QUERY_KEY });
     resetHttpClient();
     disposeWsClient();
+    // Drop every cached query so the next signed-in user doesn't inherit the
+    // previous user's data. Query keys don't currently include a user/token
+    // dimension, and individual keys' staleTime (e.g. userPlaylists' 5 min)
+    // would otherwise paper over the cross-user leak. Doing this at the auth
+    // boundary keeps the rest of the hooks simple.
+    queryClient.clear();
     setIsAuthenticated(false);
   }, [queryClient]);
 

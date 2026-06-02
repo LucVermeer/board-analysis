@@ -1,6 +1,11 @@
 import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
-import { Platform, StyleSheet } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetScrollView,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
 import { sheetStyles } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
@@ -12,6 +17,12 @@ type SheetProps = {
   onChange?: (index: number) => void;
   onClose?: () => void;
   enablePanDownToClose?: boolean;
+  // Render the content inside a BottomSheetScrollView instead of a plain
+  // BottomSheetView. Use this for content taller than the sheet — never wrap
+  // your own BottomSheetScrollView in the children, as nesting it inside the
+  // default BottomSheetView breaks gorhom's scroll gesture wiring.
+  scrollable?: boolean;
+  contentContainerStyle?: StyleProp<ViewStyle>;
 };
 
 export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
@@ -22,6 +33,8 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     onChange,
     onClose,
     enablePanDownToClose = true,
+    scrollable = false,
+    contentContainerStyle,
   },
   ref,
 ) {
@@ -59,7 +72,17 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       handleIndicatorStyle={sheetStyles.indicator}
       style={styles.sheet}
     >
-      <BottomSheetView style={styles.content}>{children}</BottomSheetView>
+      {scrollable ? (
+        <BottomSheetScrollView
+          style={styles.content}
+          contentContainerStyle={contentContainerStyle}
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </BottomSheetScrollView>
+      ) : (
+        <BottomSheetView style={styles.content}>{children}</BottomSheetView>
+      )}
     </BottomSheet>
   );
 });

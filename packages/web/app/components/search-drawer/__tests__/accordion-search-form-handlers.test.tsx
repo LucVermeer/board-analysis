@@ -26,8 +26,6 @@ vi.mock('@/app/lib/user-preferences-db', () => ({
   removePreference: () => Promise.resolve(undefined),
   getAlwaysTickInApp: () => Promise.resolve(false),
   setAlwaysTickInApp: () => Promise.resolve(undefined),
-  getShakeToReportDismissed: () => Promise.resolve(false),
-  setShakeToReportDismissed: () => Promise.resolve(undefined),
   getGradeDisplayFormat: () => Promise.resolve('v-grade'),
   setGradeDisplayFormat: () => Promise.resolve(undefined),
 }));

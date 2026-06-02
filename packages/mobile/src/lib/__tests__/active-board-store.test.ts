@@ -52,7 +52,8 @@ describe('active-board-store', () => {
   });
 
   it('clears the stored board', async () => {
-    const { getStoredActiveBoard, setStoredActiveBoard, clearStoredActiveBoard } = await import('../active-board-store');
+    const { getStoredActiveBoard, setStoredActiveBoard, clearStoredActiveBoard } =
+      await import('../active-board-store');
     await setStoredActiveBoard(board);
     await clearStoredActiveBoard();
     await expect(getStoredActiveBoard()).resolves.toBeNull();
