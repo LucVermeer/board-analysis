@@ -5,6 +5,7 @@ import { hapticSelection } from '../lib/haptics';
 import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
+import { useTheme } from '../providers/theme-provider';
 
 type SegmentOption = {
   key: string;
@@ -34,6 +35,8 @@ function Segment({
   onPress: () => void;
   textVariant: 'subheadline' | 'footnote';
 }) {
+  const { systemColors, colorScheme } = useTheme();
+  const isDark = colorScheme === 'dark';
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -48,7 +51,8 @@ function Segment({
     scale.value = withSpring(1, springs.snappy);
   };
 
-  // White segment background is an intentional iOS design choice (pill highlight)
+  // Selected pill is a raised tile over the track — elevatedSurface reads as a
+  // light pill in light mode and a lighter-than-track tile in dark mode.
   const segmentStyle: ViewStyle = {
     flex: 1,
     paddingVertical: spacing[2],
@@ -56,7 +60,7 @@ function Segment({
     justifyContent: 'center',
     borderRadius: 7,
     ...(selected && {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: systemColors.elevatedSurface,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.15,
@@ -64,6 +68,10 @@ function Segment({
       elevation: 2,
     }),
   };
+
+  // Maroon brand accent reads well on the light pill; on the dark pill it's too
+  // low-contrast, so fall back to the high-contrast label colour there.
+  const selectedTextColor = isDark ? systemColors.label : brandColors.primary;
 
   return (
     <AnimatedPressable
@@ -80,7 +88,7 @@ function Segment({
     >
       <Text
         variant={textVariant}
-        color={selected ? brandColors.primary : undefined}
+        color={selected ? selectedTextColor : undefined}
         style={selected ? styles.labelSelected : styles.label}
       >
         {label}

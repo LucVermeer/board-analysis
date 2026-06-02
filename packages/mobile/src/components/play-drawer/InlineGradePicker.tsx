@@ -6,6 +6,7 @@ import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { hapticSelection } from '../../lib/haptics';
 import { spacing } from '../../theme/tokens';
+import { useTheme } from '../../providers/theme-provider';
 
 type InlineGradePickerProps = {
   grades: Grade[];
@@ -21,6 +22,7 @@ export const InlineGradePicker = React.memo(function InlineGradePicker({
   onSelect,
 }: InlineGradePickerProps) {
   const scrollRef = useRef<ScrollView>(null);
+  const { systemColors } = useTheme();
   const chipWidth = 56;
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export const InlineGradePicker = React.memo(function InlineGradePicker({
             ? brandColors.primary
             : isConsensus
               ? brandColors.primary + '60'
-              : 'rgba(60, 60, 67, 0.18)',
+              : systemColors.separator,
           backgroundColor: isSelected ? brandColors.primary : 'transparent',
         };
 

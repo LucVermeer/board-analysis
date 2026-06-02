@@ -16,6 +16,7 @@ type ResolvedSystemColors = {
   secondaryBackground: ColorValue;
   tertiaryBackground: ColorValue;
   groupedBackground: ColorValue;
+  elevatedSurface: ColorValue;
   label: ColorValue;
   secondaryLabel: ColorValue;
   tertiaryLabel: ColorValue;
@@ -61,6 +62,7 @@ function resolveSystemColors(colorScheme: ColorScheme): ResolvedSystemColors {
     secondaryBackground: fallback.secondaryBackground,
     tertiaryBackground: fallback.tertiaryBackground,
     groupedBackground: fallback.groupedBackground,
+    elevatedSurface: fallback.elevatedSurface,
     label: fallback.label,
     secondaryLabel: fallback.secondaryLabel,
     tertiaryLabel: fallback.tertiaryLabel,

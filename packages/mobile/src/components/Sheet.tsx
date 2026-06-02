@@ -1,8 +1,14 @@
 import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
 import { Platform, StyleSheet } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+  type BottomSheetBackgroundProps,
+} from '@gorhom/bottom-sheet';
 import { hapticMedium } from '../lib/haptics';
 import { useTheme } from '../providers/theme-provider';
+import { GlassSurface } from './GlassSurface';
 import { iosSystemColors } from '../theme/ios-colors';
 
 type SheetProps = {
@@ -43,10 +49,16 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [onChange],
   );
 
-  const backgroundStyle = {
-    ...styles.background,
-    backgroundColor: systemColors.secondaryBackground,
-  };
+  const renderBackground = useCallback(
+    ({ style }: BottomSheetBackgroundProps) => (
+      <GlassSurface
+        glassEffectStyle="regular"
+        fallbackColor={systemColors.secondaryBackground}
+        style={[style, styles.background]}
+      />
+    ),
+    [systemColors.secondaryBackground],
+  );
 
   return (
     <BottomSheet
@@ -56,10 +68,10 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       enableDynamicSizing={enableDynamicSizing}
       enablePanDownToClose={enablePanDownToClose}
       backdropComponent={renderBackdrop}
+      backgroundComponent={renderBackground}
       onChange={handleChange}
       onClose={onClose}
       handleIndicatorStyle={styles.indicator}
-      backgroundStyle={backgroundStyle}
       style={styles.sheet}
     >
       <BottomSheetView style={styles.content}>{children}</BottomSheetView>
@@ -84,6 +96,8 @@ const styles = StyleSheet.create({
   background: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+    // Clip the glass / blur material to the rounded top edge.
+    overflow: 'hidden',
   },
   indicator: {
     backgroundColor: iosSystemColors.separator,

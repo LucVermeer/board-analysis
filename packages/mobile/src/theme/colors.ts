@@ -15,6 +15,9 @@ export const iosSystemColors: Record<string, ColorValue> | null =
         secondaryBackground: PlatformColor('secondarySystemBackground'),
         tertiaryBackground: PlatformColor('tertiarySystemBackground'),
         groupedBackground: PlatformColor('systemGroupedBackground'),
+        // Raised tile on top of a grouped/secondary surface (e.g. the selected
+        // segmented-control pill). Reads as elevated in both light and dark.
+        elevatedSurface: PlatformColor('secondarySystemGroupedBackground'),
         label: PlatformColor('label'),
         secondaryLabel: PlatformColor('secondaryLabel'),
         tertiaryLabel: PlatformColor('tertiaryLabel'),
@@ -44,6 +47,7 @@ export const androidFallbackColors = {
     secondaryBackground: '#F2F2F7',
     tertiaryBackground: '#FFFFFF',
     groupedBackground: '#F2F2F7',
+    elevatedSurface: '#FFFFFF',
     label: '#000000',
     secondaryLabel: 'rgba(60, 60, 67, 0.6)',
     tertiaryLabel: 'rgba(60, 60, 67, 0.3)',
@@ -55,6 +59,7 @@ export const androidFallbackColors = {
     secondaryBackground: '#1C1C1E',
     tertiaryBackground: '#2C2C2E',
     groupedBackground: '#000000',
+    elevatedSurface: '#2C2C2E',
     label: '#FFFFFF',
     secondaryLabel: 'rgba(235, 235, 245, 0.6)',
     tertiaryLabel: 'rgba(235, 235, 245, 0.3)',

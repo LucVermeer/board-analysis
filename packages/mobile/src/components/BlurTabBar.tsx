@@ -1,11 +1,11 @@
-import { View, Text, Pressable, StyleSheet, Platform, useColorScheme } from 'react-native';
-import { BlurView } from '@react-native-community/blur';
+import { View, Text, Pressable, StyleSheet, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
 import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
 import { useBluetoothConnectedStatus } from '../lib/ble/bluetooth-status-store';
 import { brandColors } from '../theme/colors';
+import { GlassSurface } from './GlassSurface';
 
 // Exported so the persistent queue bar (which docks above the tab bar) and
 // FlashLists below it can compute their layouts off the same constant.
@@ -92,39 +92,11 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
     </View>
   );
 
-  if (Platform.OS === 'ios') {
-    return (
-      <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }]}>
-        <BlurView
-          blurType={isDark ? 'dark' : 'light'}
-          blurAmount={20}
-          reducedTransparencyFallbackColor={
-            isDark ? iosDarkColors.secondaryBackground : iosLightColors.secondaryBackground
-          }
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          style={[styles.separator, { backgroundColor: isDark ? iosDarkColors.separator : iosLightColors.separator }]}
-        />
-        {renderContent()}
-      </View>
-    );
-  }
-
-  // Android fallback: semi-transparent background
+  // GlassSurface resolves the material per device: Liquid Glass on iOS 26+,
+  // a frosted blur on older iOS, and a solid themed bar on Android.
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          height: totalHeight,
-          paddingBottom: insets.bottom,
-          backgroundColor: isDark
-            ? `${iosDarkColors.secondaryBackground}F2`
-            : `${iosLightColors.secondaryBackground}F2`,
-        },
-      ]}
-    >
+    <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }]}>
+      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} />
       <View
         style={[styles.separator, { backgroundColor: isDark ? iosDarkColors.separator : iosLightColors.separator }]}
       />

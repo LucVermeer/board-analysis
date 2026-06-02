@@ -10,7 +10,13 @@
       "title": "More",
       "development": "Development",
       "metroServersTitle": "Metro servers",
-      "metroServersSubtitle": "Switch between Tailnet bundlers"
+      "metroServersSubtitle": "Switch between Tailnet bundlers",
+      "appearance": {
+        "title": "Appearance",
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      }
     },
     "nav": {
       "boards": "Boards",

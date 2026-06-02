@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryProvider } from '../src/providers/query-provider';
+import { ColorSchemePreferenceProvider } from '../src/providers/color-scheme-preference-provider';
 import { ThemeProvider } from '../src/providers/theme-provider';
 import { AuthProvider } from '../src/providers/auth-provider';
 import { I18nProvider } from '../src/providers/i18n-provider';
@@ -143,49 +144,51 @@ function RootLayout() {
       <StatusBar style="auto" />
       <I18nProvider>
         <QueryProvider>
-          <ThemeProvider>
-            <FeatureFlagsProvider>
-              <AuthProvider onReady={onAuthReady}>
-                <PartyProfileProvider>
-                  <ConnectionSettingsProvider>
-                    <ToastProvider>
-                      <FavoritesProvider>
-                        <PlaylistsProvider>
-                          <QueueProvider>
-                            <BoardAdapterWrapper>
-                              <BoardProviderWrapper>
-                                <BluetoothProviderWrapper>
-                                  {/* BottomSheetModalProvider lives *inside* the
+          <ColorSchemePreferenceProvider>
+            <ThemeProvider>
+              <FeatureFlagsProvider>
+                <AuthProvider onReady={onAuthReady}>
+                  <PartyProfileProvider>
+                    <ConnectionSettingsProvider>
+                      <ToastProvider>
+                        <FavoritesProvider>
+                          <PlaylistsProvider>
+                            <QueueProvider>
+                              <BoardAdapterWrapper>
+                                <BoardProviderWrapper>
+                                  <BluetoothProviderWrapper>
+                                    {/* BottomSheetModalProvider lives *inside* the
                                       board providers: gorhom's BottomSheetModal
                                       portals its content (PlayDrawer → QuickTickBar)
                                       to this host, so the host must sit within
                                       BoardAdapterProvider/BoardProvider or the
                                       portaled hooks (useSaveTick → useBoardAdapter)
                                       escape that context. */}
-                                  <BottomSheetModalProvider>
-                                    <DrawerHostProvider>
-                                      <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                        <Stack.Screen name="(tabs)" />
-                                        <Stack.Screen
-                                          name="auth"
-                                          options={{ headerShown: false, gestureEnabled: false }}
-                                        />
-                                      </Stack>
-                                      <PersistentQueueBar />
-                                    </DrawerHostProvider>
-                                  </BottomSheetModalProvider>
-                                </BluetoothProviderWrapper>
-                              </BoardProviderWrapper>
-                            </BoardAdapterWrapper>
-                          </QueueProvider>
-                        </PlaylistsProvider>
-                      </FavoritesProvider>
-                    </ToastProvider>
-                  </ConnectionSettingsProvider>
-                </PartyProfileProvider>
-              </AuthProvider>
-            </FeatureFlagsProvider>
-          </ThemeProvider>
+                                    <BottomSheetModalProvider>
+                                      <DrawerHostProvider>
+                                        <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                          <Stack.Screen name="(tabs)" />
+                                          <Stack.Screen
+                                            name="auth"
+                                            options={{ headerShown: false, gestureEnabled: false }}
+                                          />
+                                        </Stack>
+                                        <PersistentQueueBar />
+                                      </DrawerHostProvider>
+                                    </BottomSheetModalProvider>
+                                  </BluetoothProviderWrapper>
+                                </BoardProviderWrapper>
+                              </BoardAdapterWrapper>
+                            </QueueProvider>
+                          </PlaylistsProvider>
+                        </FavoritesProvider>
+                      </ToastProvider>
+                    </ConnectionSettingsProvider>
+                  </PartyProfileProvider>
+                </AuthProvider>
+              </FeatureFlagsProvider>
+            </ThemeProvider>
+          </ColorSchemePreferenceProvider>
         </QueryProvider>
       </I18nProvider>
     </GestureHandlerRootView>

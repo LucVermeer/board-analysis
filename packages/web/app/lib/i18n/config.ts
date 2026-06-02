@@ -7,6 +7,10 @@ export const DEFAULT_LOCALE: Locale = 'en-US';
 // outside the web orphan checker's scan tree.
 // i18n-keep common:mobile.play.sendCount_one
 // i18n-keep common:mobile.play.sendCount_other
+// i18n-keep common:mobile.more.appearance.title
+// i18n-keep common:mobile.more.appearance.system
+// i18n-keep common:mobile.more.appearance.light
+// i18n-keep common:mobile.more.appearance.dark
 // i18n-keep session:playView.actionBar.previousAria
 // i18n-keep session:playView.actionBar.nextAria
 // i18n-keep session:playView.actionBar.mirrorAria

@@ -8,6 +8,7 @@ import {
   BottomSheetBackdrop,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
+  type BottomSheetBackgroundProps,
 } from '@gorhom/bottom-sheet';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import type { ClimbQueueItem } from '@boardsesh/queue';
@@ -25,6 +26,7 @@ import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { LogAscentSheet } from '../LogAscentSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
+import { GlassSurface } from '../GlassSurface';
 import { useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToggleFavorite } from '../../lib/graphql/hooks';
@@ -266,6 +268,13 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
     [],
   );
 
+  const renderBackground = useCallback(
+    ({ style }: BottomSheetBackgroundProps) => (
+      <GlassSurface glassEffectStyle="regular" style={[style, sheetStyles.background, styles.glassBackground]} />
+    ),
+    [],
+  );
+
   const snapPoints = useMemo(() => ['100%'], []);
 
   const ascentCount = displayedClimb?.userAscents ?? 0;
@@ -284,7 +293,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         backdropComponent={renderBackdrop}
         onDismiss={handleClose}
         handleIndicatorStyle={sheetStyles.indicator}
-        backgroundStyle={sheetStyles.background}
+        backgroundComponent={renderBackground}
       >
         <BottomSheetScrollView
           style={styles.content}
@@ -471,6 +480,10 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 const styles = StyleSheet.create({
   content: {
     flex: 1,
+  },
+  glassBackground: {
+    // Clip the glass / blur material to the sheet's rounded top edge.
+    overflow: 'hidden',
   },
   closeButton: {
     position: 'absolute',

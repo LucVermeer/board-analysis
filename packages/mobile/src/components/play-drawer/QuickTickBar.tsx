@@ -11,10 +11,12 @@ import {
 } from '@boardsesh/play-view';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { GlassSurface } from '../GlassSurface';
 import { InlineStarPicker } from './InlineStarPicker';
 import { InlineGradePicker } from './InlineGradePicker';
 import { InlineTriesPicker } from './InlineTriesPicker';
 import { useGrades } from '../../lib/graphql/hooks';
+import { useTheme } from '../../providers/theme-provider';
 import { useSaveTick } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
@@ -51,6 +53,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   onDismiss,
 }: QuickTickBarProps) {
   const { t } = useTranslation('session');
+  const { systemColors } = useTheme();
   const saveTick = useSaveTick(toBoardName(boardName));
   const { data: grades } = useGrades(boardName);
 
@@ -152,7 +155,11 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const saveLabel = ascentType === 'flash' ? t('playView.tickBar.flashSaveLabel') : t('playView.tickBar.sendSaveLabel');
 
   return (
-    <Animated.View style={[styles.container, animatedStyle]} pointerEvents={visible ? 'auto' : 'none'}>
+    <Animated.View
+      style={[styles.container, { borderTopColor: systemColors.separator }, animatedStyle]}
+      pointerEvents={visible ? 'auto' : 'none'}
+    >
+      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={styles.row}>
         <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
           {t('playView.tickBar.gradeLabel')}
@@ -230,11 +237,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: iosSystemColors.white,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
+    // Clip the glass / blur material to the rounded top edge.
+    overflow: 'hidden',
     zIndex: 5,
     paddingTop: spacing[3],
     paddingBottom: spacing[3],

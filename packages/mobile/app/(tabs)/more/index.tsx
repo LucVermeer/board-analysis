@@ -2,19 +2,51 @@ import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { useColorSchemePreference } from '../../../src/providers/color-scheme-preference-provider';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
 import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
+import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
+import type { ColorSchemePreference } from '../../../src/lib/theme-preference-store';
 
 export default function MoreScreen() {
   const { systemColors, spacing, borderRadius } = useTheme();
   const { t } = useTranslation('common');
+  const { preference, setPreference } = useColorSchemePreference();
+
+  const appearanceOptions = [
+    { key: 'system', label: t('mobile.more.appearance.system') },
+    { key: 'light', label: t('mobile.more.appearance.light') },
+    { key: 'dark', label: t('mobile.more.appearance.dark') },
+  ];
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <DevMetadataPanel />
+
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.appearance.title')} />
+        <View
+          style={[
+            styles.card,
+            styles.controlCard,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderRadius: borderRadius.lg,
+              marginHorizontal: spacing[4],
+            },
+          ]}
+        >
+          <SegmentedControl
+            options={appearanceOptions}
+            selectedKey={preference}
+            onSelect={(key) => setPreference(key as ColorSchemePreference)}
+            trackColor={systemColors.fill}
+          />
+        </View>
+      </View>
       {__DEV__ ? (
         <View style={styles.section}>
           <SectionHeader title={t('mobile.more.development')} />
@@ -72,5 +104,8 @@ const styles = StyleSheet.create({
   },
   card: {
     overflow: 'hidden',
+  },
+  controlCard: {
+    padding: 12,
   },
 });

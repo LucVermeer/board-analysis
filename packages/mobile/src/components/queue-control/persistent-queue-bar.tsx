@@ -25,6 +25,7 @@ import { shadowColor } from '../../theme/tokens';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { GlassSurface } from '../GlassSurface';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
 import { EndSessionSheet } from '../EndSessionSheet';
 import { useTheme } from '../../providers/theme-provider';
@@ -232,6 +233,11 @@ export function PersistentQueueBar() {
     ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
 
+  // Low-alpha grade wash so the climb's hue reads through the glass without
+  // killing the translucency. The opaque `tintBackground` is preserved for the
+  // solid (Android / reduce-transparency) path via GlassSurface.fallbackColor.
+  const glassTint = `${currentChipColor}33`;
+
   return (
     <>
       <Animated.View
@@ -243,10 +249,16 @@ export function PersistentQueueBar() {
             // Sit directly above the BlurTabBar — side margins + rounded
             // corners give the floating-card look; no extra vertical gap.
             bottom: insets.bottom + TAB_BAR_HEIGHT,
-            backgroundColor: tintBackground ?? systemColors.background,
           },
         ]}
       >
+        <GlassSurface
+          glassEffectStyle="clear"
+          style={StyleSheet.absoluteFill}
+          tintColor={glassTint}
+          fallbackColor={tintBackground ?? systemColors.background}
+          pointerEvents="none"
+        />
         <View style={styles.row}>
           <GestureDetector gesture={composedGesture}>
             <View style={styles.swipeArea} onLayout={onLayout} accessibilityRole="button">

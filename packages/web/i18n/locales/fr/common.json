@@ -10,7 +10,13 @@
       "title": "Plus",
       "development": "Développement",
       "metroServersTitle": "Serveurs Metro",
-      "metroServersSubtitle": "Basculer entre les bundlers Tailnet"
+      "metroServersSubtitle": "Basculer entre les bundlers Tailnet",
+      "appearance": {
+        "title": "Apparence",
+        "system": "Système",
+        "light": "Clair",
+        "dark": "Sombre"
+      }
     },
     "nav": {
       "boards": "Boards",

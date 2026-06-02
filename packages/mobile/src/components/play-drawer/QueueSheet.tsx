@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, Platform, StyleSheet } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import BottomSheet, {
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+  type BottomSheetBackgroundProps,
+} from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { ClimbQueueItem } from '@boardsesh/queue';
 import { QueueSheetHeader } from './QueueSheetHeader';
 import { QueueList } from './QueueList';
 import { Text } from '../Text';
+import { GlassSurface } from '../GlassSurface';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticMedium, hapticWarning } from '../../lib/haptics';
@@ -125,6 +130,13 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
     [],
   );
 
+  const renderBackground = useCallback(
+    ({ style }: BottomSheetBackgroundProps) => (
+      <GlassSurface glassEffectStyle="regular" style={[style, sheetStyles.background, styles.glassBackground]} />
+    ),
+    [],
+  );
+
   const viewOnlyMode = queue.length === 0;
 
   return (
@@ -137,7 +149,7 @@ export function QueueSheet({ visible, onClose, onClimbPress }: QueueSheetProps) 
       onChange={handleSheetChange}
       onClose={handleClose}
       handleIndicatorStyle={sheetStyles.indicator}
-      backgroundStyle={sheetStyles.background}
+      backgroundComponent={renderBackground}
       style={styles.sheet}
     >
       <QueueSheetHeader
@@ -206,6 +218,10 @@ const styles = StyleSheet.create({
         elevation: 16,
       },
     }),
+  },
+  glassBackground: {
+    // Clip the glass / blur material to the sheet's rounded top edge.
+    overflow: 'hidden',
   },
   bulkBar: {
     position: 'absolute',
