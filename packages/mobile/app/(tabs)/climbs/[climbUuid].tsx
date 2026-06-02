@@ -242,7 +242,6 @@ export default function ClimbDetail() {
           visible={showLogAscent}
           onDismiss={() => setShowLogAscent(false)}
           climbUuid={climb.uuid}
-          climbName={climb.name}
           boardName={boardName}
           angle={Number(angle)}
           isMirror={climb.mirrored === true}

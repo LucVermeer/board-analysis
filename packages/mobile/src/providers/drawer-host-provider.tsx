@@ -31,7 +31,6 @@ export type BoardConfig = {
 
 export type LogAscentInput = {
   climbUuid: string;
-  climbName: string;
   boardName: string;
   angle: number;
   isMirror: boolean;
@@ -171,7 +170,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     if (!climbActions) return;
     setLogAscentInput({
       climbUuid: climbActions.climb.uuid,
-      climbName: climbActions.climb.name,
       boardName: climbActions.boardConfig.boardName,
       angle: climbActions.boardConfig.angle,
       isMirror: false,
@@ -197,7 +195,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           visible
           onDismiss={dismissLogAscent}
           climbUuid={logAscentInput.climbUuid}
-          climbName={logAscentInput.climbName}
           boardName={logAscentInput.boardName}
           angle={logAscentInput.angle}
           isMirror={logAscentInput.isMirror}

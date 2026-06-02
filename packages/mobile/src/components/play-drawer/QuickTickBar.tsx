@@ -3,7 +3,8 @@
 // pan-down-to-close, and the drag handle. This component is just the
 // pickers + save row.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Pressable, StyleSheet, TextInput, type TextStyle } from 'react-native';
+import { View, Pressable, StyleSheet, type TextStyle } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import {
   createInitialTickState,
@@ -67,14 +68,24 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 
   // Mobile's `Climb.userAscents`/`userAttempts` GraphQL fields aren't
   // populated server-side, so we read the user's accumulated logbook
-  // (denormalised via `BoardProvider` → `useLogbook`) directly. Same source
-  // AscentStatusBadge uses for its flash/send/attempt pill.
+  // (denormalised via `BoardProvider` → `useLogbook`) directly. Same
+  // source `AscentStatusBadge` uses for its flash/send/attempt pill.
   //
-  // Pessimistic default when the provider isn't mounted yet: treat the
-  // climb as already-attempted so the primary save button reads "Send"
-  // rather than the optimistic "Flash". Logging a real first-flash as a
-  // send is a one-tap fix; logging a re-send as a flash is unrecoverable.
+  // Two failure modes the save-button label must guard against:
+  // 1. `BoardProvider` not mounted → no logbook context at all → `Send`.
+  // 2. Provider is mounted but this climb's ticks haven't been fetched
+  //    yet → `board.logbook.some(...)` returns false. We trigger
+  //    `getLogbook` on mount (idempotent thanks to useLogbook's fetched-
+  //    uuid dedupe) so the answer becomes authoritative on the next
+  //    render after the fetch resolves. In the brief window before then
+  //    the label may still read `Flash` for a climb that actually has
+  //    history — bounded to flows that bypass the climbs-index
+  //    pre-fetch (e.g. deep link to /climbs/[uuid]).
   const board = useOptionalBoardProvider();
+  useEffect(() => {
+    if (!board) return;
+    void board.getLogbook([climbUuid]);
+  }, [board, climbUuid]);
   const hasPriorHistory = useMemo(() => {
     if (!board) return true;
     return board.logbook.some((entry) => entry.climb_uuid === climbUuid && entry.angle === angle);
@@ -233,7 +244,11 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
           {t('playView.tickBar.noteLabel')}
         </Text>
-        <TextInput
+        {/* `BottomSheetTextInput` (vs the bare `TextInput`) is what makes
+            the host sheet auto-expand to its larger snap point when the
+            keyboard appears — otherwise the keyboard covers the comment
+            row and the save buttons. */}
+        <BottomSheetTextInput
           value={comment}
           onChangeText={setComment}
           placeholder={t('playView.tickBar.commentPlaceholder')}
@@ -328,7 +343,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[3],
-    paddingHorizontal: spacing[4],
+    // Pull the save buttons inward from the edges — the picker rows above
+    // use spacing[4] for their content gutter, but pill buttons want a
+    // larger visual margin so the green Send doesn't crowd the screen edge.
+    paddingHorizontal: spacing[6],
     paddingTop: spacing[3],
   },
   saveButton: {

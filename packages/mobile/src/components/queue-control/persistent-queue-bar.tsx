@@ -173,7 +173,6 @@ export function PersistentQueueBar() {
     hapticSelection();
     openLogAscent({
       climbUuid: currentClimbQueueItem.climb.uuid,
-      climbName: currentClimbQueueItem.climb.name,
       boardName: boardConfig.boardName,
       angle: currentClimbQueueItem.climb.angle,
       isMirror: currentClimbQueueItem.climb.mirrored === true,

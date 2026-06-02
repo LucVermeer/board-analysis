@@ -497,7 +497,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           visible={isTickBarActive}
           onDismiss={handleTickBarDismiss}
           climbUuid={displayedClimb.uuid}
-          climbName={displayedClimb.name}
           boardName={boardName}
           angle={angle}
           isMirror={isMirrored}
