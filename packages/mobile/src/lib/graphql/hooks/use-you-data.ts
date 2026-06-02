@@ -15,7 +15,6 @@ import {
 import { BOARD_TYPES, type LogbookEntry } from '@boardsesh/profile-stats';
 import type { ActivityFeedInput } from '@boardsesh/shared-schema';
 import { getHttpClient } from '../client';
-import { GET_PUBLIC_PROFILE, type GetPublicProfileQueryResponse } from '../operations';
 
 const PROFILE_STALE_TIME_MS = 30 * 1000;
 const FEED_PAGE_SIZE = 20;
@@ -82,19 +81,6 @@ export function useUserClimbPercentile(userId: string | undefined) {
         userId,
       });
       return response.userClimbPercentile;
-    },
-    enabled: !!userId,
-    staleTime: PROFILE_STALE_TIME_MS,
-  });
-}
-
-/** Public profile (display name, avatar, follower/following counts). */
-export function usePublicProfile(userId: string | undefined) {
-  return useQuery({
-    queryKey: ['publicProfile', userId],
-    queryFn: async () => {
-      const response = await getHttpClient().request<GetPublicProfileQueryResponse>(GET_PUBLIC_PROFILE, { userId });
-      return response.publicProfile;
     },
     enabled: !!userId,
     staleTime: PROFILE_STALE_TIME_MS,

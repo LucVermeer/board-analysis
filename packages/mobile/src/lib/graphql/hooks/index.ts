@@ -362,7 +362,6 @@ export {
   useAllBoardsTicks,
   useUserProfileStats,
   useUserClimbPercentile,
-  usePublicProfile,
   useUserAscentsFeed,
   useSessionGroupedFeed,
 } from './use-you-data';

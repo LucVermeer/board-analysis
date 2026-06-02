@@ -8,7 +8,6 @@ import type BottomSheet from '@gorhom/bottom-sheet';
 import { useProfile, useYouProfileData } from '../../../src/lib/graphql/hooks';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { YouTabBar, type YouTab } from '../../../src/components/you/YouTabBar';
-import { YouProfileHeader } from '../../../src/components/you/YouProfileHeader';
 import { YouFilterSheet } from '../../../src/components/you/YouFilterSheet';
 import { ProgressTab } from '../../../src/components/you/ProgressTab';
 import { SessionsTab } from '../../../src/components/you/SessionsTab';
@@ -101,7 +100,6 @@ export default function YouScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
-      <YouProfileHeader profile={youData.profile} />
       <YouTabBar tabs={tabs} activeIndex={activeIndex} scrollPosition={scrollPosition} onTabPress={handleTabPress} />
 
       <PagerView
