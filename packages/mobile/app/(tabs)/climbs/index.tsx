@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, RefreshControl, Image, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import { toClimbSearchInput, DEFAULT_CLIMB_FILTER_STATE } from '@boardsesh/climb-filters';
@@ -11,6 +11,7 @@ import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
+import { CreateClimbFab } from '../../../src/components/create-climb/CreateClimbFab';
 import { GradePopover } from '../../../src/components/search/GradePopover';
 import { SearchBottomBar } from '../../../src/components/search/SearchBottomBar';
 import { StickyFilterStrip } from '../../../src/components/search/StickyFilterStrip';
@@ -64,6 +65,7 @@ export default function ClimbList() {
 
 function ClimbListInner() {
   const navigation = useNavigation();
+  const router = useRouter();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
   const { systemColors } = useTheme();
@@ -564,6 +566,17 @@ function ClimbListInner() {
           boardConfig={boardConfig}
           currentFilters={filters}
           onApply={handleApplyFilters}
+        />
+      ) : null}
+
+      {isAuthenticated && hasBoardConfig ? (
+        <CreateClimbFab
+          onPress={() =>
+            router.push({
+              pathname: '/(tabs)/climbs/create',
+              params: { boardName, layoutId: String(layoutId), sizeId: String(sizeId), setIds, angle: String(angle) },
+            })
+          }
         />
       ) : null}
     </View>

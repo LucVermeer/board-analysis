@@ -1,13 +1,18 @@
-'use client';
-
 import { useState, useCallback, useMemo } from 'react';
-import { type LitUpHoldsMap, type HoldState, HOLD_STATE_MAP, STATE_TO_PRIMARY_CODE } from '../board-renderer/types';
-import type { BoardName } from '@/app/lib/types';
+import { HOLD_STATE_MAP, STATE_TO_PRIMARY_CODE } from '@boardsesh/board-constants/hold-states';
+import type { BoardName, HoldState, LitUpHoldsMap } from '@boardsesh/shared-schema';
 
 type UseCreateClimbOptions = {
   initialHoldsMap?: LitUpHoldsMap;
 };
 
+/**
+ * Aurora (Kilter/Tension/etc) hold-state machine for the create-climb editor.
+ * Pure React + board-constants — shared verbatim by the web form and the
+ * React Native editor. Keys holds by numeric id; enforces the max-2
+ * STARTING/FINISH rule; serialises to the Aurora `p{holdId}r{code}` frame
+ * string.
+ */
 export function useCreateClimb(boardName: BoardName, options?: UseCreateClimbOptions) {
   const [litUpHoldsMap, setLitUpHoldsMap] = useState<LitUpHoldsMap>(options?.initialHoldsMap ?? {});
 

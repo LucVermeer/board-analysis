@@ -4,7 +4,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CreateClimbForm from '../create-climb-form';
 import { useBoardProvider } from '../../board-provider/board-provider-context';
-import { useCreateClimb } from '../use-create-climb';
+import { useCreateClimb } from '@boardsesh/create-climb-react';
 import { useMoonBoardCreateClimb } from '../use-moonboard-create-climb';
 import { useOptionalBluetoothContext } from '../../board-bluetooth-control/bluetooth-context';
 import type { BoardDetails, Climb } from '@/app/lib/types';
@@ -69,7 +69,7 @@ vi.mock('../../board-bluetooth-control/bluetooth-context', () => ({
   useOptionalBluetoothContext: vi.fn(() => ({ isConnected: false, sendFramesToBoard: mockSendFramesToBoard })),
 }));
 
-vi.mock('../use-create-climb', () => ({
+vi.mock('@boardsesh/create-climb-react', () => ({
   useCreateClimb: vi.fn(() => ({
     litUpHoldsMap: mockAuroraCreateState.litUpHoldsMap,
     setHoldState: mockSetAuroraHoldState,

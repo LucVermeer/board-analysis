@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import type { Climb } from '@boardsesh/shared-schema';
 import { buildClimbViewPath } from '@boardsesh/play-view';
+import { computeCanUpdate, type SavedClimbSnapshot } from '@boardsesh/create-climb-react';
 import { Sheet } from './Sheet';
 import { ListRow } from './ListRow';
 import { Icon } from './Icon';
@@ -23,6 +25,8 @@ type ClimbActionsSheetProps = {
   sizeId: number;
   setIds: string;
   angle: number;
+  /** Current signed-in user id — gates the owner-only Edit row. */
+  currentUserId?: string | null;
   onAddToQueue?: () => void;
   onToggleFavorite?: () => void;
   /** When provided, shows a "Log a tick" row that opens the LogAscent sheet. */
@@ -45,6 +49,7 @@ function ClimbActionsSheet({
   sizeId,
   setIds,
   angle,
+  currentUserId,
   onAddToQueue,
   onToggleFavorite,
   onTick,
@@ -52,6 +57,7 @@ function ClimbActionsSheet({
 }: ClimbActionsSheetProps) {
   const { t } = useTranslation('climbs');
   const { showToast } = useToast();
+  const router = useRouter();
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
@@ -113,6 +119,55 @@ function ClimbActionsSheet({
     onClose();
   }, [onClose]);
 
+  const handleFork = useCallback(() => {
+    if (!climb) return;
+    onClose();
+    router.push({
+      pathname: '/(tabs)/climbs/create',
+      params: {
+        forkFrames: climb.frames,
+        forkName: climb.name,
+        forkDescription: climb.description ?? '',
+        boardName,
+        layoutId: String(layoutId),
+        sizeId: String(sizeId),
+        setIds,
+        angle: String(angle),
+      },
+    });
+  }, [climb, boardName, layoutId, sizeId, setIds, angle, router, onClose]);
+
+  const handleEdit = useCallback(() => {
+    if (!climb) return;
+    onClose();
+    router.push({
+      pathname: '/(tabs)/climbs/create',
+      params: {
+        editClimbUuid: climb.uuid,
+        boardName,
+        layoutId: String(layoutId),
+        sizeId: String(sizeId),
+        setIds,
+        angle: String(angle),
+      },
+    });
+  }, [climb, boardName, layoutId, sizeId, setIds, angle, router, onClose]);
+
+  // Edit is owner-only, and only while the climb is still a draft OR within
+  // 24h of first publish (the backend enforces the same window). `userId`
+  // is null for Aurora-synced climbs that predate Boardsesh accounts.
+  const canEdit = useMemo(() => {
+    if (!climb || !currentUserId || !climb.userId || climb.userId !== currentUserId) return false;
+    const snapshot: SavedClimbSnapshot = {
+      uuid: climb.uuid,
+      boardType: boardName,
+      createdAt: climb.created_at ?? null,
+      publishedAt: climb.published_at ?? null,
+      isDraft: climb.is_draft ?? false,
+    };
+    return (climb.is_draft ?? false) || computeCanUpdate(snapshot, boardName);
+  }, [climb, currentUserId, boardName]);
+
   const snapPoints = useMemo(() => ['40%'], []);
 
   return (
@@ -142,6 +197,20 @@ function ClimbActionsSheet({
             showSeparator
           />
         )}
+        {canEdit && (
+          <ListRow
+            title={t('mobile.climbActions.edit')}
+            leading={<Icon name="edit" size={22} color={iosSystemColors.systemBlue} />}
+            onPress={handleEdit}
+            showSeparator
+          />
+        )}
+        <ListRow
+          title={t('mobile.climbActions.fork')}
+          leading={<Icon name="branch" size={22} color={iosSystemColors.systemBlue} />}
+          onPress={handleFork}
+          showSeparator
+        />
         <ListRow
           title={t('mobile.climbActions.copyLink')}
           leading={<Icon name="copy" size={22} color={iosSystemColors.systemBlue} />}

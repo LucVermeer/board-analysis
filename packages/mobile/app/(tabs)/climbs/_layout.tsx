@@ -32,6 +32,13 @@ export default function ClimbsLayout() {
           presentation: 'modal',
         }}
       />
+      <Stack.Screen
+        name="create"
+        options={{
+          title: t('mobile.nav.createClimb'),
+          presentation: 'modal',
+        }}
+      />
     </Stack>
   );
 }

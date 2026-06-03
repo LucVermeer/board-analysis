@@ -9,6 +9,7 @@ import type { BoardRouteParams, ClimbSearchParams, ClimbRow, ClimbSearchResult }
 type RawSelectResult = {
   uuid: string;
   setter_username: string | null;
+  userId: string | null;
   name: string | null;
   frames: string | null;
   is_draft: boolean | null;
@@ -27,6 +28,7 @@ function mapResultToClimbRow(result: RawSelectResult, params: BoardRouteParams):
   return {
     uuid: result.uuid,
     setter_username: result.setter_username || '',
+    userId: result.userId ?? null,
     name: result.name || '',
     frames: result.frames || '',
     angle: params.angle,
@@ -181,6 +183,7 @@ async function statsDrivenSearch(
   const selectFields = {
     uuid: boardClimbs.uuid,
     setter_username: boardClimbs.setterUsername,
+    userId: boardClimbs.userId,
     name: boardClimbs.name,
     frames: boardClimbs.frames,
     is_draft: boardClimbs.isDraft,
@@ -295,6 +298,7 @@ async function standardSearch(
   const selectFields = {
     uuid: boardClimbs.uuid,
     setter_username: boardClimbs.setterUsername,
+    userId: boardClimbs.userId,
     name: boardClimbs.name,
     frames: boardClimbs.frames,
     is_draft: boardClimbs.isDraft,

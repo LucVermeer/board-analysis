@@ -227,7 +227,8 @@
       "climbs": "Bloques",
       "climb": "Bloque",
       "profile": "Perfil",
-      "setters": "Equipadores"
+      "setters": "Equipadores",
+      "createClimb": "Crear vía"
     }
   },
   "lightControl": {

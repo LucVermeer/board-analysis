@@ -34,6 +34,7 @@
     "@boardsesh/board-react": "*",
     "@boardsesh/board-renderer-wasm": "*",
     "@boardsesh/climb-actions": "*",
+    "@boardsesh/create-climb-react": "*",
     "@boardsesh/climb-filters": "*",
     "@boardsesh/crypto": "*",
     "@boardsesh/db": "*",

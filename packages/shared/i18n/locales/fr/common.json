@@ -29,7 +29,8 @@
       "climbs": "Blocs",
       "climb": "Bloc",
       "profile": "Profil",
-      "setters": "Ouvreurs"
+      "setters": "Ouvreurs",
+      "createClimb": "Créer une voie"
     }
   },
   "lightControl": {

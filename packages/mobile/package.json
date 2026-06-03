@@ -16,6 +16,7 @@
     "@boardsesh/board-react": "*",
     "@boardsesh/climb-actions": "*",
     "@boardsesh/climb-filters": "*",
+    "@boardsesh/create-climb-react": "*",
     "@boardsesh/graphql": "*",
     "@boardsesh/graphql-client": "*",
     "@boardsesh/i18n": "*",

@@ -21,6 +21,11 @@ import {
   CLIMB_STATS_HISTORY,
   type ClimbStatsHistoryResponse,
 } from '@boardsesh/graphql/operations';
+import {
+  DELETE_DRAFT_CLIMB_MUTATION,
+  type DeleteDraftClimbMutationVariables,
+  type DeleteDraftClimbMutationResponse,
+} from '@boardsesh/graphql/operations/new-climb-feed';
 import { getHttpClient } from '../client';
 import {
   GET_PROFILE,
@@ -218,6 +223,29 @@ export function useClimb(variables: GetClimbQueryVariables | null) {
     queryFn: () => getHttpClient().request<GetClimbQueryResponse>(GET_CLIMB, variables!),
     select: (data) => data.climb,
     enabled: !!variables,
+  });
+}
+
+/**
+ * Delete a draft climb. The backend only permits deleting climbs that are
+ * still drafts and owned by the caller. Busts the climb-search caches so the
+ * deleted draft disappears from the drafts list (and any climb list) without a
+ * manual reload.
+ */
+export function useDeleteDraftClimb() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (variables: DeleteDraftClimbMutationVariables) => {
+      const response = await getHttpClient().request<DeleteDraftClimbMutationResponse>(
+        DELETE_DRAFT_CLIMB_MUTATION,
+        variables,
+      );
+      return response.deleteDraftClimb;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+      void queryClient.invalidateQueries({ queryKey: ['searchClimbsCount'] });
+    },
   });
 }
 

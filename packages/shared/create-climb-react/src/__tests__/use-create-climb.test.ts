@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from 'vite-plus/test';
+import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCreateClimb } from '../use-create-climb';
 
-vi.mock('../../board-renderer/types', () => ({
+vi.mock('@boardsesh/board-constants/hold-states', () => ({
   HOLD_STATE_MAP: {
     kilter: {
       42: { name: 'STARTING', color: '#00FF00', displayColor: '#00FF00' },
@@ -302,6 +302,27 @@ describe('useCreateClimb', () => {
       expect(result.current.totalHolds).toBe(2);
       expect(result.current.startingCount).toBe(1);
       expect(result.current.isValid).toBe(true);
+    });
+  });
+
+  describe('loadHolds', () => {
+    it('replaces the entire holds map', () => {
+      const { result } = renderHook(() => useCreateClimb('kilter'));
+
+      act(() => {
+        result.current.setHoldState(100, 'STARTING');
+      });
+
+      const next = {
+        200: { state: 'HAND' as const, color: '#00FFFF', displayColor: '#00FFFF' },
+        300: { state: 'FINISH' as const, color: '#FF00FF', displayColor: '#FF00FF' },
+      };
+      act(() => {
+        result.current.loadHolds(next);
+      });
+
+      expect(result.current.litUpHoldsMap).toEqual(next);
+      expect(result.current.litUpHoldsMap[100]).toBeUndefined();
     });
   });
 

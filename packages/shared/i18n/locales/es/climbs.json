@@ -666,7 +666,53 @@
       "report": "Reportar",
       "linkCopied": "Enlace copiado",
       "tick": "Registrar un envío",
-      "openInApp": "Abrir en la app Aurora"
+      "openInApp": "Abrir en la app Aurora",
+      "fork": "Bifurcar esta vía",
+      "edit": "Editar vía"
+    },
+    "create": {
+      "brush": {
+        "start": "Inicio",
+        "hand": "Mano",
+        "finish": "Final",
+        "foot": "Pie",
+        "erase": "Borrar"
+      },
+      "counts": {
+        "start": "Inicio: {{count}}/2",
+        "finish": "Final: {{count}}/2"
+      },
+      "actions": {
+        "heatmap": "Mapa de calor",
+        "settings": "Ajustes",
+        "clear": "Borrar presas",
+        "setActive": "Fijar como vía activa",
+        "save": "Guardar vía"
+      },
+      "holdRole": {
+        "title": "Asignar rol de presa",
+        "clear": "Borrar"
+      },
+      "settings": {
+        "draftLabel": "Guardar como borrador",
+        "draftDescription": "Los borradores quedan privados hasta que los publiques.",
+        "showAllHoldsLabel": "Mostrar todas las presas",
+        "showAllHoldsDescription": "Resalta todas las presas pulsables del panel.",
+        "connectBoard": "Conectar panel",
+        "bleConnected": "Panel conectado",
+        "bleUnavailable": "Elige un panel para iluminarlo por Bluetooth."
+      },
+      "drafts": {
+        "holds_one": "{{count}} presa",
+        "holds_other": "{{count}} presas"
+      },
+      "unavailable": {
+        "title": "Aún no se puede crear aquí",
+        "subtitle": "Esta configuración de panel no admite la creación de vías."
+      },
+      "fab": {
+        "ariaLabel": "Crear una vía"
+      }
     }
   }
 }

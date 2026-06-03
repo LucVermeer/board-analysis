@@ -20,7 +20,7 @@ import { LogAscentSheet } from '../components/LogAscentSheet';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
-import { useToggleFavorite } from '../lib/graphql/hooks';
+import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
 import { useQueue } from './queue-provider';
 
 export type BoardConfig = {
@@ -89,6 +89,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const { addToQueue, setSessionBoardPath } = useQueue();
   const setActiveBoard = useSetActiveBoard();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
+  const { data: profile } = useProfile();
 
   // Climb to open after the boardConfig override has committed. We can't
   // open synchronously inside openPlayDrawer when an override is supplied
@@ -278,6 +279,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           sizeId={climbActions.boardConfig.sizeId}
           setIds={climbActions.boardConfig.setIds}
           angle={climbActions.boardConfig.angle}
+          currentUserId={profile?.id ?? null}
           onAddToQueue={handleClimbActionsAddToQueue}
           onToggleFavorite={handleClimbActionsToggleFavorite}
           onTick={handleClimbActionsTick}

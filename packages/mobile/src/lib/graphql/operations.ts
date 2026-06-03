@@ -65,6 +65,7 @@ const BOARD_FIELDS = `
 const CLIMB_SEARCH_FIELDS = `
   uuid
   setter_username
+  userId
   name
   frames
   angle

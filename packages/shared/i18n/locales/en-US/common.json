@@ -29,7 +29,8 @@
       "climbs": "Climbs",
       "climb": "Climb",
       "profile": "Profile",
-      "setters": "Setters"
+      "setters": "Setters",
+      "createClimb": "Create climb"
     }
   },
   "lightControl": {
