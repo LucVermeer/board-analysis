@@ -207,24 +207,34 @@ For boards with only one catalog source (e.g. Tension, `kilter_` is NULL) this c
 
 ### Quality scale — every board on 1–5
 
-Kilter Grips reports `quality_average` on a 1–5 scale (MoonBoard too), but Aurora reports 1–3. To keep `board_climb_stats.quality_average` one scale the UI renders uniformly, aurora-sync now normalises its writes to 1–5 via `normalizeQualityTo5` (`×5/3`, continuous — it's a stored average, so unlike `convertQuality` it isn't rounded to integer star steps). Kilter Grips values are stored as-is (already 1–5); Boardsesh-tick quality is already 1–5.
+Kilter Grips reports `quality_average` on a 1–5 scale (MoonBoard too), but Aurora reports 1–3. To keep `board_climb_stats.quality_average` one scale the UI renders uniformly, every writer stores 1–5: aurora-sync normalises its writes via `normalizeQualityTo5` (`×5/3`, continuous — it's a stored average, so unlike `convertQuality` it isn't rounded to integer star steps); Kilter Grips and Boardsesh-tick quality are already 1–5 and stored as-is.
 
-**One-time backfill (NOT idempotent — run exactly once per environment):** existing Aurora-board rows are still 1–3 until rescaled:
+Existing rows synced **before** that change are still on 1–3 (this is why the app showed 1–3 stars). A new boolean **`board_climb_stats.quality_normalized`** tracks whether a row is on the canonical 1–5 scale; migration `0116_backfill_quality_scale_1to5` does the one-time conversion idempotently:
 
-```sql
-UPDATE board_climb_stats SET quality_average = quality_average * 5.0 / 3.0
-WHERE board_type IN ('tension','decoy','soill','touchstone','grasshopper') AND quality_average IS NOT NULL;
-```
+- Scales `×5/3` and sets `quality_normalized = true` for Aurora-sourced 1–3 rows on the Aurora-scale boards (`kilter, tension, decoy, soill, touchstone, grasshopper`), **excluding** Kilter Grips-touched rows (`kilter_ascensionist_count > 0`) and Boardsesh-owned climbs (both already 1–5).
+- Marks every remaining row `quality_normalized = true` without changing it (MoonBoard, Grips-native, Boardsesh-owned, null quality).
 
-(Kilter is excluded — its quality is grips-authoritative and already 1–5 for grips-covered climbs; running this twice would double-scale.)
+Every write path (`aurora-sync` upsert, kilter `catalog-sync`, the tick `recompute`) sets `quality_normalized`, so rows touched after the migration are never re-scaled, and re-running the migration is a no-op. (Transitional column — drop it in follow-up work once the whole table is normalized.)
+
+> **Already ran the old manual `×5/3` SQL?** Earlier revisions documented a manual one-time `UPDATE … * 5.0/3.0` for the non-kilter boards. If an environment ran it, mark those rows normalized **before** applying `0116` so they aren't scaled twice:
+>
+> ```sql
+> UPDATE board_climb_stats SET quality_normalized = true
+> WHERE board_type IN ('tension','decoy','soill','touchstone','grasshopper') AND quality_average IS NOT NULL;
+> ```
+>
+> Fresh environments (never manually backfilled) need nothing — `0116` handles them.
+
+> **Deploy order matters.** `normalizeQualityTo5` (aurora-sync write path) and the `quality_normalized` flag must ship **together** — they do, on this branch. The hazard: an aurora-sync build that normalises quality on write but predates the `quality_normalized` column would write 1–5 values flagged `false`, which `0116` would then scale **again** (a 1–5 average ≤ 3 still passes the `≤ 3.0` guard). So: **apply migrations `0115`+`0116` before the new aurora-sync daemon runs**, and never run a normalize-on-write build standalone against a DB that hasn't had `0116`. Production is safe today — the kilter-sync branch isn't deployed, so no normalize-on-write has run; prod `quality_average` is uniformly raw 1–3 (verified). If you ever suspect an environment ran normalize-on-write before `0115`, treat its Aurora-board rows like the manual-SQL case above (mark normalized, then migrate).
 
 ## Schema changes
 
-The catalog-relevant schema (`board_climbs.hold_fingerprint` + index, `board_climb_aliases`, `board_climb_stats.kilter_ascensionist_count` + the three-writer recompute) already shipped with Flow B. Flow A adds one table:
+The catalog-relevant schema (`board_climbs.hold_fingerprint` + index, `board_climb_aliases`, `board_climb_stats.kilter_ascensionist_count` + the three-writer recompute) already shipped with Flow B. Flow A adds:
 
-| Change | Object                                                                                                      | Notes                                                                                                 |
-| ------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| new    | `board_layout_aliases (board_type, layout_uuid PK, layout_id FK→board_layouts, source, first/last_seen_at)` | Persists the Grips `product_layout_uuid` → integer `layout_id` mapping; reused by the per-user paths. |
+| Change | Object                                                                                                      | Notes                                                                                                                                           |
+| ------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| new    | `board_layout_aliases (board_type, layout_uuid PK, layout_id FK→board_layouts, source, first/last_seen_at)` | Persists the Grips `product_layout_uuid` → integer `layout_id` mapping; reused by the per-user paths.                                           |
+| new    | `board_climb_stats.quality_normalized boolean NOT NULL DEFAULT false` (migration `0115`)                    | Tracks whether `quality_average` is on the canonical 1–5 scale; gates the one-time 1–3→1–5 backfill (`0116`). Transitional — drop in follow-up. |
 
 ## OAuth handshake
 

@@ -806,6 +806,20 @@
       "when": 1780454395393,
       "tag": "0114_strange_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1780465936229,
+      "tag": "0115_add_quality_normalized",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1780465949650,
+      "tag": "0116_backfill_quality_scale_1to5",
+      "breakpoints": true
     }
   ]
 }

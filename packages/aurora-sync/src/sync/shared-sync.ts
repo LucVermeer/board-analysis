@@ -442,6 +442,9 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
         // is one scale the UI can render uniformly. quality_average is a stored
         // average (double), so keep it continuous rather than rounding.
         qualityAverage: normalizeQualityTo5(item.quality_average),
+        // We just normalised quality_average to 1-5, so the row is on the
+        // canonical scale — the one-time 1-3→1-5 backfill must skip it.
+        qualityNormalized: true,
         faUsername: item.fa_username,
         faAt: item.fa_at,
       };
@@ -464,6 +467,7 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
           ascensionistCount: sql`COALESCE(${climbStatsSchema.kilterAscensionistCount}, excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
+          qualityNormalized: sql`true`,
           faUsername: sql`excluded.fa_username`,
           faAt: sql`excluded.fa_at`,
         },

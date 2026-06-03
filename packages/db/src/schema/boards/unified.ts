@@ -567,6 +567,12 @@ export const boardClimbStats = pgTable(
     boardseshAscensionistCount: bigint('boardsesh_ascensionist_count', { mode: 'number' }),
     difficultyAverage: doublePrecision('difficulty_average'),
     qualityAverage: doublePrecision('quality_average'),
+    // True once quality_average is on the canonical 1-5 scale. Aurora reports
+    // quality on 1-3; Kilter Grips / MoonBoard / Boardsesh ticks are already
+    // 1-5. The 1-3→1-5 backfill (migration 0115/0116) and every write path set
+    // this so the one-time conversion never double-applies. Transitional: once
+    // every row is normalized this column can be dropped (follow-up).
+    qualityNormalized: boolean('quality_normalized').notNull().default(false),
     faUsername: text('fa_username'),
     faAt: timestamp('fa_at', { mode: 'string' }),
   },

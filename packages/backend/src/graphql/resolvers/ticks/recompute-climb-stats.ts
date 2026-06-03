@@ -126,6 +126,14 @@ export async function recomputeClimbStats(boardType: string, climbUuid: string, 
                  THEN agg.avg_quality
                ELSE s.quality_average
              END,
+             -- Boardsesh-owned climbs derive quality from boardsesh_ticks, which
+             -- are already on the 1-5 scale, so the row is normalized. For
+             -- Aurora-synced climbs leave the flag as-is (its own sync sets it).
+             quality_normalized = CASE
+               WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
+                 THEN TRUE
+               ELSE s.quality_normalized
+             END,
              difficulty_average = CASE
                WHEN COALESCE((SELECT boardsesh_owned FROM owner), FALSE)
                  THEN agg.avg_difficulty

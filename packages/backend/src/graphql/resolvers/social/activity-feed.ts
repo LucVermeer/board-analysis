@@ -218,10 +218,24 @@ export const activityFeedQueries = {
       .from(dbSchema.boardseshTicks)
       .innerJoin(dbSchema.users, eq(dbSchema.boardseshTicks.userId, dbSchema.users.id))
       .leftJoin(dbSchema.userProfiles, eq(dbSchema.boardseshTicks.userId, dbSchema.userProfiles.userId))
+      // Resolve dedup-merged climbs to their canonical UUID before joining
+      // board_climbs. A tick may point at an alias UUID that was deduplicated
+      // away (no board_climbs row); the alias table maps it to the canonical.
+      // Ticks already on a canonical have no alias row, so COALESCE falls back to
+      // the tick's own climb_uuid. The PK (board_type, alias_uuid) keeps the join
+      // to ≤1 row, so it never fans out. Otherwise these ticks render "Unknown
+      // Climb" in the trending feed.
+      .leftJoin(
+        dbSchema.boardClimbAliases,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
+        ),
+      )
       .leftJoin(
         dbSchema.boardClimbs,
         and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbs.uuid),
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
         ),
       )

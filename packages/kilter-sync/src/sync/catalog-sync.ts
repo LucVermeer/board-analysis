@@ -12,7 +12,12 @@ import {
 import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 
 import type { KilterTokenProvider } from '../api/token-provider';
-import { fetchLayoutClimbs, fetchLayoutClimbStats, fetchDeletedClimbUuids } from '../api/kilter-rest';
+import {
+  fetchLayoutClimbs,
+  fetchLayoutClimbStats,
+  fetchDeletedClimbUuids,
+  type KilterCatalogStat,
+} from '../api/kilter-rest';
 import { KilterApiError } from '../api/errors';
 import { pullKilterReference, type KilterReferencePull } from './reference-pull';
 import { buildLayoutResolver } from './layout-resolver';
@@ -109,7 +114,7 @@ type GroupResult = {
 // every source UUID that resolves to the canonical; the display fields are
 // taken only from the canonical climb's own stat row (Kilter wins for
 // Kilter-origin canonicals). Re-running recomputes the same sum → idempotent.
-type StatAccum = {
+export type StatAccum = {
   canonicalUuid: string;
   angle: number;
   kilterCount: number;
@@ -118,7 +123,69 @@ type StatAccum = {
   qualityAverage: number | null;
   faUsername: string | null;
   faAt: string | null;
+  // True once the canonical climb's OWN Grips stat row has set the display
+  // fields. Until then a fingerprint-merged duplicate's row may fill them, so a
+  // climb folded onto an aurora-origin canonical still contributes a grade.
+  hasOwnRowStats: boolean;
 };
+
+/**
+ * Fold one Grips (climb, angle) stat row into the per-(canonical, angle)
+ * accumulator. `kilterCount` sums ascents across every source UUID that
+ * resolves to the canonical. Display fields (grade/quality/FA) prefer the
+ * canonical's OWN Grips row (authoritative — overwrites); when the canonical
+ * has no own row (a purely aurora-origin canonical that a Grips climb merged
+ * onto by fingerprint) a merged duplicate fills the still-null fields so the
+ * climb still shows a grade instead of NULL. Re-running over the same stats
+ * recomputes the same totals → idempotent. Exported for unit testing.
+ */
+export function foldCatalogStat(
+  accumByKey: Map<string, StatAccum>,
+  stat: KilterCatalogStat,
+  canonicalUuid: string,
+): void {
+  const key = `${canonicalUuid}|${stat.angle}`;
+  let accum = accumByKey.get(key);
+  if (!accum) {
+    accum = {
+      canonicalUuid,
+      angle: stat.angle,
+      kilterCount: 0,
+      displayDifficulty: null,
+      difficultyAverage: null,
+      qualityAverage: null,
+      faUsername: null,
+      faAt: null,
+      hasOwnRowStats: false,
+    };
+    accumByKey.set(key, accum);
+  }
+  accum.kilterCount += stat.ascentCount;
+  // Grips quality is already on the 1-5 scale; only guard non-positive
+  // (unrated) → null so we never persist a literal 0 that sorts/averages as a
+  // real rating (do NOT run normalizeQualityTo5 here — that ×5/3 is for aurora's
+  // 1-3 source only).
+  const incomingQuality = stat.qualityAverage != null && stat.qualityAverage > 0 ? stat.qualityAverage : null;
+  const isCanonicalOwnRow = stat.climbUuid.toLowerCase() === canonicalUuid.toLowerCase();
+  if (isCanonicalOwnRow) {
+    // The canonical's own Grips row is authoritative — overwrite.
+    accum.displayDifficulty = stat.currentDifficultyId ?? stat.difficultyAverage;
+    accum.difficultyAverage = stat.difficultyAverage;
+    accum.qualityAverage = incomingQuality;
+    accum.faUsername = stat.faUsername;
+    accum.faAt = stat.faAt;
+    accum.hasOwnRowStats = true;
+  } else if (!accum.hasOwnRowStats) {
+    // Fingerprint-merged duplicate: fill only the fields the canonical hasn't
+    // supplied yet, so a climb folded onto an aurora-origin canonical (no own
+    // Grips row) still contributes a grade/quality instead of NULL.
+    if (accum.displayDifficulty == null) accum.displayDifficulty = stat.currentDifficultyId ?? stat.difficultyAverage;
+    if (accum.difficultyAverage == null) accum.difficultyAverage = stat.difficultyAverage;
+    if (accum.qualityAverage == null) accum.qualityAverage = incomingQuality;
+    if (accum.faUsername == null) accum.faUsername = stat.faUsername;
+    if (accum.faAt == null) accum.faAt = stat.faAt;
+  }
+}
 
 /**
  * Sync every Grips layout that maps to one board_layouts.id. Existing climbs
@@ -311,30 +378,7 @@ async function syncBoardLayoutGroup(
     for (const stat of stats) {
       const canonicalUuid = climbUuidToCanonical.get(stat.climbUuid.toLowerCase());
       if (!canonicalUuid) continue; // stat for a filtered/unknown climb
-      const key = `${canonicalUuid}|${stat.angle}`;
-      let accum = statsByCanonicalAngle.get(key);
-      if (!accum) {
-        accum = {
-          canonicalUuid,
-          angle: stat.angle,
-          kilterCount: 0,
-          displayDifficulty: null,
-          difficultyAverage: null,
-          qualityAverage: null,
-          faUsername: null,
-          faAt: null,
-        };
-        statsByCanonicalAngle.set(key, accum);
-      }
-      accum.kilterCount += stat.ascentCount;
-      // Display fields come from the canonical climb's OWN stat row.
-      if (stat.climbUuid.toLowerCase() === canonicalUuid.toLowerCase()) {
-        accum.displayDifficulty = stat.currentDifficultyId ?? stat.difficultyAverage;
-        accum.difficultyAverage = stat.difficultyAverage;
-        accum.qualityAverage = stat.qualityAverage;
-        accum.faUsername = stat.faUsername;
-        accum.faAt = stat.faAt;
-      }
+      foldCatalogStat(statsByCanonicalAngle, stat, canonicalUuid);
     }
   }
 
@@ -345,6 +389,8 @@ async function syncBoardLayoutGroup(
     displayDifficulty: accum.displayDifficulty,
     difficultyAverage: accum.difficultyAverage,
     qualityAverage: accum.qualityAverage,
+    // Grips quality is native 1-5, so the row is already on the canonical scale.
+    qualityNormalized: true,
     faUsername: accum.faUsername,
     faAt: accum.faAt,
     kilterAscensionistCount: accum.kilterCount,
@@ -369,6 +415,8 @@ async function syncBoardLayoutGroup(
             displayDifficulty: sql`COALESCE(excluded.display_difficulty, ${boardClimbStats.displayDifficulty})`,
             difficultyAverage: sql`COALESCE(excluded.difficulty_average, ${boardClimbStats.difficultyAverage})`,
             qualityAverage: sql`COALESCE(excluded.quality_average, ${boardClimbStats.qualityAverage})`,
+            // Grips quality is 1-5; whenever we write it, the row is normalized.
+            qualityNormalized: sql`true`,
             faUsername: sql`COALESCE(excluded.fa_username, ${boardClimbStats.faUsername})`,
             faAt: sql`COALESCE(excluded.fa_at, ${boardClimbStats.faAt})`,
           },

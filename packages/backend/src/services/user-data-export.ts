@@ -1,5 +1,6 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import {
+  boardClimbAliases,
   boardClimbs,
   boardDifficultyGrades,
   boardseshTicks,
@@ -203,9 +204,27 @@ export async function buildUserAuroraJsonExport(userId: string, boardType: Auror
         createdAt: boardseshTicks.createdAt,
       })
       .from(boardseshTicks)
-      .innerJoin(
+      // Resolve dedup-merged climbs to their canonical UUID before joining
+      // board_climbs. A tick may point at an alias UUID that was deduplicated
+      // away (no board_climbs row); the alias table maps it to the canonical.
+      // Ticks already on a canonical have no alias row, so COALESCE falls back
+      // to the tick's own climb_uuid. The PK (board_type, alias_uuid) keeps this
+      // join to ≤1 row, so it never fans out.
+      .leftJoin(
+        boardClimbAliases,
+        and(
+          eq(boardseshTicks.climbUuid, boardClimbAliases.aliasUuid),
+          eq(boardseshTicks.boardType, boardClimbAliases.boardType),
+        ),
+      )
+      // LEFT (not INNER): a data export must never silently drop a tick, even if
+      // its climb is somehow absent from board_climbs. climbName stays null then.
+      .leftJoin(
         boardClimbs,
-        and(eq(boardseshTicks.boardType, boardClimbs.boardType), eq(boardseshTicks.climbUuid, boardClimbs.uuid)),
+        and(
+          eq(boardseshTicks.boardType, boardClimbs.boardType),
+          sql`COALESCE(${boardClimbAliases.canonicalUuid}, ${boardseshTicks.climbUuid}) = ${boardClimbs.uuid}`,
+        ),
       )
       .leftJoin(
         boardDifficultyGrades,
