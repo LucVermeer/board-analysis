@@ -1,4 +1,6 @@
 {
+  "sends_one": "{{count}} enchaînement",
+  "sends_other": "{{count}} enchaînements",
   "metadata": {
     "list": {
       "title": "Blocs {{boardName}} à {{angle}}°",

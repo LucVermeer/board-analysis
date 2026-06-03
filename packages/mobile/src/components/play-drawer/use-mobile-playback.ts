@@ -30,6 +30,8 @@ export type UseMobilePlaybackOutput = {
   currentFrameString: string;
   isPlaying: boolean;
   speed: number;
+  /** Native per-frame pace (ms) — lets the UI glide a progress cue at the playback cadence. */
+  paceMs: number;
   play: () => void;
   pause: () => void;
   seek: (frameIndex: number) => void;
@@ -186,11 +188,12 @@ export function useMobilePlayback({
       currentFrameString: playback.currentFrameString,
       isPlaying: playback.isPlaying,
       speed: playback.speed,
+      paceMs,
       play,
       pause: playback.pause,
       seek: playback.seek,
       setSpeed: playback.setSpeed,
     }),
-    [playback, frameStrings.length, play],
+    [playback, frameStrings.length, paceMs, play],
   );
 }

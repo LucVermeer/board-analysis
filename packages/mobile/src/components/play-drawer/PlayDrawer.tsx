@@ -427,6 +427,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     frameCount={playback.frameCount}
                     isPlaying={playback.isPlaying}
                     speed={playback.speed}
+                    paceMs={playback.paceMs}
                     onPlay={playback.play}
                     onPause={playback.pause}
                     onSeek={playback.seek}

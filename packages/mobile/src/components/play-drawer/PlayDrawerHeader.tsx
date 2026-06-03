@@ -3,7 +3,6 @@ import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from '../Text';
-import { formatAscentCount } from '../../lib/format-ascent-count';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 
@@ -40,7 +39,7 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
 
   const subtitleParts: string[] = [];
   if (qualityDisplay) subtitleParts.push(`${qualityDisplay}★`);
-  subtitleParts.push(t('sends_other', { count: ascensionistCount }));
+  subtitleParts.push(t('sends', { count: ascensionistCount }));
   if (setterUsername) subtitleParts.push(setterUsername);
 
   return (
