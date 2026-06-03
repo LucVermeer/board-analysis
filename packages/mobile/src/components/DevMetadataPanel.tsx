@@ -31,7 +31,14 @@ export function DevMetadataPanel() {
     return null;
   }
 
-  const { branchName, qaNotes, qaNotesFilePath } = devMetadata;
+  // The injected metadata is *typed* string|null, but Expo's dev-client manifest
+  // serializes `null` extra values as `{}` — rendering that object as a Text
+  // child crashes the whole screen ("Objects are not valid as a React child").
+  // Coerce defensively: only keep genuine non-empty strings.
+  const asText = (value: unknown): string | null => (typeof value === 'string' && value.length > 0 ? value : null);
+  const branchName = asText(devMetadata.branchName);
+  const qaNotes = asText(devMetadata.qaNotes);
+  const qaNotesFilePath = asText(devMetadata.qaNotesFilePath);
 
   if (!branchName && !qaNotes) {
     return null;
