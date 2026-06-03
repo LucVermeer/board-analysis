@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
     setPersonProperties: vi.fn(),
   },
   vercelTrack: vi.fn(),
+  captureMessage: vi.fn(),
+}));
+
+vi.mock('@sentry/nextjs', () => ({
+  captureMessage: mocks.captureMessage,
 }));
 
 vi.mock('@vercel/analytics', () => ({
@@ -70,6 +75,38 @@ describe('analytics wrapper', () => {
       }),
     );
     expect(mocks.posthog.capture).toHaveBeenCalledWith('Climb Opened', { kept: 'yes', count: 2 });
+  });
+
+  it('fails loud once when the PostHog key is missing on a production host', async () => {
+    vi.stubEnv('NEXT_PUBLIC_POSTHOG_KEY', '');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { track } = await import('../analytics');
+
+    track('Climb Opened');
+    track('Climb Opened');
+
+    // PostHog never initializes, but Vercel analytics is unaffected by the key.
+    expect(mocks.PostHog).not.toHaveBeenCalled();
+    expect(mocks.posthog.capture).not.toHaveBeenCalled();
+    expect(mocks.vercelTrack).toHaveBeenCalledTimes(2);
+
+    // The missing-key alert is emitted exactly once per page load.
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(mocks.captureMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.captureMessage).toHaveBeenCalledWith(expect.stringContaining('NEXT_PUBLIC_POSTHOG_KEY'), 'error');
+
+    consoleError.mockRestore();
+  });
+
+  it('does not warn about a missing key outside production hosts', async () => {
+    vi.stubEnv('NEXT_PUBLIC_POSTHOG_KEY', '');
+    setWindowLocation('https://boardsesh-preview.vercel.app/b/kilter');
+    const { track } = await import('../analytics');
+
+    track('Preview Event');
+
+    expect(mocks.captureMessage).not.toHaveBeenCalled();
+    expect(mocks.PostHog).not.toHaveBeenCalled();
   });
 
   it('keeps Vercel tracking in previews while PostHog remains production-gated', async () => {
