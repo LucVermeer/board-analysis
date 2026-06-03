@@ -49,7 +49,12 @@ export default function ClimbList() {
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
   const { openClimbActions } = useDrawerHost();
-  const { addToQueue } = useQueue();
+  const { addToQueue, state: queueState } = useQueue();
+  // The active climb (driving the board / persistent queue bar). We highlight
+  // its row so the search → tap → change-active loop is always visible.
+  // Computed once here, not per-row, so a queue change only re-renders the
+  // two affected rows (ClimbListRow is memoized), never the whole list.
+  const activeClimbUuid = queueState.currentClimbQueueItem?.climb?.uuid;
   const { getLogbook } = useBoardProvider();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
   const insets = useSafeAreaInsets();
@@ -337,11 +342,11 @@ export default function ClimbList() {
         angle={angle}
         onPress={handleClimbPress}
         onOpenActions={openClimbActions}
-        onOpenPlaylist={openClimbActions}
         onAddToQueue={handleAddToQueue}
+        selected={climb.uuid === activeClimbUuid}
       />
     ),
-    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress, openClimbActions, handleAddToQueue],
+    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress, openClimbActions, handleAddToQueue, activeClimbUuid],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {

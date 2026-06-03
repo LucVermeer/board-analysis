@@ -13,6 +13,14 @@ type LayeredClimbImageProps = {
    */
   missingBackgroundCount?: number;
   mirrored?: boolean;
+  /**
+   * Darken the board photo (a scrim drawn between the background images and
+   * the holds overlay) so the unlit physical holds recede and the lit
+   * overlay pops. The list thumbnail sets this at small sizes; the
+   * full-size play view leaves it off so the real board photo stays bright.
+   * View-layer only — not baked into the cached PNG, so no cache-key impact.
+   */
+  dimBackground?: boolean;
   recyclingKey?: string;
 };
 
@@ -33,6 +41,7 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
   backgroundPaths,
   missingBackgroundCount = 0,
   mirrored,
+  dimBackground,
   recyclingKey,
 }: LayeredClimbImageProps) {
   return (
@@ -59,6 +68,9 @@ const LayeredClimbImage = React.memo(function LayeredClimbImage({
             accessibilityLabel="Missing background layer"
           />
         ))}
+      {/* Scrim sits above the board photo, below the holds overlay, so the
+          lit climb reads against a quieted board at thumbnail size. */}
+      {dimBackground && <View style={[styles.layer, styles.dim]} pointerEvents="none" />}
       {overlayUri && (
         <Image
           source={{ uri: overlayUri }}
@@ -96,6 +108,11 @@ const styles = StyleSheet.create({
   // rule is that broken renders must be visible-broken.
   missingLayer: {
     backgroundColor: 'rgba(120, 120, 128, 0.18)',
+  },
+  // Subtle list-only board scrim. Tunable: drop dimBackground if the filled
+  // hold style already separates the climb on a given board / in light mode.
+  dim: {
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
   mirrored: {
     transform: [{ scaleX: -1 }],

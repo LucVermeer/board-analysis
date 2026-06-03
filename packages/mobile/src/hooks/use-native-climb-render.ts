@@ -37,6 +37,15 @@ type NativeClimbRenderParams = {
   layoutId: number;
   sizeId: number;
   setIds: string;
+  /**
+   * Use the filled hold style (0.3-opacity fill + thicker stroke + larger
+   * markers) instead of the default stroke-only "full" style. The list
+   * thumbnail passes true so lit holds read as solid dots once scaled to
+   * ~76px; the full-size play view leaves it false (thin strokes stay
+   * legible when large). Threaded into the cache key so the two styles
+   * cache as separate PNGs.
+   */
+  filledStyle?: boolean;
 };
 
 type NativeClimbRenderResult = {
@@ -239,10 +248,17 @@ export function buildCacheKey(
   sizeId: number,
   setIds: string,
   frames: string,
+  filledStyle = false,
 ): string {
   const framesHash = fnv1aHex(frames);
   const canonicalSetIds = canonicalizeSetIds(setIds);
-  return `v${RENDERER_VERSION}_${boardName}_${layoutId}_${sizeId}_${canonicalSetIds}_${framesHash}`;
+  // Style token sits right after the version prefix so the warm-up scan
+  // (which matches on `v${RENDERER_VERSION}_`) still loads both styles and
+  // still deletes genuinely-stale prior-version files. 'f' = filled (list
+  // thumbnail), 's' = stroke-only (full play view). Without this token the
+  // two styles would collide on one PNG and whichever rendered first wins.
+  const style = filledStyle ? 'f' : 's';
+  return `v${RENDERER_VERSION}_${style}_${boardName}_${layoutId}_${sizeId}_${canonicalSetIds}_${framesHash}`;
 }
 
 /**
@@ -258,8 +274,8 @@ export function buildBoardKey(boardName: string, layoutId: number, sizeId: numbe
   return `${boardName}-${layoutId}-${sizeId}-${setIds}`;
 }
 
-function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, setIds: string) {
-  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}`;
+function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, setIds: string, filledStyle: boolean) {
+  const configKey = `${boardName}-${layoutId}-${sizeId}-${setIds}-${filledStyle ? 'f' : 's'}`;
   const cached = boardConfigCache.get(configKey);
   if (cached) return cached;
 
@@ -286,7 +302,7 @@ function getBoardConfig(boardName: BoardName, layoutId: number, sizeId: number, 
     board_width: renderData.boardWidth,
     board_height: renderData.boardHeight,
     output_width: renderData.boardWidth,
-    thumbnail: false,
+    thumbnail: filledStyle,
     holds: renderData.holdsData.map((hold) => ({
       id: hold.id,
       mirroredHoldId: hold.mirroredHoldId,
@@ -366,13 +382,13 @@ function getNativeModule() {
  * and the component shows backgrounds alone.
  */
 export function useNativeClimbRender(params: NativeClimbRenderParams): NativeClimbRenderResult {
-  const { frames, boardName, layoutId, sizeId, setIds } = params;
+  const { frames, boardName, layoutId, sizeId, setIds, filledStyle = false } = params;
 
   // Run the disk-cache scan once per JS context. Safe to call on every
   // render — the function self-guards via `warmupRun`.
   warmupRenderedOverlaysOnce();
 
-  const currentCacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames);
+  const currentCacheKey = buildCacheKey(boardName, layoutId, sizeId, setIds, frames, filledStyle);
   const currentBoardKey = buildBoardKey(boardName, layoutId, sizeId, setIds);
 
   // Seed both pieces of state synchronously so the first paint already
@@ -507,7 +523,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     const nativeModule = getNativeModule();
     if (!nativeModule) return;
 
-    const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds);
+    const boardConfig = getBoardConfig(boardName, layoutId, sizeId, setIds, filledStyle);
     if (!boardConfig) return;
 
     const renderPromise = getOrStartInflightRender(currentCacheKey, () => {
@@ -537,7 +553,7 @@ export function useNativeClimbRender(params: NativeClimbRenderParams): NativeCli
     // nativeRender is intentionally excluded from deps: this effect *sets* it,
     // and the only meaningful re-trigger is a cacheKey change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCacheKey, frames, boardName, layoutId, sizeId, setIds]);
+  }, [currentCacheKey, frames, boardName, layoutId, sizeId, setIds, filledStyle]);
 
   // Only surface the native URI if it matches the *current* cache key —
   // a stale render (from before a prop change) would otherwise show.
