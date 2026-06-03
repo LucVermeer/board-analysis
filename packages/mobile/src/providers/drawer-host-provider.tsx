@@ -223,6 +223,11 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     setQueueSheetVisible(false);
     setQueueSheetMounted(false);
   }, []);
+  // Snackbar "Open": dismiss the snackbar, then open the queue sheet.
+  const handleSnackbarOpen = useCallback(() => {
+    dismissSnackbar();
+    openQueueSheet();
+  }, [dismissSnackbar, openQueueSheet]);
 
   // The queue sheet renders climbs against the active board (thumbnails + tick).
   const queueBoard = useMemo<QueueItemRowBoard | null>(() => {
@@ -362,10 +367,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         visible={snackbarVisible}
         nonce={snackbarNonce}
         onDismiss={dismissSnackbar}
-        onOpen={() => {
-          dismissSnackbar();
-          openQueueSheet();
-        }}
+        onOpen={handleSnackbarOpen}
       />
     </DrawerHostContext.Provider>
   );

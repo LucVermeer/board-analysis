@@ -194,8 +194,9 @@ export function useSearchClimbs(
     queryFn: () => getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input }),
     select: (data) => data.searchClimbs,
     enabled,
-    ...(options?.staleTime !== undefined ? { staleTime: options.staleTime } : {}),
-    ...(options?.gcTime !== undefined ? { gcTime: options.gcTime } : {}),
+    // undefined → React Query's defaults.
+    staleTime: options?.staleTime,
+    gcTime: options?.gcTime,
   });
 }
 

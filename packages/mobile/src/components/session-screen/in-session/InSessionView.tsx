@@ -7,6 +7,7 @@ import type { ClimbQueueItem } from '@boardsesh/queue';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { Text } from '../../Text';
 import { Button } from '../../Button';
+import { ActivityIndicator } from '../../ActivityIndicator';
 import { QueueItemRow, type QueueItemRowBoard } from '../../QueueItemRow';
 import { EndSessionSheet } from '../../EndSessionSheet';
 import { useTheme } from '../../../providers/theme-provider';
@@ -85,11 +86,17 @@ export function InSessionView() {
           <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.sectionLabel}>
             {t('mobile.session.inQueueTitle')}
           </Text>
-          {queue.length === 0 || !board ? (
+          {queue.length === 0 ? (
             <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
               <Text variant="body" color={systemColors.secondaryLabel}>
                 {t('mobile.session.inQueueEmpty')}
               </Text>
+            </View>
+          ) : !board ? (
+            // Items exist but the active board (for thumbnails) is still
+            // resolving — show a spinner rather than a misleading empty state.
+            <View style={[styles.emptyCard, { backgroundColor: systemColors.secondaryBackground }]}>
+              <ActivityIndicator />
             </View>
           ) : (
             queue.map((item, index) => (
