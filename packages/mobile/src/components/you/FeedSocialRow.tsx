@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
-import { useVote } from '../../lib/graphql/hooks';
+import { useOptimisticVote } from './use-optimistic-vote';
 import { hapticLight } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
@@ -21,30 +20,12 @@ type FeedSocialRowProps = {
 /** Vote + comment row for a session feed card. */
 export function FeedSocialRow({ sessionId, upvotes, userVote, commentCount, onOpenComments }: FeedSocialRowProps) {
   const { systemColors } = useTheme();
-  const vote = useVote();
-
-  // Optimistic override layered over the server values. Null = show server
-  // state. Reset whenever the row is recycled onto a different session
-  // (FlashList reuses component instances), so one card's vote can't bleed
-  // onto another.
-  const [optimistic, setOptimistic] = useState<{ count: number; voted: boolean } | null>(null);
-  useEffect(() => setOptimistic(null), [sessionId]);
-
-  const voted = optimistic ? optimistic.voted : userVote === 1;
-  const count = optimistic ? optimistic.count : upvotes;
+  const { voted, count, toggle, isPending } = useOptimisticVote(sessionId, upvotes, userVote);
 
   const handleVote = () => {
-    if (vote.isPending) return; // guard double-tap
+    if (isPending) return; // guard double-tap (toggle no-ops too)
     hapticLight();
-    const nextVoted = !voted;
-    setOptimistic({ count: count + (nextVoted ? 1 : -1), voted: nextVoted });
-    vote.mutate(
-      { entityType: 'session', entityId: sessionId, value: nextVoted ? 1 : 0 },
-      {
-        onSuccess: (summary) => setOptimistic({ count: summary.upvotes, voted: summary.userVote === 1 }),
-        onError: () => setOptimistic(null),
-      },
-    );
+    toggle();
   };
 
   return (
@@ -52,7 +33,7 @@ export function FeedSocialRow({ sessionId, upvotes, userVote, commentCount, onOp
       <Pressable
         style={styles.button}
         onPress={handleVote}
-        disabled={vote.isPending}
+        disabled={isPending}
         accessibilityRole="button"
         accessibilityState={{ selected: voted }}
         hitSlop={6}

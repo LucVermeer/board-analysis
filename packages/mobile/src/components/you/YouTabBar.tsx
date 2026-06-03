@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
-import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { Text } from '../Text';
 import { hapticSelection } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
@@ -23,14 +22,18 @@ type YouTabBarProps<K extends string> = {
  */
 export function YouTabBar<K extends string>({ tabs, activeIndex, scrollPosition, onTabPress }: YouTabBarProps<K>) {
   const { systemColors } = useTheme();
-  const [width, setWidth] = useState(0);
-  const tabWidth = width > 0 ? width / tabs.length : 0;
+  // Tab width lives on the UI thread so the indicator worklet always reads the
+  // live value. A JS-thread useState captured in the worklet would go stale
+  // after a resize / orientation change — the worklet wouldn't see the new width.
+  const tabWidth = useSharedValue(0);
 
-  const onLayout = (event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width);
+  const onLayout = (event: LayoutChangeEvent) => {
+    tabWidth.value = event.nativeEvent.layout.width / tabs.length;
+  };
 
   const indicatorStyle = useAnimatedStyle(() => ({
-    width: tabWidth,
-    transform: [{ translateX: scrollPosition.value * tabWidth }],
+    width: tabWidth.value,
+    transform: [{ translateX: scrollPosition.value * tabWidth.value }],
   }));
 
   return (
@@ -66,7 +69,7 @@ export function YouTabBar<K extends string>({ tabs, activeIndex, scrollPosition,
           </Pressable>
         );
       })}
-      {tabWidth > 0 && <Animated.View style={[styles.indicator, indicatorStyle]} />}
+      <Animated.View style={[styles.indicator, indicatorStyle]} />
     </View>
   );
 }

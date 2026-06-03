@@ -68,7 +68,6 @@ export function StatsSummaryCard({ statisticsSummary, hardestSend, hardestFlash,
 }
 
 function GradeTile({ highlight, label, icon }: { highlight: RawGradeHighlight; label: string; icon: IconName }) {
-  const { systemColors } = useTheme();
   const background = gradeBadgeColor(highlight.label);
   const textColor = getGradeTextColor(background);
   return (
@@ -79,7 +78,9 @@ function GradeTile({ highlight, label, icon }: { highlight: RawGradeHighlight; l
           {highlight.label}
         </Text>
       </View>
-      <Text variant="caption1" color={systemColors.secondaryLabel}>
+      {/* Match the grade/icon's contrast-aware colour; secondaryLabel is a grey
+          that washes out on saturated grade tiles. Dim slightly for hierarchy. */}
+      <Text variant="caption1" color={textColor} style={styles.gradeTileLabel}>
         {label}
       </Text>
     </View>
@@ -106,6 +107,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[1],
+  },
+  gradeTileLabel: {
+    opacity: 0.85,
   },
   percentile: {
     marginTop: spacing[5],

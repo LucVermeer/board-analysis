@@ -35,6 +35,12 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
   const { showToast } = useToast();
   const updateTick = useUpdateTick();
   const deleteTick = useDeleteTick();
+  // Save and delete hit the same tick UUID — never let one fire while the other
+  // is in flight, or a concurrent edit+delete can corrupt the row. Both controls
+  // disable (and both handlers bail) whenever either mutation is pending. The
+  // delete also goes through a modal Alert, which blocks the save button behind
+  // it, so this closes the window completely.
+  const isMutating = updateTick.isPending || deleteTick.isPending;
   const gradesQuery = useGrades(ascent?.boardType ?? '', !!ascent);
   const grades = gradesQuery.data ?? [];
 
@@ -64,7 +70,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
   );
 
   const save = () => {
-    if (!ascent) return;
+    if (!ascent || isMutating) return;
     updateTick.mutate(
       {
         uuid: ascent.uuid,
@@ -84,7 +90,7 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
   };
 
   const confirmDelete = () => {
-    if (!ascent) return;
+    if (!ascent || isMutating) return;
     Alert.alert(t('mobile.logbook.deleteTitle'), t('mobile.logbook.deleteConfirm'), [
       { text: t('mobile.cancel'), style: 'cancel' },
       {
@@ -113,7 +119,9 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustResize"
-      footer={<Button title={t('mobile.logbook.save')} onPress={save} loading={updateTick.isPending} />}
+      footer={
+        <Button title={t('mobile.logbook.save')} onPress={save} loading={updateTick.isPending} disabled={isMutating} />
+      }
     >
       <Text variant="title3" numberOfLines={1} style={styles.title}>
         {ascent?.climbName ?? t('mobile.logbook.editTitle')}
@@ -184,7 +192,12 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
         />
       </View>
 
-      <Pressable onPress={confirmDelete} style={styles.deleteRow} accessibilityRole="button">
+      <Pressable
+        onPress={confirmDelete}
+        disabled={isMutating}
+        style={[styles.deleteRow, isMutating && styles.deleteRowDisabled]}
+        accessibilityRole="button"
+      >
         <Icon name="delete" size={18} color={brandColors.error} />
         <Text variant="body" color={brandColors.error}>
           {t('mobile.logbook.delete')}
@@ -224,5 +237,8 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     marginTop: spacing[6],
     paddingVertical: spacing[3],
+  },
+  deleteRowDisabled: {
+    opacity: 0.4,
   },
 });

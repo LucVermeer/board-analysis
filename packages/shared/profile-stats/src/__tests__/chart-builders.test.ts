@@ -400,4 +400,49 @@ describe('buildVPointsTimeline', () => {
     expect(result.series[0].data[0]).toBe(7); // 6 skipped weeks as base
     expect(result.series[0].data[103]).toBe(110);
   });
+
+  it('handles a single mid-week tick (one week, one cumulative point)', () => {
+    const wednesday = dayjs('2024-06-05'); // mid-week, not a range boundary
+    const result = buildVPointsTimeline(
+      {
+        kilter: [
+          makeEntry({
+            status: 'send',
+            difficulty: 13, // V1 → 1 point
+            climbed_at: wednesday.toISOString(),
+            layoutId: 1,
+            boardType: 'kilter',
+          }),
+        ],
+      },
+      'all',
+    )!;
+    expect(result).not.toBeNull();
+    expect(result.weekLabels).toHaveLength(1);
+    expect(result.series).toHaveLength(1);
+    expect(result.series[0].data).toEqual([1]);
+    expect(result.totalPoints).toBe(1);
+  });
+
+  it('keeps the week for a tick logged on a Sunday (iso-week boundary)', () => {
+    // Sunday is the last day of the iso week; the week-range loop must still
+    // emit exactly one week, not zero (which would null out the whole chart).
+    const sunday = dayjs('2024-06-09');
+    const result = buildVPointsTimeline(
+      {
+        kilter: [
+          makeEntry({
+            status: 'send',
+            difficulty: 13,
+            climbed_at: sunday.toISOString(),
+            layoutId: 1,
+            boardType: 'kilter',
+          }),
+        ],
+      },
+      'all',
+    )!;
+    expect(result.weekLabels).toHaveLength(1);
+    expect(result.series[0].data).toEqual([1]);
+  });
 });
