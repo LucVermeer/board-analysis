@@ -15,9 +15,9 @@ export type ChartLegendItem = { color: string; label: string };
 
 // Keep only ~MAX_X_LABELS evenly-spaced labels; blank the rest so a dense
 // 52-week axis stays legible.
-function downsampleLabel(index: number, total: number, label: string): string {
-  if (total <= MAX_X_LABELS) return label;
-  const step = Math.ceil(total / MAX_X_LABELS);
+function downsampleLabel(index: number, total: number, label: string, max: number = MAX_X_LABELS): string {
+  if (total <= max) return label;
+  const step = Math.ceil(total / max);
   return index % step === 0 ? label : '';
 }
 
@@ -89,10 +89,23 @@ type StackedBarsProps = {
   loading?: boolean;
   emptyLabel?: string;
   legend?: ChartLegendItem[];
+  /**
+   * Max x-axis labels to keep before downsampling blanks the rest (default 12).
+   * Lower it for long labels (weekly "W23 '24") that would overlap horizontally.
+   */
+  maxXLabels?: number;
 };
 
 /** Stacked bars (weekly activity, grade distribution). */
-export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLabel, legend }: StackedBarsProps) {
+export function StackedBarChart({
+  bars,
+  colorBy,
+  height = 170,
+  loading,
+  emptyLabel,
+  legend,
+  maxXLabels,
+}: StackedBarsProps) {
   const { systemColors } = useTheme();
   const isEmpty = !bars || bars.length === 0;
 
@@ -120,10 +133,10 @@ export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLab
         }));
         return {
           stacks: rounded,
-          label: downsampleLabel(index, bars!.length, bar.label),
+          label: downsampleLabel(index, bars!.length, bar.label, maxXLabels),
         };
       }),
-    [bars, colorBy],
+    [bars, colorBy, maxXLabels],
   );
 
   return (
@@ -146,8 +159,7 @@ export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLab
               yAxisThickness={0}
               xAxisThickness={StyleSheet.hairlineWidth}
               xAxisColor={systemColors.separator as string}
-              rotateLabel
-              xAxisLabelTextStyle={{ color: systemColors.tertiaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
+              xAxisLabelTextStyle={{ color: systemColors.secondaryLabel as string, fontSize: AXIS_LABEL_SIZE }}
               isAnimated={false}
               disableScroll
             />

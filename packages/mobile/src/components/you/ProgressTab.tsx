@@ -79,7 +79,9 @@ export function ProgressTab({ data }: { data: YouData }) {
 
           <SectionHeader title={t('stats.activity')} />
           <Card style={styles.chartCard}>
-            <StackedBarChart bars={data.weeklyBars} colorBy="grade" emptyLabel={noAscentData} />
+            {/* Weekly labels ("W23 '24") are wide, so cap to ~6 evenly-spaced
+                markers — horizontal labels stay readable instead of colliding. */}
+            <StackedBarChart bars={data.weeklyBars} colorBy="grade" emptyLabel={noAscentData} maxXLabels={6} />
           </Card>
 
           <SectionHeader title={t('stats.gradeDistribution')} />
