@@ -49,7 +49,7 @@ import { getStoredActiveBoard } from '../lib/active-board-store';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
 import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
-import { climbToQueueItem } from '../lib/climb-to-queue-item';
+import { climbToQueueItem, toClimbInput } from '../lib/climb-to-queue-item';
 import { useToast } from './toast-provider';
 import { useQueueSnackbar } from './queue-snackbar-provider';
 
@@ -333,7 +333,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const mutations = useQueueMutations<ClimbQueueItem>({
     getClient: () => getWsClient(),
     getSessionId: () => sessionIdRef.current,
-    toQueueItemInput: (item) => ({ uuid: item.uuid, climb: item.climb }),
+    // Strip the climb to ClimbInput fields — sending the raw search climb (with
+    // created_at) makes the server reject the mutation and silently breaks queue
+    // sync to peers. See toClimbInput.
+    toQueueItemInput: (item) => ({ uuid: item.uuid, climb: toClimbInput(item.climb) }),
     ensureReady: async (capturedSessionId) => {
       const sessionId = capturedSessionId ?? (await ensureSessionRef.current());
       if (!sessionId) return null;

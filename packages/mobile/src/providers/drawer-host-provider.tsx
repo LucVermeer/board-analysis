@@ -312,7 +312,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   return (
     <DrawerHostContext.Provider value={value}>
       {children}
-      {activeBoardConfig ? <PlayDrawer ref={playDrawerRef} boardConfig={activeBoardConfig} /> : null}
+      {activeBoardConfig ? (
+        <PlayDrawer ref={playDrawerRef} boardConfig={activeBoardConfig} onOpenQueue={openQueueSheet} />
+      ) : null}
       {logAscentInput ? (
         <LogAscentSheet
           visible
