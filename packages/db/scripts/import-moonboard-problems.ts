@@ -210,7 +210,10 @@ async function importMoonBoardProblems() {
           benchmarkDifficulty: problem.isBenchmark ? difficultyId : null,
           ascensionistCount: problem.repeats,
           difficultyAverage: difficultyId,
+          // MoonBoard userRating is already on the 1-5 scale — mark normalized
+          // so the 1-3→1-5 backfill (0116) and future runs leave it untouched.
           qualityAverage: problem.userRating,
+          qualityNormalized: true,
           faUsername: null,
           faAt: null,
         });
@@ -257,6 +260,7 @@ async function importMoonBoardProblems() {
               ascensionistCount: sql`excluded.ascensionist_count`,
               difficultyAverage: sql`excluded.difficulty_average`,
               qualityAverage: sql`excluded.quality_average`,
+              qualityNormalized: sql`true`,
             },
           });
         if ((i + BATCH_SIZE) % 5000 === 0 || i + BATCH_SIZE >= statsRecords.length) {

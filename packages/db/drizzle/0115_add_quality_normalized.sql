@@ -1,0 +1,1 @@
+ALTER TABLE "board_climb_stats" ADD COLUMN "quality_normalized" boolean DEFAULT false NOT NULL;

@@ -29,6 +29,7 @@ import {
   boardUsers,
   boardWalls,
 } from '../src/schema/boards/unified.js';
+import { normalizeQualityTo5 } from '@boardsesh/shared-schema';
 import { createScriptDb, getScriptDatabaseUrl } from './db-connection.js';
 import {
   dedupeSourceClimbHolds,
@@ -422,7 +423,11 @@ function createImportConfigs(): ImportConfig[] {
         benchmarkDifficulty: toNullableNumber(row.benchmark_difficulty),
         ascensionistCount: toNullableNumber(row.ascensionist_count),
         difficultyAverage: toNullableNumber(row.difficulty_average),
-        qualityAverage: toNullableNumber(row.quality_average),
+        // Aurora quality is 1-3; normalise to the canonical 1-5 on import and
+        // mark normalized so the 0116 backfill never double-scales these rows.
+        // DIRECT_AURORA_BOARDS (decoy/touchstone/grasshopper/soill) are all 1-3.
+        qualityAverage: normalizeQualityTo5(toNullableNumber(row.quality_average)),
+        qualityNormalized: true,
         faUsername: toNullableText(row.fa_username),
         faAt: toNullableText(row.fa_at),
       }),

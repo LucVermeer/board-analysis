@@ -23,6 +23,7 @@ import type {
   SyncPutFields,
 } from '../api/sync-api-types';
 import { UNIFIED_TABLES } from '../db/table-select';
+import { normalizeQualityTo5 } from '@boardsesh/shared-schema';
 import { convertLitUpHoldsStringToMap } from '@boardsesh/board-constants/hold-states';
 import { populateDenormalizedColumns } from '@boardsesh/db/queries';
 import { setterFollows, notifications, userBoardMappings, userFollows } from '@boardsesh/db/schema';
@@ -436,7 +437,14 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
         ascensionistCount: auroraCount,
         auroraAscensionistCount: auroraCount,
         difficultyAverage: Number(item.difficulty_average),
-        qualityAverage: Number(item.quality_average),
+        // Aurora reports quality on a 1–3 scale; Kilter Grips and MoonBoard use
+        // 1–5. Normalise every board to 1–5 (×5/3) so board_climb_stats.quality_average
+        // is one scale the UI can render uniformly. quality_average is a stored
+        // average (double), so keep it continuous rather than rounding.
+        qualityAverage: normalizeQualityTo5(item.quality_average),
+        // We just normalised quality_average to 1-5, so the row is on the
+        // canonical scale — the one-time 1-3→1-5 backfill must skip it.
+        qualityNormalized: true,
         faUsername: item.fa_username,
         faAt: item.fa_at,
       };
@@ -451,9 +459,15 @@ async function upsertClimbStats(db: DrizzleDb, board: AuroraBoardName, data: Cli
           displayDifficulty: sql`excluded.display_difficulty`,
           benchmarkDifficulty: sql`excluded.benchmark_difficulty`,
           auroraAscensionistCount: sql`excluded.aurora_ascensionist_count`,
-          ascensionistCount: sql`COALESCE(excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.kilterAscensionistCount}, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
+          // aurora_ and kilter_ are the SAME ascents for the Kilter board (two
+          // backends across the Aurora→Kilter Grips split), so they are NOT
+          // summed — Kilter (the live source) wins, aurora is the fallback.
+          // For Aurora-only boards (Tension etc.) kilter_ is NULL so this
+          // collapses to aurora_ — behaviour unchanged. See kilter-sync.md.
+          ascensionistCount: sql`COALESCE(${climbStatsSchema.kilterAscensionistCount}, excluded.aurora_ascensionist_count, 0) + COALESCE(${climbStatsSchema.boardseshAscensionistCount}, 0)`,
           difficultyAverage: sql`excluded.difficulty_average`,
           qualityAverage: sql`excluded.quality_average`,
+          qualityNormalized: sql`true`,
           faUsername: sql`excluded.fa_username`,
           faAt: sql`excluded.fa_at`,
         },

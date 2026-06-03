@@ -292,4 +292,53 @@ export const schemaSQL = `
     "health_kit_workout_id" text,
     "created_at" timestamp DEFAULT now() NOT NULL
   );
+
+  -- user-data-export resolver joins these (playlists/favorites). Minimal DDL
+  -- covering only the columns the export queries read.
+  DROP TABLE IF EXISTS "playlist_climbs" CASCADE;
+  DROP TABLE IF EXISTS "playlist_ownership" CASCADE;
+  DROP TABLE IF EXISTS "playlists" CASCADE;
+  DROP TABLE IF EXISTS "user_favorites" CASCADE;
+
+  CREATE TABLE IF NOT EXISTS "playlists" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "uuid" text NOT NULL,
+    "board_type" text NOT NULL,
+    "layout_id" integer,
+    "name" text NOT NULL,
+    "description" text,
+    "is_public" boolean DEFAULT false NOT NULL,
+    "color" text,
+    "icon" text,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS "playlist_ownership" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "playlist_id" bigint NOT NULL REFERENCES "playlists"("id") ON DELETE CASCADE,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "role" text DEFAULT 'owner' NOT NULL,
+    "created_at" timestamp DEFAULT now() NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS "playlist_climbs" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "playlist_id" bigint NOT NULL REFERENCES "playlists"("id") ON DELETE CASCADE,
+    "climb_uuid" text NOT NULL,
+    "angle" integer,
+    "position" integer DEFAULT 0 NOT NULL,
+    "added_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS "user_favorites" (
+    "id" bigserial PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "board_name" text NOT NULL,
+    "climb_uuid" text NOT NULL,
+    "angle" integer NOT NULL DEFAULT 40,
+    "created_at" timestamp DEFAULT now() NOT NULL,
+    "updated_at" timestamp DEFAULT now() NOT NULL
+  );
 `;

@@ -1,8 +1,8 @@
 import { dbz } from '@/app/lib/db/db';
 import type { ClimbUuid } from '../types';
 import type { LogbookEntry, AuroraBoardName } from '../api-wrappers/aurora/types';
-import { boardseshTicks } from '@/app/lib/db/schema';
-import { eq, and, inArray, desc } from 'drizzle-orm';
+import { boardseshTicks, boardClimbAliases } from '@/app/lib/db/schema';
+import { eq, and, inArray, desc, sql } from 'drizzle-orm';
 
 /**
  * Get logbook entries for a user from boardsesh_ticks.
@@ -21,14 +21,30 @@ export async function getLogbook(
     baseConditions.push(inArray(boardseshTicks.climbUuid, climbUuids));
   }
 
+  // Resolve dedup-merged climbs: a tick's climb_uuid may be an alias UUID that
+  // was deduplicated away (no row in board_climbs). Map it to the canonical via
+  // board_climb_aliases so downstream consumers (which key on climb_uuid) find
+  // the real climb instead of rendering "Unknown Climb". Ticks already pointing
+  // at a canonical have a self-alias or no alias row, so COALESCE falls back to
+  // the tick's own climb_uuid — backwards-compatible with the old direct read.
   const results = await dbz
-    .select()
+    .select({
+      tick: boardseshTicks,
+      canonicalClimbUuid: sql<string>`COALESCE(${boardClimbAliases.canonicalUuid}, ${boardseshTicks.climbUuid})`,
+    })
     .from(boardseshTicks)
+    .leftJoin(
+      boardClimbAliases,
+      and(
+        eq(boardseshTicks.climbUuid, boardClimbAliases.aliasUuid),
+        eq(boardseshTicks.boardType, boardClimbAliases.boardType),
+      ),
+    )
     .where(and(...baseConditions))
     .orderBy(desc(boardseshTicks.climbedAt));
 
   // Transform boardsesh_ticks to LogbookEntry format
-  return results.map((tick) => {
+  return results.map(({ tick, canonicalClimbUuid }) => {
     let attemptId: number;
     if (tick.status === 'flash') {
       attemptId = 1;
@@ -40,7 +56,7 @@ export async function getLogbook(
     return {
       uuid: tick.uuid,
       wall_uuid: null,
-      climb_uuid: tick.climbUuid,
+      climb_uuid: canonicalClimbUuid,
       angle: tick.angle,
       is_mirror: tick.isMirror ?? false,
       user_id: 0, // Placeholder - we use NextAuth userId now, not Aurora user_id

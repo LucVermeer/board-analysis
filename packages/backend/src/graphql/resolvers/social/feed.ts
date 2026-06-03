@@ -1,4 +1,4 @@
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
 import { db } from '../../../db/client';
 import * as dbSchema from '@boardsesh/db/schema';
@@ -62,10 +62,22 @@ export const socialFeedQueries = {
       .from(dbSchema.boardseshTicks)
       .innerJoin(dbSchema.users, eq(dbSchema.boardseshTicks.userId, dbSchema.users.id))
       .leftJoin(dbSchema.userProfiles, eq(dbSchema.boardseshTicks.userId, dbSchema.userProfiles.userId))
+      // Resolve dedup-merged climbs to their canonical UUID before joining
+      // board_climbs / board_climb_stats. A tick may point at an alias UUID that
+      // was deduplicated away (no board_climbs row); the alias table maps it to
+      // the canonical. Ticks already on a canonical have a self-alias or no alias
+      // row, so COALESCE falls back to the tick's own climb_uuid.
+      .leftJoin(
+        dbSchema.boardClimbAliases,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
+        ),
+      )
       .leftJoin(
         dbSchema.boardClimbs,
         and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbs.uuid),
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
         ),
       )
@@ -79,7 +91,7 @@ export const socialFeedQueries = {
       .leftJoin(
         dbSchema.boardClimbStats,
         and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbStats.climbUuid),
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbStats.climbUuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
           eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
         ),
@@ -162,10 +174,19 @@ export const socialFeedQueries = {
       .from(dbSchema.boardseshTicks)
       .innerJoin(dbSchema.users, eq(dbSchema.boardseshTicks.userId, dbSchema.users.id))
       .leftJoin(dbSchema.userProfiles, eq(dbSchema.boardseshTicks.userId, dbSchema.userProfiles.userId))
+      // Resolve dedup-merged climbs to their canonical UUID before joining
+      // board_climbs / board_climb_stats. See followingAscentsFeed for rationale.
+      .leftJoin(
+        dbSchema.boardClimbAliases,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
+        ),
+      )
       .leftJoin(
         dbSchema.boardClimbs,
         and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbs.uuid),
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
         ),
       )
@@ -179,7 +200,7 @@ export const socialFeedQueries = {
       .leftJoin(
         dbSchema.boardClimbStats,
         and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbStats.climbUuid),
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbStats.climbUuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
           eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
         ),

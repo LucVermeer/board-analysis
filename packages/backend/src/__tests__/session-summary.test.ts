@@ -50,6 +50,7 @@ vi.mock('@boardsesh/db/schema', () => ({
   boardseshTicks: {},
   boardDifficultyGrades: {},
   boardClimbs: {},
+  boardClimbAliases: {},
 }));
 
 // Mock drizzle-orm functions to prevent errors from passing mock schema objects

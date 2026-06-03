@@ -66,7 +66,26 @@ export async function generateSessionSummary(sessionId: string): Promise<Session
           eq(dbSchema.boardDifficultyGrades.boardType, dbSchema.boardseshTicks.boardType),
         ),
       )
-      .leftJoin(dbSchema.boardClimbs, eq(dbSchema.boardClimbs.uuid, dbSchema.boardseshTicks.climbUuid))
+      // Resolve dedup-merged climbs to their canonical UUID before the
+      // board_climbs join. A tick may point at an alias UUID that was
+      // deduplicated away (no board_climbs row); the alias table maps it to the
+      // canonical. Ticks already on a canonical have no alias row, so COALESCE
+      // falls back to the tick's own climb_uuid. The PK (board_type, alias_uuid)
+      // keeps the hop to ≤1 row. Otherwise the hardest climb's name is dropped.
+      .leftJoin(
+        dbSchema.boardClimbAliases,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
+        ),
+      )
+      .leftJoin(
+        dbSchema.boardClimbs,
+        and(
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
+          eq(dbSchema.boardClimbs.boardType, dbSchema.boardseshTicks.boardType),
+        ),
+      )
       .where(
         and(
           eq(dbSchema.boardseshTicks.sessionId, sessionId),

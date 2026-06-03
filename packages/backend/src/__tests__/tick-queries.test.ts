@@ -119,6 +119,21 @@ const insertTick = async (params: {
   `);
 };
 
+const insertAlias = async (params: {
+  aliasUuid: string;
+  canonicalUuid: string;
+  boardType?: string;
+  source?: string;
+}) => {
+  const boardType = params.boardType ?? 'kilter';
+  const source = params.source ?? 'test';
+  await db.execute(sql`
+    INSERT INTO board_climb_aliases (board_type, alias_uuid, canonical_uuid, source, first_seen_at, last_seen_at)
+    VALUES (${boardType}, ${params.aliasUuid}, ${params.canonicalUuid}, ${source}, now(), now())
+    ON CONFLICT (board_type, alias_uuid) DO UPDATE SET canonical_uuid = excluded.canonical_uuid
+  `);
+};
+
 const insertBoardClimbStats = async (params: {
   climbUuid: string;
   boardType?: string;
@@ -138,6 +153,9 @@ const cleanup = async () => {
   await db.execute(sql`DELETE FROM user_climb_percentiles WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM boardsesh_ticks WHERE user_id IN (${TEST_USER_ID}, ${OTHER_USER_ID})`);
   await db.execute(sql`DELETE FROM board_climb_stats WHERE climb_uuid LIKE ${CLIMB_PREFIX + '%'}`);
+  await db.execute(
+    sql`DELETE FROM board_climb_aliases WHERE alias_uuid LIKE ${CLIMB_PREFIX + '%'} OR canonical_uuid LIKE ${CLIMB_PREFIX + '%'}`,
+  );
   await db.execute(sql`DELETE FROM board_climbs WHERE uuid LIKE ${CLIMB_PREFIX + '%'}`);
 };
 
@@ -697,6 +715,104 @@ describe('tickQueries — behavior fixes', () => {
 
       const outOfRange = await callUserAscentsFeed(TEST_USER_ID, { minDifficulty: 26, limit: 50 });
       expect(outOfRange.items.map((i) => i.uuid)).not.toContain('tick-feed-ungraded');
+    });
+  });
+
+  // The catalog dedup picks one UUID as canonical (a board_climbs row) and
+  // records the rest as aliases (board_climb_aliases rows with NO board_climbs
+  // row). A tick on a deduped-away alias UUID must resolve to the canonical
+  // climb's name/grade/stats via the alias hop — otherwise it renders
+  // "Unknown Climb". See the alias resolution in resolvers/ticks/queries.ts.
+  describe('dedup-merged alias ticks resolve to the canonical climb', () => {
+    it('userAscentsFeed surfaces the canonical name + consensus grade for an aliased tick', async () => {
+      const canonicalUuid = CLIMB_PREFIX + 'alias-canonical';
+      const aliasUuid = CLIMB_PREFIX + 'alias-merged-away';
+
+      // Only the canonical exists in board_climbs; the alias UUID has no climb row.
+      await insertClimb(canonicalUuid, 'The Canonical Climb');
+      await insertBoardClimbStats({ climbUuid: canonicalUuid, displayDifficulty: 21 });
+      await insertAlias({ aliasUuid, canonicalUuid });
+
+      // Tick points at the deduped-away alias UUID.
+      await insertTick({
+        uuid: 'tick-aliased-1',
+        climbUuid: aliasUuid,
+        climbedAt: '2026-07-01 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { limit: 50 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].uuid).toBe('tick-aliased-1');
+      // Without alias resolution this would be "Unknown Climb".
+      expect(result.items[0].climbName).toBe('The Canonical Climb');
+      // Stats live on the canonical, so the consensus grade must resolve too.
+      expect(result.items[0].consensusDifficulty).toBe(21);
+    });
+
+    it('userTicks populates layoutId for an aliased tick via the canonical', async () => {
+      const canonicalUuid = CLIMB_PREFIX + 'alias-canonical-layout';
+      const aliasUuid = CLIMB_PREFIX + 'alias-merged-layout';
+
+      await insertClimb(canonicalUuid, 'Canonical With Layout', { layoutId: 8 });
+      await insertAlias({ aliasUuid, canonicalUuid });
+
+      await insertTick({
+        uuid: 'tick-aliased-layout',
+        climbUuid: aliasUuid,
+        climbedAt: '2026-07-02 10:00:00',
+        status: 'flash',
+      });
+
+      const ticks = (await tickQueries.userTicks(undefined, {
+        userId: TEST_USER_ID,
+        boardType: 'kilter',
+      })) as Array<{ uuid: string; climbUuid: string; layoutId: number | null }>;
+      const aliased = ticks.find((t) => t.uuid === 'tick-aliased-layout');
+
+      expect(aliased).toBeDefined();
+      // climbUuid stays the raw tick value (downstream maps it), but the
+      // board_climbs join must resolve via the canonical to populate layoutId.
+      expect(aliased?.climbUuid).toBe(aliasUuid);
+      expect(aliased?.layoutId).toBe(8);
+    });
+
+    it('userGroupedAscentsFeed names the group from the canonical for an aliased tick', async () => {
+      const canonicalUuid = CLIMB_PREFIX + 'alias-canonical-grouped';
+      const aliasUuid = CLIMB_PREFIX + 'alias-merged-grouped';
+
+      await insertClimb(canonicalUuid, 'Canonical Grouped Climb');
+      await insertAlias({ aliasUuid, canonicalUuid });
+
+      await insertTick({
+        uuid: 'tick-aliased-grouped',
+        climbUuid: aliasUuid,
+        climbedAt: '2026-07-03 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserGroupedAscentsFeed(TEST_USER_ID, { limit: 20, offset: 0 });
+
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0].climbName).toBe('Canonical Grouped Climb');
+    });
+
+    it('a tick already on a canonical UUID is unchanged (no alias row needed)', async () => {
+      const canonicalUuid = CLIMB_PREFIX + 'canonical-no-alias';
+      await insertClimb(canonicalUuid, 'Direct Canonical Climb');
+
+      await insertTick({
+        uuid: 'tick-direct-canonical',
+        climbUuid: canonicalUuid,
+        climbedAt: '2026-07-04 10:00:00',
+        status: 'send',
+      });
+
+      const result = await callUserAscentsFeed(TEST_USER_ID, { limit: 50 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].climbName).toBe('Direct Canonical Climb');
     });
   });
 });

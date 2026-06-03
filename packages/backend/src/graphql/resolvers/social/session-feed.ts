@@ -64,7 +64,7 @@ export const sessionFeedQueries = {
       const inferredBoardFilter = boardTypeFilter
         ? sql`AND EXISTS (
             SELECT 1 FROM boardsesh_ticks tf
-            ${layoutIdFilter !== null ? sql`LEFT JOIN board_climbs cf ON cf.uuid = tf.climb_uuid AND cf.board_type = tf.board_type` : sql``}
+            ${layoutIdFilter !== null ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = tf.board_type AND bca.alias_uuid = tf.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, tf.climb_uuid) AND cf.board_type = tf.board_type` : sql``}
             WHERE tf.inferred_session_id = s.id
               AND tf.board_type = ${boardTypeFilter}
               ${layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``}
@@ -74,9 +74,13 @@ export const sessionFeedQueries = {
       // Build board filter conditions for party session ticks
       const partyBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
       const partyLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
+      // Resolve dedup-merged climbs to their canonical UUID before the layout
+      // join — board_climbs only has a row on the canonical, so an aliased tick
+      // would otherwise be dropped from a layout-filtered feed. The alias PK
+      // (board_type, alias_uuid) keeps the hop to ≤1 row.
       const partyLayoutJoin =
         layoutIdFilter !== null
-          ? sql`LEFT JOIN board_climbs cf ON cf.uuid = t.climb_uuid AND cf.board_type = t.board_type`
+          ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
           : sql``;
 
       sessionRows = await dbRead.execute(sql`
@@ -276,10 +280,23 @@ export const sessionFeedQueries = {
         consensusDifficulty: dbSchema.boardClimbStats.displayDifficulty,
       })
       .from(dbSchema.boardseshTicks)
+      // Resolve dedup-merged climbs to their canonical UUID before joining
+      // board_climbs / board_climb_stats. A tick may point at an alias UUID that
+      // was deduplicated away (no board_climbs row); the alias table maps it to
+      // the canonical, where both the climb row and its stats live. Ticks already
+      // on a canonical have no alias row, so COALESCE falls back to the tick's own
+      // climb_uuid. The PK (board_type, alias_uuid) keeps the join to ≤1 row.
+      .leftJoin(
+        dbSchema.boardClimbAliases,
+        and(
+          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbAliases.aliasUuid),
+          eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbAliases.boardType),
+        ),
+      )
       .leftJoin(
         dbSchema.boardClimbs,
         and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbs.uuid),
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbs.uuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbs.boardType),
         ),
       )
@@ -293,7 +310,7 @@ export const sessionFeedQueries = {
       .leftJoin(
         dbSchema.boardClimbStats,
         and(
-          eq(dbSchema.boardseshTicks.climbUuid, dbSchema.boardClimbStats.climbUuid),
+          sql`COALESCE(${dbSchema.boardClimbAliases.canonicalUuid}, ${dbSchema.boardseshTicks.climbUuid}) = ${dbSchema.boardClimbStats.climbUuid}`,
           eq(dbSchema.boardseshTicks.boardType, dbSchema.boardClimbStats.boardType),
           eq(dbSchema.boardseshTicks.angle, dbSchema.boardClimbStats.angle),
         ),
@@ -602,9 +619,11 @@ async function fetchParticipantsBatch(
 ): Promise<Map<string, SessionFeedParticipant[]>> {
   if (sessionIds.length === 0) return new Map();
 
+  // Resolve dedup-merged climbs to their canonical UUID before the layout join
+  // so aliased ticks aren't dropped from a layout-filtered participant count.
   const batchLayoutJoin =
     layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climbs cf ON cf.uuid = t.climb_uuid AND cf.board_type = t.board_type`
+      ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
       : sql``;
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
@@ -671,9 +690,11 @@ async function fetchGradeDistributionBatch(
 ): Promise<Map<string, SessionGradeDistributionItem[]>> {
   if (sessionIds.length === 0) return new Map();
 
+  // Resolve dedup-merged climbs to their canonical UUID before the layout join
+  // so aliased ticks aren't dropped from a layout-filtered distribution.
   const batchLayoutJoin =
     layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climbs cf ON cf.uuid = t.climb_uuid AND cf.board_type = t.board_type`
+      ? sql`LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
       : sql``;
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
@@ -689,8 +710,12 @@ async function fetchGradeDistributionBatch(
         + COALESCE(SUM(t.attempt_count) FILTER (WHERE t.status = 'attempt'), 0)
       )::int AS attempt
     FROM boardsesh_ticks t
+    -- Alias hop shared by both the layout filter and the consensus-grade stats
+    -- join below: a tick on a deduped-away alias UUID has its board_climbs row
+    -- and its board_climb_stats on the canonical, so resolve before both joins.
+    LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid
     ${batchLayoutJoin}
-    LEFT JOIN board_climb_stats bcs ON bcs.climb_uuid = t.climb_uuid AND bcs.board_type = t.board_type AND bcs.angle = t.angle
+    LEFT JOIN board_climb_stats bcs ON bcs.climb_uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND bcs.board_type = t.board_type AND bcs.angle = t.angle
     WHERE COALESCE(t.session_id, t.inferred_session_id) IN ${sql`(${sql.join(
       sessionIds.map((id) => sql`${id}`),
       sql`, `,
@@ -783,9 +808,11 @@ async function fetchBoardTypesBatch(
 ): Promise<Map<string, string[]>> {
   if (sessionIds.length === 0) return new Map();
 
+  // Resolve dedup-merged climbs to their canonical UUID before the layout join
+  // so aliased ticks aren't dropped from a layout-filtered board-type roll-up.
   const batchLayoutJoin =
     layoutIdFilter !== null
-      ? sql`LEFT JOIN board_climbs cf ON cf.uuid = t.climb_uuid AND cf.board_type = t.board_type`
+      ? sql`LEFT JOIN board_climb_aliases bca ON bca.board_type = t.board_type AND bca.alias_uuid = t.climb_uuid LEFT JOIN board_climbs cf ON cf.uuid = COALESCE(bca.canonical_uuid, t.climb_uuid) AND cf.board_type = t.board_type`
       : sql``;
   const batchBoardFilter = boardTypeFilter ? sql`AND t.board_type = ${boardTypeFilter}` : sql``;
   const batchLayoutFilter = layoutIdFilter !== null ? sql`AND cf.layout_id = ${layoutIdFilter}` : sql``;
