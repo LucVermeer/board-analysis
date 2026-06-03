@@ -229,8 +229,8 @@ export function GradePopover({ boardName, grade, sendDifficultyIds = [], onChang
             style={[
               styles.chip,
               {
-                borderColor: anySelected ? brandColors.primary : iosSystemColors.separator,
-                backgroundColor: anySelected ? brandColors.primary : 'transparent',
+                borderColor: anySelected ? brandColors.primary : (systemColors.fill as string),
+                backgroundColor: anySelected ? brandColors.primary : (systemColors.fill as string),
               },
             ]}
           >
@@ -244,8 +244,8 @@ export function GradePopover({ boardName, grade, sendDifficultyIds = [], onChang
             const endpoint = isGradeEndpoint(bound, entry.difficultyId);
             const inside = !endpoint && isGradeInRange(bound, entry.difficultyId);
             const label = formatGrade(entry.name) ?? entry.name;
-            const backgroundColor = endpoint ? color : inside ? withAlpha(color) : 'transparent';
-            const borderColor = endpoint || inside ? color : iosSystemColors.separator;
+            const backgroundColor = endpoint ? color : inside ? withAlpha(color) : (systemColors.fill as string);
+            const borderColor = endpoint || inside ? color : (systemColors.fill as string);
             return (
               <Pressable
                 key={entry.difficultyId}

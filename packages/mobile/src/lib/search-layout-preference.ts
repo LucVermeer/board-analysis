@@ -17,7 +17,11 @@ import { getPreference, setPreference } from './preference-store';
 export const SEARCH_LAYOUTS = ['bottom-bar', 'sticky-strip'] as const;
 export type SearchLayout = (typeof SEARCH_LAYOUTS)[number];
 
-export const DEFAULT_SEARCH_LAYOUT: SearchLayout = 'bottom-bar';
+// Sticky-strip is the default: it sits flat under the nav header, so with a
+// climb playing the bottom is just the queue mini-player + tab bar instead of
+// also stacking a floating search bar. Bottom-bar stays available via the
+// More-tab "Search layout" setting.
+export const DEFAULT_SEARCH_LAYOUT: SearchLayout = 'sticky-strip';
 
 const STORAGE_KEY = 'search-layout';
 
