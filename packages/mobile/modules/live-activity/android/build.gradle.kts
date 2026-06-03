@@ -17,6 +17,9 @@ android {
 
     defaultConfig {
         minSdk = 24
+        // Required by expo-module-gradle-plugin's publication setup.
+        versionCode = 1
+        versionName = "1.0.0"
     }
 }
 

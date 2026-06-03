@@ -94,8 +94,13 @@ class SessionPresenceModule : Module() {
         AsyncFunction("updateActivityClimb") { options: SessionUpdateOptions -> pushUpdate(options) }
 
         AsyncFunction("endSession") {
-            val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction
-            context.stopService(Intent(context, BoardSessionService::class.java))
+            // Note: no bare `return@AsyncFunction` + stopService() — stopService
+            // returns Boolean, which would clash with the Unit early-return. Use
+            // a null-check so the lambda stays Unit-typed.
+            val context = appContext.reactContext?.applicationContext
+            if (context != null) {
+                context.stopService(Intent(context, BoardSessionService::class.java))
+            }
         }
     }
 
