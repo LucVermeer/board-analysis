@@ -20,5 +20,55 @@
   },
   "progress": {
     "title": "Progreso"
+  },
+  "mobile": {
+    "settings": "Ajustes",
+    "unknownName": "Escalador",
+    "cancel": "Cancelar",
+    "sessions": {
+      "empty": "Aún no hay sesiones — ve a escalar algo."
+    },
+    "progress": {
+      "empty": "Nada registrado todavía — tus estadísticas aparecen cuando empieces a registrar vías."
+    },
+    "comments": {
+      "title": "Comentarios",
+      "empty": "Aún no hay comentarios — abre la conversación",
+      "placeholder": "Añade un comentario…"
+    },
+    "filter": {
+      "title": "Filtros",
+      "timeRange": "Periodo",
+      "board": "Tabla",
+      "allBoards": "Todas las tablas",
+      "all": "Todo",
+      "year": "Año",
+      "month": "Mes",
+      "week": "Semana",
+      "done": "Listo"
+    },
+    "logbook": {
+      "empty": "Tu historial está vacío — registra tu primer encadene.",
+      "editTitle": "Editar ascenso",
+      "statusLabel": "Estado",
+      "gradeLabel": "Grado",
+      "qualityLabel": "Estrellas",
+      "triesLabel": "Intentos",
+      "commentLabel": "Comentario",
+      "commentPlaceholder": "¿Cómo fue?",
+      "save": "Guardar",
+      "delete": "Eliminar",
+      "deleteTitle": "Eliminar ascenso",
+      "deleteConfirm": "Esto elimina el ascenso registrado y no se puede deshacer.",
+      "saveError": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
+      "deleteError": "No se pudo eliminar el ascenso. Inténtalo de nuevo.",
+      "tries_one": "{{count}} intento",
+      "tries_other": "{{count}} intentos",
+      "status": {
+        "flash": "Flash",
+        "send": "Encadenada",
+        "attempt": "Intento"
+      }
+    }
   }
 }

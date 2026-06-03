@@ -358,3 +358,12 @@ export function useAttachBetaLink() {
 // Re-export feature-specific hooks that live alongside this barrel so the
 // import surface from this directory stays a single path.
 export { useMobileClimbActionsData } from './use-mobile-climb-actions-data';
+export {
+  useAllBoardsTicks,
+  useUserProfileStats,
+  useUserClimbPercentile,
+  useUserAscentsFeed,
+  useSessionGroupedFeed,
+} from './use-you-data';
+export { useYouProfileData } from './use-you-profile-data';
+export { useVote, useBulkVoteSummaries, useComments, useAddComment } from './use-social';

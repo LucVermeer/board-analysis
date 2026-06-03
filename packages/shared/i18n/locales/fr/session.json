@@ -382,7 +382,6 @@
       "triesLabel": "Essais",
       "starsLabel": "Étoiles",
       "noteLabel": "Note",
-      "cancelLabel": "Annuler",
       "flashSaveLabel": "Flash",
       "sendSaveLabel": "Envoi",
       "logAscentAria": "Enregistrer {{status}}",

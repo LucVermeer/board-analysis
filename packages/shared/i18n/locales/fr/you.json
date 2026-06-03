@@ -20,5 +20,55 @@
   },
   "progress": {
     "title": "Progression"
+  },
+  "mobile": {
+    "settings": "Réglages",
+    "unknownName": "Grimpeur",
+    "cancel": "Annuler",
+    "sessions": {
+      "empty": "Aucune session enregistrée — va grimper."
+    },
+    "progress": {
+      "empty": "Rien d'enregistré pour l'instant — tes stats apparaissent dès que tu coches des voies."
+    },
+    "comments": {
+      "title": "Commentaires",
+      "empty": "Aucun commentaire — lancez la discussion",
+      "placeholder": "Ajouter un commentaire…"
+    },
+    "filter": {
+      "title": "Filtres",
+      "timeRange": "Période",
+      "board": "Board",
+      "allBoards": "Tous les boards",
+      "all": "Tout",
+      "year": "Année",
+      "month": "Mois",
+      "week": "Semaine",
+      "done": "Terminé"
+    },
+    "logbook": {
+      "empty": "Ton carnet est vide — enregistre ta première croix.",
+      "editTitle": "Modifier la croix",
+      "statusLabel": "Statut",
+      "gradeLabel": "Cotation",
+      "qualityLabel": "Étoiles",
+      "triesLabel": "Essais",
+      "commentLabel": "Commentaire",
+      "commentPlaceholder": "Comment ça s'est passé ?",
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer la croix",
+      "deleteConfirm": "Cela supprime la croix enregistrée et est irréversible.",
+      "saveError": "Impossible d'enregistrer tes modifications. Réessaie.",
+      "deleteError": "Impossible de supprimer la croix. Réessaie.",
+      "tries_one": "{{count}} essai",
+      "tries_other": "{{count}} essais",
+      "status": {
+        "flash": "Flash",
+        "send": "Réussie",
+        "attempt": "Essai"
+      }
+    }
   }
 }

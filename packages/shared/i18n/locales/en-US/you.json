@@ -20,5 +20,55 @@
   },
   "progress": {
     "title": "Progress"
+  },
+  "mobile": {
+    "settings": "Settings",
+    "unknownName": "Climber",
+    "cancel": "Cancel",
+    "sessions": {
+      "empty": "No sessions logged yet — go climb something."
+    },
+    "progress": {
+      "empty": "Nothing logged yet — your stats show up once you start ticking climbs."
+    },
+    "comments": {
+      "title": "Comments",
+      "empty": "No comments yet — start the conversation",
+      "placeholder": "Add a comment…"
+    },
+    "filter": {
+      "title": "Filters",
+      "timeRange": "Time range",
+      "board": "Board",
+      "allBoards": "All boards",
+      "all": "All",
+      "year": "Year",
+      "month": "Month",
+      "week": "Week",
+      "done": "Done"
+    },
+    "logbook": {
+      "empty": "Your logbook's empty — log your first send.",
+      "editTitle": "Edit ascent",
+      "statusLabel": "Status",
+      "gradeLabel": "Grade",
+      "qualityLabel": "Stars",
+      "triesLabel": "Tries",
+      "commentLabel": "Comment",
+      "commentPlaceholder": "How did it go?",
+      "save": "Save",
+      "delete": "Delete",
+      "deleteTitle": "Delete ascent",
+      "deleteConfirm": "This removes the logged ascent and can't be undone.",
+      "saveError": "Couldn't save your changes. Try again.",
+      "deleteError": "Couldn't delete the ascent. Try again.",
+      "tries_one": "{{count}} try",
+      "tries_other": "{{count}} tries",
+      "status": {
+        "flash": "Flash",
+        "send": "Send",
+        "attempt": "Attempt"
+      }
+    }
   }
 }

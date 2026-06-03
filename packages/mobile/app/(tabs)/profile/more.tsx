@@ -1,11 +1,15 @@
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { ThemeOverride } from '@boardsesh/key-value-storage';
 import { useTheme } from '../../../src/providers/theme-provider';
+import { useAuth } from '../../../src/providers/auth-provider';
+import { useProfile } from '../../../src/lib/graphql/hooks';
 import { spacing } from '../../../src/theme/tokens';
+import { brandColors } from '../../../src/theme/colors';
 import { DevMetadataPanel } from '../../../src/components/DevMetadataPanel';
 import { Icon } from '../../../src/components/Icon';
+import { Text } from '../../../src/components/Text';
 import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
@@ -14,6 +18,9 @@ import { isPreviewBuild } from '../../../src/lib/eas-api';
 export default function MoreScreen() {
   const { systemColors, borderRadius, themeOverride, setThemeOverride } = useTheme();
   const { t } = useTranslation('common');
+  const { t: tProfile } = useTranslation('profile');
+  const { signOut } = useAuth();
+  const { data: profile } = useProfile();
 
   const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
@@ -88,6 +95,24 @@ export default function MoreScreen() {
           />
         </>
       ) : null}
+
+      <View style={styles.section}>
+        <SectionHeader title={tProfile('mobile.account')} />
+        {profile?.email ? (
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.accountEmail}>
+            {profile.email}
+          </Text>
+        ) : null}
+        <Pressable
+          style={[styles.signOut, { borderColor: systemColors.separator, marginHorizontal: spacing[4] }]}
+          onPress={signOut}
+          accessibilityRole="button"
+        >
+          <Text variant="body" color={brandColors.error}>
+            {tProfile('mobile.signOut')}
+          </Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -104,5 +129,15 @@ const styles = StyleSheet.create({
   },
   card: {
     overflow: 'hidden',
+  },
+  accountEmail: {
+    paddingHorizontal: spacing[4],
+    marginBottom: spacing[3],
+  },
+  signOut: {
+    alignItems: 'center',
+    paddingVertical: spacing[3],
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

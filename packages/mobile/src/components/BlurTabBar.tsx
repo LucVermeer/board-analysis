@@ -11,10 +11,11 @@ import { useTheme } from '../providers/theme-provider';
 import { GlassSurface } from './GlassSurface';
 import { useSessionScreen } from '../providers/session-screen-provider';
 import { useQueue } from '../providers/queue-provider';
+import { TAB_BAR_HEIGHT } from '../theme/layout';
 
-// Exported so the persistent queue bar (which docks above the tab bar) and
-// FlashLists below it can compute their layouts off the same constant.
-export const TAB_BAR_HEIGHT = 49;
+// Re-exported for back-compat: layout consumers historically imported the
+// tab-bar height from here. The source of truth now lives in theme/layout.
+export { TAB_BAR_HEIGHT };
 
 type TabIconName =
   | 'view-dashboard'

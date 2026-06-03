@@ -28,6 +28,8 @@ Boardsesh is a monorepo. Next.js 16 web app + React Native (Expo) mobile app for
     /queue/         # Queue state machine (reducer, types, event utils)
     /board-config/  # Board metadata, hold maps, angle tables
     /board-constants/ # Grade colours, difficulty bands
+    /board-react/   # Renderer-agnostic BoardProvider + logbook/tick hooks (useSaveTick/useUpdateTick/useDeleteTick)
+    /profile-stats/ # Pure climbing-stats aggregation for the You page / profile (chart builders, deriveProfileViewModel)
     /ble-protocol/  # Bluetooth LED control protocol
   /db/              # Shared database schema, client, migrations (drizzle)
 ```
