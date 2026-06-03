@@ -10,6 +10,16 @@ import {
   useScrollIndicators,
   useStopHorizontalTouchPropagation,
 } from '@/app/components/logbook/tick-controls';
+import {
+  RANGE_EXTEND_WINDOW_MS,
+  computeGradeTap,
+  isAnyGrade,
+  isSingleGrade,
+  isRangeGrade,
+  isGradeInRange,
+  isGradeEndpoint,
+  type GradeBound,
+} from '@boardsesh/climb-filters';
 import type { BoulderGrade } from '@/app/lib/board-data';
 import baseStyles from './inline-grade-picker.module.css';
 import styles from './grade-range-picker.module.css';
@@ -45,15 +55,6 @@ export type GradeRangePickerProps = {
 };
 
 /**
- * Tapping a different chip while a single grade is selected only extends to
- * a range when the second tap lands within this window. Past it, the tap is
- * treated as a single-grade switch instead — matches user intent (rapid
- * taps = "I'm building a range", slow taps over a session = "I'm switching
- * grades").
- */
-const RANGE_EXTEND_WINDOW_MS = 3000;
-
-/**
  * In dark mode `getGradeColor` returns a pale text-readable variant. Pull the
  * hue and re-render at lower lightness so a filled band reads against the
  * dark surface. Light mode passes through.
@@ -81,19 +82,20 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
   useStopHorizontalTouchPropagation(containerRef);
   const { canScrollLeft, canScrollRight } = useScrollIndicators(containerRef);
 
-  const isAny = minGradeId === undefined && maxGradeId === undefined;
-  const isSingleGrade = minGradeId !== undefined && maxGradeId !== undefined && minGradeId === maxGradeId;
-  const isRange = minGradeId !== undefined && maxGradeId !== undefined && minGradeId !== maxGradeId;
+  const bound: GradeBound = { minGradeId, maxGradeId };
+  const isAny = isAnyGrade(bound);
+  const isSingle = isSingleGrade(bound);
+  const isRange = isRangeGrade(bound);
 
   // Timestamp of the most recent transition INTO a single-grade state.
   // Re-stamps on every bounds change so each fresh single-grade selection
   // starts its own 3-second extension window. Cleared when state is not a
   // single grade so we don't accidentally extend from a stale window after
   // the user explored a range and came back.
-  const singleGradeSelectedAtRef = useRef<number | undefined>(isSingleGrade ? Date.now() : undefined);
+  const singleGradeSelectedAtRef = useRef<number | undefined>(isSingle ? Date.now() : undefined);
   useEffect(() => {
-    singleGradeSelectedAtRef.current = isSingleGrade ? Date.now() : undefined;
-  }, [minGradeId, maxGradeId, isSingleGrade]);
+    singleGradeSelectedAtRef.current = isSingle ? Date.now() : undefined;
+  }, [minGradeId, maxGradeId, isSingle]);
 
   const lowGrade = minGradeId !== undefined ? grades.find((g) => g.difficulty_id === minGradeId) : undefined;
   const highGrade = maxGradeId !== undefined ? grades.find((g) => g.difficulty_id === maxGradeId) : undefined;
@@ -180,74 +182,26 @@ export const GradeRangePicker: React.FC<GradeRangePickerProps> = ({
   //   5. From a range, tap an *interior* chip → "V_X only" (collapse).
   //   6. From a range, tap a chip outside the range → "V_X only" (collapse).
   // No long-press, no double-tap. Range is built by tapping two chips in
-  // sequence; switching single grade from a range is one tap.
+  // sequence; switching single grade from a range is one tap. The bounds math
+  // lives in @boardsesh/climb-filters/computeGradeTap; this component owns the
+  // timer, the within-window decision, and re-emitting through onChange.
   const handleChipTap = useCallback(
     (gradeId: number) => {
-      if (isRange && minGradeId !== undefined && maxGradeId !== undefined) {
-        // Rule 4: tapping an endpoint of a range trims it. The other
-        // endpoint is preserved; the tapped endpoint moves inward by one
-        // grade (still within the range). If the trim collapses min > max,
-        // settle on the surviving endpoint as a single grade.
-        if (gradeId === minGradeId) {
-          const minIdx = grades.findIndex((g) => g.difficulty_id === minGradeId);
-          const nextMinIdx = minIdx + 1;
-          if (nextMinIdx < grades.length && grades[nextMinIdx].difficulty_id <= maxGradeId) {
-            const newMin = grades[nextMinIdx].difficulty_id;
-            onChange({ minGradeId: newMin, maxGradeId });
-            return;
-          }
-          // Trim would invert; collapse to the surviving (max) endpoint.
-          onChange({ minGradeId: maxGradeId, maxGradeId });
-          return;
-        }
-        if (gradeId === maxGradeId) {
-          const maxIdx = grades.findIndex((g) => g.difficulty_id === maxGradeId);
-          const nextMaxIdx = maxIdx - 1;
-          if (nextMaxIdx >= 0 && grades[nextMaxIdx].difficulty_id >= minGradeId) {
-            const newMax = grades[nextMaxIdx].difficulty_id;
-            onChange({ minGradeId, maxGradeId: newMax });
-            return;
-          }
-          onChange({ minGradeId, maxGradeId: minGradeId });
-          return;
-        }
-        // Rules 5 & 6: interior or outside — collapse to the tapped grade.
-        onChange({ minGradeId: gradeId, maxGradeId: gradeId });
-        return;
-      }
-      if (isSingleGrade) {
-        if (minGradeId === gradeId) {
-          handleClear();
-          return;
-        }
-        // Rule 3 is time-gated: rapid taps after a fresh single-grade pick
-        // build a range; slow taps switch single grade. Avoids accidentally
-        // creating a range during the user's primary single-grade workflow
-        // (warm-up V4, then climb V6 30s later — V6 should *replace*, not
-        // extend).
-        const selectedAt = singleGradeSelectedAtRef.current;
-        const withinWindow = selectedAt !== undefined && Date.now() - selectedAt < RANGE_EXTEND_WINDOW_MS;
-        if (withinWindow) {
-          const otherId = minGradeId as number;
-          const lo = Math.min(otherId, gradeId);
-          const hi = Math.max(otherId, gradeId);
-          onChange({ minGradeId: lo, maxGradeId: hi }, { extendedRangeWithinWindow: true });
-        } else {
-          onChange({ minGradeId: gradeId, maxGradeId: gradeId }, { extendedRangeWithinWindow: false });
-        }
-        return;
-      }
-      // "Any" or any other state — collapse to single grade.
-      onChange({ minGradeId: gradeId, maxGradeId: gradeId });
+      // Rule 3 is time-gated: rapid taps after a fresh single-grade pick build
+      // a range; slow taps switch single grade. Avoids accidentally creating a
+      // range during the user's primary single-grade workflow (warm-up V4,
+      // then climb V6 30s later — V6 should *replace*, not extend).
+      const selectedAt = singleGradeSelectedAtRef.current;
+      const withinWindow = selectedAt !== undefined && Date.now() - selectedAt < RANGE_EXTEND_WINDOW_MS;
+      const gradeIds = grades.map((grade) => grade.difficulty_id);
+      const { next, meta } = computeGradeTap({ minGradeId, maxGradeId }, gradeIds, gradeId, withinWindow);
+      onChange(next, meta);
     },
-    [isRange, isSingleGrade, minGradeId, maxGradeId, grades, onChange, handleClear],
+    [minGradeId, maxGradeId, grades, onChange],
   );
 
-  const inRange = (gradeId: number): boolean => {
-    if (minGradeId === undefined || maxGradeId === undefined) return false;
-    return gradeId >= minGradeId && gradeId <= maxGradeId;
-  };
-  const isEndpoint = (gradeId: number): boolean => gradeId === minGradeId || gradeId === maxGradeId;
+  const inRange = (gradeId: number): boolean => isGradeInRange(bound, gradeId);
+  const isEndpoint = (gradeId: number): boolean => isGradeEndpoint(bound, gradeId);
 
   return (
     <div className={styles.wrapper}>

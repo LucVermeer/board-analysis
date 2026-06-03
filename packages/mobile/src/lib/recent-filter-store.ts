@@ -20,7 +20,7 @@ const MAX_ITEMS = 10;
 // pills while signed out we strip these so a recent search from a previous
 // signed-in session doesn't silently no-op (UI would show the pill as
 // "active" but the list would be unfiltered).
-const AUTH_GATED_FIELDS = [
+export const AUTH_GATED_FIELDS = [
   'hideAttempted',
   'hideCompleted',
   'showOnlyAttempted',

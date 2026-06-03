@@ -642,7 +642,12 @@
       "settersCount_one": "{{count}} equipador",
       "settersCount_other": "{{count}} equipadores",
       "climbsCount_one": "{{count}} vía",
-      "climbsCount_other": "{{count}} vías"
+      "climbsCount_other": "{{count}} vías",
+      "grade": "Grado",
+      "anyGrade": "Cualquier grado",
+      "gradeClear": "Cualquiera",
+      "gradeHint": "Toca un grado · toca otro para un rango",
+      "filters": "Filtros"
     },
     "climbRow": {
       "addToQueue": "Añadir a la cola",

@@ -17,15 +17,18 @@ type SearchHeaderProps = {
   onChangeText: (text: string) => void;
   onFocus: () => void;
   onBlur: () => void;
+  /** Seeds the field on mount — used to reflect a restored per-board search
+   *  without an imperative setText race against the lazily-mounted header. */
+  initialValue?: string;
 };
 
 export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(function SearchHeader(
-  { placeholder, onChangeText, onFocus, onBlur },
+  { placeholder, onChangeText, onFocus, onBlur, initialValue = '' },
   ref,
 ) {
   const inputRef = useRef<TextInput>(null);
   const { systemColors } = useTheme();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialValue);
 
   useImperativeHandle(ref, () => ({
     blur: () => inputRef.current?.blur(),

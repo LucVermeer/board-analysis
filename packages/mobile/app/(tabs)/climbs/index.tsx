@@ -1,30 +1,30 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Pressable, StyleSheet, RefreshControl, Image, Keyboard } from 'react-native';
+import { View, StyleSheet, RefreshControl, Image, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
-import { toClimbSearchInput } from '@boardsesh/climb-filters';
+import { toClimbSearchInput, DEFAULT_CLIMB_FILTER_STATE } from '@boardsesh/climb-filters';
 import { ClimbListRow } from '../../../src/components/ClimbListRow';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
-import {
-  ClimbFilterSheet,
-  hasActiveFilters,
-  DEFAULT_FILTERS,
-  type ClimbFilters,
-} from '../../../src/components/ClimbFilterSheet';
+import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
+import { GradePopover } from '../../../src/components/search/GradePopover';
+import { SearchBottomBar } from '../../../src/components/search/SearchBottomBar';
+import { StickyFilterStrip } from '../../../src/components/search/StickyFilterStrip';
+import { countActiveFiltersBeyondGrade } from '../../../src/components/search/active-filter-count';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useQueue } from '../../../src/providers/queue-provider';
+import { ClimbSearchProvider, useClimbSearch, type GradeBound } from '../../../src/providers/climb-search-provider';
 import { useBoardProvider } from '@boardsesh/board-react';
 import { randomUUID } from 'expo-crypto';
 import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
-import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
+import { TAB_BAR_HEIGHT, BAR_CONTENT_HEIGHT } from '../../../src/theme/layout';
+import { useSearchClimbs, useSearchClimbsCount, useGrades } from '../../../src/lib/graphql/hooks';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
@@ -39,110 +39,122 @@ import {
   clearRecentFilters,
   type RecentFilter,
 } from '../../../src/lib/recent-filter-store';
+import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
 import { getFilterSummary } from '../../../src/lib/filter-summary';
+import { useSearchLayout } from '../../../src/lib/search-layout-preference';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
+// Approximate height of the floating bottom search bar, so the list's last row
+// clears it. Tuned to the bar's content (control row + padding).
+const SEARCH_BAR_HEIGHT = 64;
+// Debounce persisting the per-board last search so rapid grade nudges don't
+// thrash secure-store.
+const SAVE_DEBOUNCE_MS = 600;
 
 export default function ClimbList() {
+  return (
+    <ClimbSearchProvider>
+      <ClimbListInner />
+    </ClimbSearchProvider>
+  );
+}
+
+function ClimbListInner() {
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
   const { systemColors } = useTheme();
   const { addToQueue, state: queueState } = useQueue();
+  const { filters, name, setFilters, setGrade, setName, replaceSearch } = useClimbSearch();
+  const { layout, loaded: layoutLoaded } = useSearchLayout();
   // The active climb (driving the board / persistent queue bar). We highlight
   // its row so the search → tap → change-active loop is always visible.
-  // Computed once here, not per-row, so a queue change only re-renders the
-  // two affected rows (ClimbListRow is memoized), never the whole list.
   const activeClimbUuid = queueState.currentClimbQueueItem?.climb?.uuid;
+  const hasActiveClimb = !!activeClimbUuid;
   const { getLogbook } = useBoardProvider();
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
   const insets = useSafeAreaInsets();
-  // Reserve room for the floating queue bar + tab bar so the last row isn't
-  // hidden behind them.
-  const listPaddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
 
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const debouncedSearchRef = useRef('');
+  // Derive the floating bar's position and the list's bottom reservation from
+  // the SAME parts so they can't drift (the last row must clear the bar in the
+  // common active-climb + bottom-bar state). The queue mini-player only renders
+  // when a climb is active, so reserve for it only then.
+  const queueBarReserve = hasActiveClimb ? BAR_CONTENT_HEIGHT + 8 : 0;
+  const searchBarBottom = insets.bottom + TAB_BAR_HEIGHT + 8 + queueBarReserve;
+  const searchBarReserve = layout === 'bottom-bar' ? SEARCH_BAR_HEIGHT + 8 : 0;
+  const listPaddingBottom = insets.bottom + TAB_BAR_HEIGHT + queueBarReserve + searchBarReserve;
+
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchTextLength, setSearchTextLength] = useState(0);
-  const [filters, setFilters] = useState<ClimbFilters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [showGrade, setShowGrade] = useState(false);
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
 
-  const filtersActive = hasActiveFilters(filters);
-
-  const handleOpenFilters = useCallback(() => {
-    setShowFilters(true);
+  // The nav header mounts SearchHeader lazily, so an imperative setText right
+  // after an async restore can no-op. Instead we remount the header with the
+  // restored text as `initialValue`, bumping this epoch only on restore /
+  // recent-pill apply (not on keystrokes), so the field always reflects the
+  // committed name.
+  const [headerEpoch, setHeaderEpoch] = useState(0);
+  const headerInitialTextRef = useRef('');
+  const syncHeaderText = useCallback((value: string) => {
+    headerInitialTextRef.current = value;
+    setHeaderEpoch((epoch) => epoch + 1);
   }, []);
 
-  const handleDismissFilters = useCallback(() => {
-    setShowFilters(false);
-  }, []);
+  const handleOpenFilters = useCallback(() => setShowFilters(true), []);
+  const handleDismissFilters = useCallback(() => setShowFilters(false), []);
+  const handleOpenGrade = useCallback(() => setShowGrade(true), []);
+  const handleDismissGrade = useCallback(() => setShowGrade(false), []);
 
-  const handleSearchChange = useCallback((text: string) => {
-    setSearchTextLength(text.length);
+  const handleSearchChange = useCallback(
+    (text: string) => {
+      setSearchTextLength(text.length);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        setName(text);
+      }, SEARCH_DEBOUNCE_MS);
+    },
+    [setName],
+  );
 
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    debounceTimerRef.current = setTimeout(() => {
-      debouncedSearchRef.current = text;
-      setDebouncedSearch(text);
-    }, SEARCH_DEBOUNCE_MS);
-  }, []);
+  const handleSearchFocus = useCallback(() => setIsSearchFocused(true), []);
+  const handleSearchBlur = useCallback(() => setIsSearchFocused(false), []);
 
-  const handleSearchFocus = useCallback(() => {
-    setIsSearchFocused(true);
-  }, []);
-
-  const handleSearchBlur = useCallback(() => {
-    setIsSearchFocused(false);
-  }, []);
-
-  // Set up header once — SearchHeader manages its own text state internally
+  // Set up the header once — SearchHeader (climb-name search) keeps its own
+  // text state. Filters now live in the bottom bar / sticky strip gear, so the
+  // header carries just the name field.
   useEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
         <SearchHeader
+          key={headerEpoch}
           ref={searchHeaderRef}
+          initialValue={headerInitialTextRef.current}
           placeholder={t('search.placeholders.climbs')}
           onChangeText={handleSearchChange}
           onFocus={handleSearchFocus}
           onBlur={handleSearchBlur}
         />
       ),
+      headerRight: undefined,
     });
-  }, [navigation, t, handleSearchChange, handleSearchFocus, handleSearchBlur]);
+  }, [navigation, t, handleSearchChange, handleSearchFocus, handleSearchBlur, headerEpoch]);
 
-  // Separate effect for headerRight since it depends on filtersActive
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable onPress={handleOpenFilters} hitSlop={8} accessibilityRole="button">
-          <Icon name="filter" size={22} color={filtersActive ? brandColors.primary : iosSystemColors.systemGray} />
-        </Pressable>
-      ),
-    });
-  }, [navigation, filtersActive, handleOpenFilters]);
-
-  // Clean up debounce timer on unmount
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, []);
 
   const { isAuthenticated } = useAuth();
 
   // Load recent filters on mount. Pass auth state so auth-gated fields get
-  // stripped from pills written by a prior signed-in session — otherwise a
-  // tapped pill would silently no-op on the backend while looking active.
+  // stripped from pills written by a prior signed-in session.
   useEffect(() => {
     getRecentFilters({ isAuthenticated })
       .then(setRecentFilters)
@@ -162,8 +174,66 @@ export default function ClimbList() {
   const { data: gradesData } = useGrades(boardName);
   const gradesRef = useRef(gradesData);
   gradesRef.current = gradesData;
+  const grades = useMemo(() => gradesData ?? [], [gradesData]);
 
-  // Pre-warm board images so they're cached before the user taps into a climb
+  const boardConfig = useMemo(
+    () => (hasBoardConfig ? { boardName, layoutId, sizeId, setIds, angle } : null),
+    [hasBoardConfig, boardName, layoutId, sizeId, setIds, angle],
+  );
+  const boardKey = boardConfig ? boardConfigKey(boardConfig) : null;
+
+  // Per-board memory: restore this board's last search on arrival; a board
+  // never searched before gets the clean default. `restoredKey` is state (not
+  // just a ref) so the search queries can gate on it — that prevents a stale
+  // fetch of the new board filtered by the *previous* board's grade/name while
+  // the async restore is in flight, and the resulting wrong-results flash.
+  const restoredKeyRef = useRef<string | null>(null);
+  const [restoredKey, setRestoredKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!boardConfig || !boardKey) return;
+    let cancelled = false;
+    restoredKeyRef.current = null;
+    setRestoredKey(null);
+    getLastSearch(boardConfig, { isAuthenticated })
+      .then((saved) => {
+        if (cancelled) return;
+        if (saved) {
+          replaceSearch(saved.filters, saved.searchText);
+          syncHeaderText(saved.searchText);
+        } else {
+          // Never-searched board → clean default band, no grade/filters/name
+          // inherited from the board the climber came from.
+          replaceSearch(DEFAULT_CLIMB_FILTER_STATE, '');
+          syncHeaderText('');
+        }
+        restoredKeyRef.current = boardKey;
+        setRestoredKey(boardKey);
+      })
+      .catch(() => {
+        restoredKeyRef.current = boardKey;
+        setRestoredKey(boardKey);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Restore is keyed on the board only — re-running on filter changes would
+    // clobber the user's edits. replaceSearch/syncHeaderText are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardKey, isAuthenticated]);
+
+  // Search is "ready" once this board's restore has landed — gate queries on it.
+  const searchReady = hasBoardConfig && restoredKey === boardKey;
+
+  // Persist the current search for this board once the restore for it landed.
+  useEffect(() => {
+    if (!boardConfig || restoredKeyRef.current !== boardKey) return;
+    const handle = setTimeout(() => {
+      void saveLastSearch(boardConfig, filters, name);
+    }, SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [filters, name, boardConfig, boardKey]);
+
+  // Pre-warm board images so they're cached before the user taps into a climb.
   useEffect(() => {
     if (!activeBoard) return;
     const parsedSetIds = activeBoard.setIds.split(',').map(Number);
@@ -180,16 +250,14 @@ export default function ClimbList() {
     }
   }, [activeBoard]);
 
-  // Track pagination
+  // Pagination + accumulation for infinite scroll.
   const [pageNumber, setPageNumber] = useState(1);
-  // Accumulate climbs across pages for infinite scroll
   const [accumulatedClimbs, setAccumulatedClimbs] = useState<Climb[]>([]);
 
-  // Clear accumulated climbs and reset page when search or filters change
   useEffect(() => {
     setAccumulatedClimbs([]);
     setPageNumber(1);
-  }, [debouncedSearch, filters]);
+  }, [name, filters]);
 
   const searchInput = useMemo(
     () =>
@@ -197,32 +265,41 @@ export default function ClimbList() {
         filters,
         { boardName, layoutId, sizeId, setIds, angle },
         { page: pageNumber, pageSize: PAGE_SIZE },
-        { name: debouncedSearch },
+        { name },
       ),
-    [boardName, layoutId, sizeId, setIds, angle, debouncedSearch, pageNumber, filters],
+    [boardName, layoutId, sizeId, setIds, angle, name, pageNumber, filters],
   );
+
+  // Page-independent input for the result count so the count query key stays
+  // stable while the user scrolls (totalCount is the same across pages).
+  const countInput = useMemo(
+    () =>
+      toClimbSearchInput(
+        filters,
+        { boardName, layoutId, sizeId, setIds, angle },
+        { page: 1, pageSize: PAGE_SIZE },
+        { name },
+      ),
+    [boardName, layoutId, sizeId, setIds, angle, name, filters],
+  );
+  const { data: totalCount } = useSearchClimbsCount(countInput, searchReady);
 
   const {
     data: searchResult,
     isLoading: isClimbsLoading,
     isRefetching,
     refetch,
-  } = useSearchClimbs(searchInput, hasBoardConfig);
+  } = useSearchClimbs(searchInput, searchReady);
   const hasMore = searchResult?.hasMore ?? false;
   const isLoadingMoreRef = useRef(false);
 
   useEffect(() => {
     if (!searchResult?.climbs) return;
-
     isLoadingMoreRef.current = false;
-
     setAccumulatedClimbs((previous) => accumulateClimbs(previous, searchResult.climbs, pageNumber));
   }, [searchResult?.climbs, pageNumber]);
 
-  // Feed the visible climb UUIDs into the shared logbook so the ascent badge
-  // can render flash/send/attempt without baking per-user counts into the
-  // (CDN-cacheable) search query. `getLogbook` is a noop when the user is
-  // anonymous or the active board hasn't resolved yet.
+  // Feed visible UUIDs into the shared logbook for the ascent badge.
   useEffect(() => {
     if (accumulatedClimbs.length === 0) return;
     void getLogbook(accumulatedClimbs.map((climb) => climb.uuid));
@@ -241,21 +318,15 @@ export default function ClimbList() {
     }
   }, [hasMore, isClimbsLoading, isRefetching]);
 
-  const boardConfig = useMemo(
-    () => (hasBoardConfig ? { boardName, layoutId, sizeId, setIds, angle } : null),
-    [hasBoardConfig, boardName, layoutId, sizeId, setIds, angle],
-  );
-
   // Page the same search query the list uses so the play-drawer swipe can walk
-  // climbs beyond what's loaded in the list (capped by the shared refresh
-  // helper). Activation pages are 0-based; the search query is 1-based.
+  // climbs beyond what's loaded. Activation pages are 0-based; search is 1-based.
   const fetchSearchPage = useCallback(
     async ({ page, pageSize }: { page: number; pageSize: number }) => {
       const input = toClimbSearchInput(
         filters,
         { boardName, layoutId, sizeId, setIds, angle },
         { page: page + 1, pageSize },
-        { name: debouncedSearch },
+        { name },
       );
       const response = await getHttpClient().request<SearchClimbsQueryResponse>(SEARCH_CLIMBS, { input });
       return {
@@ -263,12 +334,9 @@ export default function ClimbList() {
         hasMore: response.searchClimbs.hasMore,
       };
     },
-    [filters, boardName, layoutId, sizeId, setIds, angle, debouncedSearch],
+    [filters, boardName, layoutId, sizeId, setIds, angle, name],
   );
 
-  // Tapping a climb seeds a suggestion source from the search results, anchored
-  // at the tapped climb, so the play-drawer swipe continues through the climbs
-  // listed after it — mirroring the playlist flow.
   const allQueueClimbs = useMemo(() => toQueueClimbs(accumulatedClimbs), [accumulatedClimbs]);
 
   const activateClimbListClimb = usePlaylistActivation({
@@ -297,7 +365,7 @@ export default function ClimbList() {
       setFilters(newFilters);
       setShowFilters(false);
 
-      const currentSearch = debouncedSearchRef.current;
+      const currentSearch = name;
       if (hasActiveFilters(newFilters) || currentSearch.length > 0) {
         const label = getFilterSummary(newFilters, currentSearch, gradesRef.current, t);
         addRecentFilter(label, newFilters, currentSearch)
@@ -306,22 +374,21 @@ export default function ClimbList() {
           .catch(() => {});
       }
     },
-    [t, isAuthenticated],
+    [t, isAuthenticated, name, setFilters],
   );
 
-  const handleApplyRecentFilter = useCallback((pillFilters: ClimbFilters, pillSearchText: string) => {
-    setFilters(pillFilters);
-    debouncedSearchRef.current = pillSearchText;
-    setDebouncedSearch(pillSearchText);
-    setSearchTextLength(pillSearchText.length);
-    searchHeaderRef.current?.setText(pillSearchText);
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    Keyboard.dismiss();
-    searchHeaderRef.current?.blur();
-    setIsSearchFocused(false);
-  }, []);
+  const handleApplyRecentFilter = useCallback(
+    (pillFilters: ClimbFilters, pillSearchText: string) => {
+      replaceSearch(pillFilters, pillSearchText);
+      setSearchTextLength(pillSearchText.length);
+      syncHeaderText(pillSearchText);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      Keyboard.dismiss();
+      searchHeaderRef.current?.blur();
+      setIsSearchFocused(false);
+    },
+    [replaceSearch, syncHeaderText],
+  );
 
   const handleClearRecentFilters = useCallback(() => {
     clearRecentFilters()
@@ -329,9 +396,24 @@ export default function ClimbList() {
       .catch(() => {});
   }, []);
 
-  const showRecentPills = isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
+  const handleGradeChange = useCallback(
+    (next: GradeBound) => {
+      setGrade(next);
+    },
+    [setGrade],
+  );
 
-  const isInitialLoading = isBoardLoading || (isClimbsLoading && accumulatedClimbs.length === 0);
+  const showRecentPills = isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
+  // Show the spinner (not a premature "no climbs" empty state) while a board is
+  // resolving or its per-board restore hasn't landed yet.
+  const isInitialLoading =
+    isBoardLoading || (hasBoardConfig && !searchReady) || (isClimbsLoading && accumulatedClimbs.length === 0);
+
+  const gradeBound = useMemo<GradeBound>(
+    () => ({ minGradeId: filters.minGrade, maxGradeId: filters.maxGrade }),
+    [filters.minGrade, filters.maxGrade],
+  );
+  const activeFilterCount = useMemo(() => countActiveFiltersBeyondGrade(filters), [filters]);
 
   const renderClimbItem = useCallback(
     ({ item: climb }: { item: Climb }) => (
@@ -389,6 +471,17 @@ export default function ClimbList() {
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
+      {layoutLoaded && layout === 'sticky-strip' ? (
+        <StickyFilterStrip
+          bound={gradeBound}
+          grades={grades}
+          count={totalCount}
+          activeFilterCount={activeFilterCount}
+          onOpenGrade={handleOpenGrade}
+          onOpenFilters={handleOpenFilters}
+        />
+      ) : null}
+
       <FlashList
         data={accumulatedClimbs}
         renderItem={renderClimbItem}
@@ -406,7 +499,7 @@ export default function ClimbList() {
             <RecentFilterPills
               recentFilters={recentFilters}
               currentFilters={filters}
-              currentSearchText={debouncedSearch}
+              currentSearchText={name}
               onApply={handleApplyRecentFilter}
               onClear={handleClearRecentFilters}
             />
@@ -424,19 +517,42 @@ export default function ClimbList() {
             <View style={styles.emptyContainer}>
               <Icon name="search" size={48} color={iosSystemColors.systemGray4} />
               <Text variant="headline" style={styles.emptyTitle}>
-                {debouncedSearch.length > 0
-                  ? t('mobile.emptyState.noMatches.title')
-                  : t('mobile.emptyState.noClimbs.title')}
+                {name.length > 0 ? t('mobile.emptyState.noMatches.title') : t('mobile.emptyState.noClimbs.title')}
               </Text>
               <Text variant="subheadline" style={styles.emptySubtitle}>
-                {debouncedSearch.length > 0
-                  ? t('mobile.emptyState.noMatches.description', { query: debouncedSearch })
+                {name.length > 0
+                  ? t('mobile.emptyState.noMatches.description', { query: name })
                   : t('mobile.emptyState.noClimbs.subtitle')}
               </Text>
             </View>
           ) : null
         }
       />
+
+      {layoutLoaded && layout === 'bottom-bar' ? (
+        <SearchBottomBar
+          bound={gradeBound}
+          grades={grades}
+          count={totalCount}
+          activeFilterCount={activeFilterCount}
+          onOpenGrade={handleOpenGrade}
+          onOpenFilters={handleOpenFilters}
+          bottomOffset={searchBarBottom}
+        />
+      ) : null}
+
+      {showGrade ? (
+        // sendDifficultyIds is omitted for now → the rail centers on the V5–V7
+        // band default; logbook-personalized "my grade" centering is wired in a
+        // later phase once the screen sources the climber's recent send grades.
+        <GradePopover
+          boardName={boardName}
+          grade={gradeBound}
+          onChange={handleGradeChange}
+          onDismiss={handleDismissGrade}
+        />
+      ) : null}
+
       {showFilters ? (
         <ClimbFilterSheet
           onDismiss={handleDismissFilters}

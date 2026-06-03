@@ -16,6 +16,12 @@
         "system": "System",
         "light": "Light",
         "dark": "Dark"
+      },
+      "searchLayout": {
+        "title": "Search layout",
+        "description": "Where the grade and filters sit on the climbs screen.",
+        "bottomBar": "Bottom bar",
+        "stickyStrip": "Top strip"
       }
     },
     "nav": {

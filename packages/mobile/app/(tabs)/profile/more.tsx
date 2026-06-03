@@ -14,6 +14,7 @@ import { ListRow } from '../../../src/components/ListRow';
 import { SectionHeader } from '../../../src/components/SectionHeader';
 import { SegmentedControl } from '../../../src/components/SegmentedControl';
 import { isPreviewBuild } from '../../../src/lib/eas-api';
+import { useSearchLayout, type SearchLayout } from '../../../src/lib/search-layout-preference';
 
 export default function MoreScreen() {
   const { systemColors, borderRadius, themeOverride, setThemeOverride } = useTheme();
@@ -21,11 +22,17 @@ export default function MoreScreen() {
   const { t: tProfile } = useTranslation('profile');
   const { signOut } = useAuth();
   const { data: profile } = useProfile();
+  const { layout: searchLayout, setLayout: setSearchLayout } = useSearchLayout();
 
   const appearanceOptions: { key: ThemeOverride; label: string }[] = [
     { key: 'system', label: t('mobile.more.appearance.system') },
     { key: 'light', label: t('mobile.more.appearance.light') },
     { key: 'dark', label: t('mobile.more.appearance.dark') },
+  ];
+
+  const searchLayoutOptions: { key: SearchLayout; label: string }[] = [
+    { key: 'bottom-bar', label: t('mobile.more.searchLayout.bottomBar') },
+    { key: 'sticky-strip', label: t('mobile.more.searchLayout.stickyStrip') },
   ];
 
   return (
@@ -52,6 +59,32 @@ export default function MoreScreen() {
             trackColor={systemColors.fill}
             accessibilityLabel={t('mobile.more.appearance.title')}
           />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title={t('mobile.more.searchLayout.title')} />
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: systemColors.secondaryBackground,
+              borderRadius: borderRadius.lg,
+              marginHorizontal: spacing[4],
+              padding: spacing[3],
+            },
+          ]}
+        >
+          <SegmentedControl
+            options={searchLayoutOptions}
+            selectedKey={searchLayout}
+            onSelect={setSearchLayout}
+            trackColor={systemColors.fill}
+            accessibilityLabel={t('mobile.more.searchLayout.title')}
+          />
+          <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.settingHint}>
+            {t('mobile.more.searchLayout.description')}
+          </Text>
         </View>
       </View>
       {__DEV__ ? (
@@ -129,6 +162,9 @@ const styles = StyleSheet.create({
   },
   card: {
     overflow: 'hidden',
+  },
+  settingHint: {
+    marginTop: spacing[2],
   },
   accountEmail: {
     paddingHorizontal: spacing[4],

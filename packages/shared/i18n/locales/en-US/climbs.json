@@ -642,7 +642,12 @@
       "settersCount_one": "{{count}} setter",
       "settersCount_other": "{{count}} setters",
       "climbsCount_one": "{{count}} climb",
-      "climbsCount_other": "{{count}} climbs"
+      "climbsCount_other": "{{count}} climbs",
+      "grade": "Grade",
+      "anyGrade": "Any grade",
+      "gradeClear": "Any",
+      "gradeHint": "Tap a grade · tap a second for a range",
+      "filters": "Filters"
     },
     "climbRow": {
       "addToQueue": "Add to queue",
