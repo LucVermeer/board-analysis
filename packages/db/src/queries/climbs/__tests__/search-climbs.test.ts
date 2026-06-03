@@ -7,6 +7,7 @@ const baseInput = {
   sortOrder: 'desc' as const,
   isDraftsQuery: false,
   projectsOnly: false,
+  routesOnly: false,
   page: 0,
   hasStatsFilters: false,
 };
@@ -15,6 +16,12 @@ void describe('chooseSearchPath', () => {
   void describe('the hot path: ascents DESC, page 0, no stats filters', () => {
     void it('uses stats-driven-with-fallback so projects appear at the bottom of narrow-filter pages', () => {
       assert.equal(chooseSearchPath(baseInput), 'stats-driven-with-fallback');
+    });
+  });
+
+  void describe('routes-only filter', () => {
+    void it('uses standard-only so unclimbed routes (no stats row) still appear in the list', () => {
+      assert.equal(chooseSearchPath({ ...baseInput, routesOnly: true }), 'standard-only');
     });
   });
 

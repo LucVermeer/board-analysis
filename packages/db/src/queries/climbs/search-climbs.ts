@@ -75,6 +75,8 @@ export const searchClimbs = async (
     sortOrder,
     isDraftsQuery,
     projectsOnly: !!searchParams.projectsOnly,
+    // Routes-only (frames_count > 1, boulders off) — see chooseSearchPath.
+    routesOnly: !!searchParams.routes && !searchParams.boulders,
     page,
     hasStatsFilters,
   });
@@ -130,6 +132,7 @@ export type SearchPath = 'standard-only' | 'stats-driven-only' | 'stats-driven-w
  *   - non-ascents-DESC sort → standard-only (only ascents-DESC has the index-driven plan)
  *   - drafts query          → standard-only (drafts have no stats rows)
  *   - projectsOnly          → standard-only (the user explicitly wants stats-less climbs)
+ *   - routesOnly            → standard-only (routes are few + often unclimbed; the stats path drops them)
  *   - page === 0 && !hasStatsFilters → stats-driven-with-fallback
  *   - otherwise             → stats-driven-only
  */
@@ -138,12 +141,19 @@ export function chooseSearchPath(input: {
   sortOrder: 'asc' | 'desc';
   isDraftsQuery: boolean;
   projectsOnly: boolean;
+  routesOnly: boolean;
   page: number;
   hasStatsFilters: boolean;
 }): SearchPath {
   if (input.sortBy !== 'ascents' || input.sortOrder !== 'desc') return 'standard-only';
   if (input.isDraftsQuery) return 'standard-only';
   if (input.projectsOnly) return 'standard-only';
+  // Routes (frames_count > 1) are a small, frequently-unclimbed set. The
+  // stats-driven path INNER JOINs board_climb_stats at the angle, which drops
+  // routes with no stats row — the count query still counts them, so the list
+  // comes back empty while the count says e.g. 66. Force the LEFT JOIN path so
+  // unclimbed routes surface; the tiny routes dataset makes the index plan moot.
+  if (input.routesOnly) return 'standard-only';
   if (input.page === 0 && !input.hasStatsFilters) return 'stats-driven-with-fallback';
   return 'stats-driven-only';
 }
