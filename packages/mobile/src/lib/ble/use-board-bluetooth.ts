@@ -15,6 +15,7 @@ import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
+import { sanitizeErrorForAnalytics } from '@boardsesh/analytics';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
 export async function dispatchMoonboardPacket(
@@ -252,7 +253,7 @@ export function useBoardBluetooth({
           return;
         }
         console.error('Error sending frames to board:', error);
-        track('Climb Sent to Board Failure', { boardLayout: boardName, error: String(error) });
+        track('Climb Sent to Board Failure', { boardLayout: boardName, error: sanitizeErrorForAnalytics(error) });
         // A write that fails because the link is gone (the board dropped or
         // another device grabbed it — these boards are last-connection-wins) is
         // often the only signal we get: the adapter's disconnect event may never
@@ -386,7 +387,7 @@ export function useBoardBluetooth({
           Alert.alert(t('ble.notAvailable'), t('ble.errorConnectionFailed'));
         }
 
-        track('Bluetooth Connection Failed', { boardLayout: boardName, error: String(error) });
+        track('Bluetooth Connection Failed', { boardLayout: boardName, error: sanitizeErrorForAnalytics(error) });
       } finally {
         setLoading(false);
       }

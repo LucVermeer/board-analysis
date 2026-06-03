@@ -113,6 +113,18 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleOAuthSignIn(provider: 'apple' | 'google') {
+    track('Login Attempted', { auth_method: provider, flow: 'native' });
+    const result = await signIn(provider);
+    // A successful redirect ('success') hands off to /auth/callback, which fires
+    // Login Succeeded/Failed. The user dismissing the system sheet is only
+    // observable here — track it so the funnel sees the Attempted→Succeeded
+    // drop-off instead of a silent gap.
+    if (result.type === 'cancel' || result.type === 'dismiss') {
+      track('Login Failed', { auth_method: provider, flow: 'native', failure_reason: result.type });
+    }
+  }
+
   // Input styling — dark-mode input fields are intentionally white (matches web).
   const isDark = theme.colorScheme === 'dark';
   const inputBackground = isDark ? iosSystemColors.white : '#FFFFFF';
@@ -198,16 +210,14 @@ export default function LoginScreen() {
             <SignInButton
               title={t('nativeStart.signInApple')}
               onPress={() => {
-                track('Login Attempted', { auth_method: 'apple', flow: 'native' });
-                signIn('apple');
+                void handleOAuthSignIn('apple');
               }}
             />
           )}
           <SignInButton
             title={t('nativeStart.signInGoogle')}
             onPress={() => {
-              track('Login Attempted', { auth_method: 'google', flow: 'native' });
-              signIn('google');
+              void handleOAuthSignIn('google');
             }}
           />
         </View>

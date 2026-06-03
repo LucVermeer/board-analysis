@@ -5,6 +5,7 @@
 // identity state machine, and the cross-platform event names — lives here.
 export type { AnalyticsProperties, AnalyticsPropertyValue, PostHogClient } from './client';
 export { sanitizeForPosthog } from './sanitize';
+export { sanitizeErrorForAnalytics } from './sanitize-error';
 export {
   createAnalytics,
   type AnalyticsApi,

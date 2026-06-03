@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { exchangeTransferToken } from '../../src/lib/auth';
 import { brandColors } from '../../src/theme/colors';
+import { sanitizeErrorForAnalytics } from '@boardsesh/analytics';
 import { track } from '../../src/lib/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 
@@ -15,6 +16,9 @@ export default function AuthCallback() {
 
   useEffect(() => {
     if (!transferToken) {
+      // auth_method is unknown here — the OAuth provider isn't echoed back on the
+      // transfer-token exchange (same reason Login Succeeded omits it).
+      track('Login Failed', { flow: 'native', failure_reason: 'no_transfer_token' });
       setError('No transfer token received');
       return;
     }
@@ -29,10 +33,12 @@ export default function AuthCallback() {
           await refreshAuthState();
           router.replace('/(tabs)/boards');
         } else {
+          track('Login Failed', { flow: 'native', failure_reason: sanitizeErrorForAnalytics(result.error) });
           setError(result.error);
         }
       })
       .catch((exchangeError: unknown) => {
+        track('Login Failed', { flow: 'native', failure_reason: sanitizeErrorForAnalytics(exchangeError) });
         setError(exchangeError instanceof Error ? exchangeError.message : 'Unexpected error');
       });
   }, [transferToken, router, refreshAuthState]);

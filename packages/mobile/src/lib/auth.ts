@@ -5,10 +5,13 @@ import { BACKEND_URL, WEB_BASE_URL } from './env';
 
 export type AuthProvider = 'google' | 'apple';
 
-export async function startSignIn(provider: AuthProvider): Promise<void> {
+// Returns the WebBrowser result so the caller can distinguish a successful
+// redirect from a user-cancelled/dismissed OAuth sheet — the cancel path never
+// reaches the /auth/callback deep link, so it's only observable here.
+export async function startSignIn(provider: AuthProvider): Promise<WebBrowser.WebBrowserAuthSessionResult> {
   const callbackUrl = encodeURIComponent('/api/auth/native/callback?next=/');
   const url = `${WEB_BASE_URL}/auth/native-start?provider=${provider}&callbackUrl=${callbackUrl}`;
-  await WebBrowser.openAuthSessionAsync(url, 'com.boardsesh.app://auth/callback');
+  return WebBrowser.openAuthSessionAsync(url, 'com.boardsesh.app://auth/callback');
 }
 
 export async function exchangeTransferToken(

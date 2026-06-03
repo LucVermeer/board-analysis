@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import { AppState } from 'react-native';
+import type { WebBrowserAuthSessionResult } from 'expo-web-browser';
 import { useSegments, Redirect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { getAuthToken, isTokenExpiringSoon } from '../lib/auth-store';
@@ -20,7 +21,7 @@ import { ACTIVE_BOARD_QUERY_KEY } from '../lib/graphql/use-active-board';
 type AuthState = {
   isAuthenticated: boolean;
   isLoading: boolean;
-  signIn: (provider: AuthProviderType) => Promise<void>;
+  signIn: (provider: AuthProviderType) => Promise<WebBrowserAuthSessionResult>;
   signInWithCredentials: (email: string, password: string) => Promise<CredentialsSignInResult>;
   signOut: () => Promise<void>;
   refreshAuthState: () => Promise<void>;
@@ -76,8 +77,8 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     return () => subscription.remove();
   }, [checkAuth]);
 
-  const signIn = useCallback(async (provider: AuthProviderType) => {
-    await startSignIn(provider);
+  const signIn = useCallback((provider: AuthProviderType) => {
+    return startSignIn(provider);
   }, []);
 
   const signInWithCredentials = useCallback(

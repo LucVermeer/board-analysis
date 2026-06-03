@@ -36,7 +36,7 @@ const PartyProfileContext = createContext<PartyProfileContextValue | undefined>(
 export function PartyProfileProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<PartyProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   // The authenticated user's profile (id + email + display fields). Gated on auth
   // so signed-out launches don't fire the query. Shared `['profile']` query key,
   // so this dedupes with the profile/discover screens that also read it.
@@ -68,24 +68,27 @@ export function PartyProfileProvider({ children }: { children: ReactNode }) {
   // reconcileAnalyticsIdentity from @boardsesh/analytics.
   const profileId = profile?.id;
   const authUserId = userProfile?.id ?? null;
-  // Treat the session as authenticated only once the user id has actually
-  // landed; until then we anchor on the party UUID (anonymous) and the alias →
-  // identify(user) switch fires when the id arrives.
-  const hasAuthenticatedUser = isAuthenticated && authUserId !== null;
   const authEmail = userProfile?.email ?? null;
 
   useEffect(() => {
-    if (!profileId) return;
+    // Skip while the party UUID is still loading, and while auth is still
+    // resolving (mirrors web's `sessionStatus === 'loading'` guard) so we never
+    // reconcile against a half-known state. When the session is authenticated
+    // but the user id hasn't been fetched yet, we pass the *raw* isAuthenticated
+    // so reconcileAnalyticsIdentity holds (no identify) rather than momentarily
+    // re-identifying a returning user as the anonymous UUID; the alias →
+    // identify(user) switch then fires once authUserId lands.
+    if (!profileId || isAuthLoading) return;
     lastAnalyticsDistinctId.current = reconcileAnalyticsIdentity({
       profileId,
       authUserId,
       authEmail,
-      isAuthenticated: hasAuthenticatedUser,
+      isAuthenticated,
       lastDistinctId: lastAnalyticsDistinctId.current,
       client: { identify, alias, reset },
       aliasStore: aliasDedupeStore,
     });
-  }, [profileId, hasAuthenticatedUser, authUserId, authEmail]);
+  }, [profileId, isAuthLoading, isAuthenticated, authUserId, authEmail]);
 
   const refreshProfile = useCallback(async () => {
     try {

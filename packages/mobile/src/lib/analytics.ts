@@ -30,6 +30,14 @@ function getClient(): PostHog | null {
   // captureAppLifecycleEvents defaults on (Application Opened/Backgrounded etc.);
   // expo-device + expo-application (installed) enrich events with $device_model,
   // $os_version, $app_version. Screen autocapture is handled in AnalyticsProvider.
+  //
+  // Known gap: this client is constructed at AnalyticsProvider mount (top of the
+  // tree), so the first Application Opened fires under PostHog's auto-generated
+  // anonymous distinct_id — before PartyProfileProvider has run identify() with
+  // the party-profile UUID (and, for signed-in users, the alias to the user).
+  // PostHog merges those early events into the person record once the alias is
+  // processed, so this is acceptable (web has the same cold-start window), but
+  // don't be surprised to see a few lifecycle events on a transient anon id.
   client = new PostHog(apiKey, { host });
   return client;
 }
