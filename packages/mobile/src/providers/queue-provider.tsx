@@ -384,13 +384,21 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const reorderQueue = useCallback(
     (uuid: string, oldIndex: number, newIndex: number) => {
       // Optimistic local reorder; the reducer re-validates uuid-at-oldIndex so
-      // the server's QueueReordered echo is a safe no-op. Best-effort sync only.
+      // the server's QueueReordered echo is a safe no-op.
+      const previousQueue = stateRef.current.queue;
+      const previousCurrent = stateRef.current.currentClimbQueueItem;
       dispatch({ type: 'DELTA_REORDER_QUEUE_ITEM', payload: { uuid, oldIndex, newIndex } });
       mutations.reorderQueueItem(uuid, oldIndex, newIndex).catch((error) => {
-        if (__DEV__) console.warn('[queue] reorderQueueItem sync failed', error);
+        if (__DEV__) console.warn('[queue] reorderQueueItem sync failed; rolling back', error);
+        // Unlike add/remove (idempotent, converge on next sync), a failed reorder
+        // would leave this client's order silently diverged from peers. Roll back
+        // to the pre-reorder order — that matches the server, which never applied
+        // the move — and surface the failure.
+        dispatch({ type: 'UPDATE_QUEUE', payload: { queue: previousQueue, currentClimbQueueItem: previousCurrent } });
+        showToast(t('mobile.queue.actionFailed'), 'error');
       });
     },
-    [mutations],
+    [mutations, showToast, t],
   );
 
   const clearQueue = useCallback(() => {

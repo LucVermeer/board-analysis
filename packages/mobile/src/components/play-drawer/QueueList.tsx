@@ -18,8 +18,14 @@ import { toClimbSearchInput, DEFAULT_CLIMB_FILTER_STATE } from '@boardsesh/climb
 import { useQueueDrag } from './use-queue-drag';
 
 // Synthetic suggestion-source id for tapping a climb from the queue sheet's
-// suggestion feed — distinct from real playlist activations.
+// suggestion feed — distinct from real playlist activations. This is a plain
+// string identifier (PlaylistSuggestionSource.playlistUuid is typed `string`
+// and nothing validates UUID format — the climbs list likewise uses 'climblist').
 const QUEUE_SUGGESTION_SOURCE_ID = 'queue-suggestions';
+// Keep the suggestion feed warm across sheet opens so reopening the queue reuses
+// the cached page instead of refiring a 50-item request each time.
+const SUGGESTION_STALE_MS = 5 * 60 * 1000;
+const SUGGESTION_GC_MS = 10 * 60 * 1000;
 
 type SuggestionRow = { type: 'suggestion'; climb: Climb };
 type QueueListRow = QueueFlatRow | SuggestionRow;
@@ -99,7 +105,10 @@ export function QueueList({
     () => toClimbSearchInput(DEFAULT_CLIMB_FILTER_STATE, board, { page: 1, pageSize: SUGGESTION_PAGE_SIZE }),
     [board],
   );
-  const { data: searchResult } = useSearchClimbs(searchInput, true);
+  const { data: searchResult } = useSearchClimbs(searchInput, true, {
+    staleTime: SUGGESTION_STALE_MS,
+    gcTime: SUGGESTION_GC_MS,
+  });
 
   const suggestions = useMemo<Climb[]>(() => {
     const queued = new Set(queue.map((item) => item.climb?.uuid).filter((uuid): uuid is string => !!uuid));

@@ -36,6 +36,27 @@ export function dropRowIndex(
   return clampRowIndex(raw, firstRowIndex, lastRowIndex);
 }
 
+/** The draggable window mapping needed to turn a drop into a queue reorder. */
+export type ReorderWindow = { firstRowIndex: number; firstQueueIndex: number };
+
+/**
+ * Decide the reorder to commit when a drag ends: maps the drop row index to a
+ * queue index and returns the move, or null when there's no draggable window
+ * (`firstRowIndex < 0`) or the item didn't actually move. Pure so the hook's
+ * JS-thread commit path is unit-testable without the gesture runtime.
+ */
+export function resolveReorderCommit(
+  uuid: string,
+  oldQueueIndex: number,
+  toRowIndex: number,
+  window: ReorderWindow,
+): { uuid: string; oldIndex: number; newIndex: number } | null {
+  if (window.firstRowIndex < 0) return null;
+  const newQueueIndex = queueIndexForRow(toRowIndex, window.firstRowIndex, window.firstQueueIndex);
+  if (newQueueIndex === oldQueueIndex) return null;
+  return { uuid, oldIndex: oldQueueIndex, newIndex: newQueueIndex };
+}
+
 /**
  * Vertical offset a sibling row animates to so a gap opens under the lifted row:
  * rows the dragged row has crossed shift one row-height toward the drag origin;

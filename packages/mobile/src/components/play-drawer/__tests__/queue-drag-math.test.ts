@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { queueIndexForRow, clampRowIndex, dropRowIndex, rowReorderShift } from '../queue-drag-math';
+import {
+  queueIndexForRow,
+  clampRowIndex,
+  dropRowIndex,
+  rowReorderShift,
+  resolveReorderCommit,
+} from '../queue-drag-math';
 
 // The future-item window is a contiguous block of flat-list rows that maps 1:1
 // onto a contiguous slice of the queue array. Example used throughout: history
@@ -85,5 +91,31 @@ describe('rowReorderShift', () => {
   it('no shift when target equals active (no movement)', () => {
     expect(rowReorderShift(4, 5, 5, H)).toBe(0);
     expect(rowReorderShift(6, 5, 5, H)).toBe(0);
+  });
+});
+
+describe('resolveReorderCommit', () => {
+  // Future window: flat rows 3..6 ↔ queue indices 3..6 (offset 0 here).
+  const WINDOW = { firstRowIndex: 3, firstQueueIndex: 3 };
+
+  it('maps the drop row to a queue move', () => {
+    expect(resolveReorderCommit('a', 3, 5, WINDOW)).toEqual({ uuid: 'a', oldIndex: 3, newIndex: 5 });
+  });
+
+  it('honours a row/queue index offset', () => {
+    // history "show all" row shifts flat indices +1 vs queue indices
+    expect(resolveReorderCommit('a', 2, 6, { firstRowIndex: 4, firstQueueIndex: 2 })).toEqual({
+      uuid: 'a',
+      oldIndex: 2,
+      newIndex: 4,
+    });
+  });
+
+  it('returns null when the item did not move', () => {
+    expect(resolveReorderCommit('a', 4, 4, WINDOW)).toBeNull();
+  });
+
+  it('returns null when there is no draggable window', () => {
+    expect(resolveReorderCommit('a', 0, 0, { firstRowIndex: -1, firstQueueIndex: -1 })).toBeNull();
   });
 });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, runOnJS, type SharedValue } from 'react-native-reanimated';
 import { hapticSelection } from '../../lib/haptics';
-import { dropRowIndex, queueIndexForRow } from './queue-drag-math';
+import { dropRowIndex, resolveReorderCommit } from './queue-drag-math';
 
 // Press-and-hold this long on a handle before the drag arms. Short enough to
 // feel instant on a deliberate grab, long enough that a quick flick scrolls
@@ -94,11 +94,8 @@ export function useQueueDrag({
 
   const commit = useCallback(
     (uuid: string, oldQueueIndex: number, toRowIndex: number) => {
-      const { firstRowIndex, firstQueueIndex } = windowRef.current;
-      if (firstRowIndex < 0) return;
-      const newQueueIndex = queueIndexForRow(toRowIndex, firstRowIndex, firstQueueIndex);
-      if (newQueueIndex === oldQueueIndex) return;
-      reorderQueue(uuid, oldQueueIndex, newQueueIndex);
+      const move = resolveReorderCommit(uuid, oldQueueIndex, toRowIndex, windowRef.current);
+      if (move) reorderQueue(move.uuid, move.oldIndex, move.newIndex);
     },
     [reorderQueue],
   );
