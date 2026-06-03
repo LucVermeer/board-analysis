@@ -1,10 +1,10 @@
 import { type ReactNode } from 'react';
-import { Pressable, View, StyleSheet, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { Text } from './Text';
 import { Icon } from './Icon';
+import { PressableSurface } from './PressableSurface';
 import { hapticLight } from '../lib/haptics';
-import { springs } from '../theme/animations';
+import { useTheme } from '../providers/theme-provider';
 import { iosSystemColors } from '../theme/ios-colors';
 
 type ListRowProps = {
@@ -20,8 +20,6 @@ type ListRowProps = {
   style?: ViewStyle;
 };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 export function ListRow({
   title,
   subtitle,
@@ -34,19 +32,7 @@ export function ListRow({
   separatorInset = 16,
   style,
 }: ListRowProps) {
-  const opacity = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
-
-  const handlePressIn = () => {
-    opacity.value = withSpring(0.7, springs.snappy);
-  };
-
-  const handlePressOut = () => {
-    opacity.value = withSpring(1, springs.snappy);
-  };
+  const { systemColors } = useTheme();
 
   const handlePress = () => {
     if (haptic) hapticLight();
@@ -74,22 +60,29 @@ export function ListRow({
           </View>
         )}
       </View>
-      {showSeparator && <View style={[styles.separator, { marginLeft: separatorInset + (leading ? 48 : 0) }]} />}
+      {showSeparator && (
+        <View
+          style={[
+            styles.separator,
+            { marginLeft: separatorInset + (leading ? 48 : 0), backgroundColor: systemColors.separator },
+          ]}
+        />
+      )}
     </>
   );
 
   if (onPress) {
     return (
-      <AnimatedPressable
+      <PressableSurface
         onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        feedback="opacity"
+        opacityTo={0.7}
         accessibilityRole="button"
         accessibilityLabel={title}
-        style={[animatedStyle, styles.container, style]}
+        style={[styles.container, style]}
       >
         {content}
-      </AnimatedPressable>
+      </PressableSurface>
     );
   }
 
@@ -128,7 +121,9 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   separator: {
+    // backgroundColor is applied inline from systemColors.separator so it
+    // adapts to the colour scheme on both platforms (the iOS PlatformColor
+    // value is dark-mode-correct; the static rgba here was light-mode only).
     height: StyleSheet.hairlineWidth,
-    backgroundColor: iosSystemColors.separator,
   },
 });

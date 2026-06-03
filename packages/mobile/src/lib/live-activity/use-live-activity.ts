@@ -18,13 +18,27 @@ type BoardConfig = {
   setIds: string;
 };
 
+type AndroidNotificationStrings = {
+  channelName: string;
+  channelDescription: string;
+  contentTitleFallback: string;
+  previousLabel: string;
+  nextLabel: string;
+};
+
 type UseLiveActivityOptions = {
   queue: ClimbQueueItem[];
   currentClimbQueueItem: ClimbQueueItem | null;
   board: BoardConfig | null;
   sessionId: string | null;
   isSessionActive: boolean;
+  /** Localized strings for the Android foreground-service notification (ignored on iOS). */
+  androidNotification?: AndroidNotificationStrings;
 };
+
+// Both iOS (ActivityKit) and Android (foreground service) back the session-
+// presence surface; everything else short-circuits at the plugin layer.
+const supportsSessionPresence = Platform.OS === 'ios' || Platform.OS === 'android';
 
 function getGraphqlHttpUrl(): string {
   return `${BACKEND_URL.replace(/\/+$/, '')}/graphql`;
@@ -36,20 +50,24 @@ function getGraphqlWsUrl(): string {
 
 // React Native port of `packages/web/app/lib/live-activity/use-live-activity.ts`.
 //
-// Lifecycle: starts a Live Activity when (iOS) + (session active) + (board
-// selected) + (queue has content) + (Live Activities authorized in Settings).
+// Lifecycle: starts a session presence when (iOS or Android) + (session active)
+// + (board selected) + (queue has content) + (the native surface is available —
+// Live Activities authorized on iOS, POST_NOTIFICATIONS granted on Android).
 // Pushes initial state, then watches the serialized queue (full update) and
-// current climb (lightweight update) to drive ActivityKit pushes.
+// current climb (lightweight update). On iOS this drives ActivityKit; on Android
+// it drives the foreground service + ongoing notification (the SessionPresence
+// module). The plugin layer selects the platform module behind one API.
 //
-// On non-iOS / Expo Go / preview builds without the native module, every
-// call short-circuits at the plugin layer (`Platform.OS !== 'ios'` or
-// `liveActivityNative == null`) so this hook is safe to mount unconditionally.
+// On Expo Go / preview builds without the native module, every call short-
+// circuits at the plugin layer (the selected module is null), so this hook is
+// safe to mount unconditionally.
 export function useLiveActivity({
   queue,
   currentClimbQueueItem,
   board,
   sessionId,
   isSessionActive,
+  androidNotification,
 }: UseLiveActivityOptions): void {
   const isActiveRef = useRef(false);
   const generationRef = useRef(0);
@@ -62,6 +80,8 @@ export function useLiveActivity({
   sessionIdRef.current = sessionId;
   const authTokenRef = useRef(authToken);
   authTokenRef.current = authToken;
+  const androidNotificationRef = useRef(androidNotification);
+  androidNotificationRef.current = androidNotification;
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentClimbRef = useRef(currentClimbQueueItem);
@@ -93,7 +113,7 @@ export function useLiveActivity({
 
   // Check availability once on mount.
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
+    if (!supportsSessionPresence) return;
     let cancelled = false;
     void isLiveActivityAvailable().then((result) => {
       if (!cancelled) setAvailable(result);
@@ -106,7 +126,7 @@ export function useLiveActivity({
   // Load auth token once. Re-load if the start effect's deps change (cheap
   // enough — SecureStore read).
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
+    if (!supportsSessionPresence) return;
     let cancelled = false;
     void getAuthToken().then((token) => {
       if (cancelled) return;
@@ -124,7 +144,7 @@ export function useLiveActivity({
   const shouldBeActive = isSessionActive && hasContent && stableBoard !== null && available === true && authTokenLoaded;
 
   useEffect(() => {
-    if (Platform.OS !== 'ios' || available !== true) return;
+    if (!supportsSessionPresence || available !== true) return;
 
     if (shouldBeActive && !isActiveRef.current && stableBoard) {
       isActiveRef.current = true;
@@ -140,6 +160,7 @@ export function useLiveActivity({
         layoutId: stableBoard.layoutId,
         sizeId: stableBoard.sizeId,
         setIds: stableBoard.setIds,
+        androidNotification: androidNotificationRef.current,
       })
         .then(() => {
           if (!isActiveRef.current || generationRef.current !== startGeneration) return;

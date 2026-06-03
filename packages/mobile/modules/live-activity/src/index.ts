@@ -51,6 +51,19 @@ export type LiveActivityStartSessionOptions = {
   authToken?: string;
   wsUrl?: string;
   graphqlUrl?: string;
+  /**
+   * Localized strings for the Android foreground-service notification. Ignored
+   * on iOS (ActivityKit builds its UI in Swift). Supplied so the ongoing
+   * notification + its Previous/Next actions respect the app locale instead of
+   * hardcoding English in Kotlin.
+   */
+  androidNotification?: {
+    channelName: string;
+    channelDescription: string;
+    contentTitleFallback: string;
+    previousLabel: string;
+    nextLabel: string;
+  };
 };
 
 export type LiveActivityQueueItem = {
@@ -94,3 +107,23 @@ type LiveActivityNativeModule = {
 };
 
 export const liveActivityNative = requireOptionalNativeModule<LiveActivityNativeModule>('LiveActivity');
+
+// --- SessionPresence native module (Android) ---
+
+// The Android counterpart to the iOS LiveActivity module: a foreground service +
+// ongoing media-style notification that keeps the BLE connection alive in the
+// background and surfaces Previous/Next session controls. It deliberately
+// mirrors the LiveActivity method names + the queueNavigate event shape so the
+// JS seam (live-activity-plugin) can drive either platform through one selector.
+// requireOptionalNativeModule returns null on iOS (where 'LiveActivity'/'BoardBle'
+// are the live modules) and in Expo Go / pre-module builds.
+type SessionPresenceNativeModule = {
+  isAvailable(): Promise<{ available: boolean }>;
+  startSession(options: LiveActivityStartSessionOptions): Promise<void>;
+  endSession(): Promise<void>;
+  updateActivity(options: LiveActivityUpdateOptions): Promise<void>;
+  updateActivityClimb(options: LiveActivityClimbUpdateOptions): Promise<void>;
+  addListener(event: 'queueNavigate', listener: (payload: WidgetQueueNavigateEvent) => void): EventSubscription;
+};
+
+export const sessionPresenceNative = requireOptionalNativeModule<SessionPresenceNativeModule>('SessionPresence');

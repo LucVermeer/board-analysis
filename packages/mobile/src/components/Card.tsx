@@ -1,8 +1,7 @@
 import { type ReactNode } from 'react';
-import { View, Pressable, StyleSheet, Platform, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { View, StyleSheet, Platform, type ViewStyle } from 'react-native';
+import { PressableSurface } from './PressableSurface';
 import { hapticLight } from '../lib/haptics';
-import { springs } from '../theme/animations';
 import { useTheme } from '../providers/theme-provider';
 
 type CardProps = {
@@ -12,27 +11,8 @@ type CardProps = {
   style?: ViewStyle;
 };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 export function Card({ children, onPress, haptic = true, style }: CardProps) {
   const { systemColors } = useTheme();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = () => {
-    if (onPress) {
-      scale.value = withSpring(0.98, springs.snappy);
-    }
-  };
-
-  const handlePressOut = () => {
-    if (onPress) {
-      scale.value = withSpring(1, springs.snappy);
-    }
-  };
 
   const handlePress = () => {
     if (haptic) hapticLight();
@@ -43,15 +23,15 @@ export function Card({ children, onPress, haptic = true, style }: CardProps) {
 
   if (onPress) {
     return (
-      <AnimatedPressable
+      <PressableSurface
         onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        feedback="scale"
+        scaleTo={0.98}
         accessibilityRole="button"
-        style={[animatedStyle, styles.card, backgroundStyle, style]}
+        style={[styles.card, backgroundStyle, style]}
       >
         {children}
-      </AnimatedPressable>
+      </PressableSurface>
     );
   }
 

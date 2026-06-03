@@ -1,0 +1,45 @@
+plugins {
+  id 'com.android.library'
+  // Canonical Expo local-module plugin: applies Kotlin + provides
+  // expo-modules-core on the compile classpath (version-proof — the raw
+  // expo:modules-core:<version> coordinate doesn't resolve), and supplies Expo's
+  // SDK defaults. Groovy (not .kts) so the deprecated-but-required library
+  // defaultConfig versionCode/versionName the plugin reads can be set.
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.boardsesh'
+version = '1.0.0'
+
+android {
+  namespace 'com.boardsesh.boardrenderer'
+  compileSdk 35
+
+  defaultConfig {
+    minSdk 24
+    // Required by expo-module-gradle-plugin's publication setup.
+    versionCode 1
+    versionName '1.0.0'
+    ndk {
+      // Default to all four ABIs (release / Play). A build can pass
+      // -PboardseshAbiFilters=arm64-v8a to slim a PR/test build — far faster and
+      // lower-memory native compile, and enough for any modern physical device.
+      def requestedAbis = (project.findProperty('boardseshAbiFilters')?.toString()
+        ?: 'arm64-v8a,armeabi-v7a,x86_64,x86').split(',').collect { it.trim() }.findAll { it }
+      abiFilters.clear()
+      abiFilters.addAll(requestedAbis)
+    }
+  }
+
+  sourceSets {
+    main {
+      jniLibs.srcDirs 'src/main/jniLibs'
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path 'src/main/cpp/CMakeLists.txt'
+    }
+  }
+}

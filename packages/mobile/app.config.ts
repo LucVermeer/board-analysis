@@ -145,7 +145,42 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
     },
     android: {
       package: 'com.boardsesh.app',
-      permissions: ['BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'ACCESS_FINE_LOCATION'],
+      // Keep the legacy predictive back gesture OFF. Enabling it
+      // (android.predictiveBackGestureEnabled: true) currently breaks
+      // cross-screen back navigation with Expo Router + react-native-screens —
+      // Android stops dispatching the back event so the activity exits instead
+      // of popping the stack (https://github.com/expo/expo/issues/39092). The
+      // default is already false; we set it explicitly so nobody flips it on
+      // before that regression is fixed upstream.
+      predictiveBackGestureEnabled: false,
+      // Adaptive launcher icon. The brand mark (assets/icon.png) is a
+      // full-bleed design on black, so we pin the adaptive background to black
+      // — without this, Expo's prebuild defaults the background to white and
+      // the dark icon sits inside a white squircle ring on most launchers.
+      // TODO(Phase 6): replace foregroundImage with a safe-zone-padded
+      // foreground (108dp canvas / 66dp safe zone) and add `monochromeImage`
+      // (single-colour silhouette) for Android 13+ themed icons, supplied by a
+      // designer (no AI-generated art).
+      adaptiveIcon: {
+        foregroundImage: './assets/icon.png',
+        backgroundColor: '#000000',
+      },
+      permissions: [
+        'BLUETOOTH_SCAN',
+        'BLUETOOTH_CONNECT',
+        'ACCESS_FINE_LOCATION',
+        // Background BLE session: a connectedDevice foreground service keeps the
+        // board connection alive while backgrounded; POST_NOTIFICATIONS (Android
+        // 13+) lets its ongoing media-style notification show. The <service> +
+        // <receiver> elements are added by ./plugins/with-android-session-service.
+        'FOREGROUND_SERVICE',
+        'FOREGROUND_SERVICE_CONNECTED_DEVICE',
+        'POST_NOTIFICATIONS',
+      ],
+      // Do NOT add `neverForLocation` to BLUETOOTH_SCAN here: react-native-ble-plx
+      // caps ACCESS_FINE_LOCATION at maxSdkVersion=30 when it's set, which would
+      // break expo-location (board/session discovery) and expo-maps (Google Maps)
+      // on Android 12+. We keep fine location uncapped on purpose.
       blockedPermissions: ['android.permission.BLUETOOTH_ADVERTISE'],
       // expo-maps on Android renders Google Maps, which needs an API key. iOS
       // uses Apple Maps and needs none. Supplied via env so iOS works out of the
@@ -171,6 +206,22 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // android.config.googleMaps.apiKey (env-gated). iOS uses Apple Maps.
       'expo-maps',
       'expo-status-bar',
+      // Android 12+ system splash + the launch screen on every platform. The
+      // brand mark sits on its own black background, so both schemes use black
+      // for a seamless icon-to-app handoff. app/_layout.tsx already drives
+      // SplashScreen.preventAutoHideAsync()/hideAsync() once auth is ready.
+      // TODO(Phase 6): swap `image` for a dedicated splash asset if design wants
+      // one distinct from the launcher icon.
+      [
+        'expo-splash-screen',
+        {
+          image: './assets/icon.png',
+          imageWidth: 200,
+          resizeMode: 'contain',
+          backgroundColor: '#000000',
+          dark: { image: './assets/icon.png', backgroundColor: '#000000' },
+        },
+      ],
       'expo-updates',
       'expo-web-browser',
       'react-native-ble-plx',
@@ -182,6 +233,17 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // credentials, and injecting our debug-fallback signingConfig there would
       // mis-sign EAS preview/production Android builds.
       ...(process.env.EAS_BUILD ? [] : ['./plugins/with-android-release-signing']),
+      // Declares <uses-feature android.hardware.bluetooth_le required=false> for
+      // Play device filtering. Unconditional (EAS-safe) — it's a pure manifest
+      // addition with no signing/credential implications.
+      './plugins/with-android-bluetooth-feature',
+      // Adds the <service android:foregroundServiceType="connectedDevice"> + the
+      // notification-action <receiver> for the background BLE session (the
+      // Android counterpart to the iOS Live Activity). EAS-safe manifest-only mod.
+      './plugins/with-android-session-service',
+      // Caps Gradle heap + parallel workers so the heavy native build (CMake ×4
+      // ABIs + Kotlin + JS bundle + R8) doesn't OOM-kill the daemon. EAS-safe.
+      './plugins/with-android-gradle-memory',
       // Register this before @bacons/apple-targets so Expo's mod chain runs it
       // after the widget target has been created, while keeping the provider last.
       './plugins/with-boardsesh-widget-build-settings',

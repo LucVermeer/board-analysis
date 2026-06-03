@@ -1,12 +1,12 @@
-import { Pressable, StyleSheet, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
 import { Text } from './Text';
 import { Icon } from './Icon';
+import { PressableSurface } from './PressableSurface';
 import type { IconName } from './icon-map';
 import { hapticLight } from '../lib/haptics';
-import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
+import { material } from '../theme/tokens';
 
 type ButtonVariant = 'filled' | 'outlined' | 'text';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -24,13 +24,14 @@ type ButtonProps = {
   style?: ViewStyle;
 };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 const sizeConfig = {
   small: { paddingHorizontal: 12, paddingVertical: 6, fontSize: 14, iconSize: 16 },
   medium: { paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, iconSize: 20 },
   large: { paddingHorizontal: 20, paddingVertical: 14, fontSize: 17, iconSize: 22 },
 } as const;
+
+// M3 corner radius on Android, the existing iOS radius elsewhere.
+const BUTTON_RADIUS = Platform.select({ android: material.button.radius, default: 10 });
 
 export function Button({
   title,
@@ -44,26 +45,12 @@ export function Button({
   tintColor = brandColors.primary,
   style,
 }: ButtonProps) {
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
   const config = sizeConfig[size];
 
   const handlePress = () => {
     if (disabled || loading) return;
     if (haptic) hapticLight();
     onPress();
-  };
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.96, springs.snappy);
-  };
-
-  const handlePressOut = () => {
-    scale.value = withSpring(1, springs.snappy);
   };
 
   const containerStyle: ViewStyle = {
@@ -73,24 +60,27 @@ export function Button({
     gap: 6,
     paddingHorizontal: config.paddingHorizontal,
     paddingVertical: config.paddingVertical,
-    borderRadius: 10,
+    borderRadius: BUTTON_RADIUS,
     opacity: disabled ? 0.5 : 1,
     ...(variant === 'filled' && { backgroundColor: tintColor }),
     ...(variant === 'outlined' && { borderWidth: 1, borderColor: tintColor }),
   };
 
   const textColor = variant === 'filled' ? iosSystemColors.white : tintColor;
+  // M3 ripple: onPrimary (white) over a filled button, the tint over outlined/text.
+  const rippleColor = variant === 'filled' ? iosSystemColors.white : tintColor;
 
   return (
-    <AnimatedPressable
+    <PressableSurface
       onPress={handlePress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      feedback="scale"
+      scaleTo={0.96}
+      rippleColor={rippleColor}
       disabled={disabled || loading}
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
       accessibilityLabel={title}
-      style={[animatedStyle, containerStyle, style]}
+      style={[containerStyle, style]}
     >
       {icon && <Icon name={icon} size={config.iconSize} color={textColor} />}
       <Text
@@ -100,7 +90,7 @@ export function Button({
       >
         {loading ? '...' : title}
       </Text>
-    </AnimatedPressable>
+    </PressableSurface>
   );
 }
 

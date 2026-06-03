@@ -125,7 +125,13 @@ else
         ;;
     esac
 
-    cargo build --manifest-path "$FFI_DIR/Cargo.toml" --release --target "$target"
+    # Align LOAD segments to 16 KB. Android 15 devices with 16 KB memory pages
+    # (Pixel 8/9, etc.) refuse to dlopen a .so whose segments are only 4 KB
+    # aligned ("not 16 KB aligned" → UnsatisfiedLinkError). The NDK linker still
+    # defaults to 4 KB for these targets, so force it; 16 KB-aligned libs also
+    # load fine on 4 KB devices, so this is unconditionally safe.
+    RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-z,max-page-size=16384" \
+      cargo build --manifest-path "$FFI_DIR/Cargo.toml" --release --target "$target"
 
     # Copy .so to jniLibs
     JNILIBS_DIR="$MODULE_DIR/android/src/main/jniLibs/$abi"

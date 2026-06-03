@@ -17,9 +17,8 @@ import {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticMedium } from '../lib/haptics';
-import { sheetStyles, spacing } from '../theme/tokens';
+import { sheetAndroid, sheetStyles, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
-import { iosSystemColors } from '../theme/ios-colors';
 
 // iOS renders the modal in a native window overlay so it sits above the queue
 // bar; Android's modal portal already covers it.
@@ -61,7 +60,13 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} pressBehavior="close" />
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={sheetAndroid.scrimOpacity}
+        pressBehavior="close"
+      />
     ),
     [],
   );
@@ -74,13 +79,21 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
     [onChange],
   );
 
-  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
+  const backgroundStyle = {
+    ...sheetStyles.background,
+    ...sheetAndroid.corners,
+    backgroundColor: systemColors.secondaryBackground,
+  };
 
   const footerNode = footer ? (
     <View
       style={[
         styles.footer,
-        { backgroundColor: systemColors.secondaryBackground as string, paddingBottom: insets.bottom + spacing[3] },
+        {
+          backgroundColor: systemColors.secondaryBackground as string,
+          borderTopColor: systemColors.separator,
+          paddingBottom: insets.bottom + spacing[3],
+        },
       ]}
     >
       {footer}
@@ -96,7 +109,7 @@ export const ModalSheet = forwardRef<BottomSheetModal, ModalSheetProps>(function
       enablePanDownToClose={enablePanDownToClose}
       backdropComponent={renderBackdrop}
       backgroundStyle={backgroundStyle}
-      handleIndicatorStyle={sheetStyles.indicator}
+      handleIndicatorStyle={sheetAndroid.handleStyle}
       containerComponent={modalContainerComponent}
       onChange={handleChange}
       onDismiss={onDismiss}
@@ -163,6 +176,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
+    // borderTopColor is applied inline from systemColors.separator (scheme-aware).
   },
 });
