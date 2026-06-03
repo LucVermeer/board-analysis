@@ -24,7 +24,6 @@ import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
-import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { useTheme } from '../../providers/theme-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
 import { useToast } from '../../providers/toast-provider';
@@ -66,10 +65,13 @@ export type PlayDrawerHandle = {
 type PlayDrawerProps = {
   boardConfig: BoardConfig;
   onAngleChange?: (angle: number) => void;
+  /** Open the queue list sheet (provided by DrawerHostProvider; passed as a prop
+   *  rather than read via useDrawerHost to avoid a host↔PlayDrawer require cycle). */
+  onOpenQueue: () => void;
 };
 
 export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
-  { boardConfig, onAngleChange },
+  { boardConfig, onAngleChange, onOpenQueue },
   ref,
 ) {
   const { t } = useTranslation('session');
@@ -113,7 +115,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const { state, setCurrentClimb, nextClimb, previousClimb, playlistSuggestionSource, sessionId, addToQueue } =
     useQueue();
-  const { openQueueSheet } = useDrawerHost();
   const bluetooth = useOptionalBluetoothContext();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
   const { formatGrade } = useGradeFormat();
@@ -237,8 +238,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handleOpenQueue = useCallback(() => {
-    openQueueSheet();
-  }, [openQueueSheet]);
+    onOpenQueue();
+  }, [onOpenQueue]);
 
   const handleOpenAngleSelector = useCallback(() => {
     setActiveSubDrawer('angleSelector');
