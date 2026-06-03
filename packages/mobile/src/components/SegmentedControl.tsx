@@ -1,8 +1,7 @@
-import { View, Pressable, StyleSheet, type ViewStyle, type ColorValue } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { View, StyleSheet, type ViewStyle, type ColorValue } from 'react-native';
 import { Text } from './Text';
+import { PressableSurface } from './PressableSurface';
 import { hapticSelection } from '../lib/haptics';
-import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
@@ -24,8 +23,6 @@ type SegmentedControlProps<K extends string> = {
   accessibilityLabel?: string;
 };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 function Segment({
   label,
   selected,
@@ -39,19 +36,6 @@ function Segment({
 }) {
   const { systemColors, colorScheme } = useTheme();
   const isDark = colorScheme === 'dark';
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.95, springs.snappy);
-  };
-
-  const handlePressOut = () => {
-    scale.value = withSpring(1, springs.snappy);
-  };
 
   // Selected pill is a raised tile over the track — elevatedSurface reads as a
   // light pill in light mode and a lighter-than-track tile in dark mode.
@@ -76,17 +60,17 @@ function Segment({
   const selectedTextColor = isDark ? systemColors.label : brandColors.primary;
 
   return (
-    <AnimatedPressable
+    <PressableSurface
       onPress={() => {
         hapticSelection();
         onPress();
       }}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      feedback="scale"
+      scaleTo={0.95}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
-      style={[animatedStyle, segmentStyle]}
+      style={segmentStyle}
     >
       <Text
         variant={textVariant}
@@ -95,7 +79,7 @@ function Segment({
       >
         {label}
       </Text>
-    </AnimatedPressable>
+    </PressableSurface>
   );
 }
 

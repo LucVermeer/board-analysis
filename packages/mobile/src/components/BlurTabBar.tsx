@@ -1,14 +1,16 @@
 import { useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
 import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
 import { useBluetoothConnectedStatus } from '../lib/ble/bluetooth-status-store';
-import { brandColors } from '../theme/colors';
+import { brandColors, withAlpha } from '../theme/colors';
+import { material } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
 import { GlassSurface } from './GlassSurface';
+import { PressableSurface } from './PressableSurface';
 import { useSessionScreen } from '../providers/session-screen-provider';
 import { useQueue } from '../providers/queue-provider';
 import { TAB_BAR_HEIGHT } from '../theme/layout';
@@ -36,9 +38,11 @@ const TAB_ICONS: Record<string, TabIconName> = {
 const BLINK_MIN_OPACITY = 0.35;
 const BLINK_DURATION_MS = 700;
 
+const isAndroid = Platform.OS === 'android';
+
 export default function BlurTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { colorScheme } = useTheme();
+  const { colorScheme, systemColors } = useTheme();
   const isDark = colorScheme === 'dark';
   const isBluetoothConnected = useBluetoothConnectedStatus();
   const { isOpen: sessionScreenOpen, toggle: toggleSessionScreen } = useSessionScreen();
@@ -111,8 +115,12 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
         };
 
         return (
-          <Pressable
+          <PressableSurface
             key={route.key}
+            // No iOS press animation on tabs (matches the prior plain Pressable);
+            // Android still gets a borderless ripple around the icon.
+            feedback="none"
+            rippleBorderless
             accessibilityRole="button"
             accessibilityState={isFocused ? { selected: true } : undefined}
             accessibilityLabel={options.tabBarAccessibilityLabel}
@@ -121,6 +129,14 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
             style={styles.tabItem}
           >
             <View style={styles.iconContainer}>
+              {/* Material 3 active-indicator pill behind the focused tab's icon
+                  (Android only — iOS conveys focus through the tint alone). */}
+              {isAndroid && isFocused && (
+                <View
+                  pointerEvents="none"
+                  style={[styles.activeIndicator, { backgroundColor: withAlpha(activeTint, 0.16) }]}
+                />
+              )}
               {isRecordTab ? (
                 <Animated.View style={blinkStyle}>
                   <MaterialCommunityIcons name={iconName} size={24} color={tintColor} />
@@ -133,18 +149,28 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
             <Text style={[styles.label, { color: tintColor }]} numberOfLines={1}>
               {label}
             </Text>
-          </Pressable>
+          </PressableSurface>
         );
       })}
     </View>
   );
 
-  // Bottom-anchored, full-width Liquid Glass bar. GlassSurface resolves the
-  // material per device (Liquid Glass on iOS 26+, frosted blur on older iOS,
-  // solid on Android); the glass spans through the home-indicator inset.
+  // iOS: a bottom-anchored Liquid Glass bar (GlassSurface resolves Liquid Glass
+  // on iOS 26+, frosted blur below) spanning through the home-indicator inset.
+  // Android: a solid Material navigation surface with elevation + a top divider
+  // — Material doesn't use translucent/blurred bottom navigation.
+  const androidSurfaceStyle = isAndroid
+    ? {
+        backgroundColor: systemColors.background,
+        elevation: material.navBar.surfaceElevation,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: systemColors.separator,
+      }
+    : null;
+
   return (
-    <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }]}>
-      <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />
+    <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }, androidSurfaceStyle]}>
+      {!isAndroid && <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />}
       {renderContent()}
     </View>
   );
@@ -170,6 +196,16 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     position: 'relative',
+  },
+  // Centred on the 24px icon: width/height pulled from the Material nav tokens,
+  // offset so the pill is symmetric around the icon.
+  activeIndicator: {
+    position: 'absolute',
+    left: (24 - material.navBar.activeIndicatorWidth) / 2,
+    top: (24 - material.navBar.activeIndicatorHeight) / 2,
+    width: material.navBar.activeIndicatorWidth,
+    height: material.navBar.activeIndicatorHeight,
+    borderRadius: material.navBar.activeIndicatorRadius,
   },
   bluetoothDot: {
     position: 'absolute',

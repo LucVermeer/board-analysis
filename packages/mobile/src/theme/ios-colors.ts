@@ -1,3 +1,18 @@
+import { Platform } from 'react-native';
+import { brandColors } from './colors';
+
+/**
+ * The interactive-accent blue. iOS keeps Apple's #007AFF; Android resolves it to
+ * the brand tint so the active tab, links, and "edit / copy / open" affordances
+ * read as Boardsesh maroon rather than an out-of-place iOS blue. This is the one
+ * value in `iosSystemColors` that genuinely leaks an iOS aesthetic onto Android
+ * (it's used as a *tint*, not a fixed status colour); resolving it here fixes
+ * every static (StyleSheet / default-prop) consumer at once without a wide
+ * per-file refactor. Every other value below is intentionally identical across
+ * platforms — iOS system reds/greens/grays read fine on Android too.
+ */
+const ACCENT_TINT = Platform.OS === 'android' ? brandColors.tint : '#007AFF';
+
 /**
  * iOS system color constants for use in contexts where PlatformColor
  * is unavailable (animated styles, default props, StyleSheet.create).
@@ -14,8 +29,8 @@ export const iosSystemColors = {
   systemGreen: '#34C759',
   /** iOS systemYellow — caution, moderate indicators */
   systemYellow: '#FFCC00',
-  /** iOS systemBlue — default tint, links */
-  systemBlue: '#007AFF',
+  /** Interactive accent — iOS systemBlue (#007AFF); brand maroon on Android. */
+  systemBlue: ACCENT_TINT,
   /** iOS systemOrange — moderate warnings, attempted indicators */
   systemOrange: '#FF9500',
   /** iOS systemGray — secondary text, inactive tint */

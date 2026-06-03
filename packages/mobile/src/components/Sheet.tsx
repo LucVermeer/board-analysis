@@ -9,9 +9,8 @@ import BottomSheet, {
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticMedium } from '../lib/haptics';
-import { sheetStyles, spacing } from '../theme/tokens';
+import { sheetAndroid, sheetStyles, spacing } from '../theme/tokens';
 import { useTheme } from '../providers/theme-provider';
-import { iosSystemColors } from '../theme/ios-colors';
 
 // On iOS a plain BottomSheet renders inside the screen's view tree, so it sits
 // behind root-level chrome (the floating tab bar + persistent queue bar).
@@ -74,7 +73,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={sheetAndroid.scrimOpacity} />
     ),
     [],
   );
@@ -87,13 +86,21 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
     [onChange],
   );
 
-  const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
+  const backgroundStyle = {
+    ...sheetStyles.background,
+    ...sheetAndroid.corners,
+    backgroundColor: systemColors.secondaryBackground,
+  };
 
   const footerNode = footer ? (
     <View
       style={[
         styles.footer,
-        { backgroundColor: systemColors.secondaryBackground as string, paddingBottom: insets.bottom + spacing[3] },
+        {
+          backgroundColor: systemColors.secondaryBackground as string,
+          borderTopColor: systemColors.separator,
+          paddingBottom: insets.bottom + spacing[3],
+        },
       ]}
     >
       {footer}
@@ -114,7 +121,7 @@ export const Sheet = forwardRef<BottomSheet, SheetProps>(function Sheet(
       backgroundStyle={backgroundStyle}
       onChange={handleChange}
       onClose={onClose}
-      handleIndicatorStyle={sheetStyles.indicator}
+      handleIndicatorStyle={sheetAndroid.handleStyle}
       style={styles.sheet}
     >
       {footer ? (
@@ -179,6 +186,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingTop: spacing[3],
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: iosSystemColors.separator,
+    // borderTopColor is applied inline from systemColors.separator (scheme-aware).
   },
 });
