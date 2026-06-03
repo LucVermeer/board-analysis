@@ -201,8 +201,11 @@ export default function DiscoverLibrary() {
   );
 
   // Refresh owned + pinned when returning to the tab (e.g. after editing,
-  // deleting, or pinning from a detail screen). Skip the first focus so we
-  // don't double-fetch what the hooks already load on mount.
+  // deleting, or pinning from a detail screen). Skip the first focus so we don't
+  // double-fetch what the hooks already load on mount. The ref is instance-local
+  // — React recreates it (back to false) on any remount, so a fresh mount
+  // correctly skips its own first focus; it deliberately isn't reset within a
+  // mount (every later focus should refetch).
   const hasFocusedRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
