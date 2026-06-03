@@ -175,9 +175,9 @@ export function LogbookEditSheet({ sheetRef, ascent, onClose }: LogbookEditSheet
       <SectionHeader title={t('mobile.logbook.commentLabel')} />
       <View style={styles.field}>
         <BottomSheetTextInput
-          style={[styles.input, { backgroundColor: systemColors.fill, color: systemColors.label as string }]}
+          style={[styles.input, { backgroundColor: systemColors.fill, color: systemColors.label }]}
           placeholder={t('mobile.logbook.commentPlaceholder')}
-          placeholderTextColor={systemColors.tertiaryLabel as string}
+          placeholderTextColor={systemColors.tertiaryLabel}
           value={comment}
           onChangeText={setComment}
           multiline

@@ -39,8 +39,13 @@ export function useVote() {
 
 /** Accurate vote state (count + `userVote`) for a batch of entities. */
 export function useBulkVoteSummaries(entityType: SocialEntityType, entityIds: string[], enabled = true) {
+  // Key off a sorted copy so the cache identity tracks the *set* of ids, not the
+  // array order or reference. React Query hashes keys by value, so a fresh array
+  // each render is already a cache hit — the sort additionally makes a reordered
+  // (but identical) id list resolve to the same query instead of a refetch.
+  const sortedIds = [...entityIds].sort();
   return useQuery({
-    queryKey: ['bulkVoteSummaries', entityType, entityIds],
+    queryKey: ['bulkVoteSummaries', entityType, sortedIds],
     queryFn: async () => {
       const response = await getHttpClient().request<GetBulkVoteSummariesQueryResponse>(GET_BULK_VOTE_SUMMARIES, {
         input: { entityType, entityIds },

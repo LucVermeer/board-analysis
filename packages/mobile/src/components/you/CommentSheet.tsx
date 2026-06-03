@@ -52,9 +52,9 @@ export function CommentSheet({ sheetRef, sessionId, onClose }: CommentSheetProps
       footer={
         <View style={styles.composer}>
           <BottomSheetTextInput
-            style={[styles.input, { backgroundColor: systemColors.fill, color: systemColors.label as string }]}
+            style={[styles.input, { backgroundColor: systemColors.fill, color: systemColors.label }]}
             placeholder={t('mobile.comments.placeholder')}
-            placeholderTextColor={systemColors.tertiaryLabel as string}
+            placeholderTextColor={systemColors.tertiaryLabel}
             value={draft}
             onChangeText={setDraft}
             multiline

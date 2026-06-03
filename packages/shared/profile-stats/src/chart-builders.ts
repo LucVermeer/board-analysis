@@ -65,34 +65,6 @@ export function filterLogbookByTimeframe(
   }
 }
 
-function filterByUnifiedTimeframe(
-  entries: LogbookEntry[],
-  timeframe: UnifiedTimeframeType,
-  fromDate?: string,
-  toDate?: string,
-): LogbookEntry[] {
-  if (timeframe === 'all') return entries;
-  const now = dayjs();
-  return entries.filter((entry) => {
-    switch (timeframe) {
-      case 'today':
-        return parseTickTime(entry.climbed_at).isSame(now, 'day');
-      case 'lastWeek':
-        return parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'week'));
-      case 'lastMonth':
-        return parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'month'));
-      case 'lastYear':
-        return parseTickTime(entry.climbed_at).isAfter(now.subtract(1, 'year'));
-      case 'custom': {
-        const dateStr = entry.climbed_at.slice(0, 10);
-        return (!fromDate || dateStr >= fromDate) && (!toDate || dateStr <= toDate);
-      }
-      default:
-        return true;
-    }
-  });
-}
-
 // ── Aggregated stacked bars (grade x layout, for stats summary) ─────
 
 export function buildAggregatedStackedBars(
@@ -109,7 +81,7 @@ export function buildAggregatedStackedBars(
 
   BOARD_TYPES.forEach((boardType) => {
     const ticks = allBoardsTicks[boardType] || [];
-    const filteredTicks = filterByUnifiedTimeframe(ticks, timeframe, fromDate, toDate);
+    const filteredTicks = filterLogbookByTimeframe(ticks, timeframe, fromDate ?? '', toDate ?? '');
 
     filteredTicks.forEach((entry) => {
       const gradeId = gradeIdForEntry(entry);
@@ -279,7 +251,7 @@ export function buildAggregatedFlashRedpointBars(
   toDate?: string,
 ): RawGroupedBar[] | null {
   const allEntries = BOARD_TYPES.flatMap((boardType) =>
-    filterByUnifiedTimeframe(allBoardsTicks[boardType] || [], timeframe, fromDate, toDate),
+    filterLogbookByTimeframe(allBoardsTicks[boardType] || [], timeframe, fromDate ?? '', toDate ?? ''),
   );
 
   return buildFlashRedpointBars(allEntries, gradeFormat);
@@ -309,7 +281,7 @@ export function buildVPointsTimeline(
 
   BOARD_TYPES.forEach((boardType) => {
     const ticks = allBoardsTicks[boardType] || [];
-    const filtered = filterByUnifiedTimeframe(ticks, timeframe, fromDate, toDate).filter(
+    const filtered = filterLogbookByTimeframe(ticks, timeframe, fromDate ?? '', toDate ?? '').filter(
       (e) => e.difficulty !== null && e.status !== 'attempt',
     );
 
@@ -372,7 +344,6 @@ export function buildVPointsTimeline(
   });
 
   // Build cumulative series per layout
-  let totalPoints = 0;
   const series: RawVPointsSeries[] = sortedLayouts.map((layoutKey) => {
     const { boardType, layoutId } = parseLayoutKey(layoutKey);
     const weekPoints = layoutWeeklyPoints[layoutKey];
@@ -388,8 +359,6 @@ export function buildVPointsTimeline(
       return cumulative;
     });
 
-    totalPoints += cumulative;
-
     return {
       layoutKey,
       displayName: getLayoutDisplayName(boardType, layoutId),
@@ -400,6 +369,11 @@ export function buildVPointsTimeline(
   // Only keep series that have at least 1 point
   const nonEmptySeries = series.filter((s) => s.data[s.data.length - 1] > 0);
   if (nonEmptySeries.length === 0) return null;
+
+  // Total = sum of each *displayed* series' final cumulative value. Computed
+  // from nonEmptySeries (not the raw map) so dropped/empty layouts can never
+  // contribute to the headline number.
+  const totalPoints = nonEmptySeries.reduce((sum, s) => sum + (s.data[s.data.length - 1] ?? 0), 0);
 
   return { weekLabels, series: nonEmptySeries, totalPoints };
 }

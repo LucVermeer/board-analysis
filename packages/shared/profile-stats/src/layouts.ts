@@ -76,7 +76,13 @@ export const getLayoutDisplayName = (boardType: string, layoutId: number | null 
 
 /** Parse a `${boardType}-${layoutId}` key back into its parts. */
 export const parseLayoutKey = (layoutKey: string): { boardType: string; layoutId: number | null } => {
-  const [boardType, layoutIdStr] = layoutKey.split('-');
+  // Split on the *last* hyphen, not the first: the key is
+  // `${boardType}-${layoutId}` where the trailing segment is always numeric or
+  // 'unknown' (never hyphenated), so this stays correct even if a future board
+  // type contains a hyphen in its name.
+  const separatorIndex = layoutKey.lastIndexOf('-');
+  const boardType = separatorIndex === -1 ? layoutKey : layoutKey.slice(0, separatorIndex);
+  const layoutIdStr = separatorIndex === -1 ? '' : layoutKey.slice(separatorIndex + 1);
   const layoutId = layoutIdStr === 'unknown' ? null : parseInt(layoutIdStr, 10);
   return { boardType, layoutId };
 };

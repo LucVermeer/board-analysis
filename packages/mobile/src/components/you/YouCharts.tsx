@@ -131,6 +131,8 @@ export function StackedBarChart({ bars, colorBy, height = 170, loading, emptyLab
       <ChartFrame height={height} loading={loading} isEmpty={isEmpty} emptyLabel={emptyLabel}>
         {(width) => {
           const { barWidth, spacing } = fitBars(width, stackData.length);
+          // gifted-charts color props are typed `string`, not RN `ColorValue`,
+          // so the systemColors values below are cast rather than passed directly.
           return (
             <BarChart
               stackData={stackData}
@@ -195,6 +197,8 @@ export function GroupedBarChart({ bars, height = 150, loading, emptyLabel, legen
               labelWidth: barWidth * 2 + innerGap,
             })),
           );
+          // gifted-charts color props are typed `string`, not RN `ColorValue`,
+          // so the systemColors values below are cast rather than passed directly.
           return (
             <BarChart
               data={data}
@@ -262,6 +266,8 @@ export function TotalAreaChart({ timeline, color, height = 170, loading, emptyLa
       {(width) => {
         if (!model) return null;
         const spacing = Math.max(1, Math.floor((width - 48) / Math.max(1, model.pointCount - 1)));
+        // gifted-charts color props are typed `string`, not RN `ColorValue`,
+        // so the systemColors values below are cast rather than passed directly.
         return (
           <LineChart
             areaChart
