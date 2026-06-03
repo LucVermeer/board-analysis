@@ -57,8 +57,9 @@ const {
 describe('buildCacheKey', () => {
   it('hashes the frames component so the key fits in a filename', () => {
     const key = buildCacheKey('kilter', 1, 10, '24,25', 'p1r42p2r43');
-    // v<version>_<board>_<layout>_<size>_<sets>_<8-hex-hash>
-    expect(key).toMatch(/^v\d+_kilter_1_10_24,25_[0-9a-f]{8}$/);
+    // v<version>_<style>_<board>_<layout>_<size>_<sets>_<8-hex-hash>
+    // style defaults to 's' (stroke-only / non-filled).
+    expect(key).toMatch(/^v\d+_s_kilter_1_10_24,25_[0-9a-f]{8}$/);
   });
 
   it('does not include output-width or quality suffixes (single PNG per climb)', () => {
@@ -74,6 +75,18 @@ describe('buildCacheKey', () => {
     // holds-only overlays. The version prefix guarantees no v1 file is
     // reused as a v2 overlay (which would double-paint backgrounds).
     expect(buildCacheKey('kilter', 1, 10, '24', 'p1r42')).toMatch(/^v2_/);
+  });
+
+  it('uses a distinct style token so filled (list) and stroke (play view) never collide', () => {
+    // The list thumbnail renders the filled hold style; the full-size play
+    // view renders stroke-only. They share board/layout/size/sets/frames, so
+    // without the style token they would map to one PNG and whichever
+    // rendered first would win. The token keeps them as separate cache slots.
+    const stroke = buildCacheKey('kilter', 1, 10, '24,25', 'p1r42', false);
+    const filled = buildCacheKey('kilter', 1, 10, '24,25', 'p1r42', true);
+    expect(filled).not.toBe(stroke);
+    expect(stroke).toMatch(/^v\d+_s_/);
+    expect(filled).toMatch(/^v\d+_f_/);
   });
 
   it('produces different keys for different frames', () => {

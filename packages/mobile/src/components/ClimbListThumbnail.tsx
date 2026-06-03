@@ -2,8 +2,17 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { BoardName } from '@boardsesh/shared-schema';
 import { useNativeClimbRender } from '../hooks/use-native-climb-render';
-import { spacing, borderRadius } from '../theme/tokens';
+import { borderRadius } from '../theme/tokens';
 import { LayeredClimbImage } from './LayeredClimbImage';
+
+/**
+ * Portrait dimensions of the list thumbnail cell. Exported so ClimbListRow
+ * can size its wrapper and align the row separator to the thumbnail's right
+ * edge from a single source of truth. Portrait (not square) so the portrait
+ * board image fills the cell instead of letterboxing to ~40px wide.
+ */
+export const THUMBNAIL_WIDTH = 76;
+export const THUMBNAIL_HEIGHT = 96;
 
 type ClimbListThumbnailProps = {
   frames: string;
@@ -16,7 +25,9 @@ type ClimbListThumbnailProps = {
 
 /**
  * Layered climb thumbnail for the list view. Wraps the shared
- * LayeredClimbImage stack in a fixed 64×64 cell with rounded corners.
+ * LayeredClimbImage stack in a fixed 76×96 portrait cell with rounded
+ * corners, using the filled hold style so the lit climb reads as solid
+ * dots against the board photo at this small size.
  *
  * Mirror via CSS only — passing `mirrored` to the Rust renderer too
  * would double-flip, and we'd cache two PNGs per climb instead of one.
@@ -37,6 +48,7 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
     layoutId,
     sizeId,
     setIds,
+    filledStyle: true,
   });
 
   return (
@@ -56,8 +68,8 @@ export { ClimbListThumbnail };
 
 const styles = StyleSheet.create({
   container: {
-    width: spacing[16],
-    height: spacing[16],
+    width: THUMBNAIL_WIDTH,
+    height: THUMBNAIL_HEIGHT,
     borderRadius: borderRadius.md,
     overflow: 'hidden',
   },

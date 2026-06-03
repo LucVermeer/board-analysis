@@ -646,7 +646,6 @@
     },
     "climbRow": {
       "addToQueue": "Add to queue",
-      "menuAccessibility": "Actions for {{climbName}}",
       "toggleFavorite": "Toggle favorite",
       "share": "Share climb",
       "projectFallback": "Project"

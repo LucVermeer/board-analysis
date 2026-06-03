@@ -78,6 +78,15 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
+    // Contrasting ring + faint shadow so the badge always reads as a badge,
+    // not a hold — a green check on green start-holds would otherwise blend.
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.92)',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 1,
+    shadowOffset: { width: 0, height: 0.5 },
+    elevation: 2,
   },
   sentBadge: {
     backgroundColor: iosSystemColors.systemGreen,

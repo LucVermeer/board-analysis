@@ -646,7 +646,6 @@
     },
     "climbRow": {
       "addToQueue": "Ajouter à la file",
-      "menuAccessibility": "Actions pour {{climbName}}",
       "toggleFavorite": "Basculer favori",
       "share": "Partager le bloc",
       "projectFallback": "Projet"

@@ -337,28 +337,43 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       await ensureJoined(sessionId);
       return sessionId;
     },
-    onBestEffortError: () => showToastRef.current(tRef.current('mobile.queue.actionFailed'), 'error'),
+    // Best-effort sync failures (coalescer drains for setCurrent / superseded
+    // queue-adds) must not alarm: the local reducer already applied the change
+    // and the WS subscription reconciles. Dev-log only — a user-facing "Action
+    // failed" on a swipe-to-queue or a rapid current-climb change is noise.
+    onBestEffortError: (action, error) => {
+      if (__DEV__) console.warn(`[queue] best-effort ${action} failed`, error);
+    },
   });
 
   const addToQueue = useCallback(
     (item: ClimbQueueItem) => {
-      // Optimistic local dispatch. The server echoes this item via the WS
-      // subscription, but DELTA_ADD_QUEUE_ITEM dedupes by uuid so the echo is a
-      // no-op. The shared mutation lazily creates + joins the session.
+      // Optimistic local dispatch is the source of truth for the user's queue.
+      // The server echoes this item via the WS subscription, but
+      // DELTA_ADD_QUEUE_ITEM dedupes by uuid so the echo is a no-op. The shared
+      // mutation lazily creates + joins a session purely to SYNC the add to a
+      // party. That sync is best-effort: a solo user with no session, an offline
+      // phone, or a transient WS error must NOT see "Action failed" when the
+      // local queue is already correct. Dev-log only.
       dispatch({ type: 'DELTA_ADD_QUEUE_ITEM', payload: { item } });
-      mutations.addQueueItem(item).catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
+      mutations.addQueueItem(item).catch((error) => {
+        if (__DEV__) console.warn('[queue] addQueueItem sync failed', error);
+      });
     },
-    [mutations, showToast, t],
+    [mutations],
   );
 
   const removeFromQueue = useCallback(
     (uuid: string) => {
+      // Same best-effort model as addToQueue: the reducer already removed the
+      // item locally; the server mutation only syncs it to a party session (and
+      // no-ops when there's none — it never lazily creates one just to remove).
       dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
-      // No active session -> shared mutation no-ops (it never lazily creates a
-      // session just to remove from it).
-      mutations.removeQueueItem(uuid).catch(() => showToast(t('mobile.queue.actionFailed'), 'error'));
+      mutations.removeQueueItem(uuid).catch((error) => {
+        if (__DEV__) console.warn('[queue] removeQueueItem sync failed', error);
+      });
     },
-    [mutations, showToast, t],
+    [mutations],
   );
 
   const clearQueue = useCallback(() => {
