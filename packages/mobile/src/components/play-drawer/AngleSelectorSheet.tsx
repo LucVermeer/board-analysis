@@ -174,11 +174,11 @@ export const AngleSelectorSheet = memo(function AngleSelectorSheet({
         <Pressable
           onPress={handleDone}
           accessibilityRole="button"
-          accessibilityLabel={tCommon('done')}
+          accessibilityLabel={tCommon('actions.done')}
           style={({ pressed }) => [styles.doneButton, pressed && styles.doneButtonPressed]}
         >
           <Text variant="headline" style={styles.doneText}>
-            {tCommon('done')}
+            {tCommon('actions.done')}
           </Text>
         </Pressable>
       </BottomSheetView>

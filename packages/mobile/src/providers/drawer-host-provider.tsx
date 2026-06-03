@@ -141,21 +141,24 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Apply an angle change made from the play drawer's angle selector.
   const handleAngleChange = useCallback(
     (newAngle: number) => {
-      // Fixed-angle boards can't be adjusted — do nothing (the pill is also
-      // hidden for them, this is the safety net).
-      if (activeBoard?.isAngleAdjustable === false) return;
-
-      // Persist to the active board (the angle source of truth). Writing the
-      // ['activeBoard'] cache re-grades the climb list (its search key includes
-      // the angle) and triggers the queue re-grade effect in QueueProvider.
-      if (activeBoard && newAngle !== activeBoard.angle) {
-        void setActiveBoard({ ...activeBoard, angle: newAngle });
+      if (boardConfigOverride) {
+        // The drawer is showing a climb from a board other than the user's
+        // stored active board. Update only the override (so the drawer reflects
+        // the change) — do NOT rewrite the stored active board's angle, which
+        // belongs to a different board. (No caller wires an override today, but
+        // keep the angle write targeting the board actually shown.)
+        setBoardConfigOverride((prev) => (prev ? { ...prev, angle: newAngle } : prev));
+      } else {
+        // Fixed-angle boards can't be adjusted — do nothing (the pill is also
+        // hidden for them, this is the safety net).
+        if (activeBoard?.isAngleAdjustable === false) return;
+        // Persist to the active board (the angle source of truth). Writing the
+        // ['activeBoard'] cache re-grades the climb list (its search key includes
+        // the angle) and triggers the queue re-grade effect in QueueProvider.
+        if (activeBoard && newAngle !== activeBoard.angle) {
+          void setActiveBoard({ ...activeBoard, angle: newAngle });
+        }
       }
-
-      // When a board override is showing (a climb opened from another board),
-      // the drawer reads the override's angle — bump it so the change is
-      // reflected immediately even though it isn't derived from activeBoard.
-      setBoardConfigOverride((prev) => (prev ? { ...prev, angle: newAngle } : prev));
 
       // Broadcast to party members (no-op in solo). Build the path from the
       // board the drawer is actually showing, with the new angle.
@@ -164,7 +167,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         void setSessionBoardPath(buildBoardPath(cfg.boardName, cfg.layoutId, cfg.sizeId, cfg.setIds, newAngle));
       }
     },
-    [activeBoard, setActiveBoard, setSessionBoardPath],
+    [activeBoard, boardConfigOverride, setActiveBoard, setSessionBoardPath],
   );
 
   const openLogAscent = useCallback((input: LogAscentInput) => {
