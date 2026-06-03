@@ -182,7 +182,7 @@ jobs:
             React Native rewrite — Android sideload build from commit ${{ github.sha }}.
 
             **Package:** `com.boardsesh.app` (version 2.0.0)
-            **Minimum Android version:** 13 (API 33)
+            **Minimum Android version:** 7.0 (API 24)
 
             Sideload `app-release.apk`. It's signed with the same key as the
             current app, so it upgrades an existing `com.boardsesh.app` install
