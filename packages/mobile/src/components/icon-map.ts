@@ -1,5 +1,9 @@
+import type { SymbolViewProps } from 'expo-symbols';
+
 type IconMapping = {
-  ios: string;
+  // SFSymbol union (from sf-symbols-typescript via expo-symbols) — every name is
+  // validated at compile time, so a typo fails `vp run typecheck:mobile`.
+  ios: SymbolViewProps['name'];
   android: string;
 };
 

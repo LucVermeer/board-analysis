@@ -1,4 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { SymbolView } from 'expo-symbols';
+import { Platform } from 'react-native';
 import { iconMap, type IconName } from './icon-map';
 
 type IconProps = {
@@ -7,19 +9,19 @@ type IconProps = {
   color?: string | import('react-native').OpaqueColorValue;
 };
 
+// iOS renders native SF Symbols (expo-symbols); Android keeps MaterialCommunityIcons.
+// Both glyph names live in icon-map.ts keyed by the same semantic IconName, so call
+// sites stay platform-agnostic.
 export function Icon({ name, size = 24, color }: IconProps) {
   const mapping = iconMap[name];
 
-  // TODO: Use expo-symbols (SymbolView) on iOS once we have a dev client build.
-  // SF Symbols require native code that doesn't work in Expo Go.
-  // For now, use MaterialCommunityIcons on both platforms.
-  // The Icon component API is stable — swapping the implementation later is a one-file change.
-
-  const iconName = mapping.android;
+  if (Platform.OS === 'ios') {
+    return <SymbolView name={mapping.ios} size={size} tintColor={color} />;
+  }
 
   return (
     <MaterialCommunityIcons
-      name={iconName as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
+      name={mapping.android as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
       size={size}
       color={color}
     />
