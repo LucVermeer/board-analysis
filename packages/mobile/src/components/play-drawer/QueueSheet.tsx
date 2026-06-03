@@ -55,7 +55,7 @@ export function QueueSheet({
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
 
-  const snapPoints = useMemo(() => ['60%', '90%'], []);
+  const snapPoints = useMemo(() => ['70%', '95%'], []);
 
   const currentItemUuid = currentClimbQueueItem?.uuid ?? null;
 

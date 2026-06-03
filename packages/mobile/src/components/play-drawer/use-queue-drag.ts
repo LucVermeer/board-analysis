@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Gesture, type GestureType } from 'react-native-gesture-handler';
 import { useSharedValue, runOnJS, type SharedValue } from 'react-native-reanimated';
 import { hapticSelection } from '../../lib/haptics';
+import { dropRowIndex, queueIndexForRow } from './queue-drag-math';
 
 // Press-and-hold this long on a handle before the drag arms. Short enough to
 // feel instant on a deliberate grab, long enough that a quick flick scrolls
@@ -78,11 +79,13 @@ export function useQueueDrag({
   const windowRef = useRef({ firstRowIndex: firstFutureRowIndex, firstQueueIndex: firstFutureQueueIndex });
   windowRef.current = { firstRowIndex: firstFutureRowIndex, firstQueueIndex: firstFutureQueueIndex };
 
-  const measuredRef = useRef(false);
+  // Track the latest measured row height (don't latch the first one) so a board
+  // switch with differently-shaped thumbnails keeps the drag step distance
+  // correct. Future rows are uniform, so the >1px guard avoids churn from the
+  // several rows reporting the same height.
   const onRowHeight = useCallback(
     (height: number) => {
-      if (height > 0 && !measuredRef.current) {
-        measuredRef.current = true;
+      if (height > 0 && Math.abs(rowHeight.value - height) > 1) {
         rowHeight.value = height;
       }
     },
@@ -93,7 +96,7 @@ export function useQueueDrag({
     (uuid: string, oldQueueIndex: number, toRowIndex: number) => {
       const { firstRowIndex, firstQueueIndex } = windowRef.current;
       if (firstRowIndex < 0) return;
-      const newQueueIndex = firstQueueIndex + (toRowIndex - firstRowIndex);
+      const newQueueIndex = queueIndexForRow(toRowIndex, firstRowIndex, firstQueueIndex);
       if (newQueueIndex === oldQueueIndex) return;
       reorderQueue(uuid, oldQueueIndex, newQueueIndex);
     },
@@ -117,9 +120,7 @@ export function useQueueDrag({
           'worklet';
           dragTranslateY.value = event.translationY;
           const height = rowHeight.value || DEFAULT_ROW_HEIGHT;
-          let next = Math.round(rowIndex + event.translationY / height);
-          if (next < firstRowIndexSV.value) next = firstRowIndexSV.value;
-          if (next > lastRowIndexSV.value) next = lastRowIndexSV.value;
+          const next = dropRowIndex(rowIndex, event.translationY, height, firstRowIndexSV.value, lastRowIndexSV.value);
           if (next !== targetRowIndex.value) {
             targetRowIndex.value = next;
             runOnJS(hapticSelection)();

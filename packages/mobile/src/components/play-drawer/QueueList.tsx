@@ -14,6 +14,8 @@ import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { brandColors } from '../../theme/colors';
 import { hapticSelection } from '../../lib/haptics';
+import { useSearchClimbs } from '../../lib/graphql/hooks';
+import { toClimbSearchInput, DEFAULT_CLIMB_FILTER_STATE } from '@boardsesh/climb-filters';
 import { useQueueDrag } from './use-queue-drag';
 
 const POSITION_SLOT_WIDTH = 28;
@@ -22,6 +24,11 @@ const SEPARATOR_INSET = spacing[3] + POSITION_SLOT_WIDTH + spacing[3] + THUMBNAI
 
 type SuggestionRow = { type: 'suggestion'; climb: Climb };
 type QueueListRow = QueueFlatRow | SuggestionRow;
+
+// Show only the last 2 climbed by default; "show full history" expands the rest.
+const HISTORY_DISPLAY_LIMIT = 2;
+// How many popular climbs to pull for the no-playlist suggestion feed.
+const SUGGESTION_PAGE_SIZE = 50;
 
 type QueueListProps = {
   queue: ClimbQueueItem[];
@@ -67,16 +74,47 @@ export function QueueList({
   const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
 
   const { flatRows, currentItemFlatIndex } = useMemo(
-    () => buildQueueListModel(queue, currentItemUuid, { showHistory, showFullHistory }),
+    () =>
+      buildQueueListModel(queue, currentItemUuid, {
+        showHistory,
+        showFullHistory,
+        historyDisplayLimit: HISTORY_DISPLAY_LIMIT,
+      }),
     [queue, currentItemUuid, showHistory, showFullHistory],
   );
 
-  // Suggested (playlist) climbs flow directly after the queue rows — NO header,
-  // NO divider (the intentional divergence from web).
-  const suggestions = useMemo(
+  // Suggested climbs flow directly after the queue rows — NO header, NO divider
+  // (the intentional divergence from web). Playlist suggestions (when a playlist
+  // is active) come first, then a popular (by-ascents) feed for the board tops
+  // the list up. The feed is ALWAYS fetched (not gated on the playlist source)
+  // so suggestions never vanish when the source flips or its climbs go empty —
+  // they just fall back to the feed. Everything already in the queue is excluded.
+  const playlistSuggestions = useMemo(
     () => getPlaylistSuggestedClimbs(playlistSuggestionSource, queue),
     [playlistSuggestionSource, queue],
   );
+
+  const searchInput = useMemo(
+    () => toClimbSearchInput(DEFAULT_CLIMB_FILTER_STATE, board, { page: 1, pageSize: SUGGESTION_PAGE_SIZE }),
+    [board],
+  );
+  const { data: searchResult } = useSearchClimbs(searchInput, true);
+
+  const suggestions = useMemo<Climb[]>(() => {
+    const queued = new Set(queue.map((item) => item.climb?.uuid).filter((uuid): uuid is string => !!uuid));
+    const seen = new Set<string>();
+    const out: Climb[] = [];
+    const add = (climbs: readonly Climb[]) => {
+      for (const climb of climbs) {
+        if (!climb?.uuid || queued.has(climb.uuid) || seen.has(climb.uuid)) continue;
+        seen.add(climb.uuid);
+        out.push(climb);
+      }
+    };
+    add(playlistSuggestions);
+    add(searchResult?.climbs ?? []);
+    return out;
+  }, [playlistSuggestions, searchResult, queue]);
 
   const rows = useMemo<QueueListRow[]>(
     () => [...flatRows, ...suggestions.map((climb): SuggestionRow => ({ type: 'suggestion', climb }))],

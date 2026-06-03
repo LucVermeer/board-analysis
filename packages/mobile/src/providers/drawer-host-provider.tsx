@@ -168,8 +168,6 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const openAddToPlaylist = useCallback((climb: Climb) => {
     const boardConfig = activeBoardConfigRef.current;
-    // TEMP DIAGNOSTIC (Bug 2): confirm the handler fires + board config present.
-    if (__DEV__) console.warn(`[drawer] openAddToPlaylist climb=${climb?.name} hasBoardConfig=${!!boardConfig}`);
     if (!boardConfig) return;
     setPlaylistClimb({ climb, boardConfig });
   }, []);

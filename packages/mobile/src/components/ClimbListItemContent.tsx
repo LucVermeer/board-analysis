@@ -10,14 +10,6 @@ import { formatSends, formatQuality } from '../lib/format-climb-stats';
 import { useGradeFormat } from '../hooks/use-grade-format';
 
 /**
- * The shared visual of a climb list item: portrait thumbnail (with ascent
- * badge) + name/subtitle + colorized grade. Returns the three blocks as a
- * fragment so the host row owns the flex container (padding, gap, background,
- * selected/dimmed overlays) — this keeps `ClimbListRow`'s search-list layout
- * byte-for-byte identical while letting the queue row reuse the same visual
- * around its own position indicator and trailing actions.
- */
-/**
  * Minimal structural climb shape this visual needs. Kept permissive so BOTH the
  * web-schema `Climb` (search list) and the `@boardsesh/queue` `Climb` (queue
  * items / playlist suggestions) satisfy it without a cast — the two declare
@@ -44,6 +36,14 @@ type ClimbListItemContentProps = {
   angle: number;
 };
 
+/**
+ * The shared visual of a climb list item: portrait thumbnail (with ascent
+ * badge) + name/subtitle + colorized grade. Returns the three blocks as a
+ * fragment so the host row owns the flex container (padding, gap, background,
+ * selected/dimmed overlays) — this keeps `ClimbListRow`'s search-list layout
+ * byte-for-byte identical while letting the queue row reuse the same visual
+ * around its own position indicator and trailing actions.
+ */
 const ClimbListItemContent = React.memo(function ClimbListItemContent({
   climb,
   boardName,

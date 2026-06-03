@@ -21,6 +21,7 @@ import { springs } from '../theme/animations';
 import { useTheme } from '../providers/theme-provider';
 import { hapticSelection, hapticMedium } from '../lib/haptics';
 import type { QueueDragControls } from './play-drawer/use-queue-drag';
+import { rowReorderShift } from './play-drawer/queue-drag-math';
 
 const SWIPE_DELETE_THRESHOLD = -80;
 const DELETE_BUTTON_WIDTH = 80;
@@ -197,14 +198,15 @@ export function QueueItemRow({
         elevation: 10,
       };
     }
-    const active = dragShared.activeRowIndex.value;
-    const target = dragShared.targetRowIndex.value;
-    const height = dragShared.rowHeight.value;
-    let shift = 0;
-    if (rowIndex != null) {
-      if (active < target && rowIndex > active && rowIndex <= target) shift = -height;
-      else if (active > target && rowIndex >= target && rowIndex < active) shift = height;
-    }
+    const shift =
+      rowIndex == null
+        ? 0
+        : rowReorderShift(
+            rowIndex,
+            dragShared.activeRowIndex.value,
+            dragShared.targetRowIndex.value,
+            dragShared.rowHeight.value,
+          );
     return { transform: [{ translateY: withSpring(shift, springs.interactive) }], zIndex: 0, elevation: 0 };
   });
 

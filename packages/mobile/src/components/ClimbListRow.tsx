@@ -197,8 +197,6 @@ const ClimbListRow = React.memo(function ClimbListRow({
 
   const handleSwipeWillOpen = useCallback(
     (direction: 'left' | 'right') => {
-      // TEMP DIAGNOSTIC (Bug 2): trace which direction each swipe reports.
-      if (__DEV__) console.warn(`[swipe] willOpen direction=${direction} climb=${climbRef.current?.name}`);
       // ReanimatedSwipeable reports the SWIPE direction, not the actions side:
       // 'right' fires when the LEFT actions (Queue) open (left-to-right swipe);
       // 'left' fires when the RIGHT actions (Playlist) open (right-to-left).
