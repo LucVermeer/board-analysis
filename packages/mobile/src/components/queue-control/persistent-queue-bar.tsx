@@ -3,7 +3,7 @@
  * root and is visible on every screen while a current climb is set.
  *
  * Layout (condensed for mobile, no thumbnail per design):
- *   climb name…              grade   [✓ tick] [BT] [⏻ end]
+ *   [grade] climb name…              [BT] [✓ tick]
  *      ↑ tap opens PlayDrawer    ↑ horizontal swipe = prev/next
  *
  * The horizontal swipe mirrors the play-drawer carousel pattern
@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { View, Pressable, StyleSheet, useColorScheme, type ColorValue, type LayoutChangeEvent } from 'react-native';
+import { View, StyleSheet, useColorScheme, type ColorValue, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, runOnJS, useAnimatedStyle, useDerivedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,12 +20,14 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset, getGradeTintColor } from '@boardsesh/play-view';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { shadowColor } from '../../theme/tokens';
+import { iosSystemColors } from '../../theme/ios-colors';
+import { shadowColor, spacing } from '../../theme/tokens';
+import { withAlpha } from '../../theme/colors';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
+import { PressableSurface } from '../PressableSurface';
 import { BleLightbulbButton } from '../ble/BleLightbulbButton';
-import { EndSessionSheet } from '../EndSessionSheet';
 import { useTheme } from '../../providers/theme-provider';
 import { useQueue } from '../../providers/queue-provider';
 import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider';
@@ -34,7 +36,6 @@ import { hapticSelection } from '../../lib/haptics';
 import { useCarouselGesture } from '../play-drawer/use-carousel-gesture';
 import { TAB_BAR_HEIGHT } from '../BlurTabBar';
 import { BAR_CONTENT_HEIGHT } from '../../theme/layout';
-import { useRouter } from 'expo-router';
 
 // Re-export so layout consumers that already import bar metrics from this
 // module don't need to know which file owns them. Source of truth: theme/layout.
@@ -57,26 +58,28 @@ type ClimbLabelProps = {
   display: ClimbDisplay;
   labelColor: ColorValue;
   formattedGrade: string | null;
-  gradeColor: string;
+  chipBackground: string;
 };
 
-function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLabelProps) {
+function ClimbLabel({ display, labelColor, formattedGrade, chipBackground }: ClimbLabelProps) {
   return (
     <View style={styles.labelInner}>
+      {formattedGrade ? (
+        <View style={[styles.gradePill, { backgroundColor: chipBackground }]}>
+          <Text variant="caption1" color={iosSystemColors.white} style={styles.gradeText}>
+            {formattedGrade}
+          </Text>
+        </View>
+      ) : null}
       <Text variant="subheadline" color={labelColor} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
         {display.name ?? ''}
       </Text>
-      {formattedGrade ? (
-        <Text variant="headline" color={gradeColor} numberOfLines={1} style={styles.gradeText}>
-          {formattedGrade}
-        </Text>
-      ) : null}
     </View>
   );
 }
 
 export function PersistentQueueBar() {
-  const { state, nextClimb, previousClimb, sessionId, endSession } = useQueue();
+  const { state, nextClimb, previousClimb, sessionId } = useQueue();
   const { boardConfig, openPlayDrawer, openLogAscent } = useDrawerHost();
   const bluetooth = useOptionalBluetoothContext();
   const insets = useSafeAreaInsets();
@@ -84,13 +87,10 @@ export function PersistentQueueBar() {
   const { t } = useTranslation('session');
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');
-  const router = useRouter();
   const { formatGrade: format } = useGradeFormat();
   const isDark = useColorScheme() === 'dark';
 
   const [barWidth, setBarWidth] = useState(0);
-  const [showEndSession, setShowEndSession] = useState(false);
-  const [isEnding, setIsEnding] = useState(false);
 
   const { currentClimbQueueItem, queue } = state;
 
@@ -188,26 +188,19 @@ export function PersistentQueueBar() {
     else void bluetooth.connect();
   }, [bluetooth]);
 
-  const handleEndSessionPress = useCallback(() => {
-    hapticSelection();
-    setShowEndSession(true);
-  }, []);
-
-  const handleEndSessionConfirm = useCallback(async () => {
-    setIsEnding(true);
-    const summary = await endSession();
-    setIsEnding(false);
-    setShowEndSession(false);
-    if (summary) {
-      router.push({ pathname: '/(tabs)/record/summary', params: { sessionId: summary.sessionId } });
-    }
-  }, [endSession, router]);
-
   const currentDisplay = climbDisplay(currentClimbQueueItem);
   const previousDisplay = climbDisplay(previousItem);
   const nextDisplay = climbDisplay(nextItem);
 
   if (!currentDisplay) return null;
+
+  // VoiceOver transport: swipe prev/next is invisible to assistive tech, so
+  // expose the same navigation as custom accessibility actions on the swipe
+  // area (rotor / two-finger swipe), gated on the same edge guards as the swipe.
+  const swipeAccessibilityActions = [
+    ...(canPrevious ? [{ name: 'previous', label: t('mobile.queue.previousClimb') }] : []),
+    ...(canNext ? [{ name: 'next', label: t('mobile.queue.nextClimb') }] : []),
+  ];
 
   // Soft pastel tint derived from the current climb's grade, matching the web
   // queue bar's `getGradeTintColor(difficulty, 'default', isDark)` call.
@@ -218,115 +211,111 @@ export function PersistentQueueBar() {
   const previousFormatted = previousDisplay ? format(previousDisplay.difficulty) : null;
   const nextFormatted = nextDisplay ? format(nextDisplay.difficulty) : null;
 
-  // Vivid grade color (`getGradeColor` raw hex) for the trailing grade text,
-  // matching climb list rows. Falls back to the default neutral grade color
-  // when the difficulty is unrecognised.
-  const currentGradeColor = getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR;
-  const previousGradeColor = previousDisplay
+  // Vivid grade color (`getGradeColor` raw hex) for the chip, matching the
+  // PlayDrawer header pill. Falls back to the default neutral grade color when
+  // the difficulty is unrecognised.
+  const currentChipColor = getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR;
+  const previousChipColor = previousDisplay
     ? (getGradeColor(previousDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
-  const nextGradeColor = nextDisplay
+  const nextChipColor = nextDisplay
     ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
 
   return (
-    <>
-      <Animated.View
-        entering={FadeIn.duration(200)}
-        pointerEvents="box-none"
-        style={[
-          styles.bar,
-          {
-            // Sit directly above the BlurTabBar — side margins + rounded
-            // corners give the floating-card look; no extra vertical gap.
-            bottom: insets.bottom + TAB_BAR_HEIGHT,
-            // Opaque base so the bar stays readable over scrolling content —
-            // Liquid Glass is too see-through for a text-bearing floating bar.
-            // The grade hue is layered on top as a solid card tint.
-            backgroundColor: systemColors.background,
-          },
-        ]}
-      >
-        {tintBackground ? (
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintBackground }]} />
-        ) : null}
-        <View style={styles.row}>
-          <GestureDetector gesture={composedGesture}>
-            <View style={styles.swipeArea} onLayout={onLayout} accessibilityRole="button">
-              <Animated.View style={[styles.labelSlot, currentLabelStyle]}>
+    <Animated.View
+      entering={FadeIn.duration(200)}
+      pointerEvents="box-none"
+      style={[
+        styles.bar,
+        {
+          // Sit directly above the BlurTabBar — side margins + rounded
+          // corners give the floating-card look; no extra vertical gap.
+          bottom: insets.bottom + TAB_BAR_HEIGHT,
+          // Opaque base so the bar stays readable over scrolling content —
+          // Liquid Glass is too see-through for a text-bearing floating bar.
+          // The grade hue is layered on top as a solid card tint.
+          backgroundColor: systemColors.background,
+        },
+      ]}
+    >
+      {tintBackground ? (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintBackground }]} />
+      ) : null}
+      <View style={styles.row}>
+        <GestureDetector gesture={composedGesture}>
+          <View
+            style={styles.swipeArea}
+            onLayout={onLayout}
+            accessibilityRole="button"
+            accessibilityLabel={currentDisplay.name}
+            accessibilityActions={swipeAccessibilityActions}
+            onAccessibilityAction={(event) => {
+              if (event.nativeEvent.actionName === 'next') handleNext();
+              else if (event.nativeEvent.actionName === 'previous') handlePrevious();
+            }}
+          >
+            <Animated.View style={[styles.labelSlot, currentLabelStyle]}>
+              <ClimbLabel
+                display={currentDisplay}
+                labelColor={systemColors.label}
+                formattedGrade={currentFormatted}
+                chipBackground={currentChipColor}
+              />
+            </Animated.View>
+            {nextDisplay ? (
+              <Animated.View style={[styles.peekSlot, nextPeekStyle]} pointerEvents="none">
                 <ClimbLabel
-                  display={currentDisplay}
+                  display={nextDisplay}
                   labelColor={systemColors.label}
-                  formattedGrade={currentFormatted}
-                  gradeColor={currentGradeColor}
+                  formattedGrade={nextFormatted}
+                  chipBackground={nextChipColor}
                 />
               </Animated.View>
-              {nextDisplay ? (
-                <Animated.View style={[styles.peekSlot, nextPeekStyle]} pointerEvents="none">
-                  <ClimbLabel
-                    display={nextDisplay}
-                    labelColor={systemColors.label}
-                    formattedGrade={nextFormatted}
-                    gradeColor={nextGradeColor}
-                  />
-                </Animated.View>
-              ) : null}
-              {previousDisplay ? (
-                <Animated.View style={[styles.peekSlot, prevPeekStyle]} pointerEvents="none">
-                  <ClimbLabel
-                    display={previousDisplay}
-                    labelColor={systemColors.label}
-                    formattedGrade={previousFormatted}
-                    gradeColor={previousGradeColor}
-                  />
-                </Animated.View>
-              ) : null}
-            </View>
-          </GestureDetector>
+            ) : null}
+            {previousDisplay ? (
+              <Animated.View style={[styles.peekSlot, prevPeekStyle]} pointerEvents="none">
+                <ClimbLabel
+                  display={previousDisplay}
+                  labelColor={systemColors.label}
+                  formattedGrade={previousFormatted}
+                  chipBackground={previousChipColor}
+                />
+              </Animated.View>
+            ) : null}
+          </View>
+        </GestureDetector>
 
-          <Pressable
-            onPress={handleEndSessionPress}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.queue.endSession')}
-            hitSlop={8}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-          >
-            <Icon name="end.session" size={24} color={brandColors.error} />
-          </Pressable>
+        {bluetooth ? (
+          <BleLightbulbButton
+            isConnected={bluetooth.isConnected}
+            isScanning={bluetooth.loading}
+            onPress={handleBluetoothPress}
+            accessibilityLabel={
+              bluetooth.isConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')
+            }
+            scanningAccessibilityHint={tSettings('ble.scanning')}
+            restingBackgroundColor={systemColors.fill}
+          />
+        ) : null}
 
-          {bluetooth ? (
-            <BleLightbulbButton
-              isConnected={bluetooth.isConnected}
-              isScanning={bluetooth.loading}
-              onPress={handleBluetoothPress}
-              accessibilityLabel={
-                bluetooth.isConnected ? tCommon('lightControl.disconnect') : tSettings('ble.connectBoard')
-              }
-              scanningAccessibilityHint={tSettings('ble.scanning')}
-            />
-          ) : null}
-
-          <Pressable
-            onPress={handleTick}
-            disabled={!currentClimbQueueItem || !boardConfig}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.queue.logAscent')}
-            hitSlop={8}
-            style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-          >
-            <Icon name="tick" size={26} color={brandColors.primary} />
-          </Pressable>
-        </View>
-      </Animated.View>
-
-      <EndSessionSheet
-        visible={showEndSession}
-        onDismiss={() => setShowEndSession(false)}
-        onConfirm={handleEndSessionConfirm}
-        isEnding={isEnding}
-        climbCount={queue.length}
-      />
-    </>
+        <PressableSurface
+          feedback="scale"
+          scaleTo={0.92}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.queue.logAscent')}
+          onPress={handleTick}
+          disabled={!currentClimbQueueItem || !boardConfig}
+          style={[
+            styles.iconButton,
+            { backgroundColor: withAlpha(brandColors.primary, 0.18), borderColor: systemColors.separator },
+          ]}
+        >
+          <Icon name="tick" size={26} color={brandColors.primary} />
+        </PressableSurface>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -338,7 +327,7 @@ const styles = StyleSheet.create({
     // `bottom` is set inline from safe-area insets + tab-bar height so
     // the bar sits flush against the tab bar with all four corners
     // rounded (Spotify mini-player style).
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
     shadowColor,
     shadowOffset: { width: 0, height: 2 },
@@ -351,6 +340,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: BAR_CONTENT_HEIGHT,
     paddingHorizontal: 12,
+    gap: spacing[2],
   },
   swipeArea: {
     flex: 1,
@@ -376,14 +366,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  gradeText: {
+  gradePill: {
     // Reserve a 3-char slot ("V10") so the climb name doesn't shift
     // horizontally as the user swipes between climbs with different
     // grade widths. 4-char grades like "V10+" still expand slightly.
     minWidth: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gradeText: {
     fontVariant: ['tabular-nums'],
-    fontWeight: '700',
-    textAlign: 'right',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   name: {
     flex: 1,
@@ -395,8 +392,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 22,
-  },
-  iconButtonPressed: {
-    opacity: 0.5,
+    // Hairline border keeps the tonal fill legible over the grade-tint
+    // overlay. The fill + border colour are set inline from runtime
+    // `systemColors`/`brandColors` (PlatformColor can't live in StyleSheet).
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, type ColorValue } from 'react-native';
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -27,6 +27,13 @@ type BleLightbulbButtonProps = {
    * drawer's primary action row.
    */
   containerSize?: number;
+  /**
+   * Tonal fill for the at-rest (disconnected) state so the button reads as a
+   * pressable target rather than a bare glyph. Set by the queue bar (passes
+   * `systemColors.fill`) to match the neighbouring Tick; the play drawer omits it
+   * to keep its own bare-icon look. The connected state keeps its own warm fill.
+   */
+  restingBackgroundColor?: ColorValue;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -40,6 +47,7 @@ export function BleLightbulbButton({
   haptic = 'light',
   size = 24,
   containerSize = 44,
+  restingBackgroundColor,
 }: BleLightbulbButtonProps) {
   const { systemColors, brandColors } = useTheme();
   const pulseOpacity = useSharedValue(1);
@@ -84,6 +92,12 @@ export function BleLightbulbButton({
         styles.container,
         { width: containerSize, height: containerSize, borderRadius: containerSize / 2 },
         animatedStyle,
+        !isConnected &&
+          restingBackgroundColor != null && {
+            backgroundColor: restingBackgroundColor,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: systemColors.separator as string,
+          },
         isConnected && {
           backgroundColor: visualState.backgroundColor,
           shadowColor: visualState.shadowColor,

@@ -1,6 +1,8 @@
-// Bottom-bar search layout: a floating card pinned in the thumb zone above the
-// queue bar / tab bar. Grade lives where the hand already rests (the two RN-UX
-// judges' pick). The climber can switch to the sticky-strip layout in Settings.
+// Bottom-bar search layout: a floating Liquid Glass card pinned in the thumb
+// zone above the queue bar / tab bar (the opt-in alternative to the top search
+// row). Shares one material with the tab bar; degrades to the solid elevated
+// surface on Android / Reduce Transparency. The climber switches layouts in the
+// More tab.
 
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -9,6 +11,7 @@ import type { Grade } from '@boardsesh/shared-schema';
 import type { GradeBound, ClimbBoardFilterState } from '@boardsesh/climb-filters';
 import { useTheme } from '../../providers/theme-provider';
 import { shadowColor } from '../../theme/tokens';
+import { GlassSurface } from '../GlassSurface';
 import type { ClimbFilters } from '../../lib/climb-filter-types';
 import { ClimbSearchControls } from './ClimbSearchControls';
 
@@ -39,10 +42,14 @@ export function SearchBottomBar({ bottomOffset, ...controls }: SearchBottomBarPr
   const animatedStyle = useAnimatedStyle(() => ({ bottom: offset.value }));
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(180)}
-      style={[styles.bar, { backgroundColor: systemColors.elevatedSurface as string }, animatedStyle]}
-    >
+    <Animated.View entering={FadeIn.duration(180)} style={[styles.bar, animatedStyle]}>
+      <GlassSurface
+        glassEffectStyle="regular"
+        fallbackColor={systemColors.elevatedSurface}
+        borderRadius={12}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <View style={styles.inner}>
         <ClimbSearchControls {...controls} />
       </View>
@@ -55,7 +62,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 8,
     right: 8,
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
     shadowColor,
     shadowOffset: { width: 0, height: 2 },
