@@ -2,62 +2,117 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { BottomSheetFlatList, type BottomSheetFlatListMethods } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
-import type { ClimbQueueItem } from '@boardsesh/queue';
+import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
+import { getPlaylistSuggestedClimbs } from '@boardsesh/queue';
 import { buildQueueListModel, type QueueFlatRow } from '@boardsesh/play-view';
-import { QueueItemRow } from '../QueueItemRow';
+import { QueueItemRow, type QueueItemRowBoard } from '../QueueItemRow';
+import { ClimbListItemContent } from '../ClimbListItemContent';
+import { THUMBNAIL_WIDTH } from '../ClimbListThumbnail';
 import { Text } from '../Text';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
 import { brandColors } from '../../theme/colors';
+import { hapticSelection } from '../../lib/haptics';
+import { useQueueDrag } from './use-queue-drag';
+
+const POSITION_SLOT_WIDTH = 28;
+// Match QueueItemRow's separator inset so suggestion separators line up.
+const SEPARATOR_INSET = spacing[3] + POSITION_SLOT_WIDTH + spacing[3] + THUMBNAIL_WIDTH + spacing[3];
+
+type SuggestionRow = { type: 'suggestion'; climb: Climb };
+type QueueListRow = QueueFlatRow | SuggestionRow;
 
 type QueueListProps = {
   queue: ClimbQueueItem[];
   currentItemUuid: string | null;
+  board: QueueItemRowBoard;
   isEditMode: boolean;
   showHistory: boolean;
   showFullHistory: boolean;
   selectedItems: Set<string>;
+  playlistSuggestionSource: PlaylistSuggestionSource | null;
   autoScrollOnMount?: boolean;
   onToggleSelect: (uuid: string) => void;
   onClimbPress: (item: ClimbQueueItem) => void;
   onRemove: (uuid: string) => void;
   onShowFullHistory: () => void;
+  onTickHistory: (item: ClimbQueueItem) => void;
+  onSuggestionPress: (climb: Climb) => void;
+  reorderQueue: (uuid: string, oldIndex: number, newIndex: number) => void;
+  onDraggingChange?: (dragging: boolean) => void;
 };
 
 export function QueueList({
   queue,
   currentItemUuid,
+  board,
   isEditMode,
   showHistory,
   showFullHistory,
   selectedItems,
+  playlistSuggestionSource,
   autoScrollOnMount,
   onToggleSelect,
   onClimbPress,
   onRemove,
   onShowFullHistory,
+  onTickHistory,
+  onSuggestionPress,
+  reorderQueue,
+  onDraggingChange,
 }: QueueListProps) {
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
   const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (scrollTimerRef.current) {
-        clearTimeout(scrollTimerRef.current);
-      }
-    };
-  }, []);
 
   const { flatRows, currentItemFlatIndex } = useMemo(
     () => buildQueueListModel(queue, currentItemUuid, { showHistory, showFullHistory }),
     [queue, currentItemUuid, showHistory, showFullHistory],
   );
 
+  // Suggested (playlist) climbs flow directly after the queue rows — NO header,
+  // NO divider (the intentional divergence from web).
+  const suggestions = useMemo(
+    () => getPlaylistSuggestedClimbs(playlistSuggestionSource, queue),
+    [playlistSuggestionSource, queue],
+  );
+
+  const rows = useMemo<QueueListRow[]>(
+    () => [...flatRows, ...suggestions.map((climb): SuggestionRow => ({ type: 'suggestion', climb }))],
+    [flatRows, suggestions],
+  );
+
+  // The contiguous draggable window: the `future-item` rows (upcoming queue).
+  const { firstFutureRowIndex, lastFutureRowIndex, firstFutureQueueIndex } = useMemo(() => {
+    let first = -1;
+    let last = -1;
+    let firstQueue = -1;
+    rows.forEach((row, index) => {
+      if (row.type === 'future-item') {
+        if (first === -1) {
+          first = index;
+          firstQueue = row.queueIndex;
+        }
+        last = index;
+      }
+    });
+    return { firstFutureRowIndex: first, lastFutureRowIndex: last, firstFutureQueueIndex: firstQueue };
+  }, [rows]);
+
+  const drag = useQueueDrag({
+    reorderQueue,
+    firstFutureRowIndex,
+    lastFutureRowIndex,
+    firstFutureQueueIndex,
+  });
+
   useEffect(() => {
-    if (autoScrollOnMount && currentItemFlatIndex >= 0 && flatRows.length > 0) {
+    onDraggingChange?.(drag.isDragging);
+  }, [drag.isDragging, onDraggingChange]);
+
+  useEffect(() => {
+    if (autoScrollOnMount && currentItemFlatIndex >= 0 && rows.length > 0) {
       const timer = setTimeout(() => {
         flatListRef.current?.scrollToIndex?.({
           index: currentItemFlatIndex,
@@ -68,9 +123,9 @@ export function QueueList({
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [autoScrollOnMount, currentItemFlatIndex, flatRows.length]);
+  }, [autoScrollOnMount, currentItemFlatIndex, rows.length]);
 
-  const keyExtractor = useCallback((row: QueueFlatRow, index: number): string => {
+  const keyExtractor = useCallback((row: QueueListRow, index: number): string => {
     switch (row.type) {
       case 'history-show-all':
         return 'history-show-all';
@@ -82,13 +137,23 @@ export function QueueList({
         return `current-${row.item.uuid}`;
       case 'future-item':
         return `future-${row.item.uuid}`;
+      case 'suggestion':
+        return `suggestion-${row.climb.uuid}`;
       default:
         return `row-${String(index)}`;
     }
   }, []);
 
+  const handleSuggestionPress = useCallback(
+    (climb: Climb) => {
+      hapticSelection();
+      onSuggestionPress(climb);
+    },
+    [onSuggestionPress],
+  );
+
   const renderRow = useCallback(
-    ({ item: row }: { item: QueueFlatRow }) => {
+    ({ item: row, index }: { item: QueueListRow; index: number }) => {
       switch (row.type) {
         case 'history-show-all':
           return (
@@ -112,6 +177,7 @@ export function QueueList({
             <QueueItemRow
               item={row.item}
               position={row.queueIndex + 1}
+              board={board}
               isCurrentClimb={false}
               isHistoryItem
               isEditMode={isEditMode}
@@ -119,6 +185,7 @@ export function QueueList({
               onPress={onClimbPress}
               onRemove={onRemove}
               onToggleSelect={onToggleSelect}
+              onTickHistory={onTickHistory}
             />
           );
 
@@ -127,6 +194,7 @@ export function QueueList({
             <QueueItemRow
               item={row.item}
               position={row.queueIndex + 1}
+              board={board}
               isCurrentClimb
               isEditMode={isEditMode}
               isSelected={selectedItems.has(row.item.uuid)}
@@ -141,23 +209,65 @@ export function QueueList({
             <QueueItemRow
               item={row.item}
               position={row.queueIndex + 1}
+              board={board}
               isCurrentClimb={false}
               isEditMode={isEditMode}
               isSelected={selectedItems.has(row.item.uuid)}
               onPress={onClimbPress}
               onRemove={onRemove}
               onToggleSelect={onToggleSelect}
+              drag={drag}
+              rowIndex={index}
+              queueIndex={row.queueIndex}
+              isDraggable={!isEditMode}
             />
+          );
+
+        case 'suggestion':
+          return (
+            <View>
+              <Pressable
+                onPress={() => handleSuggestionPress(row.climb)}
+                accessibilityRole="button"
+                accessibilityLabel={row.climb.name}
+                style={[styles.suggestionRow, { backgroundColor: systemColors.secondaryBackground }]}
+              >
+                <View style={styles.suggestionSpacer} />
+                <ClimbListItemContent
+                  climb={row.climb}
+                  boardName={board.boardName}
+                  layoutId={board.layoutId}
+                  sizeId={board.sizeId}
+                  setIds={board.setIds}
+                  angle={board.angle}
+                />
+              </Pressable>
+              <View style={[styles.separator, { backgroundColor: systemColors.separator }]} />
+            </View>
           );
 
         default:
           return null;
       }
     },
-    [isEditMode, selectedItems, onClimbPress, onRemove, onToggleSelect, onShowFullHistory, systemColors.separator, t],
+    [
+      board,
+      drag,
+      isEditMode,
+      selectedItems,
+      onClimbPress,
+      onRemove,
+      onToggleSelect,
+      onTickHistory,
+      onShowFullHistory,
+      handleSuggestionPress,
+      systemColors.separator,
+      systemColors.secondaryBackground,
+      t,
+    ],
   );
 
-  if (flatRows.length === 0) {
+  if (rows.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Text variant="body" color={iosSystemColors.systemGray}>
@@ -170,11 +280,12 @@ export function QueueList({
   return (
     <BottomSheetFlatList
       ref={flatListRef}
-      data={flatRows}
+      data={rows}
       keyExtractor={keyExtractor}
       renderItem={renderRow}
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
+      scrollEnabled={!drag.isDragging}
       onScrollToIndexFailed={() => {
         // Silently handle if scroll target isn't rendered yet
       }}
@@ -201,5 +312,19 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     marginVertical: spacing[1],
     marginHorizontal: spacing[4],
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: spacing[3],
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[3],
+  },
+  suggestionSpacer: {
+    width: POSITION_SLOT_WIDTH,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: SEPARATOR_INSET,
   },
 });

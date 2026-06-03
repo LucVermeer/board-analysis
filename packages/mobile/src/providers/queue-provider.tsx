@@ -51,6 +51,7 @@ import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boards
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
 import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useToast } from './toast-provider';
+import { useQueueSnackbar } from './queue-snackbar-provider';
 
 export type StartSessionConfig = {
   name?: string;
@@ -67,6 +68,7 @@ type QueueContextValue = {
   setSessionId: (id: string | null) => void;
   addToQueue: (item: ClimbQueueItem) => void;
   removeFromQueue: (uuid: string) => void;
+  reorderQueue: (uuid: string, oldIndex: number, newIndex: number) => void;
   clearQueue: () => void;
   setCurrentClimb: (item: ClimbQueueItem, options?: SetCurrentClimbOptions) => void;
   nextClimb: () => void;
@@ -122,6 +124,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const playlistSuggestionSourceRef = useRef<PlaylistSuggestionSource | null>(null);
   playlistSuggestionSourceRef.current = playlistSuggestionSource;
   const { showToast } = useToast();
+  const { showQueueAddedSnackbar } = useQueueSnackbar();
   const { t } = useTranslation('session');
 
   // JOIN_SESSION cache, keyed by (sessionId, connection epoch). Built once
@@ -359,8 +362,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       mutations.addQueueItem(item).catch((error) => {
         if (__DEV__) console.warn('[queue] addQueueItem sync failed', error);
       });
+      // Surface the "Climb added to queue · Open" snackbar for every add path.
+      showQueueAddedSnackbar();
     },
-    [mutations],
+    [mutations, showQueueAddedSnackbar],
   );
 
   const removeFromQueue = useCallback(
@@ -371,6 +376,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
       mutations.removeQueueItem(uuid).catch((error) => {
         if (__DEV__) console.warn('[queue] removeQueueItem sync failed', error);
+      });
+    },
+    [mutations],
+  );
+
+  const reorderQueue = useCallback(
+    (uuid: string, oldIndex: number, newIndex: number) => {
+      // Optimistic local reorder; the reducer re-validates uuid-at-oldIndex so
+      // the server's QueueReordered echo is a safe no-op. Best-effort sync only.
+      dispatch({ type: 'DELTA_REORDER_QUEUE_ITEM', payload: { uuid, oldIndex, newIndex } });
+      mutations.reorderQueueItem(uuid, oldIndex, newIndex).catch((error) => {
+        if (__DEV__) console.warn('[queue] reorderQueueItem sync failed', error);
       });
     },
     [mutations],
@@ -506,6 +523,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setSessionId,
       addToQueue,
       removeFromQueue,
+      reorderQueue,
       clearQueue,
       setCurrentClimb,
       nextClimb,
@@ -522,6 +540,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       sessionId,
       addToQueue,
       removeFromQueue,
+      reorderQueue,
       clearQueue,
       setCurrentClimb,
       nextClimb,

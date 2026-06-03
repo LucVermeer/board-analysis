@@ -13,14 +13,20 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { randomUUID } from 'expo-crypto';
-import type { Climb } from '@boardsesh/shared-schema';
+import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import type { Climb as QueueClimb, ClimbQueueItem } from '@boardsesh/queue';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
+import { QueueSheet } from '../components/play-drawer/QueueSheet';
+import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
+import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard } from '../lib/graphql/use-active-board';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite } from '../lib/graphql/hooks';
+import { climbToQueueItem } from '../lib/climb-to-queue-item';
 import { useQueue } from './queue-provider';
+import { useQueueSnackbar } from './queue-snackbar-provider';
 
 export type BoardConfig = {
   boardName: string;
@@ -68,6 +74,9 @@ type DrawerHostValue = {
   /** Opens the add-to-playlist bottom sheet for the given climb. Snapshots the
    *  active boardConfig (for the angle) at open time. */
   openAddToPlaylist: (climb: Climb) => void;
+  /** Opens the queue list sheet (from the play-drawer queue button or the
+   *  "Climb added to queue" snackbar's Open action). */
+  openQueueSheet: () => void;
 };
 
 const DrawerHostContext = createContext<DrawerHostValue | null>(null);
@@ -85,7 +94,9 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
-  const { addToQueue } = useQueue();
+  const [queueSheetVisible, setQueueSheetVisible] = useState(false);
+  const { addToQueue, setCurrentClimb, playlistSuggestionSource, sessionId } = useQueue();
+  const { visible: snackbarVisible, nonce: snackbarNonce, dismissSnackbar } = useQueueSnackbar();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
   // Climb to open after the boardConfig override has committed. We can't
@@ -157,6 +168,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const openAddToPlaylist = useCallback((climb: Climb) => {
     const boardConfig = activeBoardConfigRef.current;
+    // TEMP DIAGNOSTIC (Bug 2): confirm the handler fires + board config present.
+    if (__DEV__) console.warn(`[drawer] openAddToPlaylist climb=${climb?.name} hasBoardConfig=${!!boardConfig}`);
     if (!boardConfig) return;
     setPlaylistClimb({ climb, boardConfig });
   }, []);
@@ -196,6 +209,64 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     });
   }, [climbActions]);
 
+  const openQueueSheet = useCallback(() => setQueueSheetVisible(true), []);
+  const closeQueueSheet = useCallback(() => setQueueSheetVisible(false), []);
+
+  // The queue sheet renders climbs against the active board (thumbnails + tick).
+  const queueBoard = useMemo<QueueItemRowBoard | null>(() => {
+    if (!activeBoardConfig) return null;
+    return {
+      boardName: activeBoardConfig.boardName as BoardName,
+      layoutId: activeBoardConfig.layoutId,
+      sizeId: activeBoardConfig.sizeId,
+      setIds: activeBoardConfig.setIds,
+      angle: activeBoardConfig.angle,
+    };
+  }, [activeBoardConfig]);
+
+  // Tap a queue item → make it current and show it in the play drawer.
+  const handleQueueClimbPress = useCallback(
+    (item: ClimbQueueItem) => {
+      setCurrentClimb(item);
+      openPlayDrawer(item.climb, { setAsCurrent: false });
+      setQueueSheetVisible(false);
+    },
+    [setCurrentClimb, openPlayDrawer],
+  );
+
+  // Tap a suggestion → activate it (adds + sets current) and show it.
+  const handleQueueSuggestionPress = useCallback(
+    (climb: QueueClimb) => {
+      const item = climbToQueueItem(climb, { suggested: true });
+      setCurrentClimb(item, { playlistSuggestionSource });
+      openPlayDrawer(climb, { setAsCurrent: false });
+      setQueueSheetVisible(false);
+    },
+    [setCurrentClimb, playlistSuggestionSource, openPlayDrawer],
+  );
+
+  // Tick a history climb → open the log-ascent sheet (stacks above the queue
+  // sheet, which stays open beneath) pre-filled with the active session.
+  const handleQueueTickHistory = useCallback(
+    (item: ClimbQueueItem) => {
+      const boardConfig = activeBoardConfigRef.current;
+      if (!boardConfig) return;
+      setLogAscentInput({
+        climbUuid: item.climb.uuid,
+        boardName: boardConfig.boardName,
+        angle: boardConfig.angle,
+        isMirror: item.climb.mirrored === true,
+        isBenchmark: !!item.climb.benchmark_difficulty,
+        layoutId: boardConfig.layoutId,
+        sizeId: boardConfig.sizeId,
+        setIds: boardConfig.setIds,
+        sessionId,
+        consensusGradeName: item.climb.difficulty,
+      });
+    },
+    [sessionId],
+  );
+
   const value = useMemo<DrawerHostValue>(
     () => ({
       boardConfig: activeBoardConfig,
@@ -204,8 +275,17 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       openClimbActions,
       closeClimbActions,
       openAddToPlaylist,
+      openQueueSheet,
     }),
-    [activeBoardConfig, openPlayDrawer, openLogAscent, openClimbActions, closeClimbActions, openAddToPlaylist],
+    [
+      activeBoardConfig,
+      openPlayDrawer,
+      openLogAscent,
+      openClimbActions,
+      closeClimbActions,
+      openAddToPlaylist,
+      openQueueSheet,
+    ],
   );
 
   return (
@@ -251,6 +331,25 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onClose={closeAddToPlaylist}
         />
       ) : null}
+      {queueSheetVisible && queueBoard ? (
+        <QueueSheet
+          visible
+          board={queueBoard}
+          onClose={closeQueueSheet}
+          onClimbPress={handleQueueClimbPress}
+          onSuggestionPress={handleQueueSuggestionPress}
+          onTickHistory={handleQueueTickHistory}
+        />
+      ) : null}
+      <QueueAddedSnackbar
+        visible={snackbarVisible}
+        nonce={snackbarNonce}
+        onDismiss={dismissSnackbar}
+        onOpen={() => {
+          dismissSnackbar();
+          openQueueSheet();
+        }}
+      />
     </DrawerHostContext.Provider>
   );
 }
