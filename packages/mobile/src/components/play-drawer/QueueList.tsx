@@ -3,11 +3,10 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { BottomSheetFlatList, type BottomSheetFlatListMethods } from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
-import { getPlaylistSuggestedClimbs } from '@boardsesh/queue';
+import { getPlaylistSuggestedClimbs, createPlaylistSuggestionSource, getQueueBoardKey } from '@boardsesh/queue';
 import { buildQueueListModel, type QueueFlatRow } from '@boardsesh/play-view';
-import { QueueItemRow, type QueueItemRowBoard } from '../QueueItemRow';
+import { QueueItemRow, type QueueItemRowBoard, POSITION_SLOT_WIDTH, SEPARATOR_INSET } from '../QueueItemRow';
 import { ClimbListItemContent } from '../ClimbListItemContent';
-import { THUMBNAIL_WIDTH } from '../ClimbListThumbnail';
 import { Text } from '../Text';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
@@ -18,9 +17,9 @@ import { useSearchClimbs } from '../../lib/graphql/hooks';
 import { toClimbSearchInput, DEFAULT_CLIMB_FILTER_STATE } from '@boardsesh/climb-filters';
 import { useQueueDrag } from './use-queue-drag';
 
-const POSITION_SLOT_WIDTH = 28;
-// Match QueueItemRow's separator inset so suggestion separators line up.
-const SEPARATOR_INSET = spacing[3] + POSITION_SLOT_WIDTH + spacing[3] + THUMBNAIL_WIDTH + spacing[3];
+// Synthetic suggestion-source id for tapping a climb from the queue sheet's
+// suggestion feed — distinct from real playlist activations.
+const QUEUE_SUGGESTION_SOURCE_ID = 'queue-suggestions';
 
 type SuggestionRow = { type: 'suggestion'; climb: Climb };
 type QueueListRow = QueueFlatRow | SuggestionRow;
@@ -45,7 +44,7 @@ type QueueListProps = {
   onRemove: (uuid: string) => void;
   onShowFullHistory: () => void;
   onTickHistory: (item: ClimbQueueItem) => void;
-  onSuggestionPress: (climb: Climb) => void;
+  onSuggestionPress: (climb: Climb, source: PlaylistSuggestionSource) => void;
   reorderQueue: (uuid: string, oldIndex: number, newIndex: number) => void;
   onDraggingChange?: (dragging: boolean) => void;
 };
@@ -86,9 +85,11 @@ export function QueueList({
   // Suggested climbs flow directly after the queue rows — NO header, NO divider
   // (the intentional divergence from web). Playlist suggestions (when a playlist
   // is active) come first, then a popular (by-ascents) feed for the board tops
-  // the list up. The feed is ALWAYS fetched (not gated on the playlist source)
-  // so suggestions never vanish when the source flips or its climbs go empty —
-  // they just fall back to the feed. Everything already in the queue is excluded.
+  // the list up. The feed query is enabled unconditionally (not gated on the
+  // playlist source) — but this list only mounts while the queue sheet is open,
+  // so it only runs then. Fetching regardless of the source means suggestions
+  // never vanish when the source flips or its climbs go empty; they fall back to
+  // the feed. Everything already in the queue is excluded.
   const playlistSuggestions = useMemo(
     () => getPlaylistSuggestedClimbs(playlistSuggestionSource, queue),
     [playlistSuggestionSource, queue],
@@ -185,9 +186,24 @@ export function QueueList({
   const handleSuggestionPress = useCallback(
     (climb: Climb) => {
       hapticSelection();
-      onSuggestionPress(climb);
+      // Build a suggestion source anchored at the tapped climb from the CURRENT
+      // suggestions list, so the play drawer can keep swiping forward through the
+      // rest of the suggestions (mirrors how the climbs-list browse activation
+      // seeds a source from its loaded climbs).
+      const source = createPlaylistSuggestionSource({
+        playlistUuid: QUEUE_SUGGESTION_SOURCE_ID,
+        activatedClimb: climb,
+        climbs: suggestions,
+        boardKey: getQueueBoardKey({
+          board_name: board.boardName,
+          layout_id: board.layoutId,
+          size_id: board.sizeId,
+          set_ids: board.setIds,
+        }),
+      });
+      onSuggestionPress(climb, source);
     },
-    [onSuggestionPress],
+    [onSuggestionPress, suggestions, board],
   );
 
   const renderRow = useCallback(

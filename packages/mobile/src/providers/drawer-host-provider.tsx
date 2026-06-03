@@ -14,7 +14,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { randomUUID } from 'expo-crypto';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
-import type { Climb as QueueClimb, ClimbQueueItem } from '@boardsesh/queue';
+import type { Climb as QueueClimb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { QueueSheet } from '../components/play-drawer/QueueSheet';
@@ -94,8 +94,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
+  // `mounted` controls whether QueueSheet is in the tree (so its suggestion
+  // query only runs while open); `visible` drives the present/dismiss animation.
+  // Splitting them lets a programmatic close play the dismiss animation before
+  // unmounting instead of vanishing instantly.
+  const [queueSheetMounted, setQueueSheetMounted] = useState(false);
   const [queueSheetVisible, setQueueSheetVisible] = useState(false);
-  const { addToQueue, setCurrentClimb, playlistSuggestionSource, sessionId } = useQueue();
+  const { addToQueue, setCurrentClimb, sessionId } = useQueue();
   const { visible: snackbarVisible, nonce: snackbarNonce, dismissSnackbar } = useQueueSnackbar();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
@@ -207,8 +212,17 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     });
   }, [climbActions]);
 
-  const openQueueSheet = useCallback(() => setQueueSheetVisible(true), []);
-  const closeQueueSheet = useCallback(() => setQueueSheetVisible(false), []);
+  const openQueueSheet = useCallback(() => {
+    setQueueSheetMounted(true);
+    setQueueSheetVisible(true);
+  }, []);
+  // Request an animated close (flip `visible`; the sheet's dismiss animation then
+  // fires onDismissed → unmount).
+  const requestCloseQueueSheet = useCallback(() => setQueueSheetVisible(false), []);
+  const handleQueueSheetDismissed = useCallback(() => {
+    setQueueSheetVisible(false);
+    setQueueSheetMounted(false);
+  }, []);
 
   // The queue sheet renders climbs against the active board (thumbnails + tick).
   const queueBoard = useMemo<QueueItemRowBoard | null>(() => {
@@ -227,24 +241,28 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     (item: ClimbQueueItem) => {
       setCurrentClimb(item);
       openPlayDrawer(item.climb, { setAsCurrent: false });
-      setQueueSheetVisible(false);
+      requestCloseQueueSheet();
     },
-    [setCurrentClimb, openPlayDrawer],
+    [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
-  // Tap a suggestion → activate it (adds + sets current) and show it.
+  // Tap a suggestion → activate it with a suggestion source built from the
+  // suggestions list (so the play drawer can keep swiping forward through them)
+  // and show it.
   const handleQueueSuggestionPress = useCallback(
-    (climb: QueueClimb) => {
+    (climb: QueueClimb, source: PlaylistSuggestionSource) => {
       const item = climbToQueueItem(climb, { suggested: true });
-      setCurrentClimb(item, { playlistSuggestionSource });
+      setCurrentClimb(item, { playlistSuggestionSource: source });
       openPlayDrawer(climb, { setAsCurrent: false });
-      setQueueSheetVisible(false);
+      requestCloseQueueSheet();
     },
-    [setCurrentClimb, playlistSuggestionSource, openPlayDrawer],
+    [setCurrentClimb, openPlayDrawer, requestCloseQueueSheet],
   );
 
   // Tick a history climb → open the log-ascent sheet (stacks above the queue
   // sheet, which stays open beneath) pre-filled with the active session.
+  // Deps: only `sessionId` — `activeBoardConfigRef` is a stable ref read at call
+  // time (intentionally not a dep). If that ref ever becomes state, add it here.
   const handleQueueTickHistory = useCallback(
     (item: ClimbQueueItem) => {
       const boardConfig = activeBoardConfigRef.current;
@@ -329,11 +347,12 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onClose={closeAddToPlaylist}
         />
       ) : null}
-      {queueSheetVisible && queueBoard ? (
+      {queueSheetMounted && queueBoard ? (
         <QueueSheet
-          visible
+          visible={queueSheetVisible}
           board={queueBoard}
-          onClose={closeQueueSheet}
+          onClose={requestCloseQueueSheet}
+          onDismissed={handleQueueSheetDismissed}
           onClimbPress={handleQueueClimbPress}
           onSuggestionPress={handleQueueSuggestionPress}
           onTickHistory={handleQueueTickHistory}

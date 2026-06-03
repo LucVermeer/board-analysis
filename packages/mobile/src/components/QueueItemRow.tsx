@@ -25,9 +25,12 @@ import { rowReorderShift } from './play-drawer/queue-drag-math';
 
 const SWIPE_DELETE_THRESHOLD = -80;
 const DELETE_BUTTON_WIDTH = 80;
-const POSITION_SLOT_WIDTH = 28;
+// Width of the leading position/play/checkbox slot. Exported so the queue list's
+// suggestion rows reserve the same gutter and align their thumbnails + separator
+// with the queue rows from a single source of truth.
+export const POSITION_SLOT_WIDTH = 28;
 // Inset the separator to start under the climb name (after position + thumbnail).
-const SEPARATOR_INSET = spacing[3] + POSITION_SLOT_WIDTH + spacing[3] + THUMBNAIL_WIDTH + spacing[3];
+export const SEPARATOR_INSET = spacing[3] + POSITION_SLOT_WIDTH + spacing[3] + THUMBNAIL_WIDTH + spacing[3];
 
 export type QueueItemRowBoard = {
   boardName: BoardName;

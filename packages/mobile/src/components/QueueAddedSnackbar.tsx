@@ -10,6 +10,7 @@ import { useTheme } from '../providers/theme-provider';
 import { useQueue } from '../providers/queue-provider';
 import { TAB_BAR_HEIGHT } from './BlurTabBar';
 import { BAR_CONTENT_HEIGHT } from '../theme/layout';
+import { queueSnackbarBottomOffset } from './queue-snackbar-position';
 
 const DEFAULT_DURATION = 4000;
 
@@ -49,7 +50,13 @@ export function QueueAddedSnackbar({
 
   // Sit above the queue bar when it's showing; otherwise just above the tab bar.
   const barVisible = !!state.currentClimbQueueItem;
-  const bottom = insets.bottom + TAB_BAR_HEIGHT + (barVisible ? BAR_CONTENT_HEIGHT + spacing[2] : 0) + spacing[2];
+  const bottom = queueSnackbarBottomOffset({
+    insetsBottom: insets.bottom,
+    tabBarHeight: TAB_BAR_HEIGHT,
+    barContentHeight: BAR_CONTENT_HEIGHT,
+    gap: spacing[2],
+    barVisible,
+  });
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>

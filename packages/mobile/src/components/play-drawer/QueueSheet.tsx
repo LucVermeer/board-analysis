@@ -4,7 +4,7 @@ import { BottomSheetModal, BottomSheetBackdrop, type BottomSheetBackdropProps } 
 import { FullWindowOverlay } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { Climb, ClimbQueueItem } from '@boardsesh/queue';
+import type { Climb, ClimbQueueItem, PlaylistSuggestionSource } from '@boardsesh/queue';
 import { QueueSheetHeader } from './QueueSheetHeader';
 import { QueueList } from './QueueList';
 import { Text } from '../Text';
@@ -27,9 +27,12 @@ const modalContainerComponent = Platform.OS === 'ios' ? ModalSheetContainer : un
 type QueueSheetProps = {
   visible: boolean;
   board: QueueItemRowBoard;
+  /** Request an animated close (header button) — host flips `visible` to false. */
   onClose: () => void;
+  /** Fired AFTER the dismiss animation finishes so the host can unmount. */
+  onDismissed: () => void;
   onClimbPress: (item: ClimbQueueItem) => void;
-  onSuggestionPress: (climb: Climb) => void;
+  onSuggestionPress: (climb: Climb, source: PlaylistSuggestionSource) => void;
   onTickHistory: (item: ClimbQueueItem) => void;
 };
 
@@ -37,6 +40,7 @@ export function QueueSheet({
   visible,
   board,
   onClose,
+  onDismissed,
   onClimbPress,
   onSuggestionPress,
   onTickHistory,
@@ -73,10 +77,12 @@ export function QueueSheet({
     setShowFullHistory(false);
   }, []);
 
-  const handleClose = useCallback(() => {
+  // The modal's dismiss animation has finished (header request, backdrop, or
+  // pan-down). Reset local UI state and let the host unmount.
+  const handleDismissed = useCallback(() => {
     resetState();
-    onClose();
-  }, [resetState, onClose]);
+    onDismissed();
+  }, [resetState, onDismissed]);
 
   const handleToggleEditMode = useCallback(() => {
     setIsEditMode((prev) => {
@@ -156,7 +162,7 @@ export function QueueSheet({
       enableHandlePanningGesture={!isDragging}
       backdropComponent={renderBackdrop}
       containerComponent={modalContainerComponent}
-      onDismiss={handleClose}
+      onDismiss={handleDismissed}
       handleIndicatorStyle={sheetStyles.indicator}
       backgroundStyle={backgroundStyle}
       style={styles.sheet}
@@ -169,7 +175,7 @@ export function QueueSheet({
         viewOnlyMode={viewOnlyMode}
         onToggleEditMode={handleToggleEditMode}
         onToggleHistory={handleToggleHistory}
-        onClose={handleClose}
+        onClose={onClose}
         onClearAll={handleClearAll}
       />
 
