@@ -37,6 +37,7 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
   onClimbPress,
 }: SimilarClimbsSectionProps) {
   const { t } = useTranslation('session');
+  const { t: tClimbs } = useTranslation('climbs');
   const { formatGrade } = useGradeFormat();
   const { data: climbs, isLoading, isError, refetch } = useSimilarClimbs(boardName, climbUuid, layoutId, angle);
 
@@ -98,7 +99,7 @@ export const SimilarClimbsSection = memo(function SimilarClimbsSection({
       {ranked.map(({ climb: similar, compatible }) => {
         const gradeColor = getGradeColor(similar.difficultyName) ?? DEFAULT_GRADE_COLOR;
         const formattedGrade = formatGrade(similar.difficultyName) ?? similar.difficultyName ?? '';
-        const byline = formatByline(similar, t);
+        const byline = formatByline(similar, tClimbs);
         return (
           <Pressable
             key={similar.uuid}

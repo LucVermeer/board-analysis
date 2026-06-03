@@ -1,6 +1,6 @@
 {
-  "sends_one": "{{count}} enchaînement",
-  "sends_other": "{{count}} enchaînements",
+  "sends_one": "{{formattedCount}} enchaînement",
+  "sends_other": "{{formattedCount}} enchaînements",
   "metadata": {
     "list": {
       "title": "Blocs {{boardName}} à {{angle}}°",

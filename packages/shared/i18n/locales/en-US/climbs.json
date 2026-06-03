@@ -1,6 +1,6 @@
 {
-  "sends_one": "{{count}} send",
-  "sends_other": "{{count}} sends",
+  "sends_one": "{{formattedCount}} send",
+  "sends_other": "{{formattedCount}} sends",
   "metadata": {
     "list": {
       "title": "{{boardName}} climbs at {{angle}}°",

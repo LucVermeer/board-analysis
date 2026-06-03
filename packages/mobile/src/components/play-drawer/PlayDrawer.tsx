@@ -394,7 +394,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   rawDifficulty={displayedClimb.difficulty}
                   qualityAverage={displayedClimb.quality_average}
                   ascensionistCount={displayedClimb.ascensionist_count}
-                  stars={displayedClimb.stars}
                   setterUsername={displayedClimb.setter_username}
                 />
 
