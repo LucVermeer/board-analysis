@@ -6,6 +6,11 @@ plugins {
     id("expo-module-gradle-plugin")
 }
 
+// expo-module-gradle-plugin's maven-publication setup derives its coordinate
+// from group + a semver version; without these its PublicationInfo init throws.
+group = "com.boardsesh"
+version = "1.0.0"
+
 android {
     namespace = "com.boardsesh.liveactivity"
     compileSdk = 35

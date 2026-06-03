@@ -7,6 +7,12 @@ plugins {
     id("expo-module-gradle-plugin")
 }
 
+// expo-module-gradle-plugin sets up a maven publication that derives its
+// coordinate from group + a semver version; without these its PublicationInfo
+// init throws. Any valid values work for a local autolinked module.
+group = "com.boardsesh"
+version = "1.0.0"
+
 android {
     namespace = "com.boardsesh.boardrenderer"
     compileSdk = 35
