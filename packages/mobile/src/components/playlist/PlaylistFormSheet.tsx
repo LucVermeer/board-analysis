@@ -14,24 +14,14 @@ import { useTheme } from '../../providers/theme-provider';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
+import { buildPlaylistFormValues, NAME_MAX, DESCRIPTION_MAX, type PlaylistFormValues } from './playlist-form-values';
 
-const NAME_MAX = 100;
-const DESCRIPTION_MAX = 500;
+export type { PlaylistFormValues };
 
-// Preset emoji palette for the icon picker (edit only). Mobile has no
-// emoji-mart equivalent (it's DOM-only on web); a tap-to-pick row keeps the
-// picker native and the value controlled.
+// Preset emoji palette for the icon picker. Mobile has no emoji-mart equivalent
+// (it's DOM-only on web); a tap-to-pick row keeps the picker native and the
+// value controlled.
 const PRESET_ICONS = ['🔥', '💪', '🎯', '⭐', '🧗', '🪨', '📈', '❄️', '🌙', '⚡', '🏆', '🎸'] as const;
-
-export type PlaylistFormValues = {
-  name: string;
-  description?: string;
-  color?: string;
-  /** Edit only. */
-  icon?: string;
-  /** Edit only. */
-  isPublic?: boolean;
-};
 
 type PlaylistFormSheetProps = {
   mode: 'create' | 'edit';
@@ -98,40 +88,20 @@ export function PlaylistFormSheet({ mode, visible, submitting, playlist, onSubmi
   }, [onClose]);
 
   const handleSubmit = useCallback(() => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError(t('edit.validation.nameRequired'));
-      return;
-    }
-    if (trimmedName.length > NAME_MAX) {
-      setError(t('edit.validation.nameTooLong'));
-      return;
-    }
-    const trimmedDescription = description.trim();
-    if (trimmedDescription.length > DESCRIPTION_MAX) {
-      setError(t('edit.validation.descriptionTooLong'));
+    const result = buildPlaylistFormValues(mode, { name, description, color, icon, isPublic });
+    if (!result.ok) {
+      setError(
+        result.error === 'name-required'
+          ? t('edit.validation.nameRequired')
+          : result.error === 'name-too-long'
+            ? t('edit.validation.nameTooLong')
+            : t('edit.validation.descriptionTooLong'),
+      );
       return;
     }
     setError(null);
-    // Edit sends '' for a cleared field so the removal actually persists — the
-    // update API only changes fields that are present, so undefined means "leave
-    // unchanged" and '' means "clear". Create omits empties instead.
-    const values: PlaylistFormValues = isEdit
-      ? {
-          name: trimmedName,
-          description: trimmedDescription,
-          color: color ?? '',
-          icon: icon ?? '',
-          isPublic,
-        }
-      : {
-          name: trimmedName,
-          description: trimmedDescription || undefined,
-          color,
-          icon,
-        };
-    onSubmit(values);
-  }, [name, description, color, icon, isPublic, isEdit, onSubmit, t]);
+    onSubmit(result.values);
+  }, [mode, name, description, color, icon, isPublic, onSubmit, t]);
 
   const title = isEdit ? t('edit.title') : t('create.drawerTitle');
   const submitLabel = isEdit
