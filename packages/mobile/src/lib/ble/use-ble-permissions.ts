@@ -40,6 +40,20 @@ export function useBlePermissions(): BlePermissionsResult {
     const results = await PermissionsAndroid.requestMultiple(permissions);
     const allGranted = Object.values(results).every((result) => result === PermissionsAndroid.RESULTS.GRANTED);
 
+    // POST_NOTIFICATIONS (Android 13+) lets the session foreground-service show
+    // its ongoing notification with Previous/Next controls. Requested here — at
+    // connect time, the contextual moment a session becomes possible — but kept
+    // DECOUPLED from the BLE gate: a denial only hides the notification; the
+    // foreground service still runs and keeps the board connection alive in the
+    // background, so it must never block connecting.
+    if (typeof Platform.Version === 'number' && Platform.Version >= 33) {
+      try {
+        await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+      } catch {
+        // Notification permission is optional for BLE continuity — ignore failures.
+      }
+    }
+
     return allGranted;
   }, []);
 

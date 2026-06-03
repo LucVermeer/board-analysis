@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQueue } from '../../providers/queue-provider';
 import { useLiveActivity } from './use-live-activity';
 import { addWidgetQueueNavigateListener } from './live-activity-plugin';
@@ -21,6 +22,21 @@ type LiveActivityBridgeProps = {
 // authorization prompts at random.
 export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: LiveActivityBridgeProps) {
   const { state, sessionId, nextClimb, previousClimb } = useQueue();
+  const { t } = useTranslation('session');
+
+  // Localized strings for the Android foreground-service notification (channel +
+  // Previous/Next actions). Built here because hooks need a component context;
+  // ignored on iOS, where ActivityKit renders its own Swift UI.
+  const androidNotification = useMemo(
+    () => ({
+      channelName: t('mobile.session.notification.channelName'),
+      channelDescription: t('mobile.session.notification.channelDescription'),
+      contentTitleFallback: t('mobile.session.notification.contentTitleFallback'),
+      previousLabel: t('mobile.session.notification.previous'),
+      nextLabel: t('mobile.session.notification.next'),
+    }),
+    [t],
+  );
 
   useLiveActivity({
     queue: state.queue,
@@ -28,6 +44,7 @@ export function LiveActivityBridge({ boardName, layoutId, sizeId, setIds }: Live
     board: { boardName, layoutId, sizeId, setIds },
     sessionId,
     isSessionActive: state.queue.length > 0 || state.currentClimbQueueItem !== null,
+    androidNotification,
   });
 
   // Subscribe to widget Next/Previous taps. Native already updates the

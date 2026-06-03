@@ -328,7 +328,14 @@
       "inStatsGrades": "Répartition par cotation",
       "inQueueTitle": "File",
       "inQueueEmpty": "File vide — parcours des voies pour ajouter.",
-      "inEndSession": "Terminer la session"
+      "inEndSession": "Terminer la session",
+      "notification": {
+        "channelName": "Session d'escalade active",
+        "channelDescription": "Garde ta planche connectée et affiche les commandes de session quand Boardsesh est en arrière-plan.",
+        "contentTitleFallback": "Session d'escalade",
+        "previous": "Précédent",
+        "next": "Suivant"
+      }
     }
   },
   "playView": {

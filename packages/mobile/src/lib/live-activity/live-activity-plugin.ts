@@ -1,20 +1,27 @@
 import { Platform } from 'react-native';
 import {
   liveActivityNative,
+  sessionPresenceNative,
   type LiveActivityStartSessionOptions,
   type LiveActivityUpdateOptions,
   type LiveActivityClimbUpdateOptions,
   type WidgetQueueNavigateEvent,
 } from '../../../modules/live-activity/src/index';
 
-// Thin wrapper around the native LiveActivity Expo Module. All methods are
-// no-ops (or return safe defaults) when the module is unavailable — on
-// Android, in Expo Go, or in a preview build that predates the module.
+// Platform-agnostic wrapper around the "session presence" native surface:
+// iOS ActivityKit (LiveActivity module) or the Android foreground service
+// (SessionPresence module). Both modules expose the SAME method names and the
+// SAME queueNavigate event shape, so a single Platform-keyed selector routes
+// every call. Each platform sees exactly one non-null module; the other is null
+// (and so is everything in Expo Go / a preview build predating the modules), in
+// which case every method is a safe no-op.
+const sessionModule =
+  Platform.OS === 'ios' ? liveActivityNative : Platform.OS === 'android' ? sessionPresenceNative : null;
 
 export async function isLiveActivityAvailable(): Promise<boolean> {
-  if (Platform.OS !== 'ios' || !liveActivityNative) return false;
+  if (!sessionModule) return false;
   try {
-    const result = await liveActivityNative.isAvailable();
+    const result = await sessionModule.isAvailable();
     return result.available;
   } catch {
     return false;
@@ -22,30 +29,30 @@ export async function isLiveActivityAvailable(): Promise<boolean> {
 }
 
 export async function startLiveActivitySession(options: LiveActivityStartSessionOptions): Promise<void> {
-  if (Platform.OS !== 'ios' || !liveActivityNative) return;
-  await liveActivityNative.startSession(options);
+  if (!sessionModule) return;
+  await sessionModule.startSession(options);
 }
 
 export async function endLiveActivitySession(): Promise<void> {
-  if (Platform.OS !== 'ios' || !liveActivityNative) return;
-  await liveActivityNative.endSession();
+  if (!sessionModule) return;
+  await sessionModule.endSession();
 }
 
 export async function updateLiveActivity(options: LiveActivityUpdateOptions): Promise<void> {
-  if (Platform.OS !== 'ios' || !liveActivityNative) return;
-  await liveActivityNative.updateActivity(options);
+  if (!sessionModule) return;
+  await sessionModule.updateActivity(options);
 }
 
 export async function updateLiveActivityClimb(options: LiveActivityClimbUpdateOptions): Promise<void> {
-  if (Platform.OS !== 'ios' || !liveActivityNative) return;
-  await liveActivityNative.updateActivityClimb(options);
+  if (!sessionModule) return;
+  await sessionModule.updateActivityClimb(options);
 }
 
 export function addWidgetQueueNavigateListener(callback: (event: WidgetQueueNavigateEvent) => void): () => void {
-  if (Platform.OS !== 'ios' || !liveActivityNative) {
+  if (!sessionModule) {
     return () => {};
   }
-  const subscription = liveActivityNative.addListener('queueNavigate', callback);
+  const subscription = sessionModule.addListener('queueNavigate', callback);
   return () => subscription.remove();
 }
 

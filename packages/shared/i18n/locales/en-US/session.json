@@ -328,7 +328,14 @@
       "inStatsGrades": "Grade distribution",
       "inQueueTitle": "Queue",
       "inQueueEmpty": "Queue is empty — browse climbs to add.",
-      "inEndSession": "End session"
+      "inEndSession": "End session",
+      "notification": {
+        "channelName": "Active climbing session",
+        "channelDescription": "Keeps your board connected and shows session controls while Boardsesh runs in the background.",
+        "contentTitleFallback": "Climbing session",
+        "previous": "Previous",
+        "next": "Next"
+      }
     }
   },
   "playView": {

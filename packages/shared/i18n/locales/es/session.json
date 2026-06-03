@@ -328,7 +328,14 @@
       "inStatsGrades": "Distribución de grados",
       "inQueueTitle": "Cola",
       "inQueueEmpty": "Cola vacía — explora vías para añadir.",
-      "inEndSession": "Terminar sesión"
+      "inEndSession": "Terminar sesión",
+      "notification": {
+        "channelName": "Sesión de escalada activa",
+        "channelDescription": "Mantiene tu tablero conectado y muestra los controles de la sesión mientras Boardsesh está en segundo plano.",
+        "contentTitleFallback": "Sesión de escalada",
+        "previous": "Anterior",
+        "next": "Siguiente"
+      }
     }
   },
   "playView": {

@@ -1,0 +1,186 @@
+package com.boardsesh.liveactivity
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
+import android.os.IBinder
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+
+/**
+ * Foreground service (type connectedDevice) that keeps the react-native-ble-plx
+ * connection alive while Boardsesh is backgrounded, and shows an ongoing
+ * media-style notification with Previous/Next controls. The Android counterpart
+ * to the iOS Live Activity. Started/updated/stopped by SessionPresenceModule via
+ * intents; its action buttons broadcast to BoardSessionActionReceiver.
+ */
+class BoardSessionService : Service() {
+
+    private var channelName: String = "Active climbing session"
+    private var channelDescription: String = ""
+    private var contentTitleFallback: String = "Climbing session"
+    private var previousLabel: String = "Previous"
+    private var nextLabel: String = "Next"
+
+    private var climbName: String? = null
+    private var subtitle: String? = null
+    private var hasNext: Boolean = false
+    private var hasPrevious: Boolean = false
+    private var currentIndex: Int = 0
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_STOP -> {
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_START -> {
+                channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: channelName
+                channelDescription = intent.getStringExtra(EXTRA_CHANNEL_DESC) ?: channelDescription
+                contentTitleFallback = intent.getStringExtra(EXTRA_TITLE_FALLBACK) ?: contentTitleFallback
+                previousLabel = intent.getStringExtra(EXTRA_PREV_LABEL) ?: previousLabel
+                nextLabel = intent.getStringExtra(EXTRA_NEXT_LABEL) ?: nextLabel
+            }
+            ACTION_UPDATE -> {
+                climbName = intent.getStringExtra(EXTRA_CLIMB_NAME) ?: climbName
+                subtitle = intent.getStringExtra(EXTRA_SUBTITLE) ?: subtitle
+                hasNext = intent.getBooleanExtra(EXTRA_HAS_NEXT, hasNext)
+                hasPrevious = intent.getBooleanExtra(EXTRA_HAS_PREVIOUS, hasPrevious)
+                currentIndex = intent.getIntExtra(EXTRA_CURRENT_INDEX, currentIndex)
+            }
+        }
+        startInForeground()
+        // START_STICKY so the OS tries to recreate the service after a kill while
+        // a session is logically active.
+        return START_STICKY
+    }
+
+    private fun startInForeground() {
+        ensureChannel()
+        val notification = buildNotification()
+        // connectedDevice requires API 30+; older devices get a plain FGS. The
+        // type must be backed by a held permission (BLUETOOTH_CONNECT) at this
+        // call on API 34+, hence the try/catch guard.
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        } else {
+            0
+        }
+        try {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+        } catch (error: Exception) {
+            Log.w(TAG, "startForeground failed: ${error.message}")
+            stopSelf()
+        }
+    }
+
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        val channel = NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_LOW).apply {
+            description = channelDescription
+            setShowBadge(false)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun buildNotification(): Notification {
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            // TODO(Phase 6): replace with a dedicated white-silhouette Boardsesh
+            // notification icon (the app launcher icon renders as a white blob).
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(climbName ?: contentTitleFallback)
+            .setContentText(subtitle ?: "")
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setContentIntent(launchAppIntent())
+
+        val compactActions = mutableListOf<Int>()
+        var actionIndex = 0
+        if (hasPrevious) {
+            builder.addAction(
+                android.R.drawable.ic_media_previous,
+                previousLabel,
+                actionPendingIntent(ACTION_NAV_PREVIOUS, REQ_PREVIOUS),
+            )
+            compactActions.add(actionIndex)
+            actionIndex++
+        }
+        if (hasNext) {
+            builder.addAction(
+                android.R.drawable.ic_media_next,
+                nextLabel,
+                actionPendingIntent(ACTION_NAV_NEXT, REQ_NEXT),
+            )
+            compactActions.add(actionIndex)
+        }
+
+        builder.setStyle(
+            androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(*compactActions.toIntArray()),
+        )
+        return builder.build()
+    }
+
+    private fun launchAppIntent(): PendingIntent? {
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+        return PendingIntent.getActivity(this, REQ_CONTENT, launch, pendingFlags())
+    }
+
+    private fun actionPendingIntent(navAction: String, requestCode: Int): PendingIntent {
+        val intent = Intent(this, BoardSessionActionReceiver::class.java).apply {
+            action = navAction
+            putExtra(EXTRA_CURRENT_INDEX, currentIndex)
+            putExtra(EXTRA_CORRELATION_ID, java.util.UUID.randomUUID().toString())
+        }
+        return PendingIntent.getBroadcast(this, requestCode, intent, pendingFlags())
+    }
+
+    private fun pendingFlags(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+    }
+
+    companion object {
+        const val CHANNEL_ID = "boardsesh_session"
+        const val NOTIFICATION_ID = 4711
+        private const val TAG = "BoardSession"
+
+        const val ACTION_START = "com.boardsesh.liveactivity.action.START"
+        const val ACTION_UPDATE = "com.boardsesh.liveactivity.action.UPDATE"
+        const val ACTION_STOP = "com.boardsesh.liveactivity.action.STOP"
+        const val ACTION_NAV_PREVIOUS = "com.boardsesh.liveactivity.action.NAV_PREVIOUS"
+        const val ACTION_NAV_NEXT = "com.boardsesh.liveactivity.action.NAV_NEXT"
+
+        const val EXTRA_CHANNEL_NAME = "channelName"
+        const val EXTRA_CHANNEL_DESC = "channelDescription"
+        const val EXTRA_TITLE_FALLBACK = "contentTitleFallback"
+        const val EXTRA_PREV_LABEL = "previousLabel"
+        const val EXTRA_NEXT_LABEL = "nextLabel"
+        const val EXTRA_CLIMB_NAME = "climbName"
+        const val EXTRA_SUBTITLE = "subtitle"
+        const val EXTRA_HAS_NEXT = "hasNext"
+        const val EXTRA_HAS_PREVIOUS = "hasPrevious"
+        const val EXTRA_CURRENT_INDEX = "currentIndex"
+        const val EXTRA_CORRELATION_ID = "correlationId"
+
+        private const val REQ_PREVIOUS = 0
+        private const val REQ_NEXT = 1
+        private const val REQ_CONTENT = 2
+    }
+}

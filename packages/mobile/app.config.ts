@@ -165,7 +165,18 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
         foregroundImage: './assets/icon.png',
         backgroundColor: '#000000',
       },
-      permissions: ['BLUETOOTH_SCAN', 'BLUETOOTH_CONNECT', 'ACCESS_FINE_LOCATION'],
+      permissions: [
+        'BLUETOOTH_SCAN',
+        'BLUETOOTH_CONNECT',
+        'ACCESS_FINE_LOCATION',
+        // Background BLE session: a connectedDevice foreground service keeps the
+        // board connection alive while backgrounded; POST_NOTIFICATIONS (Android
+        // 13+) lets its ongoing media-style notification show. The <service> +
+        // <receiver> elements are added by ./plugins/with-android-session-service.
+        'FOREGROUND_SERVICE',
+        'FOREGROUND_SERVICE_CONNECTED_DEVICE',
+        'POST_NOTIFICATIONS',
+      ],
       // Do NOT add `neverForLocation` to BLUETOOTH_SCAN here: react-native-ble-plx
       // caps ACCESS_FINE_LOCATION at maxSdkVersion=30 when it's set, which would
       // break expo-location (board/session discovery) and expo-maps (Google Maps)
@@ -226,6 +237,10 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // Play device filtering. Unconditional (EAS-safe) — it's a pure manifest
       // addition with no signing/credential implications.
       './plugins/with-android-bluetooth-feature',
+      // Adds the <service android:foregroundServiceType="connectedDevice"> + the
+      // notification-action <receiver> for the background BLE session (the
+      // Android counterpart to the iOS Live Activity). EAS-safe manifest-only mod.
+      './plugins/with-android-session-service',
       // Register this before @bacons/apple-targets so Expo's mod chain runs it
       // after the widget target has been created, while keeping the provider last.
       './plugins/with-boardsesh-widget-build-settings',
