@@ -1,0 +1,94 @@
+name: Android PR Build (React Native)
+
+# Catches what the JS-only checks can't: a broken Expo config plugin, an
+# app.config.ts mistake, or a Gradle/native-module compile failure in the
+# packages/mobile (managed Expo, no committed android/) project — BEFORE it
+# reaches the push-to-main android-apk-rn.yml release build.
+#
+# Scope is deliberately narrow:
+#   - ci.yml already runs typecheck:mobile, the mobile vitest project, and
+#     check:mobile-bundle on PRs, so we DON'T duplicate those here.
+#   - This adds only the missing piece: `expo prebuild` (exercises every Android
+#     config plugin, incl. with-android-release-signing's debug fallback and
+#     with-android-bluetooth-feature) followed by `gradlew assembleDebug` (a real
+#     Kotlin/JNI compile of the board-renderer + live-activity modules).
+#   - Distinct from the legacy Capacitor android-ci.yml / android-release.yml,
+#     which watch `mobile/**`; the path filters below (`packages/mobile/**`)
+#     never overlap, so the two never double-fire.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/mobile/**'
+      - 'packages/shared/**'
+      - 'packages/board-constants/**'
+      - 'packages/shared-schema/**'
+      - '.github/workflows/android-pr-rn.yml'
+  push:
+    branches-ignore: [main]
+    paths:
+      - 'packages/mobile/**'
+      - 'packages/shared/**'
+      - 'packages/board-constants/**'
+      - 'packages/shared-schema/**'
+      - '.github/workflows/android-pr-rn.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: android-pr-rn-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  prebuild-and-assemble-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install Node.js dependencies (workspace root)
+        run: bun install --frozen-lockfile
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses and install SDK components
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          # Separate key prefix from the release workflow so a debug-build cache
+          # never masks a release-build regression (and vice versa).
+          key: ${{ runner.os }}-gradle-rn-pr-${{ hashFiles('packages/mobile/package.json', 'bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-rn-pr-
+
+      - name: Expo prebuild (generate android/)
+        working-directory: packages/mobile
+        env:
+          # Skip the tailscale probe (already short-circuited on CI, set
+          # explicitly so a misconfigured runner never pays the 2s timeout).
+          TAILSCALE_HOSTS: ''
+        run: bunx expo prebuild --platform android --clean --no-install
+
+      - name: Build debug APK (compiles all native modules + plugins)
+        working-directory: packages/mobile/android
+        run: ./gradlew assembleDebug --stacktrace
