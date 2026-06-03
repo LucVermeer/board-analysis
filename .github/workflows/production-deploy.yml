@@ -391,7 +391,11 @@ jobs:
 
       - name: Install Railway CLI
         if: needs.check-rollback.outputs.active != 'true'
-        run: npm install -g @railway/cli
+        # Pinned: @railway/cli 4.66.1 added a VolumeInstance.deletedAt field to its
+        # GraphQL queries (railwayapp/cli#928) that Railway's API rejects, breaking
+        # `railway deployment list --json` ("Cannot query field deletedAt on type
+        # VolumeInstance"). 4.66.0 is the last version without it. Bump deliberately.
+        run: npm install -g @railway/cli@4.66.0
 
       # The Railway service Source is the moving GHCR tag :production, which this
       # run just repointed to the freshly built digest. `railway redeploy`
