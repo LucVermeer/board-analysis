@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBoardPath } from '../board-path';
+import { buildBoardPath, parseBoardPath } from '../board-path';
 
 describe('buildBoardPath', () => {
   it('builds a path with angle', () => {
@@ -20,5 +20,67 @@ describe('buildBoardPath', () => {
 
   it('omits empty-string angle instead of producing a trailing slash', () => {
     expect(buildBoardPath('kilter', 8, 17, '26,27', '')).toBe('kilter/8/17/26,27');
+  });
+});
+
+describe('parseBoardPath', () => {
+  it('round-trips with buildBoardPath', () => {
+    expect(parseBoardPath(buildBoardPath('kilter', 8, 17, '26,27', 40))).toEqual({
+      boardName: 'kilter',
+      layoutId: 8,
+      sizeId: 17,
+      setIds: '26,27',
+      angle: 40,
+    });
+  });
+
+  it('parses the bare form and keeps comma-joined setIds intact', () => {
+    expect(parseBoardPath('kilter/8/17/26,27/40')).toEqual({
+      boardName: 'kilter',
+      layoutId: 8,
+      sizeId: 17,
+      setIds: '26,27',
+      angle: 40,
+    });
+  });
+
+  it('parses a leading-slash full pathname with trailing segments', () => {
+    expect(parseBoardPath('/kilter/1/10/1/45/list')).toEqual({
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1',
+      angle: 45,
+    });
+  });
+
+  it('drops a leading locale segment', () => {
+    expect(parseBoardPath('/es/tension/1/10/1,2/55/list')).toEqual({
+      boardName: 'tension',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      angle: 55,
+    });
+  });
+
+  it('treats angle 0 as a real angle', () => {
+    expect(parseBoardPath('kilter/8/17/26,27/0')?.angle).toBe(0);
+  });
+
+  it('returns angle null when absent', () => {
+    expect(parseBoardPath('kilter/8/17/26,27')).toEqual({
+      boardName: 'kilter',
+      layoutId: 8,
+      sizeId: 17,
+      setIds: '26,27',
+      angle: null,
+    });
+  });
+
+  it('returns null for non-board paths', () => {
+    expect(parseBoardPath('')).toBeNull();
+    expect(parseBoardPath('/b/my-board-slug/40')).toBeNull();
+    expect(parseBoardPath('kilter/notanumber/17/26,27/40')).toBeNull();
   });
 });

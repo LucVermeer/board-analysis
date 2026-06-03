@@ -70,6 +70,22 @@ export type SetCurrentClimbOptions = {
   playlistSuggestionSource: PlaylistSuggestionSource | null;
 };
 
+/**
+ * Per-climb grade fields that change when the board angle changes. A climb's
+ * difficulty/quality/sends are angle-specific (stored per-angle server-side),
+ * but a `Climb` carries a single set baked in for the angle it was fetched at.
+ * `REGRADE_CLIMBS` patches these onto the climbs already in the queue so they
+ * render the new angle's grade without re-adding them. Keyed by `climb.uuid`.
+ */
+export type ClimbRegradePatch = {
+  angle: number;
+  difficulty: string;
+  quality_average: string;
+  ascensionist_count: number;
+  benchmark_difficulty: string | null;
+  difficulty_error?: string;
+};
+
 export type QueueSearchParams = Record<string, unknown>;
 
 export type QueueState<TSearchParams extends QueueSearchParams = QueueSearchParams> = {
@@ -131,4 +147,5 @@ export type QueueAction<TSearchParams extends QueueSearchParams = QueueSearchPar
   | { type: 'CLEAR_RESYNC_FLAG' }
   | { type: 'OPTIMISTIC_SET_DRIVER'; payload: { participantId: string } }
   | { type: 'OPTIMISTIC_CLEAR_DRIVER' }
+  | { type: 'REGRADE_CLIMBS'; payload: { grades: Record<string, ClimbRegradePatch> } }
   | { type: 'CLEAR_QUEUE' };

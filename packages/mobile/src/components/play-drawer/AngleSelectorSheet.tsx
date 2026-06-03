@@ -1,17 +1,22 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import BottomSheet, {
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
+import { View, Pressable, StyleSheet, Platform } from 'react-native';
+import {
+  BottomSheetModal,
   BottomSheetBackdrop,
-  BottomSheetFlatList,
+  BottomSheetView,
   type BottomSheetBackdropProps,
-  type BottomSheetFlatListMethods,
 } from '@gorhom/bottom-sheet';
+import { FullWindowOverlay } from 'react-native-screens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import type { BoardName } from '@boardsesh/shared-schema';
+import { ANGLES } from '@boardsesh/board-config';
 import { Text } from '../Text';
-import { getHttpClient } from '../../lib/graphql/client';
-import { GET_ANGLES, type GetAnglesQueryResponse } from '../../lib/graphql/operations';
-import { hapticSelection } from '../../lib/haptics';
+import { useClimbStatsHistory } from '../../lib/graphql/hooks';
+import { useGradeFormat } from '../../hooks/use-grade-format';
+import { buildAngleStatsMap, type AngleStats } from './community-utils';
+import { AngleBoardDiagram } from './AngleBoardDiagram';
+import { AngleSlider } from './AngleSlider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { brandColors } from '../../theme/colors';
 import { spacing, sheetStyles } from '../../theme/tokens';
@@ -22,198 +27,214 @@ type AngleSelectorSheetProps = {
   onClose: () => void;
   boardName: string;
   layoutId: number;
+  /** Current climb, used to show the per-angle grade/quality/sends preview. */
+  climbUuid?: string;
   currentAngle: number;
   onAngleChange: (angle: number) => void;
 };
 
-type AngleItem = { angle: number };
+// Render the modal in a FullWindowOverlay on iOS so it portals above the play
+// drawer + tab/queue bars — the proven recipe shared by ModalSheet and
+// LogAscentSheet (BottomSheetModal + stackBehavior=push + static BottomSheetView).
+function AngleSelectorModalContainer({ children }: PropsWithChildren) {
+  return <FullWindowOverlay>{children}</FullWindowOverlay>;
+}
+const modalContainerComponent = Platform.OS === 'ios' ? AngleSelectorModalContainer : undefined;
 
 export const AngleSelectorSheet = memo(function AngleSelectorSheet({
   visible,
   onClose,
   boardName,
-  layoutId,
+  climbUuid,
   currentAngle,
   onAngleChange,
 }: AngleSelectorSheetProps) {
   const { t } = useTranslation('session');
+  const { t: tCommon } = useTranslation('common');
   const { systemColors } = useTheme();
-  const sheetRef = useRef<BottomSheet>(null);
-  const flatListRef = useRef<BottomSheetFlatListMethods | null>(null);
+  const insets = useSafeAreaInsets();
+  const { gradeFormat } = useGradeFormat();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const isPresentedRef = useRef(false);
 
-  const snapPoints = useMemo(() => ['50%'], []);
+  // Single large snap point so the sheet always opens at full "big" size with
+  // room for the diagram, stats, slider and Done button above the home indicator.
+  const snapPoints = useMemo(() => ['90%'], []);
 
-  const { data: anglesData } = useQuery({
-    queryKey: ['angles', boardName, layoutId],
-    queryFn: async () => {
-      const client = getHttpClient();
-      const response = await client.request<GetAnglesQueryResponse>(GET_ANGLES, {
-        boardName,
-        layoutId,
-      });
-      return response.angles;
-    },
-  });
+  // Valid angles come from the static per-board table (what web uses) — robust
+  // and offline, unlike a per-board query.
+  const angles = useMemo<number[]>(() => ANGLES[boardName as BoardName] ?? [], [boardName]);
 
-  const angles = useMemo(() => anglesData ?? [], [anglesData]);
+  // Live preview angle. Applied to the board only when "Done" is pressed; the
+  // diagram, grade, stars and sends all reflect this as the user slides.
+  const [selectedAngle, setSelectedAngle] = useState(currentAngle);
 
-  // Refs to access latest values without adding deps that re-fire the effect
-  const isOpenRef = useRef(false);
-  const anglesRef = useRef(angles);
-  anglesRef.current = angles;
+  const { data: statsHistory } = useClimbStatsHistory(boardName, climbUuid ?? null);
+  const statsByAngle = useMemo(() => buildAngleStatsMap(statsHistory, gradeFormat), [statsHistory, gradeFormat]);
+  const stats: AngleStats | undefined = statsByAngle.get(selectedAngle);
+  const quality = stats?.quality ?? 0;
+
   const currentAngleRef = useRef(currentAngle);
   currentAngleRef.current = currentAngle;
 
   useEffect(() => {
-    if (visible) {
-      if (isOpenRef.current) {
-        // Already open — skip re-triggering
-        return undefined;
-      }
-      isOpenRef.current = true;
-      sheetRef.current?.snapToIndex(0);
-
-      // Auto-scroll to current angle after a short delay to let the list render
-      const currentIndex = anglesRef.current.findIndex((angleItem) => angleItem.angle === currentAngleRef.current);
-      if (currentIndex >= 0) {
-        const scrollTimer = setTimeout(() => {
-          try {
-            flatListRef.current?.scrollToIndex?.({
-              index: currentIndex,
-              animated: true,
-              viewPosition: 0.5,
-            });
-          } catch {
-            // scrollToIndex can throw if layout hasn't been computed yet
-          }
-        }, 300);
-        return () => clearTimeout(scrollTimer);
-      }
-    } else {
-      isOpenRef.current = false;
-      sheetRef.current?.close();
+    if (visible && !isPresentedRef.current) {
+      // Reset the preview to the board's actual angle each time the sheet opens.
+      setSelectedAngle(currentAngleRef.current);
+      sheetRef.current?.present();
+      isPresentedRef.current = true;
+    } else if (!visible && isPresentedRef.current) {
+      sheetRef.current?.dismiss();
+      isPresentedRef.current = false;
     }
-    return undefined;
   }, [visible]);
 
-  const handleClose = useCallback(() => {
+  // Dismissed by gesture / backdrop / programmatically — does NOT apply the
+  // previewed angle (that only happens via "Done").
+  const handleDismiss = useCallback(() => {
+    isPresentedRef.current = false;
     onClose();
   }, [onClose]);
 
-  const handleAnglePress = useCallback(
-    (angle: number) => {
-      hapticSelection();
-      onAngleChange(angle);
-      onClose();
-    },
-    [onAngleChange, onClose],
-  );
+  const handleDone = useCallback(() => {
+    onAngleChange(selectedAngle);
+    onClose();
+  }, [onAngleChange, selectedAngle, onClose]);
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} pressBehavior="close" />
     ),
     [],
   );
 
   const backgroundStyle = { ...sheetStyles.background, backgroundColor: systemColors.secondaryBackground };
 
-  const renderAngleRow = useCallback(
-    ({ item }: { item: AngleItem }) => {
-      const isSelected = item.angle === currentAngle;
-
-      return (
-        <Pressable
-          onPress={() => handleAnglePress(item.angle)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: isSelected }}
-          style={({ pressed }) => [
-            styles.angleRow,
-            isSelected && styles.angleRowSelected,
-            pressed && styles.angleRowPressed,
-          ]}
-        >
-          <Text variant="body" style={[styles.angleText, isSelected && styles.angleTextSelected]}>
-            {item.angle}°
-          </Text>
-          {isSelected && <View style={styles.selectedIndicator} />}
-        </Pressable>
-      );
-    },
-    [currentAngle, handleAnglePress],
-  );
-
-  const keyExtractor = useCallback((item: AngleItem) => String(item.angle), []);
-
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={sheetRef}
-      index={-1}
+      name="angle-selector"
+      index={0}
+      stackBehavior="push"
       snapPoints={snapPoints}
+      containerComponent={modalContainerComponent}
       enablePanDownToClose
+      onDismiss={handleDismiss}
       backdropComponent={renderBackdrop}
-      onClose={handleClose}
       handleIndicatorStyle={sheetStyles.indicator}
       backgroundStyle={backgroundStyle}
     >
-      <View style={styles.header}>
-        <Text variant="headline">{t('mobile.angleSelector.title')}</Text>
-      </View>
-      <BottomSheetFlatList
-        ref={flatListRef}
-        data={angles}
-        keyExtractor={keyExtractor}
-        renderItem={renderAngleRow}
-        contentContainerStyle={styles.listContent}
-        getItemLayout={(_data, index) => ({
-          length: ANGLE_ROW_HEIGHT,
-          offset: ANGLE_ROW_HEIGHT * index,
-          index,
-        })}
-      />
-    </BottomSheet>
+      <BottomSheetView style={[styles.container, { paddingBottom: insets.bottom + spacing[4] }]}>
+        <Text variant="headline" style={styles.title}>
+          {t('mobile.angleSelector.title')}
+        </Text>
+
+        <AngleBoardDiagram
+          angle={selectedAngle}
+          size={150}
+          accessibilityLabel={t('mobile.angleSelector.diagramAria', { angle: selectedAngle })}
+        />
+
+        <Text variant="largeTitle" style={[styles.angleValue, { color: systemColors.label }]}>
+          {selectedAngle}°
+        </Text>
+
+        {stats?.gradeName ? (
+          <Text variant="headline" style={[styles.grade, { color: stats.color }]}>
+            {stats.gradeName}
+          </Text>
+        ) : null}
+
+        <View style={styles.stars} accessibilityLabel={`★ ${quality.toFixed(1)}`}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Text
+              key={n}
+              variant="body"
+              style={[styles.star, { color: quality >= n ? iosSystemColors.starGold : systemColors.secondaryLabel }]}
+            >
+              {quality >= n ? '★' : '☆'}
+            </Text>
+          ))}
+        </View>
+
+        {stats && stats.sends > 0 ? (
+          <Text variant="caption1" style={[styles.ascents, { color: systemColors.secondaryLabel }]}>
+            {t('mobile.community.ascensionists', { count: stats.sends })}
+          </Text>
+        ) : null}
+
+        <Text variant="caption2" style={[styles.hint, { color: systemColors.tertiaryLabel }]}>
+          {t('mobile.angleSelector.fromVerticalHint')}
+        </Text>
+
+        <View style={styles.sliderWrap}>
+          <AngleSlider angles={angles} value={selectedAngle} onChange={setSelectedAngle} />
+        </View>
+
+        <Pressable
+          onPress={handleDone}
+          accessibilityRole="button"
+          accessibilityLabel={tCommon('actions.done')}
+          style={({ pressed }) => [styles.doneButton, pressed && styles.doneButtonPressed]}
+        >
+          <Text variant="headline" style={styles.doneText}>
+            {tCommon('actions.done')}
+          </Text>
+        </Pressable>
+      </BottomSheetView>
+    </BottomSheetModal>
   );
 });
 
-const ANGLE_ROW_HEIGHT = 52;
-
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: spacing[4],
+  container: {
+    paddingHorizontal: spacing[5],
     paddingTop: spacing[2],
-    paddingBottom: spacing[3],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: iosSystemColors.separator,
-  },
-  listContent: {
-    paddingBottom: spacing[8],
-  },
-  angleRow: {
-    height: ANGLE_ROW_HEIGHT,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing[4],
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: iosSystemColors.separator,
   },
-  angleRowSelected: {
-    backgroundColor: `${brandColors.primary}14`,
+  title: {
+    alignSelf: 'flex-start',
+    marginBottom: spacing[2],
   },
-  angleRowPressed: {
-    opacity: 0.6,
+  angleValue: {
+    fontWeight: '700',
+    marginTop: spacing[2],
   },
-  angleText: {
-    color: iosSystemColors.systemGray,
+  grade: {
+    marginTop: spacing[1],
   },
-  angleTextSelected: {
-    fontWeight: '600',
-    color: brandColors.primary,
+  stars: {
+    flexDirection: 'row',
+    gap: spacing[1],
+    marginTop: spacing[1],
   },
-  selectedIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  star: {
+    fontSize: 18,
+  },
+  ascents: {
+    marginTop: spacing[1],
+  },
+  hint: {
+    marginTop: spacing[1],
+  },
+  sliderWrap: {
+    width: '100%',
+    marginTop: spacing[4],
+    marginBottom: spacing[4],
+  },
+  doneButton: {
+    width: '100%',
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: brandColors.primary,
+  },
+  doneButtonPressed: {
+    opacity: 0.85,
+  },
+  doneText: {
+    color: iosSystemColors.white,
+    fontWeight: '600',
   },
 });

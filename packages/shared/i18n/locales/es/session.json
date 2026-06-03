@@ -280,7 +280,9 @@
       "urlInvalid": "Debe ser una URL de Instagram o TikTok"
     },
     "angleSelector": {
-      "title": "Seleccionar ángulo"
+      "title": "Elegir ángulo",
+      "fromVerticalHint": "Medido desde la vertical",
+      "diagramAria": "Tablero inclinado a {{angle}}° desde la vertical"
     },
     "queue": {
       "unknownClimb": "Bloque desconocido",

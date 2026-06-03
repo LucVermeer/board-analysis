@@ -818,9 +818,23 @@ export const SESSION_UPDATES_SUBSCRIPTION = `
         reason
         newPath
       }
+      ... on SessionBoardPathChanged {
+        boardPath
+        changedByParticipantId
+      }
     }
   }
 `;
+
+// Envelope for the session-updates subscription. Fields specific to events the
+// mobile app reacts to are optional so a plain `__typename` + field check
+// narrows cleanly without a brittle discriminated union; events we don't handle
+// fall through the guard. Extend as more event handling lands.
+export type SessionUpdateEvent = {
+  __typename: string;
+  boardPath?: string;
+  changedByParticipantId?: string | null;
+};
 
 // Fields the queue UI needs from each climb in a subscription payload.
 // Must stay in sync with `climbToQueueItem` in PlayDrawer.tsx and with

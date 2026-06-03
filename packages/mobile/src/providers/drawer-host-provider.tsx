@@ -14,9 +14,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { randomUUID } from 'expo-crypto';
 import type { Climb } from '@boardsesh/shared-schema';
+import { buildBoardPath } from '@boardsesh/board-config';
 import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '../components/play-drawer';
 import { LogAscentSheet } from '../components/LogAscentSheet';
-import { useActiveBoard } from '../lib/graphql/use-active-board';
+import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite } from '../lib/graphql/hooks';
@@ -85,7 +86,8 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
-  const { addToQueue } = useQueue();
+  const { addToQueue, setSessionBoardPath } = useQueue();
+  const setActiveBoard = useSetActiveBoard();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
   // Climb to open after the boardConfig override has committed. We can't
@@ -135,6 +137,38 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     pendingOverrideOpenRef.current = null;
     playDrawerRef.current?.open(climb, options);
   }, [activeBoardConfig]);
+
+  // Apply an angle change made from the play drawer's angle selector.
+  const handleAngleChange = useCallback(
+    (newAngle: number) => {
+      if (boardConfigOverride) {
+        // The drawer is showing a climb from a board other than the user's
+        // stored active board. Update only the override (so the drawer reflects
+        // the change) — do NOT rewrite the stored active board's angle, which
+        // belongs to a different board. (No caller wires an override today, but
+        // keep the angle write targeting the board actually shown.)
+        setBoardConfigOverride((prev) => (prev ? { ...prev, angle: newAngle } : prev));
+      } else {
+        // Fixed-angle boards can't be adjusted — do nothing (the pill is also
+        // hidden for them, this is the safety net).
+        if (activeBoard?.isAngleAdjustable === false) return;
+        // Persist to the active board (the angle source of truth). Writing the
+        // ['activeBoard'] cache re-grades the climb list (its search key includes
+        // the angle) and triggers the queue re-grade effect in QueueProvider.
+        if (activeBoard && newAngle !== activeBoard.angle) {
+          void setActiveBoard({ ...activeBoard, angle: newAngle });
+        }
+      }
+
+      // Broadcast to party members (no-op in solo). Build the path from the
+      // board the drawer is actually showing, with the new angle.
+      const cfg = activeBoardConfigRef.current;
+      if (cfg) {
+        void setSessionBoardPath(buildBoardPath(cfg.boardName, cfg.layoutId, cfg.sizeId, cfg.setIds, newAngle));
+      }
+    },
+    [activeBoard, boardConfigOverride, setActiveBoard, setSessionBoardPath],
+  );
 
   const openLogAscent = useCallback((input: LogAscentInput) => {
     setLogAscentInput(input);
@@ -211,7 +245,14 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   return (
     <DrawerHostContext.Provider value={value}>
       {children}
-      {activeBoardConfig ? <PlayDrawer ref={playDrawerRef} boardConfig={activeBoardConfig} /> : null}
+      {activeBoardConfig ? (
+        <PlayDrawer
+          ref={playDrawerRef}
+          boardConfig={activeBoardConfig}
+          onAngleChange={handleAngleChange}
+          isAngleAdjustable={activeBoard?.isAngleAdjustable ?? true}
+        />
+      ) : null}
       {logAscentInput ? (
         <LogAscentSheet
           visible
