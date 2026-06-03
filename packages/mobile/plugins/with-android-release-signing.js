@@ -39,6 +39,22 @@ function applyAndroidReleaseSigning(contents) {
     return contents;
   }
 
+  // Fail loudly if a future Expo SDK ships its own `release` signing config:
+  // blindly injecting ours would produce a duplicate `release {}` inside
+  // `signingConfigs` and a cryptic Gradle DSL error. signingConfigs always
+  // precedes buildTypes in the generated file, so scan only that slice.
+  const buildTypesIndex = contents.search(/buildTypes\s*\{/);
+  const signingConfigsIndex = contents.search(/signingConfigs\s*\{/);
+  if (signingConfigsIndex !== -1 && buildTypesIndex > signingConfigsIndex) {
+    const signingConfigsSlice = contents.slice(signingConfigsIndex, buildTypesIndex);
+    if (/\brelease\s*\{/.test(signingConfigsSlice)) {
+      throw new Error(
+        'with-android-release-signing: the generated build.gradle already defines a `release` ' +
+          'signing config (the Expo template changed). Update this plugin to reuse it instead of injecting a duplicate.',
+      );
+    }
+  }
+
   // 1) Add a `release` signing config right after `signingConfigs {`.
   const withSigningConfig = contents.replace(/signingConfigs\s*\{/, (match) => `${match}\n${RELEASE_SIGNING_BLOCK}`);
   if (withSigningConfig === contents) {

@@ -25,7 +25,9 @@ on:
 
 concurrency:
   group: android-apk-rn-${{ github.ref }}
-  cancel-in-progress: true
+  # Don't cancel an in-flight run: it may be between `assembleRelease` and the
+  # GitHub Release publish, where a cancel could leave a tag with no asset.
+  cancel-in-progress: false
 
 permissions:
   contents: write # required for softprops/action-gh-release
@@ -116,6 +118,12 @@ jobs:
         run: bunx expo prebuild --platform android --clean --no-install
 
       - name: Set version code
+        # versionCode = offset + run_number. The offset keeps this line strictly
+        # above the Capacitor app's versionCode so an install upgrades in place.
+        # NOTE: github.run_number resets to 1 if this workflow file is renamed or
+        # recreated — if you ever do that, bump version_code_offset past the
+        # current production ceiling via the workflow_dispatch input, or new
+        # builds will be un-installable over existing ones.
         run: |
           offset=${{ github.event.inputs.version_code_offset || '2000000' }}
           code=$(( offset + ${{ github.run_number }} ))
@@ -144,6 +152,17 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: ./gradlew assembleRelease --stacktrace
 
+      # Guard against shipping an unsigned / debug-signed APK as if it were the
+      # release build: assert the artifact verifies and log its signer cert so
+      # the signing key is auditable in the run log.
+      - name: Verify APK signature
+        run: |
+          apk=$(find packages/mobile/android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          if [ -z "$apk" ]; then echo "::error::No release APK was produced."; exit 1; fi
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -r | head -n 1)"
+          echo "Verifying $apk with $apksigner"
+          "$apksigner" verify --print-certs "$apk"
+
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -154,7 +173,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Create GitHub Release
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: rn-android-2.0.${{ github.run_number }}

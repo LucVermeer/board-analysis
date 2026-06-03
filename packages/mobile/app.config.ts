@@ -178,7 +178,10 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // ANDROID_KEYSTORE_* env vars are set (CI), falling back to debug signing
       // for local `expo prebuild`. Lets the android-apk-rn workflow produce a
       // sideloadable release APK without committing the android/ project.
-      './plugins/with-android-release-signing',
+      // Excluded under EAS: `eas build` manages release signing through its own
+      // credentials, and injecting our debug-fallback signingConfig there would
+      // mis-sign EAS preview/production Android builds.
+      ...(process.env.EAS_BUILD ? [] : ['./plugins/with-android-release-signing']),
       // Register this before @bacons/apple-targets so Expo's mod chain runs it
       // after the widget target has been created, while keeping the provider last.
       './plugins/with-boardsesh-widget-build-settings',
