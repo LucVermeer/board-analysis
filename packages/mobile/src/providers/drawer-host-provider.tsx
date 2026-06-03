@@ -18,6 +18,7 @@ import { PlayDrawer, type PlayDrawerHandle, type PlayDrawerOpenOptions } from '.
 import { LogAscentSheet } from '../components/LogAscentSheet';
 import { useActiveBoard } from '../lib/graphql/use-active-board';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
+import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite } from '../lib/graphql/hooks';
 import { useQueue } from './queue-provider';
 
@@ -64,6 +65,9 @@ type DrawerHostValue = {
    *  boardConfig at the time of opening. */
   openClimbActions: (climb: Climb) => void;
   closeClimbActions: () => void;
+  /** Opens the add-to-playlist bottom sheet for the given climb. Snapshots the
+   *  active boardConfig (for the angle) at open time. */
+  openAddToPlaylist: (climb: Climb) => void;
 };
 
 const DrawerHostContext = createContext<DrawerHostValue | null>(null);
@@ -80,6 +84,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const [boardConfigOverride, setBoardConfigOverride] = useState<BoardConfig | null>(null);
   const [logAscentInput, setLogAscentInput] = useState<LogAscentInput | null>(null);
   const [climbActions, setClimbActions] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
+  const [playlistClimb, setPlaylistClimb] = useState<{ climb: Climb; boardConfig: BoardConfig } | null>(null);
   const { addToQueue } = useQueue();
   const { mutate: toggleFavoriteMutate } = useToggleFavorite();
 
@@ -150,6 +155,16 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
     setClimbActions(null);
   }, []);
 
+  const openAddToPlaylist = useCallback((climb: Climb) => {
+    const boardConfig = activeBoardConfigRef.current;
+    if (!boardConfig) return;
+    setPlaylistClimb({ climb, boardConfig });
+  }, []);
+
+  const closeAddToPlaylist = useCallback(() => {
+    setPlaylistClimb(null);
+  }, []);
+
   const handleClimbActionsAddToQueue = useCallback(() => {
     if (!climbActions) return;
     addToQueue({ uuid: randomUUID(), climb: climbActions.climb });
@@ -182,8 +197,15 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   }, [climbActions]);
 
   const value = useMemo<DrawerHostValue>(
-    () => ({ boardConfig: activeBoardConfig, openPlayDrawer, openLogAscent, openClimbActions, closeClimbActions }),
-    [activeBoardConfig, openPlayDrawer, openLogAscent, openClimbActions, closeClimbActions],
+    () => ({
+      boardConfig: activeBoardConfig,
+      openPlayDrawer,
+      openLogAscent,
+      openClimbActions,
+      closeClimbActions,
+      openAddToPlaylist,
+    }),
+    [activeBoardConfig, openPlayDrawer, openLogAscent, openClimbActions, closeClimbActions, openAddToPlaylist],
   );
 
   return (
@@ -219,6 +241,14 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
           onToggleFavorite={handleClimbActionsToggleFavorite}
           onTick={handleClimbActionsTick}
           onClose={closeClimbActions}
+        />
+      ) : null}
+      {playlistClimb ? (
+        <AddToPlaylistSheet
+          visible
+          climb={playlistClimb.climb}
+          angle={playlistClimb.boardConfig.angle}
+          onClose={closeAddToPlaylist}
         />
       ) : null}
     </DrawerHostContext.Provider>

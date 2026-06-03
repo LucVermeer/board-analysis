@@ -17,6 +17,7 @@ import {
   type ClimbFilters,
 } from '../../../src/components/ClimbFilterSheet';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
+import { useTheme } from '../../../src/providers/theme-provider';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { useBoardProvider } from '@boardsesh/board-react';
 import { randomUUID } from 'expo-crypto';
@@ -48,7 +49,8 @@ const SEARCH_DEBOUNCE_MS = 300;
 export default function ClimbList() {
   const navigation = useNavigation();
   const { t } = useTranslation('climbs');
-  const { openClimbActions } = useDrawerHost();
+  const { openClimbActions, openAddToPlaylist } = useDrawerHost();
+  const { systemColors } = useTheme();
   const { addToQueue, state: queueState } = useQueue();
   // The active climb (driving the board / persistent queue bar). We highlight
   // its row so the search → tap → change-active loop is always visible.
@@ -342,11 +344,23 @@ export default function ClimbList() {
         angle={angle}
         onPress={handleClimbPress}
         onOpenActions={openClimbActions}
+        onOpenPlaylist={openAddToPlaylist}
         onAddToQueue={handleAddToQueue}
         selected={climb.uuid === activeClimbUuid}
       />
     ),
-    [boardName, layoutId, sizeId, setIds, angle, handleClimbPress, openClimbActions, handleAddToQueue, activeClimbUuid],
+    [
+      boardName,
+      layoutId,
+      sizeId,
+      setIds,
+      angle,
+      handleClimbPress,
+      openClimbActions,
+      openAddToPlaylist,
+      handleAddToQueue,
+      activeClimbUuid,
+    ],
   );
 
   if (!hasBoardConfig && !isBoardLoading) {
@@ -374,7 +388,7 @@ export default function ClimbList() {
   const isEmpty = accumulatedClimbs.length === 0 && !isClimbsLoading;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: systemColors.background }]}>
       <FlashList
         data={accumulatedClimbs}
         renderItem={renderClimbItem}

@@ -26,8 +26,8 @@ type ClimbListThumbnailProps = {
 /**
  * Layered climb thumbnail for the list view. Wraps the shared
  * LayeredClimbImage stack in a fixed 76×96 portrait cell with rounded
- * corners, using the filled hold style + a dimmed background so the lit
- * climb reads as solid dots against the board photo at this small size.
+ * corners, using the filled hold style so the lit climb reads as solid
+ * dots against the board photo at this small size.
  *
  * Mirror via CSS only — passing `mirrored` to the Rust renderer too
  * would double-flip, and we'd cache two PNGs per climb instead of one.
@@ -58,7 +58,6 @@ const ClimbListThumbnail = React.memo(function ClimbListThumbnail({
         backgroundPaths={backgroundPaths}
         missingBackgroundCount={missingBackgroundCount}
         mirrored={mirrored}
-        dimBackground
         recyclingKey={frames}
       />
     </View>
