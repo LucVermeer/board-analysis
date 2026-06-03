@@ -23,6 +23,7 @@ import type {
   QueueAction,
   QueueSearchParams,
   ClimbQueueItem,
+  ClimbRegradePatch,
   PlaylistSuggestionSource,
   SetCurrentClimbOptions,
 } from '@boardsesh/queue';
@@ -34,18 +35,23 @@ import {
 import { useQueueMutations } from '@boardsesh/queue-react';
 import type { SessionSummary } from '@boardsesh/shared-schema';
 import { execute } from '@boardsesh/graphql-client';
-import { buildBoardPath } from '@boardsesh/board-config';
+import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
 import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
 import { getWsClient } from '../lib/graphql/ws-client';
 import { getHttpClient } from '../lib/graphql/client';
 import {
   QUEUE_UPDATES_SUBSCRIPTION,
+  SESSION_UPDATES_SUBSCRIPTION,
   CREATE_SESSION,
   END_SESSION,
+  GET_CLIMB,
   type CreateSessionMutationResponse,
   type EndSessionMutationResponse,
+  type SessionUpdateEvent,
+  type GetClimbQueryResponse,
 } from '../lib/graphql/operations';
 import { getStoredActiveBoard } from '../lib/active-board-store';
+import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
 import { getStoredSessionId, setStoredSessionId, clearStoredSessionId } from '../lib/session-store';
 import { findPreviousQueueItem, findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
 import { toClimbQueueItem, type SubscriptionQueueItem } from '../lib/queue-conversion';
@@ -85,6 +91,11 @@ type QueueContextValue = {
    * mutation failed. No-op (returns existing id) when a session is live.
    */
   startSession: (config?: StartSessionConfig) => Promise<string | null>;
+  /**
+   * Broadcast the session's boardPath so every party member follows the same
+   * angle/board. Best-effort; a true no-op in solo (never creates a session).
+   */
+  setSessionBoardPath: (boardPath: string) => Promise<void>;
 };
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -108,7 +119,21 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(queueReducer, defaultSearchParams, initialState);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  // Our own participant id, captured from the JOIN_SESSION response. Used to
+  // suppress the echo of our own SessionBoardPathChanged broadcasts (the server
+  // stamps `changedByParticipantId` with the originator's participant id).
+  const participantIdRef = useRef<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // The active board is the angle source of truth. Read it here so the
+  // self-healing re-grade effect can compare each queued climb's display angle
+  // to the live angle, and so inbound SessionBoardPathChanged events can write
+  // the new angle back. `setActiveBoard` is stable; keep a ref for the WS
+  // handler so the subscription effect doesn't re-subscribe on board changes.
+  const { data: activeBoard } = useActiveBoard();
+  const setActiveBoard = useSetActiveBoard();
+  const setActiveBoardRef = useRef(setActiveBoard);
+  setActiveBoardRef.current = setActiveBoard;
   const stateRef = useRef(state);
   stateRef.current = state;
   const sessionCreationRef = useRef<Promise<string | null> | null>(null);
@@ -142,8 +167,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             activeBoard.angle,
           );
         },
-        execute: ({ sessionId: sid, boardPath }) =>
-          execute(getWsClient(), { query: JOIN_SESSION, variables: { sessionId: sid, boardPath } }),
+        execute: async ({ sessionId: sid, boardPath }) => {
+          const result = await execute<{ joinSession?: { participantId?: string | null } }>(getWsClient(), {
+            query: JOIN_SESSION,
+            variables: { sessionId: sid, boardPath },
+          });
+          // Remember our participant id so we can ignore the echo of our own
+          // board-path broadcasts. Only overwrite on a concrete value.
+          const joinedParticipantId = result?.joinSession?.participantId;
+          if (joinedParticipantId) participantIdRef.current = joinedParticipantId;
+          return result;
+        },
       }),
     [],
   );
@@ -196,6 +230,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (!sessionId) {
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
+      participantIdRef.current = null;
       joinTracker.reset();
       return;
     }
@@ -255,8 +290,56 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     unsubscribeRef.current = cleanup;
 
+    // Follow board-path (angle) changes broadcast by other party members. The
+    // angle is session-shared: when a peer changes it we update our own active
+    // board's angle (which cascades to the climb list, play drawer, and the
+    // re-grade effect). We don't switch the whole board — only the angle.
+    const sessionUpdatesCleanup = wsClient.subscribe<{ sessionUpdates: SessionUpdateEvent }>(
+      {
+        query: SESSION_UPDATES_SUBSCRIPTION,
+        variables: { sessionId },
+      },
+      {
+        next: ({ data }) => {
+          const event = data?.sessionUpdates;
+          if (!event || event.__typename !== 'SessionBoardPathChanged' || !event.boardPath) return;
+          // Echo of our own change — we already applied it locally before
+          // broadcasting. A null local participant id (peer event before our
+          // JOIN_SESSION resolved) can't be the originator, so we apply it.
+          if (event.changedByParticipantId && event.changedByParticipantId === participantIdRef.current) return;
+          const parsed = parseBoardPath(event.boardPath);
+          if (!parsed || parsed.angle == null) return;
+          const nextAngle = parsed.angle;
+          void (async () => {
+            const stored = await getStoredActiveBoard();
+            if (!stored || stored.angle === nextAngle) return;
+            // Never override a fixed-angle board (mirrors handleAngleChange's
+            // local guard) — a peer can't change an angle the board can't be
+            // set to.
+            if (stored.isAngleAdjustable === false) return;
+            // Follow ONLY the angle, and only when the peer is on the SAME
+            // board. A mixed-board session must not push a foreign angle (board
+            // angle tables differ, e.g. MoonBoard only allows 25°/40°). Compare
+            // the parsed board identity to our stored board before applying.
+            if (
+              parsed.boardName !== stored.boardType ||
+              parsed.layoutId !== stored.layoutId ||
+              parsed.sizeId !== stored.sizeId ||
+              parsed.setIds !== stored.setIds
+            ) {
+              return;
+            }
+            await setActiveBoardRef.current({ ...stored, angle: nextAngle });
+          })();
+        },
+        error: () => {},
+        complete: () => {},
+      },
+    );
+
     return () => {
       cleanup();
+      sessionUpdatesCleanup();
       unsubConnected();
       unsubClosed();
       unsubscribeRef.current = null;
@@ -345,6 +428,94 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       if (__DEV__) console.warn(`[queue] best-effort ${action} failed`, error);
     },
   });
+
+  // Broadcast the session's boardPath (angle/board) to party members. The
+  // shared mutation already swallows transport errors and is a true no-op in
+  // solo (never lazily creates a session), so callers can fire it freely.
+  const setSessionBoardPath = useCallback((boardPath: string) => mutations.setSessionBoardPath(boardPath), [mutations]);
+
+  // Self-healing re-grade: a climb's difficulty/quality/sends are angle-specific
+  // (stored per-angle server-side), but queue items carry the grade baked in for
+  // the angle they were fetched at. Whenever the active angle differs from a
+  // queued climb's display angle — the user changed the angle, or a server
+  // FullSync re-staled the queue at the old angle — refetch that climb at the
+  // live angle and patch it in. Local only: each client follows the angle and
+  // re-grades its own queue, so nothing is sent to peers. Idempotent — after
+  // patching, climb.angle === angle, so the effect no-ops on its own re-run.
+  // Maps a climb uuid → the angle a re-grade fetch is currently in flight for.
+  // Keyed by angle (not a plain Set) so a fetch already running for a STALE
+  // angle doesn't block a fresh fetch when the angle changes again mid-flight —
+  // otherwise that climb could strand at the old grade.
+  const regradeInFlightRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!activeBoard) return undefined;
+    const { boardType, layoutId, sizeId, setIds, angle } = activeBoard;
+    const uuids = new Set<string>();
+    const consider = (item: ClimbQueueItem | null | undefined) => {
+      if (!item?.climb) return;
+      // Re-grade when the display angle differs AND we aren't already fetching
+      // this climb for the CURRENT angle (a fetch for a prior angle re-enqueues).
+      if (item.climb.angle !== angle && regradeInFlightRef.current.get(item.climb.uuid) !== angle) {
+        uuids.add(item.climb.uuid);
+      }
+    };
+    state.queue.forEach(consider);
+    consider(state.currentClimbQueueItem);
+    if (uuids.size === 0) return undefined;
+
+    const targetUuids = [...uuids];
+    targetUuids.forEach((uuid) => regradeInFlightRef.current.set(uuid, angle));
+
+    let cancelled = false;
+    void (async () => {
+      const client = getHttpClient();
+      const patches = await Promise.all(
+        targetUuids.map(async (climbUuid) => {
+          try {
+            const response = await client.request<GetClimbQueryResponse>(GET_CLIMB, {
+              boardName: boardType,
+              layoutId,
+              sizeId,
+              setIds,
+              angle,
+              climbUuid,
+            });
+            const climb = response.climb;
+            if (!climb) return null;
+            const patch: ClimbRegradePatch = {
+              angle,
+              difficulty: climb.difficulty,
+              quality_average: climb.quality_average,
+              ascensionist_count: climb.ascensionist_count,
+              benchmark_difficulty: climb.benchmark_difficulty ?? null,
+              difficulty_error: climb.difficulty_error,
+            };
+            return [climbUuid, patch] as const;
+          } catch {
+            return null;
+          } finally {
+            // Only clear our own marker — a newer run may have re-targeted this
+            // uuid to a different angle, and must keep its in-flight claim.
+            if (regradeInFlightRef.current.get(climbUuid) === angle) {
+              regradeInFlightRef.current.delete(climbUuid);
+            }
+          }
+        }),
+      );
+      if (cancelled) return;
+      const grades: Record<string, ClimbRegradePatch> = {};
+      for (const entry of patches) {
+        if (entry) grades[entry[0]] = entry[1];
+      }
+      if (Object.keys(grades).length > 0) {
+        dispatch({ type: 'REGRADE_CLIMBS', payload: { grades } });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.queue, state.currentClimbQueueItem, activeBoard]);
 
   const addToQueue = useCallback(
     (item: ClimbQueueItem) => {
@@ -516,6 +687,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       clearSession,
       endSession,
       startSession: createSessionWithConfig,
+      setSessionBoardPath,
     }),
     [
       state,
@@ -532,6 +704,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       clearSession,
       endSession,
       createSessionWithConfig,
+      setSessionBoardPath,
     ],
   );
 

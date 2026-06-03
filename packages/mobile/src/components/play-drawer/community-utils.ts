@@ -49,3 +49,54 @@ export function buildAngleGradeBars(
     })
     .sort((a, b) => a.angle - b.angle);
 }
+
+export type AngleStats = {
+  /** Formatted grade label (e.g. "V6"), or null when this angle has no stats. */
+  gradeName: string | null;
+  /** Grade colour, for tinting the grade label. */
+  color: string;
+  /** Average quality rating (stars), or null when unrated. */
+  quality: number | null;
+  /** Ascensionist count (sends) at this angle. */
+  sends: number;
+};
+
+// Latest snapshot per angle → grade + quality + sends, for the angle selector's
+// per-angle row stats. Same latest-per-angle logic as buildAngleGradeBars, but
+// keyed by angle and carrying quality/sends too. Angles with no difficulty
+// snapshot still appear (gradeName null) so their quality/sends can show.
+export function buildAngleStatsMap(
+  history: ClimbStatsHistoryEntry[] | undefined,
+  gradeFormat: GradeDisplayFormat,
+): Map<number, AngleStats> {
+  const result = new Map<number, AngleStats>();
+  if (!history) return result;
+
+  const latestByAngle = new Map<number, ClimbStatsHistoryEntry>();
+  for (const entry of history) {
+    const existing = latestByAngle.get(entry.angle);
+    if (!existing || new Date(entry.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+      latestByAngle.set(entry.angle, entry);
+    }
+  }
+
+  for (const [angle, entry] of latestByAngle) {
+    const difficulty = entry.displayDifficulty ?? entry.difficultyAverage;
+    const grade = difficulty == null ? undefined : GRADE_BY_ID.get(Math.round(difficulty));
+    const gradeName = grade
+      ? gradeFormat === 'font'
+        ? grade.font_grade.toUpperCase()
+        : grade.v_grade
+      : difficulty == null
+        ? null
+        : String(Math.round(difficulty));
+    result.set(angle, {
+      gradeName,
+      color: getGradeColor(grade?.difficulty_name) ?? DEFAULT_GRADE_COLOR,
+      quality: entry.qualityAverage,
+      sends: entry.ascensionistCount ?? 0,
+    });
+  }
+
+  return result;
+}

@@ -66,10 +66,12 @@ export type PlayDrawerHandle = {
 type PlayDrawerProps = {
   boardConfig: BoardConfig;
   onAngleChange?: (angle: number) => void;
+  /** When false, the board's angle is fixed — the angle pill is hidden. */
+  isAngleAdjustable?: boolean;
 };
 
 export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
-  { boardConfig, onAngleChange },
+  { boardConfig, onAngleChange, isAngleAdjustable = true },
   ref,
 ) {
   const { t } = useTranslation('session');
@@ -143,6 +145,14 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   useEffect(() => {
     setIsTickBarActive(false);
   }, [displayedClimbUuid]);
+
+  // When the board angle changes, drop the locally-pinned climb so the drawer
+  // re-derives the displayed climb from currentClimbQueueItem — which the queue
+  // re-grade effect patches with the new angle's grade. Without this, the header
+  // would keep showing the stale grade baked into the locally-held climb.
+  useEffect(() => {
+    setClimb(null);
+  }, [angle]);
 
   const { showToast } = useToast();
 
@@ -396,7 +406,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                       enabled={!isTickBarActive}
                     />
                   )}
-
                 </View>
 
                 <PlayDrawerActionBar
@@ -420,7 +429,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   onTickPress={handleTickFabPress}
                   onTickLongPress={handleTickFabLongPress}
                   currentAngle={angle}
-                  onOpenAngleSelector={handleOpenAngleSelector}
+                  onOpenAngleSelector={isAngleAdjustable ? handleOpenAngleSelector : undefined}
                 />
               </View>
 
@@ -484,6 +493,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           onClose={handleCloseSubDrawer}
           boardName={boardName}
           layoutId={layoutId}
+          climbUuid={displayedClimb?.uuid}
           currentAngle={angle}
           onAngleChange={(newAngle) => {
             onAngleChange?.(newAngle);

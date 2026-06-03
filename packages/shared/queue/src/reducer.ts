@@ -3,7 +3,7 @@
  * The React `useReducer` wrapper lives in the web app.
  */
 
-import type { QueueState, QueueAction, QueueSearchParams } from './types';
+import type { QueueState, QueueAction, QueueSearchParams, ClimbQueueItem } from './types';
 import { insertQueueItemIdempotent } from './event-utils';
 import { playlistSuggestionSourceMatches, pruneSuggestedQueueItemsAfterCurrent } from './playlist-suggestions';
 
@@ -367,6 +367,38 @@ export function queueReducer<TSearchParams extends QueueSearchParams>(
         queue: newQueue,
         // Update current climb if it was the replaced item
         currentClimbQueueItem: state.currentClimbQueueItem?.uuid === uuid ? item : state.currentClimbQueueItem,
+      };
+    }
+
+    case 'REGRADE_CLIMBS': {
+      // Patch the per-angle grade fields onto climbs already in the queue /
+      // current item when the board angle changes. Keyed by climb.uuid (the
+      // SAME climb can appear multiple times — e.g. re-added after a tick — so
+      // every occurrence is patched). Local-only: the caller re-fetches each
+      // climb's grade for the new angle and dispatches this; nothing is sent to
+      // peers (each client follows the angle and re-grades its own queue).
+      const { grades } = action.payload;
+      let changed = false;
+      const regrade = (item: ClimbQueueItem): ClimbQueueItem => {
+        const patch = grades[item.climb.uuid];
+        // Skip if there's no patch, or the climb already carries this angle
+        // (idempotent — re-running after a patch / on a stale FullSync no-ops).
+        if (!patch || item.climb.angle === patch.angle) return item;
+        changed = true;
+        return { ...item, climb: { ...item.climb, ...patch } };
+      };
+
+      const newQueue = state.queue.map(regrade);
+      const newCurrent = state.currentClimbQueueItem ? regrade(state.currentClimbQueueItem) : null;
+
+      // Preserve the original state reference when nothing matched, so the
+      // self-healing effect that dispatches this can't churn renders.
+      if (!changed) return state;
+
+      return {
+        ...state,
+        queue: newQueue,
+        currentClimbQueueItem: newCurrent,
       };
     }
 

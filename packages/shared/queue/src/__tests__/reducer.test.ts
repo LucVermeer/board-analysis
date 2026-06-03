@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { queueReducer, initialState } from '../reducer';
 import type { QueueState, ClimbQueueItem } from '../types';
 
-function makeClimbQueueItem(overrides: Partial<ClimbQueueItem> & { uuid: string }): ClimbQueueItem {
+function makeClimbQueueItem(
+  overrides: Partial<Omit<ClimbQueueItem, 'climb'>> & { uuid: string; climb?: Partial<ClimbQueueItem['climb']> },
+): ClimbQueueItem {
   return {
     uuid: overrides.uuid,
     climb: {
@@ -332,6 +334,133 @@ describe('OPTIMISTIC_CLEAR_DRIVER', () => {
   it('is idempotent when already null', () => {
     const state = makeState({ optimisticDriverParticipantId: null });
     const result = queueReducer(state, { type: 'OPTIMISTIC_CLEAR_DRIVER' });
+    expect(result).toBe(state);
+  });
+});
+
+describe('REGRADE_CLIMBS', () => {
+  it('patches matching climbs in the queue and the current item', () => {
+    const queued = makeClimbQueueItem({ uuid: 'q1', climb: { uuid: 'climb-a', angle: 40, difficulty: '6a/V3' } });
+    const current = makeClimbQueueItem({ uuid: 'c1', climb: { uuid: 'climb-b', angle: 40, difficulty: '6b/V4' } });
+    const state = makeState({ queue: [queued], currentClimbQueueItem: current });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-a': {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+          },
+          'climb-b': {
+            angle: 50,
+            difficulty: '7a/V6',
+            quality_average: '4.0',
+            ascensionist_count: 20,
+            benchmark_difficulty: null,
+          },
+        },
+      },
+    });
+
+    expect(result.queue[0].climb.difficulty).toBe('6c/V5');
+    expect(result.queue[0].climb.angle).toBe(50);
+    expect(result.currentClimbQueueItem?.climb.difficulty).toBe('7a/V6');
+    expect(result.currentClimbQueueItem?.climb.angle).toBe(50);
+  });
+
+  it('keeps reference equality for items without a patch', () => {
+    const patched = makeClimbQueueItem({ uuid: 'q1', climb: { uuid: 'climb-a', angle: 40, difficulty: '6a/V3' } });
+    const untouched = makeClimbQueueItem({ uuid: 'q2', climb: { uuid: 'climb-z', angle: 40, difficulty: '5+/V1' } });
+    const state = makeState({ queue: [patched, untouched] });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-a': {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+          },
+        },
+      },
+    });
+
+    expect(result.queue[1]).toBe(untouched); // same reference — not re-created
+    expect(result.queue[0]).not.toBe(patched); // patched item is a fresh object
+  });
+
+  it('patches every occurrence of the same climb uuid', () => {
+    const first = makeClimbQueueItem({ uuid: 'q1', climb: { uuid: 'dup', angle: 40, difficulty: '6a/V3' } });
+    const second = makeClimbQueueItem({ uuid: 'q2', climb: { uuid: 'dup', angle: 40, difficulty: '6a/V3' } });
+    const state = makeState({ queue: [first, second] });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          dup: {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+          },
+        },
+      },
+    });
+
+    expect(result.queue[0].climb.difficulty).toBe('6c/V5');
+    expect(result.queue[1].climb.difficulty).toBe('6c/V5');
+  });
+
+  it('returns the same state when no uuid matches', () => {
+    const queued = makeClimbQueueItem({ uuid: 'q1', climb: { uuid: 'climb-a', angle: 40, difficulty: '6a/V3' } });
+    const state = makeState({ queue: [queued] });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'not-in-queue': {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+          },
+        },
+      },
+    });
+
+    expect(result).toBe(state);
+  });
+
+  it('is idempotent when the climb already carries the target angle', () => {
+    const queued = makeClimbQueueItem({ uuid: 'q1', climb: { uuid: 'climb-a', angle: 50, difficulty: '6c/V5' } });
+    const state = makeState({ queue: [queued] });
+
+    const result = queueReducer(state, {
+      type: 'REGRADE_CLIMBS',
+      payload: {
+        grades: {
+          'climb-a': {
+            angle: 50,
+            difficulty: '6c/V5',
+            quality_average: '3.5',
+            ascensionist_count: 10,
+            benchmark_difficulty: null,
+          },
+        },
+      },
+    });
+
     expect(result).toBe(state);
   });
 });

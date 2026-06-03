@@ -185,11 +185,15 @@ export default function ClimbList() {
   // Accumulate climbs across pages for infinite scroll
   const [accumulatedClimbs, setAccumulatedClimbs] = useState<Climb[]>([]);
 
-  // Clear accumulated climbs and reset page when search or filters change
+  // Clear accumulated climbs and reset page when search, filters, or angle
+  // change. Including `angle` is essential: the search refetches per-angle
+  // grades (the angle is in the query key), and without resetting accumulation
+  // a mid-scroll angle change would merge the new angle's page into the old
+  // angle's pages, mixing grades.
   useEffect(() => {
     setAccumulatedClimbs([]);
     setPageNumber(1);
-  }, [debouncedSearch, filters]);
+  }, [debouncedSearch, filters, angle]);
 
   const searchInput = useMemo(
     () =>
