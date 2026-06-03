@@ -334,6 +334,11 @@
     }
   },
   "playView": {
+    "previousFrame": "Previous frame",
+    "nextFrame": "Next frame",
+    "play": "Play",
+    "pause": "Pause",
+    "replay": "Replay",
     "onWallChip": "ON WALL · {{username}}",
     "onWallChipNoDriver": "ON WALL",
     "drivingChip": "DRIVING",

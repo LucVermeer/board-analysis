@@ -334,6 +334,11 @@
     }
   },
   "playView": {
+    "previousFrame": "Image précédente",
+    "nextFrame": "Image suivante",
+    "play": "Lire",
+    "pause": "Pause",
+    "replay": "Rejouer",
     "onWallChip": "SUR LE MUR · {{username}}",
     "onWallChipNoDriver": "SUR LE MUR",
     "drivingChip": "AU CONTRÔLE",

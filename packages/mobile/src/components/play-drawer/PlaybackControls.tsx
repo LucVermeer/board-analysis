@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, runOnJS } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useTranslation } from 'react-i18next';
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
@@ -79,6 +80,11 @@ function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: num
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        // Claim the touch only on horizontal intent; a vertical drag falls
+        // through to the BottomSheetScrollView (matches QueueItemRow's
+        // swipe-inside-a-scroll-view pattern).
+        .activeOffsetX([-10, 10])
+        .failOffsetY([-10, 10])
         .onBegin(() => {
           dragging.value = true;
           startPosition.value = position.value;
@@ -150,6 +156,7 @@ export function PlaybackControls({
   onSpeedChange,
 }: PlaybackControlsProps) {
   const { systemColors } = useTheme();
+  const { t } = useTranslation('session');
   const atFirstFrame = frameIndex <= 0;
   const atLastFrame = frameIndex >= frameCount - 1;
   // Pause while playing; replay (restart from 0) when stopped on the last frame;
@@ -180,7 +187,7 @@ export function PlaybackControls({
           disabled={atFirstFrame}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Previous frame"
+          accessibilityLabel={t('playView.previousFrame')}
           style={styles.stepButton}
         >
           <Icon name="skip.previous" size={26} color={atFirstFrame ? systemColors.tertiaryLabel : systemColors.label} />
@@ -190,6 +197,7 @@ export function PlaybackControls({
           onPress={handleMain}
           hitSlop={8}
           accessibilityRole="button"
+          accessibilityLabel={isPlaying ? t('playView.pause') : atLastFrame ? t('playView.replay') : t('playView.play')}
           accessibilityState={{ selected: isPlaying }}
           style={styles.playButton}
         >
@@ -201,7 +209,7 @@ export function PlaybackControls({
           disabled={atLastFrame}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Next frame"
+          accessibilityLabel={t('playView.nextFrame')}
           style={styles.stepButton}
         >
           <Icon name="skip.next" size={26} color={atLastFrame ? systemColors.tertiaryLabel : systemColors.label} />

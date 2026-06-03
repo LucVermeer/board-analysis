@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
 import { useClimbFrames, usePlaybackEngine, type ExternalPlaybackState } from '@boardsesh/playback-react';
 import { useQueue } from '../../providers/queue-provider';
@@ -175,16 +175,22 @@ export function useMobilePlayback({
     playback.play();
   }, [playback, onRoutePlayed]);
 
-  return {
-    isAnimatable: playback.isAnimatable,
-    frameCount: frameStrings.length,
-    frameIndex: playback.frameIndex,
-    currentFrameString: playback.currentFrameString,
-    isPlaying: playback.isPlaying,
-    speed: playback.speed,
-    play,
-    pause: playback.pause,
-    seek: playback.seek,
-    setSpeed: playback.setSpeed,
-  };
+  // Memoise the output so a frame tick doesn't hand the play drawer a new object
+  // every render (parity with web's use-drawer-playback). `playback` is already
+  // a stable useMemo from the engine and `play` is a stable useCallback.
+  return useMemo<UseMobilePlaybackOutput>(
+    () => ({
+      isAnimatable: playback.isAnimatable,
+      frameCount: frameStrings.length,
+      frameIndex: playback.frameIndex,
+      currentFrameString: playback.currentFrameString,
+      isPlaying: playback.isPlaying,
+      speed: playback.speed,
+      play,
+      pause: playback.pause,
+      seek: playback.seek,
+      setSpeed: playback.setSpeed,
+    }),
+    [playback, frameStrings.length, play],
+  );
 }
