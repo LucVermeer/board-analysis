@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { track as vercelTrack } from '@vercel/analytics';
 import { PostHog } from 'posthog-js-lite';
 import { analyticsPathname, isAdminAnalyticsUrl } from './analytics-paths';
@@ -24,7 +25,20 @@ function getPosthog(): PostHog | null {
   if (!window.location.hostname.includes('boardsesh.com')) return null;
 
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    // We're on a production boardsesh.com host but NEXT_PUBLIC_POSTHOG_KEY was
+    // not inlined into the client bundle at build time, so the SDK can't start
+    // and every client-side event silently goes dark. This exact gap blacked
+    // out product analytics for days after the May 2026 deploy-pipeline move to
+    // CI `vercel build` (the key stopped reaching the build). Fail loud so a
+    // missing key surfaces in minutes, not days. Fires once per page load —
+    // posthogInitAttempted (set above) gates re-entry.
+    const message =
+      'PostHog client key (NEXT_PUBLIC_POSTHOG_KEY) is missing on a production host — client analytics is disabled. Check the web build env.';
+    console.error(`[analytics] ${message}`);
+    Sentry.captureMessage(message, 'error');
+    return null;
+  }
   // Default to the boardsesh backend's PostHog reverse proxy so events look
   // first-party to ad-blockers. NEXT_PUBLIC_POSTHOG_HOST overrides for incident
   // recovery (point straight at us.i.posthog.com if the proxy is down).

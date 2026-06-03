@@ -193,6 +193,14 @@ jobs:
           # any .env file in Next). Same Production-environment secret the
           # migrate job uses.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # NEXT_PUBLIC_* must exist at build time — Next inlines it into the
+          # client bundle. Native Vercel builds got this from the project env;
+          # the CI prebuilt build does not, so pass it explicitly (same gap as
+          # DATABASE_URL). Without it, getPosthog() short-circuits and ALL
+          # client-side PostHog analytics goes dark — which is exactly what
+          # happened when prod web moved to CI `vercel build`. Public client key
+          # (phc_…), not a secret, so it's a GitHub Actions variable.
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
         run: vercel build --prod
 
       - name: Package prebuilt output
