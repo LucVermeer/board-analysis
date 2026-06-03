@@ -173,9 +173,11 @@ function SpeedSlider({
   );
 
   // Keep the thumb synced to the external value while not dragging (peer sync,
-  // commit echoes, resets). The guard avoids fighting the gesture.
+  // commit echoes, resets). Skip until layout gives a real track width — otherwise
+  // `usable` is 0 and the thumb snaps to the left before jumping into place. Read
+  // the SharedValue with `.get()` (Reanimated JS-thread accessor), not `.value`.
   useEffect(() => {
-    if (dragging.value) return;
+    if (usable <= 0 || dragging.get()) return;
     position.value = clamp01((value - MIN_SPEED) / (MAX_SPEED - MIN_SPEED)) * usable;
   }, [value, usable, position, dragging]);
 
@@ -336,7 +338,13 @@ export function PlaybackControls({
     const glide = isPlaying ? Math.max(timing.instant, paceMs / Math.max(speed, 0.01)) : timing.fast;
     progress.value = withTiming(target, { duration: glide });
   }, [frameIndex, frameCount, isPlaying, paceMs, speed, progress]);
-  const progressStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0, progress.value) }] }));
+  // transformOrigin must live in the animated style, not the static StyleSheet —
+  // the latter isn't honoured for the Reanimated-driven scaleX, so the bar would
+  // grow from center instead of left-to-right.
+  const progressStyle = useAnimatedStyle(() => ({
+    transformOrigin: 'left',
+    transform: [{ scaleX: Math.max(0, progress.value) }],
+  }));
 
   const handleMain = useCallback(() => {
     hapticSelection();
@@ -438,7 +446,6 @@ const styles = StyleSheet.create({
     right: 0,
     height: 3,
     backgroundColor: brandColors.primary,
-    transformOrigin: 'left',
   },
   transportRow: {
     flexDirection: 'row',
