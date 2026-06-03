@@ -10,34 +10,38 @@
 // provider stays trivially testable and renderer-agnostic.
 
 import { createContext, useCallback, useContext, useMemo, useReducer, type PropsWithChildren } from 'react';
-import { DEFAULT_CLIMB_FILTER_STATE } from '@boardsesh/climb-filters';
+import {
+  DEFAULT_CLIMB_FILTER_STATE,
+  DEFAULT_CLIMB_BOARD_FILTER_STATE,
+  type ClimbBoardFilterState,
+} from '@boardsesh/climb-filters';
 import type { ClimbFilters } from '../lib/climb-filter-types';
-
-export type SearchViewMode = 'list' | 'grid';
 
 /** Lower/upper grade bounds as difficulty ids; undefined = unbounded side. */
 export type GradeBound = { minGradeId: number | undefined; maxGradeId: number | undefined };
 
 export type ClimbSearchState = {
   filters: ClimbFilters;
+  /** Board-renderer-dependent filters (benchmark now; holds/zone later). */
+  boardFilters: ClimbBoardFilterState;
   /** Committed (already-debounced) name term used for the query. */
   name: string;
-  viewMode: SearchViewMode;
 };
 
 const DEFAULT_STATE: ClimbSearchState = {
   filters: DEFAULT_CLIMB_FILTER_STATE,
+  boardFilters: DEFAULT_CLIMB_BOARD_FILTER_STATE,
   name: '',
-  viewMode: 'list',
 };
 
 type Action =
   | { type: 'setFilters'; filters: ClimbFilters }
   | { type: 'patchFilters'; patch: Partial<ClimbFilters> }
   | { type: 'setGrade'; grade: GradeBound }
+  | { type: 'setBoardFilters'; boardFilters: ClimbBoardFilterState }
+  | { type: 'patchBoardFilters'; patch: Partial<ClimbBoardFilterState> }
   | { type: 'setName'; name: string }
-  | { type: 'replaceSearch'; filters: ClimbFilters; name: string }
-  | { type: 'setViewMode'; viewMode: SearchViewMode }
+  | { type: 'replaceSearch'; filters: ClimbFilters; boardFilters: ClimbBoardFilterState; name: string }
   | { type: 'reset' };
 
 function reducer(state: ClimbSearchState, action: Action): ClimbSearchState {
@@ -51,12 +55,14 @@ function reducer(state: ClimbSearchState, action: Action): ClimbSearchState {
         ...state,
         filters: { ...state.filters, minGrade: action.grade.minGradeId, maxGrade: action.grade.maxGradeId },
       };
+    case 'setBoardFilters':
+      return { ...state, boardFilters: action.boardFilters };
+    case 'patchBoardFilters':
+      return { ...state, boardFilters: { ...state.boardFilters, ...action.patch } };
     case 'setName':
       return { ...state, name: action.name };
     case 'replaceSearch':
-      return { ...state, filters: action.filters, name: action.name };
-    case 'setViewMode':
-      return { ...state, viewMode: action.viewMode };
+      return { ...state, filters: action.filters, boardFilters: action.boardFilters, name: action.name };
     case 'reset':
       return { ...DEFAULT_STATE };
     default:
@@ -68,10 +74,11 @@ export type ClimbSearchContextValue = ClimbSearchState & {
   setFilters: (filters: ClimbFilters) => void;
   patchFilters: (patch: Partial<ClimbFilters>) => void;
   setGrade: (grade: GradeBound) => void;
+  setBoardFilters: (boardFilters: ClimbBoardFilterState) => void;
+  patchBoardFilters: (patch: Partial<ClimbBoardFilterState>) => void;
   setName: (name: string) => void;
-  /** Apply a saved filter+name pair atomically (recent pill, per-board restore). */
-  replaceSearch: (filters: ClimbFilters, name: string) => void;
-  setViewMode: (viewMode: SearchViewMode) => void;
+  /** Apply a saved filter+name (+board filters) set atomically (recent pill, per-board restore). */
+  replaceSearch: (filters: ClimbFilters, name: string, boardFilters?: ClimbBoardFilterState) => void;
   reset: () => void;
 };
 
@@ -88,9 +95,14 @@ export function ClimbSearchProvider({ children, initial }: PropsWithChildren<{ i
       setFilters: (filters: ClimbFilters) => dispatch({ type: 'setFilters', filters }),
       patchFilters: (patch: Partial<ClimbFilters>) => dispatch({ type: 'patchFilters', patch }),
       setGrade: (grade: GradeBound) => dispatch({ type: 'setGrade', grade }),
+      setBoardFilters: (boardFilters: ClimbBoardFilterState) => dispatch({ type: 'setBoardFilters', boardFilters }),
+      patchBoardFilters: (patch: Partial<ClimbBoardFilterState>) => dispatch({ type: 'patchBoardFilters', patch }),
       setName: (name: string) => dispatch({ type: 'setName', name }),
-      replaceSearch: (filters: ClimbFilters, name: string) => dispatch({ type: 'replaceSearch', filters, name }),
-      setViewMode: (viewMode: SearchViewMode) => dispatch({ type: 'setViewMode', viewMode }),
+      replaceSearch: (
+        filters: ClimbFilters,
+        name: string,
+        boardFilters: ClimbBoardFilterState = DEFAULT_CLIMB_BOARD_FILTER_STATE,
+      ) => dispatch({ type: 'replaceSearch', filters, name, boardFilters }),
       reset: () => dispatch({ type: 'reset' }),
     }),
     [],
