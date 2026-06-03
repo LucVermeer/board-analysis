@@ -166,6 +166,7 @@
         "@boardsesh/key-value-storage": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
+        "@boardsesh/playback-react": "*",
         "@boardsesh/playlist-generator": "*",
         "@boardsesh/playlists-react": "*",
         "@boardsesh/profile-stats": "*",
@@ -383,6 +384,25 @@
         "typescript": "~6.0.3",
       },
     },
+    "packages/shared/playback-react": {
+      "name": "@boardsesh/playback-react",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/board-constants": "*",
+        "@boardsesh/shared-schema": "*",
+      },
+      "devDependencies": {
+        "@testing-library/react": "^16.3.2",
+        "@types/react": "^19",
+        "happy-dom": "^15",
+        "react": "^19",
+        "react-dom": "^19",
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "react": "^19",
+      },
+    },
     "packages/shared/playlist-generator": {
       "name": "@boardsesh/playlist-generator",
       "version": "1.0.0",
@@ -492,6 +512,7 @@
         "@boardsesh/moonboard-ocr": "*",
         "@boardsesh/party-profile": "*",
         "@boardsesh/play-view": "*",
+        "@boardsesh/playback-react": "*",
         "@boardsesh/playlist-generator": "*",
         "@boardsesh/playlists-react": "*",
         "@boardsesh/profile-stats": "*",
@@ -908,6 +929,8 @@
     "@boardsesh/party-profile": ["@boardsesh/party-profile@workspace:packages/shared/party-profile"],
 
     "@boardsesh/play-view": ["@boardsesh/play-view@workspace:packages/shared/play-view"],
+
+    "@boardsesh/playback-react": ["@boardsesh/playback-react@workspace:packages/shared/playback-react"],
 
     "@boardsesh/playlist-generator": ["@boardsesh/playlist-generator@workspace:packages/shared/playlist-generator"],
 

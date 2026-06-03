@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LitUpHoldsMap } from '@boardsesh/shared-schema';
-import { MIN_PACE_MS } from '../board-renderer/util';
+import { MIN_PACE_MS } from './pace';
 
 export type PlaybackSnapshot = {
   /** Index in `frameStrings` currently displayed. */

@@ -31,6 +31,13 @@ type SwipeBoardCarouselProps = {
   sizeId: number;
   setIds: string;
   currentFrames: string;
+  /**
+   * When playing a route, the per-frame BLE string to render for the ACTIVE
+   * board only. Falls back to `currentFrames` when null/undefined (static climb
+   * or idle). Peek boards and the zoom-reset identity stay keyed on
+   * `currentFrames`, so per-frame ticks never disturb swipe navigation.
+   */
+  currentFrameOverride?: string | null;
   nextFrames: string | null;
   prevFrames: string | null;
   mirrored: boolean;
@@ -52,6 +59,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
   sizeId,
   setIds,
   currentFrames,
+  currentFrameOverride,
   nextFrames,
   prevFrames,
   mirrored,
@@ -160,7 +168,7 @@ export const SwipeBoardCarousel = React.memo(function SwipeBoardCarousel({
         <Animated.View style={[styles.boardWrapper, currentStyle]}>
           <Animated.View style={animatedZoomStyle}>
             <BoardImageNative
-              frames={currentFrames}
+              frames={currentFrameOverride ?? currentFrames}
               boardName={boardName}
               layoutId={layoutId}
               sizeId={sizeId}

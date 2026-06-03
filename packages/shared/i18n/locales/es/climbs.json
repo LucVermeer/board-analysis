@@ -565,6 +565,10 @@
       "savedToast": "Tick guardado"
     },
     "filter": {
+      "climbType": "Tipo",
+      "boulders": "Bloques",
+      "routes": "Rutas",
+      "both": "Ambos",
       "title": "Filtros",
       "sortBy": "Ordenar por",
       "gradeRange": "Rango de grado",

@@ -565,6 +565,10 @@
       "savedToast": "Tick enregistré"
     },
     "filter": {
+      "climbType": "Type",
+      "boulders": "Blocs",
+      "routes": "Voies",
+      "both": "Les deux",
       "title": "Filtres",
       "sortBy": "Trier par",
       "gradeRange": "Plage de cotation",

@@ -50,6 +50,7 @@ export default defineConfig({
       './packages/shared/climb-actions/vite.config.ts',
       './packages/shared/key-value-storage/vite.config.ts',
       './packages/shared/play-view/vite.config.ts',
+      './packages/shared/playback-react/vite.config.ts',
       './packages/shared/profile-stats/vite.config.ts',
       './packages/shared/playlist-generator/vite.config.ts',
       './packages/shared/climb-filters/vite.config.ts',
@@ -245,6 +246,10 @@ export default defineConfig({
       'typecheck:play-view': {
         command: 'bun run --filter=@boardsesh/play-view typecheck',
       },
+      'typecheck:playback-react': {
+        command: 'bun run --filter=@boardsesh/playback-react typecheck',
+        dependsOn: ['build:constants'],
+      },
       'typecheck:profile-stats': {
         command: 'bun run --filter=@boardsesh/profile-stats typecheck',
         dependsOn: ['build:constants'],
@@ -287,6 +292,7 @@ export default defineConfig({
           'typecheck:key-value-storage',
           'typecheck:board-config',
           'typecheck:play-view',
+          'typecheck:playback-react',
           'typecheck:profile-stats',
           'typecheck:playlist-generator',
           'typecheck:climb-filters',
