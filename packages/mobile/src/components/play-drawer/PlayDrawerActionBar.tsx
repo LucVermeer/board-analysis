@@ -1,6 +1,5 @@
 import { memo, useCallback } from 'react';
-import { View, Pressable, Platform, StyleSheet, type ViewStyle } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '../Icon';
 import { Badge } from '../Badge';
@@ -285,9 +284,9 @@ type ShareButtonProps = {
   accessibilityLabel: string;
 };
 
-// Renders the native iOS share glyph (square.and.arrow.up) on iOS via expo-symbols.
-// Falls back to the Material Design share icon on Android (via the standard Icon
-// component, which uses MaterialCommunityIcons).
+// The share glyph resolves to the native iOS share symbol (square.and.arrow.up) on
+// iOS and the Material Design share icon on Android — Icon picks per platform from
+// the shared icon-map.
 function ShareButton({ size, onPress, accessibilityLabel }: ShareButtonProps) {
   const { dim, icon } = SIZES[size];
   return (
@@ -301,11 +300,7 @@ function ShareButton({ size, onPress, accessibilityLabel }: ShareButtonProps) {
         pressed && styles.actionButtonPressed,
       ]}
     >
-      {Platform.OS === 'ios' ? (
-        <SymbolView name="square.and.arrow.up" size={icon} tintColor={iosSystemColors.systemGray} />
-      ) : (
-        <Icon name="share" size={icon} color={iosSystemColors.systemGray} />
-      )}
+      <Icon name="share" size={icon} color={iosSystemColors.systemGray} />
     </Pressable>
   );
 }
