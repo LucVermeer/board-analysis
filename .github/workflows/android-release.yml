@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-release:
@@ -123,58 +123,13 @@ jobs:
           path: mobile/android/app/build/outputs/bundle/release/*.aab
           retention-days: 30
 
-      - name: Check for Play Store credentials
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        id: play-store-check
-        run: |
-          if [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ]; then
-            echo "has_key=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_key=false" >> "$GITHUB_OUTPUT"
-            echo "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON secret not set, skipping Play Store upload"
-          fi
-        env:
-          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-
-      - name: Upload to Google Play (internal track)
-        if: steps.play-store-check.outputs.has_key == 'true'
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: com.boardsesh.app
-          releaseFiles: mobile/android/app/build/outputs/bundle/release/*.aab
-          track: internal
-          status: completed
-
-      - name: Create GitHub Release
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: android-build-${{ github.run_number }}
-          name: Android Build ${{ github.run_number }}
-          body: |
-            Android build from commit ${{ github.sha }}.
-
-            **Build number:** ${{ github.run_number }}
-            **Minimum Android version:** 13 (API 33)
-
-            The AAB has been uploaded to Google Play internal testing track.
-            Sideload options:
-            - `app-release.apk` — signed production build (`com.boardsesh.app`).
-            - `app-debug.apk` — debug build (`com.boardsesh.app.debug`,
-              labelled "Boardsesh debug") with the in-app Dev URL switcher
-              unlocked (user drawer → Dev URL). Installs alongside the
-              release build; both packages are App-Links-verified, so on a
-              dev device pin deep-link routing to the debug package with
-              `scripts/android-debug-install.sh` or:
-              `adb shell pm set-app-links-user-selection --user 0 --package com.boardsesh.app.debug true boardsesh.com www.boardsesh.com`.
-          files: |
-            mobile/android/app/build/outputs/apk/release/*.apk
-            mobile/android/app/build/outputs/apk/debug/*.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Publishing is disabled: the React Native rewrite (packages/mobile/,
+      # android-apk-rn.yml) is now the sole shipper of com.boardsesh.app. It
+      # signs with the same key and uses a versionCode above this app's, so a
+      # Capacitor release would regress the upgrade path on devices already on
+      # the RN build. This workflow still builds + uploads CI artifacts for
+      # validation; it no longer creates a GitHub Release or pushes to Play.
+      # See docs/android-sideload-build.md.
 
       - name: Clean up keystore
         if: always()
