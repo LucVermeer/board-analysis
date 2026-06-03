@@ -28,6 +28,7 @@ const nextConfig = {
     '@boardsesh/playlists-react',
     '@boardsesh/board-react',
     '@boardsesh/party-profile',
+    '@boardsesh/analytics',
     '@boardsesh/climb-actions',
     '@boardsesh/play-view',
     '@boardsesh/playback-react',

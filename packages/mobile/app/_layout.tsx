@@ -45,6 +45,8 @@ import { brandColors } from '../src/theme/colors';
 import { iosDarkColors } from '../src/theme/ios-colors';
 import { spacing } from '../src/theme/tokens';
 import { wrapWithSentry, reportError } from '../src/lib/sentry';
+import { AnalyticsProvider } from '../src/components/analytics/AnalyticsProvider';
+import { AnalyticsScreenTracker } from '../src/components/analytics/AnalyticsScreenTracker';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -205,12 +207,17 @@ function RootLayout() {
 
   return (
     <GestureHandlerRootView style={layoutStyles.root}>
-      <I18nProvider>
-        <QueryProvider>
-          <ThemeProvider>
-            <FeatureFlagsProvider>
-              <AuthProvider onReady={onAuthReady}>
-                <PartyProfileProvider>
+      {/* PostHogProvider sits at the top so touch autocapture covers the whole
+          app. It owns the single PostHog client; manual events go through the
+          imperative wrapper in src/lib/analytics. No-ops (renders children
+          untouched) in dev / when no key is configured. */}
+      <AnalyticsProvider>
+        <I18nProvider>
+          <QueryProvider>
+            <ThemeProvider>
+              <FeatureFlagsProvider>
+                <AuthProvider onReady={onAuthReady}>
+                  <PartyProfileProvider>
                   <ConnectionSettingsProvider>
                     <ToastProvider>
                       <ClimbActionsDataWrapper>
@@ -244,6 +251,7 @@ function RootLayout() {
                                             </Stack>
                                           </ThemedNavigation>
                                           <PersistentQueueBar />
+                                          <AnalyticsScreenTracker />
                                           <SessionScreenHost />
                                         </DrawerHostProvider>
                                       </SessionScreenProvider>
@@ -257,12 +265,13 @@ function RootLayout() {
                       </ClimbActionsDataWrapper>
                     </ToastProvider>
                   </ConnectionSettingsProvider>
-                </PartyProfileProvider>
-              </AuthProvider>
-            </FeatureFlagsProvider>
-          </ThemeProvider>
-        </QueryProvider>
-      </I18nProvider>
+                  </PartyProfileProvider>
+                </AuthProvider>
+              </FeatureFlagsProvider>
+            </ThemeProvider>
+          </QueryProvider>
+        </I18nProvider>
+      </AnalyticsProvider>
     </GestureHandlerRootView>
   );
 }

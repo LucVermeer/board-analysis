@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { track as vercelTrack } from '@vercel/analytics';
 import { PostHog } from 'posthog-js-lite';
+import { createAnalytics } from '@boardsesh/analytics';
 import { analyticsPathname, isAdminAnalyticsUrl } from './analytics-paths';
 import { getBackendHttpUrl } from './backend-url';
 
@@ -72,18 +73,16 @@ function getPosthog(): PostHog | null {
 
 type PosthogProperties = Record<string, string | number | boolean | null>;
 
-function sanitizeForPosthog(properties?: EventProperties): PosthogProperties | undefined {
-  if (!properties) return undefined;
-  const out: PosthogProperties = {};
-  for (const [key, value] of Object.entries(properties)) {
-    if (value !== undefined) out[key] = value;
-  }
-  return out;
-}
-
 function isCurrentAdminAnalyticsPage(): boolean {
   return typeof window !== 'undefined' && isAdminAnalyticsUrl(window.location.pathname, window.location.origin);
 }
+
+// The SDK-agnostic capture/identity logic (sanitize, null-client guards, the
+// boolean "did it send" contract) lives in @boardsesh/analytics and is shared
+// with mobile. Web keeps the platform-specific bits in this file: the Vercel
+// dual-write, the production hostname gate inside getPosthog(), the admin-page
+// skip, and URL pageviews.
+const core = createAnalytics(getPosthog, { shouldSkip: isCurrentAdminAnalyticsPage });
 
 export function track(name: string, properties?: EventProperties, options?: { flags?: FlagsDataInput }): void {
   if (isCurrentAdminAnalyticsPage()) return;
@@ -96,59 +95,33 @@ export function track(name: string, properties?: EventProperties, options?: { fl
 
   // Preserve the existing Vercel behavior in dev/preview; PostHog stays
   // hostname-gated inside getPosthog() so staging cannot write to prod.
-  const posthog = getPosthog();
-  if (posthog) posthog.capture(name, sanitizeForPosthog(properties));
+  core.track(name, properties);
 }
 
 export function capturePosthog(name: string, properties?: PosthogProperties): boolean {
-  if (isCurrentAdminAnalyticsPage()) return false;
-
-  const posthog = getPosthog();
-  if (!posthog) return false;
-  posthog.capture(name, properties);
-  return true;
+  return core.capture(name, properties);
 }
 
 export function identify(distinctId: string, properties?: PosthogProperties): boolean {
-  if (isCurrentAdminAnalyticsPage()) return false;
-
-  const posthog = getPosthog();
-  if (!posthog) return false;
-  posthog.identify(distinctId, properties);
-  return true;
+  return core.identify(distinctId, properties);
 }
 
 // Sets person properties on the current distinct_id. `setOnce` properties are
 // only written if they don't already exist on the user (use for first-touch
 // attributes like signup_at, auth_method). `set` overwrites every call.
 export function setPersonProperties(set?: PosthogProperties, setOnce?: PosthogProperties): boolean {
-  if (isCurrentAdminAnalyticsPage()) return false;
-
-  const posthog = getPosthog();
-  if (!posthog) return false;
-  posthog.setPersonProperties(set, setOnce);
-  return true;
+  return core.setPersonProperties(set, setOnce);
 }
 
 // Sends a $create_alias event linking the current distinct_id to `newId`.
 // Use this on signup/login to merge the anonymous IndexedDB UUID into the
 // authenticated user UUID, then call identify(newId) to switch.
 export function alias(newId: string): boolean {
-  if (isCurrentAdminAnalyticsPage()) return false;
-
-  const posthog = getPosthog();
-  if (!posthog) return false;
-  posthog.alias(newId);
-  return true;
+  return core.alias(newId);
 }
 
 export function reset(): boolean {
-  if (isCurrentAdminAnalyticsPage()) return false;
-
-  const posthog = getPosthog();
-  if (!posthog) return false;
-  posthog.reset();
-  return true;
+  return core.reset();
 }
 
 export function pageview(url: string): void {

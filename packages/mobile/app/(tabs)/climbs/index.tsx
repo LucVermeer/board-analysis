@@ -9,6 +9,7 @@ import {
   toClimbSearchInput,
   mergeBoardFilters,
   countActiveFiltersBeyondGrade,
+  hasActiveBoardFilters,
   DEFAULT_CLIMB_FILTER_STATE,
   DEFAULT_CLIMB_BOARD_FILTER_STATE,
   type ClimbBoardFilterState,
@@ -50,6 +51,7 @@ import {
 import { getLastSearch, saveLastSearch, boardConfigKey } from '../../../src/lib/last-search-store';
 import { getFilterSummary } from '../../../src/lib/filter-summary';
 import { useSearchLayout } from '../../../src/lib/search-layout-preference';
+import { track } from '../../../src/lib/analytics';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
@@ -296,7 +298,38 @@ function ClimbListInner() {
     setAccumulatedClimbs((previous) => accumulateClimbs(previous, searchResult.climbs, pageNumber));
   }, [searchResult?.climbs, pageNumber]);
 
-  // Feed visible UUIDs into the shared logbook for the ascent badge.
+  // Fire "Climb Search Performed" once per resolved search/filter result set.
+  // Keyed on the search text + filter signature so it fires when a new result
+  // set lands — not on every keystroke (debounced upstream) or paginated page.
+  const lastSearchTrackKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (pageNumber !== 1 || !searchResult) return;
+    // Skip the default state (no search text, no active filters): the initial
+    // tab-mount load is not a user search/apply, and web suppresses it the same
+    // way (only fires when at least one filter/term is active).
+    if (name.length === 0 && !hasActiveFilters(filters) && !hasActiveBoardFilters(boardFilters)) return;
+    const trackKey = JSON.stringify({ name, filters, boardFilters, boardName, layoutId, sizeId, setIds, angle });
+    if (lastSearchTrackKeyRef.current === trackKey) return;
+    lastSearchTrackKeyRef.current = trackKey;
+    track('Climb Search Performed', {
+      query: name,
+      // The search payload carries `climbs` + `hasMore` only — no total count
+      // (that lives in the separate count query). Report the size of the
+      // resolved page-1 result set, which is what's available at this point.
+      resultCount: searchResult.climbs.length,
+      boardName,
+      boardLayout: layoutId,
+      sizeId,
+      setIds,
+      angle,
+      activeFilterCount: countActiveFiltersBeyondGrade(filters, boardFilters),
+    });
+  }, [searchResult, pageNumber, name, filters, boardFilters, boardName, layoutId, sizeId, setIds, angle]);
+
+  // Feed the visible climb UUIDs into the shared logbook so the ascent badge
+  // can render flash/send/attempt without baking per-user counts into the
+  // (CDN-cacheable) search query. `getLogbook` is a noop when the user is
+  // anonymous or the active board hasn't resolved yet.
   useEffect(() => {
     if (accumulatedClimbs.length === 0) return;
     void getLogbook(accumulatedClimbs.map((climb) => climb.uuid));

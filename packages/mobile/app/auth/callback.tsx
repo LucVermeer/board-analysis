@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { exchangeTransferToken } from '../../src/lib/auth';
 import { brandColors } from '../../src/theme/colors';
+import { track } from '../../src/lib/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 
 export default function AuthCallback() {
@@ -24,6 +25,7 @@ export default function AuthCallback() {
     exchangeTransferToken(transferToken)
       .then(async (result) => {
         if (result.success) {
+          track('Login Succeeded', { flow: 'native' });
           await refreshAuthState();
           router.replace('/(tabs)/boards');
         } else {

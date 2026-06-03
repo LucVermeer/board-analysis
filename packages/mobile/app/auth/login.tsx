@@ -14,6 +14,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
+import { track } from '../../src/lib/analytics';
 import { hapticLight } from '../../src/lib/haptics';
 import { brandColors } from '../../src/theme/colors';
 import { iosSystemColors } from '../../src/theme/ios-colors';
@@ -85,9 +86,11 @@ export default function LoginScreen() {
 
     setError(null);
     setSubmitting(true);
+    track('Login Attempted', { auth_method: 'credentials', flow: 'native' });
     try {
       const result = await signInWithCredentials(trimmedEmail, password);
       if (!result.success) {
+        track('Login Failed', { auth_method: 'credentials', failure_reason: result.error });
         if (result.error === 'network') {
           setError(t('nativeStart.networkError'));
         } else if (result.status === 401) {
@@ -95,8 +98,16 @@ export default function LoginScreen() {
         } else {
           setError(result.error);
         }
+      } else {
+        track('Login Succeeded', { auth_method: 'credentials', flow: 'native' });
       }
       // On success, AuthProvider flips isAuthenticated and the redirect handles navigation.
+    } catch (signInError) {
+      track('Login Failed', {
+        auth_method: 'credentials',
+        failure_reason: signInError instanceof Error ? signInError.message : null,
+      });
+      throw signInError;
     } finally {
       setSubmitting(false);
     }
@@ -184,9 +195,21 @@ export default function LoginScreen() {
 
         <View style={styles.buttons}>
           {Platform.OS === 'ios' && (
-            <SignInButton title={t('nativeStart.signInApple')} onPress={() => signIn('apple')} />
+            <SignInButton
+              title={t('nativeStart.signInApple')}
+              onPress={() => {
+                track('Login Attempted', { auth_method: 'apple', flow: 'native' });
+                signIn('apple');
+              }}
+            />
           )}
-          <SignInButton title={t('nativeStart.signInGoogle')} onPress={() => signIn('google')} />
+          <SignInButton
+            title={t('nativeStart.signInGoogle')}
+            onPress={() => {
+              track('Login Attempted', { auth_method: 'google', flow: 'native' });
+              signIn('google');
+            }}
+          />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

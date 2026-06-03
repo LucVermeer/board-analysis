@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { Playlist } from '@boardsesh/graphql/operations/playlists';
+
+// The provider imports `../lib/analytics`. Replace that module with a spy so we
+// can assert the instrumentation fires (the `posthog-react-native` native dep is
+// separately stubbed via the vite.config alias). `vi.hoisted` is required: bare
+// `vi.mock` factories are hoisted above top-level `const`s, so the spy must be
+// created inside a hoisted block to be in scope when the factory runs.
+const { trackMock } = vi.hoisted(() => ({ trackMock: vi.fn() }));
+vi.mock('../../lib/analytics', () => ({ track: trackMock }));
+
 import { PlaylistsProvider, usePlaylistsContext } from '../playlists-provider';
 
 const mkPlaylist = (uuid: string, name: string): Playlist => ({
@@ -21,6 +30,10 @@ const mkPlaylist = (uuid: string, name: string): Playlist => ({
 });
 
 describe('PlaylistsProvider', () => {
+  beforeEach(() => {
+    trackMock.mockClear();
+  });
+
   it('exposes the supplied playlists + isLoading/isAuthenticated flags', () => {
     const playlists = [mkPlaylist('p-1', 'Hard sends'), mkPlaylist('p-2', 'V4 grind')];
     const wrapper = ({ children }: { children: ReactNode }) => (
@@ -63,14 +76,68 @@ describe('PlaylistsProvider', () => {
     expect(result.current.isLoading).toBe(true);
   });
 
-  it('supplied mutations are invoked when called', async () => {
+  it('supplied mutations are invoked when called and Add to Playlist is tracked once', async () => {
     const addToPlaylist = vi.fn(async (_playlistId: string, _climbUuid: string, _angle: number) => undefined);
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <PlaylistsProvider addToPlaylist={addToPlaylist}>{children}</PlaylistsProvider>
+      <PlaylistsProvider playlists={[mkPlaylist('p-1', 'Hard sends')]} addToPlaylist={addToPlaylist}>
+        {children}
+      </PlaylistsProvider>
     );
     const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
     await result.current.addToPlaylist('p-1', 'climb-A', 40);
     expect(addToPlaylist).toHaveBeenCalledWith('p-1', 'climb-A', 40);
+    expect(trackMock).toHaveBeenCalledTimes(1);
+    expect(trackMock).toHaveBeenCalledWith('Add to Playlist', {
+      playlistId: 'p-1',
+      playlistName: 'Hard sends',
+      climbUuid: 'climb-A',
+    });
+  });
+
+  it('removeFromPlaylist tracks Remove from Playlist once with the resolved name', async () => {
+    const removeFromPlaylist = vi.fn(async (_playlistId: string, _climbUuid: string) => undefined);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <PlaylistsProvider playlists={[mkPlaylist('p-2', 'V4 grind')]} removeFromPlaylist={removeFromPlaylist}>
+        {children}
+      </PlaylistsProvider>
+    );
+    const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
+    await result.current.removeFromPlaylist('p-2', 'climb-B');
+    expect(removeFromPlaylist).toHaveBeenCalledWith('p-2', 'climb-B');
+    expect(trackMock).toHaveBeenCalledTimes(1);
+    expect(trackMock).toHaveBeenCalledWith('Remove from Playlist', {
+      playlistId: 'p-2',
+      playlistName: 'V4 grind',
+      climbUuid: 'climb-B',
+    });
+  });
+
+  it('add tracking falls back to a null playlistName when the id is not in the list', async () => {
+    const addToPlaylist = vi.fn(async (_playlistId: string, _climbUuid: string, _angle: number) => undefined);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <PlaylistsProvider playlists={[]} addToPlaylist={addToPlaylist}>
+        {children}
+      </PlaylistsProvider>
+    );
+    const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
+    await result.current.addToPlaylist('missing', 'climb-A', 40);
+    expect(trackMock).toHaveBeenCalledWith('Add to Playlist', {
+      playlistId: 'missing',
+      playlistName: null,
+      climbUuid: 'climb-A',
+    });
+  });
+
+  it('createPlaylist tracks Create Playlist once with the name', async () => {
+    const createPlaylist = vi.fn(async (name: string) => mkPlaylist('p-new', name));
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <PlaylistsProvider createPlaylist={createPlaylist}>{children}</PlaylistsProvider>
+    );
+    const { result } = renderHook(() => usePlaylistsContext(), { wrapper });
+    await result.current.createPlaylist('Projects');
+    expect(createPlaylist).toHaveBeenCalledWith('Projects', undefined, undefined, undefined);
+    expect(trackMock).toHaveBeenCalledTimes(1);
+    expect(trackMock).toHaveBeenCalledWith('Create Playlist', { playlistName: 'Projects' });
   });
 
   it('usePlaylistsContext throws when called outside a provider', () => {

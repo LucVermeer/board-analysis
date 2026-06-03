@@ -9,6 +9,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
 import { useToast } from '../../providers/toast-provider';
+import { track } from '../../lib/analytics';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 
@@ -34,6 +35,10 @@ export const BetaVideoCard = memo(function BetaVideoCard({ link }: Props) {
         return;
       }
       await Linking.openURL(link.link);
+      track('Beta Video Link Clicked', {
+        climbUuid: link.climb_uuid,
+        platform: detectPlatform(link.link)?.name ?? null,
+      });
     } catch {
       showToast(t('mobile.betaVideos.openError'), 'error');
     }

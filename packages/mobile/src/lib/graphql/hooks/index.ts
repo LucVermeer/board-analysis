@@ -70,11 +70,12 @@ import {
 // User Profile
 // ============================================
 
-export function useProfile() {
+export function useProfile(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['profile'],
     queryFn: () => getHttpClient().request<GetProfileQueryResponse>(GET_PROFILE),
     select: (data) => data.profile,
+    enabled: options?.enabled ?? true,
   });
 }
 

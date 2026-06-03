@@ -23,6 +23,7 @@ import { useGrades } from '../../lib/graphql/hooks';
 import { useOptionalBoardProvider, useSaveTick } from '@boardsesh/board-react';
 import { toBoardName } from '@boardsesh/board-config';
 import { useToast } from '../../providers/toast-provider';
+import { track } from '../../lib/analytics';
 import { hapticSuccess, hapticError } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
@@ -131,6 +132,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const handleSaveWithStatus = useCallback(
     (status: TickStatus) => {
       if (saveTick.isPending) return;
+      track('Tick Button Clicked', { climbUuid, boardLayout: layoutId ?? null });
       setLastError(null);
 
       const finalAttempts = clampAttempts(tickState.attemptCount, status);
@@ -154,6 +156,8 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         },
         {
           onSuccess: () => {
+            track('Quick Tick Saved', { climbUuid, boardLayout: layoutId ?? null });
+            track('Tick Logged', { climbUuid, boardLayout: layoutId ?? null, tickType: status });
             hapticSuccess();
             // Reset on commit so reopening the sheet on the same climb
             // doesn't show stale state from the just-saved tick.

@@ -10,6 +10,7 @@ import {
   type AuthProvider as AuthProviderType,
   type CredentialsSignInResult,
 } from '../lib/auth';
+import { track } from '../lib/analytics';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
@@ -91,6 +92,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   );
 
   const signOut = useCallback(async () => {
+    track('Logout', { method: 'manual' });
     await authSignOut();
     await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
     // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so

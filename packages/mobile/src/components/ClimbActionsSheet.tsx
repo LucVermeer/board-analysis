@@ -16,6 +16,7 @@ import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing } from '../theme/tokens';
 import { WEB_BASE_URL } from '../lib/env';
+import { track } from '../lib/analytics';
 
 type ClimbActionsSheetProps = {
   visible: boolean;
@@ -88,17 +89,19 @@ function ClimbActionsSheet({
   const handleOpenInApp = useCallback(async () => {
     if (!auroraAppUrl) return;
     try {
+      track('Open in Aurora App', { climbUuid: climb?.uuid ?? null, boardLayout: boardName });
       await WebBrowser.openBrowserAsync(auroraAppUrl);
     } finally {
       onClose();
     }
-  }, [auroraAppUrl, onClose]);
+  }, [auroraAppUrl, climb, boardName, onClose]);
 
   const handleCopyLink = useCallback(async () => {
     if (!climb) return;
     try {
       const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
       await Clipboard.setStringAsync(url);
+      track('Climb Shared', { method: 'copy_link', climbUuid: climb.uuid, boardLayout: boardName });
       showToast(t('mobile.climbActions.linkCopied'), 'info');
     } finally {
       onClose();

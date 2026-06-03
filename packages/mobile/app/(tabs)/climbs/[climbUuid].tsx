@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -15,6 +15,7 @@ import { useClimb, useToggleFavorite } from '../../../src/lib/graphql/hooks';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { getBoardRenderData } from '../../../src/lib/board-details';
 import { hapticSuccess } from '../../../src/lib/haptics';
+import { track } from '../../../src/lib/analytics';
 import { brandColors } from '../../../src/theme/colors';
 import { spacing } from '../../../src/theme/tokens';
 
@@ -67,6 +68,15 @@ export default function ClimbDetail() {
     const color = getGradeColor(climb.difficulty) ?? DEFAULT_GRADE_COLOR;
     return { name: climb.difficulty, color };
   }, [climb]);
+
+  const viewedClimbUuid = climb?.uuid;
+  useEffect(() => {
+    if (!viewedClimbUuid) return;
+    track('Climb Info Viewed', {
+      boardLayout: boardName ?? null,
+      climbUuid: viewedClimbUuid,
+    });
+  }, [viewedClimbUuid, boardName]);
 
   const handleToggleFavorite = useCallback(() => {
     if (!climb || !boardName) return;

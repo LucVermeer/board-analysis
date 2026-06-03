@@ -5,6 +5,7 @@ import { registerBluetoothConnection } from '../lib/ble/bluetooth-status-store';
 import { useQueue } from './queue-provider';
 import { hapticSuccess, hapticError } from '../lib/haptics';
 import { DevicePickerSheet } from '../components/ble/DevicePickerSheet';
+import { track } from '../lib/analytics';
 
 type BluetoothContextValue = {
   isConnected: boolean;
@@ -210,12 +211,13 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
   const wrappedDisconnect = useCallback(async () => {
     isUserDisconnectRef.current = true;
     setDisconnectedUnexpectedly(false);
+    track('Bluetooth Disconnected', { boardLayout: boardName, reason: 'user' });
     try {
       await disconnect();
     } finally {
       isUserDisconnectRef.current = false;
     }
-  }, [disconnect]);
+  }, [disconnect, boardName]);
 
   // Deliberately NO foreground auto-reconnect. These boards are
   // last-connection-wins, so silently re-grabbing the board whenever the app
@@ -228,6 +230,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
       // Unexpected disconnect — fire haptic error and expose to consumers
       hapticError();
       setDisconnectedUnexpectedly(true);
+      track('Bluetooth Disconnected', { boardLayout: boardName, reason: 'unexpected' });
     }
     wasConnectedRef.current = isConnected;
   }, [isConnected]);
