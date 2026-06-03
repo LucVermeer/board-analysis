@@ -16,7 +16,7 @@ import { Text } from '../Text';
 import { Icon } from '../Icon';
 import type { IconName } from '../icon-map';
 import { useTheme } from '../../providers/theme-provider';
-import { hapticSelection, hapticSuccess } from '../../lib/haptics';
+import { hapticLight, hapticSelection, hapticSuccess } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -28,6 +28,15 @@ const MIN_SPEED = 0.5;
 const MAX_SPEED = 10;
 const THUMB_SIZE = 20;
 const TRACK_HEIGHT = 6;
+
+// Discrete speeds the pill cycles through on tap; long-press reveals the fine
+// slider for anything in between. Mirrors Apple Podcasts' tap-to-cycle control.
+const SPEED_STEPS = [0.5, 1, 1.5, 2, 3] as const;
+
+/** Next preset strictly above `current`, wrapping to the slowest past the top. */
+function nextSpeedStep(current: number): number {
+  return SPEED_STEPS.find((step) => step > current + 0.001) ?? SPEED_STEPS[0];
+}
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -91,16 +100,18 @@ function StepButton({
   );
 }
 
-/** Tap-to-reveal speed pill. Shows the live speed; toggles the slider below. */
+/** Speed pill: tap cycles through the presets, long-press reveals the fine slider. */
 function SpeedPill({
   label,
   active,
-  onPress,
+  onCycle,
+  onToggleSlider,
   accessibilityLabel,
 }: {
   label: string;
   active: boolean;
-  onPress: () => void;
+  onCycle: () => void;
+  onToggleSlider: () => void;
   accessibilityLabel: string;
 }) {
   const { systemColors } = useTheme();
@@ -108,7 +119,9 @@ function SpeedPill({
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <AnimatedPressable
-      onPress={onPress}
+      onPress={onCycle}
+      onLongPress={onToggleSlider}
+      delayLongPress={300}
       onPressIn={() => {
         scale.value = withSpring(0.92, springs.snappy);
       }}
@@ -258,8 +271,9 @@ function SpeedSlider({
  * the active climb is a route (`isAnimatable`); boulders never mount it. Sits in
  * its own surface tied to the board, so it reads as one player distinct from the
  * climb-level action bar below. Play is a ghost glyph (not a filled circle) so the
- * green Tick stays the only hero button; the speed pill on the right reveals the
- * slider on tap, keeping the resting state uncluttered.
+ * green Tick stays the only hero button; the speed pill on the right cycles the
+ * presets on tap and reveals the fine slider on long-press (Apple Podcasts style),
+ * keeping the resting state uncluttered.
  */
 export function PlaybackControls({
   frameIndex,
@@ -285,8 +299,14 @@ export function PlaybackControls({
   useEffect(() => {
     setLiveSpeed(speed);
   }, [speed]);
-  const toggleSpeed = useCallback(() => {
+  // Tap the pill to step through the speed presets (the common case); long-press
+  // reveals the fine slider for anything in between.
+  const cycleSpeed = useCallback(() => {
     hapticSelection();
+    onSpeedChange(nextSpeedStep(speed));
+  }, [onSpeedChange, speed]);
+  const toggleSpeed = useCallback(() => {
+    hapticLight();
     setShowSpeed((open) => !open);
   }, []);
 
@@ -383,7 +403,8 @@ export function PlaybackControls({
           <SpeedPill
             label={formatSpeed(liveSpeed)}
             active={showSpeed}
-            onPress={toggleSpeed}
+            onCycle={cycleSpeed}
+            onToggleSlider={toggleSpeed}
             accessibilityLabel={`${t('playView.speed')}, ${formatSpeed(liveSpeed)}`}
           />
         </View>
