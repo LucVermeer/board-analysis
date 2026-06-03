@@ -84,12 +84,19 @@
     "shareError": "No se pudo compartir",
     "deleted": "Playlist eliminada",
     "deleteFailed": "No se pudo eliminar la playlist",
+    "deleteConfirm": {
+      "title": "¿Eliminar playlist?",
+      "message": "Esto elimina \"{{name}}\" y sus bloques de forma permanente. No se puede deshacer.",
+      "confirm": "Eliminar",
+      "cancel": "Cancelar"
+    },
     "discussion": "Discusión",
     "empty": "Aún no hay bloques en esta playlist",
     "climbCount_one": "{{count}} bloque",
     "climbCount_other": "{{count}} bloques",
     "followerCount_one": "{{count}} seguidor",
     "followerCount_other": "{{count}} seguidores",
+    "followFailed": "No se pudo actualizar el seguimiento",
     "errors": {
       "notFoundTitle": "Playlist no encontrada",
       "notFoundDescription": "Esta playlist puede haber sido eliminada o no tienes permiso para verla.",
@@ -134,9 +141,9 @@
     "fields": {
       "name": "Nombre",
       "namePlaceholder": "p. ej., Regletas duras",
-      "description": "Descripción (opcional)",
+      "description": "Descripción",
       "descriptionPlaceholder": "Descripción opcional...",
-      "color": "Color (opcional)"
+      "color": "Color"
     }
   },
   "generator": {

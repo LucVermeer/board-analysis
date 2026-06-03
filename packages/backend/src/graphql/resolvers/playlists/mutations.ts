@@ -106,11 +106,14 @@ export const playlistMutations = {
       updatedAt: new Date(),
     };
 
+    // Normalize the empty-string "clear" signal to NULL so a cleared field is
+    // stored as NULL, not '' (matches createPlaylist's `|| null`). `undefined`
+    // still means "leave unchanged".
     if (validatedInput.name !== undefined) updateData.name = validatedInput.name;
-    if (validatedInput.description !== undefined) updateData.description = validatedInput.description;
+    if (validatedInput.description !== undefined) updateData.description = validatedInput.description || null;
     if (validatedInput.isPublic !== undefined) updateData.isPublic = validatedInput.isPublic;
-    if (validatedInput.color !== undefined) updateData.color = validatedInput.color;
-    if (validatedInput.icon !== undefined) updateData.icon = validatedInput.icon;
+    if (validatedInput.color !== undefined) updateData.color = validatedInput.color || null;
+    if (validatedInput.icon !== undefined) updateData.icon = validatedInput.icon || null;
 
     // Update playlist
     const [updated] = await db

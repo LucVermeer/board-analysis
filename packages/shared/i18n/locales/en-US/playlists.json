@@ -84,12 +84,19 @@
     "shareError": "Failed to share",
     "deleted": "Playlist deleted",
     "deleteFailed": "Failed to delete playlist",
+    "deleteConfirm": {
+      "title": "Delete playlist?",
+      "message": "This permanently deletes \"{{name}}\" and its climbs. This can't be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
     "discussion": "Discussion",
     "empty": "No climbs in this playlist yet",
     "climbCount_one": "{{count}} climb",
     "climbCount_other": "{{count}} climbs",
     "followerCount_one": "{{count}} follower",
     "followerCount_other": "{{count}} followers",
+    "followFailed": "Failed to update follow status",
     "errors": {
       "notFoundTitle": "Playlist Not Found",
       "notFoundDescription": "This playlist may have been deleted or you may not have permission to view it.",
@@ -134,9 +141,9 @@
     "fields": {
       "name": "Name",
       "namePlaceholder": "e.g., Hard Crimps",
-      "description": "Description (optional)",
+      "description": "Description",
       "descriptionPlaceholder": "Optional description...",
-      "color": "Color (optional)"
+      "color": "Color"
     }
   },
   "generator": {

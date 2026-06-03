@@ -84,12 +84,19 @@
     "shareError": "Impossible de partager",
     "deleted": "Playlist supprimée",
     "deleteFailed": "Impossible de supprimer la playlist",
+    "deleteConfirm": {
+      "title": "Supprimer la playlist ?",
+      "message": "Cela supprime définitivement « {{name}} » et ses voies. Cette action est irréversible.",
+      "confirm": "Supprimer",
+      "cancel": "Annuler"
+    },
     "discussion": "Discussion",
     "empty": "Aucun bloc dans cette playlist pour l'instant",
     "climbCount_one": "{{count}} bloc",
     "climbCount_other": "{{count}} blocs",
     "followerCount_one": "{{count}} abonné",
     "followerCount_other": "{{count}} abonnés",
+    "followFailed": "Impossible de mettre à jour le suivi",
     "errors": {
       "notFoundTitle": "Playlist introuvable",
       "notFoundDescription": "Cette playlist a été supprimée ou vous n'avez pas accès.",
@@ -134,9 +141,9 @@
     "fields": {
       "name": "Nom",
       "namePlaceholder": "ex. : Réglettes qui piquent",
-      "description": "Description (facultative)",
+      "description": "Description",
       "descriptionPlaceholder": "Description facultative...",
-      "color": "Couleur (facultative)"
+      "color": "Couleur"
     }
   },
   "generator": {

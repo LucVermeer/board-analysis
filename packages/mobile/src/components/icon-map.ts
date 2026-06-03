@@ -39,6 +39,8 @@ export const iconMap = {
   delete: { ios: 'trash', android: 'delete-outline' },
   'delete.fill': { ios: 'trash.fill', android: 'delete' },
   edit: { ios: 'pencil', android: 'pencil-outline' },
+  pin: { ios: 'pin', android: 'pin-outline' },
+  'pin.fill': { ios: 'pin.fill', android: 'pin' },
   tag: { ios: 'tag', android: 'tag-outline' },
   'check.small': { ios: 'checkmark', android: 'check' },
   flash: { ios: 'bolt.fill', android: 'flash' },

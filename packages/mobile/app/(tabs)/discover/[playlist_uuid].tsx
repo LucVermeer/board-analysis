@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, StyleSheet, Pressable, Alert } from 'react-native';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { usePlaylistClimbs } from '@boardsesh/playlists-react';
+import { usePlaylistClimbs, usePlaylistMutations } from '@boardsesh/playlists-react';
 import {
   GET_PLAYLIST,
   GET_PLAYLIST_CLIMBS,
@@ -11,14 +11,26 @@ import {
   type GetPlaylistQueryVariables,
   type GetPlaylistClimbsInput,
   type GetPlaylistClimbsQueryResponse,
+  type Playlist,
 } from '@boardsesh/graphql/operations/playlists';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
-import { PlaylistDetailView } from '../../../src/components/playlist';
+import {
+  PlaylistDetailView,
+  PlaylistFormSheet,
+  PlaylistActionsMenu,
+  PlaylistPinButton,
+  PlaylistFollowButton,
+  type PlaylistFormValues,
+} from '../../../src/components/playlist';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
+import { recordPlaylistOpen } from '../../../src/lib/playlists/recents-store';
 import { toQueueClimbs } from '../../../src/lib/climb-types';
+import { useAuth } from '../../../src/providers/auth-provider';
+import { useToast } from '../../../src/providers/toast-provider';
+import { useTheme } from '../../../src/providers/theme-provider';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 type DetailParams = {
@@ -28,8 +40,16 @@ type DetailParams = {
 export default function PlaylistDetail() {
   const { playlist_uuid: playlistUuid } = useLocalSearchParams<DetailParams>();
   const { t } = useTranslation('playlists');
+  const navigation = useNavigation();
+  const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
+  const { showToast } = useToast();
+  const { systemColors } = useTheme();
+  const { updatePlaylist, deletePlaylist, pinPlaylist, unpinPlaylist, followPlaylist, unfollowPlaylist } =
+    usePlaylistMutations();
 
-  // Playlist metadata for the hero (name, climb count, colour, icon).
+  // Playlist metadata for the hero (name, climb count, colour, icon, ownership,
+  // pin/follow state).
   const { data: playlist, isLoading: metaLoading } = useQuery({
     queryKey: ['playlist', playlistUuid],
     queryFn: async () => {
@@ -87,14 +107,221 @@ export default function PlaylistDetail() {
     refreshErrorMessage: 'Failed to refresh playlist suggestions:',
   });
 
+  const isOwner = playlist?.userRole === 'owner';
+  const isFollowable = !!playlist?.isPublic && !isOwner;
+
+  // Interactive state seeded from the loaded playlist, updated optimistically.
+  const [isPinned, setIsPinned] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Re-seed interactive state whenever the cached playlist changes — including
+  // after a mutation writes its response back via setQueryData. Safe because the
+  // GraphQL payloads (the updatePlaylist response + our optimistic setQueryData)
+  // all carry accurate isPinnedByMe/isFollowedByMe/followerCount (the update
+  // resolver recomputes pin/follow stats), so reseeding can't clobber an
+  // optimistic flip with a stale value.
+  useEffect(() => {
+    if (!playlist) return;
+    setIsPinned(playlist.isPinnedByMe);
+    setIsFollowing(playlist.isFollowedByMe);
+    setFollowerCount(playlist.followerCount);
+  }, [playlist]);
+
+  // Record the open for the "recently opened" pinned fallback. Smart playlists
+  // (a separate route) are deliberately not recorded — no uuid/board to match.
+  // Guard on the uuid so optimistic `setQueryData` updates (pin/follow/edit),
+  // which replace the `playlist` object reference, don't re-record + spuriously
+  // refresh the library's recents fallback on every tap.
+  const recordedUuidRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!playlist || recordedUuidRef.current === playlist.uuid) return;
+    recordedUuidRef.current = playlist.uuid;
+    void recordPlaylistOpen({
+      uuid: playlist.uuid,
+      boardType: playlist.boardType,
+      layoutId: playlist.layoutId ?? null,
+    });
+  }, [playlist]);
+
+  const handleTogglePin = useCallback(async () => {
+    if (!playlist) return;
+    const next = !isPinned;
+    setIsPinned(next);
+    // Update the cache before the await so the reseed effect mirrors the
+    // optimistic value (not a stale one) if it fires mid-request.
+    queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+      prev ? { ...prev, isPinnedByMe: next } : prev,
+    );
+    try {
+      if (next) await pinPlaylist(playlist.uuid);
+      else await unpinPlaylist(playlist.uuid);
+    } catch (err) {
+      console.error('Failed to toggle pin:', err);
+      setIsPinned(!next);
+      queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+        prev ? { ...prev, isPinnedByMe: !next } : prev,
+      );
+      showToast(t(next ? 'library.pin.pinFailed' : 'library.pin.unpinFailed'), 'error');
+    }
+  }, [playlist, isPinned, pinPlaylist, unpinPlaylist, queryClient, playlistUuid, showToast, t]);
+
+  const handleToggleFollow = useCallback(async () => {
+    if (!playlist) return;
+    const next = !isFollowing;
+    const delta = next ? 1 : -1;
+    setIsFollowing(next);
+    setFollowerCount((count) => count + delta);
+    // Update the cache before the await so a reseed mid-request mirrors the
+    // optimistic count, and the error path can't double-revert from a stale one.
+    queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+      prev ? { ...prev, isFollowedByMe: next, followerCount: prev.followerCount + delta } : prev,
+    );
+    setFollowLoading(true);
+    try {
+      if (next) await followPlaylist(playlist.uuid);
+      else await unfollowPlaylist(playlist.uuid);
+    } catch (err) {
+      console.error('Failed to toggle follow:', err);
+      setIsFollowing(!next);
+      setFollowerCount((count) => count - delta);
+      queryClient.setQueryData<Playlist | null>(['playlist', playlistUuid], (prev) =>
+        prev ? { ...prev, isFollowedByMe: !next, followerCount: prev.followerCount - delta } : prev,
+      );
+      showToast(t('detail.followFailed'), 'error');
+    } finally {
+      setFollowLoading(false);
+    }
+  }, [playlist, isFollowing, followPlaylist, unfollowPlaylist, queryClient, playlistUuid, showToast, t]);
+
+  const handleEditSubmit = useCallback(
+    async (values: PlaylistFormValues) => {
+      if (!playlist) return;
+      setSavingEdit(true);
+      try {
+        const updated = await updatePlaylist({
+          playlistId: playlist.uuid,
+          name: values.name,
+          // The form emits '' for cleared description/colour/icon in edit mode,
+          // so the removals persist; pass them straight through.
+          description: values.description,
+          color: values.color,
+          icon: values.icon,
+          isPublic: values.isPublic,
+        });
+        queryClient.setQueryData(['playlist', playlistUuid], updated);
+        setEditVisible(false);
+        showToast(t('edit.messages.updated'), 'success');
+      } catch (err) {
+        console.error('Failed to update playlist:', err);
+        showToast(t('edit.messages.updateFailed'), 'error');
+      } finally {
+        setSavingEdit(false);
+      }
+    },
+    [playlist, updatePlaylist, queryClient, playlistUuid, showToast, t],
+  );
+
+  const handleDelete = useCallback(() => {
+    if (!playlist) return;
+    Alert.alert(t('detail.deleteConfirm.title'), t('detail.deleteConfirm.message', { name: playlist.name }), [
+      { text: t('detail.deleteConfirm.cancel'), style: 'cancel' },
+      {
+        text: t('detail.deleteConfirm.confirm'),
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePlaylist(playlist.uuid);
+            queryClient.removeQueries({ queryKey: ['playlist', playlistUuid] });
+            showToast(t('detail.deleted'), 'success');
+            navigation.goBack();
+          } catch (err) {
+            console.error('Failed to delete playlist:', err);
+            showToast(t('detail.deleteFailed'), 'error');
+          }
+        },
+      },
+    ]);
+  }, [playlist, deletePlaylist, queryClient, playlistUuid, showToast, t, navigation]);
+
+  // Hand the menu → edit sheet off sequentially: close the menu first, then
+  // open the edit sheet from the menu's onClose. Opening both in one tick would
+  // animate two gorhom sheets (and their backdrops) at once.
+  const pendingEditRef = useRef(false);
+  const openEdit = useCallback(() => {
+    pendingEditRef.current = true;
+    setActionsVisible(false);
+  }, []);
+
+  const openDelete = useCallback(() => {
+    setActionsVisible(false);
+    handleDelete();
+  }, [handleDelete]);
+
+  const handleActionsClose = useCallback(() => {
+    setActionsVisible(false);
+    if (pendingEditRef.current) {
+      pendingEditRef.current = false;
+      setEditVisible(true);
+    }
+  }, []);
+
+  // Header actions: follow (public non-owner) + pin (auth) + owner more-menu.
+  useEffect(() => {
+    navigation.setOptions({
+      title: playlist?.name ?? t('metadata.detail.fallbackTitle'),
+      headerRight: () =>
+        playlist ? (
+          <View style={styles.headerActions}>
+            {isAuthenticated && isFollowable ? (
+              <PlaylistFollowButton isFollowing={isFollowing} onToggle={handleToggleFollow} loading={followLoading} />
+            ) : null}
+            {isAuthenticated ? <PlaylistPinButton isPinned={isPinned} onToggle={handleTogglePin} /> : null}
+            {isOwner ? (
+              <Pressable
+                onPress={() => setActionsVisible(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('detail.actions')}
+              >
+                <Icon name="more" size={22} color={systemColors.label as string} />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null,
+    });
+  }, [
+    navigation,
+    playlist,
+    isAuthenticated,
+    isFollowable,
+    isFollowing,
+    followLoading,
+    isPinned,
+    isOwner,
+    handleToggleFollow,
+    handleTogglePin,
+    systemColors,
+    t,
+  ]);
+
   const hero = useMemo(
     () => ({
       name: playlist?.name ?? t('metadata.detail.fallbackTitle'),
       climbCount: playlist?.climbCount ?? allClimbs.length,
       color: playlist?.color,
       icon: playlist?.icon,
+      description: playlist?.description,
+      boardType: playlist?.boardType,
+      layoutId: playlist?.layoutId,
+      showBoardBackdrop: !!playlist?.boardType,
+      followerLabel: playlist?.isPublic ? t('detail.followerCount', { count: followerCount }) : undefined,
     }),
-    [playlist, allClimbs.length, t],
+    [playlist, allClimbs.length, followerCount, t],
   );
 
   // Playlist not found (resolved, null) — distinct from still-loading.
@@ -121,20 +348,43 @@ export default function PlaylistDetail() {
   }
 
   return (
-    <PlaylistDetailView
-      hero={hero}
-      climbs={allClimbs}
-      isLoading={query.isLoading}
-      isFetchingNextPage={query.isFetchingNextPage}
-      hasNextPage={query.hasNextPage ?? false}
-      fetchNextPage={query.fetchNextPage}
-      onActivateClimb={activate}
-      emptyMessage={t('detail.empty')}
-    />
+    <>
+      <PlaylistDetailView
+        hero={hero}
+        climbs={allClimbs}
+        isLoading={query.isLoading}
+        isFetchingNextPage={query.isFetchingNextPage}
+        hasNextPage={query.hasNextPage ?? false}
+        fetchNextPage={query.fetchNextPage}
+        onActivateClimb={activate}
+        emptyMessage={t('detail.empty')}
+      />
+
+      <PlaylistActionsMenu
+        visible={actionsVisible}
+        onEdit={openEdit}
+        onDelete={openDelete}
+        onClose={handleActionsClose}
+      />
+
+      <PlaylistFormSheet
+        mode="edit"
+        visible={editVisible}
+        submitting={savingEdit}
+        playlist={playlist ?? null}
+        onSubmit={handleEditSubmit}
+        onClose={() => setEditVisible(false)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   stateContainer: {
     flex: 1,
     alignItems: 'center',

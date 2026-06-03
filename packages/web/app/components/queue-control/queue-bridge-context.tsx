@@ -41,16 +41,39 @@ import type { SetActiveClimbSource } from '../graphql-queue/set-active-climb-eve
 import { track } from '@/app/lib/analytics';
 import {
   getPlaylistSuggestedClimbs,
-  getPlaylistPeekQueueItemUuid,
   insertQueueItemAfterCurrent,
   isPlaylistPeekQueueItemUuid,
   playlistSuggestionSourceMatches,
   pruneSuggestedQueueItemsAfterCurrent,
 } from './playlist-suggestions';
+import { findNextQueueItemWithSuggestions } from '@boardsesh/play-view';
+import type {
+  ClimbQueue as SharedClimbQueue,
+  ClimbQueueItem as SharedClimbQueueItem,
+  PlaylistSuggestionSource as SharedPlaylistSuggestionSource,
+} from '@boardsesh/queue';
 
 const LiveActivityBridge = dynamic(() => import('@/app/lib/live-activity/live-activity-bridge'), {
   ssr: false,
 });
+
+// Bridge web's queue types to the shared `findNextQueueItemWithSuggestions`
+// across the documented type seam (see ./types): web's ClimbQueueItem / Climb /
+// PlaylistSuggestionSource are structurally compatible with — but not identical
+// to — their @boardsesh/queue counterparts (web's Climb is wider). Centralizing
+// the `as unknown as` casts here keeps the call site clean and mirrors the same
+// boundary casting in ./playlist-suggestions.
+function findNextQueueItemAcrossSeam(
+  queue: ClimbQueueItem[],
+  anchor: ClimbQueueItem | null,
+  source: PlaylistSuggestionSource | null,
+): ClimbQueueItem | null {
+  return findNextQueueItemWithSuggestions(
+    queue as unknown as SharedClimbQueue,
+    anchor as unknown as SharedClimbQueueItem | null,
+    source as unknown as SharedPlaylistSuggestionSource | null,
+  ) as unknown as ClimbQueueItem | null;
+}
 
 /**
  * Derive BoardDetails + baseBoardPath from a climb's own boardType/layoutId.
@@ -244,25 +267,28 @@ function usePersistentSessionQueueAdapter(): {
     return false;
   }, []);
 
-  // Bridge-mode nav is queue-only for the swipe path (no search results plumbed
-  // through here), so suggestionsOnly is a no-op in this adapter — return null
-  // instead of a queue item. The drawer is the only caller passing
-  // suggestionsOnly today. When the queue is exhausted, fall through to the
-  // playlist suggestion feed so the user can keep walking through climbs.
+  // Bridge-mode nav delegates to the shared @boardsesh/play-view helper
+  // (`findNextQueueItemWithSuggestions`) so web's off-board swipe path stays in
+  // lockstep with mobile, which already uses that helper. The helper is
+  // queue-first and, once the queue is exhausted, re-walks the playlist from
+  // the CURRENT climb's position in the source — re-activating a playlist
+  // climb starts a fresh pass instead of jumping to the first un-queued climb.
+  //
+  // Two web-only params the helper has no concept of are preserved by wrapping
+  // the delegated call:
+  //  - `suggestionsOnly`: the bridge has no search results plumbed through, so
+  //    this stays a no-op here (returns null). The drawer is the only caller
+  //    passing it today.
+  //  - `from`: pass `options.from ?? current` as the helper's
+  //    currentClimbQueueItem. This reproduces the old anchor selection
+  //    (anchor = the `from` item when supplied, else the current wall climb).
+  // The web↔shared type-seam casts live in `findNextQueueItemAcrossSeam`.
   const getNextClimbQueueItem = useCallback(
     (options?: { from?: ClimbQueueItem | null; suggestionsOnly?: boolean }): ClimbQueueItem | null => {
       if (options?.suggestionsOnly) return null;
       const { queue, currentClimbQueueItem: current, playlistSuggestionSource } = latestRef.current;
-      const anchorUuid = options?.from ? options.from.uuid : current?.uuid;
-      const idx = queue.findIndex(({ uuid }) => uuid === anchorUuid);
-      if (idx >= 0 && idx < queue.length - 1) return queue[idx + 1];
-      const nextClimb = getPlaylistSuggestedClimbs(playlistSuggestionSource, queue)[0];
-      // Transient peek item. Uses a deterministic uuid derived from the climb
-      // so repeated peeks of the same suggestion produce a stable queue uuid
-      // (see playlist-suggestions.getPlaylistPeekQueueItemUuid).
-      return nextClimb
-        ? { climb: nextClimb, addedBy: null, uuid: getPlaylistPeekQueueItemUuid(nextClimb.uuid), suggested: true }
-        : null;
+      const anchor = options?.from ?? current;
+      return findNextQueueItemAcrossSeam(queue, anchor, playlistSuggestionSource);
     },
     [],
   );

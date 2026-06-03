@@ -1,31 +1,43 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   useDiscoverPlaylists,
   useUserPlaylists,
   usePinnedPlaylists,
   useSmartPlaylistCounts,
+  usePlaylistMutations,
 } from '@boardsesh/playlists-react';
-import type { DiscoverablePlaylist } from '@boardsesh/graphql/operations/playlists';
+import type { DiscoverablePlaylist, Playlist } from '@boardsesh/graphql/operations/playlists';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { SectionHeader } from '../../../src/components/SectionHeader';
-import { PlaylistCard, PlaylistScrollSection, BoardFilterStrip } from '../../../src/components/playlist';
+import {
+  PlaylistCard,
+  PlaylistScrollSection,
+  BoardFilterStrip,
+  CreatePlaylistFab,
+  PlaylistFormSheet,
+  type PlaylistFormValues,
+} from '../../../src/components/playlist';
 import type { BoardFilterSelection } from '../../../src/components/playlist';
 import { SMART_PLAYLISTS } from '../../../src/lib/smart-playlists';
 import { useAuth } from '../../../src/providers/auth-provider';
+import { useToast } from '../../../src/providers/toast-provider';
 import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
 import { useMyBoards, useProfile } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
 
 export default function DiscoverLibrary() {
   const { t } = useTranslation('playlists');
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data: token = null, isLoading: tokenLoading } = useAuthToken();
   const { data: profile } = useProfile();
@@ -55,6 +67,7 @@ export default function DiscoverLibrary() {
     isLoading: userLoading,
     isLoadingMore: userLoadingMore,
     loadMore: loadMoreUser,
+    refetch: refetchUser,
   } = useUserPlaylists({
     token: effectiveToken,
     boardType: filterBoardType,
@@ -62,7 +75,7 @@ export default function DiscoverLibrary() {
     pageSize: 20,
   });
 
-  const { pinned: pinnedPlaylists } = usePinnedPlaylists({
+  const { pinned: pinnedPlaylists, refetch: refetchPinned } = usePinnedPlaylists({
     token: effectiveToken,
     boardType: filterBoardType,
     layoutId: filterLayoutId,
@@ -118,137 +131,235 @@ export default function DiscoverLibrary() {
     router.push(`/(tabs)/discover/smart/${type}`);
   }, []);
 
+  const { showToast } = useToast();
+  const { createPlaylist, pinPlaylist, unpinPlaylist } = usePlaylistMutations();
+
+  // Create flow — the FAB needs a board (boardType + layoutId). Prefer the
+  // active board filter, fall back to the user's active board; with neither,
+  // guide the user to pick a board first (mirrors web's "select a board").
+  const createBoard = useMemo(() => {
+    if (boardFilter) return { boardType: boardFilter.boardType, layoutId: boardFilter.layoutId };
+    if (activeBoard) return { boardType: activeBoard.boardType, layoutId: activeBoard.layoutId };
+    return null;
+  }, [boardFilter, activeBoard]);
+
+  const [createVisible, setCreateVisible] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const handleCreatePress = useCallback(() => {
+    if (!createBoard) {
+      showToast(t('bottomTabBar.selectBoardForPlaylist'), 'info');
+      router.push('/(tabs)/boards');
+      return;
+    }
+    setCreateVisible(true);
+  }, [createBoard, showToast, t]);
+
+  const handleCreateSubmit = useCallback(
+    async (values: PlaylistFormValues) => {
+      if (!createBoard) return;
+      setCreating(true);
+      try {
+        const created = await createPlaylist({
+          boardType: createBoard.boardType,
+          layoutId: createBoard.layoutId,
+          name: values.name,
+          description: values.description,
+          color: values.color,
+          icon: values.icon,
+        });
+        setCreateVisible(false);
+        showToast(t('bottomTabBar.createdPlaylistToast', { name: created.name }), 'success');
+        refetchUser();
+        router.push(`/(tabs)/discover/${created.uuid}`);
+      } catch (err) {
+        console.error('Failed to create playlist:', err);
+        showToast(t('bottomTabBar.createPlaylistFailed'), 'error');
+      } finally {
+        setCreating(false);
+      }
+    },
+    [createBoard, createPlaylist, showToast, t, refetchUser],
+  );
+
+  // Pin / unpin straight from a "Jump Back In" card. The shared-hook arrays
+  // aren't ours to mutate optimistically, so refetch both lists once the
+  // mutation lands and let the pinned ordering + icon re-derive.
+  const handleToggleCardPin = useCallback(
+    async (playlist: Playlist) => {
+      try {
+        if (playlist.isPinnedByMe) await unpinPlaylist(playlist.uuid);
+        else await pinPlaylist(playlist.uuid);
+        refetchUser();
+        refetchPinned();
+      } catch (err) {
+        console.error('Failed to toggle pin:', err);
+        showToast(t(playlist.isPinnedByMe ? 'library.pin.unpinFailed' : 'library.pin.pinFailed'), 'error');
+      }
+    },
+    [pinPlaylist, unpinPlaylist, refetchUser, refetchPinned, showToast, t],
+  );
+
+  // Refresh owned + pinned when returning to the tab (e.g. after editing,
+  // deleting, or pinning from a detail screen). Skip the first focus so we don't
+  // double-fetch what the hooks already load on mount. The ref is instance-local
+  // — React recreates it (back to false) on any remount, so a fresh mount
+  // correctly skips its own first focus; it deliberately isn't reset within a
+  // mount (every later focus should refetch).
+  const hasFocusedRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedRef.current) {
+        hasFocusedRef.current = true;
+        return;
+      }
+      refetchUser();
+      refetchPinned();
+    }, [refetchUser, refetchPinned]),
+  );
+
   const showSignInPrompt = !isAuthenticated && !authLoading;
 
   return (
-    <ScrollView
-      style={styles.flex}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      <BoardFilterStrip boards={boards} selectedBoardUuid={boardFilter?.uuid ?? null} onSelect={setBoardFilter} />
+    <View style={styles.flex}>
+      <ScrollView
+        style={styles.flex}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ paddingBottom: BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom + spacing[6] }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <BoardFilterStrip boards={boards} selectedBoardUuid={boardFilter?.uuid ?? null} onSelect={setBoardFilter} />
 
-      {showSignInPrompt ? (
-        <Pressable style={styles.signInBanner} onPress={() => router.push('/auth/login')} accessibilityRole="button">
-          <Icon name="person" size={26} color={iosSystemColors.systemGray} />
-          <View style={styles.signInText}>
-            <Text variant="subheadline" style={styles.signInTitle}>
-              {t('library.signInBanner.title')}
+        {showSignInPrompt ? (
+          <Pressable style={styles.signInBanner} onPress={() => router.push('/auth/login')} accessibilityRole="button">
+            <Icon name="person" size={26} color={iosSystemColors.systemGray} />
+            <View style={styles.signInText}>
+              <Text variant="subheadline" style={styles.signInTitle}>
+                {t('library.signInBanner.title')}
+              </Text>
+              <Text variant="caption1" style={styles.signInDescription}>
+                {t('library.signInBanner.description')}
+              </Text>
+            </View>
+            <Text variant="subheadline" color={brandColors.primary} style={styles.signInCta}>
+              {t('library.signInBanner.cta')}
             </Text>
-            <Text variant="caption1" style={styles.signInDescription}>
-              {t('library.signInBanner.description')}
-            </Text>
+          </Pressable>
+        ) : null}
+
+        {/* Your Picks — smart-playlist grid (non-empty presets only). */}
+        {smartCardsToShow.length > 0 ? (
+          <View style={styles.section}>
+            <SectionHeader title={t('library.sections.smart')} />
+            <View style={styles.grid}>
+              {smartCardsToShow.map(({ preset, count }, index) => (
+                <View key={preset.slug} style={styles.gridItem}>
+                  <PlaylistCard
+                    name={t(preset.titleI18nKey)}
+                    climbCount={count}
+                    color={preset.color}
+                    icon={preset.icon}
+                    variant="grid"
+                    index={index}
+                    onPress={() => goToSmart(preset.type)}
+                  />
+                </View>
+              ))}
+            </View>
           </View>
-          <Text variant="subheadline" color={brandColors.primary} style={styles.signInCta}>
-            {t('library.signInBanner.cta')}
-          </Text>
-        </Pressable>
-      ) : null}
+        ) : null}
 
-      {/* Your Picks — smart-playlist grid (non-empty presets only). */}
-      {smartCardsToShow.length > 0 ? (
-        <View style={styles.section}>
-          <SectionHeader title={t('library.sections.smart')} />
-          <View style={styles.grid}>
-            {smartCardsToShow.map(({ preset, count }, index) => (
-              <View key={preset.slug} style={styles.gridItem}>
-                <PlaylistCard
-                  name={t(preset.titleI18nKey)}
-                  climbCount={count}
-                  color={preset.color}
-                  icon={preset.icon}
-                  variant="grid"
-                  index={index}
-                  onPress={() => goToSmart(preset.type)}
-                />
-              </View>
+        {/* Jump Back In — pinned + owned playlists. */}
+        {isAuthenticated && (userLoading || jumpBackIn.length > 0) ? (
+          <PlaylistScrollSection
+            title={t('library.sections.jumpBackIn')}
+            loading={userLoading && jumpBackIn.length === 0}
+            isLoadingMore={userLoadingMore}
+            onEndReached={loadMoreUser}
+          >
+            {jumpBackIn.map((playlist, index) => (
+              <PlaylistCard
+                key={playlist.uuid}
+                name={playlist.name}
+                climbCount={playlist.climbCount}
+                color={playlist.color}
+                icon={playlist.icon}
+                variant="scroll"
+                index={index}
+                onPress={() => goToPlaylist(playlist.uuid)}
+                isPinned={playlist.isPinnedByMe}
+                onTogglePin={() => handleToggleCardPin(playlist)}
+              />
             ))}
+          </PlaylistScrollSection>
+        ) : null}
+
+        {/* Discover — community playlists. */}
+        {discoverLoading || discoverItems.length > 0 ? (
+          <PlaylistScrollSection
+            title={t('library.sections.discover')}
+            loading={discoverLoading && discoverItems.length === 0}
+            isLoadingMore={discoverLoadingMore}
+            onEndReached={loadMoreDiscover}
+          >
+            {discoverItems.map((playlist, index) => (
+              <PlaylistCard
+                key={playlist.uuid}
+                name={playlist.name}
+                climbCount={playlist.climbCount}
+                color={playlist.color}
+                icon={playlist.icon}
+                variant="scroll"
+                index={index}
+                onPress={() => goToPlaylist(playlist.uuid)}
+              />
+            ))}
+          </PlaylistScrollSection>
+        ) : null}
+
+        {/* Empty state: signed in, nothing anywhere, nothing loading. */}
+        {isAuthenticated &&
+        !userLoading &&
+        !discoverLoading &&
+        !smartCountsLoading &&
+        jumpBackIn.length === 0 &&
+        discoverItems.length === 0 &&
+        smartCardsToShow.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="playlist" size={48} color={iosSystemColors.systemGray4} />
+            <Text variant="headline" style={styles.emptyTitle}>
+              {t('library.empty.title')}
+            </Text>
+            <Text variant="subheadline" style={styles.emptySubtitle}>
+              {t('library.empty.description')}
+            </Text>
           </View>
-        </View>
-      ) : null}
+        ) : null}
 
-      {/* Jump Back In — pinned + owned playlists. */}
-      {isAuthenticated && (userLoading || jumpBackIn.length > 0) ? (
-        <PlaylistScrollSection
-          title={t('library.sections.jumpBackIn')}
-          loading={userLoading && jumpBackIn.length === 0}
-          isLoadingMore={userLoadingMore}
-          onEndReached={loadMoreUser}
-        >
-          {jumpBackIn.map((playlist, index) => (
-            <PlaylistCard
-              key={playlist.uuid}
-              name={playlist.name}
-              climbCount={playlist.climbCount}
-              color={playlist.color}
-              icon={playlist.icon}
-              variant="scroll"
-              index={index}
-              onPress={() => goToPlaylist(playlist.uuid)}
-            />
-          ))}
-        </PlaylistScrollSection>
-      ) : null}
+        {/* Initial spinner before any section has resolved. */}
+        {(authLoading || tokenLoading) && jumpBackIn.length === 0 && discoverItems.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : null}
+      </ScrollView>
 
-      {/* Discover — community playlists. */}
-      {discoverLoading || discoverItems.length > 0 ? (
-        <PlaylistScrollSection
-          title={t('library.sections.discover')}
-          loading={discoverLoading && discoverItems.length === 0}
-          isLoadingMore={discoverLoadingMore}
-          onEndReached={loadMoreDiscover}
-        >
-          {discoverItems.map((playlist, index) => (
-            <PlaylistCard
-              key={playlist.uuid}
-              name={playlist.name}
-              climbCount={playlist.climbCount}
-              color={playlist.color}
-              icon={playlist.icon}
-              variant="scroll"
-              index={index}
-              onPress={() => goToPlaylist(playlist.uuid)}
-            />
-          ))}
-        </PlaylistScrollSection>
-      ) : null}
+      {isAuthenticated ? <CreatePlaylistFab onPress={handleCreatePress} /> : null}
 
-      {/* Empty state: signed in, nothing anywhere, nothing loading. */}
-      {isAuthenticated &&
-      !userLoading &&
-      !discoverLoading &&
-      !smartCountsLoading &&
-      jumpBackIn.length === 0 &&
-      discoverItems.length === 0 &&
-      smartCardsToShow.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Icon name="playlist" size={48} color={iosSystemColors.systemGray4} />
-          <Text variant="headline" style={styles.emptyTitle}>
-            {t('library.empty.title')}
-          </Text>
-          <Text variant="subheadline" style={styles.emptySubtitle}>
-            {t('library.empty.description')}
-          </Text>
-        </View>
-      ) : null}
-
-      {/* Initial spinner before any section has resolved. */}
-      {(authLoading || tokenLoading) && jumpBackIn.length === 0 && discoverItems.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" />
-        </View>
-      ) : null}
-    </ScrollView>
+      <PlaylistFormSheet
+        mode="create"
+        visible={createVisible}
+        submitting={creating}
+        onSubmit={handleCreateSubmit}
+        onClose={() => setCreateVisible(false)}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-  },
-  content: {
-    paddingBottom: spacing[16],
   },
   section: {
     marginTop: spacing[2],
