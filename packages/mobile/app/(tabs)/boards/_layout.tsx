@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 export default function BoardsLayout() {
@@ -8,7 +9,12 @@ export default function BoardsLayout() {
     <Stack
       screenOptions={{
         headerLargeTitle: false,
-        headerTransparent: true,
+        // iOS keeps the transparent blur header (content insets via
+        // contentInsetAdjustmentBehavior="automatic"). On Android that prop is a
+        // no-op and edge-to-edge would draw content under the floating header +
+        // status bar (the title overlapped the toolbar) — a solid header lays the
+        // scene out below it.
+        headerTransparent: Platform.OS === 'ios',
         headerBlurEffect: 'systemMaterial',
         contentStyle: { backgroundColor: 'transparent' },
       }}

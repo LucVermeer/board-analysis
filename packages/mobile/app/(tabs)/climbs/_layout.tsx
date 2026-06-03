@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 export default function ClimbsLayout() {
@@ -8,7 +9,12 @@ export default function ClimbsLayout() {
     <Stack
       screenOptions={{
         headerLargeTitle: false,
-        headerTransparent: true,
+        // Transparent blur header is an iOS idiom — there, the list's
+        // contentInsetAdjustmentBehavior="automatic" insets content below it. On
+        // Android that prop is a no-op and, under mandatory edge-to-edge, content
+        // draws under the floating header + status bar (the search bar overlapped
+        // the first row). A solid header lays the scene out below it correctly.
+        headerTransparent: Platform.OS === 'ios',
         headerBlurEffect: 'systemMaterial',
         contentStyle: { backgroundColor: 'transparent' },
       }}
