@@ -47,7 +47,17 @@ function AddToPlaylistSheet({ visible, climb, angle, onClose }: AddToPlaylistShe
       try {
         await addToPlaylist(playlist.id, climb.uuid, angle);
         showToast(t('actions.playlist.toast.added'), 'success');
-      } catch {
+      } catch (error) {
+        // The toast is intentionally generic, but a swallowed error makes
+        // "failed to add" impossible to diagnose. Log the real reason in dev.
+        if (__DEV__) {
+          console.warn('[playlist] add to playlist failed', {
+            playlistId: playlist.id,
+            climbUuid: climb.uuid,
+            angle,
+            error,
+          });
+        }
         showToast(t('actions.playlist.toast.addFailed'), 'error');
       } finally {
         onClose();
