@@ -241,6 +241,9 @@ export default ({ config }: ConfigContext): ExpoConfig & { newArchEnabled?: bool
       // notification-action <receiver> for the background BLE session (the
       // Android counterpart to the iOS Live Activity). EAS-safe manifest-only mod.
       './plugins/with-android-session-service',
+      // Caps Gradle heap + parallel workers so the heavy native build (CMake ×4
+      // ABIs + Kotlin + JS bundle + R8) doesn't OOM-kill the daemon. EAS-safe.
+      './plugins/with-android-gradle-memory',
       // Register this before @bacons/apple-targets so Expo's mod chain runs it
       // after the widget target has been created, while keeping the provider last.
       './plugins/with-boardsesh-widget-build-settings',
