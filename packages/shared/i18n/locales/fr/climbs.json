@@ -642,7 +642,12 @@
       "settersCount_one": "{{count}} ouvreur",
       "settersCount_other": "{{count}} ouvreurs",
       "climbsCount_one": "{{count}} voie",
-      "climbsCount_other": "{{count}} voies"
+      "climbsCount_other": "{{count}} voies",
+      "grade": "Niveau",
+      "anyGrade": "Tout niveau",
+      "gradeClear": "Tous",
+      "gradeHint": "Touchez un niveau · un second pour une plage",
+      "filters": "Filtres"
     },
     "climbRow": {
       "addToQueue": "Ajouter à la file",

@@ -16,6 +16,12 @@
         "system": "Système",
         "light": "Clair",
         "dark": "Sombre"
+      },
+      "searchLayout": {
+        "title": "Disposition de recherche",
+        "description": "Où se trouvent le niveau et les filtres sur l'écran des blocs.",
+        "bottomBar": "Barre inférieure",
+        "stickyStrip": "Barre supérieure"
       }
     },
     "nav": {
