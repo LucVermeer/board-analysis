@@ -16,6 +16,8 @@ import { computeNavigationStateWithSuggestions, boardSupportsMirroring } from '@
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import type { ActiveSubDrawer } from '@boardsesh/play-view';
 import { SwipeBoardCarousel } from './SwipeBoardCarousel';
+import { PlaybackControls } from './PlaybackControls';
+import { useMobilePlayback } from './use-mobile-playback';
 import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { LogAscentSheet } from '../LogAscentSheet';
@@ -139,6 +141,16 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   );
 
   const displayedClimb = climb ?? state.currentClimbQueueItem?.climb;
+
+  // Multi-frame route playback (animation + BLE + party-sync). Boulders
+  // short-circuit inside the hook (isAnimatable === false), so nothing renders
+  // and the drawer behaves exactly as before for single-frame climbs.
+  const playback = useMobilePlayback({
+    climb: displayedClimb ?? null,
+    boardName: boardName as BoardName,
+    mirrored: isMirrored,
+    isOpen: isSheetOpen,
+  });
 
   // Auto-close tick bar when climb changes
   const displayedClimbUuid = displayedClimb?.uuid;
@@ -395,6 +407,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                       sizeId={sizeId}
                       setIds={setIds}
                       currentFrames={displayedClimb.frames}
+                      currentFrameOverride={playback.isAnimatable ? playback.currentFrameString : null}
                       nextFrames={navigationState.nextItem?.climb.frames ?? null}
                       prevFrames={navigationState.prevItem?.climb.frames ?? null}
                       mirrored={isMirrored}
@@ -407,6 +420,20 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                     />
                   )}
                 </View>
+
+                {playback.isAnimatable && (
+                  <PlaybackControls
+                    frameIndex={playback.frameIndex}
+                    frameCount={playback.frameCount}
+                    isPlaying={playback.isPlaying}
+                    speed={playback.speed}
+                    paceMs={playback.paceMs}
+                    onPlay={playback.play}
+                    onPause={playback.pause}
+                    onSeek={playback.seek}
+                    onSpeedChange={playback.setSpeed}
+                  />
+                )}
 
                 <PlayDrawerActionBar
                   canSwipePrevious={navigationState.canPrevious}

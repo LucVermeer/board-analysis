@@ -28,6 +28,8 @@ describe('DEFAULT_CLIMB_FILTER_STATE', () => {
       sortBy: 'ascents',
       sortOrder: 'desc',
       status: 'any',
+      boulders: true,
+      routes: false,
     });
   });
 });
@@ -114,6 +116,8 @@ describe('toClimbSearchInput', () => {
       pageSize: 30,
       sortBy: 'ascents',
       sortOrder: 'desc',
+      // Default is boulders-only (routes hidden), matching web.
+      boulders: true,
     });
   });
 

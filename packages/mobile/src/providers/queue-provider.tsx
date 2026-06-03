@@ -32,8 +32,8 @@ import {
   mapSubscriptionEnvelopeToAction,
   type SubscriptionWireEnvelope,
 } from '@boardsesh/queue-runtime';
-import { useQueueMutations } from '@boardsesh/queue-react';
-import type { SessionSummary } from '@boardsesh/shared-schema';
+import { useQueueMutations, type PublishPlaybackStateInput } from '@boardsesh/queue-react';
+import type { SessionSummary, SubscriptionQueueEvent } from '@boardsesh/shared-schema';
 import { execute } from '@boardsesh/graphql-client';
 import { buildBoardPath, parseBoardPath } from '@boardsesh/board-config';
 import { JOIN_SESSION } from '@boardsesh/graphql/operations/queue-session';
@@ -96,6 +96,14 @@ type QueueContextValue = {
    * angle/board. Best-effort; a true no-op in solo (never creates a session).
    */
   setSessionBoardPath: (boardPath: string) => Promise<void>;
+  /**
+   * Subscribe to raw queue subscription events, including transient ones that
+   * never reach the reducer (PlaybackStateChanged drives route playback
+   * party-sync). Returns an unsubscribe function.
+   */
+  subscribeToQueueEvents: (listener: (event: SubscriptionQueueEvent) => void) => () => void;
+  /** Broadcast local route-playback state to party peers. Best-effort; no-op solo. */
+  publishPlaybackState: (input: PublishPlaybackStateInput) => Promise<void>;
 };
 
 const QueueContext = createContext<QueueContextValue | null>(null);
@@ -226,6 +234,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const tRef = useRef(t);
   tRef.current = t;
 
+  // Transient queue-event listeners. PlaybackStateChanged (route playback
+  // party-sync) doesn't mutate queue state, so the play-drawer orchestrator
+  // subscribes here and the reducer path skips it. Listeners live in a ref so
+  // adding/removing one never tears down the WS subscription effect below.
+  const queueEventListenersRef = useRef<Set<(event: SubscriptionQueueEvent) => void>>(new Set());
+  const subscribeToQueueEvents = useCallback((listener: (event: SubscriptionQueueEvent) => void) => {
+    queueEventListenersRef.current.add(listener);
+    return () => {
+      queueEventListenersRef.current.delete(listener);
+    };
+  }, []);
+
   useEffect(() => {
     if (!sessionId) {
       unsubscribeRef.current?.();
@@ -269,7 +289,26 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       {
         next: ({ data }) => {
           if (!data?.queueUpdates) return;
-          const result = mapSubscriptionEnvelopeToAction(data.queueUpdates, {
+          const event = data.queueUpdates;
+          // Forward every event to transient-event listeners (route playback
+          // party-sync) before the reducer path. The wire-envelope type doesn't
+          // model PlaybackStateChanged, but the subscription selects it and the
+          // server emits it — SubscriptionQueueEvent is the canonical client
+          // union that includes it.
+          const queueEvent = event as unknown as SubscriptionQueueEvent;
+          if (queueEventListenersRef.current.size > 0) {
+            for (const listener of queueEventListenersRef.current) {
+              try {
+                listener(queueEvent);
+              } catch (listenerError) {
+                if (__DEV__) console.warn('[queue] queue-event listener threw', listenerError);
+              }
+            }
+          }
+          // PlaybackStateChanged is transient — it carries no queue state and
+          // reuses the room's current sequence, so it bypasses the reducer.
+          if (queueEvent.__typename === 'PlaybackStateChanged') return;
+          const result = mapSubscriptionEnvelopeToAction(event, {
             mapItem: toClimbQueueItem,
             context: { myClientId: coordinator.clientId },
           });
@@ -669,6 +708,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, [clearSession, showToast, t]);
 
+  const publishPlaybackState = useCallback(
+    (input: PublishPlaybackStateInput) => mutations.publishPlaybackState(input),
+    [mutations],
+  );
+
   const contextValue = useMemo<QueueContextValue>(
     () => ({
       state,
@@ -688,6 +732,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       endSession,
       startSession: createSessionWithConfig,
       setSessionBoardPath,
+      subscribeToQueueEvents,
+      publishPlaybackState,
     }),
     [
       state,
@@ -705,6 +751,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       endSession,
       createSessionWithConfig,
       setSessionBoardPath,
+      subscribeToQueueEvents,
+      publishPlaybackState,
     ],
   );
 

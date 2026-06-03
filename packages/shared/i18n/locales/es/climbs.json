@@ -1,4 +1,6 @@
 {
+  "sends_one": "{{count}} encadene",
+  "sends_other": "{{count}} encadenes",
   "metadata": {
     "list": {
       "title": "Bloques de {{boardName}} a {{angle}}°",
@@ -565,6 +567,10 @@
       "savedToast": "Tick guardado"
     },
     "filter": {
+      "climbType": "Tipo",
+      "boulders": "Bloques",
+      "routes": "Rutas",
+      "both": "Ambos",
       "title": "Filtros",
       "sortBy": "Ordenar por",
       "gradeRange": "Rango de grado",

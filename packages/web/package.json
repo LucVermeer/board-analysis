@@ -43,6 +43,7 @@
     "@boardsesh/moonboard-ocr": "*",
     "@boardsesh/party-profile": "*",
     "@boardsesh/play-view": "*",
+    "@boardsesh/playback-react": "*",
     "@boardsesh/playlist-generator": "*",
     "@boardsesh/playlists-react": "*",
     "@boardsesh/profile-stats": "*",

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Climb, BoardDetails } from '@/app/lib/types';
 import { useClimbFrames } from '../board-renderer/util';
-import { usePlaybackEngine, type ExternalPlaybackState } from '../playback/use-playback-engine';
+import { usePlaybackEngine, type ExternalPlaybackState } from '@boardsesh/playback-react/use-playback-engine';
 import { usePersistentSessionActions } from '../persistent-session';
 import { useBluetoothContext } from '../board-bluetooth-control/bluetooth-context';
 import { renderBoard } from '@/app/lib/board-render-worker/worker-manager';

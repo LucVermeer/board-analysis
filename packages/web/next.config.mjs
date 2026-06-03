@@ -30,6 +30,7 @@ const nextConfig = {
     '@boardsesh/party-profile',
     '@boardsesh/climb-actions',
     '@boardsesh/play-view',
+    '@boardsesh/playback-react',
     '@boardsesh/climb-filters',
     '@boardsesh/i18n',
   ],
