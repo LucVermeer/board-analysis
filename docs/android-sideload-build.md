@@ -71,6 +71,7 @@ Two invariants to respect:
    rename/recreate. If you must, bump `version_code_offset` (the
    `workflow_dispatch` input) past the current production ceiling first, or new
    builds become un-installable over existing ones.
-2. **When Capacitor is fully retired,** disable or delete the release/Play-Store
-   steps in `android-release.yml` so it can't publish a lower-versionCode build
-   for the same package.
+2. **Capacitor publishing is already disabled.** `android-release.yml` still
+   builds the Capacitor app for CI validation, but its GitHub-Release and
+   Play-Store-upload steps were removed so it can't publish a lower-versionCode
+   build for `com.boardsesh.app`. The RN workflow is the sole Android shipper.
