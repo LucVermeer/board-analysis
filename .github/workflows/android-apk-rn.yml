@@ -201,6 +201,33 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+      # Gate the Play upload on the service-account secret so the build stays
+      # green before the one-time Play Console bootstrap (create the app + hand-
+      # upload the first AAB + link the service account — the Play API cannot do
+      # the initial upload). See docs/android-sideload-build.md. Mirrors the
+      # Sentry gate above.
+      - name: Configure Play upload
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "PLAY_UPLOAD_ENABLED=true" >> "$GITHUB_ENV"
+            echo "Play service account present — will upload the AAB to the internal track."
+          else
+            echo "PLAY_UPLOAD_ENABLED=false" >> "$GITHUB_ENV"
+            echo "::warning::GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not set — skipping Play upload (first upload is manual; see docs/android-sideload-build.md)."
+          fi
+
+      - name: Upload AAB to Play internal track
+        if: github.ref == 'refs/heads/main' && env.PLAY_UPLOAD_ENABLED == 'true'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.boardsesh.app
+          releaseFiles: packages/mobile/android/app/build/outputs/bundle/release/*.aab
+          track: internal
+          status: completed
+
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2

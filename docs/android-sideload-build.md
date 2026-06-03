@@ -75,3 +75,66 @@ Two invariants to respect:
    builds the Capacitor app for CI validation, but its GitHub-Release and
    Play-Store-upload steps were removed so it can't publish a lower-versionCode
    build for `com.boardsesh.app`. The RN workflow is the sole Android shipper.
+
+## Play Store (AAB → internal testing track)
+
+The same workflow also builds a signed **AAB** (`./gradlew bundleRelease`, same
+prebuild / `release` signingConfig / `versionCode` as the APK, so the two
+channels never diverge) and uploads it to the Google Play **internal testing**
+track via [`r0adkll/upload-google-play`](https://github.com/r0adkll/upload-google-play)
+(pinned to a commit SHA). The APK stays the sideload channel (GitHub Release);
+the AAB is the Play channel.
+
+`bundleRelease` runs with `SENTRY_DISABLE_AUTO_UPLOAD=true` because
+`assembleRelease` already uploaded the source maps for the same release/dist —
+this avoids a duplicate upload.
+
+### One-time bootstrap (manual — the Play API can't do the first upload)
+
+The upload step is **gated on `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`** and skips
+cleanly (build stays green) until it exists. Before adding that secret, do this
+once in the Play Console — the Developer API cannot create the app or perform
+the initial upload:
+
+1. Create the app `com.boardsesh.app` in the Play Console.
+2. Download the AAB artifact from a workflow run (`boardsesh-rn-android-aab-*`)
+   and **upload it by hand** to the internal testing track.
+3. The first upload enrolls the app in **Play App Signing** (Google holds the
+   app signing key; see the key note below).
+4. Create a Google Cloud **service account**, link it under Play Console →
+   Setup → API access, and grant it **Release to testing tracks**.
+5. Complete the **Foreground Service declaration** form for
+   `FOREGROUND_SERVICE_CONNECTED_DEVICE` (justification: keep a BLE-connected
+   climbing board controllable in the background) — it can block the release.
+6. Add the service-account JSON as the `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` repo
+   secret (Production environment). Subsequent pushes to `main` auto-upload.
+
+### Upload key vs app signing key
+
+The `ANDROID_KEYSTORE_*` keystore (shared with the sideload APK + the legacy
+Capacitor app) is the Play **upload key**. Once enrolled in Play App Signing,
+Google **re-signs** the distributed APKs with its own app signing key. Two
+consequences:
+
+- A **Play install and a sideload install** of `com.boardsesh.app` have
+  different signatures, so they will **not** upgrade over each other on the same
+  device (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). This is inherent to running both
+  channels.
+- **App Links:** after enrollment, copy Google's app-signing-key SHA-256 (Play
+  Console → Setup → App signing) into the `ANDROID_APP_LINK_CERT_FINGERPRINTS`
+  env var (web/Vercel) so `/.well-known/assetlinks.json` serves **both** the
+  upload-key (sideload) and app-signing-key (Play) fingerprints. (Note: the RN
+  app doesn't yet declare `autoVerify` App Link intent filters — that needs
+  deep-link route handling first; tracked separately.)
+
+### versionCode
+
+No separate version source: the AAB inherits the exact `versionCode` the "Set
+version code" step seds in (`offset + run_number`), shared with the APK. Play
+enforces strictly-increasing `versionCode` per track, which `run_number`
+monotonicity satisfies. `eas.json`'s `appVersionSource: remote` governs only
+`eas build`/`eas submit` — do **not** enable EAS auto-increment for Android, or
+it would fight the gradle version source.
+
+For production later, promote from internal and use Play's staged rollout (set
+`track: production` + `status: inProgress` + `userFraction` on the upload step).
