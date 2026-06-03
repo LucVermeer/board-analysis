@@ -486,21 +486,22 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
         />
       )}
 
-      {/* Sub-drawer: Angle selector */}
-      {activeSubDrawer === 'angleSelector' && (
-        <AngleSelectorSheet
-          visible={true}
-          onClose={handleCloseSubDrawer}
-          boardName={boardName}
-          layoutId={layoutId}
-          climbUuid={displayedClimb?.uuid}
-          currentAngle={angle}
-          onAngleChange={(newAngle) => {
-            onAngleChange?.(newAngle);
-            handleCloseSubDrawer();
-          }}
-        />
-      )}
+      {/* Sub-drawer: Angle selector. Always mounted and toggled via `visible`
+          (it presents as a BottomSheetModal with stackBehavior=push, the only
+          way to render above the play drawer's own modal — same as the tick
+          sheet below). A plain BottomSheet here would open behind this modal. */}
+      <AngleSelectorSheet
+        visible={activeSubDrawer === 'angleSelector'}
+        onClose={handleCloseSubDrawer}
+        boardName={boardName}
+        layoutId={layoutId}
+        climbUuid={displayedClimb?.uuid}
+        currentAngle={angle}
+        onAngleChange={(newAngle) => {
+          onAngleChange?.(newAngle);
+          handleCloseSubDrawer();
+        }}
+      />
 
       {/* Tick sheet — sibling of the PlayDrawer modal so it renders above
           (gorhom `BottomSheetModal` with stackBehavior=push). Snap-point is

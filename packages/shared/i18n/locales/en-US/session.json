@@ -280,11 +280,9 @@
       "urlInvalid": "Needs to be an Instagram or TikTok URL"
     },
     "angleSelector": {
-      "title": "Select Angle",
+      "title": "Choose Angle",
       "fromVerticalHint": "Measured from vertical",
-      "diagramAria": "Board tilted to {{angle}}° from vertical",
-      "sends_one": "{{count}} send",
-      "sends_other": "{{count}} sends"
+      "diagramAria": "Board tilted to {{angle}}° from vertical"
     },
     "queue": {
       "unknownClimb": "Unknown climb",
