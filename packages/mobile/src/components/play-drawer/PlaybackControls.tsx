@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet, type ColorValue, type LayoutChangeEvent } from 'react-native';
 import Animated, {
+  FadeIn,
+  FadeOut,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -89,14 +91,60 @@ function StepButton({
   );
 }
 
+/** Tap-to-reveal speed pill. Shows the live speed; toggles the slider below. */
+function SpeedPill({
+  label,
+  active,
+  onPress,
+  accessibilityLabel,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  const { systemColors } = useTheme();
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.92, springs.snappy);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, springs.snappy);
+      }}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: active }}
+      accessibilityLabel={accessibilityLabel}
+      style={[styles.speedPill, { backgroundColor: active ? brandColors.primary : systemColors.fill }, animatedStyle]}
+    >
+      <Text variant="footnote" color={active ? iosSystemColors.white : systemColors.label} style={styles.speedPillText}>
+        {label}
+      </Text>
+    </AnimatedPressable>
+  );
+}
+
 /**
  * Hand-rolled speed slider on reanimated + gesture-handler — no native slider
  * dependency (which would force a fresh build and break OTA updates). The thumb
- * tracks a shared value on the UI thread and grows on grab; the label updates
- * live, but the speed is committed once on release (one engine update / one
- * party-sync broadcast), with a light haptic tick every 0.5× and a magnet to 1×.
+ * tracks a shared value on the UI thread and grows on grab; speed is committed
+ * once on release (one engine update / one party-sync broadcast), with a haptic
+ * tick every 0.5× and a magnet to 1×. The live value is reported up to the pill
+ * via `onLiveChange`.
  */
-function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: number) => void }) {
+function SpeedSlider({
+  value,
+  onChange,
+  onLiveChange,
+}: {
+  value: number;
+  onChange: (speed: number) => void;
+  onLiveChange: (speed: number) => void;
+}) {
   const { systemColors } = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
   const usable = Math.max(0, trackWidth - THUMB_SIZE);
@@ -105,32 +153,32 @@ function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: num
   const dragging = useSharedValue(false);
   const thumbScale = useSharedValue(1);
   const lastNotch = useSharedValue(-1);
-  const [labelSpeed, setLabelSpeed] = useState(value);
 
   const ratioToSpeed = useCallback(
     (ratio: number) => Math.round((MIN_SPEED + clamp01(ratio) * (MAX_SPEED - MIN_SPEED)) * 10) / 10,
     [],
   );
 
-  // Keep the thumb + label synced to the external value while not dragging
-  // (peer sync, commit echoes, resets). The guard avoids fighting the gesture.
+  // Keep the thumb synced to the external value while not dragging (peer sync,
+  // commit echoes, resets). The guard avoids fighting the gesture.
   useEffect(() => {
     if (dragging.value) return;
     position.value = clamp01((value - MIN_SPEED) / (MAX_SPEED - MIN_SPEED)) * usable;
-    setLabelSpeed(value);
   }, [value, usable, position, dragging]);
 
-  const updateLabel = useCallback(
-    (px: number) => setLabelSpeed(ratioToSpeed(usable > 0 ? px / usable : 0)),
-    [ratioToSpeed, usable],
+  const reportLive = useCallback(
+    (px: number) => onLiveChange(ratioToSpeed(usable > 0 ? px / usable : 0)),
+    [onLiveChange, ratioToSpeed, usable],
   );
   const commit = useCallback(
     (px: number) => {
       const raw = ratioToSpeed(usable > 0 ? px / usable : 0);
       // Gentle magnet to 1× — the natural default is easy to land on exactly.
-      onChange(Math.abs(raw - 1) <= 0.1 ? 1 : raw);
+      const snapped = Math.abs(raw - 1) <= 0.1 ? 1 : raw;
+      onLiveChange(snapped);
+      onChange(snapped);
     },
-    [onChange, ratioToSpeed, usable],
+    [onChange, onLiveChange, ratioToSpeed, usable],
   );
 
   const pan = useMemo(
@@ -158,7 +206,7 @@ function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: num
             lastNotch.value = notch;
             runOnJS(hapticSelection)();
           }
-          runOnJS(updateLabel)(next);
+          runOnJS(reportLive)(next);
         })
         .onEnd(() => {
           runOnJS(commit)(position.value);
@@ -167,7 +215,7 @@ function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: num
           dragging.value = false;
           thumbScale.value = withSpring(1, springs.snappy);
         }),
-    [usable, position, startPosition, dragging, thumbScale, lastNotch, updateLabel, commit],
+    [usable, position, startPosition, dragging, thumbScale, lastNotch, reportLive, commit],
   );
 
   // Tap-to-seek on the track.
@@ -177,10 +225,10 @@ function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: num
         if (usable <= 0) return;
         const next = Math.max(0, Math.min(usable, event.x - THUMB_SIZE / 2));
         position.value = next;
-        runOnJS(updateLabel)(next);
+        runOnJS(reportLive)(next);
         runOnJS(commit)(next);
       }),
-    [usable, position, updateLabel, commit],
+    [usable, position, reportLive, commit],
   );
 
   const composed = useMemo(() => Gesture.Race(pan, tap), [pan, tap]);
@@ -195,18 +243,13 @@ function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: num
   }, []);
 
   return (
-    <View style={styles.speedRow}>
-      <GestureDetector gesture={composed}>
-        <View style={styles.sliderTrackWrapper} onLayout={handleLayout}>
-          <View style={[styles.sliderTrack, { backgroundColor: systemColors.fill }]} />
-          <Animated.View style={[styles.sliderFill, fillStyle]} />
-          <Animated.View style={[styles.sliderThumb, thumbStyle]} />
-        </View>
-      </GestureDetector>
-      <Text variant="subheadline" color={systemColors.label} style={styles.speedLabel}>
-        {formatSpeed(labelSpeed)}
-      </Text>
-    </View>
+    <GestureDetector gesture={composed}>
+      <View style={styles.sliderTrackWrapper} onLayout={handleLayout}>
+        <View style={[styles.sliderTrack, { backgroundColor: systemColors.fill }]} />
+        <Animated.View style={[styles.sliderFill, fillStyle]} />
+        <Animated.View style={[styles.sliderThumb, thumbStyle]} />
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -214,8 +257,9 @@ function SpeedSlider({ value, onChange }: { value: number; onChange: (speed: num
  * Transport + speed controls for multi-frame route playback. Rendered only when
  * the active climb is a route (`isAnimatable`); boulders never mount it. Sits in
  * its own surface tied to the board, so it reads as one player distinct from the
- * climb-level action bar below — and Play is a ghost glyph (not a filled circle)
- * so the green Tick stays the only hero button on screen.
+ * climb-level action bar below. Play is a ghost glyph (not a filled circle) so the
+ * green Tick stays the only hero button; the speed pill on the right reveals the
+ * slider on tap, keeping the resting state uncluttered.
  */
 export function PlaybackControls({
   frameIndex,
@@ -234,6 +278,17 @@ export function PlaybackControls({
   const atLastFrame = frameIndex >= frameCount - 1;
   // Pause while playing; replay (restart from 0) at the end; otherwise play.
   const mainIcon: IconName = isPlaying ? 'pause' : atLastFrame ? 'refresh' : 'play.fill';
+
+  const [showSpeed, setShowSpeed] = useState(false);
+  // Pill shows the live value while dragging, the committed speed otherwise.
+  const [liveSpeed, setLiveSpeed] = useState(speed);
+  useEffect(() => {
+    setLiveSpeed(speed);
+  }, [speed]);
+  const toggleSpeed = useCallback(() => {
+    hapticSelection();
+    setShowSpeed((open) => !open);
+  }, []);
 
   // Play glyph: press-scale × state-pop, combined into one transform.
   const playPress = useSharedValue(1);
@@ -282,44 +337,63 @@ export function PlaybackControls({
       <Animated.View style={[styles.progressBar, progressStyle]} pointerEvents="none" />
 
       <View style={styles.transportRow}>
-        <StepButton
-          direction="prev"
-          disabled={atFirstFrame}
-          onPress={handlePrev}
-          label={t('playView.previousFrame')}
-          color={atFirstFrame ? systemColors.tertiaryLabel : iosSystemColors.systemGray}
-        />
-        <AnimatedPressable
-          onPress={handleMain}
-          onPressIn={() => {
-            playPress.value = withSpring(0.88, springs.snappy);
-          }}
-          onPressOut={() => {
-            playPress.value = withSpring(1, springs.snappy);
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={isPlaying ? t('playView.pause') : atLastFrame ? t('playView.replay') : t('playView.play')}
-          accessibilityState={{ selected: isPlaying }}
-          style={[styles.playButton, playStyle]}
-        >
-          <Icon name={mainIcon} size={42} color={systemColors.label} />
-        </AnimatedPressable>
-        <StepButton
-          direction="next"
-          disabled={atLastFrame}
-          onPress={handleNext}
-          label={t('playView.nextFrame')}
-          color={atLastFrame ? systemColors.tertiaryLabel : iosSystemColors.systemGray}
-        />
+        <View style={styles.sideLeft}>
+          <Text variant="footnote" style={styles.counter}>
+            <Text style={[styles.counterCurrent, { color: systemColors.label }]}>{frameIndex + 1}</Text>
+            <Text style={{ color: systemColors.secondaryLabel }}>{` / ${frameCount}`}</Text>
+          </Text>
+        </View>
+
+        <View style={styles.centerGroup}>
+          <StepButton
+            direction="prev"
+            disabled={atFirstFrame}
+            onPress={handlePrev}
+            label={t('playView.previousFrame')}
+            color={atFirstFrame ? systemColors.tertiaryLabel : iosSystemColors.systemGray}
+          />
+          <AnimatedPressable
+            onPress={handleMain}
+            onPressIn={() => {
+              playPress.value = withSpring(0.88, springs.snappy);
+            }}
+            onPressOut={() => {
+              playPress.value = withSpring(1, springs.snappy);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isPlaying ? t('playView.pause') : atLastFrame ? t('playView.replay') : t('playView.play')
+            }
+            accessibilityState={{ selected: isPlaying }}
+            style={[styles.playButton, playStyle]}
+          >
+            <Icon name={mainIcon} size={42} color={systemColors.label} />
+          </AnimatedPressable>
+          <StepButton
+            direction="next"
+            disabled={atLastFrame}
+            onPress={handleNext}
+            label={t('playView.nextFrame')}
+            color={atLastFrame ? systemColors.tertiaryLabel : iosSystemColors.systemGray}
+          />
+        </View>
+
+        <View style={styles.sideRight}>
+          <SpeedPill
+            label={formatSpeed(liveSpeed)}
+            active={showSpeed}
+            onPress={toggleSpeed}
+            accessibilityLabel={`${t('playView.speed')}, ${formatSpeed(liveSpeed)}`}
+          />
+        </View>
       </View>
 
-      <Text variant="footnote" style={styles.counter}>
-        <Text style={[styles.counterCurrent, { color: systemColors.label }]}>{frameIndex + 1}</Text>
-        <Text style={{ color: systemColors.secondaryLabel }}>{` / ${frameCount}`}</Text>
-      </Text>
-
-      <SpeedSlider value={speed} onChange={onSpeedChange} />
+      {showSpeed && (
+        <Animated.View entering={FadeIn.duration(timing.fast)} exiting={FadeOut.duration(timing.instant)}>
+          <SpeedSlider value={speed} onChange={onSpeedChange} onLiveChange={setLiveSpeed} />
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -348,7 +422,18 @@ const styles = StyleSheet.create({
   transportRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  sideLeft: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  sideRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  centerGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[6],
   },
   stepButton: {
@@ -364,24 +449,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   counter: {
-    textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
   counterCurrent: {
     fontWeight: '600',
   },
-  speedRow: {
+  speedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[3],
+    justifyContent: 'center',
+    minWidth: 52,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.full,
   },
-  speedLabel: {
-    minWidth: 48,
-    textAlign: 'right',
+  speedPillText: {
     fontVariant: ['tabular-nums'],
+    fontWeight: '600',
   },
   sliderTrackWrapper: {
-    flex: 1,
+    alignSelf: 'stretch',
     height: 28,
     justifyContent: 'center',
   },

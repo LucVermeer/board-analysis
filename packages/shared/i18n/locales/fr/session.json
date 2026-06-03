@@ -339,6 +339,7 @@
     "play": "Lire",
     "pause": "Pause",
     "replay": "Rejouer",
+    "speed": "Vitesse de lecture",
     "onWallChip": "SUR LE MUR · {{username}}",
     "onWallChipNoDriver": "SUR LE MUR",
     "drivingChip": "AU CONTRÔLE",

@@ -339,6 +339,7 @@
     "play": "Play",
     "pause": "Pause",
     "replay": "Replay",
+    "speed": "Playback speed",
     "onWallChip": "ON WALL · {{username}}",
     "onWallChipNoDriver": "ON WALL",
     "drivingChip": "DRIVING",

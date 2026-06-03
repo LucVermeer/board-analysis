@@ -339,6 +339,7 @@
     "play": "Reproducir",
     "pause": "Pausar",
     "replay": "Repetir",
+    "speed": "Velocidad de reproducción",
     "onWallChip": "EN EL MURO · {{username}}",
     "onWallChipNoDriver": "EN EL MURO",
     "drivingChip": "AL MANDO",
