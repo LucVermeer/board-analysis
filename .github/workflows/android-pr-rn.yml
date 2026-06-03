@@ -1,31 +1,28 @@
 name: Android PR Build (React Native)
 
-# Catches what the JS-only checks can't: a broken Expo config plugin, an
-# app.config.ts mistake, or a Gradle/native-module compile failure in the
-# packages/mobile (managed Expo, no committed android/) project — BEFORE it
-# reaches the push-to-main android-apk-rn.yml release build.
+# Two jobs in one, for PRs touching packages/mobile (managed Expo, no committed
+# android/):
+#   1. Catches what the JS-only checks can't — a broken Expo config plugin, an
+#      app.config.ts mistake, or a Gradle/native-module compile failure — BEFORE
+#      it reaches the push-to-main android-apk-rn.yml release build.
+#   2. Produces a sideloadable APK artifact so anyone can test the branch on a
+#      real device WITHOUT the production keystore.
 #
-# Scope is deliberately narrow:
-#   - ci.yml already runs typecheck:mobile, the mobile vitest project, and
-#     check:mobile-bundle on PRs, so we DON'T duplicate those here.
-#   - This adds only the missing piece: `expo prebuild` (exercises every Android
-#     config plugin, incl. with-android-release-signing's debug fallback and
-#     with-android-bluetooth-feature) followed by `gradlew assembleDebug` (a real
-#     Kotlin/JNI compile of the board-renderer + live-activity modules).
-#   - Distinct from the legacy Capacitor android-ci.yml / android-release.yml,
-#     which watch `mobile/**`; the path filters below (`packages/mobile/**`)
-#     never overlap, so the two never double-fire.
+# It builds `assembleRelease` (JS bundled → runs standalone), but with the
+# debug-signing FALLBACK in with-android-release-signing.js: this job is NOT in
+# the Production GitHub Environment, so it has no ANDROID_KEYSTORE_* secrets and
+# the plugin signs `release` with the debug key. That makes the APK sideloadable
+# but with a DIFFERENT signature than the production/Play build — uninstall any
+# existing com.boardsesh.app before installing it.
+#
+# ci.yml already runs typecheck:mobile + the mobile vitest project +
+# check:mobile-bundle on PRs, so this doesn't duplicate those. Distinct from the
+# legacy Capacitor android-ci.yml / android-release.yml (which watch `mobile/**`)
+# — the path filters below never overlap. pull_request only (no push trigger) so
+# it runs exactly once per PR sync.
 
 on:
   pull_request:
-    paths:
-      - 'packages/mobile/**'
-      - 'packages/shared/**'
-      - 'packages/board-constants/**'
-      - 'packages/shared-schema/**'
-      - '.github/workflows/android-pr-rn.yml'
-  push:
-    branches-ignore: [main]
     paths:
       - 'packages/mobile/**'
       - 'packages/shared/**'
@@ -42,9 +39,16 @@ permissions:
   contents: read
 
 jobs:
-  prebuild-and-assemble-debug:
+  prebuild-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
+    env:
+      # The app's env.ts already defaults to the production backend/web URLs, so
+      # the test APK talks to prod without any secrets. Sentry stays off (no DSN).
+      EXPO_PUBLIC_BACKEND_URL: https://ws.boardsesh.com
+      EXPO_PUBLIC_WS_URL: wss://ws.boardsesh.com/graphql
+      EXPO_PUBLIC_WEB_URL: https://www.boardsesh.com
 
     steps:
       - name: Checkout repository
@@ -75,11 +79,20 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          # Separate key prefix from the release workflow so a debug-build cache
+          # Separate key prefix from the release workflow so a debug-signed cache
           # never masks a release-build regression (and vice versa).
           key: ${{ runner.os }}-gradle-rn-pr-${{ hashFiles('packages/mobile/package.json', 'bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-gradle-rn-pr-
+
+      - name: Write .env for Expo build-time inlining
+        working-directory: packages/mobile
+        run: |
+          cat > .env <<EOF
+          EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
+          EXPO_PUBLIC_WS_URL=$EXPO_PUBLIC_WS_URL
+          EXPO_PUBLIC_WEB_URL=$EXPO_PUBLIC_WEB_URL
+          EOF
 
       - name: Expo prebuild (generate android/)
         working-directory: packages/mobile
@@ -89,6 +102,18 @@ jobs:
           TAILSCALE_HOSTS: ''
         run: bunx expo prebuild --platform android --clean --no-install
 
-      - name: Build debug APK (compiles all native modules + plugins)
+      - name: Build debug-signed release APK (compiles all native modules + plugins)
         working-directory: packages/mobile/android
-        run: ./gradlew assembleDebug --stacktrace
+        # No ANDROID_KEYSTORE_* env here → with-android-release-signing falls back
+        # to debug signing. assembleRelease bundles the JS so the APK runs
+        # standalone (a debug APK would expect a Metro dev server).
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload sideloadable APK
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: boardsesh-rn-android-pr-${{ github.event.pull_request.number || github.run_number }}
+          path: packages/mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 14
+          if-no-files-found: warn

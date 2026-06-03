@@ -13,9 +13,11 @@ android {
 }
 
 dependencies {
-    // Matches the pin in modules/board-renderer/android/build.gradle.kts so the
-    // two local Expo modules can't pull conflicting expo-modules-core versions.
-    implementation("expo:modules-core:56.0.12")
+    // Must match the installed expo-modules-core version AND the pin in
+    // modules/board-renderer/android/build.gradle.kts (the coordinate resolves
+    // to that exact published artifact). Bump both in lockstep when
+    // expo-modules-core updates, or the Android build fails to resolve it.
+    implementation("expo:modules-core:56.0.14")
     // MediaStyle for the ongoing session notification (Previous/Next actions).
     implementation("androidx.media:media:1.7.0")
     // Notification + service compat helpers (NotificationCompat, ServiceCompat,
