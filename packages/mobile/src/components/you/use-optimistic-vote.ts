@@ -24,7 +24,11 @@ export function useOptimisticVote(
   serverUpvotes: number,
   serverUserVote: number | null,
 ): OptimisticVote {
-  const vote = useVote();
+  // Destructure the stable `mutate` + the `isPending` flag rather than depend on
+  // the whole useMutation result — that object is a fresh reference every render,
+  // so depending on it would needlessly recreate `toggle` (defeating any memo on
+  // consumers). `mutate` is reference-stable; only `isPending` legitimately moves.
+  const { mutate: voteMutate, isPending: voteIsPending } = useVote();
   const [optimistic, setOptimistic] = useState<{ count: number; voted: boolean } | null>(null);
 
   // Recycled onto a different session → drop the previous card's optimistic state.
@@ -34,17 +38,17 @@ export function useOptimisticVote(
   const count = optimistic ? optimistic.count : serverUpvotes;
 
   const toggle = useCallback(() => {
-    if (vote.isPending) return; // guard double-tap
+    if (voteIsPending) return; // guard double-tap
     const nextVoted = !voted;
     setOptimistic({ count: count + (nextVoted ? 1 : -1), voted: nextVoted });
-    vote.mutate(
+    voteMutate(
       { entityType: 'session', entityId: sessionId, value: nextVoted ? 1 : 0 },
       {
         onSuccess: (summary) => setOptimistic({ count: summary.upvotes, voted: summary.userVote === 1 }),
         onError: () => setOptimistic(null),
       },
     );
-  }, [vote, voted, count, sessionId]);
+  }, [voteMutate, voteIsPending, voted, count, sessionId]);
 
-  return { voted, count, toggle, isPending: vote.isPending };
+  return { voted, count, toggle, isPending: voteIsPending };
 }

@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { Text } from '../Text';
@@ -27,9 +28,12 @@ export function YouTabBar<K extends string>({ tabs, activeIndex, scrollPosition,
   // after a resize / orientation change — the worklet wouldn't see the new width.
   const tabWidth = useSharedValue(0);
 
-  const onLayout = (event: LayoutChangeEvent) => {
-    tabWidth.value = event.nativeEvent.layout.width / tabs.length;
-  };
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      tabWidth.value = event.nativeEvent.layout.width / tabs.length;
+    },
+    [tabWidth, tabs.length],
+  );
 
   const indicatorStyle = useAnimatedStyle(() => ({
     width: tabWidth.value,

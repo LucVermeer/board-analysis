@@ -106,7 +106,8 @@ describe('useDeleteTick (shared)', () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(invalidatedRoots(invalidateSpy.mock.calls)).toContain('userTicks');
+    const roots = invalidatedRoots(invalidateSpy.mock.calls);
+    for (const key of TICK_DEPENDENT_KEYS) expect(roots).toContain(key);
   });
 
   it('does NOT invalidate caches when the delete fails', async () => {
