@@ -5,6 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { useSnackbar } from '@/app/components/providers/snackbar-provider';
 import { classifyBleFailure, isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import { normaliseSetIds } from '@/app/lib/ble/board-config-match';
+import { createGraphQLHttpClient } from '@/app/lib/graphql/client';
+import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
+import { useWsAuthToken } from '@/app/hooks/use-ws-auth-token';
 import { track } from '@/app/lib/analytics';
 import * as Sentry from '@sentry/nextjs';
 import type { BoardDetails } from '@/app/lib/types';
@@ -70,31 +73,41 @@ type UseBoardBluetoothOptions = {
 };
 
 /**
- * Fire-and-forget POST to record the (serial, board config) mapping for the
- * authenticated user. Failures are swallowed — connect must not block on this.
+ * Fire-and-forget GraphQL mutation recording the (serial, board config, API
+ * level) the user was on when connecting. Failures are swallowed — connect must
+ * not block on this. A null token still fires (the backend rejects it), keeping
+ * behaviour identical to the previous unauthenticated POST.
  */
-function recordBoardSerial(serialNumber: string, boardDetails: BoardDetails, boardUuid: string | undefined): void {
+function recordBoardSerial(
+  serialNumber: string,
+  boardDetails: BoardDetails,
+  boardUuid: string | undefined,
+  apiLevel: number,
+  token: string | null,
+): void {
   // Sort + dedupe before joining so the recording is canonical regardless of
   // how the route emitted set_ids — `matchesBoardDetails` also normalises on
   // read, but keeping the stored value canonical means recorded entries
   // produced by different routes are byte-equal.
   const setIds = [...new Set(boardDetails.set_ids)].sort((a, b) => a - b).join(',');
-  // Empty set_ids would serialise to "" and the route's Zod schema rejects
-  // empty strings — the POST 400s and the `.catch` swallows it silently, so
+  // Empty set_ids would serialise to "" and the input Zod schema rejects empty
+  // strings — the mutation would error and the `.catch` would swallow it, so
   // the serial would never get recorded. Skip the call deliberately instead.
   if (!setIds) return;
-  void fetch('/api/internal/board-serials', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      serialNumber,
-      boardName: boardDetails.board_name,
-      layoutId: boardDetails.layout_id,
-      sizeId: boardDetails.size_id,
-      setIds,
-      boardUuid,
-    }),
-  }).catch(() => {});
+  const client = createGraphQLHttpClient(token);
+  void client
+    .request(RECORD_BOARD_SERIAL, {
+      input: {
+        serialNumber,
+        boardName: boardDetails.board_name,
+        layoutId: boardDetails.layout_id,
+        sizeId: boardDetails.size_id,
+        setIds,
+        apiLevel,
+        boardUuid,
+      },
+    })
+    .catch(() => {});
 }
 
 type BoardConfigurationRequest = {
@@ -144,6 +157,11 @@ export function useBoardBluetooth({
 }: UseBoardBluetoothOptions) {
   const { showMessage } = useSnackbar();
   const { t } = useTranslation('common');
+  // Auth token for the fire-and-forget serial recording mutation. Kept in a ref
+  // so the stable `connect` callback reads the latest value without re-creating.
+  const { token: wsAuthToken } = useWsAuthToken();
+  const authTokenRef = useRef<string | null>(null);
+  authTokenRef.current = wsAuthToken;
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   // The board this device last successfully connected to, with the identity of
@@ -575,7 +593,7 @@ export function useBoardBluetooth({
         if (boardDetails.board_name !== 'moonboard') {
           parsedSerial = parseSerialNumber(connection.deviceName) ?? null;
           if (parsedSerial) {
-            recordBoardSerial(parsedSerial, boardDetails, boardUuid);
+            recordBoardSerial(parsedSerial, boardDetails, boardUuid, apiLevelRef.current, authTokenRef.current);
             // Remember the board (and which config it was paired against) so a
             // later involuntary drop can be recovered with a silent reconnect.
             setLastConnectedBoard({ serial: parsedSerial, configKey: boardIdentityKey(boardDetails) });

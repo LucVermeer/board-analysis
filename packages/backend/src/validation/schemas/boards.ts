@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AURORA_BOARDS } from '@boardsesh/shared-schema';
 import { UUIDSchema, BoardNameSchema, LatitudeSchema, LongitudeSchema, SlugSchema } from './primitives';
 
 /**
@@ -97,9 +98,28 @@ export const PopularBoardConfigsInputSchema = z.object({
 /**
  * Schema for `boardsBySerialNumbers` and `myBoardSerialConfigs` queries.
  * Caps the array length and per-element size so an attacker can't push a
- * massive IN-list into the resolver. Mirrors the route Zod schema in
- * `packages/web/app/api/internal/board-serials/route.ts`.
+ * massive IN-list into the resolver.
  */
 export const SerialNumberLookupSchema = z.object({
   serialNumbers: z.array(z.string().trim().min(1).max(64)).max(20),
+});
+
+/**
+ * Record-board-serial input validation schema. Mirrors the deleted REST route
+ * (`packages/web/app/api/internal/board-serials/route.ts`) and adds `apiLevel`,
+ * the protocol level parsed from the BLE device name's `@N` suffix. Only Aurora
+ * boards advertise a serial in this format, so `boardName` is the Aurora enum.
+ */
+export const RecordBoardSerialInputSchema = z.object({
+  serialNumber: z.string().trim().min(1).max(64),
+  boardName: z.enum(AURORA_BOARDS),
+  layoutId: z.number().int().nonnegative(),
+  sizeId: z.number().int().nonnegative(),
+  // Comma-separated positive integers only — no whitespace, no empties.
+  setIds: z
+    .string()
+    .max(256)
+    .regex(/^\d+(,\d+)*$/, 'setIds must be a comma-separated list of integers'),
+  apiLevel: z.number().int().nonnegative().optional(),
+  boardUuid: z.string().min(1).max(64).optional(),
 });

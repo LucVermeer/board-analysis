@@ -58,6 +58,13 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+// The serial-recording path imports the GraphQL HTTP client, which transitively
+// pulls in expo-secure-store (via the auth interceptor) — unavailable in the
+// test environment. Short-circuit it; these tests only exercise the pure helpers.
+vi.mock('../../graphql/client', () => ({
+  getHttpClient: vi.fn(() => ({ request: vi.fn().mockResolvedValue({ recordBoardSerial: null }) })),
+}));
+
 vi.mock('../adapter', () => ({
   RNBleAdapter: vi.fn(),
 }));

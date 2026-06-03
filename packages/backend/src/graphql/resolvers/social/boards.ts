@@ -15,6 +15,7 @@ import {
   SearchBoardsInputSchema,
   PopularBoardConfigsInputSchema,
   SerialNumberLookupSchema,
+  RecordBoardSerialInputSchema,
   UUIDSchema,
 } from '../../../validation/schemas';
 import { generateUniqueGymSlug } from './gyms';
@@ -69,6 +70,25 @@ async function generateUniqueSlug(name: string): Promise<string> {
 
   // Fallback: append UUID fragment
   return `${baseSlug}-${uuidv4().slice(0, 8)}`;
+}
+
+/**
+ * Normalise a comma-separated set_ids string to a deduped, numerically-sorted
+ * representation so order/whitespace differences don't trigger spurious
+ * mismatches when comparing a recording against a saved board's config.
+ * Mirrors `normaliseSetIds` in the web app's `board-config-match.ts`.
+ */
+function normaliseSetIds(setIds: string): string {
+  return [
+    ...new Set(
+      setIds
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0),
+    ),
+  ]
+    .sort((first, second) => Number(first) - Number(second))
+    .join(',');
 }
 
 /**
@@ -749,6 +769,7 @@ export const socialBoardQueries = {
         layoutId: dbSchema.userBoardSerials.layoutId,
         sizeId: dbSchema.userBoardSerials.sizeId,
         setIds: dbSchema.userBoardSerials.setIds,
+        apiLevel: dbSchema.userBoardSerials.apiLevel,
         updatedAt: dbSchema.userBoardSerials.updatedAt,
         boardUuid: dbSchema.userBoardSerials.boardUuid,
         boardSlug: dbSchema.userBoards.slug,
@@ -762,15 +783,16 @@ export const socialBoardQueries = {
         and(eq(dbSchema.userBoardSerials.userId, userId), inArray(dbSchema.userBoardSerials.serialNumber, cleaned)),
       );
 
-    return rows.map((r) => ({
-      serialNumber: r.serialNumber,
-      boardName: r.boardName,
-      layoutId: Number(r.layoutId),
-      sizeId: Number(r.sizeId),
-      setIds: r.setIds,
-      updatedAt: r.updatedAt.toISOString(),
-      boardUuid: r.boardUuid,
-      boardSlug: r.boardSlug,
+    return rows.map((row) => ({
+      serialNumber: row.serialNumber,
+      boardName: row.boardName,
+      layoutId: Number(row.layoutId),
+      sizeId: Number(row.sizeId),
+      setIds: row.setIds,
+      apiLevel: row.apiLevel,
+      updatedAt: row.updatedAt.toISOString(),
+      boardUuid: row.boardUuid,
+      boardSlug: row.boardSlug,
     }));
   },
 
@@ -1152,6 +1174,137 @@ export const socialBoardQueries = {
 // ============================================
 
 export const socialBoardMutations = {
+  /**
+   * Record the (serial, board config) the current user was on when connecting
+   * to a controller over BLE. Replaces the deleted REST route
+   * POST /api/internal/board-serials. Upserts into userBoardSerials keyed by
+   * (userId, serialNumber), capturing the API level advertised after the `@` in
+   * the device name. Returns the stored recording, or null when the user already
+   * has a saved board whose config matches the connect (nothing to record).
+   */
+  recordBoardSerial: async (_: unknown, { input }: { input: unknown }, ctx: ConnectionContext) => {
+    requireAuthenticated(ctx);
+    await applyRateLimit(ctx, 30);
+
+    const validatedInput = validateInput(RecordBoardSerialInputSchema, input, 'input');
+    const userId = ctx.userId!;
+    const { serialNumber, boardName, layoutId, sizeId, setIds, apiLevel, boardUuid } = validatedInput;
+
+    // If the user already has a saved board for this controller AND its config
+    // matches, the recording adds nothing — skip the write and return null. The
+    // saved board stays authoritative for serial→board lookups; recordings only
+    // exist to provide a fallback and to detect drift when the configs differ.
+    const [savedMatch] = await db
+      .select({
+        boardType: dbSchema.userBoards.boardType,
+        layoutId: dbSchema.userBoards.layoutId,
+        sizeId: dbSchema.userBoards.sizeId,
+        setIds: dbSchema.userBoards.setIds,
+      })
+      .from(dbSchema.userBoards)
+      .where(
+        and(
+          eq(dbSchema.userBoards.ownerId, userId),
+          eq(dbSchema.userBoards.serialNumber, serialNumber),
+          isNull(dbSchema.userBoards.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (
+      savedMatch &&
+      savedMatch.boardType === boardName &&
+      Number(savedMatch.layoutId) === layoutId &&
+      Number(savedMatch.sizeId) === sizeId &&
+      normaliseSetIds(savedMatch.setIds) === normaliseSetIds(setIds)
+    ) {
+      return null;
+    }
+
+    // Validate boardUuid before linking: only persist the link if the user can
+    // legitimately reach the board (owner or public). A forged/unauthorised uuid
+    // is silently dropped to null so it can't attach the controller to someone
+    // else's private board.
+    let linkedBoardUuid: string | null = null;
+    if (boardUuid) {
+      const [allowed] = await db
+        .select({ uuid: dbSchema.userBoards.uuid })
+        .from(dbSchema.userBoards)
+        .where(
+          and(
+            eq(dbSchema.userBoards.uuid, boardUuid),
+            isNull(dbSchema.userBoards.deletedAt),
+            or(eq(dbSchema.userBoards.ownerId, userId), eq(dbSchema.userBoards.isPublic, true)),
+          ),
+        )
+        .limit(1);
+      if (allowed) {
+        linkedBoardUuid = boardUuid;
+      }
+    }
+
+    const apiLevelValue = apiLevel ?? null;
+
+    await db
+      .insert(dbSchema.userBoardSerials)
+      .values({
+        userId,
+        serialNumber,
+        boardName,
+        layoutId,
+        sizeId,
+        setIds,
+        apiLevel: apiLevelValue,
+        boardUuid: linkedBoardUuid,
+      })
+      .onConflictDoUpdate({
+        target: [dbSchema.userBoardSerials.userId, dbSchema.userBoardSerials.serialNumber],
+        set: {
+          boardName,
+          layoutId,
+          sizeId,
+          setIds,
+          apiLevel: apiLevelValue,
+          boardUuid: linkedBoardUuid,
+          updatedAt: new Date(),
+        },
+      });
+
+    const [row] = await db
+      .select({
+        serialNumber: dbSchema.userBoardSerials.serialNumber,
+        boardName: dbSchema.userBoardSerials.boardName,
+        layoutId: dbSchema.userBoardSerials.layoutId,
+        sizeId: dbSchema.userBoardSerials.sizeId,
+        setIds: dbSchema.userBoardSerials.setIds,
+        apiLevel: dbSchema.userBoardSerials.apiLevel,
+        updatedAt: dbSchema.userBoardSerials.updatedAt,
+        boardUuid: dbSchema.userBoardSerials.boardUuid,
+        boardSlug: dbSchema.userBoards.slug,
+      })
+      .from(dbSchema.userBoardSerials)
+      .leftJoin(
+        dbSchema.userBoards,
+        and(eq(dbSchema.userBoards.uuid, dbSchema.userBoardSerials.boardUuid), isNull(dbSchema.userBoards.deletedAt)),
+      )
+      .where(
+        and(eq(dbSchema.userBoardSerials.userId, userId), eq(dbSchema.userBoardSerials.serialNumber, serialNumber)),
+      )
+      .limit(1);
+
+    return {
+      serialNumber: row.serialNumber,
+      boardName: row.boardName,
+      layoutId: Number(row.layoutId),
+      sizeId: Number(row.sizeId),
+      setIds: row.setIds,
+      apiLevel: row.apiLevel,
+      updatedAt: row.updatedAt.toISOString(),
+      boardUuid: row.boardUuid,
+      boardSlug: row.boardSlug,
+    };
+  },
+
   /**
    * Create a new board
    */

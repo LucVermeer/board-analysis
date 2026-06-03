@@ -12,6 +12,8 @@ import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
 import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { SHARED_EVENTS } from '@boardsesh/analytics';
+import { RECORD_BOARD_SERIAL } from '@boardsesh/graphql/operations';
+import { getHttpClient } from '../graphql/client';
 import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
 import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
@@ -36,6 +38,38 @@ export type PickerState = {
   handleSelect: (deviceId: string) => void;
   handleCancel: () => void;
 };
+
+/**
+ * Fire-and-forget GraphQL mutation recording the (serial, board config, API
+ * level) seen on connect for the authenticated user. Mirrors the web app's
+ * `recordBoardSerial`. Failures are swallowed — connect must not block on this.
+ */
+function recordBoardSerial(input: {
+  serialNumber: string;
+  boardName: string;
+  layoutId: number;
+  sizeId: number;
+  setIds: string;
+  apiLevel: number;
+  boardUuid?: string;
+}): void {
+  // Canonicalise set IDs: dedupe + numeric sort, dropping any non-numeric token
+  // so the value satisfies the backend's `^\d+(,\d+)*$` schema.
+  const setIds = [
+    ...new Set(
+      input.setIds
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => /^\d+$/.test(part)),
+    ),
+  ]
+    .sort((first, second) => Number(first) - Number(second))
+    .join(',');
+  if (!setIds) return;
+  void getHttpClient()
+    .request(RECORD_BOARD_SERIAL, { input: { ...input, setIds } })
+    .catch(() => {});
+}
 
 type GetLedPlacementsFn = (boardName: string, layoutId: number, sizeId: number) => Record<number, number>;
 let cachedGetLedPlacements: GetLedPlacementsFn | null = null;
@@ -68,6 +102,10 @@ type UseBoardBluetoothOptions = {
   boardName?: string;
   layoutId?: number;
   sizeId?: number;
+  /** Comma-separated set IDs of the active board, recorded against the serial on connect. */
+  setIds?: string;
+  /** UUID of the active (saved) board, linked to the serial recording. */
+  boardUuid?: string;
   holdsData?: HoldPlacement[];
   ledColorOverrides?: LedColorOverrides;
   onConnectionChange?: (connected: boolean) => void;
@@ -112,6 +150,8 @@ export function useBoardBluetooth({
   boardName,
   layoutId,
   sizeId,
+  setIds,
+  boardUuid,
   holdsData,
   ledColorOverrides,
   onConnectionChange,
@@ -379,10 +419,23 @@ export function useBoardBluetooth({
           }
         }
 
-        // Parse serial for Aurora boards
+        // Parse serial for Aurora boards and record the (serial, config, API
+        // level) mapping for serial→config lookups. Moonboard device names
+        // don't carry a serial in this format, so they're skipped.
         let parsedSerial: string | null = null;
         if (boardName !== 'moonboard' && connection.deviceName) {
           parsedSerial = parseSerialNumber(connection.deviceName) ?? null;
+          if (parsedSerial && boardName && layoutId !== undefined && sizeId !== undefined && setIds) {
+            recordBoardSerial({
+              serialNumber: parsedSerial,
+              boardName,
+              layoutId,
+              sizeId,
+              setIds,
+              apiLevel: apiLevelRef.current,
+              boardUuid,
+            });
+          }
         }
 
         // Remember the board (keyed to the config it was paired against) so an
@@ -437,7 +490,18 @@ export function useBoardBluetooth({
 
       return false;
     },
-    [handleDisconnection, boardName, onConnectionChange, onConnectSuccess, sendFramesToBoard, devicePicker],
+    [
+      handleDisconnection,
+      boardName,
+      layoutId,
+      sizeId,
+      setIds,
+      boardUuid,
+      onConnectionChange,
+      onConnectSuccess,
+      sendFramesToBoard,
+      devicePicker,
+    ],
   );
 
   const disconnect = useCallback(async () => {

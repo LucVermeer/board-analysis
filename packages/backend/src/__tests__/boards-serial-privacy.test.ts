@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import type { ConnectionContext } from '@boardsesh/shared-schema';
-import { socialBoardQueries } from '../graphql/resolvers/social/boards';
+import { socialBoardQueries, socialBoardMutations } from '../graphql/resolvers/social/boards';
 
 // Mock db + dependencies before importing resolver.
 // `vi.mock` is hoisted to the top of the file at parse time, so even though
@@ -345,6 +345,7 @@ describe('myBoardSerialConfigs privacy', () => {
       layoutId: 1,
       sizeId: 10,
       setIds: '1,20',
+      apiLevel: 3,
       updatedAt: new Date('2026-04-01'),
       boardUuid: null,
       boardSlug: null,
@@ -407,6 +408,7 @@ describe('myBoardSerialConfigs privacy', () => {
       layoutId: 5,
       sizeId: 12,
       setIds: '1,3',
+      apiLevel: 3,
       updatedAt: '2026-04-01T00:00:00.000Z',
       boardUuid: 'linked-board-uuid',
       boardSlug: 'my-tension',
@@ -499,5 +501,113 @@ describe('myBoardSerialConfigs privacy', () => {
 
     expect(results[0].boardUuid).toBe('deleted-board-uuid');
     expect(results[0].boardSlug).toBeNull();
+  });
+});
+
+describe('recordBoardSerial', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Wires the two sequential selects the mutation runs (saved-board lookup, then
+  // the post-upsert re-select) plus the insert().values().onConflictDoUpdate()
+  // chain. boardUuid is omitted so there's no intermediate ownership select.
+  function setupRecord({ savedMatch = [], recordingRow }: { savedMatch?: unknown[]; recordingRow: unknown }) {
+    let selectCall = 0;
+    mockDb.select.mockImplementation(() => {
+      const rows = selectCall++ === 0 ? savedMatch : [recordingRow];
+      const limit = vi.fn().mockResolvedValue(rows);
+      const where = vi.fn().mockReturnValue({ limit });
+      const leftJoin = vi.fn().mockReturnValue({ where });
+      const from = vi.fn().mockReturnValue({ where, leftJoin });
+      return { from };
+    });
+    const onConflictDoUpdate = vi.fn().mockResolvedValue(undefined);
+    const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+    mockDb.insert.mockReturnValue({ values });
+    return { values, onConflictDoUpdate };
+  }
+
+  function recordingRow(overrides: Record<string, unknown> = {}) {
+    return {
+      serialNumber: 'SN42',
+      boardName: 'kilter',
+      layoutId: 1,
+      sizeId: 10,
+      setIds: '1,2',
+      apiLevel: 3,
+      updatedAt: new Date('2026-04-01'),
+      boardUuid: null,
+      boardSlug: null,
+      ...overrides,
+    };
+  }
+
+  it('throws when the caller is not authenticated', async () => {
+    await expect(
+      socialBoardMutations.recordBoardSerial(
+        null,
+        { input: { serialNumber: 'SN42', boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', apiLevel: 3 } },
+        makeUnauthCtx(),
+      ),
+    ).rejects.toThrow(/Authentication required/);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it('upserts the recording with its API level and returns the stored config', async () => {
+    const { values } = setupRecord({ savedMatch: [], recordingRow: recordingRow() });
+
+    const result = await socialBoardMutations.recordBoardSerial(
+      null,
+      { input: { serialNumber: 'SN42', boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', apiLevel: 3 } },
+      makeAuthCtx('user-1'),
+    );
+
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ apiLevel: 3, serialNumber: 'SN42' }));
+    expect(result).toEqual(
+      expect.objectContaining({ serialNumber: 'SN42', apiLevel: 3, updatedAt: '2026-04-01T00:00:00.000Z' }),
+    );
+  });
+
+  it('persists a null API level when none is supplied', async () => {
+    const { values } = setupRecord({ savedMatch: [], recordingRow: recordingRow({ apiLevel: null }) });
+
+    const result = await socialBoardMutations.recordBoardSerial(
+      null,
+      { input: { serialNumber: 'SN42', boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2' } },
+      makeAuthCtx('user-1'),
+    );
+
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ apiLevel: null }));
+    expect(result?.apiLevel).toBeNull();
+  });
+
+  it('skips the write and returns null when a saved board already matches', async () => {
+    const { values } = setupRecord({
+      savedMatch: [{ boardType: 'kilter', layoutId: 1, sizeId: 10, setIds: '2,1' }],
+      recordingRow: recordingRow(),
+    });
+
+    const result = await socialBoardMutations.recordBoardSerial(
+      null,
+      { input: { serialNumber: 'SN42', boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1,2', apiLevel: 3 } },
+      makeAuthCtx('user-1'),
+    );
+
+    expect(result).toBeNull();
+    expect(values).not.toHaveBeenCalled();
+  });
+
+  it('rejects set IDs that are not a comma-separated integer list', async () => {
+    setupRecord({ savedMatch: [], recordingRow: recordingRow() });
+
+    await expect(
+      socialBoardMutations.recordBoardSerial(
+        null,
+        { input: { serialNumber: 'SN42', boardName: 'kilter', layoutId: 1, sizeId: 10, setIds: '1, 2,', apiLevel: 3 } },
+        makeAuthCtx('user-1'),
+      ),
+    ).rejects.toThrow();
+    expect(mockDb.insert).not.toHaveBeenCalled();
   });
 });

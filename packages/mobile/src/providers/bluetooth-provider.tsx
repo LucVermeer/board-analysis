@@ -179,10 +179,19 @@ type BluetoothProviderProps = {
   boardName?: string;
   layoutId?: number;
   sizeId?: number;
+  setIds?: string;
+  boardUuid?: string;
   children: React.ReactNode;
 };
 
-export function BluetoothProvider({ boardName, layoutId, sizeId, children }: BluetoothProviderProps) {
+export function BluetoothProvider({
+  boardName,
+  layoutId,
+  sizeId,
+  setIds,
+  boardUuid,
+  children,
+}: BluetoothProviderProps) {
   const { sessionId, confirmClimbOnWall, setSessionBoardSerial, lastConnectedBoardSerial } = useQueueSessionControls();
   const sessionIdRef = useRef(sessionId);
   useEffect(() => {
@@ -225,6 +234,8 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
       boardName,
       layoutId,
       sizeId,
+      setIds,
+      boardUuid,
       onConnectSuccess: handleConnectSuccess,
     });
 
