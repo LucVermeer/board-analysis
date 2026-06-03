@@ -672,7 +672,53 @@
       "report": "Signaler",
       "linkCopied": "Lien copié",
       "tick": "Enregistrer une croix",
-      "openInApp": "Ouvrir dans l'app Aurora"
+      "openInApp": "Ouvrir dans l'app Aurora",
+      "fork": "Dupliquer cette voie",
+      "edit": "Modifier la voie"
+    },
+    "create": {
+      "brush": {
+        "start": "Départ",
+        "hand": "Main",
+        "finish": "Fin",
+        "foot": "Pied",
+        "erase": "Effacer"
+      },
+      "counts": {
+        "start": "Départ : {{count}}/2",
+        "finish": "Fin : {{count}}/2"
+      },
+      "actions": {
+        "heatmap": "Carte de chaleur",
+        "settings": "Réglages",
+        "clear": "Effacer les prises",
+        "setActive": "Définir comme voie active",
+        "save": "Enregistrer la voie"
+      },
+      "holdRole": {
+        "title": "Définir le rôle de la prise",
+        "clear": "Effacer"
+      },
+      "settings": {
+        "draftLabel": "Enregistrer comme brouillon",
+        "draftDescription": "Les brouillons restent privés jusqu’à publication.",
+        "showAllHoldsLabel": "Afficher toutes les prises",
+        "showAllHoldsDescription": "Met en évidence chaque prise cliquable du panneau.",
+        "connectBoard": "Connecter le panneau",
+        "bleConnected": "Panneau connecté",
+        "bleUnavailable": "Choisissez un panneau pour l’éclairer en Bluetooth."
+      },
+      "drafts": {
+        "holds_one": "{{count}} prise",
+        "holds_other": "{{count}} prises"
+      },
+      "unavailable": {
+        "title": "Création indisponible ici",
+        "subtitle": "Cette configuration de panneau ne permet pas de créer des voies."
+      },
+      "fab": {
+        "ariaLabel": "Créer une voie"
+      }
     }
   }
 }

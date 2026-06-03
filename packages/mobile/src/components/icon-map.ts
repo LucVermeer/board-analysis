@@ -63,6 +63,14 @@ export const iconMap = {
   playlist: { ios: 'folder.badge.plus', android: 'folder-plus-outline' },
   send: { ios: 'paperplane.fill', android: 'send' },
 
+  // Create climb
+  flame: { ios: 'flame', android: 'fire' },
+  lock: { ios: 'lock', android: 'lock-outline' },
+  'play.circle': { ios: 'play.circle', android: 'play-circle-outline' },
+  'square.and.arrow.up.on.square': { ios: 'square.and.arrow.up.on.square', android: 'tray-arrow-up' },
+  eraser: { ios: 'eraser', android: 'eraser' },
+  'hand.raised': { ios: 'hand.raised', android: 'hand-back-right-outline' },
+
   // Status
   info: { ios: 'info.circle', android: 'information-outline' },
   warning: { ios: 'exclamationmark.triangle', android: 'alert-outline' },

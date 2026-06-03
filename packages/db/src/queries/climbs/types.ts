@@ -177,6 +177,8 @@ export type ClimbSearchResult = {
 export type ClimbRow = {
   uuid: string;
   setter_username: string;
+  /** Owner (creator) user id; null for Aurora-imported climbs. Used for edit-ownership gating. */
+  userId: string | null;
   name: string;
   description: string;
   frames: string;

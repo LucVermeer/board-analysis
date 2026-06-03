@@ -672,7 +672,53 @@
       "report": "Report",
       "linkCopied": "Link copied",
       "tick": "Log a tick",
-      "openInApp": "Open in Aurora app"
+      "openInApp": "Open in Aurora app",
+      "fork": "Fork this climb",
+      "edit": "Edit climb"
+    },
+    "create": {
+      "brush": {
+        "start": "Start",
+        "hand": "Hand",
+        "finish": "Finish",
+        "foot": "Foot",
+        "erase": "Erase"
+      },
+      "counts": {
+        "start": "Start: {{count}}/2",
+        "finish": "Finish: {{count}}/2"
+      },
+      "actions": {
+        "heatmap": "Heatmap",
+        "settings": "Settings",
+        "clear": "Clear holds",
+        "setActive": "Set as active climb",
+        "save": "Save climb"
+      },
+      "holdRole": {
+        "title": "Set hold role",
+        "clear": "Clear"
+      },
+      "settings": {
+        "draftLabel": "Save as draft",
+        "draftDescription": "Drafts stay private until you publish them.",
+        "showAllHoldsLabel": "Show all holds",
+        "showAllHoldsDescription": "Highlight every tappable hold on the board.",
+        "connectBoard": "Connect board",
+        "bleConnected": "Board connected",
+        "bleUnavailable": "Pick a board to light it up over Bluetooth."
+      },
+      "drafts": {
+        "holds_one": "{{count}} hold",
+        "holds_other": "{{count}} holds"
+      },
+      "unavailable": {
+        "title": "Can't build here yet",
+        "subtitle": "This board layout is not supported for creating climbs."
+      },
+      "fab": {
+        "ariaLabel": "Create a climb"
+      }
     }
   }
 }

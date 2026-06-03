@@ -182,6 +182,7 @@
         "@boardsesh/board-react": "*",
         "@boardsesh/climb-actions": "*",
         "@boardsesh/climb-filters": "*",
+        "@boardsesh/create-climb-react": "*",
         "@boardsesh/graphql": "*",
         "@boardsesh/graphql-client": "*",
         "@boardsesh/i18n": "*",
@@ -348,6 +349,25 @@
       },
       "devDependencies": {
         "typescript": "~6.0.3",
+      },
+    },
+    "packages/shared/create-climb-react": {
+      "name": "@boardsesh/create-climb-react",
+      "version": "1.0.0",
+      "dependencies": {
+        "@boardsesh/board-constants": "*",
+        "@boardsesh/shared-schema": "*",
+      },
+      "devDependencies": {
+        "@testing-library/react": "^16.3.2",
+        "@types/react": "^19",
+        "@vitest/coverage-v8": "^4.1.5",
+        "happy-dom": "^15",
+        "react": "^19",
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "react": "^19",
       },
     },
     "packages/shared/graphql": {
@@ -535,6 +555,7 @@
         "@boardsesh/board-renderer-wasm": "*",
         "@boardsesh/climb-actions": "*",
         "@boardsesh/climb-filters": "*",
+        "@boardsesh/create-climb-react": "*",
         "@boardsesh/crypto": "*",
         "@boardsesh/db": "*",
         "@boardsesh/graphql": "*",
@@ -941,6 +962,8 @@
     "@boardsesh/climb-actions": ["@boardsesh/climb-actions@workspace:packages/shared/climb-actions"],
 
     "@boardsesh/climb-filters": ["@boardsesh/climb-filters@workspace:packages/shared/climb-filters"],
+
+    "@boardsesh/create-climb-react": ["@boardsesh/create-climb-react@workspace:packages/shared/create-climb-react"],
 
     "@boardsesh/crypto": ["@boardsesh/crypto@workspace:packages/crypto"],
 
