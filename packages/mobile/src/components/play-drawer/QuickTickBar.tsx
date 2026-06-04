@@ -17,8 +17,8 @@ import {
 import { Text } from '../Text';
 import { Icon } from '../Icon';
 import { InlineStarPicker } from './InlineStarPicker';
-import { InlineGradePicker } from './InlineGradePicker';
 import { InlineTriesPicker } from './InlineTriesPicker';
+import { GradeSingleSelectRail } from '../grade';
 import { useTheme } from '../../providers/theme-provider';
 import { useGrades } from '../../lib/graphql/hooks';
 import { useOptionalBoardProvider, useSaveTick } from '@boardsesh/board-react';
@@ -43,7 +43,7 @@ type QuickTickBarProps = {
   sessionId?: string | null;
   // The climb's consensus grade label (e.g. "V5", "7a+"). Resolved to a
   // numeric difficulty id at render time via the loaded grades list and
-  // forwarded to InlineGradePicker so the consensus chip is centered (and
+  // forwarded to GradeSingleSelectRail so the consensus chip is centered (and
   // visually outlined) without being preselected.
   consensusGradeName?: string;
   onDismiss: () => void;
@@ -103,7 +103,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 
   // Resolve the consensus grade *name* (e.g. "V5") to a numeric difficulty
   // id by matching against the loaded grades list. The id is what
-  // InlineGradePicker compares against each chip's `difficultyId`.
+  // GradeSingleSelectRail compares against each chip's `difficultyId`.
   const consensusDifficultyId = useMemo(() => {
     if (!consensusGradeName || !grades) return undefined;
     return grades.find((grade) => grade.name === consensusGradeName)?.difficultyId;
@@ -220,11 +220,12 @@ export const QuickTickBar = React.memo(function QuickTickBar({
         </Text>
         <View style={styles.rowPicker}>
           {grades && (
-            <InlineGradePicker
+            <GradeSingleSelectRail
               grades={grades}
               selectedDifficultyId={tickState.difficulty}
               consensusDifficultyId={consensusDifficultyId}
               onSelect={handleGradeSelect}
+              style={styles.gradeRailContent}
             />
           )}
         </View>
@@ -348,6 +349,9 @@ const styles = StyleSheet.create({
   },
   rowPicker: {
     flex: 1,
+  },
+  gradeRailContent: {
+    paddingHorizontal: 0,
   },
   saveRow: {
     flexDirection: 'row',

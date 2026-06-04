@@ -45,7 +45,6 @@ import { SwitchRow } from './SwitchRow';
 import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
-import { useGradeFormat } from '../hooks/use-grade-format';
 import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
 import { subscribeToSetterSelection } from '../lib/filter-handoff';
@@ -53,7 +52,7 @@ import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
-import { formatGradePillLabel } from './search/grade-pill-label';
+import { GradeRangeRail } from './grade';
 import type { ClimbFilters } from '../lib/climb-filter-types';
 import { DEFAULT_FILTERS } from '../lib/climb-filter-types';
 
@@ -75,10 +74,6 @@ type ClimbFilterSheetProps = {
   currentBoardFilters: ClimbBoardFilterState;
   /** Current committed name term, so the live "Show N" count matches Apply. */
   searchName?: string;
-  /** Commit the in-progress sheet edits, then open the grade popover (the single
-   *  grade front door). Receives the current local edits so nothing is lost on
-   *  the jump from the sheet to the popover. */
-  onEditGrade: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
   onApply: (filters: ClimbFilters, boardFilters: ClimbBoardFilterState) => void;
 };
 
@@ -145,13 +140,11 @@ export function ClimbFilterSheet({
   currentFilters,
   currentBoardFilters,
   searchName,
-  onEditGrade,
   onApply,
 }: ClimbFilterSheetProps) {
   const { t } = useTranslation('climbs');
   const theme = useTheme();
   const { systemColors } = theme;
-  const { formatGrade } = useGradeFormat();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
@@ -292,6 +285,9 @@ export function ClimbFilterSheet({
     (value: GradeAccuracyValue | 'off') => setFiltersPatch({ gradeAccuracy: value === 'off' ? undefined : value }),
     [setFiltersPatch],
   );
+  const handleGradeChange = useCallback((grade: { minGradeId: number | undefined; maxGradeId: number | undefined }) => {
+    setLocalFilters((previous) => ({ ...previous, minGrade: grade.minGradeId, maxGrade: grade.maxGradeId }));
+  }, []);
   // Climb-type toggle (main's #2496 control). A 3-way control means there's no
   // UI path to "neither", so the never-both-off invariant is structural (see
   // toClimbSearchInput). "Both" = show everything; boulders-only is the default.
@@ -438,31 +434,16 @@ export function ClimbFilterSheet({
       >
         {/* PRIMARY — the levers the analytics say carry the product. Always open. */}
         <View style={styles.primary}>
-          {/* Grade — one tappable row that opens the colorized popover (the
-              single grade front door, shared with the bottom-bar pill). */}
-          <Pressable
-            onPress={() => onEditGrade(localFilters, localBoardFilters)}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.filter.gradeRange')}
-            style={({ pressed }) => [
-              styles.tappableRow,
-              { backgroundColor: systemColors.tertiaryBackground as string },
-              pressed && styles.tappableRowPressed,
-            ]}
-          >
-            <Text variant="body">{t('mobile.filter.gradeRange')}</Text>
-            <View style={styles.tappableRowTrailing}>
-              <Text variant="footnote" style={styles.tappableRowValue}>
-                {formatGradePillLabel(
-                  { minGradeId: localFilters.minGrade, maxGradeId: localFilters.maxGrade },
-                  grades ?? [],
-                  formatGrade,
-                  t,
-                )}
-              </Text>
-              <Icon name="chevron.right" size={14} color={iosSystemColors.systemGray4} />
-            </View>
-          </Pressable>
+          {/* Grade — inline and sheet-local, so dismissing the filter sheet does
+              not commit grade edits until Apply. */}
+          <GradeRangeRail
+            grades={grades ?? []}
+            bound={{ minGradeId: localFilters.minGrade, maxGradeId: localFilters.maxGrade }}
+            onChange={handleGradeChange}
+            dismissible={false}
+            showTitle
+            style={styles.inlineGradeRail}
+          />
 
           {/* Quality toggles, grouped as one iOS inset card. */}
           <View style={styles.subsectionGap} />
@@ -754,6 +735,9 @@ const styles = StyleSheet.create({
   },
   tappableRowValue: {
     opacity: 0.55,
+  },
+  inlineGradeRail: {
+    marginTop: spacing[2],
   },
   footer: {
     paddingHorizontal: spacing[4],

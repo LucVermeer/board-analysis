@@ -20,7 +20,6 @@ import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
-import { GradePopover } from '../../../src/components/search/GradePopover';
 import { ClimbSearchBar } from '../../../src/components/search/ClimbSearchBar';
 import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
 import { SearchFab } from '../../../src/components/search/SearchFab';
@@ -129,9 +128,17 @@ function ClimbListInner() {
   const [showBoardDetail, setShowBoardDetail] = useState(false);
   const setActiveBoard = useSetActiveBoard();
 
-  const handleOpenFilters = useCallback(() => setShowFilters(true), []);
+  const handleOpenFilters = useCallback(() => {
+    setShowGrade(false);
+    setShowFilters(true);
+  }, []);
   const handleDismissFilters = useCallback(() => setShowFilters(false), []);
-  const handleOpenGrade = useCallback(() => setShowGrade(true), []);
+  const handleOpenGrade = useCallback(() => {
+    Keyboard.dismiss();
+    searchHeaderRef.current?.blur();
+    setIsSearchFocused(false);
+    setShowGrade(true);
+  }, []);
   const handleDismissGrade = useCallback(() => setShowGrade(false), []);
 
   const handleSearchChange = useCallback(
@@ -156,7 +163,10 @@ function ClimbListInner() {
     [setName],
   );
 
-  const handleSearchFocus = useCallback(() => setIsSearchFocused(true), []);
+  const handleSearchFocus = useCallback(() => {
+    setShowGrade(false);
+    setIsSearchFocused(true);
+  }, []);
   const handleSearchBlur = useCallback(() => setIsSearchFocused(false), []);
 
   useEffect(() => {
@@ -594,7 +604,10 @@ function ClimbListInner() {
           filters={filters}
           boardFilters={boardFilters}
           activeFilterCount={activeFilterCount}
+          gradeRailVisible={showGrade}
           onOpenGrade={handleOpenGrade}
+          onCloseGrade={handleDismissGrade}
+          onGradeChange={handleGradeChange}
           onOpenFilters={handleOpenFilters}
           onPatchFilters={patchFilters}
           onPatchBoardFilters={patchBoardFilters}
@@ -623,23 +636,14 @@ function ClimbListInner() {
             bound={gradeBound}
             grades={grades}
             activeFilterCount={activeFilterCount}
+            gradeRailVisible={showGrade}
             onOpenGrade={handleOpenGrade}
+            onCloseGrade={handleDismissGrade}
+            onGradeChange={handleGradeChange}
             onOpenFilters={handleOpenFilters}
             toolbarBottom={toolbarBottom}
           />
         </>
-      ) : null}
-
-      {showGrade ? (
-        // sendDifficultyIds is omitted for now → the rail centers on the V5–V7
-        // band default; logbook-personalized "my grade" centering is wired in a
-        // later phase once the screen sources the climber's recent send grades.
-        <GradePopover
-          boardName={boardName}
-          grade={gradeBound}
-          onChange={handleGradeChange}
-          onDismiss={handleDismissGrade}
-        />
       ) : null}
 
       {showFilters ? (
@@ -649,15 +653,6 @@ function ClimbListInner() {
           currentFilters={filters}
           currentBoardFilters={boardFilters}
           searchName={name}
-          onEditGrade={(editedFilters, editedBoardFilters) => {
-            // Commit the sheet's in-progress edits before jumping to the grade
-            // popover, so toggling e.g. Benchmarks then tapping Grade doesn't
-            // discard them. (No recent-filter side effect — that's Apply's job.)
-            setFilters(editedFilters);
-            setBoardFilters(editedBoardFilters);
-            setShowFilters(false);
-            setShowGrade(true);
-          }}
           onApply={handleApplyFilters}
         />
       ) : null}

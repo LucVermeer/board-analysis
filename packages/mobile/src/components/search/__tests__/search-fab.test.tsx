@@ -29,10 +29,11 @@ vi.mock('react-native-reanimated', () => ({
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('expo-router', () => ({ useFocusEffect: () => {} }));
 vi.mock('../../../providers/theme-provider', () => ({
-  useTheme: () => ({ systemColors: { label: '#000', fill: '#eee' } }),
+  useTheme: () => ({ systemColors: { label: '#000', fill: '#eee' }, brandColors: { primary: '#8C4A52' } }),
 }));
 vi.mock('../../../theme/tokens', () => ({ spacing: { 2: 8 } }));
 vi.mock('../../../theme/layout', () => ({ TOOLBAR_FAB_SIZE: 56, TOOLBAR_SIDE_MARGIN: 16 }));
+vi.mock('../../../theme/colors', () => ({ withAlpha: (color: string, alpha: number) => `${color}@${alpha}` }));
 vi.mock('../../../lib/haptics', () => ({ hapticLight: haptics.light, hapticSelection: haptics.selection }));
 vi.mock('../../../hooks/use-reduce-motion', () => ({ useReduceMotion: () => false }));
 vi.mock('../../../lib/search-expanded-state', () => ({ setSearchExpanded: signal.setSearchExpanded }));
@@ -65,6 +66,7 @@ vi.mock('../../GlassIconButton', () => ({
 
 vi.mock('../GradePill', () => ({ GradePill: () => createElement('div', { 'data-gradepill': 'true' }) }));
 vi.mock('../FilterButton', () => ({ FilterButton: () => createElement('div', { 'data-filterbutton': 'true' }) }));
+vi.mock('../../grade', () => ({ GradeRangeRail: () => createElement('div', { 'data-grade-rail': 'true' }) }));
 vi.mock('../../GlassCluster', () => ({
   GlassCluster: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
 }));
@@ -83,7 +85,10 @@ function makeProps(over: Partial<Parameters<typeof SearchFab>[0]> = {}) {
     bound: {} as GradeBound,
     grades: [],
     activeFilterCount: 0,
+    gradeRailVisible: false,
     onOpenGrade: vi.fn(),
+    onCloseGrade: vi.fn(),
+    onGradeChange: vi.fn(),
     onOpenFilters: vi.fn(),
     toolbarBottom: 100,
     ...over,
@@ -132,5 +137,11 @@ describe('SearchFab', () => {
     expect(fab(container).getAttribute('data-badge')).toBe('4');
     fireEvent.click(fab(container));
     expect(fab(container).getAttribute('data-badge')).toBe('');
+  });
+
+  it('renders the grade rail above the expanded row when requested', () => {
+    const { container } = render(<SearchFab {...makeProps({ gradeRailVisible: true })} />);
+    fireEvent.click(fab(container));
+    expect(container.querySelector('[data-grade-rail]')).not.toBeNull();
   });
 });

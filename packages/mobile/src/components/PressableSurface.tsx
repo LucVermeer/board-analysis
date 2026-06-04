@@ -5,6 +5,7 @@ import {
   type AccessibilityRole,
   type AccessibilityState,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -28,6 +29,7 @@ type PressableSurfaceProps = {
   onPressIn?: (event: GestureResponderEvent) => void;
   onPressOut?: (event: GestureResponderEvent) => void;
   onLongPress?: (event: GestureResponderEvent) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
   disabled?: boolean;
   /** iOS feedback style (default 'scale'). Android uses a ripple either way. */
   feedback?: PressFeedback;
@@ -61,6 +63,7 @@ export function PressableSurface({
   onPressIn,
   onPressOut,
   onLongPress,
+  onLayout,
   disabled = false,
   feedback = 'scale',
   scaleTo = 0.96,
@@ -113,6 +116,7 @@ export function PressableSurface({
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         onLongPress={onLongPress}
+        onLayout={onLayout}
         disabled={disabled}
         android_ripple={androidRipple(rippleColor ?? brandColors.tint, rippleBorderless)}
         hitSlop={hitSlop}
@@ -133,6 +137,7 @@ export function PressableSurface({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={onLongPress}
+      onLayout={onLayout}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole={accessibilityRole}

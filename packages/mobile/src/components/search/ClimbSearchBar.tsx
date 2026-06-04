@@ -13,7 +13,7 @@
 // can pad the list to rest below it (handles the chips row appearing/vanishing).
 
 import { type Ref, useCallback } from 'react';
-import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
+import { Pressable, type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
@@ -28,6 +28,7 @@ import { GlassIconButton } from '../GlassIconButton';
 import { GradePill } from './GradePill';
 import { FilterButton } from './FilterButton';
 import { ActiveFilterChips } from './ActiveFilterChips';
+import { GradeRangeRail } from '../grade';
 
 type ClimbSearchBarProps = {
   layout: SearchLayout;
@@ -44,7 +45,10 @@ type ClimbSearchBarProps = {
   filters: ClimbFilters;
   boardFilters: ClimbBoardFilterState;
   activeFilterCount: number;
+  gradeRailVisible: boolean;
   onOpenGrade: () => void;
+  onCloseGrade: () => void;
+  onGradeChange: (grade: GradeBound) => void;
   onOpenFilters: () => void;
   onPatchFilters: (patch: Partial<ClimbFilters>) => void;
   onPatchBoardFilters: (patch: Partial<ClimbBoardFilterState>) => void;
@@ -68,7 +72,10 @@ export function ClimbSearchBar({
   filters,
   boardFilters,
   activeFilterCount,
+  gradeRailVisible,
   onOpenGrade,
+  onCloseGrade,
+  onGradeChange,
   onOpenFilters,
   onPatchFilters,
   onPatchBoardFilters,
@@ -92,42 +99,79 @@ export function ClimbSearchBar({
     onCreate();
   }, [onCreate]);
 
+  const handleGradePress = useCallback(() => {
+    hapticLight();
+    if (gradeRailVisible) {
+      onCloseGrade();
+    } else {
+      onOpenGrade();
+    }
+  }, [gradeRailVisible, onCloseGrade, onOpenGrade]);
+
   return (
-    <View pointerEvents="box-none" style={[styles.container, { paddingTop: insets.top }]} onLayout={handleLayout}>
-      <View pointerEvents="box-none" style={styles.row}>
-        {canCreate ? (
-          <GlassIconButton
-            iconName="plus"
-            iconColor={systemColors.label as string}
-            onPress={handleCreate}
-            accessibilityLabel={t('mobile.create.fab.ariaLabel')}
-            fallbackColor={systemColors.fill}
+    <View pointerEvents="box-none" style={styles.container}>
+      {showControls && gradeRailVisible ? (
+        <Pressable
+          style={styles.dismissLayer}
+          onPress={onCloseGrade}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
+      ) : null}
+      <View pointerEvents="box-none" style={[styles.chrome, { paddingTop: insets.top }]} onLayout={handleLayout}>
+        <View pointerEvents="box-none" style={styles.row}>
+          {canCreate ? (
+            <GlassIconButton
+              iconName="plus"
+              iconColor={systemColors.label as string}
+              onPress={handleCreate}
+              accessibilityLabel={t('mobile.create.fab.ariaLabel')}
+              fallbackColor={systemColors.fill}
+            />
+          ) : null}
+
+          <SearchHeader
+            ref={searchFieldRef}
+            initialValue={searchInitialValue}
+            placeholder={searchPlaceholder}
+            onChangeText={onSearchChange}
+            onFocus={onSearchFocus}
+            onBlur={onSearchBlur}
+          />
+
+          {showControls ? (
+            <GradePill
+              bound={bound}
+              grades={grades}
+              onPress={handleGradePress}
+              expanded={gradeRailVisible}
+              maxWidth={132}
+            />
+          ) : null}
+
+          {showControls ? <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} /> : null}
+        </View>
+
+        {showControls && gradeRailVisible ? (
+          <GradeRangeRail
+            grades={grades}
+            bound={bound}
+            onChange={onGradeChange}
+            onRequestClose={onCloseGrade}
+            style={styles.gradeRail}
           />
         ) : null}
 
-        <SearchHeader
-          ref={searchFieldRef}
-          initialValue={searchInitialValue}
-          placeholder={searchPlaceholder}
-          onChangeText={onSearchChange}
-          onFocus={onSearchFocus}
-          onBlur={onSearchBlur}
-        />
-
-        {showControls ? <GradePill bound={bound} grades={grades} onPress={onOpenGrade} maxWidth={132} /> : null}
-
-        {showControls ? <FilterButton activeFilterCount={activeFilterCount} onPress={onOpenFilters} /> : null}
+        {showControls && filtersActive ? (
+          <ActiveFilterChips
+            filters={filters}
+            boardFilters={boardFilters}
+            onPatchFilters={onPatchFilters}
+            onPatchBoardFilters={onPatchBoardFilters}
+            style={styles.chipsRow}
+          />
+        ) : null}
       </View>
-
-      {showControls && filtersActive ? (
-        <ActiveFilterChips
-          filters={filters}
-          boardFilters={boardFilters}
-          onPatchFilters={onPatchFilters}
-          onPatchBoardFilters={onPatchBoardFilters}
-          style={styles.chipsRow}
-        />
-      ) : null}
     </View>
   );
 }
@@ -138,7 +182,21 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     zIndex: 10,
+  },
+  dismissLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    // Below the chrome (zIndex 1) so taps on the grade rail / row reach their
+    // controls; this layer only catches taps in the empty area to dismiss.
+    zIndex: 0,
+  },
+  chrome: {
+    zIndex: 1,
   },
   row: {
     flexDirection: 'row',
@@ -150,5 +208,9 @@ const styles = StyleSheet.create({
   chipsRow: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[2],
+  },
+  gradeRail: {
+    marginHorizontal: spacing[4],
+    marginBottom: spacing[2],
   },
 });

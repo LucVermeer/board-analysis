@@ -50,7 +50,7 @@ export type LogAscentInput = {
   setIds?: string;
   sessionId?: string | null;
   // Climb's consensus grade name (just `Climb.difficulty`). Forwarded to
-  // InlineGradePicker so the consensus chip is centered and outlined
+  // GradeSingleSelectRail so the consensus chip is centered and outlined
   // without being preselected. Optional — callers that don't have a
   // freshly fetched climb can omit it.
   consensusGradeName?: string;
