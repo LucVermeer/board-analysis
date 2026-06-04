@@ -1,5 +1,4 @@
 export { CreateClimbScreen } from './CreateClimbScreen';
-export { CreateClimbFab } from './CreateClimbFab';
 export { BrushBar, type SaveButtonState } from './BrushBar';
 export { HoldRoleSheet } from './HoldRoleSheet';
 export { CreateClimbSettingsSheet } from './CreateClimbSettingsSheet';

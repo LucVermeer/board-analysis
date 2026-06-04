@@ -23,6 +23,9 @@ export default function ClimbsLayout() {
         name="index"
         options={{
           title: t('mobile.nav.climbs'),
+          // The climb list owns its own floating glass search row, so it hides
+          // the native header (which otherwise occluded the in-body controls).
+          headerShown: false,
         }}
       />
       <Stack.Screen

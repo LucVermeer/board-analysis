@@ -6,7 +6,7 @@ import { hapticLight } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
+import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
 
 /**
  * Floating "create playlist" button on the Discover library (mirrors web's
@@ -16,7 +16,7 @@ import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-
 export function CreatePlaylistFab({ onPress }: { onPress: () => void }) {
   const { t } = useTranslation('playlists');
   const insets = useSafeAreaInsets();
-  const bottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom + spacing[3];
+  const bottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[3];
 
   return (
     <Pressable

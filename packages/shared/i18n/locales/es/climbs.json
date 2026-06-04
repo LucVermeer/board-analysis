@@ -1,6 +1,6 @@
 {
-  "sends_one": "{{count}} encadene",
-  "sends_other": "{{count}} encadenes",
+  "sends_one": "{{formattedCount}} encadene",
+  "sends_other": "{{formattedCount}} encadenes",
   "metadata": {
     "list": {
       "title": "Bloques de {{boardName}} a {{angle}}°",
@@ -659,7 +659,12 @@
       "gradeClear": "Cualquiera",
       "gradeHint": "Toca un grado · toca otro para un rango",
       "filters": "Filtros",
-      "removeFilter": "Quitar filtro {{name}}"
+      "removeFilter": "Quitar filtro {{name}}",
+      "fab": {
+        "open": "Buscar",
+        "close": "Cerrar búsqueda",
+        "done": "Listo"
+      }
     },
     "climbRow": {
       "addToQueue": "Añadir a la cola",

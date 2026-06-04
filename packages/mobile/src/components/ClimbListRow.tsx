@@ -258,7 +258,7 @@ const ClimbListRow = React.memo(function ClimbListRow({
       parts.push(t('createClimbForm.draftBadge'));
     }
     if (!climb.is_draft && climb.ascensionist_count) {
-      parts.push(formatSends(climb.ascensionist_count));
+      parts.push(formatSends(climb.ascensionist_count, t));
     }
     const qualityNum = parseFloat(climb.quality_average);
     if (qualityNum > 0) {

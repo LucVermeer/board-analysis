@@ -4,7 +4,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTim
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
-import { iosSystemColors, iosDarkColors, iosLightColors } from '../theme/ios-colors';
+import { iosSystemColors } from '../theme/ios-colors';
 import { useBluetoothConnectedStatus } from '../lib/ble/bluetooth-status-store';
 import { brandColors, withAlpha } from '../theme/colors';
 import { material } from '../theme/tokens';
@@ -40,16 +40,25 @@ const BLINK_DURATION_MS = 700;
 
 const isAndroid = Platform.OS === 'android';
 
+// Dark-tinted glass tab bar: a translucent dark tint over the Liquid Glass so the
+// bar stays dark enough for the white/grey tab icons regardless of app theme,
+// while letting more of the blurred content through than the original near-opaque
+// tint — it no longer has to match the (now-removed) dark queue bar. Solid
+// fallback for Reduce Transparency and the Android surface.
+const TAB_BAR_DARK_TINT = 'rgba(12, 12, 12, 0.65)';
+const TAB_BAR_DARK_SOLID = '#0C0C0C';
+// Spotify tab tints on the dark bar: crisp white active, mid-grey inactive.
+const TAB_BAR_INACTIVE_TINT = '#9A9A9A';
+
 export default function BlurTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { colorScheme, systemColors } = useTheme();
-  const isDark = colorScheme === 'dark';
+  const { systemColors } = useTheme();
   const isBluetoothConnected = useBluetoothConnectedStatus();
   const { isOpen: sessionScreenOpen, toggle: toggleSessionScreen } = useSessionScreen();
   const { sessionId } = useQueue();
 
-  const activeTint = iosSystemColors.systemBlue;
-  const inactiveTint = isDark ? iosDarkColors.systemGray : iosLightColors.inactiveGray;
+  const activeTint = iosSystemColors.white;
+  const inactiveTint = TAB_BAR_INACTIVE_TINT;
   const totalHeight = TAB_BAR_HEIGHT + insets.bottom;
 
   // The Record tab opacity-pulses when a session is alive but the user has
@@ -161,7 +170,7 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
   // — Material doesn't use translucent/blurred bottom navigation.
   const androidSurfaceStyle = isAndroid
     ? {
-        backgroundColor: systemColors.background,
+        backgroundColor: TAB_BAR_DARK_SOLID,
         elevation: material.navBar.surfaceElevation,
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: systemColors.separator,
@@ -170,7 +179,15 @@ export default function BlurTabBar({ state, descriptors, navigation }: BottomTab
 
   return (
     <View style={[styles.container, { height: totalHeight, paddingBottom: insets.bottom }, androidSurfaceStyle]}>
-      {!isAndroid && <GlassSurface glassEffectStyle="regular" style={StyleSheet.absoluteFill} pointerEvents="none" />}
+      {!isAndroid && (
+        <GlassSurface
+          glassEffectStyle="regular"
+          tintColor={TAB_BAR_DARK_TINT}
+          fallbackColor={TAB_BAR_DARK_SOLID}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      )}
       {renderContent()}
     </View>
   );

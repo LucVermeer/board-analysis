@@ -1,6 +1,6 @@
 {
-  "sends_one": "{{count}} send",
-  "sends_other": "{{count}} sends",
+  "sends_one": "{{formattedCount}} send",
+  "sends_other": "{{formattedCount}} sends",
   "metadata": {
     "list": {
       "title": "{{boardName}} climbs at {{angle}}°",
@@ -659,7 +659,12 @@
       "gradeClear": "Any",
       "gradeHint": "Tap a grade · tap a second for a range",
       "filters": "Filters",
-      "removeFilter": "Remove {{name}} filter"
+      "removeFilter": "Remove {{name}} filter",
+      "fab": {
+        "open": "Search",
+        "close": "Close search",
+        "done": "Done"
+      }
     },
     "climbRow": {
       "addToQueue": "Add to queue",

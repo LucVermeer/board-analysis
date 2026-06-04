@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, RefreshControl, Image, Keyboard } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { Climb, BoardName } from '@boardsesh/shared-schema';
 import {
@@ -18,25 +18,26 @@ import { ActivityIndicator } from '../../../src/components/ActivityIndicator';
 import { Text } from '../../../src/components/Text';
 import { Icon } from '../../../src/components/Icon';
 import { ClimbFilterSheet, hasActiveFilters, type ClimbFilters } from '../../../src/components/ClimbFilterSheet';
-import { CreateClimbFab } from '../../../src/components/create-climb/CreateClimbFab';
 import { GradePopover } from '../../../src/components/search/GradePopover';
-import { SearchBottomBar } from '../../../src/components/search/SearchBottomBar';
-import { StickyFilterStrip } from '../../../src/components/search/StickyFilterStrip';
+import { ClimbSearchBar } from '../../../src/components/search/ClimbSearchBar';
+import { ClimbTopChrome } from '../../../src/components/search/ClimbTopChrome';
+import { SearchFab } from '../../../src/components/search/SearchFab';
+import { BoardDetailSheet } from '../../../src/components/board-discovery/BoardDetailSheet';
 import { useDrawerHost } from '../../../src/providers/drawer-host-provider';
 import { useTheme } from '../../../src/providers/theme-provider';
 import { useQueue } from '../../../src/providers/queue-provider';
 import { ClimbSearchProvider, useClimbSearch, type GradeBound } from '../../../src/providers/climb-search-provider';
 import { useBoardProvider } from '@boardsesh/board-react';
 import { randomUUID } from 'expo-crypto';
-import { SearchHeader, type SearchHeaderHandle } from '../../../src/components/SearchHeader';
+import { type SearchHeaderHandle } from '../../../src/components/SearchHeader';
 import { RecentFilterPills } from '../../../src/components/RecentFilterPills';
-import { TAB_BAR_HEIGHT, BAR_CONTENT_HEIGHT } from '../../../src/theme/layout';
-import { useSearchClimbs, useSearchClimbsCount, useGrades } from '../../../src/lib/graphql/hooks';
+import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE, TOOLBAR_GAP_ABOVE_TABBAR } from '../../../src/theme/layout';
+import { useSearchClimbs, useGrades } from '../../../src/lib/graphql/hooks';
 import { SEARCH_CLIMBS, type SearchClimbsQueryResponse } from '../../../src/lib/graphql/operations';
 import { getHttpClient } from '../../../src/lib/graphql/client';
 import { usePlaylistActivation } from '../../../src/lib/playlists/use-playlist-activation';
 import { toQueueClimb, toQueueClimbs } from '../../../src/lib/climb-types';
-import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
+import { useActiveBoard, useSetActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useAuth } from '../../../src/providers/auth-provider';
 import { accumulateClimbs } from '../../../src/lib/climb-pagination';
 import { getBoardRenderData } from '../../../src/lib/board-details';
@@ -54,9 +55,6 @@ import { iosSystemColors } from '../../../src/theme/ios-colors';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
-// Approximate height of the floating bottom search bar, so the list's last row
-// clears it. Tuned to the bar's content (control row + padding).
-const SEARCH_BAR_HEIGHT = 64;
 // Debounce persisting the per-board last search so rapid grade nudges don't
 // thrash secure-store.
 const SAVE_DEBOUNCE_MS = 600;
@@ -70,7 +68,6 @@ export default function ClimbList() {
 }
 
 function ClimbListInner() {
-  const navigation = useNavigation();
   const router = useRouter();
   const { t } = useTranslation('climbs');
   const { openClimbActions, openAddToPlaylist } = useDrawerHost();
@@ -97,14 +94,15 @@ function ClimbListInner() {
   const searchHeaderRef = useRef<SearchHeaderHandle>(null);
   const insets = useSafeAreaInsets();
 
-  // Derive the floating bar's position and the list's bottom reservation from
-  // the SAME parts so they can't drift (the last row must clear the bar in the
-  // common active-climb + bottom-bar state). The queue mini-player only renders
-  // when a climb is active, so reserve for it only then.
-  const queueBarReserve = hasActiveClimb ? BAR_CONTENT_HEIGHT + 8 : 0;
-  const searchBarBottom = insets.bottom + TAB_BAR_HEIGHT + 8 + queueBarReserve;
-  const searchBarReserve = layout === 'bottom-bar' ? SEARCH_BAR_HEIGHT + 8 : 0;
-  const listPaddingBottom = insets.bottom + TAB_BAR_HEIGHT + queueBarReserve + searchBarReserve;
+  // One floating toolbar (search · capsule · tick) replaces the stacked queue
+  // mini-player + search fab. The capsule + tick live in the global toolbar; the
+  // search fab floats into its reserved left gutter at the same `toolbarBottom`.
+  // The toolbar is a single fixed-height row whether or not a climb is active, so
+  // the reserve is constant on the bottom-bar layout (and on any layout while a
+  // climb is active, since the global capsule + tick still float there).
+  const toolbarBottom = insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_GAP_ABOVE_TABBAR;
+  const listPaddingBottom =
+    insets.bottom + TAB_BAR_HEIGHT + (layout === 'bottom-bar' || hasActiveClimb ? TOOLBAR_RESERVE : 0);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -112,18 +110,13 @@ function ClimbListInner() {
   const [showFilters, setShowFilters] = useState(false);
   const [showGrade, setShowGrade] = useState(false);
   const [recentFilters, setRecentFilters] = useState<RecentFilter[]>([]);
-
-  // The nav header mounts SearchHeader lazily, so an imperative setText right
-  // after an async restore can no-op. Instead we remount the header with the
-  // restored text as `initialValue`, bumping this epoch only on restore /
-  // recent-pill apply (not on keystrokes), so the field always reflects the
-  // committed name.
-  const [headerEpoch, setHeaderEpoch] = useState(0);
-  const headerInitialTextRef = useRef('');
-  const syncHeaderText = useCallback((value: string) => {
-    headerInitialTextRef.current = value;
-    setHeaderEpoch((epoch) => epoch + 1);
-  }, []);
+  // Measured height of the floating glass search row (incl. the top safe-area
+  // inset). The list pads its top by this so the first row rests below the bar
+  // and the rest scroll under it; re-measures when the chips row appears.
+  const [searchBarHeight, setSearchBarHeight] = useState(insets.top + 60);
+  // Board-detail sheet, opened from the bottom-bar experiment's top board capsule.
+  const [showBoardDetail, setShowBoardDetail] = useState(false);
+  const setActiveBoard = useSetActiveBoard();
 
   const handleOpenFilters = useCallback(() => setShowFilters(true), []);
   const handleDismissFilters = useCallback(() => setShowFilters(false), []);
@@ -141,28 +134,19 @@ function ClimbListInner() {
     [setName],
   );
 
+  // Commit the typed text immediately, bypassing the debounce — used by the
+  // bottom-bar "done typing" fab so the search runs the moment it's tapped.
+  const handleSearchSubmit = useCallback(
+    (text: string) => {
+      setSearchTextLength(text.length);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      setName(text);
+    },
+    [setName],
+  );
+
   const handleSearchFocus = useCallback(() => setIsSearchFocused(true), []);
   const handleSearchBlur = useCallback(() => setIsSearchFocused(false), []);
-
-  // Set up the header once — SearchHeader (climb-name search) keeps its own
-  // text state. Filters now live in the bottom bar / sticky strip gear, so the
-  // header carries just the name field.
-  useEffect(() => {
-    navigation.setOptions({
-      headerTitle: () => (
-        <SearchHeader
-          key={headerEpoch}
-          ref={searchHeaderRef}
-          initialValue={headerInitialTextRef.current}
-          placeholder={t('search.placeholders.climbs')}
-          onChangeText={handleSearchChange}
-          onFocus={handleSearchFocus}
-          onBlur={handleSearchBlur}
-        />
-      ),
-      headerRight: undefined,
-    });
-  }, [navigation, t, handleSearchChange, handleSearchFocus, handleSearchBlur, headerEpoch]);
 
   useEffect(() => {
     return () => {
@@ -218,12 +202,12 @@ function ClimbListInner() {
         if (cancelled) return;
         if (saved) {
           replaceSearch(saved.filters, saved.searchText, saved.boardFilters);
-          syncHeaderText(saved.searchText);
+          searchHeaderRef.current?.setText(saved.searchText);
         } else {
           // Never-searched board → clean default band, no grade/filters/name
           // inherited from the board the climber came from.
           replaceSearch(DEFAULT_CLIMB_FILTER_STATE, '', DEFAULT_CLIMB_BOARD_FILTER_STATE);
-          syncHeaderText('');
+          searchHeaderRef.current?.setText('');
         }
         restoredKeyRef.current = boardKey;
         setRestoredKey(boardKey);
@@ -236,7 +220,7 @@ function ClimbListInner() {
       cancelled = true;
     };
     // Restore is keyed on the board only — re-running on filter changes would
-    // clobber the user's edits. replaceSearch/syncHeaderText are stable.
+    // clobber the user's edits. replaceSearch is stable; searchHeaderRef is a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardKey, isAuthenticated]);
 
@@ -296,23 +280,6 @@ function ClimbListInner() {
       ),
     [boardName, layoutId, sizeId, setIds, angle, name, pageNumber, filters, boardFilters],
   );
-
-  // Page-independent input for the result count so the count query key stays
-  // stable while the user scrolls (totalCount is the same across pages).
-  const countInput = useMemo(
-    () =>
-      mergeBoardFilters(
-        toClimbSearchInput(
-          filters,
-          { boardName, layoutId, sizeId, setIds, angle },
-          { page: 1, pageSize: PAGE_SIZE },
-          { name },
-        ),
-        boardFilters,
-      ),
-    [boardName, layoutId, sizeId, setIds, angle, name, filters, boardFilters],
-  );
-  const { data: totalCount } = useSearchClimbsCount(countInput, searchReady);
 
   const {
     data: searchResult,
@@ -417,13 +384,13 @@ function ClimbListInner() {
     (pillFilters: ClimbFilters, pillSearchText: string) => {
       replaceSearch(pillFilters, pillSearchText);
       setSearchTextLength(pillSearchText.length);
-      syncHeaderText(pillSearchText);
+      searchHeaderRef.current?.setText(pillSearchText);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       Keyboard.dismiss();
       searchHeaderRef.current?.blur();
       setIsSearchFocused(false);
     },
-    [replaceSearch, syncHeaderText],
+    [replaceSearch],
   );
 
   const handleClearRecentFilters = useCallback(() => {
@@ -439,7 +406,18 @@ function ClimbListInner() {
     [setGrade],
   );
 
-  const showRecentPills = isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
+  const handleCreateClimb = useCallback(() => {
+    router.push({
+      pathname: '/(tabs)/climbs/create',
+      params: { boardName, layoutId: String(layoutId), sizeId: String(sizeId), setIds, angle: String(angle) },
+    });
+  }, [router, boardName, layoutId, sizeId, setIds, angle]);
+
+  // Recent-filter pills live in the list header on search focus — only meaningful
+  // in the sticky-strip layout (in bottom-bar the search field sits behind a
+  // scrim/keyboard, so the list header isn't reachable while typing).
+  const showRecentPills =
+    layout === 'sticky-strip' && isSearchFocused && searchTextLength === 0 && recentFilters.length > 0;
   // Show the spinner (not a premature "no climbs" empty state) while a board is
   // resolving or its per-board restore hasn't landed yet.
   const isInitialLoading =
@@ -510,30 +488,17 @@ function ClimbListInner() {
 
   return (
     <View style={[styles.container, { backgroundColor: systemColors.background }]}>
-      {layoutLoaded && layout === 'sticky-strip' ? (
-        <StickyFilterStrip
-          bound={gradeBound}
-          grades={grades}
-          filters={filters}
-          boardFilters={boardFilters}
-          count={totalCount}
-          activeFilterCount={activeFilterCount}
-          onOpenGrade={handleOpenGrade}
-          onOpenFilters={handleOpenFilters}
-          onPatchFilters={patchFilters}
-          onPatchBoardFilters={patchBoardFilters}
-        />
-      ) : null}
-
       <FlashList
         data={accumulatedClimbs}
         renderItem={renderClimbItem}
         keyExtractor={keyExtractor}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingBottom: listPaddingBottom }}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={{ paddingTop: searchBarHeight, paddingBottom: listPaddingBottom }}
+        scrollIndicatorInsets={{ top: searchBarHeight }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={brandColors.primary} />
         }
@@ -572,20 +537,54 @@ function ClimbListInner() {
         }
       />
 
-      {layoutLoaded && layout === 'bottom-bar' ? (
-        <SearchBottomBar
+      {layout === 'sticky-strip' ? (
+        <ClimbSearchBar
+          layout={layout}
+          searchFieldRef={searchHeaderRef}
+          searchInitialValue={name}
+          searchPlaceholder={t('search.placeholders.climbs')}
+          onSearchChange={handleSearchChange}
+          onSearchFocus={handleSearchFocus}
+          onSearchBlur={handleSearchBlur}
           bound={gradeBound}
           grades={grades}
           filters={filters}
           boardFilters={boardFilters}
-          count={totalCount}
           activeFilterCount={activeFilterCount}
           onOpenGrade={handleOpenGrade}
           onOpenFilters={handleOpenFilters}
           onPatchFilters={patchFilters}
           onPatchBoardFilters={patchBoardFilters}
-          bottomOffset={searchBarBottom}
+          canCreate={isAuthenticated && hasBoardConfig}
+          onCreate={handleCreateClimb}
+          onHeightChange={setSearchBarHeight}
         />
+      ) : null}
+
+      {layoutLoaded && layout === 'bottom-bar' ? (
+        <>
+          <ClimbTopChrome
+            canCreate={isAuthenticated && hasBoardConfig}
+            onCreate={handleCreateClimb}
+            onOpenBoardDetail={() => setShowBoardDetail(true)}
+            onHeightChange={setSearchBarHeight}
+          />
+          <SearchFab
+            searchFieldRef={searchHeaderRef}
+            searchInitialValue={name}
+            searchPlaceholder={t('search.placeholders.climbs')}
+            onSearchChange={handleSearchChange}
+            onSearchSubmit={handleSearchSubmit}
+            onSearchFocus={handleSearchFocus}
+            onSearchBlur={handleSearchBlur}
+            bound={gradeBound}
+            grades={grades}
+            activeFilterCount={activeFilterCount}
+            onOpenGrade={handleOpenGrade}
+            onOpenFilters={handleOpenFilters}
+            toolbarBottom={toolbarBottom}
+          />
+        </>
       ) : null}
 
       {showGrade ? (
@@ -620,16 +619,15 @@ function ClimbListInner() {
         />
       ) : null}
 
-      {isAuthenticated && hasBoardConfig ? (
-        <CreateClimbFab
-          onPress={() =>
-            router.push({
-              pathname: '/(tabs)/climbs/create',
-              params: { boardName, layoutId: String(layoutId), sizeId: String(sizeId), setIds, angle: String(angle) },
-            })
-          }
-        />
-      ) : null}
+      <BoardDetailSheet
+        board={activeBoard ?? null}
+        visible={showBoardDetail}
+        onClose={() => setShowBoardDetail(false)}
+        onSetActive={(board) => {
+          void setActiveBoard(board);
+          setShowBoardDetail(false);
+        }}
+      />
     </View>
   );
 }

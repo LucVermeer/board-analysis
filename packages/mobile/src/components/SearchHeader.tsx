@@ -1,8 +1,8 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useCallback } from 'react';
 import { View, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Icon } from './Icon';
+import { GlassSurface } from './GlassSurface';
 import { useTheme } from '../providers/theme-provider';
-import { spacing } from '../theme/tokens';
 import { iosSystemColors } from '../theme/ios-colors';
 
 export type SearchHeaderHandle = {
@@ -17,18 +17,28 @@ type SearchHeaderProps = {
   onChangeText: (text: string) => void;
   onFocus: () => void;
   onBlur: () => void;
-  /** Seeds the field on mount — used to reflect a restored per-board search
-   *  without an imperative setText race against the lazily-mounted header. */
+  /** Seeds the field on mount — reflects a restored per-board search. */
   initialValue?: string;
+  /** Capsule height (defaults to 44). The bottom toolbar passes 56 so the
+   *  expanded field matches its FABs. The radius tracks height/2 for a pill. */
+  height?: number;
 };
 
+/**
+ * The climb-name search field, styled as a Liquid Glass capsule for the
+ * climb-list search row. The glass fills a clipped pill behind the magnifier +
+ * input; it degrades to a solid `systemColors.fill` capsule on Android / Reduce
+ * Transparency / cold-start via GlassSurface. Keeps an imperative handle so the
+ * screen can blur it and seed restored text without a remount.
+ */
 export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(function SearchHeader(
-  { placeholder, onChangeText, onFocus, onBlur, initialValue = '' },
+  { placeholder, onChangeText, onFocus, onBlur, initialValue = '', height = 44 },
   ref,
 ) {
   const inputRef = useRef<TextInput>(null);
   const { systemColors } = useTheme();
   const [text, setText] = useState(initialValue);
+  const radius = height / 2;
 
   useImperativeHandle(ref, () => ({
     blur: () => inputRef.current?.blur(),
@@ -55,43 +65,57 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
   }, [onChangeText]);
 
   return (
-    <View style={[styles.container, { backgroundColor: systemColors.fill as string }]}>
-      <Icon name="search" size={16} color={iosSystemColors.systemGray} />
-      <TextInput
-        ref={inputRef}
-        value={text}
-        onChangeText={handleChange}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        placeholderTextColor={iosSystemColors.systemGray}
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="search"
-        clearButtonMode="never"
-        style={[styles.input, { color: systemColors.label as string }]}
-        accessibilityLabel={placeholder}
+    <View style={[styles.capsule, { height, borderRadius: radius }]}>
+      <GlassSurface
+        glassEffectStyle="regular"
+        fallbackColor={systemColors.fill}
+        borderRadius={radius}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
       />
-      {text.length > 0 && (
-        <Pressable onPress={handleClear} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
-          <View style={styles.clearButton}>
-            <Icon name="close" size={12} color={iosSystemColors.white} />
-          </View>
-        </Pressable>
-      )}
+      <View style={[styles.content, { height }]}>
+        <Icon name="search" size={18} color={iosSystemColors.systemGray} />
+        <TextInput
+          ref={inputRef}
+          value={text}
+          onChangeText={handleChange}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          placeholder={placeholder}
+          placeholderTextColor={iosSystemColors.systemGray}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="never"
+          style={[styles.input, { color: systemColors.label as string }]}
+          accessibilityLabel={placeholder}
+        />
+        {text.length > 0 && (
+          <Pressable onPress={handleClear} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+            <View style={styles.clearButton}>
+              <Icon name="close" size={12} color={iosSystemColors.white} />
+            </View>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  container: {
+  capsule: {
+    flex: 1,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  content: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 36,
-    borderRadius: 10,
-    paddingHorizontal: spacing[2],
-    gap: spacing[1],
-    flex: 1,
+    height: 44,
+    paddingHorizontal: 14,
+    gap: 6,
   },
   input: {
     flex: 1,

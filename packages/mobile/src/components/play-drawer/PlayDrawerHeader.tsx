@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
+import { formatSends, formatQuality } from '../../lib/format-climb-stats';
 import { Text } from '../Text';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
@@ -17,7 +18,6 @@ type PlayDrawerHeaderProps = {
   rawDifficulty?: string;
   qualityAverage: string;
   ascensionistCount: number;
-  stars: number;
   setterUsername: string;
 };
 
@@ -27,7 +27,6 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   rawDifficulty,
   qualityAverage,
   ascensionistCount,
-  stars,
   setterUsername,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
@@ -42,12 +41,10 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
     setGradeColumnWidth((previousWidth) => (previousWidth === measuredWidth ? previousWidth : measuredWidth));
   }, []);
 
-  const qualityNum = parseFloat(qualityAverage);
-  const qualityDisplay = stars > 0 ? stars.toFixed(1) : qualityNum > 0 ? qualityNum.toFixed(1) : null;
-
   const subtitleParts: string[] = [];
-  if (qualityDisplay) subtitleParts.push(`${qualityDisplay}★`);
-  subtitleParts.push(t('sends', { count: ascensionistCount }));
+  if (ascensionistCount > 0) subtitleParts.push(formatSends(ascensionistCount, t));
+  const qualityNum = parseFloat(qualityAverage);
+  if (qualityNum > 0) subtitleParts.push(`${formatQuality(qualityAverage)}★`);
   if (setterUsername) subtitleParts.push(setterUsername);
 
   return (

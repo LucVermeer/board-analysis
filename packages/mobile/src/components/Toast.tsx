@@ -2,11 +2,13 @@ import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSegments } from 'expo-router';
 import { Text } from './Text';
 import { Icon } from './Icon';
 import type { IconName } from './icon-map';
 import { brandColors, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
+import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
 import { useTheme } from '../providers/theme-provider';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
@@ -36,6 +38,15 @@ export function Toast({ toast, onDismiss }: ToastProps) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const config = VARIANT_CONFIG[toast.variant];
 
+  // Tab screens carry the tab bar + floating climb toolbar; lift the toast clear
+  // of both (a tick confirmation lands just above the tick). Elsewhere (auth,
+  // session/modal screens) there's no bottom chrome — just clear the safe area.
+  const segments = useSegments() as string[];
+  const bottomOffset =
+    segments[0] === '(tabs)'
+      ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
+      : insets.bottom + spacing[3];
+
   useEffect(() => {
     timerRef.current = setTimeout(() => onDismiss(toast.id), toast.duration);
     return () => {
@@ -52,7 +63,13 @@ export function Toast({ toast, onDismiss }: ToastProps) {
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(200)}
-      style={[styles.container, { top: insets.top + spacing[2], backgroundColor: systemColors.secondaryBackground }]}
+      style={[
+        styles.container,
+        {
+          bottom: bottomOffset,
+          backgroundColor: systemColors.secondaryBackground,
+        },
+      ]}
       accessibilityRole="alert"
       accessibilityLiveRegion="assertive"
     >

@@ -30,6 +30,14 @@ type GlassSurfaceProps = {
    * a surface wants its tint to survive on the no-glass path.
    */
   fallbackColor?: ColorValue;
+  /**
+   * Corner radius for a shaped surface (pill / circle). On iOS 26 it is handed to
+   * the native GlassView so the glass renders its own rounded shape with Apple's
+   * clean edge — DON'T clip a square glass with a parent `overflow`/`borderWidth`
+   * (an RN border on a circle seams at the 12/3/6/9 arc joins). The blur and solid
+   * fallbacks clip to the radius themselves.
+   */
+  borderRadius?: number;
   /** Blur strength for the iOS < 26 fallback. */
   blurAmount?: number;
   pointerEvents?: ViewProps['pointerEvents'];
@@ -53,6 +61,7 @@ export function GlassSurface({
   glassEffectStyle = 'regular',
   tintColor,
   fallbackColor,
+  borderRadius,
   blurAmount = 20,
   pointerEvents,
 }: GlassSurfaceProps) {
@@ -61,21 +70,22 @@ export function GlassSurface({
   const isDark = colorScheme === 'dark';
 
   const solidColor = fallbackColor ?? systemColors.secondaryBackground;
+  const radius = borderRadius != null ? { borderRadius } : null;
+  // The blur/solid paths have no native shape, so clip them to the radius here.
+  const clippedRadius = borderRadius != null ? { borderRadius, overflow: 'hidden' as const } : null;
 
   // Honour Reduce Transparency strictly — no glass, no blur.
   if (reduceTransparency) {
     return (
-      <View style={[style, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
+      <View style={[style, clippedRadius, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
         {children}
       </View>
     );
   }
 
-  // iOS 26+: real Liquid Glass. colorScheme is pinned to the resolved scheme so
-  // it tracks the in-app appearance toggle (Appearance.setColorScheme). The
-  // GlassView fills a plain wrapper that owns `pointerEvents` — same shape as
-  // the blur/solid paths, and it doesn't depend on GlassView keeping a
-  // ViewProps-compatible `pointerEvents`.
+  // iOS 26+: real Liquid Glass. The radius goes on the GlassView itself so the
+  // native glass renders a rounded shape with its own clean edge (no parent clip
+  // or RN border, which would seam at the cardinal points of a circle).
   if (Platform.OS === 'ios' && isLiquidGlassAvailable() && isGlassEffectAPIAvailable()) {
     return (
       <View style={style} pointerEvents={pointerEvents}>
@@ -83,7 +93,7 @@ export function GlassSurface({
           glassEffectStyle={glassEffectStyle}
           tintColor={tintColor}
           colorScheme={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, radius]}
         />
         {children}
       </View>
@@ -93,7 +103,7 @@ export function GlassSurface({
   // iOS < 26: frosted blur approximation (matches the existing tab-bar look).
   if (Platform.OS === 'ios') {
     return (
-      <View style={style} pointerEvents={pointerEvents}>
+      <View style={[style, clippedRadius]} pointerEvents={pointerEvents}>
         <BlurView
           blurType={isDark ? 'dark' : 'light'}
           blurAmount={blurAmount}
@@ -112,7 +122,7 @@ export function GlassSurface({
 
   // Android: solid themed surface (or an opaque tint via fallbackColor).
   return (
-    <View style={[style, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
+    <View style={[style, clippedRadius, { backgroundColor: solidColor }]} pointerEvents={pointerEvents}>
       {children}
     </View>
   );
