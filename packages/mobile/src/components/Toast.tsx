@@ -9,6 +9,7 @@ import type { IconName } from './icon-map';
 import { brandColors, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
 import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
+import { isTabsRoute } from '../lib/route-segments';
 import { useTheme } from '../providers/theme-provider';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
@@ -41,11 +42,9 @@ export function Toast({ toast, onDismiss }: ToastProps) {
   // Tab screens carry the tab bar + floating climb toolbar; lift the toast clear
   // of both (a tick confirmation lands just above the tick). Elsewhere (auth,
   // session/modal screens) there's no bottom chrome — just clear the safe area.
-  const segments = useSegments() as string[];
-  const bottomOffset =
-    segments[0] === '(tabs)'
-      ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
-      : insets.bottom + spacing[3];
+  const bottomOffset = isTabsRoute(useSegments())
+    ? insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2]
+    : insets.bottom + spacing[3];
 
   useEffect(() => {
     timerRef.current = setTimeout(() => onDismiss(toast.id), toast.duration);

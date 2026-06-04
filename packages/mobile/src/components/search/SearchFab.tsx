@@ -161,6 +161,7 @@ export function SearchFab({
             fallbackColor={systemColors.fill}
             onPress={handleFabPress}
             accessibilityLabel={expanded ? t('mobile.search.fab.close') : t('mobile.search.fab.open')}
+            accessibilityHint={expanded ? undefined : t('mobile.search.fab.hint')}
             badgeCount={expanded ? undefined : activeFilterCount}
             size={TOOLBAR_FAB_SIZE}
           />

@@ -42,6 +42,7 @@ type PressableSurfaceProps = {
   hitSlop?: number;
   accessibilityRole?: AccessibilityRole;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
   accessibilityState?: AccessibilityState;
   style?: StyleProp<ViewStyle>;
 };
@@ -69,6 +70,7 @@ export function PressableSurface({
   hitSlop,
   accessibilityRole = 'button',
   accessibilityLabel,
+  accessibilityHint,
   accessibilityState,
   style,
 }: PressableSurfaceProps) {
@@ -116,6 +118,7 @@ export function PressableSurface({
         hitSlop={hitSlop}
         accessibilityRole={accessibilityRole}
         accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
         accessibilityState={accessibilityState}
         style={style}
       >
@@ -134,6 +137,7 @@ export function PressableSurface({
       hitSlop={hitSlop}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={accessibilityState}
       style={[animatedStyle, style]}
     >

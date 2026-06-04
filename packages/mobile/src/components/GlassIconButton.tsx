@@ -17,6 +17,9 @@ type GlassIconButtonProps = {
   iconSize?: number;
   onPress: () => void;
   accessibilityLabel: string;
+  /** Hint describing what activation does — useful when the button morphs in
+   *  place (e.g. search ↔ close) rather than navigating. */
+  accessibilityHint?: string;
   /** Translucent tint composited on the glass (iOS). Omit for a neutral surface. */
   tintColor?: string;
   /** Solid colour used on Android, Reduce Transparency, and the cold-start frame. */
@@ -50,6 +53,7 @@ export function GlassIconButton({
   iconSize = 22,
   onPress,
   accessibilityLabel,
+  accessibilityHint,
   tintColor,
   fallbackColor,
   badgeCount,
@@ -83,6 +87,7 @@ export function GlassIconButton({
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
         style={[styles.button, { width: size, height: size, borderRadius: size / 2 }]}
       >
         <GlassSurface
