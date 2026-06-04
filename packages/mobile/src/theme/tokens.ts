@@ -79,22 +79,6 @@ export const opacity = {
 } as const;
 
 /**
- * Glass material strength, expressed as the iOS<26 `blurAmount` fallback. Native
- * Liquid Glass (`GlassView`) only exposes `regular`/`clear`, so the material
- * split lives on the blur path: actionable FABs read with the frostier `regular`
- * material; informational text capsules use the lighter `thin` material so the
- * content behind them stays legible.
- */
-export const glassMaterial = {
-  regular: 20,
-  thin: 13,
-  // A heavier frost for controls that float over bright, saturated content (e.g.
-  // the create-playlist FAB over vivid playlist hero cards) so the colour behind
-  // the glass diffuses instead of bleeding through and washing out the glyph.
-  thick: 30,
-} as const;
-
-/**
  * Floating-overlay tokens. Intentionally fixed across light/dark — these are
  * for chips/buttons that overlay arbitrary content (board images, photos) and
  * need stable contrast regardless of the user's color scheme.

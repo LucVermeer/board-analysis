@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { computePeekOffset } from '@boardsesh/play-view';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import type { ClimbQueueItem } from '@boardsesh/queue';
-import { shadows, glassMaterial } from '../../theme/tokens';
+import { shadows } from '../../theme/tokens';
 import { TOOLBAR_CAPSULE_HEIGHT, TOOLBAR_CAPSULE_MAX_WIDTH } from '../../theme/layout';
 import { useGradeFormat } from '../../hooks/use-grade-format';
 import { useReduceMotion } from '../../hooks/use-reduce-motion';
@@ -198,7 +198,6 @@ export function ClimbCapsule() {
         glassEffectStyle="regular"
         fallbackColor={systemColors.elevatedSurface}
         borderRadius={CAPSULE_RADIUS}
-        blurAmount={glassMaterial.thin}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />

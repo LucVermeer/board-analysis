@@ -4,19 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { GlassIconButton } from '../GlassIconButton';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticLight } from '../../lib/haptics';
-import { spacing, glassMaterial } from '../../theme/tokens';
+import { spacing } from '../../theme/tokens';
 import { glassSize } from '../../theme/layout';
 import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
 
 /**
  * Floating "create playlist" button on the Discover library — the single defining
  * action of that screen, so it takes the glass `hero` size. The playlist hero
- * cards behind it are bright, vivid colours, so legibility gets two levers: a
- * high-contrast `label` plus glyph (black on light, white on dark) and the
- * `thick` glass material, which frosts the saturated card behind it instead of
- * letting the colour bleed through. Anchored bottom-right, lifted above the
- * persistent queue bar + tab bar so it never sits under them. The parent gates
- * rendering on auth.
+ * cards behind it are bright, vivid colours, so the plus glyph uses the
+ * high-contrast system `label` (black on light, white on dark) to stay legible
+ * over any card — colour on the icon, not a fill, on the OS-standard `regular`
+ * glass. Anchored bottom-right, lifted above the persistent queue bar + tab bar
+ * so it never sits under them. The parent gates rendering on auth.
  */
 export function CreatePlaylistFab({ onPress }: { onPress: () => void }) {
   const { t } = useTranslation('playlists');
@@ -31,7 +30,6 @@ export function CreatePlaylistFab({ onPress }: { onPress: () => void }) {
         iconColor={systemColors.label as string}
         iconSize={28}
         size={glassSize.hero}
-        blurAmount={glassMaterial.thick}
         onPress={() => {
           hapticLight();
           onPress();

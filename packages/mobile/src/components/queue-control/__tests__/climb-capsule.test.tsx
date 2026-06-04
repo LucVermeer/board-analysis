@@ -110,7 +110,7 @@ vi.mock('../../../lib/haptics', () => ({ hapticLight: vi.fn(), hapticSelection: 
 
 vi.mock('../../../theme/colors', () => ({ withAlpha: (color: string) => `${color}29` }));
 vi.mock('../../../theme/layout', () => ({ TOOLBAR_CAPSULE_HEIGHT: 52, TOOLBAR_CAPSULE_MAX_WIDTH: 260 }));
-vi.mock('../../../theme/tokens', () => ({ shadows: { sm: {} }, glassMaterial: { regular: 20, thin: 13 } }));
+vi.mock('../../../theme/tokens', () => ({ shadows: { sm: {} } }));
 vi.mock('../../../hooks/use-native-glass', () => ({ useNativeGlass: () => false }));
 
 // useCarouselGesture is mocked: in jsdom we cannot drive the RNGH worklets, so

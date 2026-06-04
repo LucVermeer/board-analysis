@@ -78,7 +78,6 @@ vi.mock('../../../providers/bluetooth-provider', () => ({
 vi.mock('../../../theme/tokens', () => ({
   spacing: { 2: 8, 4: 16 },
   shadows: { sm: {} },
-  glassMaterial: { regular: 20, thin: 13 },
 }));
 
 vi.mock('../../../theme/colors', () => ({

@@ -68,7 +68,6 @@ vi.mock('@boardsesh/board-constants/grade-colors', () => ({
   getGradeColor: (name: string) => (name === 'V6' ? '#FF0000' : null),
 }));
 
-vi.mock('../../../theme/tokens', () => ({ glassMaterial: { regular: 20, thin: 13 } }));
 vi.mock('../../../theme/layout', () => ({ glassSize: { standard: 56 } }));
 
 // Real-ish bound predicate: "any" iff both ids are undefined (mirrors source).
