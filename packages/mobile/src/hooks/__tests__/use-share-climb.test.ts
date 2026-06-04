@@ -4,9 +4,9 @@ import { renderHook, act } from '@testing-library/react';
 
 const ctrl = vi.hoisted(() => ({ os: 'ios' as string }));
 
-type iOSPayload = { url: string; title: string };
+type IOSPayload = { message: string; url: string };
 type AndroidPayload = { message: string };
-type SharePayload = iOSPayload | AndroidPayload;
+type SharePayload = IOSPayload | AndroidPayload;
 
 const shareMock = vi.fn<(payload: SharePayload) => Promise<{ action: string }>>(async () => ({
   action: 'sharedAction',
@@ -57,7 +57,7 @@ describe('useShareClimb', () => {
   });
 
   describe('iOS', () => {
-    it('passes { url, title } with no message — URL appears exactly once in the share sheet', async () => {
+    it('passes { message: climbName, url } — message has name only so URL appears exactly once', async () => {
       const { result } = renderHook(() => useShareClimb({ climb, ...baseArgs }));
       await act(async () => {
         await result.current();
@@ -66,13 +66,14 @@ describe('useShareClimb', () => {
       const firstCall = shareMock.mock.calls[0];
       if (!firstCall) throw new Error('Share.share was not called');
       const payload = firstCall[0];
-      if (!('url' in payload)) throw new Error('Expected iOS payload shape { url, title }');
+      if (!('url' in payload)) throw new Error('Expected iOS payload shape { message, url }');
       expect(payload.url).toMatch(/^https:\/\/www\.boardsesh\.com\//);
       expect(payload.url).toContain('climb-uuid-123');
       expect(payload.url).toContain('kilter');
       expect(payload.url).toContain('40');
-      expect(payload.title).toBe('Test Climb');
-      expect(payload).not.toHaveProperty('message');
+      expect(payload.message).toBe('Test Climb');
+      expect(payload.message).not.toMatch(/https?:\/\//);
+      expect(payload).not.toHaveProperty('title');
     });
   });
 
