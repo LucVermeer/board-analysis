@@ -21,7 +21,7 @@ export function DuplicateBanner({ name, onView, onDismiss }: DuplicateBannerProp
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
   return (
-    <View style={[styles.banner, { backgroundColor: systemColors.fill as string }]}>
+    <View style={[styles.banner, { backgroundColor: systemColors.fill }]}>
       <View style={styles.bannerText}>
         <Text variant="footnote">
           {name
@@ -37,7 +37,7 @@ export function DuplicateBanner({ name, onView, onDismiss }: DuplicateBannerProp
         ) : null}
       </View>
       <Pressable onPress={onDismiss} accessibilityRole="button" hitSlop={8}>
-        <Icon name="close" size={16} color={systemColors.secondaryLabel as string} />
+        <Icon name="close" size={16} color={systemColors.secondaryLabel} />
       </Pressable>
     </View>
   );

@@ -107,7 +107,7 @@ export const CreateDrawerActionBar = memo(function CreateDrawerActionBar({
             selectedBrush === 'OFF' && { borderColor: systemColors.label, borderWidth: 2 },
           ]}
         >
-          <Icon name="eraser" size={18} color={systemColors.label as string} />
+          <Icon name="eraser" size={18} color={systemColors.label} />
           <Text variant="caption1" style={styles.chipLabel} numberOfLines={1}>
             {t('mobile.create.brush.erase')}
           </Text>

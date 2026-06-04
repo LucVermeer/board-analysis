@@ -72,7 +72,7 @@ function holdsReducer(state: HoldsHistory, action: HoldsAction): HoldsHistory {
     case 'REDO': {
       if (state.future.length === 0) return state;
       const next = state.future[0];
-      return { past: [...state.past, state.present], present: next, future: state.future.slice(1) };
+      return { past: capPast([...state.past, state.present]), present: next, future: state.future.slice(1) };
     }
     default:
       return state;
