@@ -303,6 +303,20 @@ describe('useCreateClimb', () => {
       expect(result.current.startingCount).toBe(1);
       expect(result.current.isValid).toBe(true);
     });
+
+    it('drops initial holds whose state cannot be saved for the board', () => {
+      const initialHoldsMap = {
+        100: { state: 'STARTING' as const, color: '#00FF00', displayColor: '#00FF00' },
+        200: { state: 'FOOT' as const, color: '#FFA500', displayColor: '#FFA500' },
+      };
+
+      const { result } = renderHook(() => useCreateClimb('moonboard', { initialHoldsMap }));
+
+      expect(result.current.litUpHoldsMap).toEqual({
+        100: { state: 'STARTING', color: '#00FF00', displayColor: '#00FF00' },
+      });
+      expect(result.current.generateFramesString()).toBe('p100r42');
+    });
   });
 
   describe('loadHolds', () => {
@@ -323,6 +337,22 @@ describe('useCreateClimb', () => {
 
       expect(result.current.litUpHoldsMap).toEqual(next);
       expect(result.current.litUpHoldsMap[100]).toBeUndefined();
+    });
+
+    it('drops loaded holds whose state cannot be saved for the board', () => {
+      const { result } = renderHook(() => useCreateClimb('moonboard'));
+
+      act(() => {
+        result.current.loadHolds({
+          100: { state: 'HAND', color: '#00FFFF', displayColor: '#00FFFF' },
+          200: { state: 'FOOT', color: '#FFA500', displayColor: '#FFA500' },
+        });
+      });
+
+      expect(result.current.litUpHoldsMap).toEqual({
+        100: { state: 'HAND', color: '#00FFFF', displayColor: '#00FFFF' },
+      });
+      expect(result.current.generateFramesString()).toBe('p100r43');
     });
   });
 

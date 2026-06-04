@@ -1,5 +1,5 @@
 import { getProductSize, getImageFilename, getHolePlacements } from '@boardsesh/board-constants/product-sizes';
-import { BOARD_IMAGE_DIMENSIONS } from '@boardsesh/board-config';
+import { BOARD_IMAGE_DIMENSIONS, MOONBOARD_SIZE, getMoonBoardDetails } from '@boardsesh/board-config';
 import type { BoardName } from '@boardsesh/shared-schema';
 import type { HoldPlacement } from '../components/board-renderer/types';
 import { WEB_BASE_URL } from './env';
@@ -22,6 +22,10 @@ export function getBoardRenderData(params: {
   setIds: number[];
 }): BoardRenderData | null {
   const { boardName, layoutId, sizeId, setIds } = params;
+
+  if (boardName === 'moonboard') {
+    return getMoonBoardRenderData({ layoutId, sizeId, setIds });
+  }
 
   const sizeData = getProductSize(boardName, sizeId);
   if (!sizeData) return null;
@@ -65,6 +69,38 @@ export function getBoardRenderData(params: {
   return { boardWidth, boardHeight, imageUrls, holdsData };
 }
 
+function getMoonBoardRenderData(params: {
+  layoutId: number;
+  sizeId: number;
+  setIds: number[];
+}): BoardRenderData | null {
+  const { layoutId, sizeId, setIds } = params;
+  if (sizeId !== MOONBOARD_SIZE.id) return null;
+
+  try {
+    const details = getMoonBoardDetails({ layout_id: layoutId, set_ids: setIds });
+    const imageUrls = Object.keys(details.images_to_holds).map(
+      (filename) => `${WEB_BASE_URL}/images/moonboard/${filename}`,
+    );
+    const holdsData: HoldPlacement[] = details.holdsData.map((hold) => ({
+      id: hold.id,
+      mirroredHoldId: hold.mirroredHoldId,
+      cx: hold.cx,
+      cy: hold.cy,
+      r: hold.r,
+    }));
+
+    return {
+      boardWidth: details.boardWidth,
+      boardHeight: details.boardHeight,
+      imageUrls,
+      holdsData,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function getBoardAspectRatio(params: {
   boardName: BoardName;
   layoutId: number;
@@ -72,6 +108,11 @@ export function getBoardAspectRatio(params: {
   setIds: number[];
 }): number {
   const { boardName, layoutId, sizeId, setIds } = params;
+
+  if (boardName === 'moonboard') {
+    const renderData = getBoardRenderData(params);
+    return renderData ? renderData.boardWidth / renderData.boardHeight : 1080 / 1920;
+  }
 
   for (const setId of setIds) {
     const imageFilename = getImageFilename(boardName, layoutId, sizeId, setId);

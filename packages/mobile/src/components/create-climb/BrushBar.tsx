@@ -10,7 +10,7 @@ import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection, hapticLight } from '../../lib/haptics';
 import { brandColors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
-import { PAINT_ROLES, brushRoleColor, useBrushRoleLabels, type BrushRole } from './brush-roles';
+import { brushRoleColor, getPaintRoles, useBrushRoleLabels, type BrushRole } from './brush-roles';
 
 // The save button's visual state, derived by the controller from auth + the
 // saved-climb snapshot + in-flight state.
@@ -72,15 +72,16 @@ export function BrushBar({
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
   const roleLabels = useBrushRoleLabels();
+  const paintRoles = useMemo(() => getPaintRoles(boardName), [boardName]);
 
   const roleChips = useMemo(
     () =>
-      PAINT_ROLES.map((role) => ({
+      paintRoles.map((role) => ({
         role,
         label: roleLabels[role],
         color: brushRoleColor(boardName, role),
       })),
-    [boardName, roleLabels],
+    [boardName, paintRoles, roleLabels],
   );
 
   const handleSelect = (role: BrushRole) => {

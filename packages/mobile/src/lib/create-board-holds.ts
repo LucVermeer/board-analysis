@@ -18,8 +18,8 @@ export type CreateBoardHolds = {
 
 /**
  * Resolve the full set of tappable holds for a board configuration, board-family
- * agnostic. Aurora boards come from the hole-placement pipeline; the MoonBoard
- * grid branch is added alongside MoonBoard create support.
+ * agnostic. Aurora boards come from the hole-placement pipeline; MoonBoard comes
+ * from the grid-backed render data branch.
  */
 export function getCreateBoardHolds(cfg: {
   boardName: BoardName;
@@ -27,14 +27,12 @@ export function getCreateBoardHolds(cfg: {
   sizeId: number;
   setIds: number[];
 }): CreateBoardHolds | null {
-  // MoonBoard uses a separate grid source (getMoonBoardDetails); added in the
-  // MoonBoard PR. For now every supported create board is an Aurora board.
   const data = getBoardRenderData(cfg);
   if (!data) return null;
   return {
     holdTargets: data.holdsData.map((hold) => ({ id: hold.id, cx: hold.cx, cy: hold.cy, r: hold.r })),
     boardWidth: data.boardWidth,
     boardHeight: data.boardHeight,
-    family: 'aurora',
+    family: cfg.boardName === 'moonboard' ? 'moonboard' : 'aurora',
   };
 }
