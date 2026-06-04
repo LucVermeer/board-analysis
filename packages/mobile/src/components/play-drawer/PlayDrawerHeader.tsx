@@ -44,57 +44,51 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
 
   return (
     <View style={styles.container}>
-      {/* Grade */}
-      <View style={styles.gradeColumn}>
-        <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
-          <Text variant="footnote" color={iosSystemColors.white} style={styles.gradeText}>
-            {difficulty}
+      <View style={styles.headerRow}>
+        <View style={styles.leadingSpacer} />
+        <View style={styles.centerColumn}>
+          <Text variant="body" style={styles.nameText} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text variant="caption1" style={styles.subtitleText} numberOfLines={1}>
+            {subtitleParts.join(' · ')}
           </Text>
         </View>
-      </View>
-
-      {/* Name + details */}
-      <View style={styles.centerColumn}>
-        <Text variant="body" style={styles.nameText} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text variant="caption1" style={styles.subtitleText} numberOfLines={1}>
-          {subtitleParts.join(' · ')}
+        <Text variant="headline" style={[styles.gradeText, { color: gradeColor }]} numberOfLines={1}>
+          {difficulty}
         </Text>
       </View>
-
-      {/* Spacer for symmetry */}
-      <View style={styles.spacer} />
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
     minHeight: 56,
+    justifyContent: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[3],
   },
-  gradeColumn: {
+  leadingSpacer: {
     flexShrink: 0,
     minWidth: 48,
-    alignItems: 'center',
-  },
-  gradePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  gradeText: {
-    fontWeight: '700',
   },
   centerColumn: {
     flex: 1,
     minWidth: 0,
     alignItems: 'center',
+  },
+  gradeText: {
+    flexShrink: 0,
+    minWidth: 48,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+    textAlign: 'right',
   },
   nameText: {
     fontWeight: '700',
@@ -104,9 +98,5 @@ const styles = StyleSheet.create({
     color: iosSystemColors.systemGray,
     marginTop: 2,
     textAlign: 'center',
-  },
-  spacer: {
-    flexShrink: 0,
-    minWidth: 48,
   },
 });

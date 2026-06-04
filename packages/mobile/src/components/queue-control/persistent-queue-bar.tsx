@@ -3,7 +3,7 @@
  * root and is visible on every screen while a current climb is set.
  *
  * Layout (condensed for mobile, no thumbnail per design):
- *   [grade] climb name…              [✓ tick] [BT] [⏻ end]
+ *   climb name…              grade   [✓ tick] [BT] [⏻ end]
  *      ↑ tap opens PlayDrawer    ↑ horizontal swipe = prev/next
  *
  * The horizontal swipe mirrors the play-drawer carousel pattern
@@ -58,22 +58,20 @@ type ClimbLabelProps = {
   display: ClimbDisplay;
   labelColor: ColorValue;
   formattedGrade: string | null;
-  chipBackground: string;
+  gradeColor: string;
 };
 
-function ClimbLabel({ display, labelColor, formattedGrade, chipBackground }: ClimbLabelProps) {
+function ClimbLabel({ display, labelColor, formattedGrade, gradeColor }: ClimbLabelProps) {
   return (
     <View style={styles.labelInner}>
-      {formattedGrade ? (
-        <View style={[styles.gradePill, { backgroundColor: chipBackground }]}>
-          <Text variant="caption1" color={iosSystemColors.white} style={styles.gradeText}>
-            {formattedGrade}
-          </Text>
-        </View>
-      ) : null}
       <Text variant="subheadline" color={labelColor} numberOfLines={1} ellipsizeMode="tail" style={styles.name}>
         {display.name ?? ''}
       </Text>
+      {formattedGrade ? (
+        <Text variant="headline" color={gradeColor} numberOfLines={1} style={styles.gradeText}>
+          {formattedGrade}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -221,14 +219,14 @@ export function PersistentQueueBar() {
   const previousFormatted = previousDisplay ? format(previousDisplay.difficulty) : null;
   const nextFormatted = nextDisplay ? format(nextDisplay.difficulty) : null;
 
-  // Vivid grade color (`getGradeColor` raw hex) for the chip, matching the
-  // PlayDrawer header pill. Falls back to the default neutral grade color when
-  // the difficulty is unrecognised.
-  const currentChipColor = getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR;
-  const previousChipColor = previousDisplay
+  // Vivid grade color (`getGradeColor` raw hex) for the trailing grade text,
+  // matching climb list rows. Falls back to the default neutral grade color
+  // when the difficulty is unrecognised.
+  const currentGradeColor = getGradeColor(currentDisplay.difficulty) ?? DEFAULT_GRADE_COLOR;
+  const previousGradeColor = previousDisplay
     ? (getGradeColor(previousDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
-  const nextChipColor = nextDisplay
+  const nextGradeColor = nextDisplay
     ? (getGradeColor(nextDisplay.difficulty) ?? DEFAULT_GRADE_COLOR)
     : DEFAULT_GRADE_COLOR;
 
@@ -261,7 +259,7 @@ export function PersistentQueueBar() {
                   display={currentDisplay}
                   labelColor={systemColors.label}
                   formattedGrade={currentFormatted}
-                  chipBackground={currentChipColor}
+                  gradeColor={currentGradeColor}
                 />
               </Animated.View>
               {nextDisplay ? (
@@ -270,7 +268,7 @@ export function PersistentQueueBar() {
                     display={nextDisplay}
                     labelColor={systemColors.label}
                     formattedGrade={nextFormatted}
-                    chipBackground={nextChipColor}
+                    gradeColor={nextGradeColor}
                   />
                 </Animated.View>
               ) : null}
@@ -280,7 +278,7 @@ export function PersistentQueueBar() {
                     display={previousDisplay}
                     labelColor={systemColors.label}
                     formattedGrade={previousFormatted}
-                    chipBackground={previousChipColor}
+                    gradeColor={previousGradeColor}
                   />
                 </Animated.View>
               ) : null}
@@ -379,21 +377,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  gradePill: {
+  gradeText: {
     // Reserve a 3-char slot ("V10") so the climb name doesn't shift
     // horizontally as the user swipes between climbs with different
     // grade widths. 4-char grades like "V10+" still expand slightly.
     minWidth: 40,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gradeText: {
     fontVariant: ['tabular-nums'],
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '700',
+    textAlign: 'right',
   },
   name: {
     flex: 1,
