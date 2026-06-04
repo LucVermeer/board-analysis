@@ -1,39 +1,28 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { Alert } from 'react-native';
 import type { HoldPlacement } from '../../../components/board-renderer/types';
+import {
+  reactNativePermissionHarness,
+  resetReactNativePermissionHarness,
+} from './react-native-permissions-test-harness';
 
 // ── Mock native modules that use-board-bluetooth.ts imports transitively ──
-
-const reactNativeHarness = vi.hoisted(() => ({
-  platform: {
-    OS: 'android' as 'android' | 'ios',
-    Version: 31,
-  },
-  permissionsAndroid: {
-    PERMISSIONS: {
-      ACCESS_FINE_LOCATION: 'ACCESS_FINE_LOCATION',
-      BLUETOOTH_SCAN: 'BLUETOOTH_SCAN',
-      BLUETOOTH_CONNECT: 'BLUETOOTH_CONNECT',
-      POST_NOTIFICATIONS: 'POST_NOTIFICATIONS',
-    },
-    RESULTS: {
-      GRANTED: 'granted',
-      DENIED: 'denied',
-    },
-    requestMultiple: vi.fn(),
-    request: vi.fn(),
-  },
-}));
 
 const mockBleManager = vi.hoisted(() => ({
   state: vi.fn().mockResolvedValue('PoweredOn'),
   onStateChange: vi.fn(),
 }));
 
-vi.mock('react-native', () => ({
-  Alert: { alert: vi.fn() },
-  Platform: reactNativeHarness.platform,
-  PermissionsAndroid: reactNativeHarness.permissionsAndroid,
-}));
+vi.mock('react-native', async () => {
+  const { reactNativePermissionHarness: harness } = await import('./react-native-permissions-test-harness');
+  return {
+    Alert: { alert: vi.fn() },
+    Platform: harness.platform,
+    PermissionsAndroid: harness.permissionsAndroid,
+  };
+});
 
 vi.mock('react-native-ble-plx', () => ({
   State: {
@@ -63,6 +52,12 @@ vi.mock('@boardsesh/ble-protocol/moonboard', () => ({
   getMoonboardBluetoothPacket: mockGetMoonboardBluetoothPacket,
 }));
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+}));
+
 vi.mock('../adapter', () => ({
   RNBleAdapter: vi.fn(),
 }));
@@ -77,7 +72,8 @@ vi.mock('../adapter-factory', () => ({
   isNativeIosBleAdapter: vi.fn().mockReturnValue(false),
 }));
 
-import { convertToMirroredFramesString, dispatchMoonboardPacket } from '../use-board-bluetooth';
+import { createBluetoothAdapter } from '../adapter-factory';
+import { convertToMirroredFramesString, dispatchMoonboardPacket, useBoardBluetooth } from '../use-board-bluetooth';
 
 // ── Factory helper ─────────────────────────────────────────────────────────
 
@@ -86,6 +82,37 @@ function makePlacement(id: number, mirroredHoldId: number | null): HoldPlacement
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────
+
+describe('useBoardBluetooth', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetReactNativePermissionHarness();
+    mockBleManager.state.mockResolvedValue('PoweredOn');
+  });
+
+  it('shows permission copy and stops before adapter availability when Android BLE permission is denied', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'denied',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const { result } = renderHook(() =>
+      useBoardBluetooth({
+        boardName: 'kilter',
+        layoutId: 1,
+        sizeId: 1,
+      }),
+    );
+
+    let connected = true;
+    await act(async () => {
+      connected = await result.current.connect();
+    });
+
+    expect(connected).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith('ble.permissionRequired', 'ble.errorPermissionDenied');
+    expect(createBluetoothAdapter).not.toHaveBeenCalled();
+  });
+});
 
 describe('convertToMirroredFramesString', () => {
   it('correctly maps hold IDs to mirrored IDs', () => {

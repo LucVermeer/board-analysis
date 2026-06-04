@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import {
+  reactNativePermissionHarness,
+  resetReactNativePermissionHarness,
+} from './react-native-permissions-test-harness';
 
 const mockBleManager = vi.hoisted(() => ({
   state: vi.fn(),
@@ -8,31 +12,13 @@ const mockBleManager = vi.hoisted(() => ({
   stopDeviceScan: vi.fn(),
 }));
 
-const reactNativeHarness = vi.hoisted(() => ({
-  platform: {
-    OS: 'android' as 'android' | 'ios',
-    Version: 31 as number | string,
-  },
-  permissionsAndroid: {
-    PERMISSIONS: {
-      ACCESS_FINE_LOCATION: 'ACCESS_FINE_LOCATION',
-      BLUETOOTH_SCAN: 'BLUETOOTH_SCAN',
-      BLUETOOTH_CONNECT: 'BLUETOOTH_CONNECT',
-      POST_NOTIFICATIONS: 'POST_NOTIFICATIONS',
-    },
-    RESULTS: {
-      GRANTED: 'granted',
-      DENIED: 'denied',
-    },
-    requestMultiple: vi.fn(),
-    request: vi.fn(),
-  },
-}));
-
-vi.mock('react-native', () => ({
-  Platform: reactNativeHarness.platform,
-  PermissionsAndroid: reactNativeHarness.permissionsAndroid,
-}));
+vi.mock('react-native', async () => {
+  const { reactNativePermissionHarness: harness } = await import('./react-native-permissions-test-harness');
+  return {
+    Platform: harness.platform,
+    PermissionsAndroid: harness.permissionsAndroid,
+  };
+});
 
 vi.mock('react-native-ble-plx', () => ({
   State: { PoweredOn: 'PoweredOn', PoweredOff: 'PoweredOff' },
@@ -59,13 +45,7 @@ describe('useBoardScan', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    reactNativeHarness.platform.OS = 'android';
-    reactNativeHarness.platform.Version = 31;
-    reactNativeHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
-      BLUETOOTH_SCAN: 'granted',
-      BLUETOOTH_CONNECT: 'granted',
-    });
-    reactNativeHarness.permissionsAndroid.request.mockResolvedValue('granted');
+    resetReactNativePermissionHarness();
     mockBleManager.state.mockResolvedValue('PoweredOn');
   });
 
@@ -92,18 +72,18 @@ describe('useBoardScan', () => {
       await result.current.start();
     });
 
-    expect(reactNativeHarness.permissionsAndroid.requestMultiple).toHaveBeenCalledWith([
+    expect(reactNativePermissionHarness.permissionsAndroid.requestMultiple).toHaveBeenCalledWith([
       'BLUETOOTH_SCAN',
       'BLUETOOTH_CONNECT',
     ]);
-    expect(reactNativeHarness.permissionsAndroid.requestMultiple.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(reactNativePermissionHarness.permissionsAndroid.requestMultiple.mock.invocationCallOrder[0]).toBeLessThan(
       mockBleManager.state.mock.invocationCallOrder[0],
     );
     expect(result.current.status).toBe('scanning');
   });
 
   it('reports unavailable when Android BLE permissions are denied', async () => {
-    reactNativeHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
       BLUETOOTH_SCAN: 'denied',
       BLUETOOTH_CONNECT: 'granted',
     });

@@ -39,13 +39,9 @@ export async function requestBleRuntimePermissions({
 }: BleRuntimePermissionOptions = {}): Promise<boolean> {
   if (Platform.OS === 'ios') {
     // iOS handles BLE permissions via Info.plist entries; the system prompts
-    // automatically on first scan. No runtime permission request needed.
-    try {
-      const state = await bleManager.state();
-      return state === State.PoweredOn;
-    } catch {
-      return false;
-    }
+    // automatically on first scan. No runtime permission request needed, and
+    // radio state is checked separately by scan/connect availability guards.
+    return true;
   }
 
   if (Platform.OS !== 'android') {

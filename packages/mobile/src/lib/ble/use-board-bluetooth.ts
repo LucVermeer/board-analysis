@@ -280,7 +280,7 @@ export function useBoardBluetooth({
       try {
         const permissionsGranted = await requestBleRuntimePermissions({ requestNotificationPermission: true });
         if (!permissionsGranted) {
-          Alert.alert(t('ble.notAvailable'), t('ble.notAvailable'));
+          Alert.alert(t('ble.permissionRequired'), t('ble.errorPermissionDenied'));
           return false;
         }
 
