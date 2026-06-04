@@ -77,7 +77,12 @@ export function PlaylistsProvider({
   const trackedCreatePlaylist = useCallback(
     async (name: string, description?: string, color?: string, icon?: string): Promise<Playlist> => {
       const created = await createPlaylist(name, description, color, icon);
-      track('Create Playlist', { playlistName: name });
+      track('Create Playlist', {
+        playlistId: created.id,
+        hasDescription: !!description,
+        hasColor: !!color,
+        hasIcon: !!icon,
+      });
       return created;
     },
     [createPlaylist],
@@ -88,11 +93,10 @@ export function PlaylistsProvider({
       await addToPlaylist(playlistId, climbUuid, angle);
       track('Add to Playlist', {
         playlistId,
-        playlistName: playlists.find((playlist) => playlist.id === playlistId)?.name ?? null,
         climbUuid,
       });
     },
-    [addToPlaylist, playlists],
+    [addToPlaylist],
   );
 
   const trackedRemoveFromPlaylist = useCallback(
@@ -100,11 +104,10 @@ export function PlaylistsProvider({
       await removeFromPlaylist(playlistId, climbUuid);
       track('Remove from Playlist', {
         playlistId,
-        playlistName: playlists.find((playlist) => playlist.id === playlistId)?.name ?? null,
         climbUuid,
       });
     },
-    [removeFromPlaylist, playlists],
+    [removeFromPlaylist],
   );
 
   const value = useMemo<PlaylistsContextValue>(

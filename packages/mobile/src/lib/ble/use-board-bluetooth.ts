@@ -15,7 +15,6 @@ import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 import { track } from '../analytics';
-import { sanitizeErrorForAnalytics } from '@boardsesh/analytics';
 
 // Exported for testing — isolates the .packet extraction so regressions are caught.
 export async function dispatchMoonboardPacket(
@@ -100,6 +99,13 @@ function mergeAbortSignals(signalA: AbortSignal, signalB: AbortSignal): AbortSig
   return controller.signal;
 }
 
+function classifyBleFailureReason(error: unknown): string {
+  if (isDisconnectionError(error)) return 'disconnected';
+  if (error instanceof Error && error.message.includes('Mirrored hold ID')) return 'missing_mirror_mapping';
+  if (error instanceof DOMException) return `dom_${error.name || 'exception'}`;
+  return 'write_failed';
+}
+
 export function useBoardBluetooth({
   boardName,
   layoutId,
@@ -182,6 +188,7 @@ export function useBoardBluetooth({
   const sendFramesToBoard = useCallback(
     async (frames: string, mirrored: boolean = false, signal?: AbortSignal) => {
       if (!adapterRef.current || !boardName || layoutId === undefined || sizeId === undefined) return;
+      const boardAnalyticsProperties = { boardName, layoutId, sizeId, mirrored };
 
       // Create an AbortController for this write so connect() can cancel
       // an in-flight write when creating a new adapter.
@@ -198,7 +205,7 @@ export function useBoardBluetooth({
             adapterRef.current.write.bind(adapterRef.current),
             combinedSignal,
           );
-          if (sent) track('Climb Sent to Board Success', { boardLayout: boardName });
+          if (sent) track('Climb Sent to Board Success', boardAnalyticsProperties);
           return sent;
         }
 
@@ -227,6 +234,10 @@ export function useBoardBluetooth({
             `[BLE] LED placement map is empty for ${boardName} layout=${layoutId} size=${sizeId}. Board configuration may be incorrect or LED data may need regeneration.`,
           );
           Alert.alert(t('ble.notAvailable'), t('ble.errorLedMissing'));
+          track('Climb Sent to Board Failure', {
+            ...boardAnalyticsProperties,
+            failureReason: 'missing_led_placements',
+          });
           return false;
         }
 
@@ -243,6 +254,7 @@ export function useBoardBluetooth({
         if (skippedCount > 0 && result.packet.length === 0) {
           console.warn(`[BLE] All ${result.totalPlacements} placements skipped — climb incompatible with board`);
           Alert.alert(t('ble.notAvailable'), t('ble.errorIncompatible'));
+          track('Climb Sent to Board Failure', { ...boardAnalyticsProperties, failureReason: 'incompatible_climb' });
           return false;
         }
 
@@ -251,14 +263,17 @@ export function useBoardBluetooth({
         }
 
         await adapterRef.current.write(result.packet, combinedSignal);
-        track('Climb Sent to Board Success', { boardLayout: boardName });
+        track('Climb Sent to Board Success', boardAnalyticsProperties);
         return true;
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }
         console.error('Error sending frames to board:', error);
-        track('Climb Sent to Board Failure', { boardLayout: boardName, error: sanitizeErrorForAnalytics(error) });
+        track('Climb Sent to Board Failure', {
+          ...boardAnalyticsProperties,
+          failureReason: classifyBleFailureReason(error),
+        });
         // A write that fails because the link is gone (the board dropped or
         // another device grabbed it — these boards are last-connection-wins) is
         // often the only signal we get: the adapter's disconnect event may never
@@ -365,7 +380,7 @@ export function useBoardBluetooth({
         setIsConnected(true);
         onConnectionChange?.(true);
         onConnectSuccess?.(parsedSerial);
-        track('Bluetooth Connection Success', { boardLayout: boardName });
+        track('Bluetooth Connection Success', { boardName, layoutId, sizeId });
         return true;
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
@@ -390,7 +405,12 @@ export function useBoardBluetooth({
           Alert.alert(t('ble.notAvailable'), t('ble.errorConnectionFailed'));
         }
 
-        track('Bluetooth Connection Failed', { boardLayout: boardName, error: sanitizeErrorForAnalytics(error) });
+        track('Bluetooth Connection Failed', {
+          boardName,
+          layoutId,
+          sizeId,
+          failureReason: classifyBleFailureReason(error),
+        });
       } finally {
         setLoading(false);
       }

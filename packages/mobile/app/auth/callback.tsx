@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { exchangeTransferToken } from '../../src/lib/auth';
+import { classifyNativeAuthFailureReason } from '../../src/lib/native-auth-analytics';
 import { brandColors } from '../../src/theme/colors';
-import { sanitizeErrorForAnalytics } from '@boardsesh/analytics';
 import { track } from '../../src/lib/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 
@@ -33,12 +33,12 @@ export default function AuthCallback() {
           await refreshAuthState();
           router.replace('/(tabs)/boards');
         } else {
-          track('Login Failed', { flow: 'native', failure_reason: sanitizeErrorForAnalytics(result.error) });
+          track('Login Failed', { flow: 'native', failure_reason: classifyNativeAuthFailureReason(result) });
           setError(result.error);
         }
       })
       .catch((exchangeError: unknown) => {
-        track('Login Failed', { flow: 'native', failure_reason: sanitizeErrorForAnalytics(exchangeError) });
+        track('Login Failed', { flow: 'native', failure_reason: 'exception' });
         setError(exchangeError instanceof Error ? exchangeError.message : 'Unexpected error');
       });
   }, [transferToken, router, refreshAuthState]);

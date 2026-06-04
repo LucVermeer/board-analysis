@@ -136,6 +136,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const openPlayDrawer = useCallback((climb: Climb, options?: OpenPlayDrawerOptions) => {
     const { boardConfig: override, ...openOptions } = options ?? {};
+    const boardConfig = override ?? activeBoardConfigRef.current;
+    track('Play Drawer Opened', {
+      climbUuid: climb.uuid,
+      boardName: boardConfig?.boardName,
+      layoutId: boardConfig?.layoutId,
+      source: openOptions.setAsCurrent === false ? 'current_queue_item' : 'mobile',
+    });
     if (override) {
       pendingOverrideOpenRef.current = { climb, options: openOptions };
       setBoardConfigOverride(override);
@@ -160,6 +167,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   const handleAngleChange = useCallback(
     (newAngle: number) => {
       const cfg = activeBoardConfigRef.current;
+      if (cfg && newAngle === cfg.angle) return;
       if (boardConfigOverride) {
         // The drawer is showing a climb from a board other than the user's
         // stored active board. Update only the override (so the drawer reflects
@@ -182,7 +190,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
       track('Angle Changed', {
         angle: newAngle,
         boardName: cfg?.boardName,
-        boardLayout: cfg?.layoutId,
+        layoutId: cfg?.layoutId,
         sizeId: cfg?.sizeId,
         setIds: cfg?.setIds,
         source: 'mobile_play_drawer',
@@ -234,6 +242,13 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
 
   const handleClimbActionsToggleFavorite = useCallback(() => {
     if (!climbActions) return;
+    track('Favorite Toggle', {
+      action: 'toggled',
+      climbUuid: climbActions.climb.uuid,
+      boardName: climbActions.boardConfig.boardName,
+      layoutId: climbActions.boardConfig.layoutId,
+      source: 'mobile_climb_actions',
+    });
     toggleFavoriteMutate({
       input: {
         boardName: climbActions.boardConfig.boardName,

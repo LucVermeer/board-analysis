@@ -329,7 +329,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             case 'QueueItemAdded':
               track('Climb Added to Queue', {
                 boardName: activeBoardRef.current?.boardType,
-                boardLayout: activeBoardRef.current?.layoutId,
+                layoutId: activeBoardRef.current?.layoutId,
                 addedFromTab: 'peer_broadcast',
                 currentQueueLength: stateRef.current.queue.length + 1,
                 partyMode: true,
@@ -338,7 +338,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             case 'QueueItemRemoved':
               track('Climb Removed from Queue', {
                 boardName: activeBoardRef.current?.boardType,
-                boardLayout: activeBoardRef.current?.layoutId,
+                layoutId: activeBoardRef.current?.layoutId,
                 partyMode: true,
                 removedBy: 'peer',
               });
@@ -347,7 +347,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               if (event.__typename === 'QueueReordered') {
                 track('Queue Reordered', {
                   boardName: activeBoardRef.current?.boardType,
-                  boardLayout: activeBoardRef.current?.layoutId,
+                  layoutId: activeBoardRef.current?.layoutId,
                   oldIndex: event.oldIndex,
                   newIndex: event.newIndex,
                   partyMode: true,
@@ -616,7 +616,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       track('Climb Added to Queue', {
         climbUuid: item.climb.uuid,
         boardName: activeBoardRef.current?.boardType,
-        boardLayout: activeBoardRef.current?.layoutId,
+        layoutId: activeBoardRef.current?.layoutId,
         addedFromTab: 'mobile',
         currentQueueLength: stateRef.current.queue.length + 1,
       });
@@ -631,14 +631,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   const removeFromQueue = useCallback(
     (uuid: string) => {
+      const removedItem = stateRef.current.queue.find((queueItem) => queueItem.uuid === uuid);
       // Same best-effort model as addToQueue: the reducer already removed the
       // item locally; the server mutation only syncs it to a party session (and
       // no-ops when there's none — it never lazily creates one just to remove).
       dispatch({ type: 'DELTA_REMOVE_QUEUE_ITEM', payload: { uuid } });
       track('Climb Removed from Queue', {
-        climbUuid: uuid,
+        climbUuid: removedItem?.climb.uuid ?? null,
+        queueItemUuid: uuid,
         boardName: activeBoardRef.current?.boardType,
-        boardLayout: activeBoardRef.current?.layoutId,
+        layoutId: activeBoardRef.current?.layoutId,
         removedBy: 'self',
       });
       mutations.removeQueueItem(uuid).catch((error) => {
@@ -657,7 +659,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'DELTA_REORDER_QUEUE_ITEM', payload: { uuid, oldIndex, newIndex } });
       track('Queue Reordered', {
         boardName: activeBoardRef.current?.boardType,
-        boardLayout: activeBoardRef.current?.layoutId,
+        layoutId: activeBoardRef.current?.layoutId,
         oldIndex,
         newIndex,
         partyMode: sessionIdRef.current !== null,
@@ -679,7 +681,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const clearQueue = useCallback(() => {
     const itemsToRemove = stateRef.current.queue;
     dispatch({ type: 'CLEAR_QUEUE' });
-    track('Queue Cleared', { boardLayout: activeBoardRef.current?.layoutId, totalCount: itemsToRemove.length });
+    track('Queue Cleared', { layoutId: activeBoardRef.current?.layoutId, totalCount: itemsToRemove.length });
     setPlaylistSuggestionSourceState(null);
     // Surface at most one toast if any removal fails — a persistent join
     // failure would otherwise toast once per queued item.
@@ -721,7 +723,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       if (options) setPlaylistSuggestionSourceState(options.playlistSuggestionSource);
       track('Set Active Climb', {
         climbUuid: item.climb.uuid,
-        boardLayout: activeBoardRef.current?.layoutId,
+        layoutId: activeBoardRef.current?.layoutId,
         source: 'mobile',
       });
       // Append (fresh-uuid items add to the queue; the reducer's uuid dedup makes

@@ -6,8 +6,9 @@
 // A low sheet (not the 90% filter mega-sheet) keeps it one-handed. Tap rules are
 // the shared, web-identical state machine in @boardsesh/climb-filters.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef, type PropsWithChildren } from 'react';
+import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
@@ -72,7 +73,7 @@ export function GradePopover({ boardName, grade, sendDifficultyIds = [], onChang
   const { formatGrade } = useGradeFormat();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ElementRef<typeof ScrollView>>(null);
   const { data: gradesData } = useGrades(boardName);
 
   const grades = useMemo(() => [...(gradesData ?? [])].sort((a, b) => a.difficultyId - b.difficultyId), [gradesData]);
@@ -210,6 +211,10 @@ export function GradePopover({ boardName, grade, sendDifficultyIds = [], onChang
           ) : null}
         </View>
 
+        {/* react-native-gesture-handler's ScrollView (not the bare RN one) — a
+            plain ScrollView inside a gorhom sheet has its touches captured by
+            the sheet's pan handler on Android, so the rail never scrolls. The
+            gesture-handler scrollable coordinates with the sheet's pan gesture. */}
         <ScrollView
           ref={scrollRef}
           horizontal

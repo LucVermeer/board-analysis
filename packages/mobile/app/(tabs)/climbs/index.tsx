@@ -61,6 +61,14 @@ const SEARCH_DEBOUNCE_MS = 300;
 // thrash secure-store.
 const SAVE_DEBOUNCE_MS = 600;
 
+function queryLengthBucket(query: string): 'none' | 'short' | 'medium' | 'long' {
+  const queryLength = query.trim().length;
+  if (queryLength === 0) return 'none';
+  if (queryLength <= 8) return 'short';
+  if (queryLength <= 24) return 'medium';
+  return 'long';
+}
+
 export default function ClimbList() {
   return (
     <ClimbSearchProvider>
@@ -312,13 +320,14 @@ function ClimbListInner() {
     if (lastSearchTrackKeyRef.current === trackKey) return;
     lastSearchTrackKeyRef.current = trackKey;
     track('Climb Search Performed', {
-      query: name,
+      hasQuery: name.length > 0,
+      queryLengthBucket: queryLengthBucket(name),
       // The search payload carries `climbs` + `hasMore` only — no total count
       // (that lives in the separate count query). Report the size of the
       // resolved page-1 result set, which is what's available at this point.
       resultCount: searchResult.climbs.length,
       boardName,
-      boardLayout: layoutId,
+      layoutId,
       sizeId,
       setIds,
       angle,

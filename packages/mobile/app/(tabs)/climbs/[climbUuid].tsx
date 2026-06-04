@@ -73,7 +73,7 @@ export default function ClimbDetail() {
   useEffect(() => {
     if (!viewedClimbUuid) return;
     track('Climb Info Viewed', {
-      boardLayout: boardName ?? null,
+      boardName: boardName ?? null,
       climbUuid: viewedClimbUuid,
     });
   }, [viewedClimbUuid, boardName]);

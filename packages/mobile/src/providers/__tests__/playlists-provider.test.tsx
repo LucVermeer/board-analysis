@@ -89,12 +89,11 @@ describe('PlaylistsProvider', () => {
     expect(trackMock).toHaveBeenCalledTimes(1);
     expect(trackMock).toHaveBeenCalledWith('Add to Playlist', {
       playlistId: 'p-1',
-      playlistName: 'Hard sends',
       climbUuid: 'climb-A',
     });
   });
 
-  it('removeFromPlaylist tracks Remove from Playlist once with the resolved name', async () => {
+  it('removeFromPlaylist tracks Remove from Playlist once without user-entered names', async () => {
     const removeFromPlaylist = vi.fn(async (_playlistId: string, _climbUuid: string) => undefined);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <PlaylistsProvider playlists={[mkPlaylist('p-2', 'V4 grind')]} removeFromPlaylist={removeFromPlaylist}>
@@ -107,12 +106,11 @@ describe('PlaylistsProvider', () => {
     expect(trackMock).toHaveBeenCalledTimes(1);
     expect(trackMock).toHaveBeenCalledWith('Remove from Playlist', {
       playlistId: 'p-2',
-      playlistName: 'V4 grind',
       climbUuid: 'climb-B',
     });
   });
 
-  it('add tracking falls back to a null playlistName when the id is not in the list', async () => {
+  it('add tracking only includes playlist and climb ids when the id is not in the list', async () => {
     const addToPlaylist = vi.fn(async (_playlistId: string, _climbUuid: string, _angle: number) => undefined);
     const wrapper = ({ children }: { children: ReactNode }) => (
       <PlaylistsProvider playlists={[]} addToPlaylist={addToPlaylist}>
@@ -123,12 +121,11 @@ describe('PlaylistsProvider', () => {
     await result.current.addToPlaylist('missing', 'climb-A', 40);
     expect(trackMock).toHaveBeenCalledWith('Add to Playlist', {
       playlistId: 'missing',
-      playlistName: null,
       climbUuid: 'climb-A',
     });
   });
 
-  it('createPlaylist tracks Create Playlist once with the name', async () => {
+  it('createPlaylist tracks Create Playlist once without the user-entered name', async () => {
     const createPlaylist = vi.fn(async (name: string) => mkPlaylist('p-new', name));
     const wrapper = ({ children }: { children: ReactNode }) => (
       <PlaylistsProvider createPlaylist={createPlaylist}>{children}</PlaylistsProvider>
@@ -137,7 +134,12 @@ describe('PlaylistsProvider', () => {
     await result.current.createPlaylist('Projects');
     expect(createPlaylist).toHaveBeenCalledWith('Projects', undefined, undefined, undefined);
     expect(trackMock).toHaveBeenCalledTimes(1);
-    expect(trackMock).toHaveBeenCalledWith('Create Playlist', { playlistName: 'Projects' });
+    expect(trackMock).toHaveBeenCalledWith('Create Playlist', {
+      playlistId: 'p-new',
+      hasDescription: false,
+      hasColor: false,
+      hasIcon: false,
+    });
   });
 
   it('usePlaylistsContext throws when called outside a provider', () => {

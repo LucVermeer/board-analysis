@@ -211,7 +211,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
   const wrappedDisconnect = useCallback(async () => {
     isUserDisconnectRef.current = true;
     setDisconnectedUnexpectedly(false);
-    track('Bluetooth Disconnected', { boardLayout: boardName, reason: 'user' });
+    track('Bluetooth Disconnected', { boardName, reason: 'user' });
     try {
       await disconnect();
     } finally {
@@ -230,7 +230,7 @@ export function BluetoothProvider({ boardName, layoutId, sizeId, children }: Blu
       // Unexpected disconnect — fire haptic error and expose to consumers
       hapticError();
       setDisconnectedUnexpectedly(true);
-      track('Bluetooth Disconnected', { boardLayout: boardName, reason: 'unexpected' });
+      track('Bluetooth Disconnected', { boardName, reason: 'unexpected' });
     }
     wasConnectedRef.current = isConnected;
   }, [isConnected]);

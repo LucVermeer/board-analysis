@@ -11,7 +11,7 @@ import {
   type AuthProvider as AuthProviderType,
   type CredentialsSignInResult,
 } from '../lib/auth';
-import { track } from '../lib/analytics';
+import { reset as resetAnalytics, track } from '../lib/analytics';
 import { resetHttpClient } from '../lib/graphql/client';
 import { disposeWsClient } from '../lib/graphql/ws-client';
 import { clearStoredSessionId } from '../lib/session-store';
@@ -45,10 +45,20 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const queryClient = useQueryClient();
+  const authStateRef = useRef({ isAuthenticated: false, isLoading: true });
+  authStateRef.current = { isAuthenticated, isLoading };
+
+  const resetAnalyticsForSignedOutTransition = useCallback(() => {
+    const authState = authStateRef.current;
+    if (authState.isLoading || authState.isAuthenticated) {
+      resetAnalytics();
+    }
+  }, []);
 
   const checkAuth = useCallback(async () => {
     const token = await getAuthToken();
     if (!token) {
+      resetAnalyticsForSignedOutTransition();
       setIsAuthenticated(false);
       setIsLoading(false);
       return;
@@ -57,12 +67,13 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
     if (expiring) {
       const { ensureFreshToken } = await import('../lib/auth-interceptor');
       const refreshed = await ensureFreshToken();
+      if (!refreshed) resetAnalyticsForSignedOutTransition();
       setIsAuthenticated(refreshed);
     } else {
       setIsAuthenticated(true);
     }
     setIsLoading(false);
-  }, []);
+  }, [resetAnalyticsForSignedOutTransition]);
 
   useEffect(() => {
     checkAuth();
@@ -95,6 +106,7 @@ export function AuthProvider({ children, onReady }: AuthProviderProps) {
   const signOut = useCallback(async () => {
     track('Logout', { method: 'manual' });
     await authSignOut();
+    resetAnalytics();
     await Promise.all([clearStoredSessionId(), clearStoredActiveBoard()]);
     // Drop the in-memory active-board cache too. It's `staleTime: Infinity`, so
     // without this the next user to sign in on a shared device would inherit the

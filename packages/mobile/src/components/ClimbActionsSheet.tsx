@@ -89,7 +89,7 @@ function ClimbActionsSheet({
   const handleOpenInApp = useCallback(async () => {
     if (!auroraAppUrl) return;
     try {
-      track('Open in Aurora App', { climbUuid: climb?.uuid ?? null, boardLayout: boardName });
+      track('Open in Aurora App', { climbUuid: climb?.uuid ?? null, boardName, layoutId });
       await WebBrowser.openBrowserAsync(auroraAppUrl);
     } finally {
       onClose();
@@ -101,7 +101,7 @@ function ClimbActionsSheet({
     try {
       const url = `${WEB_BASE_URL}${buildClimbViewPath(boardName, layoutId, sizeId, setIds, angle, climb.uuid)}`;
       await Clipboard.setStringAsync(url);
-      track('Climb Shared', { method: 'copy_link', climbUuid: climb.uuid, boardLayout: boardName });
+      track('Climb Shared', { method: 'copy_link', climbUuid: climb.uuid, boardName, layoutId });
       showToast(t('mobile.climbActions.linkCopied'), 'info');
     } finally {
       onClose();
