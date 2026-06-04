@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, StyleSheet, type TextStyle } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import {
   createInitialTickState,
@@ -63,6 +64,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const { t: tClimbs } = useTranslation('climbs');
   const { systemColors } = useTheme();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
   const saveTick = useSaveTick(toBoardName(boardName));
   const { data: grades } = useGrades(boardName);
 
@@ -198,7 +200,9 @@ export const QuickTickBar = React.memo(function QuickTickBar({
   const saveLabel = ascentType === 'flash' ? t('playView.tickBar.flashSaveLabel') : t('playView.tickBar.sendSaveLabel');
 
   return (
-    <View style={styles.container}>
+    // The save row sits at the very bottom of LogAscentSheet, so the bottom
+    // padding must clear the Android system nav bar / home indicator.
+    <View style={[styles.container, { paddingBottom: insets.bottom + spacing[3] }]}>
       <View style={styles.row}>
         <Text variant="footnote" color={iosSystemColors.systemGray} style={styles.rowLabel}>
           {t('playView.tickBar.gradeLabel')}
@@ -324,7 +328,6 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 const styles = StyleSheet.create({
   container: {
     paddingTop: spacing[1],
-    paddingBottom: spacing[3],
   },
   row: {
     flexDirection: 'row',
