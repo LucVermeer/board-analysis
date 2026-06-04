@@ -159,9 +159,16 @@ export function useBoardBluetooth({
 
       setPickerState({ devices: [], isScanning: true, handleSelect, handleCancel });
 
-      subscribe((devices) => {
-        setPickerState((prev) => (prev ? { ...prev, devices } : null));
-      });
+      subscribe(
+        (devices) => {
+          setPickerState((prev) => (prev ? { ...prev, devices } : null));
+        },
+        () => {
+          // Scan window closed — drop the spinner. The picker stays open (a
+          // device was found but not yet picked, or it shows the empty state).
+          setPickerState((prev) => (prev ? { ...prev, isScanning: false } : null));
+        },
+      );
     });
   }, []);
 
@@ -361,7 +368,10 @@ export function useBoardBluetooth({
         // serial grace window opens the picker but nothing ever advertises, the
         // adapter rejects the selection promise on the scan timeout without
         // settling the picker's own promise — so the sheet (and its spinner)
-        // would otherwise stay mounted until the user swipes it away.
+        // would otherwise stay mounted until the user swipes it away. Settle the
+        // dangling picker promise before clearing it (matching the unmount
+        // cleanup) so it can't leak.
+        pickerRejectRef.current?.(new Error('Connection failed'));
         pickerRejectRef.current = null;
         setPickerState(null);
 

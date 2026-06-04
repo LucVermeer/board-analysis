@@ -18,12 +18,8 @@ type BleControlSheetProps = {
   onClose: () => void;
 };
 
-/**
- * Secondary BLE controls revealed by long-pressing the lightbulb. Keeps the
- * destructive Disconnect behind a labelled menu (rather than a blind long-press)
- * and surfaces the re-light action so the tap behaviour is discoverable —
- * mirroring web's light-control drawer.
- */
+// Secondary BLE controls (Re-light / Disconnect) revealed by long-pressing the
+// lightbulb — keeps the destructive Disconnect behind a labelled menu.
 function BleControlSheet({ visible, onReassert, onDisconnect, onClose }: BleControlSheetProps) {
   const { t: tSettings } = useTranslation('settings');
   const { t: tCommon } = useTranslation('common');

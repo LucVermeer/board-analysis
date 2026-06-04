@@ -68,7 +68,13 @@ export function classifyBleFailure(error: unknown, pairingStage?: string): BleFa
 
   // Scan found nothing / the target board's serial never showed up. Anchored to
   // device/board so a future unrelated "X not found" doesn't land here by accident.
-  if (/Target board not found during scan|device.*not found|board.*not found|deviceNotFound/i.test(message)) {
+  // "No boards found" is the native scan-timeout message (word order is "boards
+  // found", which "board.*not found" wouldn't match).
+  if (
+    /Target board not found during scan|No boards? found|device.*not found|board.*not found|deviceNotFound/i.test(
+      message,
+    )
+  ) {
     return 'board_not_found';
   }
 

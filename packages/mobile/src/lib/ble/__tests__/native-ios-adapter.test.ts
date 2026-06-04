@@ -52,7 +52,7 @@ vi.mock('../../../../modules/live-activity/src/index', () => ({
 }));
 
 import { NativeIosBleAdapter } from '../native-ios-adapter';
-import { SERIAL_RECONNECT_GRACE_MS } from '../scan-constants';
+import { SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
 beforeEach(() => {
   vi.useFakeTimers();

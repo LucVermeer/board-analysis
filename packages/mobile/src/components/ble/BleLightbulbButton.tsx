@@ -97,9 +97,11 @@ export function BleLightbulbButton({
       onLongPress={handleLongPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={
-        getBleLightbulbAccessibilityHint(isScanning, scanningAccessibilityHint) ?? longPressAccessibilityHint
-      }
+      accessibilityHint={getBleLightbulbAccessibilityHint(
+        isScanning,
+        scanningAccessibilityHint,
+        longPressAccessibilityHint,
+      )}
       accessibilityState={{ selected: isConnected }}
       hitSlop={8}
       style={({ pressed }) => [

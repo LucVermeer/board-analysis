@@ -39,6 +39,11 @@ describe('classifyBleFailure', () => {
       error: new Error('Bluetooth device was not found'),
       expected: 'board_not_found',
     },
+    {
+      name: 'native RN scan-timeout (no boards advertised)',
+      error: new Error('No boards found within scan window'),
+      expected: 'board_not_found',
+    },
 
     // service missing — native swift error descriptions
     { name: 'swift UART service missing', error: new Error('UART service was not found'), expected: 'service_missing' },

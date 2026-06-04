@@ -5,7 +5,7 @@ import {
   type NativeBleScanEvent,
 } from '../../../modules/live-activity/src/index';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
-import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from './scan-constants';
+import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
 function uint8ArrayToHex(bytes: Uint8Array): string {
   let hex = '';
@@ -47,6 +47,7 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
     const native = this.requireNative();
     const devices = new Map<string, DiscoveredDevice>();
     let updateListener: ((devices: DiscoveredDevice[]) => void) | null = null;
+    let scanStoppedListener: (() => void) | null = null;
     const pushDevices = () => updateListener?.([...devices.values()]);
 
     // One selection promise, resolved by either the silent serial auto-select
@@ -66,8 +67,9 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
       if (pickerOpened) return;
       pickerOpened = true;
       autoSelecting = false;
-      this.devicePicker((onUpdate) => {
+      this.devicePicker((onUpdate, onScanStopped) => {
         updateListener = onUpdate;
+        scanStoppedListener = onScanStopped ?? null;
         pushDevices();
       }).then(resolveSelection, rejectSelection);
     };
@@ -125,6 +127,10 @@ export class NativeIosBleAdapter implements BluetoothAdapter {
         // result so the sheet doesn't spin forever.
         if (pickerOpened && devices.size === 0) {
           rejectSelection(new Error('No boards found within scan window'));
+        } else {
+          // Devices were found but none picked yet — tell the picker the scan
+          // stopped so it drops the spinner instead of implying a live scan.
+          scanStoppedListener?.();
         }
       }, SCAN_TIMEOUT_MS);
 

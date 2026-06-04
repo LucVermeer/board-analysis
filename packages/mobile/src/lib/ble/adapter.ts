@@ -9,7 +9,7 @@ import {
 } from '@boardsesh/ble-protocol';
 import { bleManager } from './ble-manager';
 import type { BluetoothAdapter, BleConnection, DevicePickerFn, DiscoveredDevice } from './types';
-import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from './scan-constants';
+import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
 const CONNECTION_TIMEOUT_MS = 12_000;
 
@@ -38,6 +38,7 @@ export class RNBleAdapter implements BluetoothAdapter {
   async requestAndConnect(targetSerial?: string): Promise<BleConnection> {
     const devices = new Map<string, DiscoveredDevice>();
     let updateListener: ((devices: DiscoveredDevice[]) => void) | null = null;
+    let scanStoppedListener: (() => void) | null = null;
     const pushDevices = () => updateListener?.([...devices.values()]);
 
     // One selection promise, resolved by either the silent serial auto-select
@@ -57,8 +58,9 @@ export class RNBleAdapter implements BluetoothAdapter {
       if (pickerOpened) return;
       pickerOpened = true;
       autoSelecting = false;
-      this.devicePicker((onUpdate) => {
+      this.devicePicker((onUpdate, onScanStopped) => {
         updateListener = onUpdate;
+        scanStoppedListener = onScanStopped ?? null;
         pushDevices();
       }).then(resolveSelection, rejectSelection);
     };
@@ -130,6 +132,10 @@ export class RNBleAdapter implements BluetoothAdapter {
         // result so the sheet doesn't spin forever.
         if (pickerOpened && devices.size === 0) {
           rejectSelection(new Error('No boards found within scan window'));
+        } else {
+          // Devices were found but none picked yet — tell the picker the scan
+          // stopped so it drops the spinner instead of implying a live scan.
+          scanStoppedListener?.();
         }
       }, SCAN_TIMEOUT_MS);
 

@@ -33,9 +33,15 @@ export function getBleLightbulbVisualState({
   };
 }
 
+// Resolves the single accessibility hint for the button. While scanning, the
+// scanning hint wins outright — we deliberately don't fall back to the
+// long-press hint, so "scanning but no scanning hint supplied" never reads as
+// the long-press action.
 export function getBleLightbulbAccessibilityHint(
   isScanning: boolean,
   scanningAccessibilityHint?: string,
+  longPressAccessibilityHint?: string,
 ): string | undefined {
-  return isScanning ? scanningAccessibilityHint : undefined;
+  if (isScanning) return scanningAccessibilityHint;
+  return longPressAccessibilityHint;
 }
