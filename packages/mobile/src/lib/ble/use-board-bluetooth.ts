@@ -12,6 +12,7 @@ import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
 import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
+import { requestBleRuntimePermissions } from './use-ble-permissions';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
 import type { HoldPlacement } from '../../components/board-renderer/types';
 
@@ -277,6 +278,12 @@ export function useBoardBluetooth({
       setLoading(true);
 
       try {
+        const permissionsGranted = await requestBleRuntimePermissions({ requestNotificationPermission: true });
+        if (!permissionsGranted) {
+          Alert.alert(t('ble.notAvailable'), t('ble.notAvailable'));
+          return false;
+        }
+
         const adapter = createBluetoothAdapter(devicePicker);
 
         const available = await adapter.isAvailable();

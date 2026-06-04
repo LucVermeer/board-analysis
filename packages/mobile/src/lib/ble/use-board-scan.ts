@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { State } from 'react-native-ble-plx';
 import { AURORA_ADVERTISED_SERVICE_UUID, UART_SERVICE_UUID, parseSerialNumber } from '@boardsesh/ble-protocol';
 import { bleManager } from './ble-manager';
+import { requestBleRuntimePermissions } from './use-ble-permissions';
 
 const SCAN_TIMEOUT_MS = 15_000;
 
@@ -45,6 +46,12 @@ export function useBoardScan(): BoardScan {
 
   const start = useCallback(async () => {
     if (scanningRef.current) return;
+
+    const permissionsGranted = await requestBleRuntimePermissions();
+    if (!permissionsGranted) {
+      setStatus('unavailable');
+      return;
+    }
 
     let powered = false;
     try {

@@ -3,8 +3,48 @@ import type { HoldPlacement } from '../../../components/board-renderer/types';
 
 // ── Mock native modules that use-board-bluetooth.ts imports transitively ──
 
+const reactNativeHarness = vi.hoisted(() => ({
+  platform: {
+    OS: 'android' as 'android' | 'ios',
+    Version: 31,
+  },
+  permissionsAndroid: {
+    PERMISSIONS: {
+      ACCESS_FINE_LOCATION: 'ACCESS_FINE_LOCATION',
+      BLUETOOTH_SCAN: 'BLUETOOTH_SCAN',
+      BLUETOOTH_CONNECT: 'BLUETOOTH_CONNECT',
+      POST_NOTIFICATIONS: 'POST_NOTIFICATIONS',
+    },
+    RESULTS: {
+      GRANTED: 'granted',
+      DENIED: 'denied',
+    },
+    requestMultiple: vi.fn(),
+    request: vi.fn(),
+  },
+}));
+
+const mockBleManager = vi.hoisted(() => ({
+  state: vi.fn().mockResolvedValue('PoweredOn'),
+  onStateChange: vi.fn(),
+}));
+
 vi.mock('react-native', () => ({
   Alert: { alert: vi.fn() },
+  Platform: reactNativeHarness.platform,
+  PermissionsAndroid: reactNativeHarness.permissionsAndroid,
+}));
+
+vi.mock('react-native-ble-plx', () => ({
+  State: {
+    PoweredOn: 'PoweredOn',
+    PoweredOff: 'PoweredOff',
+    Unknown: 'Unknown',
+  },
+}));
+
+vi.mock('../ble-manager', () => ({
+  bleManager: mockBleManager,
 }));
 
 vi.mock('expo-keep-awake', () => ({
