@@ -52,6 +52,7 @@ vi.mock('../../../../modules/live-activity/src/index', () => ({
 }));
 
 import { NativeIosBleAdapter } from '../native-ios-adapter';
+import { SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -117,17 +118,63 @@ describe('NativeIosBleAdapter scan timeout', () => {
     expect(nativeMock.connect).toHaveBeenCalledWith('dev-1');
   });
 
-  it('rejects with "target not found" when targetSerial auto-select times out', async () => {
-    const adapter = new NativeIosBleAdapter(() => Promise.reject(new Error('picker should not open')));
+  it('falls back to the picker (not a hard reject) when targetSerial never advertises', async () => {
+    let pickerOpened = false;
+    // Picker that stays open once shown (never resolves on its own).
+    const adapter = new NativeIosBleAdapter(() => {
+      pickerOpened = true;
+      return new Promise<string>(() => {});
+    });
     const connectPromise = adapter.requestAndConnect('NEEDLE-SERIAL').catch((error: Error) => error);
     await Promise.resolve();
 
+    // Before the grace window the auto-select is still silent — no picker.
+    vi.advanceTimersByTime(SERIAL_RECONNECT_GRACE_MS - 1);
+    await Promise.resolve();
+    expect(pickerOpened).toBe(false);
+
+    // Grace window elapses with no serial match → the picker opens instead of
+    // waiting out the full scan window and failing.
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+    expect(pickerOpened).toBe(true);
+
+    // ...and with nothing ever discovered, the scan timeout rejects so the
+    // sheet doesn't spin forever.
     vi.advanceTimersByTime(30_000);
     await vi.runAllTimersAsync();
-
     const result = await connectPromise;
     expect(result).toBeInstanceOf(Error);
-    expect((result as Error).message).toMatch(/target board not found/i);
+    expect((result as Error).message).toMatch(/no boards found/i);
+  });
+
+  it('lets the user pick the stored board after the grace window opens the picker', async () => {
+    let manualPick: (deviceId: string) => void = () => {};
+    const adapter = new NativeIosBleAdapter(
+      () =>
+        new Promise<string>((resolve) => {
+          manualPick = resolve;
+        }),
+    );
+    const connectPromise = adapter.requestAndConnect('NEEDLE-SERIAL');
+    await Promise.resolve();
+
+    // Grace window opens the picker.
+    vi.advanceTimersByTime(SERIAL_RECONNECT_GRACE_MS);
+    await Promise.resolve();
+
+    // The board finally advertises after the picker opened — it shows up as a
+    // pickable device (auto-select has stopped), and the user taps it.
+    scanListeners[0]?.({
+      device: { deviceId: 'late-dev', name: 'NEEDLE-SERIAL' },
+      localName: 'NEEDLE-SERIAL',
+      rssi: -50,
+    });
+    manualPick('late-dev');
+    await vi.runAllTimersAsync();
+    await connectPromise;
+
+    expect(nativeMock.connect).toHaveBeenCalledWith('late-dev');
   });
 });
 

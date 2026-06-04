@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vite-plus/test';
+import { describe, it, expect } from 'vitest';
 import { classifyBleFailure, isDisconnectionError, type BleFailureCategory } from '../connection-error';
+
+// Mimics a react-native-ble-plx BleError: an Error subclass whose `name` is
+// 'BleError' (so the predicate classifies from the message, not the name).
+function bleError(message: string): Error {
+  const error = new Error(message);
+  error.name = 'BleError';
+  return error;
+}
 
 describe('classifyBleFailure', () => {
   const cases: Array<{ name: string; error: unknown; stage?: string; expected: BleFailureCategory }> = [
@@ -29,6 +37,11 @@ describe('classifyBleFailure', () => {
     {
       name: 'native swift device-not-found',
       error: new Error('Bluetooth device was not found'),
+      expected: 'board_not_found',
+    },
+    {
+      name: 'native RN scan-timeout (no boards advertised)',
+      error: new Error('No boards found within scan window'),
       expected: 'board_not_found',
     },
 
@@ -100,6 +113,11 @@ describe('isDisconnectionError', () => {
     { name: 'adapter "Device disconnected during write"', error: new Error('Device disconnected during write') },
     { name: 'plugin peripheral disconnected', error: new Error('The peripheral disconnected unexpectedly') },
     { name: 'generic gatt-not-connected message', error: new Error('GATT operation failed: not connected') },
+    // react-native-ble-plx BleError message shapes (name === 'BleError', so the
+    // predicate classifies from the message). These two carry the disconnect
+    // keyword and must be caught directly.
+    { name: 'rn-ble-plx DeviceDisconnected (201)', error: bleError('Device 5C:F8 was disconnected') },
+    { name: 'rn-ble-plx DeviceNotConnected (205)', error: bleError('Device 5C:F8 is not connected') },
   ];
 
   for (const { name, error } of disconnects) {
@@ -122,6 +140,14 @@ describe('isDisconnectionError', () => {
     // Validation-shaped messages from the write path.
     { name: 'LED data missing', error: new Error('LED placement map is empty') },
     { name: 'incompatible climb', error: new Error('climb incompatible with board') },
+    // rn-ble-plx CharacteristicWriteFailed (401) does NOT name the disconnect.
+    // The predicate deliberately leaves it unclassified — a write can fail on a
+    // live link too. The RNBleAdapter re-probes device.isConnected() and only
+    // then normalises to "Device disconnected during write" (caught above).
+    {
+      name: 'rn-ble-plx CharacteristicWriteFailed (401)',
+      error: bleError('Characteristic ABCD write failed for device 5C:F8 and service 1234'),
+    },
     // Opaque / non-error values.
     { name: 'opaque error', error: new Error('something opaque') },
     { name: 'plain string', error: 'a plain string' },

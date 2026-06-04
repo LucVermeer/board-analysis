@@ -42,6 +42,7 @@ vi.mock('@boardsesh/ble-protocol', () => ({
 // ── Import after mocks ─────────────────────────────────────────────────
 
 import { RNBleAdapter } from '../adapter';
+import { SCAN_TIMEOUT_MS, SERIAL_RECONNECT_GRACE_MS } from '@boardsesh/ble-protocol/scan-constants';
 import { splitMessages } from '@boardsesh/ble-protocol';
 import { State } from 'react-native-ble-plx';
 
@@ -348,6 +349,86 @@ describe('RNBleAdapter', () => {
       // No chunks should have been written since signal was aborted before start
       expect(mockWriteFn).not.toHaveBeenCalled();
     });
+
+    it('normalises a write failure to the disconnect signature when the link is gone', async () => {
+      // react-native-ble-plx surfaces a mid-write drop as a CharacteristicWriteFailed
+      // BleError that doesn't name the disconnect. The adapter probes the live
+      // link; when the device is actually gone it normalises to the message the
+      // write-failure path keys on so the lightbulb darkens.
+      const writeFailure = new Error('Characteristic ABCD write failed for device 5C:F8');
+      const mockWriteFn = vi.fn().mockRejectedValue(writeFailure);
+      const isConnectedFn = vi.fn().mockResolvedValue(false);
+      const mockCharacteristic = { uuid: 'uart-write-uuid', writeWithoutResponse: mockWriteFn };
+
+      const mockDeviceWithServices = {
+        id: 'drop-device',
+        isConnected: isConnectedFn,
+        characteristicsForService: vi.fn().mockResolvedValue([mockCharacteristic]),
+        requestMTU: vi.fn().mockResolvedValue(undefined),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnThis(),
+      };
+      const mockConnectedDevice = {
+        id: 'drop-device',
+        requestMTU: vi.fn().mockResolvedValue(undefined),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnValue(mockDeviceWithServices),
+      };
+
+      mockBleManager.connectToDevice.mockResolvedValue(mockConnectedDevice);
+      mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+      mockBleManager.startDeviceScan.mockImplementation(
+        (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+          callback(null, { id: 'drop-device', localName: 'Board', name: 'Board', rssi: -40 });
+        },
+      );
+
+      const adapter = new RNBleAdapter(() => Promise.resolve('drop-device'));
+      await adapter.requestAndConnect();
+
+      const data = new Uint8Array([0x01]);
+      vi.mocked(splitMessages).mockReturnValue([data]);
+
+      await expect(adapter.write(data)).rejects.toThrow('Device disconnected during write');
+      expect(isConnectedFn).toHaveBeenCalledOnce();
+    });
+
+    it('rethrows the original error when the link is still alive after a write failure', async () => {
+      // A genuine transient write failure on a live link must NOT be normalised
+      // to a disconnect — otherwise it would falsely darken the lightbulb.
+      const writeFailure = new Error('Characteristic ABCD write failed for device 5C:F8');
+      const mockWriteFn = vi.fn().mockRejectedValue(writeFailure);
+      const isConnectedFn = vi.fn().mockResolvedValue(true);
+      const mockCharacteristic = { uuid: 'uart-write-uuid', writeWithoutResponse: mockWriteFn };
+
+      const mockDeviceWithServices = {
+        id: 'live-device',
+        isConnected: isConnectedFn,
+        characteristicsForService: vi.fn().mockResolvedValue([mockCharacteristic]),
+        requestMTU: vi.fn().mockResolvedValue(undefined),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnThis(),
+      };
+      const mockConnectedDevice = {
+        id: 'live-device',
+        requestMTU: vi.fn().mockResolvedValue(undefined),
+        discoverAllServicesAndCharacteristics: vi.fn().mockReturnValue(mockDeviceWithServices),
+      };
+
+      mockBleManager.connectToDevice.mockResolvedValue(mockConnectedDevice);
+      mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+      mockBleManager.startDeviceScan.mockImplementation(
+        (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+          callback(null, { id: 'live-device', localName: 'Board', name: 'Board', rssi: -40 });
+        },
+      );
+
+      const adapter = new RNBleAdapter(() => Promise.resolve('live-device'));
+      await adapter.requestAndConnect();
+
+      const data = new Uint8Array([0x01]);
+      vi.mocked(splitMessages).mockReturnValue([data]);
+
+      await expect(adapter.write(data)).rejects.toThrow(writeFailure);
+      expect(isConnectedFn).toHaveBeenCalledOnce();
+    });
   });
 
   describe('requestAndConnect — failure modes', () => {
@@ -411,6 +492,71 @@ describe('RNBleAdapter', () => {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toMatch(/scan failed/i);
       expect(mockBleManager.stopDeviceScan).toHaveBeenCalled();
+    });
+
+    it('falls back to the picker when a reconnect-by-serial board never advertises', async () => {
+      vi.useFakeTimers();
+      try {
+        mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+        mockBleManager.startDeviceScan.mockImplementation(() => {});
+
+        let pickerOpened = false;
+        // Picker stays open once shown.
+        const devicePicker: DevicePickerFn = () => {
+          pickerOpened = true;
+          return new Promise<string>(() => {});
+        };
+        const adapter = new RNBleAdapter(devicePicker);
+        const settled = adapter.requestAndConnect('NEEDLE-SERIAL').catch((reason) => reason);
+        await Promise.resolve();
+
+        // Silent auto-select before the grace window — no picker yet.
+        await vi.advanceTimersByTimeAsync(SERIAL_RECONNECT_GRACE_MS - 1);
+        expect(pickerOpened).toBe(false);
+
+        // Grace window elapses with no match → picker opens instead of failing.
+        await vi.advanceTimersByTimeAsync(1);
+        expect(pickerOpened).toBe(true);
+
+        // Nothing ever advertises → scan timeout rejects so the sheet doesn't spin.
+        await vi.advanceTimersByTimeAsync(SCAN_TIMEOUT_MS);
+        const error = await settled;
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(/no boards found/i);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('signals scan-stopped to the picker on timeout when devices were found but not picked', async () => {
+      vi.useFakeTimers();
+      try {
+        mockBleManager.onDeviceDisconnected.mockReturnValue({ remove: vi.fn() });
+        // Surface a device immediately so the timeout takes the "found but not
+        // picked" branch rather than the empty-result reject.
+        mockBleManager.startDeviceScan.mockImplementation(
+          (_uuids: unknown, _opts: unknown, callback: (error: unknown, device: unknown) => void) => {
+            callback(null, { id: 'seen-device', localName: 'Board', name: 'Board', rssi: -40 });
+          },
+        );
+
+        const onScanStopped = vi.fn();
+        // Picker stays open (user hasn't tapped a device yet) and captures the
+        // scan-stopped notifier the adapter hands it.
+        const devicePicker: DevicePickerFn = (subscribe) => {
+          subscribe(() => {}, onScanStopped);
+          return new Promise<string>(() => {});
+        };
+        const adapter = new RNBleAdapter(devicePicker);
+        void adapter.requestAndConnect().catch(() => {});
+        await Promise.resolve();
+
+        expect(onScanStopped).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(SCAN_TIMEOUT_MS);
+        expect(onScanStopped).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

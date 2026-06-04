@@ -9,6 +9,7 @@ import {
   type LedColorOverrides,
 } from '@boardsesh/ble-protocol/aurora';
 import { getMoonboardBluetoothPacket } from '@boardsesh/ble-protocol/moonboard';
+import { isDisconnectionError } from '@boardsesh/ble-protocol/connection-error';
 import type { AuroraBoardName } from '@boardsesh/shared-schema';
 import { createBluetoothAdapter, isNativeIosBleAdapter } from './adapter-factory';
 import type { BluetoothAdapter, DevicePickerFn, DiscoveredDevice } from './types';
@@ -110,6 +111,13 @@ export function useBoardBluetooth({
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
+  // Remember the board (serial + which config it was paired against) so a later
+  // involuntary drop can be recovered with a silent reconnect to the same board
+  // (the lightbulb tap, native shells). Only valid while the current route still
+  // points at the same board — switching board/layout/size invalidates it and
+  // callers fall back to the picker. Mirrors the web `reconnectSerialForCurrentBoard`.
+  const [lastConnectedBoard, setLastConnectedBoard] = useState<{ serial: string; configKey: string } | null>(null);
+
   const adapterRef = useRef<BluetoothAdapter | null>(null);
   const apiLevelRef = useRef<number>(3);
   const unsubDisconnectRef = useRef<(() => void) | null>(null);
@@ -151,9 +159,16 @@ export function useBoardBluetooth({
 
       setPickerState({ devices: [], isScanning: true, handleSelect, handleCancel });
 
-      subscribe((devices) => {
-        setPickerState((prev) => (prev ? { ...prev, devices } : null));
-      });
+      subscribe(
+        (devices) => {
+          setPickerState((prev) => (prev ? { ...prev, devices } : null));
+        },
+        () => {
+          // Scan window closed — drop the spinner. The picker stays open (a
+          // device was found but not yet picked, or it shows the empty state).
+          setPickerState((prev) => (prev ? { ...prev, isScanning: false } : null));
+        },
+      );
     });
   }, []);
 
@@ -236,10 +251,20 @@ export function useBoardBluetooth({
           return;
         }
         console.error('Error sending frames to board:', error);
+        // A write that fails because the link is gone (the board dropped or
+        // another device grabbed it — these boards are last-connection-wins) is
+        // often the only signal we get: the adapter's disconnect event may never
+        // fire. Mark the connection lost so the lightbulb stops showing
+        // "connected" and a deliberate reconnect can run. The native adapters
+        // throw the plain-Error signatures the predicate matches ("Not
+        // connected", "Device disconnected during write").
+        if (isDisconnectionError(error)) {
+          handleDisconnection();
+        }
         return false;
       }
     },
-    [boardName, layoutId, sizeId, holdsData, ledColorOverrides],
+    [boardName, layoutId, sizeId, holdsData, ledColorOverrides, handleDisconnection],
   );
 
   const connect = useCallback(
@@ -268,7 +293,15 @@ export function useBoardBluetooth({
         // Clean up any existing adapter
         if (adapterRef.current) {
           unsubDisconnectRef.current?.();
-          await adapterRef.current.disconnect();
+          try {
+            await adapterRef.current.disconnect();
+          } catch {
+            // The previous adapter may already be torn down — e.g. after a
+            // write-failure disconnect (another device grabbed the board) the
+            // link is dead, and disconnecting a dead handle can reject. We're
+            // replacing it anyway, so swallow it rather than aborting the
+            // reconnect with a spurious error.
+          }
         }
 
         const connection = await adapter.requestAndConnect(targetSerial);
@@ -311,6 +344,13 @@ export function useBoardBluetooth({
           parsedSerial = parseSerialNumber(connection.deviceName) ?? null;
         }
 
+        // Remember the board (keyed to the config it was paired against) so an
+        // involuntary drop can be recovered with a silent reconnect. Only Aurora
+        // boards expose a parseable serial; moonboard can't be reconnected by serial.
+        if (parsedSerial) {
+          setLastConnectedBoard({ serial: parsedSerial, configKey: `${boardName}::${layoutId}::${sizeId}` });
+        }
+
         // Send initial frames if provided
         if (initialFrames) {
           await sendFramesToBoard(initialFrames, mirrored);
@@ -323,6 +363,17 @@ export function useBoardBluetooth({
       } catch (error) {
         console.error('Error connecting to Bluetooth:', error);
         setIsConnected(false);
+
+        // Dismiss the picker sheet if it's still showing. When a reconnect-by-
+        // serial grace window opens the picker but nothing ever advertises, the
+        // adapter rejects the selection promise on the scan timeout without
+        // settling the picker's own promise — so the sheet (and its spinner)
+        // would otherwise stay mounted until the user swipes it away. Settle the
+        // dangling picker promise before clearing it (matching the unmount
+        // cleanup) so it can't leak.
+        pickerRejectRef.current?.(new Error('Connection failed'));
+        pickerRejectRef.current = null;
+        setPickerState(null);
 
         const errorMessage = error instanceof Error ? error.message : String(error);
         const isUserCancel =
@@ -348,10 +399,30 @@ export function useBoardBluetooth({
     const adapter = adapterRef.current;
     adapterRef.current = null;
     setIsConnected(false);
+    // A deliberate disconnect clears the remembered board — only an involuntary
+    // drop should offer a silent same-board reconnect.
+    setLastConnectedBoard(null);
     onConnectionChange?.(false);
     // TODO: analytics (Phase 6)
     await adapter?.disconnect();
   }, [onConnectionChange]);
+
+  // Serial to silently reconnect to for the board currently in view, or null
+  // when nothing is remembered or the user switched boards (in which case the
+  // caller opens the device picker instead).
+  //
+  // Deliberately keyed on board+layout+size only — NOT set_ids, which web's
+  // boardIdentityKey also folds in. The mobile BluetoothProvider is handed a
+  // single global activeBoard (no set_ids), and the LED placement map keys on
+  // layout+size alone, so a same-board reconnect renders identically regardless
+  // of set_ids. Don't thread set_ids in here without also passing it to the
+  // provider.
+  const currentConfigKey =
+    boardName && layoutId !== undefined && sizeId !== undefined ? `${boardName}::${layoutId}::${sizeId}` : null;
+  const reconnectSerialForCurrentBoard =
+    lastConnectedBoard && currentConfigKey && lastConnectedBoard.configKey === currentConfigKey
+      ? lastConnectedBoard.serial
+      : null;
 
   // Clean up on unmount
   useEffect(() => {
@@ -370,5 +441,6 @@ export function useBoardBluetooth({
     disconnect,
     sendFramesToBoard,
     pickerState,
+    reconnectSerialForCurrentBoard,
   };
 }

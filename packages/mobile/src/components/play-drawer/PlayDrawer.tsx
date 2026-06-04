@@ -24,6 +24,7 @@ import { LogAscentSheet } from '../LogAscentSheet';
 import { DeferredSections } from './DeferredSections';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
+import { BleControlSheet } from '../ble/BleControlSheet';
 import { Icon } from '../Icon';
 import { useQueue } from '../../providers/queue-provider';
 import { useTheme } from '../../providers/theme-provider';
@@ -88,6 +89,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   const [isTickBarActive, setIsTickBarActive] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [activeSubDrawer, setActiveSubDrawer] = useState<ActiveSubDrawer>('none');
+  const [bleControlOpen, setBleControlOpen] = useState(false);
   const resetZoomRef = useRef<(() => void) | null>(null);
 
   // Measured heights driving the peek snap-point. The peek opens the drawer
@@ -251,9 +253,30 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
 
   const handleLightbulb = useCallback(() => {
     if (!bluetooth) return;
-    if (bluetooth.isConnected) void bluetooth.disconnect();
-    else void bluetooth.connect();
+    if (bluetooth.isConnected) {
+      // Already connected — re-light the current climb. Re-tapping the lightbulb
+      // re-pushes the wall (and trips disconnect detection if the link is dead).
+      bluetooth.reassertWall();
+    } else {
+      // Disconnected — silently reconnect to the same board when we remember it;
+      // the adapter falls back to the picker if it doesn't reappear.
+      void bluetooth.connect(undefined, undefined, bluetooth.reconnectSerialForCurrentBoard ?? undefined);
+    }
   }, [bluetooth]);
+
+  const handleLightbulbLongPress = useCallback(() => {
+    if (!bluetooth?.isConnected) return;
+    // Reveal the BLE controls (Re-light / Disconnect) rather than disconnecting
+    // blind — keeps the destructive action behind a labelled menu.
+    setBleControlOpen(true);
+  }, [bluetooth]);
+
+  // Close the BLE controls sheet if the link drops while it's open — otherwise
+  // it lingers showing Re-light / Disconnect actions that no-op on a dead link.
+  const bluetoothConnected = bluetooth?.isConnected ?? false;
+  useEffect(() => {
+    if (!bluetoothConnected) setBleControlOpen(false);
+  }, [bluetoothConnected]);
 
   const handleOpenActions = useCallback(() => {
     setActiveSubDrawer('actions');
@@ -451,6 +474,7 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
                   onMirror={handleMirror}
                   onToggleFavorite={handleToggleFavorite}
                   onLightbulb={handleLightbulb}
+                  onLightbulbLongPress={handleLightbulbLongPress}
                   onOpenActions={handleOpenActions}
                   onOpenQueue={handleOpenQueue}
                   onShare={handleShare}
@@ -535,6 +559,16 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           setIds={setIds}
           sessionId={sessionId}
           consensusGradeName={displayedClimb.difficulty}
+        />
+      )}
+
+      {/* BLE controls revealed by long-pressing the lightbulb. */}
+      {bluetooth && (
+        <BleControlSheet
+          visible={bleControlOpen}
+          onReassert={bluetooth.reassertWall}
+          onDisconnect={() => void bluetooth.disconnect()}
+          onClose={() => setBleControlOpen(false)}
         />
       )}
     </>
