@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,8 +36,6 @@ export function EndSessionSheet({ visible, onDismiss, onConfirm, isEnding, climb
     }
   }, [mounted]);
 
-  const snapPoints = useMemo(() => ['35%'], []);
-
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />,
     [],
@@ -53,7 +51,10 @@ export function EndSessionSheet({ visible, onDismiss, onConfirm, isEnding, climb
   return (
     <BottomSheet
       ref={sheetRef}
-      snapPoints={snapPoints}
+      // Size to content rather than a fixed snap point — with safe-area bottom
+      // padding added (up to ~34pt on gesture-nav phones), a fixed '35%' could
+      // crowd or clip the buttons on shorter devices.
+      enableDynamicSizing
       enablePanDownToClose
       onClose={handleClose}
       backdropComponent={renderBackdrop}
@@ -89,7 +90,7 @@ export function EndSessionSheet({ visible, onDismiss, onConfirm, isEnding, climb
 
 const styles = StyleSheet.create({
   content: {
-    flex: 1,
+    // No flex:1 — enableDynamicSizing measures the content's intrinsic height.
     alignItems: 'center',
     paddingHorizontal: spacing[6],
     paddingTop: spacing[4],

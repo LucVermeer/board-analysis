@@ -328,7 +328,6 @@ export const QuickTickBar = React.memo(function QuickTickBar({
 const styles = StyleSheet.create({
   container: {
     paddingTop: spacing[1],
-    // paddingBottom applied inline (safe-area aware) — see render.
   },
   row: {
     flexDirection: 'row',
