@@ -55,10 +55,7 @@ export function parseBoardConfigFromPath(boardPath: string): ResolvedBoardConfig
  * found, returns it with the path's angle applied — a session can be on any
  * angle, and we never want to leave the joiner on the board's last-used angle.
  */
-export function findOwnedBoardForSession(
-  ownedBoards: UserBoard[],
-  config: ResolvedBoardConfig,
-): UserBoard | undefined {
+export function findOwnedBoardForSession(ownedBoards: UserBoard[], config: ResolvedBoardConfig): UserBoard | undefined {
   const owned = findOwnedBoardForConfig(ownedBoards, {
     boardType: config.boardType,
     layoutId: config.layoutId,

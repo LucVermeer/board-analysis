@@ -163,11 +163,7 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
           </View>
         }
       />
-      <CommentSheet
-        sheetRef={commentSheetRef}
-        entityId={commentSessionId}
-        onClose={() => setCommentSessionId(null)}
-      />
+      <CommentSheet sheetRef={commentSheetRef} entityId={commentSessionId} onClose={() => setCommentSessionId(null)} />
     </View>
   );
 }

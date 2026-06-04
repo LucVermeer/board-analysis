@@ -48,9 +48,7 @@ export function parseJoinSessionId(url: string): string | null {
     segments.push(...parsed.path.split('/'));
   }
 
-  const cleaned = segments
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0);
+  const cleaned = segments.map((segment) => segment.trim()).filter((segment) => segment.length > 0);
 
   // Drop a leading two-letter locale segment (`es`, `fr`). No route prefix is
   // two letters, so this can't swallow a real segment.

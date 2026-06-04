@@ -133,8 +133,8 @@ describe('resolveBoardForSession', () => {
   });
 
   it('throws on an unparseable board path', async () => {
-    await expect(
-      resolveBoardForSession('garbage', { ownedBoards: [], createBoard: vi.fn() }),
-    ).rejects.toThrow(/Cannot resolve a board/);
+    await expect(resolveBoardForSession('garbage', { ownedBoards: [], createBoard: vi.fn() })).rejects.toThrow(
+      /Cannot resolve a board/,
+    );
   });
 });

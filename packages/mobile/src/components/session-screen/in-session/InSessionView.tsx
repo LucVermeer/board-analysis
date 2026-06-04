@@ -63,14 +63,14 @@ function isSessionHistoryTick(tick: SessionDetailTick): tick is SessionDetailTic
   return isSessionHistoryStatus(tick.status);
 }
 
-function statusMeta(status: SessionHistoryStatus): { icon: IconName; tint: string; labelKey: string } {
+function statusMeta(status: SessionHistoryStatus): { icon: IconName; tint: string } {
   switch (status) {
     case 'flash':
-      return { icon: 'flash', tint: brandColors.warning, labelKey: 'playView.tickBar.flashSaveLabel' };
+      return { icon: 'flash', tint: brandColors.warning };
     case 'send':
-      return { icon: 'tick', tint: brandColors.success, labelKey: 'playView.tickBar.sendSaveLabel' };
+      return { icon: 'tick', tint: brandColors.success };
     case 'attempt':
-      return { icon: 'circle', tint: iosSystemColors.systemGray, labelKey: 'playView.tickBar.attemptLabel' };
+      return { icon: 'circle', tint: iosSystemColors.systemGray };
   }
 }
 
@@ -112,7 +112,18 @@ function SessionHistoryRow({ tick, status, participant, onPress }: SessionHistor
   const { t } = useTranslation('session');
   const { systemColors } = useTheme();
   const meta = statusMeta(status);
-  const statusLabel = t(meta.labelKey);
+  let statusLabel: string;
+  switch (status) {
+    case 'flash':
+      statusLabel = t('playView.tickBar.flashSaveLabel');
+      break;
+    case 'send':
+      statusLabel = t('playView.tickBar.sendSaveLabel');
+      break;
+    case 'attempt':
+      statusLabel = t('playView.tickBar.attemptLabel');
+      break;
+  }
   const climb = tickToClimb(tick);
   const boardConfig = tick.layoutId ? getBoardConfigForPlaylist(tick.boardType, tick.layoutId) : null;
   const subtitleParts = [

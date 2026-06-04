@@ -30,9 +30,7 @@ export function SessionParticipantBreakdown({ participants }: { participants: Se
           showSeparator
           trailing={
             <View style={styles.chips}>
-              {participant.sends > 0 && (
-                <Chip icon="tick" label={`${participant.sends}`} tint={brandColors.success} />
-              )}
+              {participant.sends > 0 && <Chip icon="tick" label={`${participant.sends}`} tint={brandColors.success} />}
               {participant.flashes > 0 && (
                 <Chip icon="flash" label={`${participant.flashes}`} tint={brandColors.warning} />
               )}

@@ -27,12 +27,7 @@ export function SessionStatTiles({ sends, flashes, attempts, hardestGrade }: Ses
     <Card style={styles.card}>
       <View style={styles.tiles}>
         <StatTile value={sends} label={t('mobile.sessions.weekly.sends')} icon="tick" tint={brandColors.success} />
-        <StatTile
-          value={flashes}
-          label={t('mobile.sessions.weekly.flashes')}
-          icon="flash"
-          tint={brandColors.warning}
-        />
+        <StatTile value={flashes} label={t('mobile.sessions.weekly.flashes')} icon="flash" tint={brandColors.warning} />
         <StatTile
           value={attempts}
           label={t('mobile.sessions.weekly.attempts')}

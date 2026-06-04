@@ -73,7 +73,9 @@ export const SessionFeedCard = memo(function SessionFeedCard({
               )}
             </View>
           </View>
-          {session.hardestGrade ? <HardestBadge grade={session.hardestGrade} label={t('sessionFeedCard.hardest')} /> : null}
+          {session.hardestGrade ? (
+            <HardestBadge grade={session.hardestGrade} label={t('sessionFeedCard.hardest')} />
+          ) : null}
         </View>
 
         {session.goal ? (

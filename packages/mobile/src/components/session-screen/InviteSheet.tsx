@@ -103,12 +103,7 @@ export function InviteSheet({ visible, onDismiss, sessionId }: InviteSheetProps)
             onPress={handleCopyLink}
             style={styles.button}
           />
-          <Button
-            title={t('mobile.session.inviteShare')}
-            icon="share"
-            onPress={handleShare}
-            style={styles.button}
-          />
+          <Button title={t('mobile.session.inviteShare')} icon="share" onPress={handleShare} style={styles.button} />
         </View>
       </BottomSheetView>
     </BottomSheet>

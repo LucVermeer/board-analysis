@@ -66,10 +66,7 @@ export default function SessionDetailScreen() {
   const handleOpenSessionComments = useCallback((id: string) => openComments(id, 'session'), [openComments]);
   const handleOpenTickComments = useCallback((tickUuid: string) => openComments(tickUuid, 'tick'), [openComments]);
 
-  const handleTickPress = useCallback(
-    (tick: SessionDetailTick) => navigateToSessionClimb(router, tick),
-    [router],
-  );
+  const handleTickPress = useCallback((tick: SessionDetailTick) => navigateToSessionClimb(router, tick), [router]);
 
   // Header: title + edit overflow for an owned inferred session.
   useEffect(() => {

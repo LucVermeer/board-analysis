@@ -123,7 +123,8 @@ export function StackedBarChart({
           .map((segment) => ({
             value: segment.value,
             // An explicit segment colour wins; otherwise fall back to colorBy.
-            color: segment.color ?? (colorBy === 'grade' ? gradeChartColor(segment.key) : layoutChartColor(segment.key)),
+            color:
+              segment.color ?? (colorBy === 'grade' ? gradeChartColor(segment.key) : layoutChartColor(segment.key)),
           }));
         const stacks = filled.length > 0 ? filled : [{ value: 0, color: 'transparent' }];
         // Round only the stack's outer corners (bottom of the bottom segment,

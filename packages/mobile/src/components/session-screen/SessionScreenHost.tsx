@@ -48,13 +48,9 @@ export function SessionScreenHost() {
       setMounted(true);
       translateY.value = withSpring(0, springs.gentle);
     } else if (mounted) {
-      translateY.value = withTiming(
-        screenHeight,
-        { duration: 240, easing: Easing.in(Easing.cubic) },
-        (finished) => {
-          if (finished) runOnJS(setMounted)(false);
-        },
-      );
+      translateY.value = withTiming(screenHeight, { duration: 240, easing: Easing.in(Easing.cubic) }, (finished) => {
+        if (finished) runOnJS(setMounted)(false);
+      });
     }
   }, [isOpen, mounted, screenHeight, translateY]);
 

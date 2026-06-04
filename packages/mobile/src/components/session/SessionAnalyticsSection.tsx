@@ -37,7 +37,11 @@ export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] 
   }, [ticks, gradeFormat]);
 
   const gradeDistLegend = useMemo<ChartLegendItem[] | undefined>(
-    () => viewModel?.aggregatedStackedBars?.legend.map((entry) => ({ label: entry.label, color: layoutChartColor(entry.key) })),
+    () =>
+      viewModel?.aggregatedStackedBars?.legend.map((entry) => ({
+        label: entry.label,
+        color: layoutChartColor(entry.key),
+      })),
     [viewModel],
   );
   const flashRedpointLegend = useMemo<ChartLegendItem[] | undefined>(
@@ -55,7 +59,11 @@ export function SessionAnalyticsSection({ ticks }: { ticks: SessionDetailTick[] 
     <View>
       <SectionHeader title={t('stats.gradeDistribution')} />
       <Card style={styles.chartCard}>
-        <StackedBarChart bars={viewModel.aggregatedStackedBars?.bars ?? null} colorBy="layout" legend={gradeDistLegend} />
+        <StackedBarChart
+          bars={viewModel.aggregatedStackedBars?.bars ?? null}
+          colorBy="layout"
+          legend={gradeDistLegend}
+        />
       </Card>
 
       {viewModel.aggregatedFlashRedpointBars && (

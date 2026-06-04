@@ -1,4 +1,9 @@
-import { V_GRADE_COLORS, FONT_GRADE_COLORS, getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
+import {
+  V_GRADE_COLORS,
+  FONT_GRADE_COLORS,
+  getGradeColor,
+  DEFAULT_GRADE_COLOR,
+} from '@boardsesh/board-constants/grade-colors';
 import type { RawBar, RawBarSegment } from '@boardsesh/profile-stats';
 import type { SessionGradeDistributionItem } from '@boardsesh/shared-schema';
 import { brandColors, withAlpha } from '../../theme/colors';

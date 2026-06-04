@@ -43,19 +43,19 @@ export function SessionScreenHeader({
   return (
     <GestureDetector gesture={dragGesture}>
       <View style={styles.row}>
-      <Pressable
-        onPress={onClose}
-        hitSlop={12}
-        accessibilityRole="button"
-        accessibilityLabel={t('mobile.session.minimize')}
-        style={styles.iconButton}
-      >
-        <Icon name="chevron.down" size={26} color={systemColors.label} />
-      </Pressable>
-      <Text variant="title3" color={systemColors.label} style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
-      {onShare ? (
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.session.minimize')}
+          style={styles.iconButton}
+        >
+          <Icon name="chevron.down" size={26} color={systemColors.label} />
+        </Pressable>
+        <Text variant="title3" color={systemColors.label} style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+        {onShare ? (
           <Pressable
             onPress={onShare}
             hitSlop={12}

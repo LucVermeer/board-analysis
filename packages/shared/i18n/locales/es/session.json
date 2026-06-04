@@ -335,8 +335,6 @@
       "inStatsDuration": "Duración",
       "inStatsHardest": "Encadene más duro",
       "inStatsGrades": "Distribución de grados",
-      "inQueueTitle": "Cola",
-      "inQueueEmpty": "Cola vacía — explora vías para añadir.",
       "inEndSession": "Terminar sesión",
       "notification": {
         "channelName": "Sesión de escalada activa",

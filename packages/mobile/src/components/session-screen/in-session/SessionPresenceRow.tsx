@@ -47,9 +47,7 @@ export function SessionPresenceRow({ users, driverParticipantId, selfParticipant
   if (users.length === 0) return null;
 
   const allReconnecting = users.every((user) => user.connectionState !== 'CONNECTED');
-  const driver = driverParticipantId
-    ? users.find((user) => user.id === driverParticipantId)
-    : undefined;
+  const driver = driverParticipantId ? users.find((user) => user.id === driverParticipantId) : undefined;
   const driverIsSelf = !!driver && driver.id === selfParticipantId;
 
   return (
