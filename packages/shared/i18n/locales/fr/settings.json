@@ -373,6 +373,8 @@
     "relightBoard": "Rallumer le panneau",
     "holdForControls": "Maintenir pour les commandes",
     "notAvailable": "Le Bluetooth n'est pas disponible",
+    "permissionRequired": "Autorisation Bluetooth requise",
+    "errorPermissionDenied": "Autorisez le Bluetooth pour connecter un panneau.",
     "errorLedMissing": "Impossible d'envoyer au panneau — données LED manquantes pour cette configuration.",
     "errorIncompatible": "Ce bloc est pour une configuration de panneau différente.",
     "errorConnectionFailed": "Impossible de se connecter au panneau. Vérifiez qu'il est allumé et à proximité."

@@ -1,12 +1,24 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import {
+  reactNativePermissionHarness,
+  resetReactNativePermissionHarness,
+} from './react-native-permissions-test-harness';
 
 const mockBleManager = vi.hoisted(() => ({
   state: vi.fn(),
   startDeviceScan: vi.fn(),
   stopDeviceScan: vi.fn(),
 }));
+
+vi.mock('react-native', async () => {
+  const { reactNativePermissionHarness: harness } = await import('./react-native-permissions-test-harness');
+  return {
+    Platform: harness.platform,
+    PermissionsAndroid: harness.permissionsAndroid,
+  };
+});
 
 vi.mock('react-native-ble-plx', () => ({
   State: { PoweredOn: 'PoweredOn', PoweredOff: 'PoweredOff' },
@@ -33,6 +45,7 @@ describe('useBoardScan', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    resetReactNativePermissionHarness();
     mockBleManager.state.mockResolvedValue('PoweredOn');
   });
 
@@ -49,6 +62,39 @@ describe('useBoardScan', () => {
     });
 
     expect(result.current.status).toBe('unavailable');
+    expect(mockBleManager.startDeviceScan).not.toHaveBeenCalled();
+  });
+
+  it('requests Android BLE permissions before checking Bluetooth state', async () => {
+    const { result } = renderHook(() => useBoardScan());
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    expect(reactNativePermissionHarness.permissionsAndroid.requestMultiple).toHaveBeenCalledWith([
+      'BLUETOOTH_SCAN',
+      'BLUETOOTH_CONNECT',
+    ]);
+    expect(reactNativePermissionHarness.permissionsAndroid.requestMultiple.mock.invocationCallOrder[0]).toBeLessThan(
+      mockBleManager.state.mock.invocationCallOrder[0],
+    );
+    expect(result.current.status).toBe('scanning');
+  });
+
+  it('reports unavailable when Android BLE permissions are denied', async () => {
+    reactNativePermissionHarness.permissionsAndroid.requestMultiple.mockResolvedValue({
+      BLUETOOTH_SCAN: 'denied',
+      BLUETOOTH_CONNECT: 'granted',
+    });
+    const { result } = renderHook(() => useBoardScan());
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    expect(result.current.status).toBe('unavailable');
+    expect(mockBleManager.state).not.toHaveBeenCalled();
     expect(mockBleManager.startDeviceScan).not.toHaveBeenCalled();
   });
 

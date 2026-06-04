@@ -373,6 +373,8 @@
     "relightBoard": "Reiluminar tablero",
     "holdForControls": "Mantén pulsado para los controles",
     "notAvailable": "Bluetooth no está disponible",
+    "permissionRequired": "Permiso de Bluetooth necesario",
+    "errorPermissionDenied": "Permite los permisos de Bluetooth para conectar un tablero.",
     "errorLedMissing": "No se pudo enviar al tablero — faltan datos LED para esta configuración.",
     "errorIncompatible": "Este boulder es para una configuración de tablero diferente.",
     "errorConnectionFailed": "No se pudo conectar al tablero. Asegúrate de que esté encendido y cerca."
