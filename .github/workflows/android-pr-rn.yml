@@ -113,7 +113,8 @@ jobs:
           SENTRY_DISABLE_AUTO_UPLOAD: 'true'
         # arm64-v8a only: every modern physical device, ~4× less native compile
         # (board-renderer CMake + RN/Hermes) → faster + far lower peak memory.
-        # The release/Play build (android-apk-rn.yml) keeps all ABIs.
+        # The GitHub Release sideload APK uses the same arm64-only path; Play
+        # distribution still goes through the signed AAB in android-apk-rn.yml.
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -PboardseshAbiFilters=arm64-v8a --stacktrace
 
       - name: Upload sideloadable APK
