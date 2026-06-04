@@ -298,13 +298,19 @@
       "logAscent": "Registrar ascenso",
       "nextClimb": "Siguiente bloque",
       "previousClimb": "Bloque anterior",
-      "alreadyLogged": "Registrado"
+      "alreadyLogged": "Registrado",
+      "dragHandleAria": "Arrastra para reordenar {{name}}"
     },
     "queueSheet": {
       "emptyQueue": "Tu cola está vacía",
       "toggleHistory": "Mostrar historial",
       "editQueue": "Editar cola",
       "doneEditing": "Listo"
+    },
+    "queueSnackbar": {
+      "added": "Bloque añadido a la cola",
+      "open": "Abrir",
+      "openAria": "Abrir cola"
     },
     "toast": {
       "sessionEnded": "Sesión terminada"

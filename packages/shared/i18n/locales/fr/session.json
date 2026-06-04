@@ -298,13 +298,19 @@
       "logAscent": "Enregistrer l'ascension",
       "nextClimb": "Bloc suivant",
       "previousClimb": "Bloc précédent",
-      "alreadyLogged": "Enregistré"
+      "alreadyLogged": "Enregistré",
+      "dragHandleAria": "Glisser pour réorganiser {{name}}"
     },
     "queueSheet": {
       "emptyQueue": "Votre file est vide",
       "toggleHistory": "Afficher l'historique",
       "editQueue": "Modifier la file",
       "doneEditing": "Terminé"
+    },
+    "queueSnackbar": {
+      "added": "Bloc ajouté à la file",
+      "open": "Ouvrir",
+      "openAria": "Ouvrir la file"
     },
     "toast": {
       "sessionEnded": "Session terminée"

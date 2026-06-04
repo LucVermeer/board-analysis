@@ -298,13 +298,19 @@
       "logAscent": "Log ascent",
       "nextClimb": "Next climb",
       "previousClimb": "Previous climb",
-      "alreadyLogged": "Logged"
+      "alreadyLogged": "Logged",
+      "dragHandleAria": "Drag to reorder {{name}}"
     },
     "queueSheet": {
       "emptyQueue": "Your queue is empty",
       "toggleHistory": "Toggle history",
       "editQueue": "Edit queue",
       "doneEditing": "Done editing"
+    },
+    "queueSnackbar": {
+      "added": "Climb added to queue",
+      "open": "Open",
+      "openAria": "Open queue"
     },
     "toast": {
       "sessionEnded": "Session ended"

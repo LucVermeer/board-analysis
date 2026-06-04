@@ -22,7 +22,6 @@ import { PlayDrawerHeader } from './PlayDrawerHeader';
 import { PlayDrawerActionBar } from './PlayDrawerActionBar';
 import { LogAscentSheet } from '../LogAscentSheet';
 import { DeferredSections } from './DeferredSections';
-import { QueueSheet } from './QueueSheet';
 import { AngleSelectorSheet } from './AngleSelectorSheet';
 import { ClimbActionsSheet } from '../ClimbActionsSheet';
 import { Icon } from '../Icon';
@@ -70,10 +69,13 @@ type PlayDrawerProps = {
   onAngleChange?: (angle: number) => void;
   /** When false, the board's angle is fixed — the angle pill is hidden. */
   isAngleAdjustable?: boolean;
+  /** Open the queue list sheet (provided by DrawerHostProvider; passed as a prop
+   *  rather than read via useDrawerHost to avoid a host↔PlayDrawer require cycle). */
+  onOpenQueue: () => void;
 };
 
 export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function PlayDrawer(
-  { boardConfig, onAngleChange, isAngleAdjustable = true },
+  { boardConfig, onAngleChange, isAngleAdjustable = true, onOpenQueue },
   ref,
 ) {
   const { t } = useTranslation('session');
@@ -258,8 +260,8 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
   }, []);
 
   const handleOpenQueue = useCallback(() => {
-    setActiveSubDrawer('queue');
-  }, []);
+    onOpenQueue();
+  }, [onOpenQueue]);
 
   const handleOpenAngleSelector = useCallback(() => {
     setActiveSubDrawer('angleSelector');
@@ -475,19 +477,6 @@ export const PlayDrawer = forwardRef<PlayDrawerHandle, PlayDrawerProps>(function
           )}
         </BottomSheetScrollView>
       </BottomSheetModal>
-
-      {/* Sub-drawer: Queue */}
-      {activeSubDrawer === 'queue' && (
-        <QueueSheet
-          visible={true}
-          onClose={handleCloseSubDrawer}
-          onClimbPress={(item) => {
-            setClimb(item.climb);
-            setCurrentClimb(item);
-            handleCloseSubDrawer();
-          }}
-        />
-      )}
 
       {/* Sub-drawer: Climb actions */}
       {activeSubDrawer === 'actions' && (
