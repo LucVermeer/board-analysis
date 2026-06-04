@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ClimbQueueItem } from '@boardsesh/queue';
+import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import type { Climb, SessionDetailTick, SessionFeedParticipant } from '@boardsesh/shared-schema';
 import { getGradeTextColor } from '@boardsesh/play-view';
 import { formatTickRelativeTime, tickTimeMs } from '@boardsesh/profile-stats';
@@ -24,7 +25,6 @@ import { Icon } from '../../Icon';
 import { Text } from '../../Text';
 import { type IconName } from '../../icon-map';
 import { useTheme } from '../../../providers/theme-provider';
-import { useOptionalBluetoothContext } from '../../../providers/bluetooth-provider';
 import { useQueue } from '../../../providers/queue-provider';
 import { useDrawerHost } from '../../../providers/drawer-host-provider';
 import { useSessionScreen } from '../../../providers/session-screen-provider';
@@ -206,7 +206,6 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const bluetooth = useOptionalBluetoothContext();
   const { close } = useSessionScreen();
   const { openPlayDrawer } = useDrawerHost();
   const { sessionId, liveStats, sessionUsers, driverParticipantId, participantId, setCurrentClimb, endSession } =
@@ -304,7 +303,23 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
     [sessionUsers, participantId],
   );
 
-  const canControlWall = bluetooth?.isConnected === true || (!!participantId && participantId === driverParticipantId);
+  const isSessionDriver = deriveIsDriver({
+    isPersistentSessionActive: !!sessionId,
+    participantId,
+    driverParticipantId,
+  });
+  const canControlWall = isSessionDriver;
+  const driverUserId = useMemo(
+    () =>
+      sessionUsers.find((user) =>
+        deriveIsDriver({
+          isPersistentSessionActive: true,
+          participantId: user.id,
+          driverParticipantId,
+        }),
+      )?.userId ?? null,
+    [sessionUsers, driverParticipantId],
+  );
 
   const participantByUserId = useMemo(() => {
     const entries = new Map<string, SessionFeedParticipant>();
@@ -447,11 +462,7 @@ export function InSessionView({ translateY, screenHeight }: InSessionViewProps) 
               )}
             </View>
 
-            <SessionLeaderboard
-              participants={participants}
-              driverParticipantId={driverParticipantId}
-              selfUserId={selfUserId}
-            />
+            <SessionLeaderboard participants={participants} driverUserId={driverUserId} selfUserId={selfUserId} />
           </Animated.ScrollView>
         </GestureDetector>
 

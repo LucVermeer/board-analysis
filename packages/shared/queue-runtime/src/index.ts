@@ -15,3 +15,5 @@ export type {
 
 export { createJoinSessionTracker } from './ensure-joined';
 export type { JoinSessionTracker, JoinSessionTrackerOptions } from './ensure-joined';
+
+export { deriveIsDriver } from './driver-state';

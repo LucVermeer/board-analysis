@@ -40,7 +40,7 @@ import {
 
 import { dispatchOpenPlayDrawer } from '../queue-control/play-drawer-event';
 import { useSessionIdManagement } from './hooks/use-session-id-management';
-import { deriveIsDriver } from './driver-state';
+import { deriveIsDriver } from '@boardsesh/queue-runtime';
 import { useQueueRestoration } from './hooks/use-queue-restoration';
 import { useQueueEventSubscription } from './hooks/use-queue-event-subscription';
 import { usePendingUpdateCleanup } from './hooks/use-pending-update-cleanup';
