@@ -32,6 +32,17 @@ vi.mock('react-native', () => ({
 }));
 
 vi.mock('react-native-gesture-handler', () => ({
+  Gesture: {
+    Pan: () => {
+      const gesture = {
+        activeOffsetY: () => gesture,
+        failOffsetX: () => gesture,
+        onEnd: () => gesture,
+      };
+      return gesture;
+    },
+  },
+  GestureDetector: ({ children }: { children?: ReactNode }) => createElement('div', { 'data-gesture': 'true' }, children),
   ScrollView: ({ children, onLayout }: { children?: ReactNode; onLayout?: (event: LayoutEvent) => void }) =>
     createElement(
       'div',
@@ -43,6 +54,13 @@ vi.mock('react-native-gesture-handler', () => ({
       },
       children,
     ),
+}));
+
+vi.mock('react-native-reanimated', () => ({
+  runOnJS:
+    (fn: (...args: unknown[]) => unknown) =>
+    (...args: unknown[]) =>
+      fn(...args),
 }));
 
 vi.mock('../GradeChip', () => ({
@@ -183,20 +201,16 @@ describe('GradeRangeRail', () => {
     expect(onChange).toHaveBeenLastCalledWith({ minGradeId: 10, maxGradeId: 14 });
   });
 
-  it('keeps the rail open long enough to use the shared range window', async () => {
+  it('keeps the rail open after grade taps until the user dismisses it', async () => {
     const { getByText, onRequestClose } = renderRail({ minGradeId: undefined, maxGradeId: undefined });
     await act(async () => {
       await Promise.resolve();
     });
     fireEvent.click(getByText('V4'));
     act(() => {
-      vi.advanceTimersByTime(2999);
+      vi.advanceTimersByTime(10000);
     });
     expect(onRequestClose).not.toHaveBeenCalled();
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(onRequestClose).toHaveBeenCalledTimes(1);
   });
 
   it('does not auto-dismiss a single selection while screen reader state is still resolving', () => {

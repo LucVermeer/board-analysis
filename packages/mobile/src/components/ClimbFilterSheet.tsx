@@ -45,7 +45,6 @@ import { SwitchRow } from './SwitchRow';
 import { Icon } from './Icon';
 import { useTheme } from '../providers/theme-provider';
 import { useGrades, useSearchClimbsCount } from '../lib/graphql/hooks';
-import { useGradeFormat } from '../hooks/use-grade-format';
 import { useAuth } from '../providers/auth-provider';
 import { hapticSelection } from '../lib/haptics';
 import { subscribeToSetterSelection } from '../lib/filter-handoff';
@@ -53,7 +52,6 @@ import { springs } from '../theme/animations';
 import { brandColors } from '../theme/colors';
 import { iosSystemColors } from '../theme/ios-colors';
 import { spacing, borderRadius } from '../theme/tokens';
-import { formatGradePillLabel } from './search/grade-pill-label';
 import { GradeRangeRail } from './grade';
 import type { ClimbFilters } from '../lib/climb-filter-types';
 import { DEFAULT_FILTERS } from '../lib/climb-filter-types';
@@ -147,7 +145,6 @@ export function ClimbFilterSheet({
   const { t } = useTranslation('climbs');
   const theme = useTheme();
   const { systemColors } = theme;
-  const { formatGrade } = useGradeFormat();
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
@@ -158,7 +155,6 @@ export function ClimbFilterSheet({
 
   const [localFilters, setLocalFilters] = useState<ClimbFilters>(() => normalizeRetiredStatus(currentFilters));
   const [localBoardFilters, setLocalBoardFilters] = useState<ClimbBoardFilterState>(currentBoardFilters);
-  const [gradeRailOpen, setGradeRailOpen] = useState(false);
   // Bumped on Reset so the Refine/Advanced sections collapse back to default.
   const [sectionResetKey, setSectionResetKey] = useState(0);
 
@@ -328,7 +324,6 @@ export function ClimbFilterSheet({
     hapticSelection();
     setLocalFilters(DEFAULT_FILTERS);
     setLocalBoardFilters(DEFAULT_CLIMB_BOARD_FILTER_STATE);
-    setGradeRailOpen(false);
     setSectionResetKey((key) => key + 1);
   }, []);
 
@@ -441,47 +436,15 @@ export function ClimbFilterSheet({
         <View style={styles.primary}>
           {/* Grade — inline and sheet-local, so dismissing the filter sheet does
               not commit grade edits until Apply. */}
-          <Pressable
-            onPress={() => {
-              hapticSelection();
-              setGradeRailOpen((open) => !open);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.filter.gradeRange')}
-            accessibilityState={{ expanded: gradeRailOpen }}
-            style={({ pressed }) => [
-              styles.tappableRow,
-              { backgroundColor: systemColors.tertiaryBackground as string },
-              pressed && styles.tappableRowPressed,
-            ]}
-          >
-            <Text variant="body">{t('mobile.filter.gradeRange')}</Text>
-            <View style={styles.tappableRowTrailing}>
-              <Text variant="footnote" style={styles.tappableRowValue}>
-                {formatGradePillLabel(
-                  { minGradeId: localFilters.minGrade, maxGradeId: localFilters.maxGrade },
-                  grades ?? [],
-                  formatGrade,
-                  t,
-                )}
-              </Text>
-              <Icon
-                name={gradeRailOpen ? 'chevron.up' : 'chevron.down'}
-                size={14}
-                color={iosSystemColors.systemGray4}
-              />
-            </View>
-          </Pressable>
-
-          {gradeRailOpen ? (
-            <GradeRangeRail
-              grades={grades ?? []}
-              bound={{ minGradeId: localFilters.minGrade, maxGradeId: localFilters.maxGrade }}
-              onChange={handleGradeChange}
-              onRequestClose={() => setGradeRailOpen(false)}
-              style={styles.inlineGradeRail}
-            />
-          ) : null}
+          <GradeRangeRail
+            grades={grades ?? []}
+            bound={{ minGradeId: localFilters.minGrade, maxGradeId: localFilters.maxGrade }}
+            onChange={handleGradeChange}
+            onRequestClose={() => {}}
+            dismissible={false}
+            showTitle
+            style={styles.inlineGradeRail}
+          />
 
           {/* Quality toggles, grouped as one iOS inset card. */}
           <View style={styles.subsectionGap} />

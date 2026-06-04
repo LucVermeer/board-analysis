@@ -672,6 +672,7 @@
       "rangeFilterAria": "{{grade}} está en el rango de grados seleccionado",
       "anyGradeAria": "Cualquier grado seleccionado",
       "clearFilterAria": "Borrar filtro de grado",
+      "closeAria": "Cerrar selector de grado",
       "rangeHint": "Toca otro grado para crear un rango",
       "setLogGradeAria": "Guardar grado {{grade}} en el registro",
       "selectedLogGradeAria": "Grado {{grade}} seleccionado para el registro",

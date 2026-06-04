@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode } from 'react';
 import { AccessibilityInfo, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import type { Grade } from '@boardsesh/shared-schema';
 import {
@@ -16,7 +17,6 @@ import {
 } from '@boardsesh/climb-filters';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from '../Text';
-import { Icon } from '../Icon';
 import { GlassSurface } from '../GlassSurface';
 import { PressableSurface } from '../PressableSurface';
 import { useTheme } from '../../providers/theme-provider';
@@ -28,7 +28,6 @@ import { spacing } from '../../theme/tokens';
 import { GradeChip } from './GradeChip';
 import { readableTextColor } from './grade-chip-colors';
 
-const AUTO_DISMISS_MS = RANGE_EXTEND_WINDOW_MS;
 const CLEAR_DISMISS_MS = 300;
 
 type ChipLayout = { x: number; width: number };
@@ -64,6 +63,8 @@ type GradeRangeRailProps = {
   sendDifficultyIds?: readonly number[];
   onChange: (next: GradeBound) => void;
   onRequestClose: () => void;
+  dismissible?: boolean;
+  showTitle?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -73,6 +74,8 @@ export function GradeRangeRail({
   sendDifficultyIds = [],
   onChange,
   onRequestClose,
+  dismissible = true,
+  showTitle = false,
   style,
 }: GradeRangeRailProps) {
   const { t } = useTranslation('climbs');
@@ -89,7 +92,8 @@ export function GradeRangeRail({
   const grades = useMemo(() => sortedGrades(unsortedGrades), [unsortedGrades]);
   const gradeIds = useMemo(() => grades.map((grade) => grade.difficultyId), [grades]);
   const centerId = useMemo(() => gradeRailCenter(bound, grades, sendDifficultyIds), [bound, grades, sendDifficultyIds]);
-  const showDone = isRangeGrade(bound) || (screenReaderEnabled === true && !isAnyGrade(bound));
+  const showDone = dismissible && (isRangeGrade(bound) || (screenReaderEnabled === true && !isAnyGrade(bound)));
+  const showTopRow = showTitle || showDone;
 
   const clearDismissTimer = useCallback(() => {
     if (dismissTimerRef.current) {
@@ -97,6 +101,11 @@ export function GradeRangeRail({
       dismissTimerRef.current = null;
     }
   }, []);
+
+  const handleRequestClose = useCallback(() => {
+    clearDismissTimer();
+    onRequestClose();
+  }, [clearDismissTimer, onRequestClose]);
 
   useEffect(() => clearDismissTimer, [clearDismissTimer]);
 
@@ -124,6 +133,20 @@ export function GradeRangeRail({
     [clearDismissTimer, onRequestClose],
   );
 
+  const handleGestureClose = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY([-10, 10])
+        .failOffsetX([-32, 32])
+        .onEnd((event) => {
+          'worklet';
+          if (Math.abs(event.translationY) > 24 || Math.abs(event.velocityY) > 450) {
+            runOnJS(handleRequestClose)();
+          }
+        }),
+    [handleRequestClose],
+  );
+
   const maybeCenter = useCallback(() => {
     if (didCenterRef.current || railWidth === 0 || centerId == null) return;
     const chipLayout = chipLayoutsRef.current[centerId];
@@ -142,11 +165,8 @@ export function GradeRangeRail({
       const result = computeGradeTap(bound, gradeIds, difficultyId, withinWindow);
       onChange(result.next);
       lastSingleAtRef.current = isSingleGrade(result.next) ? Date.now() : undefined;
-      if (screenReaderEnabled === false && !isRangeGrade(result.next)) {
-        scheduleDismiss(AUTO_DISMISS_MS);
-      }
     },
-    [bound, gradeIds, onChange, clearDismissTimer, scheduleDismiss, screenReaderEnabled],
+    [bound, gradeIds, onChange, clearDismissTimer],
   );
 
   const handleClear = useCallback(() => {
@@ -154,37 +174,51 @@ export function GradeRangeRail({
     clearDismissTimer();
     lastSingleAtRef.current = undefined;
     onChange(clearGradeBound());
-    scheduleDismiss(CLEAR_DISMISS_MS);
-  }, [clearDismissTimer, onChange, scheduleDismiss]);
+    if (dismissible) scheduleDismiss(CLEAR_DISMISS_MS);
+  }, [clearDismissTimer, dismissible, onChange, scheduleDismiss]);
 
   const anySelected = isAnyGrade(bound);
 
   return (
     <RailFrame style={style}>
-      <View style={styles.topRow}>
-        <View style={styles.titleRow}>
-          <Icon name="search" size={13} color={systemColors.secondaryLabel as string} />
-          <Text variant="caption1" color={systemColors.secondaryLabel} style={styles.title}>
-            {t('mobile.search.grade')}
-          </Text>
-        </View>
-        {showDone ? (
+      {dismissible ? (
+        <GestureDetector gesture={handleGestureClose}>
           <PressableSurface
-            onPress={() => {
-              clearDismissTimer();
-              onRequestClose();
-            }}
+            onPress={handleRequestClose}
             feedback="opacity"
+            hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel={t('mobile.filter.done')}
-            style={styles.doneButton}
+            accessibilityLabel={t('mobile.gradeRail.closeAria')}
+            style={styles.handleButton}
           >
-            <Text variant="subheadline" color={readableTextColor(brandColors.primary)} style={styles.doneText}>
-              {t('mobile.filter.done')}
-            </Text>
+            <View style={[styles.handle, { backgroundColor: systemColors.tertiaryLabel }]} />
           </PressableSurface>
-        ) : null}
-      </View>
+        </GestureDetector>
+      ) : null}
+      {showTopRow ? (
+        <View style={[styles.topRow, !showTitle && styles.topRowEnd]}>
+          {showTitle ? (
+            <Text variant="footnote" color={systemColors.secondaryLabel} style={styles.title}>
+              {t('mobile.filter.gradeRange')}
+            </Text>
+          ) : null}
+          {showDone ? (
+            <PressableSurface
+              onPress={() => {
+                handleRequestClose();
+              }}
+              feedback="opacity"
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.filter.done')}
+              style={styles.doneButton}
+            >
+              <Text variant="subheadline" color={readableTextColor(brandColors.primary)} style={styles.doneText}>
+                {t('mobile.filter.done')}
+              </Text>
+            </PressableSurface>
+          ) : null}
+        </View>
+      ) : null}
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -336,7 +370,18 @@ const styles = StyleSheet.create({
   frame: {
     overflow: 'hidden',
     borderRadius: 24,
-    paddingVertical: spacing[2],
+    paddingTop: 2,
+    paddingBottom: spacing[2],
+  },
+  handleButton: {
+    minHeight: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  handle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
   },
   topRow: {
     minHeight: 28,
@@ -345,10 +390,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
+  topRowEnd: {
+    justifyContent: 'flex-end',
   },
   title: {
     fontWeight: '600',

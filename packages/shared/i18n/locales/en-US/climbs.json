@@ -672,6 +672,7 @@
       "rangeFilterAria": "{{grade}} is in the selected grade range",
       "anyGradeAria": "Any grade selected",
       "clearFilterAria": "Clear grade filter",
+      "closeAria": "Close grade selector",
       "rangeHint": "Tap another grade to make a range",
       "setLogGradeAria": "Set log grade to {{grade}}",
       "selectedLogGradeAria": "{{grade}} log grade selected",
