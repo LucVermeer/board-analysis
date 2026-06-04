@@ -1,10 +1,12 @@
-import { memo, useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { getGradeColor, DEFAULT_GRADE_COLOR } from '@boardsesh/board-constants/grade-colors';
 import { Text } from '../Text';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
+
+const MIN_GRADE_COLUMN_WIDTH: number = spacing[12];
 
 type PlayDrawerHeaderProps = {
   name: string;
@@ -29,10 +31,16 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
   setterUsername,
 }: PlayDrawerHeaderProps) {
   const { t } = useTranslation('climbs');
+  const [gradeColumnWidth, setGradeColumnWidth] = useState(MIN_GRADE_COLUMN_WIDTH);
   const gradeColor = useMemo(
     () => getGradeColor(rawDifficulty ?? difficulty) ?? DEFAULT_GRADE_COLOR,
     [rawDifficulty, difficulty],
   );
+
+  const handleGradeLayout = useCallback((event: LayoutChangeEvent) => {
+    const measuredWidth = Math.ceil(event.nativeEvent.layout.width);
+    setGradeColumnWidth((previousWidth) => (previousWidth === measuredWidth ? previousWidth : measuredWidth));
+  }, []);
 
   const qualityNum = parseFloat(qualityAverage);
   const qualityDisplay = stars > 0 ? stars.toFixed(1) : qualityNum > 0 ? qualityNum.toFixed(1) : null;
@@ -44,57 +52,55 @@ export const PlayDrawerHeader = memo(function PlayDrawerHeader({
 
   return (
     <View style={styles.container}>
-      {/* Grade */}
-      <View style={styles.gradeColumn}>
-        <View style={[styles.gradePill, { backgroundColor: gradeColor }]}>
-          <Text variant="footnote" color={iosSystemColors.white} style={styles.gradeText}>
-            {difficulty}
+      <View style={styles.headerRow}>
+        <View style={[styles.leadingSpacer, { width: gradeColumnWidth }]} />
+        <View style={styles.centerColumn}>
+          <Text variant="body" style={styles.nameText} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text variant="caption1" style={styles.subtitleText} numberOfLines={1}>
+            {subtitleParts.join(' · ')}
           </Text>
         </View>
-      </View>
-
-      {/* Name + details */}
-      <View style={styles.centerColumn}>
-        <Text variant="body" style={styles.nameText} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text variant="caption1" style={styles.subtitleText} numberOfLines={1}>
-          {subtitleParts.join(' · ')}
+        <Text
+          variant="headline"
+          style={[styles.gradeText, { color: gradeColor }]}
+          numberOfLines={1}
+          onLayout={handleGradeLayout}
+        >
+          {difficulty}
         </Text>
       </View>
-
-      {/* Spacer for symmetry */}
-      <View style={styles.spacer} />
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
     minHeight: 56,
+    justifyContent: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing[3],
   },
-  gradeColumn: {
+  leadingSpacer: {
     flexShrink: 0,
-    minWidth: 48,
-    alignItems: 'center',
-  },
-  gradePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  gradeText: {
-    fontWeight: '700',
   },
   centerColumn: {
     flex: 1,
     minWidth: 0,
     alignItems: 'center',
+  },
+  gradeText: {
+    flexShrink: 0,
+    minWidth: MIN_GRADE_COLUMN_WIDTH,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+    textAlign: 'right',
   },
   nameText: {
     fontWeight: '700',
@@ -104,9 +110,5 @@ const styles = StyleSheet.create({
     color: iosSystemColors.systemGray,
     marginTop: 2,
     textAlign: 'center',
-  },
-  spacer: {
-    flexShrink: 0,
-    minWidth: 48,
   },
 });
