@@ -25,6 +25,10 @@ type GlassIconButtonProps = {
   tintColor?: string;
   /** Solid colour used on Android, Reduce Transparency, and the cold-start frame. */
   fallbackColor: ColorValue;
+  /** Frost strength for the iOS < 26 blur fallback (see `glassMaterial`). Default
+   *  is GlassSurface's `regular`; pass `glassMaterial.thick` for a FAB floating
+   *  over bright, saturated content. */
+  blurAmount?: number;
   /** Count badge (top-right). Rendered only when > 0. */
   badgeCount?: number;
   disabled?: boolean;
@@ -58,6 +62,7 @@ export function GlassIconButton({
   accessibilityHint,
   tintColor,
   fallbackColor,
+  blurAmount,
   badgeCount,
   disabled = false,
   size = glassSize.standard,
@@ -97,6 +102,7 @@ export function GlassIconButton({
           tintColor={tintColor}
           fallbackColor={fallbackColor}
           borderRadius={size / 2}
+          blurAmount={blurAmount}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />

@@ -88,6 +88,10 @@ export const opacity = {
 export const glassMaterial = {
   regular: 20,
   thin: 13,
+  // A heavier frost for controls that float over bright, saturated content (e.g.
+  // the create-playlist FAB over vivid playlist hero cards) so the colour behind
+  // the glass diffuses instead of bleeding through and washing out the glyph.
+  thick: 30,
 } as const;
 
 /**

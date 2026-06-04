@@ -205,14 +205,14 @@ describe('ClimbCapsule', () => {
     expect(gradeNode?.getAttribute('data-color')).toBe('#808080');
   });
 
-  it('tints the glass with a grade-hued wash derived from the current grade', () => {
+  it('keeps the glass neutral — no grade-hued wash (the grade rides the text only)', () => {
     const item = makeItem(makeClimb({ difficulty: 'V6' }));
     queue.state.currentClimbQueueItem = item;
     queue.state.queue = [item];
 
     const { container } = render(<ClimbCapsule />);
-    // withAlpha('#FF0000', 0.16) is mocked to append the alpha byte.
-    expect(container.querySelector('[data-glass]')?.getAttribute('data-tint')).toBe('#FF000029');
+    // No tint passed to the glass — the capsule background is plain frosted glass.
+    expect(container.querySelector('[data-glass]')?.getAttribute('data-tint')).toBe('');
   });
 
   it('wires openPlayDrawer with setAsCurrent:false (drawer-open behavior; tap worklet not driven in jsdom)', () => {

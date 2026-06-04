@@ -35,6 +35,7 @@ type GlassIconButtonMockProps = {
   disabled?: boolean;
   accessibilityLabel?: string;
   iconName?: string;
+  iconColor?: string;
   tintColor?: string;
   fallbackColor?: string;
 };
@@ -44,6 +45,7 @@ vi.mock('../../GlassIconButton', () => ({
     disabled,
     accessibilityLabel,
     iconName,
+    iconColor,
     tintColor,
     fallbackColor,
   }: GlassIconButtonMockProps) =>
@@ -52,6 +54,7 @@ vi.mock('../../GlassIconButton', () => ({
       disabled,
       'data-fab': iconName,
       'data-label': accessibilityLabel,
+      'data-icon-color': iconColor ?? '',
       'data-tint': tintColor ?? '',
       'data-fallback': fallbackColor ?? '',
     }),
@@ -185,16 +188,18 @@ describe('LogAscentFab', () => {
     expect(drawer.openLogAscent).not.toHaveBeenCalled();
   });
 
-  it('renders the neutral resting tint/fallback when the climb is not logged', () => {
+  it('renders neutral glass + a label glyph when the climb is not logged', () => {
     boardProvider.value = { logbook: [], getLogbook: vi.fn().mockResolvedValue(undefined) };
     const { container } = render(<LogAscentFab climb={makeClimb()} />);
     const button = fab(container);
-    // Un-logged: no success tint, fallback is the neutral system fill.
+    // Always neutral glass — no tint, fallback is the system fill — and the glyph
+    // is the neutral system label.
     expect(button.getAttribute('data-tint')).toBe('');
     expect(button.getAttribute('data-fallback')).toBe('#EEEEEE');
+    expect(button.getAttribute('data-icon-color')).toBe('#111111');
   });
 
-  it('renders the success (green) tint/fallback when a matching send exists in the logbook', () => {
+  it('signals a logged climb with a green glyph, keeping the glass neutral', () => {
     // Real countSentAscents counts this send at climb-123 / angle 40 → logged.
     boardProvider.value = {
       logbook: [makeSendEntry({ climb_uuid: 'climb-123', angle: 40 })],
@@ -203,11 +208,11 @@ describe('LogAscentFab', () => {
     const { container } = render(<LogAscentFab climb={makeClimb({ uuid: 'climb-123', angle: 40 })} />);
     const button = fab(container);
 
-    // Logged → success-coloured tint + a stronger success fallback, both
-    // distinct from the neutral resting values asserted above.
-    expect(button.getAttribute('data-tint')).toBe('#34C759@0.3');
-    expect(button.getAttribute('data-fallback')).toBe('#34C759@0.4');
-    expect(button.getAttribute('data-fallback')).not.toBe('#EEEEEE');
+    // Logged → success-coloured glyph; the glass background stays neutral (no
+    // tint, the same fill as the resting state).
+    expect(button.getAttribute('data-icon-color')).toBe('#34C759');
+    expect(button.getAttribute('data-tint')).toBe('');
+    expect(button.getAttribute('data-fallback')).toBe('#EEEEEE');
     // The a11y label gains the "already logged" suffix.
     expect(button.getAttribute('data-label')).toContain('mobile.queue.alreadyLogged');
   });
@@ -218,7 +223,7 @@ describe('LogAscentFab', () => {
       getLogbook: vi.fn().mockResolvedValue(undefined),
     };
     const { container } = render(<LogAscentFab climb={makeClimb({ uuid: 'climb-123', angle: 40 })} />);
-    expect(fab(container).getAttribute('data-tint')).toBe('');
+    expect(fab(container).getAttribute('data-icon-color')).toBe('#111111');
   });
 
   it('counts a flash (tries:1 ascent) as logged via the real normalizer', () => {
@@ -227,6 +232,6 @@ describe('LogAscentFab', () => {
       getLogbook: vi.fn().mockResolvedValue(undefined),
     };
     const { container } = render(<LogAscentFab climb={makeClimb({ uuid: 'climb-123', angle: 40 })} />);
-    expect(fab(container).getAttribute('data-fallback')).toBe('#34C759@0.4');
+    expect(fab(container).getAttribute('data-icon-color')).toBe('#34C759');
   });
 });
