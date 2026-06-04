@@ -695,11 +695,10 @@
         "finish": "Finish: {{count}}/2"
       },
       "actions": {
-        "heatmap": "Heatmap",
-        "settings": "Settings",
         "clear": "Clear holds",
         "setActive": "Set as active climb",
-        "save": "Save climb"
+        "undo": "Undo",
+        "redo": "Redo"
       },
       "holdRole": {
         "title": "Set hold role",
@@ -710,13 +709,13 @@
         "draftDescription": "Drafts stay private until you publish them.",
         "showAllHoldsLabel": "Show all holds",
         "showAllHoldsDescription": "Highlight every tappable hold on the board.",
-        "connectBoard": "Connect board",
-        "bleConnected": "Board connected",
-        "bleUnavailable": "Pick a board to light it up over Bluetooth."
+        "noMatchLabel": "No matching",
+        "noMatchDescription": "Hands can't match on the same hold"
       },
       "drafts": {
         "holds_one": "{{count}} hold",
-        "holds_other": "{{count}} holds"
+        "holds_other": "{{count}} holds",
+        "sectionTitle": "Open drafts"
       },
       "unavailable": {
         "title": "Can't build here yet",
@@ -724,6 +723,17 @@
       },
       "fab": {
         "ariaLabel": "Create a climb"
+      },
+      "header": {
+        "newClimb": "New climb"
+      },
+      "save": {
+        "idle": "Save",
+        "login": "Sign in to save",
+        "saving": "Saving…",
+        "done": "Saved",
+        "draftToast": "Draft saved",
+        "publishedToast": "Climb published"
       }
     }
   }

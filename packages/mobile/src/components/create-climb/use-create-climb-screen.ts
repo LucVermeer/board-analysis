@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import type { BoardName, Climb } from '@boardsesh/shared-schema';
+import { isNoMatchClimb, withNoMatch } from '@boardsesh/shared-schema';
 import {
   useCreateClimb,
   computeCanUpdate,
@@ -20,7 +22,10 @@ import { useToast } from '../../providers/toast-provider';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import { loadDraft, saveDraft, clearDraft, createClimbDraftKey } from '../../lib/create-climb-draft-store';
 import { getPaintRoles, type BrushRole } from './brush-roles';
-import type { SaveButtonState } from './BrushBar';
+
+// The save button's visual state, derived from auth + the saved-climb snapshot +
+// in-flight state. Lives here (the controller computes it) so the UI imports it.
+export type SaveButtonState = 'ready' | 'saving' | 'justSaved' | 'editLocked' | 'login';
 
 export type CreateClimbBoard = {
   boardName: BoardName;
@@ -38,6 +43,9 @@ type UseCreateClimbScreenArgs = {
   forkDescription?: string;
   /** When set, fetch and edit this existing climb in place. */
   editClimbUuid?: string;
+  /** Called after a successful publish (non-draft save) so the screen can
+   *  dismiss the drawer and let the success toast show over the list. */
+  onPublished?: () => void;
 };
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -65,7 +73,7 @@ function readDuplicateExtensions(err: unknown): PublishDuplicateError {
  * The create-climb screen controller. Composes the shared hold-state machine
  * with auth, the board provider's save/update mutations, the per-board local
  * autosave, BLE preview, and the queue, and exposes a save state machine the
- * BrushBar renders.
+ * create drawer's action bar renders.
  */
 export function useCreateClimbScreen({
   board,
@@ -73,6 +81,7 @@ export function useCreateClimbScreen({
   forkName,
   forkDescription,
   editClimbUuid,
+  onPublished,
 }: UseCreateClimbScreenArgs) {
   const router = useRouter();
   const { t } = useTranslation('climbs');
@@ -82,6 +91,7 @@ export function useCreateClimbScreen({
   const { setCurrentClimb } = useQueue();
   const bluetooth = useOptionalBluetoothContext();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
   const isForking = !!forkFrames;
   const isEditing = !!editClimbUuid;
@@ -104,11 +114,22 @@ export function useCreateClimbScreen({
     isValid,
     resetHolds,
     loadHolds,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useCreateClimb(board.boardName, { initialHoldsMap });
 
   const [selectedBrush, setSelectedBrush] = useState<BrushRole>('HAND');
   const [name, setName] = useState(isForking && forkName ? `${forkName} fork` : '');
-  const [description, setDescription] = useState(isForking && forkDescription ? forkDescription : '');
+  const [description, setDescription] = useState(
+    isForking && forkDescription ? withNoMatch(forkDescription, false) : '',
+  );
+  // The "no match" climb rule is a separate boolean in the editor; we encode it
+  // into the description (a leading "No match" line — see isNoMatchClimb) only at
+  // save time, so the editable description field stays clean and the toggle never
+  // gets stuck on a fuzzy match. A follow-up migrates this to a real column.
+  const [noMatch, setNoMatch] = useState(isForking && forkDescription ? isNoMatchClimb(forkDescription) : false);
   const [isDraft, setIsDraft] = useState(true);
   const [showAllHolds, setShowAllHolds] = useState(false);
 
@@ -165,7 +186,8 @@ export function useCreateClimbScreen({
     editSeededRef.current = true;
     loadHolds(buildInitialHoldsMap(editClimb.frames, board.boardName));
     setName(editClimb.name);
-    setDescription(editClimb.description ?? '');
+    setDescription(withNoMatch(editClimb.description ?? '', false));
+    setNoMatch(isNoMatchClimb(editClimb.description));
     setIsDraft(editClimb.is_draft ?? false);
     setSavedClimb({
       uuid: editClimb.uuid,
@@ -195,7 +217,8 @@ export function useCreateClimbScreen({
         // Corrupt holds payload — ignore and start clean.
       }
       setName(draft.name);
-      setDescription(draft.description);
+      setDescription(withNoMatch(draft.description, false));
+      setNoMatch(isNoMatchClimb(draft.description));
       setIsDraft(draft.isDraft);
       restoredRef.current = true;
     });
@@ -219,10 +242,10 @@ export function useCreateClimbScreen({
         void clearDraft(draftKey);
         return;
       }
-      void saveDraft(draftKey, { holdsJson, name, description, isDraft });
+      void saveDraft(draftKey, { holdsJson, name, description: withNoMatch(description, noMatch), isDraft });
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [holdsJson, name, description, isDraft, draftKey, litUpHoldsMap]);
+  }, [holdsJson, name, description, noMatch, isDraft, draftKey, litUpHoldsMap]);
 
   // ---- BLE preview (debounced) while connected. ----
   const sendFramesRef = useRef(bluetooth?.sendFramesToBoard);
@@ -302,10 +325,12 @@ export function useCreateClimbScreen({
     setCurrentClimb(climbToQueueItem(buildProvisionalClimb(uuid, frames), { uuid }));
   }, [generateFramesString, savedClimb, buildProvisionalClimb, setCurrentClimb]);
 
-  // ---- BLE connect. ----
-  const handleConnectBoard = useCallback(() => {
+  // ---- BLE toggle (drives the header lightbulb): connect lights the wall with
+  // the current holds; tapping again disconnects. ----
+  const handleToggleBle = useCallback(() => {
     if (!bluetooth) return;
-    void bluetooth.connect(generateFramesString());
+    if (bluetooth.isConnected) void bluetooth.disconnect();
+    else void bluetooth.connect(generateFramesString());
   }, [bluetooth, generateFramesString]);
 
   // ---- Save state machine. ----
@@ -320,9 +345,10 @@ export function useCreateClimbScreen({
     return 'ready';
   }, [isAuthenticated, isSaving, justSaved, editLocked]);
 
-  // Signal the screen should open the settings sheet (e.g. to fill in a name).
-  const [openSettingsSignal, setOpenSettingsSignal] = useState(0);
-  const requestOpenSettings = useCallback(() => setOpenSettingsSignal((value) => value + 1), []);
+  // Signal the screen should focus the header name field (e.g. on a save with
+  // no name yet). The name input lives in the drawer header, not a settings sheet.
+  const [focusNameSignal, setFocusNameSignal] = useState(0);
+  const requestFocusName = useCallback(() => setFocusNameSignal((value) => value + 1), []);
 
   const handleSave = useCallback(async () => {
     if (!isAuthenticated) {
@@ -332,20 +358,22 @@ export function useCreateClimbScreen({
     if (editLocked) return;
     if (!isValid) return;
     if (name.trim() === '') {
-      requestOpenSettings();
+      requestFocusName();
       return;
     }
 
     setIsSaving(true);
     setPublishDuplicateError(null);
     const frames = generateFramesString();
+    // Encode the no-match marker into the description only at save time.
+    const fullDescription = withNoMatch(description, noMatch);
     try {
       if (canUpdate && savedClimb) {
         const result = await updateClimb({
           uuid: savedClimb.uuid,
           boardType: board.boardName,
           name: name.trim(),
-          description,
+          description: fullDescription,
           frames,
           angle: board.angle,
           isDraft,
@@ -362,7 +390,7 @@ export function useCreateClimbScreen({
         const result = await saveClimb({
           layout_id: board.layoutId,
           name: name.trim(),
-          description,
+          description: fullDescription,
           is_draft: isDraft,
           frames,
           angle: board.angle,
@@ -377,7 +405,15 @@ export function useCreateClimbScreen({
         syncSavedToQueue(result.uuid, frames);
       }
       await clearDraft(draftKey);
+      // Refresh the inline Open Drafts table so the just-saved climb appears /
+      // updates (delete already invalidates these keys; save must too).
+      queryClient.invalidateQueries({ queryKey: ['searchClimbs'] });
+      queryClient.invalidateQueries({ queryKey: ['searchClimbsCount'] });
       setJustSaved(true);
+      showToast(isDraft ? t('mobile.create.save.draftToast') : t('mobile.create.save.publishedToast'), 'success');
+      // A publish is commit-and-done — dismiss the drawer so the toast shows
+      // over the climbs list (drafts stay open so you can keep editing).
+      if (!isDraft) onPublished?.();
       if (justSavedTimerRef.current) clearTimeout(justSavedTimerRef.current);
       justSavedTimerRef.current = setTimeout(() => setJustSaved(false), JUST_SAVED_MS);
     } catch (err) {
@@ -402,12 +438,15 @@ export function useCreateClimbScreen({
     saveClimb,
     board,
     description,
+    noMatch,
     isDraft,
     draftKey,
-    requestOpenSettings,
+    requestFocusName,
     syncSavedToQueue,
     showToast,
     t,
+    queryClient,
+    onPublished,
   ]);
 
   const dismissDuplicateError = useCallback(() => setPublishDuplicateError(null), []);
@@ -427,6 +466,11 @@ export function useCreateClimbScreen({
     handleClear,
     showAllHolds,
     setShowAllHolds,
+    // undo/redo (current editing session only)
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     // form fields
     name,
     setName,
@@ -434,6 +478,8 @@ export function useCreateClimbScreen({
     setDescription,
     isDraft,
     setIsDraft,
+    noMatch,
+    setNoMatch,
     // save
     saveState,
     handleSave,
@@ -441,12 +487,12 @@ export function useCreateClimbScreen({
     handleSetActive,
     publishDuplicateError,
     dismissDuplicateError,
-    openSettingsSignal,
+    focusNameSignal,
     // ble
     bleAvailable: !!bluetooth,
     bleConnected,
     bleConnecting: bluetooth?.loading ?? false,
-    handleConnectBoard,
+    handleToggleBle,
     // auth (re-export so the screen can render a login affordance if needed)
     isAuthenticated,
     refreshAuthState: auth.refreshAuthState,

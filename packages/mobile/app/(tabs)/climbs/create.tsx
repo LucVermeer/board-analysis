@@ -48,7 +48,11 @@ export default function CreateClimbRoute() {
   }
 
   return (
+    // Key by the edited climb so switching drafts (router.replace with a new
+    // editClimbUuid) remounts the editor — a clean re-seed and a fresh undo
+    // history per editing session.
     <CreateClimbScreen
+      key={params.editClimbUuid ?? 'new'}
       board={board}
       forkFrames={params.forkFrames}
       forkName={params.forkName}

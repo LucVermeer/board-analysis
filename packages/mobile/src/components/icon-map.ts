@@ -70,6 +70,8 @@ export const iconMap = {
   'square.and.arrow.up.on.square': { ios: 'square.and.arrow.up.on.square', android: 'tray-arrow-up' },
   eraser: { ios: 'eraser', android: 'eraser' },
   'hand.raised': { ios: 'hand.raised', android: 'hand-back-right-outline' },
+  undo: { ios: 'arrow.uturn.backward', android: 'undo' },
+  redo: { ios: 'arrow.uturn.forward', android: 'redo' },
 
   // Status
   info: { ios: 'info.circle', android: 'information-outline' },

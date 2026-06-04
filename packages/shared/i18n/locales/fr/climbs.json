@@ -695,11 +695,10 @@
         "finish": "Fin : {{count}}/2"
       },
       "actions": {
-        "heatmap": "Carte de chaleur",
-        "settings": "Réglages",
         "clear": "Effacer les prises",
         "setActive": "Définir comme voie active",
-        "save": "Enregistrer la voie"
+        "undo": "Annuler",
+        "redo": "Rétablir"
       },
       "holdRole": {
         "title": "Définir le rôle de la prise",
@@ -710,13 +709,13 @@
         "draftDescription": "Les brouillons restent privés jusqu’à publication.",
         "showAllHoldsLabel": "Afficher toutes les prises",
         "showAllHoldsDescription": "Met en évidence chaque prise cliquable du panneau.",
-        "connectBoard": "Connecter le panneau",
-        "bleConnected": "Panneau connecté",
-        "bleUnavailable": "Choisissez un panneau pour l’éclairer en Bluetooth."
+        "noMatchLabel": "Sans matcher",
+        "noMatchDescription": "Les mains ne peuvent pas se rejoindre sur la même prise"
       },
       "drafts": {
         "holds_one": "{{count}} prise",
-        "holds_other": "{{count}} prises"
+        "holds_other": "{{count}} prises",
+        "sectionTitle": "Brouillons en cours"
       },
       "unavailable": {
         "title": "Création indisponible ici",
@@ -724,6 +723,17 @@
       },
       "fab": {
         "ariaLabel": "Créer une voie"
+      },
+      "header": {
+        "newClimb": "Nouvelle voie"
+      },
+      "save": {
+        "idle": "Enregistrer",
+        "login": "Connectez-vous pour enregistrer",
+        "saving": "Enregistrement…",
+        "done": "Enregistré",
+        "draftToast": "Brouillon enregistré",
+        "publishedToast": "Voie publiée"
       }
     }
   }

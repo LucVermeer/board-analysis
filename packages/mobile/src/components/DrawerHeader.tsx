@@ -1,0 +1,73 @@
+import { memo, useCallback, useState, type ReactNode } from 'react';
+import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { spacing } from '../theme/tokens';
+
+// Default width of the trailing slot (and the matching leading spacer) so the
+// centered column stays optically centered before the trailing element measures.
+const DEFAULT_TRAILING_MIN_WIDTH: number = spacing[12];
+
+type DrawerHeaderProps = {
+  /** Centered column content (e.g. title + subtitle, or a name input + counts). */
+  center: ReactNode;
+  /** Right-aligned element (e.g. a grade, an angle, a validity check). Its width
+   *  is measured at runtime and mirrored into the leading spacer so `center`
+   *  stays centered regardless of the trailing element's width. */
+  trailing?: ReactNode;
+  trailingMinWidth?: number;
+};
+
+/**
+ * Shared drawer header chassis: a centered column flanked by a measured-width
+ * trailing slot and a matching leading spacer. Used by the Play Drawer (name +
+ * stats + grade) and the Create Drawer (name input + start/finish + validity).
+ */
+export const DrawerHeader = memo(function DrawerHeader({
+  center,
+  trailing,
+  trailingMinWidth = DEFAULT_TRAILING_MIN_WIDTH,
+}: DrawerHeaderProps) {
+  const [trailingWidth, setTrailingWidth] = useState(trailingMinWidth);
+
+  const handleTrailingLayout = useCallback((event: LayoutChangeEvent) => {
+    const measured = Math.ceil(event.nativeEvent.layout.width);
+    setTrailingWidth((previous) => (previous === measured ? previous : measured));
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <View style={[styles.leadingSpacer, { width: trailingWidth }]} />
+        <View style={styles.centerColumn}>{center}</View>
+        <View style={[styles.trailing, { minWidth: trailingMinWidth }]} onLayout={handleTrailingLayout}>
+          {trailing}
+        </View>
+      </View>
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    minHeight: 56,
+    justifyContent: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  leadingSpacer: {
+    flexShrink: 0,
+  },
+  centerColumn: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+  },
+  trailing: {
+    flexShrink: 0,
+    alignItems: 'flex-end',
+  },
+});
