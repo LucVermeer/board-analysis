@@ -22,7 +22,7 @@ import { BluetoothQuickstartSheet } from '../../../src/components/board-discover
 import { userBoardToItem, popularConfigToItem } from '../../../src/components/board-discovery/board-items';
 import type { DiscoveryBoardItem } from '../../../src/components/board-discovery/BoardDiscoveryCard';
 import {
-  BAR_CONTENT_HEIGHT,
+  TOOLBAR_RESERVE,
   TAB_BAR_HEIGHT,
 } from '../../../src/components/queue-control/persistent-queue-bar';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
@@ -38,7 +38,7 @@ export default function BoardSelection() {
   // Clear the absolutely-positioned PersistentQueueBar (which sits above the tab
   // bar) so the last carousel isn't tucked underneath it — same inset the queue
   // tab uses.
-  const scrollBottomPadding = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
+  const scrollBottomPadding = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom;
 
   const setActiveBoard = useSetActiveBoard();
   const { data: activeBoard } = useActiveBoard();

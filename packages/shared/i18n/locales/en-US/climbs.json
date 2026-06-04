@@ -659,7 +659,12 @@
       "gradeClear": "Any",
       "gradeHint": "Tap a grade · tap a second for a range",
       "filters": "Filters",
-      "removeFilter": "Remove {{name}} filter"
+      "removeFilter": "Remove {{name}} filter",
+      "fab": {
+        "open": "Search",
+        "close": "Close search",
+        "done": "Done"
+      }
     },
     "climbRow": {
       "addToQueue": "Add to queue",

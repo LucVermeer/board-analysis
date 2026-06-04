@@ -23,6 +23,8 @@ type ActiveFilterChipsProps = {
   onPatchBoardFilters: (patch: Partial<ClimbBoardFilterState>) => void;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  /** Pill height — bump to 44 to match the grade pill when shown beside it. */
+  chipHeight?: number;
 };
 
 export function ActiveFilterChips({
@@ -32,6 +34,7 @@ export function ActiveFilterChips({
   onPatchBoardFilters,
   style,
   contentContainerStyle,
+  chipHeight = 30,
 }: ActiveFilterChipsProps) {
   const { t } = useTranslation('climbs');
   const { systemColors } = useTheme();
@@ -39,6 +42,8 @@ export function ActiveFilterChips({
   const pills = useMemo(() => buildActiveFilterPills(filters, boardFilters, t), [filters, boardFilters, t]);
 
   if (pills.length === 0) return null;
+
+  const radius = chipHeight / 2;
 
   return (
     <ScrollView
@@ -60,16 +65,16 @@ export function ActiveFilterChips({
           scaleTo={0.94}
           accessibilityRole="button"
           accessibilityLabel={t('mobile.search.removeFilter', { name: pill.label })}
-          style={styles.chip}
+          style={[styles.chip, { height: chipHeight, borderRadius: radius }]}
         >
           <GlassSurface
             glassEffectStyle="regular"
             fallbackColor={systemColors.fill}
-            borderRadius={15}
+            borderRadius={radius}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-          <View style={styles.chipContent}>
+          <View style={[styles.chipContent, { height: chipHeight }]}>
             <Text variant="caption1" numberOfLines={1} style={styles.chipText}>
               {pill.label}
             </Text>
@@ -87,8 +92,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   chip: {
-    height: 30,
-    borderRadius: 15,
     overflow: 'hidden',
     justifyContent: 'center',
   },
@@ -98,7 +101,6 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingLeft: 10,
     paddingRight: 8,
-    height: 30,
   },
   chipText: {
     fontWeight: '500',

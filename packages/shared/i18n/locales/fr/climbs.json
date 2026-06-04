@@ -659,7 +659,12 @@
       "gradeClear": "Tous",
       "gradeHint": "Touchez un niveau · un second pour une plage",
       "filters": "Filtres",
-      "removeFilter": "Retirer le filtre {{name}}"
+      "removeFilter": "Retirer le filtre {{name}}",
+      "fab": {
+        "open": "Rechercher",
+        "close": "Fermer la recherche",
+        "done": "Terminé"
+      }
     },
     "climbRow": {
       "addToQueue": "Ajouter à la file",

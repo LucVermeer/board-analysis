@@ -34,6 +34,9 @@ type BleLightbulbButtonProps = {
    * to keep its own bare-icon look. The connected state keeps its own warm fill.
    */
   restingBackgroundColor?: ColorValue;
+  /** Icon colour in the disconnected (resting) state. Defaults to secondaryLabel;
+   *  the queue bar passes white for a crisp Spotify-style glyph. */
+  disconnectedColor?: string;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -48,6 +51,7 @@ export function BleLightbulbButton({
   size = 24,
   containerSize = 44,
   restingBackgroundColor,
+  disconnectedColor,
 }: BleLightbulbButtonProps) {
   const { systemColors, brandColors } = useTheme();
   const pulseOpacity = useSharedValue(1);
@@ -77,7 +81,7 @@ export function BleLightbulbButton({
   const visualState = getBleLightbulbVisualState({
     isConnected,
     connectedColor: brandColors.warning,
-    disconnectedColor: systemColors.secondaryLabel as string,
+    disconnectedColor: disconnectedColor ?? (systemColors.secondaryLabel as string),
   });
 
   return (

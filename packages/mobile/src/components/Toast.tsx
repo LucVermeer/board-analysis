@@ -7,6 +7,7 @@ import { Icon } from './Icon';
 import type { IconName } from './icon-map';
 import { brandColors, withAlpha } from '../theme/colors';
 import { borderRadius, spacing } from '../theme/tokens';
+import { TAB_BAR_HEIGHT, TOOLBAR_RESERVE } from '../theme/layout';
 import { useTheme } from '../providers/theme-provider';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
@@ -52,7 +53,16 @@ export function Toast({ toast, onDismiss }: ToastProps) {
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(200)}
-      style={[styles.container, { top: insets.top + spacing[2], backgroundColor: systemColors.secondaryBackground }]}
+      style={[
+        styles.container,
+        {
+          // Sit at the bottom (conventional snackbar spot), lifted clear of the
+          // tab bar + floating climb toolbar so a tick confirmation lands right
+          // above the tick the user pressed.
+          bottom: insets.bottom + TAB_BAR_HEIGHT + TOOLBAR_RESERVE + spacing[2],
+          backgroundColor: systemColors.secondaryBackground,
+        },
+      ]}
       accessibilityRole="alert"
       accessibilityLiveRegion="assertive"
     >

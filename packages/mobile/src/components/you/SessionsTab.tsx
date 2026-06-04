@@ -11,7 +11,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { SessionFeedCard } from './SessionFeedCard';
 import { CommentSheet } from './CommentSheet';
 import { useSessionGroupedFeed, useBulkVoteSummaries } from '../../lib/graphql/hooks';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../theme/layout';
+import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -20,7 +20,7 @@ export function SessionsTab({ userId }: { userId: string | undefined }) {
   const { t } = useTranslation('you');
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
-  const paddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom + spacing[4];
+  const paddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[4];
 
   const commentSheetRef = useRef<BottomSheet | null>(null);
   const [commentSessionId, setCommentSessionId] = useState<string | null>(null);

@@ -5,8 +5,8 @@
 // Layout: [🔍 glass search capsule] [grade] [filter] [＋ create]
 //   - sticky-strip value: grade + filter live inline here; a second chips row
 //     appears under the row only when filters are active.
-//   - bottom-bar value: only search + create live here; grade/filter/chips/count
-//     stay in the floating SearchBottomBar in the thumb zone.
+//   - bottom-bar value: this row isn't rendered; that layout uses ClimbTopChrome
+//     (board + create) up top and the thumb-zone SearchFab for search/grade/filter.
 //
 // The container is `box-none` so taps in the gaps fall through to the list; each
 // control captures its own touches. It reports its measured height so the screen

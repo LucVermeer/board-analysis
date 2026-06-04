@@ -297,7 +297,8 @@
       "climbCount_other": "{{count}} bloques",
       "logAscent": "Registrar ascenso",
       "nextClimb": "Siguiente bloque",
-      "previousClimb": "Bloque anterior"
+      "previousClimb": "Bloque anterior",
+      "alreadyLogged": "Registrado"
     },
     "queueSheet": {
       "emptyQueue": "Tu cola está vacía",

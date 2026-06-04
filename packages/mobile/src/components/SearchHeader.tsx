@@ -19,6 +19,9 @@ type SearchHeaderProps = {
   onBlur: () => void;
   /** Seeds the field on mount — reflects a restored per-board search. */
   initialValue?: string;
+  /** Capsule height (defaults to 44). The bottom toolbar passes 56 so the
+   *  expanded field matches its FABs. The radius tracks height/2 for a pill. */
+  height?: number;
 };
 
 /**
@@ -29,12 +32,13 @@ type SearchHeaderProps = {
  * screen can blur it and seed restored text without a remount.
  */
 export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(function SearchHeader(
-  { placeholder, onChangeText, onFocus, onBlur, initialValue = '' },
+  { placeholder, onChangeText, onFocus, onBlur, initialValue = '', height = 44 },
   ref,
 ) {
   const inputRef = useRef<TextInput>(null);
   const { systemColors } = useTheme();
   const [text, setText] = useState(initialValue);
+  const radius = height / 2;
 
   useImperativeHandle(ref, () => ({
     blur: () => inputRef.current?.blur(),
@@ -61,15 +65,15 @@ export const SearchHeader = forwardRef<SearchHeaderHandle, SearchHeaderProps>(fu
   }, [onChangeText]);
 
   return (
-    <View style={styles.capsule}>
+    <View style={[styles.capsule, { height, borderRadius: radius }]}>
       <GlassSurface
         glassEffectStyle="regular"
         fallbackColor={systemColors.fill}
-        borderRadius={22}
+        borderRadius={radius}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
-      <View style={styles.content}>
+      <View style={[styles.content, { height }]}>
         <Icon name="search" size={18} color={iosSystemColors.systemGray} />
         <TextInput
           ref={inputRef}

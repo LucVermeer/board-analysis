@@ -30,7 +30,7 @@ import { useAuthToken } from '../../../src/lib/graphql/use-auth-token';
 import { useMyBoards, useProfile } from '../../../src/lib/graphql/hooks';
 import { useActiveBoard } from '../../../src/lib/graphql/use-active-board';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
+import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../../src/components/queue-control/persistent-queue-bar';
 import { brandColors } from '../../../src/theme/colors';
 import { iosSystemColors } from '../../../src/theme/ios-colors';
 import { spacing } from '../../../src/theme/tokens';
@@ -225,7 +225,7 @@ export default function DiscoverLibrary() {
       <ScrollView
         style={styles.flex}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingBottom: BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom + spacing[6] }}
+        contentContainerStyle={{ paddingBottom: TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[6] }}
         keyboardShouldPersistTaps="handled"
       >
         <BoardFilterStrip boards={boards} selectedBoardUuid={boardFilter?.uuid ?? null} onSelect={setBoardFilter} />

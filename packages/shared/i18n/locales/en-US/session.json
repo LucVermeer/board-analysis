@@ -297,7 +297,8 @@
       "climbCount_other": "{{count}} climbs",
       "logAscent": "Log ascent",
       "nextClimb": "Next climb",
-      "previousClimb": "Previous climb"
+      "previousClimb": "Previous climb",
+      "alreadyLogged": "Logged"
     },
     "queueSheet": {
       "emptyQueue": "Your queue is empty",

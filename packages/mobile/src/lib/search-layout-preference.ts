@@ -17,11 +17,11 @@ import { getPreference, setPreference } from './preference-store';
 export const SEARCH_LAYOUTS = ['bottom-bar', 'sticky-strip'] as const;
 export type SearchLayout = (typeof SEARCH_LAYOUTS)[number];
 
-// Sticky-strip is the default: it sits flat under the nav header, so with a
-// climb playing the bottom is just the queue mini-player + tab bar instead of
-// also stacking a floating search bar. Bottom-bar stays available via the
-// More-tab "Search layout" setting.
-export const DEFAULT_SEARCH_LAYOUT: SearchLayout = 'sticky-strip';
+// Bottom-bar is the default: a collapsed search FAB keeps the thumb zone clear
+// (board identity + create live at the top), and search/grade/filter speed-dial
+// out of the FAB on demand. Sticky-strip (the always-visible top search row)
+// stays available via the More-tab "Search layout" setting.
+export const DEFAULT_SEARCH_LAYOUT: SearchLayout = 'bottom-bar';
 
 const STORAGE_KEY = 'search-layout';
 

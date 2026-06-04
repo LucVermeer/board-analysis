@@ -11,7 +11,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { ClimbListRow } from '../ClimbListRow';
 import { PlaylistPreviewSquare } from './PlaylistPreviewSquare';
 import { toQueueClimb, toSchemaClimb } from '../../lib/climb-types';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
+import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../queue-control/persistent-queue-bar';
 import { useDrawerHost } from '../../providers/drawer-host-provider';
 import { iosSystemColors } from '../../theme/ios-colors';
 import { spacing } from '../../theme/tokens';
@@ -71,7 +71,7 @@ export function PlaylistDetailView({
   const insets = useSafeAreaInsets();
   // Reserve room for the floating queue bar + tab bar so the last row isn't
   // hidden behind them (matches the boards list).
-  const listPaddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom;
+  const listPaddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom;
 
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();

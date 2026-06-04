@@ -11,7 +11,7 @@ import { ActivityIndicator } from '../ActivityIndicator';
 import { StatsSummaryCard } from './StatsSummaryCard';
 import { StackedBarChart, GroupedBarChart, TotalAreaChart, type ChartLegendItem } from './YouCharts';
 import { layoutChartColor, flashRedpointColor } from './profile-chart-colors';
-import { BAR_CONTENT_HEIGHT, TAB_BAR_HEIGHT } from '../../theme/layout';
+import { TOOLBAR_RESERVE, TAB_BAR_HEIGHT } from '../../theme/layout';
 import { brandColors } from '../../theme/colors';
 import { spacing } from '../../theme/tokens';
 import { useTheme } from '../../providers/theme-provider';
@@ -23,7 +23,7 @@ export function ProgressTab({ data }: { data: YouData }) {
   const { t: tYou } = useTranslation('you');
   const { systemColors } = useTheme();
   const insets = useSafeAreaInsets();
-  const paddingBottom = BAR_CONTENT_HEIGHT + TAB_BAR_HEIGHT + insets.bottom + spacing[6];
+  const paddingBottom = TOOLBAR_RESERVE + TAB_BAR_HEIGHT + insets.bottom + spacing[6];
 
   const totalAscents = data.statisticsSummary.totalAscents;
   const noAscentData = t('empty.noAscentData');

@@ -297,7 +297,8 @@
       "climbCount_other": "{{count}} blocs",
       "logAscent": "Enregistrer l'ascension",
       "nextClimb": "Bloc suivant",
-      "previousClimb": "Bloc précédent"
+      "previousClimb": "Bloc précédent",
+      "alreadyLogged": "Enregistré"
     },
     "queueSheet": {
       "emptyQueue": "Votre file est vide",
