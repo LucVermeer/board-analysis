@@ -6,6 +6,13 @@ type UseCreateClimbOptions = {
   initialHoldsMap?: LitUpHoldsMap;
 };
 
+function filterSupportedHoldsMap(boardName: BoardName, holdsMap: LitUpHoldsMap): LitUpHoldsMap {
+  const stateToCode = STATE_TO_PRIMARY_CODE[boardName];
+  return Object.fromEntries(
+    Object.entries(holdsMap).filter(([, hold]) => hold.state !== 'OFF' && stateToCode[hold.state] !== undefined),
+  ) as LitUpHoldsMap;
+}
+
 /**
  * Aurora (Kilter/Tension/etc) hold-state machine for the create-climb editor.
  * Pure React + board-constants — shared verbatim by the web form and the
@@ -14,7 +21,9 @@ type UseCreateClimbOptions = {
  * string.
  */
 export function useCreateClimb(boardName: BoardName, options?: UseCreateClimbOptions) {
-  const [litUpHoldsMap, setLitUpHoldsMap] = useState<LitUpHoldsMap>(options?.initialHoldsMap ?? {});
+  const [litUpHoldsMap, setLitUpHoldsMap] = useState<LitUpHoldsMap>(() =>
+    filterSupportedHoldsMap(boardName, options?.initialHoldsMap ?? {}),
+  );
 
   // Derived state: count holds by type
   const startingCount = useMemo(
@@ -88,9 +97,9 @@ export function useCreateClimb(boardName: BoardName, options?: UseCreateClimbOpt
     const stateToCode = STATE_TO_PRIMARY_CODE[boardName];
     return Object.entries(litUpHoldsMap)
       .filter(([, hold]) => hold.state !== 'OFF')
-      .map(([holdId, hold]) => {
+      .flatMap(([holdId, hold]) => {
         const code = stateToCode[hold.state];
-        return `p${holdId}r${code}`;
+        return code === undefined ? [] : [`p${holdId}r${code}`];
       })
       .join('');
   }, [litUpHoldsMap, boardName]);
@@ -101,9 +110,12 @@ export function useCreateClimb(boardName: BoardName, options?: UseCreateClimbOpt
   }, []);
 
   // Replace the entire holds map in one shot (used when loading a draft back into the form).
-  const loadHolds = useCallback((next: LitUpHoldsMap) => {
-    setLitUpHoldsMap(next);
-  }, []);
+  const loadHolds = useCallback(
+    (next: LitUpHoldsMap) => {
+      setLitUpHoldsMap(filterSupportedHoldsMap(boardName, next));
+    },
+    [boardName],
+  );
 
   return {
     litUpHoldsMap,

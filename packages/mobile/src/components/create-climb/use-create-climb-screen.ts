@@ -19,7 +19,7 @@ import { useOptionalBluetoothContext } from '../../providers/bluetooth-provider'
 import { useToast } from '../../providers/toast-provider';
 import { climbToQueueItem } from '../../lib/climb-to-queue-item';
 import { loadDraft, saveDraft, clearDraft, createClimbDraftKey } from '../../lib/create-climb-draft-store';
-import type { BrushRole } from './brush-roles';
+import { getPaintRoles, type BrushRole } from './brush-roles';
 import type { SaveButtonState } from './BrushBar';
 
 export type CreateClimbBoard = {
@@ -116,6 +116,13 @@ export function useCreateClimbScreen({
   const [isSaving, setIsSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [publishDuplicateError, setPublishDuplicateError] = useState<PublishDuplicateError | null>(null);
+
+  useEffect(() => {
+    if (selectedBrush === 'OFF') return;
+    const supportedRoles = getPaintRoles(board.boardName);
+    if (supportedRoles.includes(selectedBrush)) return;
+    setSelectedBrush(supportedRoles[0] ?? 'HAND');
+  }, [board.boardName, selectedBrush]);
 
   const draftKey = useMemo(() => createClimbDraftKey(board), [board]);
   // Skip the local-autosave restore when forking or editing (those seed from

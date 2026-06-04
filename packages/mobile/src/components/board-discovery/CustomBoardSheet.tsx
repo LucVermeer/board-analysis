@@ -4,13 +4,13 @@ import type BottomSheet from '@gorhom/bottom-sheet';
 import { useTranslation } from 'react-i18next';
 import type { BoardName, UserBoard } from '@boardsesh/shared-schema';
 import { SUPPORTED_BOARDS, ANGLES } from '@boardsesh/board-config';
-import {
-  getAllLayouts,
-  getSizesForLayoutId,
-  getSetsForLayoutAndSize,
-  getDefaultSizeForLayout,
-} from '@boardsesh/board-constants/product-sizes';
 import { useCreateBoard } from '../../lib/graphql/hooks';
+import {
+  getBoardLayouts,
+  getBoardSizesForLayoutId,
+  getBoardSetsForLayoutAndSize,
+  getDefaultBoardSizeForLayout,
+} from '../../lib/custom-board-options';
 import { findOwnedBoardForConfig } from './board-items';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { brandColors } from '../../theme/colors';
@@ -87,10 +87,13 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
   }, [seed]);
 
   // Cascading option lists — each derives from the selection above it.
-  const layouts = useMemo(() => getAllLayouts(boardName), [boardName]);
-  const sizes = useMemo(() => (layoutId != null ? getSizesForLayoutId(boardName, layoutId) : []), [boardName, layoutId]);
+  const layouts = useMemo(() => getBoardLayouts(boardName), [boardName]);
+  const sizes = useMemo(
+    () => (layoutId != null ? getBoardSizesForLayoutId(boardName, layoutId) : []),
+    [boardName, layoutId],
+  );
   const sets = useMemo(
-    () => (layoutId != null && sizeId != null ? getSetsForLayoutAndSize(boardName, layoutId, sizeId) : []),
+    () => (layoutId != null && sizeId != null ? getBoardSetsForLayoutAndSize(boardName, layoutId, sizeId) : []),
     [boardName, layoutId, sizeId],
   );
   const angles = ANGLES[boardName] ?? [];
@@ -105,14 +108,14 @@ export const CustomBoardSheet = forwardRef<BottomSheet, CustomBoardSheetProps>(f
   };
   const selectLayout = (next: number) => {
     setLayoutId(next);
-    const defaultSize = getDefaultSizeForLayout(boardName, next);
+    const defaultSize = getDefaultBoardSizeForLayout(boardName, next);
     setSizeId(defaultSize);
-    setSetIds(defaultSize != null ? getSetsForLayoutAndSize(boardName, next, defaultSize).map((s) => s.id) : []);
+    setSetIds(defaultSize != null ? getBoardSetsForLayoutAndSize(boardName, next, defaultSize).map((s) => s.id) : []);
   };
   const selectSize = (next: number) => {
     setSizeId(next);
     // Pre-select all sets for the size (the common case).
-    setSetIds(layoutId != null ? getSetsForLayoutAndSize(boardName, layoutId, next).map((s) => s.id) : []);
+    setSetIds(layoutId != null ? getBoardSetsForLayoutAndSize(boardName, layoutId, next).map((s) => s.id) : []);
   };
   const toggleSet = (id: number) => {
     setSetIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));

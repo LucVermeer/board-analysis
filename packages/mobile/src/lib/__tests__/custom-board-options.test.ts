@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'vitest';
+import {
+  getBoardLayouts,
+  getBoardSetsForLayoutAndSize,
+  getBoardSizesForLayoutId,
+  getDefaultBoardSizeForLayout,
+} from '../custom-board-options';
+
+describe('custom board options', () => {
+  it('returns MoonBoard layouts for the custom board selector', () => {
+    const layouts = getBoardLayouts('moonboard');
+    expect(layouts.map((layout) => layout.name)).toEqual([
+      'MoonBoard 2010',
+      'MoonBoard 2016',
+      'MoonBoard 2024',
+      'MoonBoard Masters 2017',
+      'MoonBoard Masters 2019',
+      'Mini MoonBoard 2020',
+    ]);
+  });
+
+  it('returns the MoonBoard standard size for known layouts', () => {
+    expect(getDefaultBoardSizeForLayout('moonboard', 3)).toBe(1);
+    expect(getBoardSizesForLayoutId('moonboard', 3)).toEqual([
+      {
+        id: 1,
+        name: 'Standard',
+        description: '11x18 Grid',
+        edgeLeft: 0,
+        edgeRight: 11,
+        edgeBottom: 0,
+        edgeTop: 18,
+        productId: 1,
+      },
+    ]);
+  });
+
+  it('returns MoonBoard sets for a known layout and size', () => {
+    const sets = getBoardSetsForLayoutAndSize('moonboard', 3, 1);
+    expect(sets.map((set) => set.name)).toEqual([
+      'Hold Set D',
+      'Hold Set E',
+      'Hold Set F',
+      'Wooden Holds',
+      'Wooden Holds B',
+      'Wooden Holds C',
+    ]);
+  });
+
+  it('returns no MoonBoard options for unknown layout or size combinations', () => {
+    expect(getDefaultBoardSizeForLayout('moonboard', 999)).toBeNull();
+    expect(getBoardSizesForLayoutId('moonboard', 999)).toEqual([]);
+    expect(getBoardSetsForLayoutAndSize('moonboard', 3, 999)).toEqual([]);
+  });
+});

@@ -10,6 +10,11 @@ export type BrushRole = Extract<HoldState, 'STARTING' | 'HAND' | 'FINISH' | 'FOO
 
 export const PAINT_ROLES: ReadonlyArray<Exclude<BrushRole, 'OFF'>> = ['STARTING', 'HAND', 'FINISH', 'FOOT'];
 
+export function getPaintRoles(boardName: BoardName): ReadonlyArray<Exclude<BrushRole, 'OFF'>> {
+  const supportedRoles = STATE_TO_PRIMARY_CODE[boardName];
+  return PAINT_ROLES.filter((role) => supportedRoles[role] !== undefined);
+}
+
 /**
  * The swatch colour for a role on a given board, taken from the board's
  * canonical role code (the same code the frame string and BLE encoder use).

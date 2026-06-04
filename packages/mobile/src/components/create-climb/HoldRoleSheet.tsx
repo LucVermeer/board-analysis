@@ -9,7 +9,7 @@ import { Icon } from '../Icon';
 import { useTheme } from '../../providers/theme-provider';
 import { hapticSelection } from '../../lib/haptics';
 import { spacing, borderRadius } from '../../theme/tokens';
-import { PAINT_ROLES, brushRoleColor, useBrushRoleLabels, type BrushRole } from './brush-roles';
+import { brushRoleColor, getPaintRoles, useBrushRoleLabels, type BrushRole } from './brush-roles';
 
 type HoldRoleSheetProps = {
   /** The long-pressed hold, or null when the sheet is closed. */
@@ -53,6 +53,7 @@ export function HoldRoleSheet({
   const currentState: HoldState | undefined = holdId != null ? litUpHoldsMap[holdId]?.state : undefined;
 
   const snapPoints = useMemo(() => ['38%'], []);
+  const paintRoles = useMemo(() => getPaintRoles(boardName), [boardName]);
 
   const handleSelect = (role: BrushRole) => {
     if (holdId == null) return;
@@ -68,7 +69,7 @@ export function HoldRoleSheet({
           {t('mobile.create.holdRole.title')}
         </Text>
         <View style={styles.grid}>
-          {PAINT_ROLES.map((role) => {
+          {paintRoles.map((role) => {
             const isCurrent = currentState === role;
             const atCap = (role === 'STARTING' && startingCount >= 2) || (role === 'FINISH' && finishCount >= 2);
             const disabled = atCap && !isCurrent;
