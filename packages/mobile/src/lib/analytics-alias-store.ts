@@ -42,8 +42,7 @@ export function createAsyncAliasStore(storage: AsyncKeyValueStorage): {
   }
 
   function persist(): void {
-    const bounded = [...recordedPairs].slice(-MAX_STORED_ALIAS_PAIRS);
-    void storage.setItem(STORAGE_KEY, JSON.stringify(bounded)).catch(() => {
+    void storage.setItem(STORAGE_KEY, JSON.stringify([...recordedPairs])).catch(() => {
       // Best-effort: the in-memory mirror still dedupes for this app session.
     });
   }
