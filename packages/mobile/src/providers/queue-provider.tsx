@@ -343,6 +343,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                 removedBy: 'peer',
               });
               break;
+            case 'QueueReordered':
+              if (event.__typename === 'QueueReordered') {
+                track('Queue Reordered', {
+                  boardName: activeBoardRef.current?.boardType,
+                  boardLayout: activeBoardRef.current?.layoutId,
+                  oldIndex: event.oldIndex,
+                  newIndex: event.newIndex,
+                  partyMode: true,
+                  reorderedBy: 'peer',
+                });
+              }
+              break;
           }
         },
         error: () => {
@@ -643,6 +655,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const previousQueue = stateRef.current.queue;
       const previousCurrent = stateRef.current.currentClimbQueueItem;
       dispatch({ type: 'DELTA_REORDER_QUEUE_ITEM', payload: { uuid, oldIndex, newIndex } });
+      track('Queue Reordered', {
+        boardName: activeBoardRef.current?.boardType,
+        boardLayout: activeBoardRef.current?.layoutId,
+        oldIndex,
+        newIndex,
+        partyMode: sessionIdRef.current !== null,
+        reorderedBy: 'self',
+      });
       mutations.reorderQueueItem(uuid, oldIndex, newIndex).catch((error) => {
         if (__DEV__) console.warn('[queue] reorderQueueItem sync failed; rolling back', error);
         // Unlike add/remove (idempotent, converge on next sync), a failed reorder

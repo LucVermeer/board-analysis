@@ -218,15 +218,15 @@ function RootLayout() {
               <FeatureFlagsProvider>
                 <AuthProvider onReady={onAuthReady}>
                   <PartyProfileProvider>
-                  <ConnectionSettingsProvider>
-                    <ToastProvider>
-                      <ClimbActionsDataWrapper>
-                        <QueueSnackbarProvider>
-                          <QueueProvider>
-                            <BoardAdapterWrapper>
-                              <PlaylistsAdapterWrapper>
-                                <BoardProviderWrapper>
-                                  {/* BottomSheetModalProvider sits inside the board
+                    <ConnectionSettingsProvider>
+                      <ToastProvider>
+                        <ClimbActionsDataWrapper>
+                          <QueueSnackbarProvider>
+                            <QueueProvider>
+                              <BoardAdapterWrapper>
+                                <PlaylistsAdapterWrapper>
+                                  <BoardProviderWrapper>
+                                    {/* BottomSheetModalProvider sits inside the board
                                     providers (gorhom's BottomSheetModal portals
                                     PlayDrawer → QuickTickBar here, so the host
                                     must be able to see BoardAdapter/BoardProvider
@@ -237,34 +237,34 @@ function RootLayout() {
                                     exist before the picker mounts or gorhom
                                     throws "BottomSheetModalInternalContext
                                     cannot be null". */}
-                                  <BottomSheetModalProvider>
-                                    <BluetoothProviderWrapper>
-                                      <SessionScreenProvider>
-                                        <DrawerHostProvider>
-                                          <ThemedNavigation>
-                                            <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-                                              <Stack.Screen name="(tabs)" />
-                                              <Stack.Screen
-                                                name="auth"
-                                                options={{ headerShown: false, gestureEnabled: false }}
-                                              />
-                                            </Stack>
-                                          </ThemedNavigation>
-                                          <PersistentQueueBar />
-                                          <AnalyticsScreenTracker />
-                                          <SessionScreenHost />
-                                        </DrawerHostProvider>
-                                      </SessionScreenProvider>
-                                    </BluetoothProviderWrapper>
-                                  </BottomSheetModalProvider>
-                                </BoardProviderWrapper>
-                              </PlaylistsAdapterWrapper>
-                            </BoardAdapterWrapper>
-                          </QueueProvider>
-                        </QueueSnackbarProvider>
-                      </ClimbActionsDataWrapper>
-                    </ToastProvider>
-                  </ConnectionSettingsProvider>
+                                    <BottomSheetModalProvider>
+                                      <BluetoothProviderWrapper>
+                                        <SessionScreenProvider>
+                                          <DrawerHostProvider>
+                                            <ThemedNavigation>
+                                              <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
+                                                <Stack.Screen name="(tabs)" />
+                                                <Stack.Screen
+                                                  name="auth"
+                                                  options={{ headerShown: false, gestureEnabled: false }}
+                                                />
+                                              </Stack>
+                                            </ThemedNavigation>
+                                            <PersistentQueueBar />
+                                            <AnalyticsScreenTracker />
+                                            <SessionScreenHost />
+                                          </DrawerHostProvider>
+                                        </SessionScreenProvider>
+                                      </BluetoothProviderWrapper>
+                                    </BottomSheetModalProvider>
+                                  </BoardProviderWrapper>
+                                </PlaylistsAdapterWrapper>
+                              </BoardAdapterWrapper>
+                            </QueueProvider>
+                          </QueueSnackbarProvider>
+                        </ClimbActionsDataWrapper>
+                      </ToastProvider>
+                    </ConnectionSettingsProvider>
                   </PartyProfileProvider>
                 </AuthProvider>
               </FeatureFlagsProvider>

@@ -33,9 +33,9 @@ vi.mock('../auth-provider', () => ({
 // Stub both so this suite stays focused on party-profile loading and runs in the
 // node/jsdom env without a QueryClient or native AsyncStorage.
 const { useProfileMock } = vi.hoisted(() => ({
-  useProfileMock: vi.fn<() => { data: { displayName?: string; avatarUrl?: string; id?: string; email?: string } | undefined }>(
-    () => ({ data: undefined }),
-  ),
+  useProfileMock: vi.fn<
+    () => { data: { displayName?: string; avatarUrl?: string; id?: string; email?: string } | undefined }
+  >(() => ({ data: undefined })),
 }));
 vi.mock('../../lib/graphql/hooks', () => ({ useProfile: useProfileMock }));
 vi.mock('../../lib/analytics-alias-store', () => ({

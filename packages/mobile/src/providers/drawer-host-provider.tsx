@@ -22,6 +22,7 @@ import { QueueSheet } from '../components/play-drawer/QueueSheet';
 import { QueueAddedSnackbar } from '../components/QueueAddedSnackbar';
 import type { QueueItemRowBoard } from '../components/QueueItemRow';
 import { useActiveBoard, useSetActiveBoard } from '../lib/graphql/use-active-board';
+import { track } from '../lib/analytics';
 import { ClimbActionsSheet } from '../components/ClimbActionsSheet';
 import { AddToPlaylistSheet } from '../components/AddToPlaylistSheet';
 import { useToggleFavorite, useProfile } from '../lib/graphql/hooks';
@@ -158,6 +159,7 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
   // Apply an angle change made from the play drawer's angle selector.
   const handleAngleChange = useCallback(
     (newAngle: number) => {
+      const cfg = activeBoardConfigRef.current;
       if (boardConfigOverride) {
         // The drawer is showing a climb from a board other than the user's
         // stored active board. Update only the override (so the drawer reflects
@@ -177,14 +179,23 @@ export function DrawerHostProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      track('Angle Changed', {
+        angle: newAngle,
+        boardName: cfg?.boardName,
+        boardLayout: cfg?.layoutId,
+        sizeId: cfg?.sizeId,
+        setIds: cfg?.setIds,
+        source: 'mobile_play_drawer',
+        partyMode: sessionId !== null,
+      });
+
       // Broadcast to party members (no-op in solo). Build the path from the
       // board the drawer is actually showing, with the new angle.
-      const cfg = activeBoardConfigRef.current;
       if (cfg) {
         void setSessionBoardPath(buildBoardPath(cfg.boardName, cfg.layoutId, cfg.sizeId, cfg.setIds, newAngle));
       }
     },
-    [activeBoard, boardConfigOverride, setActiveBoard, setSessionBoardPath],
+    [activeBoard, boardConfigOverride, sessionId, setActiveBoard, setSessionBoardPath],
   );
 
   const openLogAscent = useCallback((input: LogAscentInput) => {

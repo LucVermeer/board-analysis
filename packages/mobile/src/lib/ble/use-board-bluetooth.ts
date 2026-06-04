@@ -193,8 +193,13 @@ export function useBoardBluetooth({
 
       try {
         if (boardName === 'moonboard') {
-          // TODO: analytics (Phase 6)
-          return dispatchMoonboardPacket(frames, adapterRef.current.write.bind(adapterRef.current), combinedSignal);
+          const sent = await dispatchMoonboardPacket(
+            frames,
+            adapterRef.current.write.bind(adapterRef.current),
+            combinedSignal,
+          );
+          if (sent) track('Climb Sent to Board Success', { boardLayout: boardName });
+          return sent;
         }
 
         // Empty frames = "clear all LEDs" for Aurora boards
@@ -339,8 +344,6 @@ export function useBoardBluetooth({
           }
         }
 
-        // TODO: analytics (Phase 6)
-
         // Parse serial for Aurora boards
         let parsedSerial: string | null = null;
         if (boardName !== 'moonboard' && connection.deviceName) {
@@ -407,7 +410,6 @@ export function useBoardBluetooth({
     // drop should offer a silent same-board reconnect.
     setLastConnectedBoard(null);
     onConnectionChange?.(false);
-    // TODO: analytics (Phase 6)
     await adapter?.disconnect();
   }, [onConnectionChange]);
 

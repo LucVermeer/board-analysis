@@ -17,6 +17,7 @@ export const SHARED_EVENTS = {
   AddToQueue: 'Add to Queue',
   ClimbAddedToQueue: 'Climb Added to Queue',
   ClimbRemovedFromQueue: 'Climb Removed from Queue',
+  QueueReordered: 'Queue Reordered',
   QueueCleared: 'Queue Cleared',
   QueueNavigation: 'Queue Navigation',
   WallAdvance: 'Wall Advance',
@@ -24,6 +25,7 @@ export const SHARED_EVENTS = {
   PlayDrawerOpened: 'Play Drawer Opened',
   SessionStarted: 'Session Started',
   SessionEnded: 'Session Ended',
+  AngleChanged: 'Angle Changed',
   // Climb actions
   ClimbInfoViewed: 'Climb Info Viewed',
   FavoriteToggle: 'Favorite Toggle',

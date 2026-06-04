@@ -1,7 +1,8 @@
 // PartyProfileProvider — mirrors web's
-// `packages/web/app/components/party-manager/party-profile-context.tsx` but
-// strips out the web-specific glue (PostHog identity sync, OAuth-pending
-// drain, NextAuth session bridging, language sync). Phase 1 = load-only.
+// `packages/web/app/components/party-manager/party-profile-context.tsx`.
+// It keeps the shared party-profile UUID and PostHog identity reconciliation,
+// while omitting web-only concerns such as OAuth-pending drain, NextAuth session
+// bridging, and locale person-property sync.
 // The party profile itself is just `{ id: UUID }` — used as a stable peer
 // identity for the WebSocket party session. username/avatarUrl are surfaced
 // for API parity but resolve to undefined until mobile fetches the user's

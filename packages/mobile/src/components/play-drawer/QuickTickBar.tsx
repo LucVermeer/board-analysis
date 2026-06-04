@@ -170,9 +170,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
           onError: (error: unknown) => {
             hapticError();
             const message =
-              error instanceof Error && error.message
-                ? error.message
-                : tClimbs('mobile.logAscent.errorMessage');
+              error instanceof Error && error.message ? error.message : tClimbs('mobile.logAscent.errorMessage');
             setLastError(message);
           },
         },
@@ -295,11 +293,7 @@ export const QuickTickBar = React.memo(function QuickTickBar({
             saveTick.isPending && styles.buttonDisabled,
           ]}
         >
-          <Text
-            variant="footnote"
-            color={systemColors.label}
-            style={styles.attemptLabel}
-          >
+          <Text variant="footnote" color={systemColors.label} style={styles.attemptLabel}>
             {tClimbs('mobile.logAscent.attempt')}
           </Text>
         </Pressable>

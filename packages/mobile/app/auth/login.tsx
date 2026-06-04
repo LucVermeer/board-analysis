@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { sanitizeErrorForAnalytics } from '@boardsesh/analytics';
 import { useAuth } from '../../src/providers/auth-provider';
 import { useTheme } from '../../src/providers/theme-provider';
 import { track } from '../../src/lib/analytics';
@@ -90,7 +91,7 @@ export default function LoginScreen() {
     try {
       const result = await signInWithCredentials(trimmedEmail, password);
       if (!result.success) {
-        track('Login Failed', { auth_method: 'credentials', failure_reason: result.error });
+        track('Login Failed', { auth_method: 'credentials', failure_reason: sanitizeErrorForAnalytics(result.error) });
         if (result.error === 'network') {
           setError(t('nativeStart.networkError'));
         } else if (result.status === 401) {
@@ -105,7 +106,7 @@ export default function LoginScreen() {
     } catch (signInError) {
       track('Login Failed', {
         auth_method: 'credentials',
-        failure_reason: signInError instanceof Error ? signInError.message : null,
+        failure_reason: sanitizeErrorForAnalytics(signInError),
       });
       throw signInError;
     } finally {
